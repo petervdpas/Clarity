@@ -66,6 +66,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
     resolve_data(&mut files);
     give_settings(&mut files);
     make_form_labels(&mut files);
+    make_undo_scopes(&mut files);
     make_hears(&mut files);
     diagnostics.extend(check::check(&files));
     diagnostics.extend(files.iter().flat_map(themes::check_decls));
@@ -142,6 +143,40 @@ fn make_form_labels(files: &mut [model::SpecFile]) {
     for file in files.iter_mut() {
         for page in &mut file.pages {
             walk(&mut page.widgets, &page.data, &entities);
+        }
+    }
+}
+
+/// Each part's undo scope (DESIGN 5.29), worked out once for every screen.
+fn make_undo_scopes(files: &mut [model::SpecFile]) {
+    fn set(widgets: &mut [model::Widget], page: &[model::Widget]) {
+        for w in widgets.iter_mut() {
+            w.props.undo_scope = w.props.name.as_deref().and_then(|n| widgets::undo_scope(page, n));
+            set(&mut w.children, page);
+            for inner in &mut w.pages {
+                set(&mut inner.children, page);
+            }
+        }
+    }
+    // Each grid on its own: the window's, and its frame's sidebars and footer.
+    fn frame(frame: &mut model::Frame) {
+        for sidebar in &mut frame.sidebars {
+            let all = sidebar.widgets.clone();
+            set(&mut sidebar.widgets, &all);
+        }
+        if let Some(footer) = &mut frame.footer {
+            let all = footer.widgets.clone();
+            set(&mut footer.widgets, &all);
+        }
+    }
+    for file in files.iter_mut() {
+        for page in &mut file.pages {
+            let all = page.widgets.clone();
+            set(&mut page.widgets, &all);
+            frame(&mut page.frame);
+        }
+        for app in &mut file.apps {
+            frame(&mut app.frame);
         }
     }
 }

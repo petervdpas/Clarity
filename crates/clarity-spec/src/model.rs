@@ -633,6 +633,15 @@ pub struct WidgetProps {
     pub style: Option<String>,
     /// An input that shows its value but cannot be changed.
     pub readonly: bool,
+    /// A part the person edits without an undo of its own (DESIGN 5.29):
+    /// `no undo`. Every other one takes back its own edits with Ctrl+Z.
+    #[serde(default)]
+    pub no_undo: bool,
+    /// Where its edits are undone, worked out when the project loads
+    /// (`widgets::undo_scope`): its form or panel, or itself; none without
+    /// undo. Every screen uses it as it is; it is never written back.
+    #[serde(default)]
+    pub undo_scope: Option<String>,
     /// A panel or form the person using the application folds and unfolds
     /// by its header: `foldable`.
     #[serde(default)]

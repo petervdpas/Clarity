@@ -95,6 +95,7 @@ translation nl
     ok "OK"
     cancel "Annuleren"
     dismiss "Sluiten"
+    undoChangedSince "Dit is intussen gewijzigd en kan daarom niet ongedaan worden gemaakt"
     languagePicker "Taal"
     themePicker "Thema"
     customerTagsLabel "Labels"

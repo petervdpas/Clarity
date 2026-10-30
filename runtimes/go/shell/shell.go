@@ -120,8 +120,8 @@ type Screen interface {
 type Service struct {
 	// stop is closed by stop_call to stop the handler that runs; each
 	// watched handler gets a new one. Not behind mu, which the handler holds.
-	stopMu sync.Mutex
-	stop   chan struct{}
+	stopMu  sync.Mutex
+	stop    chan struct{}
 	options Options
 	desktop Desktop
 	// mu keeps one command at a time on the databases, as the Tauri shell does.
@@ -195,6 +195,15 @@ func (c *Service) onEvent(state clarity.WindowState, event string) (clarity.Repl
 	return c.options.Windows.Redraw(c.options.Db, reply)
 }
 
+// onEventless draws the window as its data is, running no handler.
+func (c *Service) onEventless(state clarity.WindowState) (clarity.Reply, error) {
+	reply, err := clarity.NewUi(state).Reply(state.Window, state.Data)
+	if err != nil {
+		return reply, err
+	}
+	return c.options.Windows.Redraw(c.options.Db, reply)
+}
+
 // dispatch runs a handler, then draws the window's canvases anew.
 func (c *Service) dispatch(state clarity.WindowState, handler string) (clarity.Reply, error) {
 	reply, err := c.options.Windows.Dispatch(c.options.Db, state, handler)
@@ -232,6 +241,9 @@ type Args struct {
 	Field    string              `json:"field"`
 	Store    string              `json:"store"`
 	Path     string              `json:"path"`
+	// Step and Back say which undo step to take back (Back) or do again.
+	Step int64 `json:"step"`
+	Back bool  `json:"back"`
 	Address  string              `json:"address"`
 	Line     string              `json:"line"`
 	Settings map[string]any      `json:"settings"`
@@ -260,7 +272,15 @@ func progressScript(done, total int64, ended bool) string {
 	return fmt.Sprintf(`window.dispatchEvent(new CustomEvent("clarity-progress", {detail: {"done":%d,"total":%d}}))`, done, total)
 }
 
-func (c *Service) invoke(ctx context.Context, command string, a Args) Answer {
+func (c *Service) invoke(ctx context.Context, command string, a Args) (answer Answer) {
+	// Fail safe: a handler that panics, as on a list index out of range, is
+	// an error the screen shows, and the application keeps working.
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "%s failed: %v\n", command, r)
+			answer = Answer{Error: fmt.Sprint(r)}
+		}
+	}()
 	if a.State.Data == nil {
 		a.State.Data = map[string]any{}
 	}
@@ -294,7 +314,6 @@ func (c *Service) invoke(ctx context.Context, command string, a Args) Answer {
 			screen.Eval(ctx, progressScript(done, total, false))
 		}
 	}}
-	var answer Answer
 	clarity.Watching(watch, func() { answer = c.answer(ctx, command, a) })
 	c.stopMu.Lock()
 	if c.stop == stop {
@@ -365,7 +384,32 @@ func (c *Service) answer(ctx context.Context, command string, a Args) Answer {
 	case "start_app":
 		return answer(c.onEvent(clarity.NewWindowState("", nil), "start"))
 	case "dispatch_event":
-		return answer(c.dispatch(a.State, a.Handler))
+		// One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
+		before := db.LastStep()
+		var reply clarity.Reply
+		err := db.Step(func() error {
+			var err error
+			reply, err = c.dispatch(a.State, a.Handler)
+			return err
+		})
+		if err == nil && db.LastStep() != before {
+			reply.Step = db.LastStep()
+		}
+		return answer(reply, err)
+	case "undo_step":
+		// A step taken back or done again, on the window's data as the screen put it back.
+		if a.Step > 0 {
+			var err error
+			if a.Back {
+				_, err = db.Undo(a.Step)
+			} else {
+				_, err = db.Redo(a.Step)
+			}
+			if err != nil {
+				return failed(err)
+			}
+		}
+		return answer(c.onEventless(a.State))
 	case "answer_event":
 		// The answer to a question a handler asked runs the handler it goes to.
 		reply, err := c.options.Windows.Answer(db, a.State, a.Handler, a.Values)

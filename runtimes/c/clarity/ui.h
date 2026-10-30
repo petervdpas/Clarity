@@ -143,6 +143,9 @@ typedef struct {
     cJSON* hears;
     /// The text the handler copied (`copy text`), for the screen to put on the clipboard; NULL: none.
     const ClarityText* copy;
+    /// The id of the database step the handler made (DESIGN 5.29), which
+    /// the screen's edit keeps to undo it by; 0 when it changed nothing.
+    int64_t step;
 } ClarityReply;
 
 /// What a handler can do to the screen.

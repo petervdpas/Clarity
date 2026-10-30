@@ -166,6 +166,9 @@ type Reply struct {
 	Hears []Hear `json:"hears,omitempty"`
 	// Copy is the text the handler copied (copy text), for the screen to put on the clipboard.
 	Copy *Text `json:"copy,omitempty"`
+	// Step is the id of the database step the handler made (DESIGN 5.29),
+	// which the screen's edit keeps to undo it by; 0 when it changed nothing.
+	Step int64 `json:"step,omitempty"`
 }
 
 // RefOption is a record a reference field can point at, as a dropdown shows it.

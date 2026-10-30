@@ -570,6 +570,12 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
+        // A canvas with undo takes the focus, so Ctrl+Z takes back its own edits (DESIGN 5.29).
+        if (Edits.GetScope(this) is not null)
+        {
+            Focusable = true;
+            Focus(NavigationMethod.Pointer);
+        }
         if (Pointing)
         {
             if (Focusable)
@@ -749,7 +755,13 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
                 context.DrawEllipse(dot, null, at(x, y), r, r);
     }
 
-    public override void Render(DrawingContext context)
+    // Fail safe: a drawing that fails shows why in the control's place.
+    public override void Render(DrawingContext context) => Failed = FailSafe.Render(this, context, () => RenderSafely(context));
+
+    /// <summary>Why the last drawing failed, or null.</summary>
+    public string? Failed { get; private set; }
+
+    void RenderSafely(DrawingContext context)
     {
         if (Stopped is { } why)
         {

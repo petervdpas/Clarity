@@ -39,5 +39,5 @@ fn avalonia_writes_the_color_input() {
     let code = generated(Backend::Csharp, Ui::Avalonia);
     has(&code, "<c:ColorInput x:Name=\"tintBox\"");
     has(&code, "Value=\"{Binding Album.Tint}\"");
-    has(&code, "tintBox.ValueChanged += (_, _) => Vm.FavouriteChangedCommand.Execute(null);");
+    has(&code, "tintBox.ValueChanged += (_, _) => Vm.EditOf(\"tintBox\", \"tintBox\", true, () => Vm.FavouriteChangedCommand.Execute(null));");
 }

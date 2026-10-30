@@ -5,11 +5,25 @@
 #include "clarity/watch.hpp"
 #include "engine/engine.hpp"
 #include "shell/shell.hpp"
+#include "clarity/sql.hpp"
 
 using namespace clarity;
 using nlohmann::json;
 
 namespace {
+
+/// A record a handler keeps, for the undo step its run makes.
+struct Memo {
+    int64_t id = 0;
+    std::string text;
+    static constexpr const char* table = "memo";
+    static const std::vector<std::string>& columns() {
+        static const std::vector<std::string> names{"text"};
+        return names;
+    }
+    std::vector<SqlValue> values() const { return {sql::text(text)}; }
+    static Memo from_values(int64_t id, const Row& v) { return {id, sql::get_text("text", v[0])}; }
+};
 
 /// The service a long handler stops, as the person's Stop does while it runs.
 shell::Service* stopping = nullptr;
@@ -35,8 +49,12 @@ public:
         return reply;
     }
 
-    Reply dispatch(Db&, const WindowState& state, const std::string& handler) override {
+    Reply dispatch(Db& db, const WindowState& state, const std::string& handler) override {
         Ui ui(state);
+        if (handler == "remember") {
+            Memo memo{0, "kept"};
+            db.save(memo);
+        }
         if (handler == "opened") ui.set_caption("title", Text::plain("Card of " + state.data["name"].get<std::string>()));
         if (handler == "save") refuse(Text("{name} is taken").with("name", slot_text("Ada")));
         if (handler == "fail") throw StorageError("locked");
@@ -233,4 +251,24 @@ TEST(a_long_handler_shows_how_far_it_is_and_stops) {
     service.invoke("dispatch_event", {{"state", state}, {"handler", "opened"}}, &screen);
     CHECK(screen.scripts.empty());
     stopping = nullptr;
+}
+
+// Undo (DESIGN 5.29): a handler that changed the database answers with its
+// step, and undo_step takes it back or does it again, drawing the window as
+// its data is.
+TEST(a_handler_answers_with_its_step_and_undo_step_takes_it_back) {
+    Db db = Db::memory();
+    db.migrate({{"CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"}});
+    Cards cards;
+    shell::Service service({"shop", "Shop", "Card", R"({"project":{}})", "", &db, &cards});
+    json state = {{"window", "Card"}, {"data", json::object()}};
+    json remembered = service.invoke("dispatch_event", {{"state", state}, {"handler", "remember"}});
+    CHECK_EQ(remembered["value"]["step"], json(1));
+    CHECK(!service.invoke("dispatch_event", {{"state", state}, {"handler", "fail"}}).contains("value"));
+    CHECK(!service.invoke("dispatch_event", {{"state", state}, {"handler", "noop"}})["value"].contains("step"));
+    json undone = service.invoke("undo_step", {{"state", state}, {"step", 1}, {"back", true}});
+    CHECK(undone.contains("value"));
+    CHECK(db.all<Memo>().empty());
+    service.invoke("undo_step", {{"state", state}, {"step", 1}, {"back", false}});
+    CHECK_EQ(db.all<Memo>().size(), size_t(1));
 }

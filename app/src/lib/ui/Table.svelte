@@ -68,6 +68,7 @@
     onselect,
     onopen,
     onedit,
+    onchanged = () => {},
   }: {
     columns: TableColumn[];
     rows: Row[];
@@ -105,6 +106,8 @@
     onopen: (row: number) => void;
     /** The person edited the row, which is chosen first: Clarity's `change`. */
     onedit: (row: number) => void;
+    /** A cell the person changed, with its value before and after: an edit for undo (DESIGN 5.29). */
+    onchanged?: (record: Record<string, JsonValue>, field: string, before: JsonValue | undefined, after: JsonValue) => void;
   } = $props();
 
   const inert = $derived(design || disabled);
@@ -246,6 +249,7 @@
   function edit(row: number, field: string, next: JsonValue) {
     const record = rows[row];
     if (!record || inert || (record[field] ?? null) === next) return;
+    onchanged(record, field, structuredClone($state.snapshot(record[field] as unknown)) as JsonValue | undefined, next);
     record[field] = next;
     choose(row);
     onedit(row);

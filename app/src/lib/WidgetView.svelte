@@ -174,6 +174,8 @@
 
   function setValue(next: JsonValue) {
     if (!bound) return;
+    // An edit for undo (DESIGN 5.29): the path, what it was and what it is now.
+    if (live && !design && p.name && p.bind) live.edited?.(p.name, p.bind, structuredClone($state.snapshot(bound.record[bound.field.name.name] as unknown)) as JsonValue, next);
     bound.record[bound.field.name.name] = next;
     // A setting is kept at once, and switches the language or theme it names.
     if (live && !design && p.bind?.split(".")[0] === "settings") live.keepSettings();
@@ -942,6 +944,11 @@
         onselect={(row) => selectRow(row)}
         onopen={() => fire("open")}
         onedit={() => fire("change")}
+        onchanged={(record, field, before, after) => {
+          // The cell's path in the window's data, by the record's place in its list, for undo.
+          const at = (collection?.rows ?? []).indexOf(record);
+          if (live && !design && p.name && p.bind && at >= 0) live.edited?.(p.name, `${p.bind}.${at}.${field}`, before, after);
+        }}
       />
     {:else if p.kind === "tree" || p.kind === "treeTable"}
       <!-- A tree (U1c): the rows under their parents, by the one reference to their own kind. -->
@@ -967,6 +974,11 @@
         onselect={(row) => selectRow(row)}
         onopen={() => fire("open")}
         onedit={() => fire("change")}
+        onchanged={(record, field, before, after) => {
+          // The cell's path in the window's data, by the record's place in its list, for undo.
+          const at = (collection?.rows ?? []).indexOf(record);
+          if (live && !design && p.name && p.bind && at >= 0) live.edited?.(p.name, `${p.bind}.${at}.${field}`, before, after);
+        }}
       />
     {:else if p.kind === "chart" && p.chart && bound?.field.type.kind === "values"}
       <!-- A chart of a list of numbers (DESIGN 5.26): drawn as they are, the last points of them. -->

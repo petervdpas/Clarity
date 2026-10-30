@@ -19,6 +19,7 @@ translation en
     ok "OK"
     cancel "Cancel"
     dismiss "Dismiss"
+    undoChangedSince "This was changed since, so it cannot be taken back"
     gameRules resource "rules-en.md"
     markCross "Cross"
     markNought "Nought"

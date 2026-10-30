@@ -170,7 +170,7 @@ fn parts_bind_to_the_data_and_to_their_state() {
     has(window, "<TextBlock x:Name=\"label1\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"2\" Classes=\"label\"><Run Text=\"{Binding Label1.Caption}\" /><Run Text=\" *\" /></TextBlock>");
     has(
         window,
-        "<c:TextInput x:Name=\"numberInput\" Grid.Column=\"2\" Grid.Row=\"0\" Grid.ColumnSpan=\"4\" Value=\"{Binding Order.Number}\" PlaceholderText=\"{x:Static local:Texts.NumberInputPlaceholder}\" IsEnabled=\"{Binding NumberInput.IsEnabled}\" IsVisible=\"{Binding NumberInput.IsVisible}\" IsReadOnly=\"{Binding NumberInput.IsReadOnly}\" />",
+        "<c:TextInput x:Name=\"numberInput\" Grid.Column=\"2\" Grid.Row=\"0\" Grid.ColumnSpan=\"4\" Value=\"{Binding Order.Number}\" PlaceholderText=\"{x:Static local:Texts.NumberInputPlaceholder}\" IsEnabled=\"{Binding NumberInput.IsEnabled}\" IsVisible=\"{Binding NumberInput.IsVisible}\" IsReadOnly=\"{Binding NumberInput.IsReadOnly}\" c:Edits.Scope=\"numberInput\" />",
     );
     has(window, "<TextBlock x:Name=\"help1\" Grid.Column=\"2\" Grid.Row=\"1\" Grid.ColumnSpan=\"4\" Classes=\"help\" Classes.error=\"{Binding NumberInput.HasError}\" Text=\"{Binding NumberInput.Shown}\" />");
     // Clarity's own inputs: each tells when the person changed its value, and only then.
@@ -208,7 +208,7 @@ fn a_radio_group_picks_an_enum_value() {
         file(&files, "Windows/OrderFormView.axaml"),
         "<c:RadioInput x:Name=\"statusPick\" Grid.Column=\"0\" Grid.Row=\"3\" Grid.ColumnSpan=\"4\" Choices=\"{x:Static local:Choices.OrderStatus}\" Value=\"{Binding Order.Status}\" Vertical=\"True\"",
     );
-    has(file(&files, "Windows/OrderFormView.axaml.cs"), "        statusPick.ValueChanged += (_, _) => Vm.FilterChangedCommand.Execute(null);");
+    has(file(&files, "Windows/OrderFormView.axaml.cs"), "        statusPick.ValueChanged += (_, _) => Vm.EditOf(\"statusPick\", \"statusPick\", true, () => Vm.FilterChangedCommand.Execute(null));");
 }
 
 #[test]
@@ -285,7 +285,7 @@ fn events_without_a_command_are_wired_in_the_code_behind() {
     let code = file(&files, "Windows/OrderFormView.axaml.cs");
     has(code, "public partial class OrderFormView : UserControl");
     // Every input of the library tells the same way when the person changed it.
-    has(code, "        numberFilter.ValueChanged += (_, _) => Vm.FilterChangedCommand.Execute(null);");
+    has(code, "        numberFilter.ValueChanged += (_, _) => Vm.EditOf(\"numberFilter\", \"numberFilter\", true, () => Vm.FilterChangedCommand.Execute(null));");
     has(code, "        grid.Selected += (_, _) => Vm.GridSelectedCommand.Execute(null);");
     has(code, "        grid.Opened += (_, _) => Vm.GridOpenedCommand.Execute(null);");
 }
@@ -477,8 +477,8 @@ fn edited_columns_hold_the_inputs_a_form_would() {
     let code = file(&files, "Windows/MainView.axaml.cs");
     // The cells' own inputs tell what the person edited; a handler's changes never count.
     assert!(!code.contains("Handling"), "{code}");
-    has(code, "grid.Edited += _ => Vm.TaskChangedCommand.Execute(null);");
-    has(code, "addedPick.ValueChanged += (_, _) => Vm.TaskChangedCommand.Execute(null);");
+    has(code, "grid.Edited += _ => Vm.EditOf(\"grid\", \"grid\", true, () => Vm.TaskChangedCommand.Execute(null));");
+    has(code, "addedPick.ValueChanged += (_, _) => Vm.EditOf(\"addedPick\", \"addedPick\", true, () => Vm.TaskChangedCommand.Execute(null));");
 }
 
 /// A window that says its size opens at it: its view model tells the shell.
@@ -675,7 +675,8 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
     let vm = file(&files, "Windows/DialViewModel.cs");
     has(vm, "Dial.X + Dial.Y");
     // The canvas gives the window where it was clicked, then runs the handler.
-    has(vm, "    [RelayCommand]\n    void ClickAt_Dial(Pointer at) => Handle(() =>\n    {\n        Dial.Pointer = at;\n        OnDialClicked();\n    }, [at]);");
+    // A click on a canvas is an edit Ctrl+Z takes back (DESIGN 5.29).
+    has(vm, "    [RelayCommand]\n    void ClickAt_Dial(Pointer at) => EditOf(\"dial\", \"dial\", ends: true, () => Handle(() =>\n    {\n        Dial.Pointer = at;\n        OnDialClicked();\n    }, [at]));");
     has(file(&files, "Windows/DialView.axaml"), "UnitsWidth=\"200\" UnitsHeight=\"100\" Command=\"{Binding ClickAt_DialCommand}\"");
 }
 

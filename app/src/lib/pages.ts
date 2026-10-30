@@ -123,6 +123,14 @@ export function gridRows(widgets: Widget[], extra: number, minimum: number): num
 
 export type Rect = { col: number; row: number; width: number; height: number };
 
+/**
+ * What tells the parts of a grid apart: where they start in the file. A label
+ * a form's label column made stands at its input's place, so it is told apart.
+ */
+export function partKey(widget: Widget): string {
+  return widget.props.made ? `label ${widget.span.start}` : `${widget.span.start}`;
+}
+
 export function overlaps(a: Rect, b: Rect): boolean {
   return a.col < b.col + b.width && b.col < a.col + a.width && a.row < b.row + b.height && b.row < a.row + a.height;
 }
@@ -199,6 +207,15 @@ export function widgetGrows(preview: Preview, widget: Widget): boolean {
 }
 
 /** Every part of a page, its sidebars and footer included, nested parts too. */
+/**
+ * Where a part's edits are undone (DESIGN 5.29), as the project worked it
+ * out for every screen: the form or panel it is in, or the part itself.
+ * None for a part without undo (`no undo`, or one that edits nothing).
+ */
+export function undoScope(page: Page, name: string): string | null {
+  return allParts(page).find((w) => w.props.name === name)?.props.undoScope ?? null;
+}
+
 export function allParts(page: Page): Widget[] {
   const out: Widget[] = [];
   const visit = (widgets: Widget[]) => {

@@ -40,7 +40,7 @@ fn avalonia_writes_the_slider_and_the_spin_box_with_their_range() {
     let code = generated(Backend::Csharp, Ui::Avalonia);
     has(&code, "<c:SliderInput x:Name=\"ratingSlider\"");
     has(&code, "Min=\"0\" Max=\"5\" Step=\"0.5\" Whole=\"False\" Value=\"{Binding Album.Rating}\"");
-    has(&code, "ratingSlider.ValueChanged += (_, _) => Vm.FavouriteChangedCommand.Execute(null);");
+    has(&code, "ratingSlider.ValueChanged += (_, _) => Vm.EditOf(\"ratingSlider\", \"ratingSlider\", true, () => Vm.FavouriteChangedCommand.Execute(null));");
     has(&code, "<c:NumberInput x:Name=\"copiesSpin\"");
     has(&code, "Min=\"0\" Max=\"99\" Step=\"1\"");
 }

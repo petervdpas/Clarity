@@ -1,8 +1,11 @@
 // The shell's commands, run without a window: the same commands and JSON as
 // the Tauri, Wails and C++ shells.
 
+#include <stddef.h>
+
 #include "check.h"
 #include "clarity/code.h"
+#include "clarity/sql.h"
 #include "shell/shell.h"
 #include "tests.h"
 
@@ -17,11 +20,32 @@ static const char* handler_of(const char* window, const char* event) {
     return strcmp(window, "Card") == 0 && strcmp(event, "open") == 0 ? "opened" : NULL;
 }
 
+/// A record a handler keeps, for the undo step its run makes.
+typedef struct {
+    int64_t id;
+    const char* text;
+} Memo;
+
+static const char* const memo_columns[] = {"text"};
+static void memo_values(const void* record, ClarityValue* out) { out[0] = clarity_text_value(((const Memo*)record)->text); }
+static bool memo_from_values(int64_t id, const ClarityValue* v, void* record) {
+    Memo* r = record;
+    r->id = id;
+    return clarity_get_text("text", v[0], &r->text);
+}
+static const ClarityEntity memo = {
+    .name = "Memo", .table = "memo", .key = "id", .source = "", .columns = memo_columns, .column_count = 1,
+    .size = sizeof(Memo), .id_at = offsetof(Memo, id), .values = memo_values, .from_values = memo_from_values,
+};
+
 /// The service a long handler stops, as the person's Stop does while it runs.
 static ClarityService* stopping;
 
 static bool dispatch(ClarityDb* db, const ClarityWindowState* state, const char* handler, ClarityReply** out) {
-    (void)db;
+    if (strcmp(handler, "remember") == 0) {
+        Memo kept = {0, "kept"};
+        if (!clarity_save(db, &memo, &kept)) return false;
+    }
     if (strcmp(handler, "plan") == 0) {
         // As a long engine call does: it says how far it is until it is stopped.
         const ClarityEngineWatch* watch = clarity_current_watch();
@@ -285,6 +309,36 @@ void a_long_handler_shows_how_far_it_is_and_stops(void) {
     shown_count = 0;
     invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"data\":{\"name\":\"Ada\"}},\"handler\":\"opened\"}", &main.desktop);
     CHECK(shown_count == 0);
+    clarity_service_free(s);
+    clarity_db_close(db);
+}
+
+static size_t memos(ClarityDb* db) {
+    void* items;
+    size_t count = 0;
+    clarity_find(db, &memo, clarity_query(), &items, &count);
+    return count;
+}
+
+// Undo (DESIGN 5.29): a handler that changed the database answers with its
+// step, and undo_step takes it back or does it again, drawing the window as
+// its data is.
+void a_handler_answers_with_its_step_and_undo_step_takes_it_back(void) {
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    REQUIRE_OK(clarity_db_batch(db, "", "CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"));
+    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityService* s = clarity_service_new(&options);
+    cJSON* remembered = invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"data\":{}},\"handler\":\"remember\"}", NULL);
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(remembered, "value"), "step"), "1");
+    CHECK(cJSON_GetObjectItem(invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"data\":{}},\"handler\":\"fail\"}", NULL), "error"));
+    cJSON* nothing = invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"data\":{}},\"handler\":\"noop\"}", NULL);
+    CHECK(!cJSON_GetObjectItem(cJSON_GetObjectItem(nothing, "value"), "step"));
+    cJSON* undone = invoked(s, "undo_step", "{\"state\":{\"window\":\"Card\",\"data\":{}},\"step\":1,\"back\":true}", NULL);
+    CHECK(cJSON_GetObjectItem(undone, "value"));
+    CHECK_INT(memos(db), 0);
+    invoked(s, "undo_step", "{\"state\":{\"window\":\"Card\",\"data\":{}},\"step\":1,\"back\":false}", NULL);
+    CHECK_INT(memos(db), 1);
     clarity_service_free(s);
     clarity_db_close(db);
 }

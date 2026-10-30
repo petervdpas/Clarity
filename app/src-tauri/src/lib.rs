@@ -2,6 +2,7 @@
 //! and their history; the frontend only renders the `Preview` it receives.
 
 mod browser_keys;
+mod fail_safe;
 mod build;
 mod links;
 mod diagrams;
@@ -21,6 +22,7 @@ mod manual;
 mod migrations;
 mod resource_urls;
 
+use crate::fail_safe::Held;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::mpsc;
@@ -236,13 +238,13 @@ fn open_file(path: &str, app: AppHandle, state: &WatchState, history: &HistorySt
     let _ = clarity_project::refresh_apis(&file);
     let preview = load(&dir)?;
     let watcher = watch(&file, &dir, app)?;
-    *state.open.lock().map_err(|_| "watch state is poisoned")? = Some(OpenProject {
+    *state.open.held().map_err(|_| "watch state is poisoned")? = Some(OpenProject {
         file,
         dir,
         watcher,
     });
     // Undo works within one project.
-    *history.0.lock().map_err(|_| "history is poisoned")? = History::default();
+    *history.0.held().map_err(|_| "history is poisoned")? = History::default();
     Ok(preview)
 }
 
@@ -429,7 +431,7 @@ fn spec_file_of(state: &WatchState, path: &str) -> Result<(PathBuf, PathBuf), St
 
 /// Remembers an applied change for Undo; a new change clears Redo.
 fn record(history: &HistoryState, files: Vec<FileChange>) -> Result<(), String> {
-    let mut history = history.0.lock().map_err(|_| "history is poisoned")?;
+    let mut history = history.0.held().map_err(|_| "history is poisoned")?;
     history.redo.clear();
     history.undo.push(Change(files));
     if history.undo.len() > HISTORY_LIMIT {
@@ -497,7 +499,7 @@ fn project_file_of(state: &WatchState) -> Result<PathBuf, String> {
 fn open_project_of(state: &WatchState) -> Result<(PathBuf, PathBuf), String> {
     state
         .open
-        .lock()
+        .held()
         .map_err(|_| "watch state is poisoned")?
         .as_ref()
         .map(|o| (o.file.clone(), o.dir.clone()))
@@ -515,7 +517,7 @@ enum Replay {
 /// that changed since (in another editor) is left alone.
 fn replay(state: &WatchState, history: &HistoryState, way: Replay) -> Result<Preview, String> {
     let dir = open_dir_of(state)?;
-    let mut history = history.0.lock().map_err(|_| "history is poisoned")?;
+    let mut history = history.0.held().map_err(|_| "history is poisoned")?;
     let (from, to) = match way {
         Replay::Undo => (&mut history.undo, Replay::Redo),
         Replay::Redo => (&mut history.redo, Replay::Undo),
@@ -568,7 +570,7 @@ pub struct HistoryCounts {
 
 #[tauri::command]
 fn history_counts(history: State<HistoryState>) -> Result<HistoryCounts, String> {
-    let history = history.0.lock().map_err(|_| "history is poisoned")?;
+    let history = history.0.held().map_err(|_| "history is poisoned")?;
     Ok(HistoryCounts {
         undo: history.undo.len() as u32,
         redo: history.redo.len() as u32,
@@ -779,6 +781,8 @@ fn window_title(name: &str, version: &str, dev_release: Option<&str>) -> String 
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            // Fail safe: a panic in a command shows in the IDE.
+            fail_safe::report_panics(app.handle().clone());
             // The status bar's meters, and the System page while it is open.
             system::start(app.handle().clone());
             let info = app.package_info();

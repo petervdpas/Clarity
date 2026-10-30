@@ -158,11 +158,29 @@ static bool dispatched(ClarityService* s, const ClarityWindowState* state, const
     return s->options.windows->dispatch(s->options.db, state, handler, out) && s->options.windows->redraw(s->options.db, *out);
 }
 
+/// Draws the window as its data is, running no handler.
+static bool drawn(ClarityService* s, const ClarityWindowState* state, ClarityReply** out) {
+    *out = clarity_ui_reply(clarity_ui(state), state->window, state->data);
+    return s->options.windows->redraw(s->options.db, *out);
+}
+
 static bool on_event(ClarityService* s, const ClarityWindowState* state, const char* event, ClarityReply** out) {
     const char* handler = s->options.windows->handler(state->window, event);
     if (handler) return dispatched(s, state, handler, out);
-    *out = clarity_ui_reply(clarity_ui(state), state->window, state->data);
-    return s->options.windows->redraw(s->options.db, *out);
+    return drawn(s, state, out);
+}
+
+/// A handler run as one undo step.
+typedef struct {
+    ClarityService* service;
+    const ClarityWindowState* state;
+    const char* handler;
+    ClarityReply* reply;
+} Stepping;
+
+static bool dispatched_step(void* context) {
+    Stepping* step = context;
+    return dispatched(step->service, step->state, step->handler, &step->reply);
 }
 
 static cJSON* replied(ClarityService* s, const ClarityWindowState* state, const char* event) {
@@ -289,9 +307,23 @@ static cJSON* answer_command(ClarityService* s, const char* command, const cJSON
     if (strcmp(command, "return_to") == 0) return replied(s, &state, "return");
     if (strcmp(command, "start_app") == 0) return replied(s, &state, "start");
     if (strcmp(command, "dispatch_event") == 0) {
+        // One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
+        int64_t before = clarity_last_step(db);
+        Stepping step = {s, &state, text_of(args, "handler"), NULL};
+        if (!clarity_step(db, dispatched_step, &step)) return failed();
+        if (clarity_last_step(db) != before) step.reply->step = clarity_last_step(db);
+        return value(clarity_reply_json(step.reply));
+    }
+    if (strcmp(command, "undo_step") == 0) {
+        // A step taken back or done again, on the window's data as the screen put it back.
+        const cJSON* step = cJSON_GetObjectItemCaseSensitive(args, "step");
+        int64_t id = cJSON_IsNumber(step) ? (int64_t)step->valuedouble : 0;
+        if (id > 0) {
+            bool undone = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(args, "back")) ? clarity_undo(db, id, NULL) : clarity_redo(db, id, NULL);
+            if (!undone) return failed();
+        }
         ClarityReply* reply;
-        if (!dispatched(s, &state, text_of(args, "handler"), &reply)) return failed();
-        return value(clarity_reply_json(reply));
+        return drawn(s, &state, &reply) ? value(clarity_reply_json(reply)) : failed();
     }
     if (strcmp(command, "answer_event") == 0) {
         // The answer to a question a handler asked runs the handler it goes to.

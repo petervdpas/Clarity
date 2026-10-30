@@ -5,6 +5,7 @@
 //! whole turn back. The model is reached through a connection of Clarity's
 //! vault, so its key never sits in a file.
 
+use crate::fail_safe::Held;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -896,7 +897,7 @@ impl Execute for AppExecute {
         let state = self.app.state::<AgentState>();
         let id = state.last_ask.fetch_add(1, Ordering::SeqCst) + 1;
         let (send, answer) = std::sync::mpsc::channel();
-        if let Ok(mut asking) = state.asking.lock() {
+        if let Ok(mut asking) = state.asking.held() {
             *asking = Some((id, send));
         }
         let _ = self.app.emit("agent-ask", AgentAsk { id, what: what.to_string() });
@@ -908,7 +909,7 @@ impl Execute for AppExecute {
                 Err(_) => break false,
             }
         };
-        if let Ok(mut asking) = state.asking.lock() {
+        if let Ok(mut asking) = state.asking.held() {
             *asking = None;
         }
         let _ = self.app.emit("agent-answered", AgentAnswered { id, allowed });
@@ -934,14 +935,14 @@ impl AppExecute {
         while builds.busy.load(Ordering::SeqCst) {
             std::thread::sleep(Duration::from_millis(200));
         }
-        builds.output.lock().map(|o| o.text()).unwrap_or_default()
+        builds.output.held().map(|o| o.text()).unwrap_or_default()
     }
 }
 
 /// The person's answer to the agent's question.
 #[tauri::command]
 pub fn agent_answer(id: u32, allowed: bool, agent: State<AgentState>) -> Result<(), String> {
-    let asking = agent.asking.lock().map_err(|_| "the question is not available".to_string())?;
+    let asking = agent.asking.held().map_err(|_| "the question is not available".to_string())?;
     match asking.as_ref() {
         Some((asked, send)) if *asked == id => {
             let _ = send.send(allowed);
@@ -1046,15 +1047,15 @@ pub fn agent_send(text: String, connection: String, runs: Runs, app: AppHandle, 
         let mut tools = ProjectTools::new(project, projects_folder);
         tools.execute = Some(Box::new(AppExecute { app: app.clone(), stop: stop.clone() }));
         tools.runs = runs;
-        if let Ok(output) = app.state::<crate::build::BuildState>().output.lock() {
+        if let Ok(output) = app.state::<crate::build::BuildState>().output.held() {
             tools.output = output.text();
         }
-        let mut conversation = state.conversation.lock().map(|c| c.clone()).unwrap_or_default();
+        let mut conversation = state.conversation.held().map(|c| c.clone()).unwrap_or_default();
         let agent = Agent { system: instructions(), max_steps: MAX_STEPS, budget };
         let _ = agent.run(&mut model, &mut tools, &mut conversation, &text, &stop, &mut |event| {
             let _ = app.emit(AGENT_EVENT, &event);
         });
-        if let Ok(mut kept) = state.conversation.lock() {
+        if let Ok(mut kept) = state.conversation.held() {
             *kept = conversation;
         }
         let changes: Vec<FileChange> =
@@ -1083,7 +1084,7 @@ pub fn agent_forget(agent: State<AgentState>) -> Result<(), String> {
     if agent.running.load(Ordering::SeqCst) {
         return Err("the agent is still working; stop it first".into());
     }
-    agent.conversation.lock().map_err(|_| "the conversation is not available".to_string())?.clear();
+    agent.conversation.held().map_err(|_| "the conversation is not available".to_string())?.clear();
     Ok(())
 }
 

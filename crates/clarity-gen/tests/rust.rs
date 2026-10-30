@@ -539,7 +539,8 @@ fn a_refusal_reaches_the_screen_with_its_slots() {
     let files = files();
     let main = &program(&files);
     assert!(main.contains("type Answer<T> = std::result::Result<T, Value>;"), "{main}");
-    assert!(main.contains("Error::Refused(text) => serde_json::to_value(text).unwrap_or_default(),"), "{main}");
+    // The runtime's guard gives a refusal with its slots, and any other error or a panic as text (runtimes/rust/tests/fail_safe.rs).
+    assert!(main.contains("clarity_runtime::run_guarded(&app.0, run)"), "{main}");
     assert!(main.contains("fn dispatch_event(app: tauri::State<App>, state: WindowState, handler: String) -> Answer<Reply> {"), "{main}");
 }
 

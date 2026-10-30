@@ -575,6 +575,7 @@ cJSON* clarity_reply_json(const ClarityReply* r) {
     if (r->result) cJSON_AddItemToObject(out, "result", cJSON_Duplicate(r->result, true));
     if (r->hears) cJSON_AddItemToObject(out, "hears", cJSON_Duplicate(r->hears, true));
     if (r->copy) cJSON_AddItemToObject(out, "copy", clarity_text_json(r->copy));
+    if (r->step) cJSON_AddNumberToObject(out, "step", (double)r->step);
     if (r->ask_count > 0) {
         cJSON* asks = cJSON_AddArrayToObject(out, "asks");
         for (size_t i = 0; i < r->ask_count; ++i) {

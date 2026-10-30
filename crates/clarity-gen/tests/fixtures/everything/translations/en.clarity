@@ -1,4 +1,6 @@
 translation en
+    undoItem "Undo"
+    redoItem "Redo"
     bannerPicture resource "banner.png"
     aTitleFirst "A title first"
     about "About"

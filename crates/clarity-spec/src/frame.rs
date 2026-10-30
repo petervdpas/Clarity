@@ -184,11 +184,11 @@ pub fn new_sidebar(side: Side, name: Option<String>) -> crate::model::SidebarPro
 }
 
 /// Click targets that are not windows.
-pub const BUILT_IN_COMMANDS: &[&str] = &["quit", "close", "language", "theme", "keys"];
+pub const BUILT_IN_COMMANDS: &[&str] = &["quit", "close", "language", "theme", "keys", "undo", "redo"];
 
 /// The built-in click targets a button in a window can have too; picking
 /// the language or theme is for menus and toolbars.
-pub const BUTTON_COMMANDS: &[&str] = &["quit", "close"];
+pub const BUTTON_COMMANDS: &[&str] = &["quit", "close", "undo", "redo"];
 
 pub fn command_keyword(kind: CommandKind) -> &'static str {
     match kind {

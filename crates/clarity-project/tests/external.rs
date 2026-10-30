@@ -9,7 +9,7 @@ const PROJECT: &str = "project Shop\n    stack rust web desktop\n    datasource 
 const ERP: &str = "module erp\nsource erp\n\nentity Invoice\n    table \"tblInvoice\"\n    key \"InvoiceID\"\n    number: text(20), column \"InvNo\", label @invoiceNumberLabel\n";
 
 /// The default language, with the keys ERP uses.
-const EN: &str = "translation en\n    invoiceNumberLabel \"Number\"\n    yes \"Yes\"\n    no \"No\"\n    ok \"OK\"\n    cancel \"Cancel\"\n    dismiss \"Dismiss\"\n";
+const EN: &str = "translation en\n    invoiceNumberLabel \"Number\"\n    yes \"Yes\"\n    no \"No\"\n    ok \"OK\"\n    cancel \"Cancel\"\n    dismiss \"Dismiss\"\n    undoChangedSince \"This was changed since, so it cannot be taken back\"\n";
 
 #[test]
 fn loading_checks_external_tables() {

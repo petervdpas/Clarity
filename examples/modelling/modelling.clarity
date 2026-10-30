@@ -31,6 +31,10 @@ app Modelling
             item @settingsItem name settingsItem on click -> Preferences
             item @languageItem name languageItem on click -> language
             item @quitItem name quitItem key "Ctrl+Q" on click -> quit
+        item @editItem name editItem
+            // Ctrl+Z takes back the last edit of the part with the focus: a box moved or a line bent, a field.
+            item @undoItem name undoItem key "Ctrl+Z" on click -> undo
+            item @redoItem name redoItem key "Ctrl+Y" on click -> redo
         item @modelItem name modelItem
             item @diagramsItem name diagramsItem key "Ctrl+5" on click -> Diagrams
             item @outputItem name outputItem key "Ctrl+6" on click -> Output

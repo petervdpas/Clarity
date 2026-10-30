@@ -216,8 +216,11 @@
   /** The bend points as a handler reads them: whole numbers, x, y, x, y, .... */
   const flat = (via: { x: number; y: number }[]) => via.flatMap((p) => [Math.round(p.x), Math.round(p.y)]);
 
+  let frame = $state<HTMLDivElement | null>(null);
+
   function down(e: PointerEvent) {
     if (!e.isPrimary || e.button !== 0) return;
+    frame?.focus({ preventScroll: true });
     if (onbend) {
       const at = offset(e);
       const found = linkAt(unitAt(at));
@@ -340,7 +343,8 @@
   });
 </script>
 
-<div class="canvas-frame" bind:clientWidth={partWidth} bind:clientHeight={partHeight}>
+<!-- It takes the focus when pressed, so Ctrl+Z takes back its own edits (DESIGN 5.29). -->
+<div class="canvas-frame" tabindex="-1" bind:this={frame} bind:clientWidth={partWidth} bind:clientHeight={partHeight}>
   <svg
     {id}
     bind:this={svg}
@@ -390,6 +394,10 @@
 {/snippet}
 
 <style>
+  .canvas-frame:focus {
+    outline: none;
+  }
+
   .canvas-frame {
     position: relative;
     width: 100%;

@@ -7,6 +7,8 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+
+use crate::fail_safe::Held;
 use std::time::{Duration, Instant};
 
 use clarity_vault::{Connection, ConnectionField, Connections, DEFAULT_PARAMS, Params, SecretEntry, Secrets, Vault, VaultError};
@@ -292,7 +294,7 @@ impl Default for VaultState {
 }
 
 fn with<T>(state: &VaultState, run: impl FnOnce(&mut Store) -> Result<T, String>) -> Result<T, String> {
-    let mut store = state.0.lock().map_err(|_| "the vault is not available".to_string())?;
+    let mut store = state.0.held().map_err(|_| "the vault is not available".to_string())?;
     run(&mut store)
 }
 

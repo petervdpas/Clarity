@@ -458,6 +458,10 @@ pub struct Reply {
     /// The text the handler copied (`copy text`), for the screen to put on the clipboard.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copy: Option<Text>,
+    /// The id of the database step the handler made (DESIGN 5.29), which
+    /// the screen's edit keeps to undo it by; 0 when it changed nothing.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub step: u64,
 }
 
 /// What a handler can do to the screen.
@@ -765,6 +769,7 @@ impl Ui {
             result: self.result,
             hears: self.hears,
             copy: self.copied,
+            step: 0,
         }
     }
 
@@ -975,4 +980,8 @@ mod tests {
         assert!(!reply.state.selected.contains_key("grid"));
         assert_eq!(reply.state.selected.get("other"), Some(&0));
     }
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }

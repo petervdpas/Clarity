@@ -24,11 +24,40 @@ typedef struct {
     char* fallback;
 } ClarityStore;
 
+/// A row of a table as it was before a change and as the change left it
+/// (DESIGN 5.29): its raw column values, kept outside the scratch arena.
+typedef struct {
+    const ClarityEntity* entity;
+    int64_t id;
+    /// Whether the row was there before the change, and is after it.
+    bool had, has;
+    ClarityValue* before;
+    ClarityValue* after;
+} ClarityChange;
+
+typedef struct {
+    ClarityChange* items;
+    size_t count;
+    size_t capacity;
+} ClarityChanges;
+
+/// A step undo takes back whole: what one handler run changed.
+typedef struct {
+    ClarityChanges changes;
+    bool undone;
+} ClarityDone;
+
 struct ClarityDb {
     ClaritySourceDb* sources;
     size_t count;
     ClarityStore* stores;
     size_t store_count;
+    /// Whether a step runs, and the changes it made so far.
+    bool recording;
+    ClarityChanges changes;
+    /// Each step by its id, counted from 1; kept until the database closes.
+    ClarityDone* steps;
+    size_t step_count;
 };
 
 /// A copy that outlives the scratch arena, to free.

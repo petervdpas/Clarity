@@ -44,6 +44,7 @@ const EN: &str = "translation en
     ok \"OK\"
     cancel \"Cancel\"
     dismiss \"Dismiss\"
+    undoChangedSince \"This was changed since, so it cannot be taken back\"
 ";
 
 const NL: &str = "translation nl
@@ -61,6 +62,7 @@ const NL: &str = "translation nl
     ok \"OK\"
     cancel \"Annuleren\"
     dismiss \"Sluiten\"
+    undoChangedSince \"Dit is intussen gewijzigd en kan daarom niet ongedaan worden gemaakt\"
 ";
 
 fn project(source: &str, files: &[(&str, &str)]) -> Project {

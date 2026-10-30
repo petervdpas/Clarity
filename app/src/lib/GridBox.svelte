@@ -1,11 +1,12 @@
 <script lang="ts">
   import PopoverView from "./PopoverView.svelte";
+  import PartGuard from "./ui/PartGuard.svelte";
   import WidgetView from "./WidgetView.svelte";
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
   import { pageDesigner } from "./pageDesignerStore.svelte";
-  import { GAP, ROW_HEIGHT, gridRows, overlaps, widgetGrows, type PageData } from "./pages";
+  import { GAP, ROW_HEIGHT, gridRows, overlaps, partKey, widgetGrows, type PageData } from "./pages";
 
   let {
     preview,
@@ -94,13 +95,16 @@
     {/each}
   {/if}
 
-  {#each placed as widget (widget.span.start)}
-    {#if widget.props.kind === "popover"}
-      <!-- A popover has no place in the grid: it opens next to its part. -->
-      <PopoverView {preview} {page} {data} {design} {widget} {onnavigate} />
-    {:else}
-      <WidgetView {preview} {page} {data} {design} {widget} {onnavigate} />
-    {/if}
+  {#each placed as widget (partKey(widget))}
+    <!-- Each part guarded: one that fails to draw shows why in its place, and the rest works. -->
+    <PartGuard name={widget.props.name ?? widget.props.kind} place={widget.props}>
+      {#if widget.props.kind === "popover"}
+        <!-- A popover has no place in the grid: it opens next to its part. -->
+        <PopoverView {preview} {page} {data} {design} {widget} {onnavigate} />
+      {:else}
+        <WidgetView {preview} {page} {data} {design} {widget} {onnavigate} />
+      {/if}
+    </PartGuard>
   {/each}
 
   {#if ghost}

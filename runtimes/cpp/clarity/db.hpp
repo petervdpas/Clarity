@@ -12,6 +12,7 @@
 
 #include <concepts>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
@@ -135,18 +136,49 @@ public:
     template <Record R>
     void remove(const R& record) {
         if constexpr (!detail::has_events<R>) {
-            remove_record(detail::source_of<R>(), R::table, detail::key_of<R>(), record.id);
+            remove_record(detail::source_of<R>(), R::table, detail::key_of<R>(), R::columns(), record.id);
         } else {
             R copy = record;
             atomic(detail::source_of<R>(), [&] {
                 if constexpr (requires { copy.before_delete(*this); }) copy.before_delete(*this);
                 // What cascades from it goes first, so no reference is left behind.
                 if constexpr (requires { copy.cascade(*this); }) copy.cascade(*this);
-                remove_record(detail::source_of<R>(), R::table, detail::key_of<R>(), copy.id);
+                remove_record(detail::source_of<R>(), R::table, detail::key_of<R>(), R::columns(), copy.id);
                 if constexpr (requires { copy.after_delete(*this); }) copy.after_delete(*this);
             });
         }
     }
+
+    /// Runs a handler as one step, which undo takes back whole (DESIGN 5.29):
+    /// its id, when it changed anything, is last_step. When it fails, what
+    /// it changed is put back at once, so it leaves nothing behind. A step
+    /// inside a step is part of it.
+    template <typename F>
+    void step(F run) {
+        if (recording_) {
+            run();
+            return;
+        }
+        std::vector<Change> changes;
+        recording_ = &changes;
+        try {
+            run();
+        } catch (...) {
+            recording_ = nullptr;
+            put_back(changes);
+            throw;
+        }
+        recording_ = nullptr;
+        if (!changes.empty()) steps_[++last_step_] = {std::move(changes), false};
+    }
+    /// The id of the last step a handler made, to undo it later by; 0 before any.
+    int64_t last_step() const { return last_step_; }
+    /// Takes back step `id`: every row it changed as it was, with its own
+    /// id. Refused, changing nothing, when one of its rows changed since;
+    /// false when there is no such step, or it is undone already.
+    bool undo(int64_t id) { return replay_step(id, true); }
+    /// Does step `id` again after an undo; false when it is not undone.
+    bool redo(int64_t id) { return replay_step(id, false); }
 
     /// The records a query finds, in its order.
     template <Record R>
@@ -271,6 +303,34 @@ private:
     };
     std::map<std::string, StoreSetting> store_settings_;
 
+    /// A row of a table as it was before a change and as the change left
+    /// it; none where it was not there.
+    struct Change {
+        std::string source, table, key;
+        std::vector<std::string> columns;
+        int64_t id = 0;
+        std::optional<Row> before, after;
+    };
+    /// A step's changes, and whether it is undone.
+    struct Done {
+        std::vector<Change> changes;
+        bool undone = false;
+    };
+    /// The changes of the step that runs; none outside a step.
+    std::vector<Change>* recording_ = nullptr;
+    /// Each step by its id, kept until the application closes.
+    std::map<int64_t, Done> steps_;
+    int64_t last_step_ = 0;
+
+    void put_back(const std::vector<Change>& changes);
+    bool replay_step(int64_t id, bool back);
+    /// A row's raw values (its columns), or none when it is not there.
+    std::optional<Row> row(const std::string& source, const std::string& table, const std::string& key, const std::vector<std::string>& columns, int64_t id);
+    /// Makes a row so: gone, or with these values and its own id.
+    void put(const Change& change, const std::optional<Row>& values);
+    /// Runs `run` in a transaction of each of `sources`.
+    void within(const std::vector<std::string>& sources, size_t from, const std::function<void()>& run);
+
     Db() = default;
     SourceDb& at(const std::string& source);
     std::filesystem::path store_folder(const std::string& name);
@@ -318,9 +378,14 @@ private:
         return out;
     }
 
+    /// Saves a row, keeping it as it was and as it is now while a step records.
     int64_t store_record(const std::string& source, const std::string& table, const std::string& key, const std::vector<std::string>& columns,
                          const std::vector<PictureColumn>& pictures, std::vector<SqlValue> values, int64_t id);
-    void remove_record(const std::string& source, const std::string& table, const std::string& key, int64_t id);
+    int64_t store_row(const std::string& source, const std::string& table, const std::string& key, const std::vector<std::string>& columns,
+                      const std::vector<PictureColumn>& pictures, std::vector<SqlValue> values, int64_t id);
+    /// Deletes a row, keeping it as it was while a step records.
+    void remove_record(const std::string& source, const std::string& table, const std::string& key, const std::vector<std::string>& columns, int64_t id);
+    void remove_row(const std::string& source, const std::string& table, const std::string& key, int64_t id);
     std::vector<Row> select(const std::string& source, const std::string& sql, const std::vector<SqlValue>& params);
     static std::string select_columns(Dialect d, const std::string& key, const std::vector<std::string>& columns, const std::vector<PictureColumn>& pictures);
     std::optional<Bytes> picture_bytes(const std::string& source, const std::string& table, const std::string& key, const PictureColumn& picture, int64_t id);

@@ -226,4 +226,16 @@ public class CanvasDragTests
         Assert.Single(drags);
         window.Close();
     }
+
+    /// A canvas with undo takes the focus when pressed, so Ctrl+Z takes back its edits (DESIGN 5.29).
+    [AvaloniaFact]
+    public void A_canvas_with_undo_takes_the_focus_when_pressed()
+    {
+        var canvas = new CanvasView();
+        Edits.SetScope(canvas, "diagram");
+        var (window, _) = Shown(canvas);
+        Click(window, new Point(40, 20));
+        Assert.True(canvas.IsFocused);
+        window.Close();
+    }
 }

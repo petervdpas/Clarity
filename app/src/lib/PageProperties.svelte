@@ -652,11 +652,14 @@
       </fieldset>
     {/if}
 
-    {#if info.properties.includes("readonly") || info.properties.includes("default") || info.properties.includes("cancel")}
+    {#if info.properties.includes("readonly") || info.properties.includes("noUndo") || info.properties.includes("default") || info.properties.includes("cancel")}
       <fieldset class="checks">
         <legend>Behavior</legend>
         {#if info.properties.includes("readonly")}
           <label><input type="checkbox" checked={p.readonly} onchange={(e) => update({ readonly: e.currentTarget.checked })} /> Read-only</label>
+        {/if}
+        {#if info.properties.includes("noUndo")}
+          <label title="Ctrl+Z takes back the person's edits of this part; untick for no undo"><input type="checkbox" checked={!p.noUndo} onchange={(e) => update({ noUndo: !e.currentTarget.checked })} /> Undo (Ctrl+Z)</label>
         {/if}
         {#if info.properties.includes("default")}
           <label><input type="checkbox" checked={p.default} onchange={(e) => update({ default: e.currentTarget.checked })} /> Enter clicks it (default)</label>

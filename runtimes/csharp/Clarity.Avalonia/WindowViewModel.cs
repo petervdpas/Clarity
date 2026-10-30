@@ -4,6 +4,7 @@
 
 using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
+using System.Text.Json.Nodes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Clarity.Runtime;
 
@@ -49,6 +50,167 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     public event Action<Question>? AskRequested;
 
     public void Say(Level level, Text text) => Messages.Add(new Message(level, text));
+
+    /// <summary>The edits of this window (DESIGN 5.29), which Ctrl+Z takes back.</summary>
+    public EditBus Edits { get; } = new();
+
+    /// <summary>The window's data as the last edit left it; what an edit changed is the difference.</summary>
+    JsonObject? baseline;
+
+    /// <summary>The database step the edit that runs made, 0 when none.</summary>
+    long editStep;
+
+    /// <summary>Whether an edit's handler runs, whose changes the edit keeps.</summary>
+    bool editing;
+
+    /// <summary>Whether an undo puts data back, which no part's change makes an edit.</summary>
+    bool applying;
+
+    /// <summary>The scope of the part that had the focus last, for an Undo in a menu.</summary>
+    public string? FocusedScope { get; set; }
+
+    /// <summary>Names of a part's own state (an unbound input's text) start so; no name of the window's data does.</summary>
+    const string PartState = "#parts.";
+
+    /// <summary>The window's data, and the parts' own text and ticks, as an edit compares them.</summary>
+    JsonObject DataNow()
+    {
+        var of = Snapshot.Of(this);
+        var now = of["data"]!.AsObject();
+        foreach (var (name, node) in of["parts"]!.AsObject())
+        {
+            if (node is not JsonObject part)
+                continue;
+            var own = new JsonObject();
+            foreach (var key in new[] { "text", "checked" })
+            {
+                if (part[key] is { } value)
+                    own[key] = value.DeepClone();
+            }
+            if (own.Count > 0)
+                now[PartState + name] = own;
+        }
+        return now;
+    }
+
+    /// <summary>An edit of <paramref name="part"/> ended: what it changed since the last one goes on the bus.</summary>
+    public void Edited(string part, string scope)
+    {
+        // What a handler or an undo changed is no edit of the person's, though the bound parts follow it.
+        if (running > 0 || applying)
+            return;
+        var now = DataNow();
+        var changes = EditBus.Between(baseline ?? now, now);
+        // The change handler of a value just changed joins its edit: one change, one Ctrl+Z.
+        if (joining is { } joined && joined.Part == part && Edits.LastOf(part) == joined)
+        {
+            joined.Changes.AddRange(changes);
+            if (editStep != 0)
+                joined.Step = editStep;
+        }
+        else
+        {
+            var edit = new Edit(part, scope, changes, editStep);
+            Edits.Push(edit);
+            if (!editing)
+            {
+                joining = edit;
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(() => joining = null, global::Avalonia.Threading.DispatcherPriority.Background);
+            }
+        }
+        baseline = now;
+        editStep = 0;
+    }
+
+    /// <summary>The edit a value change just made, which its change handler joins.</summary>
+    Edit? joining;
+
+    /// <summary>
+    /// Runs the handler of an edit of a part with undo (a canvas's drag, drop
+    /// or bend, a change): as one database step; <paramref name="ends"/> ends the edit.
+    /// </summary>
+    public void EditOf(string part, string scope, bool ends, Action handler)
+    {
+        // A mirror's handlers run on the server, which keeps its edits.
+        if (Remote is not null)
+        {
+            handler();
+            return;
+        }
+        baseline ??= DataNow();
+        var before = Db?.LastStep ?? 0;
+        editing = true;
+        try
+        {
+            Handle(() =>
+            {
+                if (Db is null)
+                    handler();
+                else
+                    Db.Step(handler);
+            }, null, nameof(EditOf));
+        }
+        finally
+        {
+            editing = false;
+        }
+        if (Db is not null && Db.LastStep != before)
+            editStep = Db.LastStep;
+        if (ends)
+            Edited(part, scope);
+    }
+
+    /// <summary>Takes back (<paramref name="back"/>) or does again the last edit of <paramref name="scope"/>.</summary>
+    public void UndoEdit(string scope, bool back)
+    {
+        var edit = back ? Edits.Undo(scope) : Edits.Redo(scope);
+        if (edit is null)
+            return;
+        try
+        {
+            if (edit.Step > 0 && Db is not null)
+            {
+                if (back)
+                    Db.Undo(edit.Step);
+                else
+                    Db.Redo(edit.Step);
+            }
+        }
+        catch (RefusedException e)
+        {
+            Edits.Refused(edit, back);
+            Say(Level.Error, e.Text);
+            return;
+        }
+        var data = new JsonObject();
+        var parts = new JsonObject();
+        foreach (var changed in edit.Changes)
+        {
+            var value = (back ? changed.Before : changed.After)?.DeepClone();
+            if (changed.Name.StartsWith(PartState, StringComparison.Ordinal))
+                parts[changed.Name[PartState.Length..]] = value;
+            else
+                data[changed.Name] = value;
+        }
+        applying = true;
+        try
+        {
+            Snapshot.Apply(this, new JsonObject { ["data"] = data, ["parts"] = parts });
+        }
+        finally
+        {
+            applying = false;
+        }
+        baseline = DataNow();
+        Redraw();
+    }
+
+    /// <summary><c>-> undo</c> and <c>-> redo</c>: the last edit of the part that had the focus last.</summary>
+    protected void UndoFocused(bool back)
+    {
+        if (FocusedScope is { } scope)
+            UndoEdit(scope, back);
+    }
 
     /// <summary>Asks the shell to put a text on the clipboard: <c>copy text</c>.</summary>
     public event Action<Text>? CopyRequested;
@@ -117,6 +279,12 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         {
             Say(Level.Error, Text.Plain(e.Message));
         }
+        catch (Exception e)
+        {
+            // Fail safe: an error nobody foresaw says why, and the window keeps working.
+            Console.Error.WriteLine($"{command} failed: {e}");
+            Say(Level.Error, Text.Plain(e.Message));
+        }
         finally
         {
             running--;
@@ -125,6 +293,9 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         }
         if (running > 0)
             return ran;
+        // What a handler that is no edit changed is not taken back: the edits start from here.
+        if (!editing)
+            baseline = DataNow();
         var close = closing;
         var open = opening.ToList();
         var asks = asking.ToList();

@@ -285,6 +285,8 @@ pub enum WidgetProperty {
     For,
     Placeholder,
     Readonly,
+    /// `no undo`: a part the person edits without its own undo (DESIGN 5.29).
+    NoUndo,
     TabOrder,
     Shortcut,
     Default,
@@ -405,10 +407,10 @@ struct Entry {
 const INPUT_EVENTS: &[Event] = &[Event::Change, Event::Enter, Event::Leave];
 const TYPED: &[WidgetProperty] = &[
     WidgetProperty::Placeholder,
-    WidgetProperty::Readonly,
+    WidgetProperty::Readonly, WidgetProperty::NoUndo,
     WidgetProperty::TabOrder,
 ];
-const PICKED: &[WidgetProperty] = &[WidgetProperty::Readonly, WidgetProperty::TabOrder];
+const PICKED: &[WidgetProperty] = &[WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];
 
 /// A part that shows text and takes no input.
 const fn text_part(
@@ -519,7 +521,7 @@ const ENTRIES: &[Entry] = &[
     },
     Entry {
         caption: Some("Toggle"),
-        ..input(WidgetKind::Toggle, "toggle", "Toggle button", (2, 1), &["bool"], &[Event::Change], &[WidgetProperty::Readonly, WidgetProperty::TabOrder, WidgetProperty::Icon])
+        ..input(WidgetKind::Toggle, "toggle", "Toggle button", (2, 1), &["bool"], &[Event::Change], &[WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder, WidgetProperty::Icon])
     },
     Entry {
         caption: Some("Switch"),
@@ -534,7 +536,7 @@ const ENTRIES: &[Entry] = &[
         (4, 1),
         &["enum", "ref", "language", "theme", "text"],
         &[Event::Change],
-        &[WidgetProperty::Typed, WidgetProperty::Search, WidgetProperty::Show, WidgetProperty::Readonly, WidgetProperty::TabOrder],
+        &[WidgetProperty::Typed, WidgetProperty::Search, WidgetProperty::Show, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder],
     ),
     input(
         WidgetKind::Radio,
@@ -543,7 +545,7 @@ const ENTRIES: &[Entry] = &[
         (6, 1),
         &["enum"],
         &[Event::Change],
-        &[WidgetProperty::Orientation, WidgetProperty::Readonly, WidgetProperty::TabOrder],
+        &[WidgetProperty::Orientation, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder],
     ),
     input(WidgetKind::Date, "date", "Date", (3, 1), &["date", "dateTime"], &[Event::Change], PICKED),
     // A file of a record (U1c): its name, with buttons to choose, open, save a copy of and remove it.
@@ -561,7 +563,7 @@ const ENTRIES: &[Entry] = &[
         (6, 1),
         &["integer", "decimal", "money"],
         &[Event::Change],
-        &[WidgetProperty::Min, WidgetProperty::Max, WidgetProperty::Step, WidgetProperty::Readonly, WidgetProperty::TabOrder],
+        &[WidgetProperty::Min, WidgetProperty::Max, WidgetProperty::Step, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder],
     ),
     input(
         WidgetKind::Spinbox,
@@ -575,7 +577,7 @@ const ENTRIES: &[Entry] = &[
             WidgetProperty::Max,
             WidgetProperty::Step,
             WidgetProperty::Placeholder,
-            WidgetProperty::Readonly,
+            WidgetProperty::Readonly, WidgetProperty::NoUndo,
             WidgetProperty::TabOrder,
         ],
     ),
@@ -768,7 +770,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Change],
-        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::OrderBy, WidgetProperty::Page],
+        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::NoUndo, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::OrderBy, WidgetProperty::Page],
     },
     // A list the window holds as a tree, arranged by `children` (U1c).
     Entry {
@@ -911,7 +913,8 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: true,
         events: &[Event::Click],
-        properties: &[WidgetProperty::Source],
+        // A picture loaded or removed is an edit Ctrl+Z takes back (DESIGN 5.29).
+        properties: &[WidgetProperty::Source, WidgetProperty::NoUndo],
     },
     Entry {
         kind: WidgetKind::Canvas,
@@ -929,7 +932,7 @@ const ENTRIES: &[Entry] = &[
         // a click runs a handler, which reads where as `canvas.x` and `canvas.y`;
         // a drag and a drop also read where it was pressed, `fromX` and `fromY`.
         events: &[Event::Draw, Event::Click, Event::Drag, Event::Drop, Event::Bend, Event::Pointer, Event::Key],
-        properties: &[WidgetProperty::Units, WidgetProperty::Zoom, WidgetProperty::Grid, WidgetProperty::Snap, WidgetProperty::Background, WidgetProperty::Dots, WidgetProperty::Runs, WidgetProperty::Surface],
+        properties: &[WidgetProperty::Units, WidgetProperty::NoUndo, WidgetProperty::Zoom, WidgetProperty::Grid, WidgetProperty::Snap, WidgetProperty::Background, WidgetProperty::Dots, WidgetProperty::Runs, WidgetProperty::Surface],
     },
     // A custom part is written by its declared name; its keyword is two
     // words, so it is never typed and reads well in messages. The Parts
@@ -1058,6 +1061,32 @@ pub fn container(kind: WidgetKind) -> Option<ContainerKind> {
 
 pub fn has_event(kind: WidgetKind, event: Event) -> bool {
     entry(kind).events.contains(&event)
+}
+
+/// Where the edits of part `name` are undone (DESIGN 5.29): the form or
+/// panel it is in, so Ctrl+Z there walks back its fields one by one, or else
+/// the part itself. None for a part without undo (one that edits nothing,
+/// or says `no undo`) or not among `widgets`.
+pub fn undo_scope(widgets: &[crate::model::Widget], name: &str) -> Option<String> {
+    fn find(widgets: &[crate::model::Widget], name: &str, scope: Option<&str>) -> Option<Option<String>> {
+        for w in widgets {
+            if w.props.name.as_deref() == Some(name) {
+                let has = has_property(w.props.kind, WidgetProperty::NoUndo) && !w.props.no_undo;
+                return Some(has.then(|| scope.unwrap_or(name).to_string()));
+            }
+            let inner = if matches!(w.props.kind, WidgetKind::Form | WidgetKind::Panel) { w.props.name.as_deref().or(scope) } else { scope };
+            if let Some(found) = find(&w.children, name, inner) {
+                return Some(found);
+            }
+            for page in &w.pages {
+                if let Some(found) = find(&page.children, name, inner) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+    find(widgets, name, None).flatten()
 }
 
 pub fn has_property(kind: WidgetKind, property: WidgetProperty) -> bool {
@@ -1224,6 +1253,8 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         made: false,
         style: None,
         readonly: false,
+        no_undo: false,
+        undo_scope: None,
         foldable: false,
         folded: false,
         tab_order: None,
@@ -1456,6 +1487,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if props.readonly {
         parts.push("readonly".to_string());
     }
+    if props.no_undo {
+        parts.push("no undo".to_string());
+    }
     if props.foldable {
         parts.push(if props.folded { "foldable folded" } else { "foldable" }.to_string());
     }
@@ -1597,6 +1631,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
             "placeholder",
         ),
         (WidgetProperty::Readonly, props.readonly, "readonly"),
+        (WidgetProperty::NoUndo, props.no_undo, "no undo"),
         (WidgetProperty::Foldable, props.foldable, "foldable"),
         (WidgetProperty::TabOrder, props.tab_order.is_some(), "taborder"),
         (WidgetProperty::Shortcut, props.shortcut.is_some(), "key"),

@@ -21,7 +21,9 @@
   import { languageName, languagesOf, rememberedChoice } from "../lib/translate";
   import { errorText, type ShownText } from "../lib/format";
   import { copyText } from "../lib/clipboard";
-  import { allParts, findPage, valueEntry, windowSize, type PageData } from "../lib/pages";
+  import { catchUncaught } from "../lib/uncaught";
+  import { allParts, findPage, undoScope, valueEntry, windowSize, type PageData } from "../lib/pages";
+  import { changesOf, EditBus, setPath, type Edit } from "../lib/editBus";
   import { handlerCall } from "../lib/calls";
   import type { Place } from "../lib/customParts";
   import { SoundPart } from "../lib/sound";
@@ -58,6 +60,8 @@
     asks?: Ask[];
     /** The hears its handler gave custom parts, in order (DESIGN 5.19). */
     hears?: { part: string; hear: string; values: JsonValue[] }[];
+    /** The database step its handler made, to undo it by (DESIGN 5.29); none when it changed nothing. */
+    step?: number;
   };
 
   /**
@@ -115,6 +119,9 @@
     // The desktop window shows it too; the designer's Preview has no such command.
     invoke("set_title", { title }).catch(() => {});
   });
+
+  // An error nothing caught shows as an error message; the application keeps working.
+  $effect(() => catchUncaught((text) => say({ level: "error", text })));
 
   /** What a handler copied (`copy text`) goes on the clipboard, as it shows in the person's language and format. */
   function copied(raw: unknown) {
@@ -429,6 +436,7 @@
    * what parts tell, so a click is never lost to an engine that tells at every frame.
    */
   async function run(handler: string): Promise<boolean> {
+    lastStep = 0;
     if (busy) {
       personWaiting++;
       try {
@@ -442,6 +450,7 @@
     const index = stack.length - 1;
     try {
       const reply = received(await invoke<Reply>("dispatch_event", { state: $state.snapshot(current), handler }));
+      lastStep = reply.step ?? 0;
       await nav.apply(index, reply);
       return true;
     } catch (err) {
@@ -554,8 +563,120 @@
   // not open (DESIGN 5.27): every window closes, and closing the last connects again.
   (globalThis as unknown as { clarityCloseRequested: () => void }).clarityCloseRequested = () => void nav.closeAll();
 
+  // Undo (DESIGN 5.29): each open window has an edit bus, by its instance.
+  // Every edit of a part goes on it as a message: what changed in the
+  // window's data, and the database step its handler made. Ctrl+Z takes
+  // back the last message of the focused part's scope (its form or panel,
+  // or the part itself), so in a form it walks back field by field.
+  const buses = new Map<number, EditBus>();
+  const busOf = (instance: number) => buses.get(instance) ?? buses.set(instance, new EditBus()).get(instance)!;
+  /** The events that end an edit of a part; a canvas's drag starts one that its drop ends, and a click on a canvas is one. */
+  const EDIT_ENDS = new Set<string>(["drop", "bend", "change"]);
+  /** Paths of a part's own state (an unbound input's text) start so; no name of the window's data does. */
+  const PART_STATE = "#parts.";
+  /** The window's data where each part's edit started. */
+  const editStarts = new Map<string, Record<string, JsonValue>>();
+  /** The edit a bound input just made, which its `on change` handler joins. */
+  let lastEdit: Edit | null = null;
+  /** The step the last handler made. */
+  let lastStep = 0;
+  /** The part that had the focus last, for an Undo in a menu. */
+  let focusedPart: string | null = null;
+  /** Text inputs the person typed in since their value was last taken: Ctrl+Z there is their own text undo. */
+  const typed = new WeakSet<EventTarget>();
+
+  const dataNow = () => structuredClone($state.snapshot(current?.data ?? {})) as Record<string, JsonValue>;
+
+  /** A part's edit through its handler: the window's data before and after it, and the step it made. */
+  async function edited(part: string, event: string, handler: string): Promise<boolean> {
+    const scope = page ? undoScope(page, part) : null;
+    const joining = lastEdit?.part === part ? lastEdit : null;
+    lastEdit = null;
+    const canvasClick = event === "click" && page !== undefined && allParts(page).some((w) => w.props.name === part && w.props.kind === "canvas");
+    if (!scope || !current || !(event === "drag" || EDIT_ENDS.has(event) || canvasClick)) return run(handler);
+    const instance = current.instance ?? 0;
+    if (!editStarts.has(part)) editStarts.set(part, dataNow());
+    if (event === "drag") return run(handler);
+    const before = editStarts.get(part)!;
+    editStarts.delete(part);
+    const ran = await run(handler);
+    // A handler that failed left nothing behind.
+    if (!ran) return false;
+    const after = stack.find((s) => s.instance === instance);
+    if (!after) return true;
+    const changes = changesOf(before, structuredClone($state.snapshot(after.data)) as Record<string, JsonValue>);
+    if (joining) {
+      joining.changes.push(...changes);
+      joining.step = lastStep;
+    } else {
+      busOf(instance).push({ part, scope, changes, step: lastStep });
+    }
+    return true;
+  }
+
+  /** A bound input changed one path of the window's data. */
+  function inputEdited(part: string, path: string, before: JsonValue | undefined, after: JsonValue | undefined) {
+    const scope = page ? undoScope(page, part) : null;
+    if (!scope || !current) return;
+    const edit: Edit = { part, scope, changes: [{ path, before, after }], step: 0 };
+    busOf(current.instance ?? 0).push(edit);
+    lastEdit = edit;
+    setTimeout(() => {
+      if (lastEdit === edit) lastEdit = null;
+    }, 0);
+  }
+
+  /** Takes back (`back`) or does again the last edit of the part with the focus, or the one that had it last. */
+  async function undoEdit(back: boolean, part = focusedPart) {
+    const active = document.activeElement;
+    // Typing not yet taken is the text input's own to take back.
+    if (active && typed.has(active)) {
+      document.execCommand(back ? "undo" : "redo");
+      return;
+    }
+    if (!current || !page || !part) return;
+    const scope = undoScope(page, part);
+    if (!scope) return;
+    const bus = busOf(current.instance ?? 0);
+    const edit = back ? bus.undo(scope) : bus.redo(scope);
+    if (!edit) return;
+    const data = dataNow();
+    const parts = structuredClone($state.snapshot(current.parts)) as Record<string, JsonValue>;
+    for (const c of back ? [...edit.changes].reverse() : edit.changes) {
+      const value = back ? c.before : c.after;
+      if (c.path.startsWith(PART_STATE)) setPath(parts, c.path.slice(PART_STATE.length), value);
+      else setPath(data, c.path, value);
+    }
+    const index = stack.length - 1;
+    try {
+      const reply = received(await invoke<Reply>("undo_step", { state: { ...$state.snapshot(current), data, parts }, step: edit.step, back }));
+      await nav.apply(index, reply);
+      // A setting taken back is kept again.
+      if (edit.changes.some((c) => c.path.split(".")[0] === SETTINGS) && current) adopt($state.snapshot(current.data[SETTINGS]));
+    } catch (err) {
+      bus.refused(edit, back);
+      say({ level: "error", text: errorText(err) });
+    }
+  }
+
+  /** Ctrl+Z, and Ctrl+Y or Ctrl+Shift+Z, on the part with the focus. */
+  function undoKeys(e: KeyboardEvent) {
+    if (e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+    const key = e.key.toLowerCase();
+    const back = key === "z" && !e.shiftKey;
+    if (!back && key !== "y" && !(key === "z" && e.shiftKey)) return;
+    const target = e.target instanceof HTMLElement ? e.target : null;
+    const part = (target?.closest("[data-part]") as HTMLElement | null)?.dataset.part ?? null;
+    const widget = page && part ? allParts(page).find((w) => w.props.name === part) : undefined;
+    e.preventDefault();
+    // `no undo`: not even a text input's own.
+    if (widget?.props.noUndo) return;
+    void undoEdit(back, part ?? focusedPart);
+  }
+
   function navigate(target: string, newWindow = false) {
-    if (target === "close") nav.close();
+    if (target === "undo" || target === "redo") void undoEdit(target === "undo");
+    else if (target === "close") nav.close();
     else if (target === "quit") invoke("quit_app");
     else if (target === "language") choosing = "language";
     else if (target === "theme") choosing = "theme";
@@ -576,17 +697,25 @@
     get selected() {
       return current?.selected ?? {};
     },
-    event(_part: string, _event: PartEvent, handler: string) {
-      return run(handler);
+    event(part: string, event: PartEvent, handler: string) {
+      return edited(part, event, handler);
+    },
+    edited(part: string, path: string, before: JsonValue | undefined, after: JsonValue | undefined) {
+      inputEdited(part, path, before, after);
     },
     select(part: string, row: number) {
       if (current) current.selected[part] = row;
     },
     setText(part: string, text: string) {
-      if (current) current.parts[part] = { ...current.parts[part], text };
+      if (!current) return;
+      // An unbound input keeps its own text: an edit of the part's state, for undo.
+      inputEdited(part, `${PART_STATE}${part}.text`, current.parts[part]?.text ?? undefined, text);
+      current.parts[part] = { ...current.parts[part], text };
     },
     setChecked(part: string, checked: boolean) {
-      if (current) current.parts[part] = { ...current.parts[part], checked };
+      if (!current) return;
+      inputEdited(part, `${PART_STATE}${part}.checked`, current.parts[part]?.checked ?? undefined, checked);
+      current.parts[part] = { ...current.parts[part], checked };
     },
     screen(part: string, hear: (hear: string, values: JsonValue[]) => void) {
       // The window the canvas shows in: what it tells runs there, even if another opens over it.
@@ -791,6 +920,17 @@
     }
   });
 </script>
+
+<!-- Undo (DESIGN 5.29): the keys, the part with the focus, and typing not yet taken. -->
+<svelte:window
+  onkeydown={undoKeys}
+  onfocusin={(e) => {
+    const part = (e.target instanceof HTMLElement ? (e.target.closest("[data-part]") as HTMLElement | null) : null)?.dataset.part;
+    if (part) focusedPart = part;
+  }}
+  oninput={(e) => e.target && typed.add(e.target)}
+  onchange={(e) => e.target && typed.delete(e.target)}
+/>
 
 <div class="runtime {area.class}" class:busy data-scheme={area.scheme}>
   {#if model && page && current}

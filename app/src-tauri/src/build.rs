@@ -3,6 +3,7 @@
 //! application; Build makes a release program. Engines whose source changed
 //! are built first. The toolchain's output is sent to the frontend line by line.
 
+use crate::fail_safe::Held;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -112,7 +113,7 @@ impl Output {
 
 /// A build starts: the Output panel's lines are kept from here.
 pub(crate) fn begin_output(app: &AppHandle) {
-    if let Ok(mut output) = app.state::<BuildState>().output.lock() {
+    if let Ok(mut output) = app.state::<BuildState>().output.held() {
         output.begin();
     }
     // The Output panel opens and empties, also when the agent started the build.
@@ -121,7 +122,7 @@ pub(crate) fn begin_output(app: &AppHandle) {
 
 /// Sends a line to the Output panel and keeps it.
 pub(crate) fn send_line(app: &AppHandle, line: String) {
-    if let Ok(mut output) = app.state::<BuildState>().output.lock() {
+    if let Ok(mut output) = app.state::<BuildState>().output.held() {
         output.line(&line);
     }
     let _ = app.emit(BUILD_LINE, line);
@@ -129,7 +130,7 @@ pub(crate) fn send_line(app: &AppHandle, line: String) {
 
 /// Ends a build: keeps how it ended and tells the screen.
 pub(crate) fn send_done(app: &AppHandle, done: BuildDone) {
-    if let Ok(mut output) = app.state::<BuildState>().output.lock() {
+    if let Ok(mut output) = app.state::<BuildState>().output.held() {
         output.finish(done.ok, &done.message);
     }
     let _ = app.emit(BUILD_DONE, done);
@@ -377,7 +378,7 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
         Ok(found) => found,
         Err(err) => {
             state.busy.store(false, Ordering::SeqCst);
-            if let Ok(mut output) = state.output.lock() {
+            if let Ok(mut output) = state.output.held() {
                 output.finish(false, &err);
             }
             return Err(err);
@@ -536,7 +537,7 @@ fn run_command_line(app: &AppHandle, out: &Path, binary: &Path, line: &str) -> B
         Ok(child) => child,
         Err(err) => return BuildDone { ok: false, message: format!("cannot start {}: {err}", binary.display()), binary: None },
     };
-    if let Ok(mut input) = app.state::<BuildState>().input.lock() {
+    if let Ok(mut input) = app.state::<BuildState>().input.held() {
         *input = child.stdin.take();
     }
     let readers: Vec<_> = [child.stdout.take().map(|o| Box::new(o) as Box<dyn std::io::Read + Send>), child.stderr.take().map(|e| Box::new(e) as Box<dyn std::io::Read + Send>)]
@@ -547,14 +548,14 @@ fn run_command_line(app: &AppHandle, out: &Path, binary: &Path, line: &str) -> B
             std::thread::spawn(move || send_words(&app, from))
         })
         .collect();
-    if let Ok(mut running) = app.state::<BuildState>().running.lock() {
+    if let Ok(mut running) = app.state::<BuildState>().running.held() {
         *running = Some(child);
     }
     for reader in readers {
         let _ = reader.join();
     }
-    let status = app.state::<BuildState>().running.lock().ok().and_then(|mut r| r.take()).and_then(|mut c| c.wait().ok());
-    if let Ok(mut input) = app.state::<BuildState>().input.lock() {
+    let status = app.state::<BuildState>().running.held().ok().and_then(|mut r| r.take()).and_then(|mut c| c.wait().ok());
+    if let Ok(mut input) = app.state::<BuildState>().input.held() {
         *input = None;
     }
     let code = status.and_then(|s| s.code());
@@ -594,7 +595,7 @@ fn send_words(app: &AppHandle, mut from: impl std::io::Read) {
 /// Types `line` to the command-line program Run started, as its input.
 pub fn type_line(app: &AppHandle, line: &str) -> Result<(), String> {
     let state = app.state::<BuildState>();
-    let mut input = state.input.lock().map_err(|_| "the input is poisoned")?;
+    let mut input = state.input.held().map_err(|_| "the input is poisoned")?;
     let Some(stdin) = input.as_mut() else { return Err("no command-line program is running".to_string()) };
     writeln!(stdin, "{line}").and_then(|()| stdin.flush()).map_err(|err| format!("cannot type to the program: {err}"))?;
     drop(input);
@@ -607,10 +608,10 @@ pub fn type_line(app: &AppHandle, line: &str) -> Result<(), String> {
 fn started(app: &AppHandle, child: Child, address: Option<String>) {
     let state = app.state::<BuildState>();
     let id = child.id();
-    if let Ok(mut running) = state.running.lock() {
+    if let Ok(mut running) = state.running.held() {
         *running = Some(child);
     }
-    if let Ok(mut kept) = state.address.lock() {
+    if let Ok(mut kept) = state.address.held() {
         kept.clone_from(&address);
     }
     let _ = app.emit(APP_RUNNING, AppRunning { address });
@@ -619,7 +620,7 @@ fn started(app: &AppHandle, child: Child, address: Option<String>) {
         loop {
             std::thread::sleep(std::time::Duration::from_millis(400));
             let state = app.state::<BuildState>();
-            let Ok(mut running) = state.running.lock() else { return };
+            let Ok(mut running) = state.running.held() else { return };
             match running.as_mut() {
                 // Stop or a new Run ended it, and said so.
                 Some(child) if child.id() != id => return,
@@ -639,7 +640,7 @@ fn started(app: &AppHandle, child: Child, address: Option<String>) {
 
 /// The application Run started has ended: the screen is told.
 fn ended(app: &AppHandle) {
-    if let Ok(mut address) = app.state::<BuildState>().address.lock() {
+    if let Ok(mut address) = app.state::<BuildState>().address.held() {
         *address = None;
     }
     let _ = app.emit(APP_ENDED, ());
@@ -648,17 +649,17 @@ fn ended(app: &AppHandle) {
 /// The application Run started, while it runs.
 pub fn running(app: &AppHandle) -> Option<AppRunning> {
     let state = app.state::<BuildState>();
-    let mut running = state.running.lock().ok()?;
+    let mut running = state.running.held().ok()?;
     let child = running.as_mut()?;
     if !matches!(child.try_wait(), Ok(None)) {
         return None;
     }
-    Some(AppRunning { address: state.address.lock().ok()?.clone() })
+    Some(AppRunning { address: state.address.held().ok()?.clone() })
 }
 
 /// Ends the application Run started, if it still runs.
 pub fn stop(app: &AppHandle) {
-    let child = app.state::<BuildState>().running.lock().ok().and_then(|mut r| r.take());
+    let child = app.state::<BuildState>().running.held().ok().and_then(|mut r| r.take());
     if let Some(mut child) = child {
         let _ = child.kill();
         let _ = child.wait();

@@ -308,6 +308,18 @@ public sealed partial class Db : IDisposable
 
     void Write<R>(R record) where R : IRecord<R>
     {
+        if (recording is null)
+        {
+            WriteRow(record);
+            return;
+        }
+        var before = record.Id == 0 ? null : Row(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, record.Id);
+        WriteRow(record);
+        recording.Add(new Change(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, record.Id, before, Row(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, record.Id)));
+    }
+
+    void WriteRow<R>(R record) where R : IRecord<R>
+    {
         var values = SavedValues(record);
         var conn = Conn(R.SourceName);
         var d = conn.Dialect;
@@ -385,6 +397,18 @@ public sealed partial class Db : IDisposable
     }
 
     void Remove<R>(R record) where R : IRecord<R>
+    {
+        if (recording is null)
+        {
+            RemoveRow(record);
+            return;
+        }
+        var before = Row(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, record.Id);
+        RemoveRow(record);
+        recording.Add(new Change(R.SourceName, R.TableName, R.KeyColumn, R.ColumnNames, record.Id, before, null));
+    }
+
+    void RemoveRow<R>(R record) where R : IRecord<R>
     {
         var conn = Conn(R.SourceName);
         var d = conn.Dialect;

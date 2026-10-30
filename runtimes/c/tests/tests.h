@@ -43,6 +43,10 @@
     X(deleting_a_record_deletes_what_cascades_from_it_first)      \
     X(a_refused_child_keeps_all_of_it)                            \
     X(a_failing_event_keeps_nothing)                              \
+    X(a_step_of_saves_is_undone_and_done_again_with_the_same_ids) \
+    X(a_delete_with_its_cascade_comes_back_whole)                 \
+    X(a_handler_that_fails_leaves_nothing_and_is_no_step)         \
+    X(an_undo_whose_rows_changed_since_is_refused)                \
     X(events_run_around_a_delete)                                 \
     X(the_server_scenario_on_sqlite)                              \
     X(a_handler_replies_as_the_other_runtimes_do)                 \
@@ -52,6 +56,7 @@
     X(a_window_opens_with_its_data_and_with)                      \
     X(the_shell_answers_the_renderers_commands)                   \
     X(a_long_handler_shows_how_far_it_is_and_stops)              \
+    X(a_handler_answers_with_its_step_and_undo_step_takes_it_back) \
     X(the_server_serves_the_page_and_answers_its_commands)        \
     X(the_server_listens_where_it_is_told)                        \
     X(every_open_window_has_its_own_number)                       \

@@ -2,6 +2,7 @@
 //! dictionary that no migration step covers yet, the renames Clarity
 //! proposes, and writing them as the next step.
 
+use crate::fail_safe::Held;
 use clarity_spec::migrate::{self, Rename};
 use clarity_spec::{Preview, Severity};
 use serde::Serialize;
@@ -101,7 +102,7 @@ pub fn create_migration(
     // The folder is new: watch it from now on, like the modules.
     if !had_folder {
         let watcher = watch(&file, &dir, app)?;
-        if let Some(open) = state.open.lock().map_err(|_| "watch state is poisoned")?.as_mut() {
+        if let Some(open) = state.open.held().map_err(|_| "watch state is poisoned")?.as_mut() {
             open.watcher = watcher;
         }
     }

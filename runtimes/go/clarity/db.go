@@ -35,6 +35,8 @@ type Db struct {
 	stores map[string]string
 	// storeSettings are the file stores whose folder is a folder setting, by name.
 	storeSettings map[string]storeSetting
+	// history is what undo takes back and redo does again (DESIGN 5.29).
+	history history
 }
 
 // Connect opens a database per data source.
@@ -208,6 +210,29 @@ func unfit(err error) error {
 }
 
 func store(db *Db, record Record) error {
+	if db.history.recording == nil {
+		return storeRow(db, record)
+	}
+	source, table, key, columns := sourceOf(record), record.Table(), keyOf(record), record.Columns()
+	var before []any
+	if record.GetID() != 0 {
+		var err error
+		if before, err = db.row(source, table, key, columns, record.GetID()); err != nil {
+			return err
+		}
+	}
+	if err := storeRow(db, record); err != nil {
+		return err
+	}
+	after, err := db.row(source, table, key, columns, record.GetID())
+	if err != nil {
+		return err
+	}
+	db.history.record(change{source, table, key, columns, record.GetID(), before, after})
+	return nil
+}
+
+func storeRow(db *Db, record Record) error {
 	s, err := db.source(sourceOf(record))
 	if err != nil {
 		return err
@@ -312,6 +337,22 @@ func Delete[R Record](db *Db, record R) error {
 }
 
 func remove(db *Db, record Record) error {
+	if db.history.recording == nil {
+		return removeRow(db, record)
+	}
+	source, table, key, columns := sourceOf(record), record.Table(), keyOf(record), record.Columns()
+	before, err := db.row(source, table, key, columns, record.GetID())
+	if err != nil {
+		return err
+	}
+	if err := removeRow(db, record); err != nil {
+		return err
+	}
+	db.history.record(change{source, table, key, columns, record.GetID(), before, nil})
+	return nil
+}
+
+func removeRow(db *Db, record Record) error {
 	s, err := db.source(sourceOf(record))
 	if err != nil {
 		return err

@@ -92,7 +92,7 @@ fn tauri_runs_a_watched_handler_off_the_screens_thread() {
     for command in ["open_window", "close_window", "return_to", "start_app", "dispatch_event", "answer_event"] {
         assert!(text.contains(&format!("async fn {command}(app: tauri::State<'_, App>, stopping: tauri::State<'_, Stopping>, webview: tauri::WebviewWindow")), "{command}");
     }
-    assert!(text.contains("watched(&stopping, &webview, || locked(&app, |db| dispatch(db, state, &handler)))"));
+    assert!(text.contains("watched(&stopping, &webview, || locked(&app, |db| clarity_runtime::stepped(db, || dispatch(db, state, &handler))))"));
     assert!(text.contains("fn stop_call(stopping: tauri::State<Stopping>)"));
     assert!(text.contains(".manage(Stopping::default())"));
     assert!(text.contains("            stop_call,\n"));

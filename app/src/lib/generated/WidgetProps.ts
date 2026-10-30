@@ -210,6 +210,17 @@ style: string | null,
  */
 readonly: boolean, 
 /**
+ * A part the person edits without an undo of its own (DESIGN 5.29):
+ * `no undo`. Every other one takes back its own edits with Ctrl+Z.
+ */
+noUndo: boolean, 
+/**
+ * Where its edits are undone, worked out when the project loads
+ * (`widgets::undo_scope`): its form or panel, or itself; none without
+ * undo. Every screen uses it as it is; it is never written back.
+ */
+undoScope: string | null, 
+/**
  * A panel or form the person using the application folds and unfolds
  * by its header: `foldable`.
  */

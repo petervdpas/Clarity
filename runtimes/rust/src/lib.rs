@@ -83,6 +83,37 @@ pub fn snapped(value: i64, step: i64) -> i64 {
     if step > 0 { (2 * value + step).div_euclid(2 * step) * step } else { value }
 }
 
+/// Runs a handler of an edit as one undo step (DESIGN 5.29): the reply
+/// carries the step's id when the handler changed the database.
+pub fn stepped(db: &Db, run: impl FnOnce() -> Result<ui::Reply>) -> Result<ui::Reply> {
+    let before = db.last_step();
+    let mut reply = db.step(run)?;
+    if db.last_step() != before {
+        reply.step = db.last_step();
+    }
+    Ok(reply)
+}
+
+/// Fail safe: runs a handler on the database. An error is what the screen
+/// shows (a refusal its own text); a panic, as on a list index out of range,
+/// becomes an error too, and the database stays usable for the next handler.
+pub fn run_guarded<T>(db: &std::sync::Mutex<Db>, run: impl FnOnce(&Db) -> Result<T>) -> std::result::Result<T, serde_json::Value> {
+    let db = db.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&db))) {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(Error::Refused(text))) => Err(serde_json::to_value(text).unwrap_or_default()),
+        Ok(Err(other)) => Err(serde_json::Value::from(other.to_string())),
+        Err(panic) => {
+            let why = panic
+                .downcast_ref::<String>()
+                .cloned()
+                .or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string()))
+                .unwrap_or_else(|| "the handler stopped".to_string());
+            Err(serde_json::Value::from(why))
+        }
+    }
+}
+
 /// `sin(degrees)` in code, rounded to 10 decimals (conformance/drawing.json).
 pub fn sin(degrees: Decimal) -> Decimal {
     angle(degrees, f64::sin)
@@ -321,6 +352,34 @@ pub struct Db {
     sources: Vec<Source>,
     /// The file stores, by name.
     stores: Vec<(String, StorePlace)>,
+    /// What undo takes back and redo does again (DESIGN 5.29).
+    history: RefCell<History>,
+}
+
+/// A row of a table as it was before a change and as the change left it;
+/// `None` where it was not there.
+struct Change {
+    source: String,
+    table: &'static str,
+    key: &'static str,
+    columns: &'static [&'static str],
+    id: Id,
+    before: Option<Vec<SqlValue>>,
+    after: Option<Vec<SqlValue>>,
+}
+
+/// The database side of undo (DESIGN 5.29): the changes of each handler
+/// run that changed something, by the step's id. The screen keeps the edits
+/// on its bus, each with the id of the step its handler made, and asks for
+/// that step to be undone or done again. Kept until the application closes.
+#[derive(Default)]
+struct History {
+    /// The changes of the step that runs; none outside a step.
+    recording: Option<Vec<Change>>,
+    /// Each step by its id, and whether it is undone.
+    steps: std::collections::BTreeMap<u64, (Vec<Change>, bool)>,
+    /// The id of the last step kept.
+    last: u64,
 }
 
 impl Db {
@@ -341,6 +400,7 @@ impl Db {
         Db {
             sources: vec![Source::new("", driver)],
             stores: Vec::new(),
+            history: RefCell::default(),
         }
     }
 
@@ -352,7 +412,7 @@ impl Db {
             .iter()
             .map(|(name, dialect, at)| Ok(Source::new(name, store::open(*dialect, at)?)))
             .collect::<Result<Vec<_>>>()?;
-        Ok(Db { sources, stores: Vec::new() })
+        Ok(Db { sources, stores: Vec::new(), history: RefCell::default() })
     }
 
     /// Adds the file store `name` at `location`, a folder (made when it is
@@ -575,6 +635,17 @@ impl Db {
     }
 
     fn store<R: Record>(&self, record: &mut R) -> Result<()> {
+        let recording = self.history.borrow().recording.is_some();
+        let before = if recording && record.id() != 0 { self.row(R::SOURCE, R::TABLE, R::KEY, R::COLUMNS, record.id())? } else { None };
+        self.store_row(record)?;
+        if recording {
+            let after = self.row(R::SOURCE, R::TABLE, R::KEY, R::COLUMNS, record.id())?;
+            self.record(Change { source: R::SOURCE.to_string(), table: R::TABLE, key: R::KEY, columns: R::COLUMNS, id: record.id(), before, after });
+        }
+        Ok(())
+    }
+
+    fn store_row<R: Record>(&self, record: &mut R) -> Result<()> {
         let values = self.saved_values(record)?;
         let mut conn = self.conn(R::SOURCE)?;
         let d = conn.dialect();
@@ -643,6 +714,16 @@ impl Db {
     }
 
     fn remove<R: Record>(&self, record: &R) -> Result<()> {
+        let recording = self.history.borrow().recording.is_some();
+        let before = if recording { self.row(R::SOURCE, R::TABLE, R::KEY, R::COLUMNS, record.id())? } else { None };
+        self.remove_row(record)?;
+        if recording {
+            self.record(Change { source: R::SOURCE.to_string(), table: R::TABLE, key: R::KEY, columns: R::COLUMNS, id: record.id(), before, after: None });
+        }
+        Ok(())
+    }
+
+    fn remove_row<R: Record>(&self, record: &R) -> Result<()> {
         let mut conn = self.conn(R::SOURCE)?;
         let d = conn.dialect();
         let sql = format!("DELETE FROM {} WHERE {} = {}", d.quote(R::TABLE), d.quote(R::KEY), d.mark(1));
@@ -654,6 +735,163 @@ impl Db {
             }),
             Err(failure) => Err(failure.into()),
         }
+    }
+
+    /// Runs a handler as one step, which undo takes back whole (DESIGN
+    /// 5.29): its id, when it changed anything, is `last_step`. When it
+    /// fails, what it changed is put back at once, so it leaves nothing
+    /// behind. A step inside a step is part of it.
+    pub fn step<T>(&self, run: impl FnOnce() -> Result<T>) -> Result<T> {
+        if self.history.borrow().recording.is_some() {
+            return run();
+        }
+        self.history.borrow_mut().recording = Some(Vec::new());
+        let result = run();
+        let changes = self.history.borrow_mut().recording.take().unwrap_or_default();
+        match &result {
+            Err(_) => {
+                for change in changes.iter().rev() {
+                    let _ = self.put(change, change.before.as_deref());
+                }
+            }
+            Ok(_) if changes.is_empty() => {}
+            Ok(_) => {
+                let mut history = self.history.borrow_mut();
+                history.last += 1;
+                let id = history.last;
+                history.steps.insert(id, (changes, false));
+            }
+        }
+        result
+    }
+
+    /// The id of the last step a handler made, to undo it later by; 0 before any.
+    pub fn last_step(&self) -> u64 {
+        self.history.borrow().last
+    }
+
+    /// Takes back step `id`: every row it changed as it was, with its own
+    /// id. Refused, changing nothing, when one of its rows changed since;
+    /// false when there is no such step, or it is undone already.
+    pub fn undo(&self, id: u64) -> Result<bool> {
+        self.replay_step(id, true)
+    }
+
+    /// Does step `id` again after an undo; false when it is not undone.
+    pub fn redo(&self, id: u64) -> Result<bool> {
+        self.replay_step(id, false)
+    }
+
+    fn replay_step(&self, id: u64, back: bool) -> Result<bool> {
+        let step = {
+            let mut history = self.history.borrow_mut();
+            match history.steps.get_mut(&id) {
+                Some((changes, undone)) if *undone != back => std::mem::take(changes),
+                _ => return Ok(false),
+            }
+        };
+        let replayed = self.replay(&step, back);
+        let mut history = self.history.borrow_mut();
+        if let Some((changes, undone)) = history.steps.get_mut(&id) {
+            *changes = step;
+            if replayed.is_ok() {
+                *undone = back;
+            }
+        }
+        replayed.map(|()| true)
+    }
+
+    fn record(&self, change: Change) {
+        if let Some(recording) = self.history.borrow_mut().recording.as_mut() {
+            recording.push(change);
+        }
+    }
+
+    /// Puts a step's rows back (`back`) or forward, after checking that each
+    /// row is still as the step left it, all in one transaction per source.
+    fn replay(&self, step: &[Change], back: bool) -> Result<()> {
+        // Each row as the step left it (its last change undone, its first redone) must still be so.
+        let mut seen = Vec::new();
+        let order: Vec<&Change> = if back { step.iter().rev().collect() } else { step.iter().collect() };
+        for change in &order {
+            let at = (change.source.as_str(), change.table, change.id);
+            if seen.contains(&at) {
+                continue;
+            }
+            seen.push(at);
+            let expected = if back { &change.after } else { &change.before };
+            if &self.row(&change.source, change.table, change.key, change.columns, change.id)? != expected {
+                return Err(Error::Refused(ui::Text::key("undoChangedSince")));
+            }
+        }
+        let mut sources: Vec<&str> = step.iter().map(|c| c.source.as_str()).collect();
+        sources.sort();
+        sources.dedup();
+        self.within(&sources, &|| {
+            for change in &order {
+                self.put(change, if back { change.before.as_deref() } else { change.after.as_deref() })?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Runs `run` in a transaction of each of `sources`.
+    fn within(&self, sources: &[&str], run: &dyn Fn() -> Result<()>) -> Result<()> {
+        match sources.split_first() {
+            None => run(),
+            Some((first, rest)) => self.atomic(first, || self.within(rest, run)),
+        }
+    }
+
+    /// A row's raw values (its columns, by `columns`), or `None` when it is not there.
+    fn row(&self, source: &str, table: &str, key: &str, columns: &[&str], id: Id) -> Result<Option<Vec<SqlValue>>> {
+        let mut conn = self.conn(source)?;
+        let d = conn.dialect();
+        let names = if columns.is_empty() { d.quote(key) } else { columns.iter().map(|c| d.quote(c)).collect::<Vec<_>>().join(", ") };
+        let sql = format!("SELECT {names} FROM {} WHERE {} = {}", d.quote(table), d.quote(key), d.mark(1));
+        let mut rows = conn.rows(&sql, &[SqlValue::Integer(id)])?;
+        Ok(if rows.is_empty() { None } else { Some(if columns.is_empty() { Vec::new() } else { rows.remove(0) }) })
+    }
+
+    /// Makes a row so: gone, or with these values and its own id.
+    fn put(&self, change: &Change, values: Option<&[SqlValue]>) -> Result<()> {
+        let there = self.row(&change.source, change.table, change.key, change.columns, change.id)?.is_some();
+        let mut conn = self.conn(&change.source)?;
+        let d = conn.dialect();
+        let table = d.quote(change.table);
+        let key = d.quote(change.key);
+        let id = SqlValue::Integer(change.id);
+        match values {
+            None if there => {
+                conn.execute(&format!("DELETE FROM {table} WHERE {key} = {}", d.mark(1)), &[id])?;
+            }
+            None => {}
+            Some(values) if there => {
+                if !change.columns.is_empty() {
+                    let sets = change.columns.iter().enumerate().map(|(i, c)| format!("{} = {}", d.quote(c), d.mark(i + 1))).collect::<Vec<_>>().join(", ");
+                    let mut params = values.to_vec();
+                    params.push(id);
+                    conn.execute(&format!("UPDATE {table} SET {sets} WHERE {key} = {}", d.mark(params.len())), &params)?;
+                }
+            }
+            Some(values) => {
+                let names = std::iter::once(key.clone()).chain(change.columns.iter().map(|c| d.quote(c))).collect::<Vec<_>>().join(", ");
+                let marks = (1..=change.columns.len() + 1).map(|i| d.mark(i)).collect::<Vec<_>>().join(", ");
+                let mut params = vec![id];
+                params.extend(values.iter().cloned());
+                let insert = format!("INSERT INTO {table} ({names}) VALUES ({marks})");
+                // SQL Server takes a key of its own counting only when asked to.
+                if d == Dialect::Mssql {
+                    conn.batch(&format!("SET IDENTITY_INSERT {table} ON"))?;
+                    let inserted = conn.execute(&insert, &params);
+                    conn.batch(&format!("SET IDENTITY_INSERT {table} OFF"))?;
+                    inserted?;
+                } else {
+                    conn.execute(&insert, &params)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     /// The records a query finds, in its order.

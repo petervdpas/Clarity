@@ -71,6 +71,8 @@ const KEYWORDS: &[&str] = &[
     "switch", "show", "surface", "on", "menu", "toolbar", "ribbon", "sidebar", "footer", "item", "separator", "icon",
     "large", "group", "tab", "step", "section", "pane", "width", "resizable", "collapsible", "collapsed", "maximizable", "foldable",
     "folded", "heading", "status", "sortable", "ask", "yes", "no", "then", "gives", "to", "max", "split", "labels",
+    // Undo (DESIGN 5.29): `no undo`, and the targets `undo` and `redo`.
+    "undo", "redo",
 ];
 
 /// Clarity's own types.

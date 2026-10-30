@@ -145,7 +145,13 @@ public class SegmentDisplay : TemplatedControl
         ['g'] = Across(2 + G, 10 - G, 10),
     };
 
-    public override void Render(DrawingContext context)
+    // Fail safe: a drawing that fails shows why in the control's place.
+    public override void Render(DrawingContext context) => Failed = FailSafe.Render(this, context, () => RenderSafely(context));
+
+    /// <summary>Why the last drawing failed, or null.</summary>
+    public string? Failed { get; private set; }
+
+    void RenderSafely(DrawingContext context)
     {
         var bounds = new Rect(Bounds.Size);
         if (Background is { } background) context.FillRectangle(background, bounds, (float)CornerRadius.TopLeft);

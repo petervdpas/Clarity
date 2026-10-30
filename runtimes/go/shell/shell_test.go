@@ -48,6 +48,13 @@ func (c *cards) Dispatch(db *clarity.Db, state clarity.WindowState, handler stri
 		return clarity.Reply{}, clarity.Refuse(clarity.NewText("{name} is taken").With("name", clarity.SlotText("Ada")))
 	case "fail":
 		return clarity.Reply{}, &clarity.StorageError{What: "locked"}
+	case "remember":
+		if err := clarity.Save(db, &memo{Text: "kept"}); err != nil {
+			return clarity.Reply{}, err
+		}
+	case "crash":
+		var none []int64
+		_ = none[3]
 	case "plan":
 		// As a long engine call does: it says how far it is until it is stopped.
 		watch := clarity.CurrentWatch()
@@ -116,6 +123,9 @@ func service(t *testing.T) (*Service, *cards) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
+	if _, err := db.Migrate([][]string{{"CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"}}); err != nil {
+		t.Fatal(err)
+	}
 	windows := &cards{}
 	return New(Options{Name: "shop", Title: "Shop", Main: "Card", Model: []byte(`{"project":{}}`), Db: db, Windows: windows}), windows
 }
@@ -187,6 +197,20 @@ func TestARefusalKeepsItsSlotsAndOtherErrorsAreText(t *testing.T) {
 	c, _ := service(t)
 	state := `{"state":{"window":"Card","data":{"name":"Ada"}},"handler":"save"}`
 	if got := wire(t, call(t, c, "dispatch_event", state)); got != `{"error":{"text":"{name} is taken","values":{"name":{"kind":"text","value":"Ada"}}}}` {
+		t.Fatal(got)
+	}
+	state = `{"state":{"window":"Card","data":{}},"handler":"fail"}`
+	if got := wire(t, call(t, c, "dispatch_event", state)); got != `{"error":"storage: locked"}` {
+		t.Fatal(got)
+	}
+}
+
+// Fail safe: a handler that panics, as on a list index out of range, is an
+// error the screen shows, and the next command runs.
+func TestAHandlerThatPanicsIsAnErrorAndTheNextCommandRuns(t *testing.T) {
+	c, _ := service(t)
+	state := `{"state":{"window":"Card","data":{}},"handler":"crash"}`
+	if got := wire(t, call(t, c, "dispatch_event", state)); !strings.Contains(got, "index out of range") {
 		t.Fatal(got)
 	}
 	state = `{"state":{"window":"Card","data":{}},"handler":"fail"}`
@@ -437,5 +461,47 @@ func TestALongHandlerShowsHowFarItIsAndStops(t *testing.T) {
 	shown.mu.Lock()
 	if len(shown.scripts) != 0 {
 		t.Errorf("told %v", shown.scripts)
+	}
+}
+
+// memo is a record a handler keeps, for undo.
+type memo struct {
+	ID   int64
+	Text string
+}
+
+func (*memo) Table() string     { return "memo" }
+func (*memo) Columns() []string { return []string{"text"} }
+func (m *memo) GetID() int64    { return m.ID }
+func (m *memo) SetID(id int64)  { m.ID = id }
+func (m *memo) Values() []any   { return []any{m.Text} }
+func (m *memo) Load(id int64, v []any) error {
+	r := clarity.NewReader(v)
+	*m = memo{id, r.Text(0, "text")}
+	return r.Err()
+}
+
+// Undo (DESIGN 5.29): a handler that changed the database answers with its
+// step, which undo_step takes back and does again, drawing the window anew.
+func TestAHandlerAnswersWithItsStepAndUndoStepTakesItBack(t *testing.T) {
+	c, _ := service(t)
+	db := c.options.Db
+	state := `{"state":{"window":"Card","data":{}},"handler":"remember"}`
+	got := wire(t, call(t, c, "dispatch_event", state))
+	if !strings.Contains(got, `"step":1`) {
+		t.Fatal(got)
+	}
+	if got := wire(t, call(t, c, "dispatch_event", `{"state":{"window":"Card","data":{}},"handler":"fail"}`)); strings.Contains(got, `"step"`) {
+		t.Fatal(got)
+	}
+	if got := wire(t, call(t, c, "undo_step", `{"state":{"window":"Card","data":{}},"step":1,"back":true}`)); strings.Contains(got, "error") {
+		t.Fatal(got)
+	}
+	if memos, _ := clarity.All[memo](db); len(memos) != 0 {
+		t.Fatal(memos)
+	}
+	call(t, c, "undo_step", `{"state":{"window":"Card","data":{}},"step":1,"back":false}`)
+	if memos, _ := clarity.All[memo](db); len(memos) != 1 {
+		t.Fatal(memos)
 	}
 }

@@ -673,6 +673,19 @@ fn check(state: &WindowState) -> Result<()> {{
     Ok(())
 }}
 
+/// Takes step `step` back or does it again, then draws the window anew.
+fn undone(db: &Db, state: WindowState, step: u64, back: bool) -> Result<Reply> {{
+    if step > 0 {{
+        if back {{
+            db.undo(step)?;
+        }} else {{
+            db.redo(step)?;
+        }}
+    }}
+    let data = state.data.clone();
+    redraw(db, Ui::from_state(&state).reply(&state.window, data))
+}}
+
 /// Runs a handler on a window's state, then draws its canvases anew.
 fn dispatch(db: &Db, state: WindowState, handler: &str) -> Result<Reply> {{
     let reply = run(db, state, handler)?;
@@ -737,11 +750,8 @@ fn picture_of(db: &Db, entity: &str, id: i64, field: &str) -> Result<Option<Vec<
 type Answer<T> = std::result::Result<T, Value>;
 
 fn locked<T>(app: &App, run: impl FnOnce(&Db) -> Result<T>) -> Answer<T> {{
-    let db = app.0.lock().map_err(|_| Value::from("the database is not available"))?;
-    run(&db).map_err(|err| match err {{
-        Error::Refused(text) => serde_json::to_value(text).unwrap_or_default(),
-        other => Value::from(other.to_string()),
-    }})
+    // Fail safe: an error or a panic is what the screen shows, and the database stays usable.
+    clarity_runtime::run_guarded(&app.0, run)
 }}
 
 {start_command}
@@ -786,7 +796,15 @@ fn open_databases() -> Result<Db> {{
 
 #[tauri::command]
 {asynced}fn dispatch_event(app: {app_state}{watch_params}, state: WindowState, handler: String) -> Answer<Reply> {{
-    {watching}locked(&app, |db| dispatch(db, state, &handler)){watched_end}
+    // One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
+    {watching}locked(&app, |db| clarity_runtime::stepped(db, || dispatch(db, state, &handler))){watched_end}
+}}
+
+/// Takes a step back (`back`) or does it again, on the window's data as the
+/// screen put it back, and draws its canvases anew (DESIGN 5.29).
+#[tauri::command]
+fn undo_step(app: tauri::State<App>, state: WindowState, step: u64, back: bool) -> Answer<Reply> {{
+    locked(&app, |db| undone(db, state, step, back))
 }}
 
 /// The answer to a question a handler asked: runs the handler it goes to.
@@ -899,6 +917,7 @@ pub(crate) fn run(db: Db{problem_param}) {{
             close_window,
             return_to,
             dispatch_event,
+            undo_step,
             answer_event,
             ref_options,
             field_values,
@@ -1252,7 +1271,11 @@ fn served(app: &App{connecting}, command: &str, args: Value) -> Value {{
         }})()),
         "dispatch_event" => given((|| {{
             let (state, handler): (WindowState, String) = (arg(&args, "state")?, arg(&args, "handler")?);
-            locked(app, |db| dispatch(db, state, &handler))
+            locked(app, |db| clarity_runtime::stepped(db, || dispatch(db, state, &handler)))
+        }})()),
+        "undo_step" => given((|| {{
+            let (state, step, back): (WindowState, u64, bool) = (arg(&args, "state")?, arg(&args, "step")?, arg(&args, "back")?);
+            locked(app, |db| undone(db, state, step, back))
         }})()),
         "answer_event" => given((|| {{
             let (state, handler, values): (WindowState, String, Vec<Value>) = (arg(&args, "state")?, arg(&args, "handler")?, arg(&args, "values")?);

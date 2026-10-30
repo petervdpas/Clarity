@@ -96,6 +96,20 @@ bool clarity_migrate(ClarityDb* db, const char* source, const ClarityStep* steps
 bool clarity_save(ClarityDb* db, const ClarityEntity* entity, void* record);
 /// Removes a stored record, with the entity's data events around it.
 bool clarity_delete(ClarityDb* db, const ClarityEntity* entity, const void* record);
+/// Runs a handler, `run(context)`, as one step, which undo takes back whole
+/// (DESIGN 5.29): its id, when it changed anything, is clarity_last_step.
+/// When it fails, what it changed is put back at once, so it leaves
+/// nothing behind. A step inside a step is part of it. Without a database
+/// it just runs.
+bool clarity_step(ClarityDb* db, bool (*run)(void* context), void* context);
+/// The id of the last step a handler made, to undo it later by; 0 before any.
+int64_t clarity_last_step(const ClarityDb* db);
+/// Takes back step `id`: every row it changed as it was, with its own id.
+/// Refused, changing nothing, when one of its rows changed since. `done`
+/// (may be NULL) is false when there is no such step, or it is undone already.
+bool clarity_undo(ClarityDb* db, int64_t id, bool* done);
+/// Does step `id` again after an undo; `done` is false when it is not undone.
+bool clarity_redo(ClarityDb* db, int64_t id, bool* done);
 /// The records a query finds, in its order, as an array in the scratch arena.
 bool clarity_find(ClarityDb* db, const ClarityEntity* entity, const ClarityQuery* query, void** items, size_t* count);
 bool clarity_get(ClarityDb* db, const ClarityEntity* entity, int64_t id, void* record);

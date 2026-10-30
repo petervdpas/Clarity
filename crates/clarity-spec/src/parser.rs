@@ -1542,10 +1542,10 @@ fn parse_widget_page(
 }
 
 /// The words a part's line is written with, which a color after `dots 3` is not.
-const LINE_WORDS: [&str; 60] = [
+const LINE_WORDS: [&str; 61] = [
     "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "order", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
-    "children", "page", "typed", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly",
+    "children", "page", "typed", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
     "foldable", "folded", "taborder", "key", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window",
 ];
 
@@ -1612,6 +1612,8 @@ fn parse_widget_props(
         made: false,
         style: None,
         readonly: false,
+        no_undo: false,
+        undo_scope: None,
         foldable: false,
         folded: false,
         tab_order: None,
@@ -1658,8 +1660,9 @@ fn parse_widget_props(
             if widgets::has_property(kind, property) {
                 Ok(())
             } else {
+                let written = if property == WidgetProperty::NoUndo { "no undo" } else { property_name };
                 Err(Diagnostic::error(
-                    format!("'{property_name}' does not apply to a {name}"),
+                    format!("'{written}' does not apply to a {name}"),
                     clause.span,
                 ))
             }
@@ -2028,6 +2031,15 @@ fn parse_widget_props(
             "readonly" => {
                 applies(WidgetProperty::Readonly)?;
                 props.readonly = true;
+            }
+            // `no undo`: the part has no undo of its own (DESIGN 5.29).
+            "no" => {
+                applies(WidgetProperty::NoUndo)?;
+                let word = cursor.expect_ident("undo, as in no undo")?;
+                if word.name != "undo" {
+                    return Err(Diagnostic::error(format!("expected undo after no, as in no undo, not '{}'", word.name), word.span));
+                }
+                props.no_undo = true;
             }
             "foldable" => {
                 applies(WidgetProperty::Foldable)?;

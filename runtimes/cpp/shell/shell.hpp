@@ -178,6 +178,8 @@ private:
     std::atomic<bool> to_screen_ = false;
 
     Reply on_event(const WindowState& state, const std::string& event);
+    /// Draws the window as its data is, running no handler.
+    Reply drawn(const WindowState& state);
     /// Runs a handler, then draws the window's canvases anew.
     Reply dispatch(const WindowState& state, const std::string& handler);
 };

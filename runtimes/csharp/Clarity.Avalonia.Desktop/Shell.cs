@@ -63,6 +63,8 @@ public sealed class Shell : Window
             }
         };
         Content = new Panel { Children = { content, messages } };
+        // Ctrl+Z takes back the focused part's last edit (DESIGN 5.29).
+        Edits.Listen(this, () => Current);
         Locale.Changed += Refresh;
         Closing += (_, _) =>
         {
@@ -201,6 +203,7 @@ public sealed class Shell : Window
             dialog.Close();
         };
         dialog.Closing += (_, _) => Finish();
+        Edits.Listen(dialog, () => other);
         dialogs.Add(other);
         dialogWindows[other] = dialog;
         _ = dialog.ShowDialog(this);

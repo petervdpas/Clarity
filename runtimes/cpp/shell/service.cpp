@@ -66,8 +66,10 @@ bool link_opens(const std::string& address) {
 
 Reply Service::on_event(const WindowState& state, const std::string& event) {
     if (auto handler = options_.windows->handler(state.window, event)) return dispatch(state, *handler);
-    return options_.windows->redraw(*options_.db, Ui(state).reply(state.window, state.data));
+    return drawn(state);
 }
+
+Reply Service::drawn(const WindowState& state) { return options_.windows->redraw(*options_.db, Ui(state).reply(state.window, state.data)); }
 
 Reply Service::dispatch(const WindowState& state, const std::string& handler) {
     return options_.windows->redraw(*options_.db, options_.windows->dispatch(*options_.db, state, handler));
@@ -152,7 +154,23 @@ json Service::answer(const std::string& command, const json& args, Desktop* call
         }
         if (command == "return_to") return value(on_event(state, "return"));
         if (command == "start_app") return value(on_event(WindowState{}, "start"));
-        if (command == "dispatch_event") return value(dispatch(state, text_of(args, "handler")));
+        if (command == "dispatch_event") {
+            // One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
+            int64_t before = db.last_step();
+            Reply reply;
+            db.step([&] { reply = dispatch(state, text_of(args, "handler")); });
+            if (db.last_step() != before) reply.step = db.last_step();
+            return value(reply);
+        }
+        if (command == "undo_step") {
+            // A step taken back or done again, on the window's data as the screen put it back.
+            int64_t step = args.contains("step") && args["step"].is_number_integer() ? args["step"].get<int64_t>() : 0;
+            if (step > 0) {
+                if (args.value("back", false)) db.undo(step);
+                else db.redo(step);
+            }
+            return value(drawn(state));
+        }
         if (command == "answer_event") {
             // The answer to a question a handler asked runs the handler it goes to.
             json values = args.contains("values") && args["values"].is_array() ? args["values"] : json::array();
@@ -255,6 +273,9 @@ json Service::answer(const std::string& command, const json& args, Desktop* call
         return {{"error", "there is no command " + command}};
     } catch (const std::exception& e) {
         return failed(e);
+    } catch (...) {
+        // Fail safe: whatever else a handler throws is an error the screen shows.
+        return {{"error", "the handler stopped"}};
     }
 }
 

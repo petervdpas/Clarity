@@ -127,6 +127,10 @@ pub const UNCONNECTED_KEYS: [(&str, &str); 2] = [("unconnectedNotKept", "The dat
 /// of its drawing (DESIGN 5.12): the host's own message in `{problem}`.
 pub const SCREEN_ENGINE_KEYS: [(&str, &str); 1] = [("screenEngineFailed", "The engine stopped: {problem}")];
 
+/// Why an undo was refused (DESIGN 5.29): what it would take back was
+/// changed since. Every application with windows has undo.
+pub const UNDO_KEYS: [(&str, &str); 1] = [("undoChangedSince", "This was changed since, so it cannot be taken back")];
+
 /// Every list of Clarity's own words, with their English.
 pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
     RENDERER_KEYS
@@ -147,6 +151,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&SECRET_KEYS)
         .chain(&KEYS_WINDOW_KEYS)
         .chain(&SCREEN_ENGINE_KEYS)
+        .chain(&UNDO_KEYS)
 }
 
 /// The key a text names, without its `@`; none for a text written as it is.
@@ -529,8 +534,10 @@ fn shown(project: &Project) -> Shown {
     let keys_window = crate::frame::clicks_to(project, "keys");
     let screen_engines = project.files.iter().flat_map(|f| &f.engines).any(|e| e.beside);
     let passwords = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Password));
+    let windows = project.files.iter().any(|f| !f.pages.is_empty());
     let own = RENDERER_KEYS
         .iter()
+        .chain(if windows { UNDO_KEYS.as_slice() } else { &[] })
         .chain(if bound_picture { PICTURE_KEYS.as_slice() } else { &[] })
         .chain(if wizard { STEP_KEYS.as_slice() } else { &[] })
         .chain(if bound_file { FILE_KEYS.as_slice() } else { &[] })

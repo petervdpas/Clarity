@@ -856,6 +856,7 @@ form name details at 1,1 span 12 rows 3 bind customer
 |---|---|---|
 | `placeholder @key` | textbox, memo, password, number | Shown while the input is empty. |
 | `readonly` | inputs | Shows the value, which cannot be changed. Handlers can change this. |
+| `no undo` | the parts the person edits: inputs, images, canvases, tables with `edit` | Ctrl+Z takes back nothing on this part, not even typing in a text input. Every other one has undo; see [Undo](#undo). |
 | `taborder n` | inputs, buttons | Position in the keyboard order, from 1. Parts without one follow in reading order. |
 | `key "Ctrl+S"` | buttons | The key that clicks the button. |
 | `default` | buttons | Enter clicks this button. One per window. |
@@ -872,7 +873,7 @@ A button, an image, a menu item, or a toolbar or ribbon button can open a window
 button @allCustomersCaption name allCustomers at 1,12 span 3 on click -> CustomerBrowse
 ```
 
-`on click -> Target` opens the window `Target`, in place, on top of the window the click is in. `on click -> Target in new window` opens it in a desktop window of its own instead: the one way, besides a `dialog`, that an application gets a second desktop window. Closing the last window there closes that desktop window, and the window that opened it gets its `on return`. In menus, toolbars and on buttons, `close` closes the current window and `quit` ends the application. In menus and toolbars, `language` lets the person choose the language the application shows (see [Translations](#translations)), and `theme` one of the themes it offers (see [Themes](#themes)). A click either opens a window this way or runs a handler (`on click: handler`), not both.
+`on click -> Target` opens the window `Target`, in place, on top of the window the click is in. `on click -> Target in new window` opens it in a desktop window of its own instead: the one way, besides a `dialog`, that an application gets a second desktop window. Closing the last window there closes that desktop window, and the window that opened it gets its `on return`. In menus, toolbars and on buttons, `close` closes the current window, `quit` ends the application, and `undo` and `redo` take back or do again the last edit of the part that had the focus (see [Undo](#undo)). In menus and toolbars, `language` lets the person choose the language the application shows (see [Translations](#translations)), and `theme` one of the themes it offers (see [Themes](#themes)). A click either opens a window this way or runs a handler (`on click: handler`), not both.
 
 ### Containers
 
@@ -1133,7 +1134,7 @@ Menu items and toolbar and ribbon buttons are commands. Their properties:
 | `icon "name"` | all | An icon, by its name among Clarity's icons. |
 | `key "Ctrl+N"` | all | The key that runs it: shown in the menu, or in the button's tooltip. A ribbon button's works whichever tab is open. One key runs one command in a frame; the window's own buttons go first. |
 | `large` | ribbon buttons | A large button. |
-| `on click -> Target` | all | Opens a window, or `close`, `quit`, `language`, `theme` or `keys` (the keys window, where the project file says `keys editable`). |
+| `on click -> Target` | all | Opens a window, or `close`, `quit`, `undo`, `redo`, `language`, `theme` or `keys` (the keys window, where the project file says `keys editable`). |
 | `on click: handler` | all | Runs a handler. |
 
 An item with a submenu opens the submenu, so it has no `on click` of its own.
@@ -1227,6 +1228,18 @@ code CustomerForm
 - `handler name(param: type, ...)` declares a handler that takes values, which a part gives it: `button "7" on click: digit(7)` runs `handler digit(d: integer)` with `d` 7. Each parameter a part gives is `text`, `integer`, `decimal`, `money`, `bool` or an enum; a handler that the answer to a question runs may also take dates, durations and records. The values must fit: as many as it has parameters, each of its type. Events of the window itself (`on open`) give no values, so their handlers take none.
 - A handler that is wired but not written is an error. A handler that is written but not wired anywhere is a warning.
 - Handlers run in the backend. The window sends its data with the event, the handler runs, and the window shows what changed: data, part properties, messages, and windows to open or close.
+- **Fail safe.** A handler that stops on an error (a refusal, a record that is gone, a list position out of range, anything the runtime did not foresee) shows the error as an error message, and the application keeps working: the next handler runs as usual, on every stack. A part that cannot be drawn shows its name and the reason in its own place, and the rest of the window works.
+
+### Undo
+
+Every part the person edits takes back its own edits with Ctrl+Z, and does them again with Ctrl+Y (or Ctrl+Shift+Z), on every stack, with nothing to write:
+
+- **What one edit is.** A click on a canvas, its drag and drop (from the first drag to the drop), a bent line, a table cell, a change of an input (bound or not), a picture loaded into an image or removed. Lists and trees, which only select, have no undo, nor a custom part, which brings its own, nor a canvas's `on pointer` and `on key`. Its undo puts back the window's data as it was before the edit, and what the handler of that edit (`on drop`, `on bend`, `on change`) saved or deleted, cascades included.
+- **Where.** Ctrl+Z acts on the part with the focus. In a `form` or a `panel`, it walks back the fields one by one, the last first. In a text input, its own text undo comes first while it has something to take back.
+- **A menu item or a button** reaches it with the built-in targets `undo` and `redo`: `item @undoItem name undoItem key "Ctrl+Z" on click -> undo`. They act on the part that had the focus last.
+- **Not taken back:** moving around (a tab, folding, zoom and pan, the selected row), what a click or a timer did, and effects outside the databases and the window (files written, messages, the clipboard, calls to other services).
+- **`no undo`** on a part's line switches it off there.
+- **Safe.** When what an undo would take back was changed since (by another edit, window or person), it is refused with a message (Clarity's word `undoChangedSince`) and changes nothing.
 
 ### What a handler sees
 

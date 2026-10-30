@@ -37,6 +37,7 @@ translation en
     ok \"OK\"
     cancel \"Cancel\"
     dismiss \"Dismiss\"
+    undoChangedSince \"This was changed since, so it cannot be taken back\"
 ";
 
 const NL: &str = "// Dutch.
@@ -52,6 +53,7 @@ translation nl
     ok \"OK\"
     cancel \"Annuleren\"
     dismiss \"Sluiten\"
+    undoChangedSince \"Dit is intussen gewijzigd en kan daarom niet ongedaan worden gemaakt\"
 ";
 
 fn project_with(files: &[(&str, &str)]) -> Project {
@@ -197,7 +199,7 @@ fn a_text_without_letters_needs_no_key() {
     assert!(!translations::has_letters("{name}"));
     let calc = "module calc\n\npage Calc: window\n    button \"7\" name seven at 1,1\n";
     let mut project = load_sources([("calc.clarity", calc)]);
-    translations::attach(&mut project, [("translations/en.clarity", "translation en\n    yes \"Yes\"\n    no \"No\"\n    ok \"OK\"\n    cancel \"Cancel\"\n    dismiss \"Dismiss\"\n")]);
+    translations::attach(&mut project, [("translations/en.clarity", "translation en\n    yes \"Yes\"\n    no \"No\"\n    ok \"OK\"\n    cancel \"Cancel\"\n    dismiss \"Dismiss\"\n    undoChangedSince \"This was changed since, so it cannot be taken back\"\n")]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
 }
 

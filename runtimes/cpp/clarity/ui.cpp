@@ -202,6 +202,7 @@ void to_json(nlohmann::json& out, const Reply& r) {
     }
     if (r.result) out["result"] = *r.result;
     if (r.copy) out["copy"] = *r.copy;
+    if (r.step) out["step"] = r.step;
     if (!r.asks.empty()) {
         nlohmann::json asks = nlohmann::json::array();
         for (const auto& a : r.asks) asks.push_back({{"question", a.question}, {"form", a.form}, {"handler", a.handler}, {"values", a.values}});

@@ -1,4 +1,7 @@
 <script lang="ts">
+  import PartGuard from "./lib/ui/PartGuard.svelte";
+  import { catchUncaught } from "./lib/uncaught";
+  import Guarded from "./lib/ui/Guarded.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
@@ -1100,6 +1103,13 @@
     return `${fileName(d.path)}:${d.span.line}:${d.span.col}`;
   }
 
+  // An error nothing caught shows in the error bar, and so does a panic in the backend.
+  onMount(() => catchUncaught((text) => (actionError = text)));
+  onMount(() => {
+    const stop = listen<string>("clarity-panic", (event) => (actionError = event.payload));
+    return () => void stop.then((unlisten) => unlisten());
+  });
+
   onMount(() => {
     // A turn of the agent ends: open what it made, show what it asked for, and offer Undo.
     agent.onEnded = async (ended) => {
@@ -1196,25 +1206,27 @@
 
 {#snippet tree(full: boolean)}
   {#if preview}
-    <ProjectTree
-      {preview}
-      selected={current}
-      {full}
-      onapp={selectApp}
-      onwindow={selectPage}
-      onselect={select}
-      onnewdata={full ? startNewData : null}
-      onnewtheme={full ? startNewTheme : null}
-      onmenu={full ? (e, item) => (treeMenu = { x: e.clientX, y: e.clientY, item }) : null}
-      onnewengine={full ? startNewEngine : null}
-      onnewlanguage={full ? startNewLanguage : null}
-      onnewresource={full ? startNewResource : null}
-      onnewdiagram={full ? startNewDiagram : null}
-      onnewwindow={full ? startNewWindow : null}
-      onnewapp={full && preview.project.files[0] ? () => preview && addApp(preview.project.files[0]) : null}
-      apis={projectFile?.settings?.datasources.filter((s) => s.kind === "rest") ?? []}
-      onnewapi={full && projectFile?.settings ? startNewApi : null}
-    />
+    <PartGuard name="project tree">
+      <ProjectTree
+        {preview}
+        selected={current}
+        {full}
+        onapp={selectApp}
+        onwindow={selectPage}
+        onselect={select}
+        onnewdata={full ? startNewData : null}
+        onnewtheme={full ? startNewTheme : null}
+        onmenu={full ? (e, item) => (treeMenu = { x: e.clientX, y: e.clientY, item }) : null}
+        onnewengine={full ? startNewEngine : null}
+        onnewlanguage={full ? startNewLanguage : null}
+        onnewresource={full ? startNewResource : null}
+        onnewdiagram={full ? startNewDiagram : null}
+        onnewwindow={full ? startNewWindow : null}
+        onnewapp={full && preview.project.files[0] ? () => preview && addApp(preview.project.files[0]) : null}
+        apis={projectFile?.settings?.datasources.filter((s) => s.kind === "rest") ?? []}
+        onnewapi={full && projectFile?.settings ? startNewApi : null}
+      />
+    </PartGuard>
   {/if}
 {/snippet}
 
@@ -1230,433 +1242,446 @@
       <button class="corner manual-button" onclick={() => openManual()} title={keyTip("Open the manual on this tab's page", "manual")}>Manual</button>
       <button class="corner agent-toggle" class:active={agent.open} aria-pressed={agent.open} onclick={() => agent.toggle()} title={keyTip("Show or hide the agent", "agent")}>Agent</button>
     </div>
-    <div class="ribbon-body">
-      {#if tab === "project"}
-        <div class="group">
-          <div class="buttons">
-            <RibbonButton icon="new" label="New" title="Create a project: a .clarity file with its folder" keys={keysFor("project.new")} onclick={newProject} />
-            <RibbonButton icon="open" label="Open" title="Open a project file (.clarity)" keys={keysFor("project.open")} onclick={chooseProject} />
-            <RibbonButton icon="reload" label="Reload" keys={keysFor("project.reload")} disabled={!openFile} onclick={() => openFile && openProject(openFile)} />
-            <RibbonButton icon="settings" label="Settings" title="Stack and data sources" keys={keysFor("project.settings")} disabled={!preview} active={current?.kind === "settings"} onclick={selectSettings} />
-          </div>
-          <div class="group-name">Project</div>
-        </div>
-        <div class="group">
-          <div class="buttons">
-            <RibbonButton icon="window" label="New window" keys={keysFor("window.new")} disabled={!preview} onclick={startNewWindow} />
-            <RibbonButton icon="app" label={app ? "App" : "New app"} disabled={!preview} onclick={() => (app ? selectApp() : preview && addApp(preview.project.files[0]))} />
-          </div>
-          <div class="group-name">Windows</div>
-        </div>
-        <div class="group">
-          <div class="buttons">
-            <RibbonButton icon="check" label={errorCount === 0 ? "No errors" : errorCount === 1 ? "1 error" : `${errorCount} errors`} title="Read every file again and check the whole project" keys={keysFor("project.check")} disabled={!preview} onclick={checkProject} />
-          </div>
-          <div class="group-name">Check</div>
-        </div>
-      {:else if tab === "design"}
-        <div class="group">
-          <div class="buttons">
-            <RibbonButton icon="undo" label="Undo" keys={keysFor("design.undo")} disabled={history.undo === 0} onclick={() => replay("undo_edit")} />
-            <RibbonButton icon="redo" label="Redo" keys={keysFor("design.redo")} disabled={history.redo === 0} onclick={() => replay("redo_edit")} />
-            <RibbonButton
-              icon="delete"
-              label="Delete"
-              title={pageDesigner.selected !== null ? "Delete the picked part" : "Delete this window"}
-              disabled={!designing}
-              onclick={deletePicked}
-            />
-          </div>
-          <div class="group-name">Edit</div>
-        </div>
-        <div class="group">
-          <div class="buttons">
-            <RibbonButton icon="window" label="New window" keys={keysFor("window.new")} disabled={!preview} onclick={startNewWindow} />
-            <RibbonButton icon="grid" label="Grid" keys={keysFor("design.grid")} active={pageDesigner.showGrid} onclick={() => (pageDesigner.showGrid = !pageDesigner.showGrid)} />
-          </div>
-          <div class="group-name">Window</div>
-        </div>
-        {@render languageGroup()}
-        <div class="group">
-          <div class="buttons">
-            <RibbonButton
-              icon="save"
-              label={pageDesigner.saving ? "Saving..." : "Saved"}
-              title="Every change is written to the project files as you make it"
-              disabled={true}
-              onclick={() => {}}
-            />
-          </div>
-          <div class="group-name">File</div>
-        </div>
-      {:else if tab === "vault"}
-        <div class="group">
-          <div class="buttons">
-            <RibbonButton icon="key" label="Secrets" keys={keysFor("vault.secrets")} active={vault.view === "secrets"} onclick={() => (vault.view = "secrets")} />
-            <RibbonButton icon="link" label="Connections" keys={keysFor("vault.connections")} active={vault.view === "connections"} onclick={() => (vault.view = "connections")} />
-          </div>
-          <div class="group-name">Vault</div>
-        </div>
-        {#if vault.view === "secrets"}
+    <PartGuard name="ribbon">
+      <div class="ribbon-body">
+        {#if tab === "project"}
           <div class="group">
             <div class="buttons">
-              <RibbonButton icon="new" label="Add" keys={keysFor("vault.add")} disabled={!vault.unlocked} onclick={() => vault.startSecret()} />
-              <RibbonButton icon="edit" label="Edit" keys={keysFor("vault.edit")} disabled={!vault.unlocked || !vault.selected} onclick={() => vault.editSecret()} />
-              <RibbonButton icon="delete" label="Delete" keys={keysFor("vault.delete")} disabled={!vault.unlocked || !vault.selected} onclick={() => vault.deleteSecret()} />
-              <RibbonButton icon="copy" label="Copy value" keys={keysFor("vault.copy")} disabled={!vault.unlocked || !vault.selected} onclick={() => vault.copyValue()} />
-              <RibbonButton icon="tag" label="Categories" keys={keysFor("vault.categories")} disabled={!vault.unlocked} onclick={() => (vault.dialog = "categories")} />
+              <RibbonButton icon="new" label="New" title="Create a project: a .clarity file with its folder" keys={keysFor("project.new")} onclick={newProject} />
+              <RibbonButton icon="open" label="Open" title="Open a project file (.clarity)" keys={keysFor("project.open")} onclick={chooseProject} />
+              <RibbonButton icon="reload" label="Reload" keys={keysFor("project.reload")} disabled={!openFile} onclick={() => openFile && openProject(openFile)} />
+              <RibbonButton icon="settings" label="Settings" title="Stack and data sources" keys={keysFor("project.settings")} disabled={!preview} active={current?.kind === "settings"} onclick={selectSettings} />
             </div>
-            <div class="group-name">Secrets</div>
+            <div class="group-name">Project</div>
+          </div>
+          <div class="group">
+            <div class="buttons">
+              <RibbonButton icon="window" label="New window" keys={keysFor("window.new")} disabled={!preview} onclick={startNewWindow} />
+              <RibbonButton icon="app" label={app ? "App" : "New app"} disabled={!preview} onclick={() => (app ? selectApp() : preview && addApp(preview.project.files[0]))} />
+            </div>
+            <div class="group-name">Windows</div>
+          </div>
+          <div class="group">
+            <div class="buttons">
+              <RibbonButton icon="check" label={errorCount === 0 ? "No errors" : errorCount === 1 ? "1 error" : `${errorCount} errors`} title="Read every file again and check the whole project" keys={keysFor("project.check")} disabled={!preview} onclick={checkProject} />
+            </div>
+            <div class="group-name">Check</div>
+          </div>
+        {:else if tab === "design"}
+          <div class="group">
+            <div class="buttons">
+              <RibbonButton icon="undo" label="Undo" keys={keysFor("design.undo")} disabled={history.undo === 0} onclick={() => replay("undo_edit")} />
+              <RibbonButton icon="redo" label="Redo" keys={keysFor("design.redo")} disabled={history.redo === 0} onclick={() => replay("redo_edit")} />
+              <RibbonButton
+                icon="delete"
+                label="Delete"
+                title={pageDesigner.selected !== null ? "Delete the picked part" : "Delete this window"}
+                disabled={!designing}
+                onclick={deletePicked}
+              />
+            </div>
+            <div class="group-name">Edit</div>
+          </div>
+          <div class="group">
+            <div class="buttons">
+              <RibbonButton icon="window" label="New window" keys={keysFor("window.new")} disabled={!preview} onclick={startNewWindow} />
+              <RibbonButton icon="grid" label="Grid" keys={keysFor("design.grid")} active={pageDesigner.showGrid} onclick={() => (pageDesigner.showGrid = !pageDesigner.showGrid)} />
+            </div>
+            <div class="group-name">Window</div>
+          </div>
+          {@render languageGroup()}
+          <div class="group">
+            <div class="buttons">
+              <RibbonButton
+                icon="save"
+                label={pageDesigner.saving ? "Saving..." : "Saved"}
+                title="Every change is written to the project files as you make it"
+                disabled={true}
+                onclick={() => {}}
+              />
+            </div>
+            <div class="group-name">File</div>
+          </div>
+        {:else if tab === "vault"}
+          <div class="group">
+            <div class="buttons">
+              <RibbonButton icon="key" label="Secrets" keys={keysFor("vault.secrets")} active={vault.view === "secrets"} onclick={() => (vault.view = "secrets")} />
+              <RibbonButton icon="link" label="Connections" keys={keysFor("vault.connections")} active={vault.view === "connections"} onclick={() => (vault.view = "connections")} />
+            </div>
+            <div class="group-name">Vault</div>
+          </div>
+          {#if vault.view === "secrets"}
+            <div class="group">
+              <div class="buttons">
+                <RibbonButton icon="new" label="Add" keys={keysFor("vault.add")} disabled={!vault.unlocked} onclick={() => vault.startSecret()} />
+                <RibbonButton icon="edit" label="Edit" keys={keysFor("vault.edit")} disabled={!vault.unlocked || !vault.selected} onclick={() => vault.editSecret()} />
+                <RibbonButton icon="delete" label="Delete" keys={keysFor("vault.delete")} disabled={!vault.unlocked || !vault.selected} onclick={() => vault.deleteSecret()} />
+                <RibbonButton icon="copy" label="Copy value" keys={keysFor("vault.copy")} disabled={!vault.unlocked || !vault.selected} onclick={() => vault.copyValue()} />
+                <RibbonButton icon="tag" label="Categories" keys={keysFor("vault.categories")} disabled={!vault.unlocked} onclick={() => (vault.dialog = "categories")} />
+              </div>
+              <div class="group-name">Secrets</div>
+            </div>
+          {:else}
+            <div class="group">
+              <div class="buttons">
+                <RibbonButton icon="new" label="New connection" keys={keysFor("vault.newConnection")} onclick={() => vault.newConnection()} />
+                <RibbonButton icon="delete" label="Delete" keys={keysFor("vault.removeConnection")} disabled={!vault.draft} onclick={() => vault.removeConnection()} />
+              </div>
+              <div class="group-name">Connections</div>
+            </div>
+          {/if}
+          <div class="group">
+            <div class="buttons">
+              <RibbonButton icon="lock" label="Lock" keys={keysFor("vault.lock")} disabled={!vault.unlocked} onclick={() => vault.lock()} />
+              <RibbonButton icon="key" label="Change password" disabled={!vault.unlocked} onclick={() => (vault.dialog = "password")} />
+              <RibbonButton icon="delete" label="Destroy vault" disabled={!vault.info?.exists} onclick={() => (vault.dialog = "destroy")} />
+            </div>
+            <div class="group-name">Master password</div>
           </div>
         {:else}
           <div class="group">
             <div class="buttons">
-              <RibbonButton icon="new" label="New connection" keys={keysFor("vault.newConnection")} onclick={() => vault.newConnection()} />
-              <RibbonButton icon="delete" label="Delete" keys={keysFor("vault.removeConnection")} disabled={!vault.draft} onclick={() => vault.removeConnection()} />
+              <RibbonButton icon="window" label="Main window" keys={keysFor("preview.main")} disabled={!preview} onclick={() => preview && (stack = startWindow(preview))} />
+              <RibbonButton icon="back" label="Back" keys={keysFor("preview.back")} disabled={stack.length < 2} onclick={() => (stack = stack.slice(0, -1))} />
             </div>
-            <div class="group-name">Connections</div>
+            <div class="group-name">Preview</div>
           </div>
+          {@render languageGroup()}
+          <div class="group">
+            <div class="buttons">
+              <RibbonButton
+                icon="play"
+                label={building ? "Building..." : "Run"}
+                title="Generate the application, build it with its toolchain and start it"
+                keys={keysFor("preview.run")}
+                disabled={!preview || building || running || commandRunning || errorCount > 0}
+                onclick={() => buildApp(false, true)}
+              />
+              <RibbonButton
+                icon="build"
+                label="Build"
+                title="Build a release program of the application"
+                keys={keysFor("preview.build")}
+                disabled={!preview || building || errorCount > 0}
+                onclick={() => buildApp(true, false)}
+              />
+              <RibbonButton icon="stop" label="Stop" title="Close the running application" keys={keysFor("preview.stop")} disabled={!running && !commandRunning} onclick={stopApp} />
+              <RibbonButton icon="globe" label="Browser" title={address ? `Open the running application in your browser, at ${address}` : "Opens a running web application in your browser"} disabled={!address} onclick={openInBrowser} />
+            </div>
+            <div class="group-name">Application</div>
+          </div>
+          {#if stack.length > 1}
+            <div class="breadcrumb">
+              {#each stack as o, i (i)}
+                {#if i > 0}<span class="sep">/</span>{/if}
+                <button disabled={i === stack.length - 1} onclick={() => (stack = stack.slice(0, i + 1))}>{o.name}</button>
+              {/each}
+            </div>
+          {/if}
         {/if}
-        <div class="group">
-          <div class="buttons">
-            <RibbonButton icon="lock" label="Lock" keys={keysFor("vault.lock")} disabled={!vault.unlocked} onclick={() => vault.lock()} />
-            <RibbonButton icon="key" label="Change password" disabled={!vault.unlocked} onclick={() => (vault.dialog = "password")} />
-            <RibbonButton icon="delete" label="Destroy vault" disabled={!vault.info?.exists} onclick={() => (vault.dialog = "destroy")} />
-          </div>
-          <div class="group-name">Master password</div>
-        </div>
-      {:else}
-        <div class="group">
-          <div class="buttons">
-            <RibbonButton icon="window" label="Main window" keys={keysFor("preview.main")} disabled={!preview} onclick={() => preview && (stack = startWindow(preview))} />
-            <RibbonButton icon="back" label="Back" keys={keysFor("preview.back")} disabled={stack.length < 2} onclick={() => (stack = stack.slice(0, -1))} />
-          </div>
-          <div class="group-name">Preview</div>
-        </div>
-        {@render languageGroup()}
-        <div class="group">
-          <div class="buttons">
-            <RibbonButton
-              icon="play"
-              label={building ? "Building..." : "Run"}
-              title="Generate the application, build it with its toolchain and start it"
-              keys={keysFor("preview.run")}
-              disabled={!preview || building || running || commandRunning || errorCount > 0}
-              onclick={() => buildApp(false, true)}
-            />
-            <RibbonButton
-              icon="build"
-              label="Build"
-              title="Build a release program of the application"
-              keys={keysFor("preview.build")}
-              disabled={!preview || building || errorCount > 0}
-              onclick={() => buildApp(true, false)}
-            />
-            <RibbonButton icon="stop" label="Stop" title="Close the running application" keys={keysFor("preview.stop")} disabled={!running && !commandRunning} onclick={stopApp} />
-            <RibbonButton icon="globe" label="Browser" title={address ? `Open the running application in your browser, at ${address}` : "Opens a running web application in your browser"} disabled={!address} onclick={openInBrowser} />
-          </div>
-          <div class="group-name">Application</div>
-        </div>
-        {#if stack.length > 1}
-          <div class="breadcrumb">
-            {#each stack as o, i (i)}
-              {#if i > 0}<span class="sep">/</span>{/if}
-              <button disabled={i === stack.length - 1} onclick={() => (stack = stack.slice(0, i + 1))}>{o.name}</button>
-            {/each}
-          </div>
+        {#if actionError || loadError}
+          <p class="ribbon-error" role="alert">
+            {actionError ?? loadError}
+            <button onclick={() => ((actionError = null), (loadError = null))}>Dismiss</button>
+          </p>
         {/if}
-      {/if}
-      {#if actionError || loadError}
-        <p class="ribbon-error" role="alert">
-          {actionError ?? loadError}
-          <button onclick={() => ((actionError = null), (loadError = null))}>Dismiss</button>
-        </p>
-      {/if}
-    </div>
+      </div>
+    </PartGuard>
   </header>
 
   <!-- Clarity's settings take the place of the work below the ribbon; the work stays as it was. -->
-  {#if appSettings.open}
-    <AppSettingsView onclose={closeAppSettings} />
-  {/if}
+  <PartGuard name="Clarity settings">
+    {#if appSettings.open}
+      <AppSettingsView onclose={closeAppSettings} />
+    {/if}
+  </PartGuard>
   <div class="shell" class:hidden={appSettings.open} style:grid-template-columns="{layout.sizes.sidebar}px auto minmax(0, 1fr){agent.open ? ` auto ${layout.sizes.agent}px` : ''}">
-    <aside>
-      {#if tab === "design" && designing}
-        <div class="side-tabs" role="tablist">
-          {#each DESIGN_SIDES as t (t.key)}
-            <button role="tab" aria-selected={designSide === t.key} class:active={designSide === t.key} onclick={() => (designSide = t.key)}>{t.name}</button>
-          {/each}
-        </div>
-      {/if}
-      <!-- Designers put their parts and their window outline here. -->
-      <div id="design-parts" class="design-sidebar" class:hidden={!designing || designSide !== "parts"}></div>
-      <div id="design-outline" class="design-sidebar" class:hidden={!designing || designSide !== "outline"}></div>
+    <PartGuard name="sidebar">
+      <aside>
+        {#if tab === "design" && designing}
+          <div class="side-tabs" role="tablist">
+            {#each DESIGN_SIDES as t (t.key)}
+              <button role="tab" aria-selected={designSide === t.key} class:active={designSide === t.key} onclick={() => (designSide = t.key)}>{t.name}</button>
+            {/each}
+          </div>
+        {/if}
+        <!-- Designers put their parts and their window outline here. -->
+        <div id="design-parts" class="design-sidebar" class:hidden={!designing || designSide !== "parts"}></div>
+        <div id="design-outline" class="design-sidebar" class:hidden={!designing || designSide !== "outline"}></div>
 
-      {#if tab === "project"}
-        <section class="side-section">
-          <h2>Project</h2>
+        {#if tab === "project"}
+          <section class="side-section">
+            <h2>Project</h2>
+            {#if preview}
+              <dl>
+                <dt>Name</dt>
+                <dd>{projectName}</dd>
+                <dt>File</dt>
+                <dd class="path" title={openFile}>{openFile}</dd>
+                <dt>App folder</dt>
+                <dd class="path"><button class="link" title="Open the project settings" onclick={selectSettings}>{projectFile?.app_folder || "-"}</button></dd>
+                <dt>Main window</dt>
+                <dd>{app?.main?.name ?? "(none)"}</dd>
+                <dt>Stack</dt>
+                <dd><button class="link" title="Open the project settings" onclick={selectSettings}>{stackSummary}</button></dd>
+                <dt>Data</dt>
+                <dd>
+                  {#if projectFile?.settings}
+                    {projectFile.settings.datasources.map((s) => s.name).join(", ") || "(none)"}
+                  {:else}
+                    -
+                  {/if}
+                </dd>
+              </dl>
+            {:else}
+              <p class="none">No project is open. Use New or Open in the ribbon.</p>
+            {/if}
+          </section>
           {#if preview}
-            <dl>
-              <dt>Name</dt>
-              <dd>{projectName}</dd>
-              <dt>File</dt>
-              <dd class="path" title={openFile}>{openFile}</dd>
-              <dt>App folder</dt>
-              <dd class="path"><button class="link" title="Open the project settings" onclick={selectSettings}>{projectFile?.app_folder || "-"}</button></dd>
-              <dt>Main window</dt>
-              <dd>{app?.main?.name ?? "(none)"}</dd>
-              <dt>Stack</dt>
-              <dd><button class="link" title="Open the project settings" onclick={selectSettings}>{stackSummary}</button></dd>
-              <dt>Data</dt>
-              <dd>
-                {#if projectFile?.settings}
-                  {projectFile.settings.datasources.map((s) => s.name).join(", ") || "(none)"}
-                {:else}
-                  -
-                {/if}
-              </dd>
-            </dl>
-          {:else}
-            <p class="none">No project is open. Use New or Open in the ribbon.</p>
+            <section class="side-section fill">
+              {@render tree(true)}
+            </section>
           {/if}
-        </section>
-        {#if preview}
+        {:else if tab === "design" && (!designing || designSide === "elements")}
           <section class="side-section fill">
             {@render tree(true)}
           </section>
+        {:else if tab === "design" && designSide === "settings"}
+          <section class="side-section">
+            <h2>Design settings</h2>
+            <label class="check">
+              <input type="checkbox" bind:checked={pageDesigner.showGrid} />
+              Show the snap grid
+            </label>
+            <p class="none">Every change is written to the project files at once; Undo and Redo in the ribbon take changes back.</p>
+          </section>
+        {:else if tab === "vault"}
+          <VaultSide />
+        {:else if tab === "preview"}
+          <section class="side-section fill">
+            <h2>Run a window</h2>
+            {@render tree(false)}
+          </section>
         {/if}
-      {:else if tab === "design" && (!designing || designSide === "elements")}
-        <section class="side-section fill">
-          {@render tree(true)}
-        </section>
-      {:else if tab === "design" && designSide === "settings"}
-        <section class="side-section">
-          <h2>Design settings</h2>
-          <label class="check">
-            <input type="checkbox" bind:checked={pageDesigner.showGrid} />
-            Show the snap grid
-          </label>
-          <p class="none">Every change is written to the project files at once; Undo and Redo in the ribbon take changes back.</p>
-        </section>
-      {:else if tab === "vault"}
-        <VaultSide />
-      {:else if tab === "preview"}
-        <section class="side-section fill">
-          <h2>Run a window</h2>
-          {@render tree(false)}
-        </section>
-      {/if}
 
-      {#if preview && tab !== "vault"}
-        <section class="diagnostics" class:flash={checkFlash} onanimationend={() => (checkFlash = false)}>
-          <h2>
-            Problems
-            <span class="count error">{errorCount}</span>
-            <span class="count warning">{warnings.length}</span>
-            {#if checkedAt}<span class="checked">checked the project and {preview.project.files.length} modules at {checkedAt}</span>{/if}
-          </h2>
-          <ul>
-            {#each projectProblems as message, i (i)}
-              <li class="error">
-                <button class="link" onclick={selectSettings}><code>{openFile ? fileName(openFile) : "project"}</code></button>
-                <span>{message}</span>
-              </li>
-            {/each}
-            {#each builtProblems as { engine, problem }, i (i)}
-              <li class={problem.severity}>
-                <button class="link" onclick={() => showEngineLine(engine, problem.line)}><code>{engine} {problem.file.split(/[\\/]/).pop()}:{problem.line}</code></button>
-                <span>{problem.message}</span>
-              </li>
-            {/each}
-            {#each preview.project.diagnostics as d, i (i)}
-              {@const fix = fixOf(d.message)}
-              <li class={d.severity}>
-                <code>{location(d)}</code>
-                <span>{d.message}</span>
-                {#if fix}
-                  {#if "edit" in fix}
-                    <button class="fix" title="For every such problem in {fileName(d.path)}" onclick={() => applyFix(d.path, fix.edit)}>{fix.label}</button>
-                  {:else}
-                    <button class="fix" title="For every text in the project" onclick={() => runFix(fix.command)}>{fix.label}</button>
+        {#if preview && tab !== "vault"}
+          <section class="diagnostics" class:flash={checkFlash} onanimationend={() => (checkFlash = false)}>
+            <h2>
+              Problems
+              <span class="count error">{errorCount}</span>
+              <span class="count warning">{warnings.length}</span>
+              {#if checkedAt}<span class="checked">checked the project and {preview.project.files.length} modules at {checkedAt}</span>{/if}
+            </h2>
+            <ul>
+              {#each projectProblems as message, i (i)}
+                <li class="error">
+                  <button class="link" onclick={selectSettings}><code>{openFile ? fileName(openFile) : "project"}</code></button>
+                  <span>{message}</span>
+                </li>
+              {/each}
+              {#each builtProblems as { engine, problem }, i (i)}
+                <li class={problem.severity}>
+                  <button class="link" onclick={() => showEngineLine(engine, problem.line)}><code>{engine} {problem.file.split(/[\\/]/).pop()}:{problem.line}</code></button>
+                  <span>{problem.message}</span>
+                </li>
+              {/each}
+              {#each preview.project.diagnostics as d, i (i)}
+                {@const fix = fixOf(d.message)}
+                <li class={d.severity}>
+                  <code>{location(d)}</code>
+                  <span>{d.message}</span>
+                  {#if fix}
+                    {#if "edit" in fix}
+                      <button class="fix" title="For every such problem in {fileName(d.path)}" onclick={() => applyFix(d.path, fix.edit)}>{fix.label}</button>
+                    {:else}
+                      <button class="fix" title="For every text in the project" onclick={() => runFix(fix.command)}>{fix.label}</button>
+                    {/if}
                   {/if}
-                {/if}
-              </li>
-            {:else}
-              {#if projectProblems.length === 0}<li class="ok">No problems</li>{/if}
-            {/each}
-          </ul>
-        </section>
-      {/if}
-    </aside>
+                </li>
+              {:else}
+                {#if projectProblems.length === 0}<li class="ok">No problems</li>{/if}
+              {/each}
+            </ul>
+          </section>
+        {/if}
+      </aside>
+    </PartGuard>
     <Splitter axis="x" label="Width of the sidebar" onmove={(d) => layout.resize("sidebar", d)} />
 
     <div class="work">
       <main>
-        {#if tab === "vault"}
-          <VaultView />
-        {:else if !preview}
-          <div class="placeholder">
-            <p>Open a project, or create a new one, with the buttons on the Project tab.</p>
-          </div>
-        {:else if current?.kind === "settings" && projectFile && openFile}
-          <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} {preview} onapplied={applyPreview} onopentheme={(name) => select({ kind: "theme", name })} />
-        {:else if current?.kind === "api" && projectFile}
-          <ApiView project={projectFile} name={current.name} onsave={saveSettings} />
-        {:else if current?.kind === "diagram"}
-          <DiagramView
-            {preview}
-            name={current.name}
-            onapplied={applyPreview}
-            onopen={openDrawn}
-            renaming={renamingDiagram}
-            onrenaming={() => (renamingDiagram = false)}
-            onrenamed={(file, next) => {
-              applyPreview(next);
-              select({ kind: "diagram", name: file });
-            }}
-          />
-        {:else if current?.kind === "resource"}
-          <ResourceView {preview} name={current.name} onapplied={applyPreview} />
-        {:else if current?.kind === "language"}
-          <TranslationsPanel
-            {preview}
-            language={current.name}
-            onapplied={applyPreview}
-            onopen={(language) => select({ kind: "language", name: language })}
-            onnewlanguage={startNewLanguage}
-          />
-        {:else if entity && file}
-          <EntityEditor
-            {preview}
-            {entity}
-            stores={projectFile?.settings?.filestores.map((s) => s.name) ?? []}
-            module={file.module?.name ?? ""}
-            onedit={editData}
-            ondelete={deletePicked}
-            onrename={(newName) => renameData("entity", entity.name.name, newName)}
-            onapplied={applyPreview}
-          />
-        {:else if enumDecl && file}
-          <EnumEditor
-            {preview}
-            onapplied={applyPreview}
-            decl={enumDecl}
-            module={file.module?.name ?? ""}
-            onedit={editData}
-            ondelete={deletePicked}
-            onrename={(newName) => renameData("enum", enumDecl.name.name, newName)}
-          />
-        {:else if openTheme}
-          <ThemeView
-            {preview}
-            theme={openTheme.theme}
-            file={openTheme.file}
-            onapply={async (edit) => {
-              if (openTheme.file) applyPreview((await applyEdit(openTheme.file, edit)).preview);
-            }}
-            onopensettings={selectSettings}
-            onrename={(newName) => openTheme.file && renameTheme(openTheme.file, { name: openTheme.theme.name.name, item: openTheme.theme.span.start }, newName)}
-            ondelete={() => openTheme.file && deleteTheme(openTheme.file, openTheme.theme.name.name, openTheme.theme.span.start)}
-          />
-        {:else if openEngine}
-          <EngineEditor
-            {preview}
-            decl={openEngine.decl}
-            file={openEngine.file}
-            goTo={engineGoTo}
-            onapply={async (edit) => applyPreview((await applyEdit(openEngine.file, edit)).preview)}
-            ondelete={() => deleteEngine(openEngine.file, openEngine.decl.name.name, openEngine.decl.span.start)}
-          />
-        {:else if openPart}
-          <PartView decl={openPart.decl} file={openPart.file} onapply={async (edit) => applyPreview((await applyEdit(openPart.file, edit)).preview)} />
-        {:else if openLibrary}
-          <LibraryView decl={openLibrary.decl} file={openLibrary.file} onapply={async (edit) => applyPreview((await applyEdit(openLibrary.file, edit)).preview)} />
-        {:else if moduleFile}
-          <ModuleView
-            {preview}
-            file={moduleFile}
-            onedit={editData}
-            onapply={async (edit) => applyPreview((await applyEdit(moduleFile, edit)).preview)}
-            onopen={(kind, name) => select({ kind, name })}
-          />
-        {:else if tab === "design" && openApp && appPage && file}
-          <PageDesigner {preview} page={appPage} app={openApp} {file} onapplied={applyPreview} />
-        {:else if tab === "design" && page && file}
-          <PageDesigner {preview} {page} {file} onapplied={applyPreview} />
-        {:else if page}
-          <ShownWindow area={themeArea(themeOf(preview))} clientWidth={windowSize(page).width}>
-            <div class="titlebar">
-              <span>{page.title ? tr(preview, page.title) : page.name.name}</span>
-              <code>{page.name.name}: {page.kind}</code>
+        <!-- What is open, guarded: an error drawing it shows in its place. -->
+        <Guarded shows={`${tab} ${current?.kind ?? ""} ${current?.name ?? ""}`}>
+          {#if tab === "vault"}
+            <VaultView />
+          {:else if !preview}
+            <div class="placeholder">
+              <p>Open a project, or create a new one, with the buttons on the Project tab.</p>
             </div>
-            <!-- The window's client, at the height it opens at. -->
-            <div class="shown" style:height="{windowSize(page).height}px">
-              <FrameView
-                {preview}
-                {page}
-                frame={frameForPage(preview, page)}
-                data={{ ...appData, ...pageData(preview, page) }}
-                design={false}
-                onnavigate={navigate}
-              >
-                <div class="client" style:padding="{CONTENT_PADDING}px">
-                  <PageView {preview} {page} onnavigate={navigate} />
-                </div>
-              </FrameView>
-            </div>
-          </ShownWindow>
-        {:else if openApp}
-          <div class="placeholder"><p>The app is designed on the Design tab; Preview runs its main window.</p></div>
-        {:else if current}
-          <div class="placeholder">
-            <p>Window <code>{current.name}</code> cannot be shown. See the problems list.</p>
-          </div>
-        {:else if startWindow(preview).length > 0}
-          <div class="placeholder"><p>Choose what to work on in the project tree on the left.</p></div>
-        {:else}
-          <div class="placeholder"><p>This project has no windows yet. Add one with New window.</p></div>
-        {/if}
-      </main>
-      {#if showOutput}
-        <Splitter axis="y" label="Height of the output" onmove={(d) => layout.resize("output", -d)} />
-        <!-- The toolchain's output while the application is generated and built, at the height the person dragged it to. -->
-        <section class="output-panel" aria-label="Build output" style:height="{layout.sizes.output}px">
-          <header>
-            <strong>Output</strong>
-            {#if commandRunning}
-              <span class="status">Building, then running the command line</span>
-            {:else if building}
-              <span class="status">Building...</span>
-            {:else if buildDone}
-              <span class="status" class:failed={!buildDone.ok}>{buildDone.ok ? (buildDone.message === "running" ? (running ? "Running" : "Stopped") : buildDone.message) : "Failed: " + buildDone.message}</span>
-            {/if}
-            {#if address}
-              <button class="link address" onclick={openInBrowser} title="Open it in your browser">{address}</button>
-            {/if}
-            <button onclick={() => (showOutput = false)} title="Hide the output">&times;</button>
-          </header>
-          {#if buildLog.length > 0}
-            <pre bind:this={outputPre}>{buildLog.join("\n")}</pre>
-          {/if}
-          {#if commandRunning}
-            <!-- What the command-line program reads, as from a terminal: the answer to its questions. -->
-            <form
-              class="typed"
-              onsubmit={(e) => {
-                e.preventDefault();
-                typeLine();
+          {:else if current?.kind === "settings" && projectFile && openFile}
+            <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} {preview} onapplied={applyPreview} onopentheme={(name) => select({ kind: "theme", name })} />
+          {:else if current?.kind === "api" && projectFile}
+            <ApiView project={projectFile} name={current.name} onsave={saveSettings} />
+          {:else if current?.kind === "diagram"}
+            <DiagramView
+              {preview}
+              name={current.name}
+              onapplied={applyPreview}
+              onopen={openDrawn}
+              renaming={renamingDiagram}
+              onrenaming={() => (renamingDiagram = false)}
+              onrenamed={(file, next) => {
+                applyPreview(next);
+                select({ kind: "diagram", name: file });
               }}
-            >
-              <input bind:value={typed} placeholder="Type an answer and press Enter" aria-label="Input for the program" />
-            </form>
+            />
+          {:else if current?.kind === "resource"}
+            <ResourceView {preview} name={current.name} onapplied={applyPreview} />
+          {:else if current?.kind === "language"}
+            <TranslationsPanel
+              {preview}
+              language={current.name}
+              onapplied={applyPreview}
+              onopen={(language) => select({ kind: "language", name: language })}
+              onnewlanguage={startNewLanguage}
+            />
+          {:else if entity && file}
+            <EntityEditor
+              {preview}
+              {entity}
+              stores={projectFile?.settings?.filestores.map((s) => s.name) ?? []}
+              module={file.module?.name ?? ""}
+              onedit={editData}
+              ondelete={deletePicked}
+              onrename={(newName) => renameData("entity", entity.name.name, newName)}
+              onapplied={applyPreview}
+            />
+          {:else if enumDecl && file}
+            <EnumEditor
+              {preview}
+              onapplied={applyPreview}
+              decl={enumDecl}
+              module={file.module?.name ?? ""}
+              onedit={editData}
+              ondelete={deletePicked}
+              onrename={(newName) => renameData("enum", enumDecl.name.name, newName)}
+            />
+          {:else if openTheme}
+            <ThemeView
+              {preview}
+              theme={openTheme.theme}
+              file={openTheme.file}
+              onapply={async (edit) => {
+                if (openTheme.file) applyPreview((await applyEdit(openTheme.file, edit)).preview);
+              }}
+              onopensettings={selectSettings}
+              onrename={(newName) => openTheme.file && renameTheme(openTheme.file, { name: openTheme.theme.name.name, item: openTheme.theme.span.start }, newName)}
+              ondelete={() => openTheme.file && deleteTheme(openTheme.file, openTheme.theme.name.name, openTheme.theme.span.start)}
+            />
+          {:else if openEngine}
+            <EngineEditor
+              {preview}
+              decl={openEngine.decl}
+              file={openEngine.file}
+              goTo={engineGoTo}
+              onapply={async (edit) => applyPreview((await applyEdit(openEngine.file, edit)).preview)}
+              ondelete={() => deleteEngine(openEngine.file, openEngine.decl.name.name, openEngine.decl.span.start)}
+            />
+          {:else if openPart}
+            <PartView decl={openPart.decl} file={openPart.file} onapply={async (edit) => applyPreview((await applyEdit(openPart.file, edit)).preview)} />
+          {:else if openLibrary}
+            <LibraryView decl={openLibrary.decl} file={openLibrary.file} onapply={async (edit) => applyPreview((await applyEdit(openLibrary.file, edit)).preview)} />
+          {:else if moduleFile}
+            <ModuleView
+              {preview}
+              file={moduleFile}
+              onedit={editData}
+              onapply={async (edit) => applyPreview((await applyEdit(moduleFile, edit)).preview)}
+              onopen={(kind, name) => select({ kind, name })}
+            />
+          {:else if tab === "design" && openApp && appPage && file}
+            <PageDesigner {preview} page={appPage} app={openApp} {file} onapplied={applyPreview} />
+          {:else if tab === "design" && page && file}
+            <PageDesigner {preview} {page} {file} onapplied={applyPreview} />
+          {:else if page}
+            <ShownWindow area={themeArea(themeOf(preview))} clientWidth={windowSize(page).width}>
+              <div class="titlebar">
+                <span>{page.title ? tr(preview, page.title) : page.name.name}</span>
+                <code>{page.name.name}: {page.kind}</code>
+              </div>
+              <!-- The window's client, at the height it opens at. -->
+              <div class="shown" style:height="{windowSize(page).height}px">
+                <FrameView
+                  {preview}
+                  {page}
+                  frame={frameForPage(preview, page)}
+                  data={{ ...appData, ...pageData(preview, page) }}
+                  design={false}
+                  onnavigate={navigate}
+                >
+                  <div class="client" style:padding="{CONTENT_PADDING}px">
+                    <PageView {preview} {page} onnavigate={navigate} />
+                  </div>
+                </FrameView>
+              </div>
+            </ShownWindow>
+          {:else if openApp}
+            <div class="placeholder"><p>The app is designed on the Design tab; Preview runs its main window.</p></div>
+          {:else if current}
+            <div class="placeholder">
+              <p>Window <code>{current.name}</code> cannot be shown. See the problems list.</p>
+            </div>
+          {:else if startWindow(preview).length > 0}
+            <div class="placeholder"><p>Choose what to work on in the project tree on the left.</p></div>
+          {:else}
+            <div class="placeholder"><p>This project has no windows yet. Add one with New window.</p></div>
           {/if}
-        </section>
-      {/if}
+        </Guarded>
+      </main>
+      <PartGuard name="output">
+        {#if showOutput}
+          <Splitter axis="y" label="Height of the output" onmove={(d) => layout.resize("output", -d)} />
+          <!-- The toolchain's output while the application is generated and built, at the height the person dragged it to. -->
+          <section class="output-panel" aria-label="Build output" style:height="{layout.sizes.output}px">
+            <header>
+              <strong>Output</strong>
+              {#if commandRunning}
+                <span class="status">Building, then running the command line</span>
+              {:else if building}
+                <span class="status">Building...</span>
+              {:else if buildDone}
+                <span class="status" class:failed={!buildDone.ok}>{buildDone.ok ? (buildDone.message === "running" ? (running ? "Running" : "Stopped") : buildDone.message) : "Failed: " + buildDone.message}</span>
+              {/if}
+              {#if address}
+                <button class="link address" onclick={openInBrowser} title="Open it in your browser">{address}</button>
+              {/if}
+              <button onclick={() => (showOutput = false)} title="Hide the output">&times;</button>
+            </header>
+            {#if buildLog.length > 0}
+              <pre bind:this={outputPre}>{buildLog.join("\n")}</pre>
+            {/if}
+            {#if commandRunning}
+              <!-- What the command-line program reads, as from a terminal: the answer to its questions. -->
+              <form
+                class="typed"
+                onsubmit={(e) => {
+                  e.preventDefault();
+                  typeLine();
+                }}
+              >
+                <input bind:value={typed} placeholder="Type an answer and press Enter" aria-label="Input for the program" />
+              </form>
+            {/if}
+          </section>
+        {/if}
+      </PartGuard>
       <!-- The code behind panel slides out over the main area. -->
     </div>
     {#if agent.open}
       <Splitter axis="x" label="Width of the agent" onmove={(d) => layout.resize("agent", -d)} />
-      <AgentPanel />
+      <PartGuard name="agent">
+        <AgentPanel />
+      </PartGuard>
     {/if}
   </div>
   <StatusBar
@@ -1681,124 +1706,142 @@
 <DialogHost />
 
 {#if newData && preview}
-  <NameDialog
-    {preview}
-    title={newData.kind === "entity" ? "New entity" : "New enum"}
-    placeholder={newData.kind === "entity" ? "Invoice" : "Priority"}
-    action={newData.kind === "entity" ? "Add entity" : "Add enum"}
-    file={newData.file}
-    error={newDataError}
-    onsubmit={addData}
-    oncancel={() => (newData = null)}
-  />
+  <PartGuard name="NameDialog">
+    <NameDialog
+      {preview}
+      title={newData.kind === "entity" ? "New entity" : "New enum"}
+      placeholder={newData.kind === "entity" ? "Invoice" : "Priority"}
+      action={newData.kind === "entity" ? "Add entity" : "Add enum"}
+      file={newData.file}
+      error={newDataError}
+      onsubmit={addData}
+      oncancel={() => (newData = null)}
+    />
+  </PartGuard>
 {/if}
 
 {#if newEngine && preview}
-  <NameDialog
-    {preview}
-    title="New engine"
-    placeholder="Pricing"
-    action="Add engine"
-    file={newEngine}
-    error={newEngineError}
-    choice={{
-      label: "Written in",
-      picked: lastEngineLanguage(),
-      options: [
-        { value: "clarity", label: "Clarity: generated with the application on every stack" },
-        { value: "rust", label: "Rust, built to WebAssembly" },
-      ],
-    }}
-    onsubmit={addEngine}
-    oncancel={() => (newEngine = null)}
-  />
+  <PartGuard name="NameDialog">
+    <NameDialog
+      {preview}
+      title="New engine"
+      placeholder="Pricing"
+      action="Add engine"
+      file={newEngine}
+      error={newEngineError}
+      choice={{
+        label: "Written in",
+        picked: lastEngineLanguage(),
+        options: [
+          { value: "clarity", label: "Clarity: generated with the application on every stack" },
+          { value: "rust", label: "Rust, built to WebAssembly" },
+        ],
+      }}
+      onsubmit={addEngine}
+      oncancel={() => (newEngine = null)}
+    />
+  </PartGuard>
 {/if}
 
 {#if treeMenu}
   {@const item = treeMenu.item}
-  <ContextMenu
-    x={treeMenu.x}
-    y={treeMenu.y}
-    items={[
-      { label: "Open", run: () => openItem(item) },
-      ...(item.kind === "diagram" ? [{ label: "Rename", run: () => renameDiagram(item.name) }] : []),
-      { label: `Delete ${item.kind}`, danger: true, run: () => deleteItem(item) },
-    ]}
-    onclose={() => (treeMenu = null)}
-  />
+  <PartGuard name="ContextMenu">
+    <ContextMenu
+      x={treeMenu.x}
+      y={treeMenu.y}
+      items={[
+        { label: "Open", run: () => openItem(item) },
+        ...(item.kind === "diagram" ? [{ label: "Rename", run: () => renameDiagram(item.name) }] : []),
+        { label: `Delete ${item.kind}`, danger: true, run: () => deleteItem(item) },
+      ]}
+      onclose={() => (treeMenu = null)}
+    />
+  </PartGuard>
 {/if}
 
 {#if newTheme && preview}
-  <NameDialog
-    {preview}
-    title="New theme"
-    placeholder="Night"
-    action="Add theme"
-    file={newTheme}
-    error={newThemeError}
-    choice={{
-      label: "Starts as",
-      options: [
-        { value: "system", label: "Light and dark, as the system is" },
-        { value: "light", label: "Light" },
-        { value: "dark", label: "Dark" },
-        { value: "cream-green", label: "Cream and green" },
-      ],
-    }}
-    onsubmit={addTheme}
-    oncancel={() => (newTheme = null)}
-  />
+  <PartGuard name="NameDialog">
+    <NameDialog
+      {preview}
+      title="New theme"
+      placeholder="Night"
+      action="Add theme"
+      file={newTheme}
+      error={newThemeError}
+      choice={{
+        label: "Starts as",
+        options: [
+          { value: "system", label: "Light and dark, as the system is" },
+          { value: "light", label: "Light" },
+          { value: "dark", label: "Dark" },
+          { value: "cream-green", label: "Cream and green" },
+        ],
+      }}
+      onsubmit={addTheme}
+      oncancel={() => (newTheme = null)}
+    />
+  </PartGuard>
 {/if}
 
 
 {#if newResourceOpen && preview}
-  <NewResourceDialog
-    kinds={resourceKinds.list}
-    taken={preview.project.resources?.files.map((f) => f.name) ?? []}
-    error={newResourceError}
-    onsubmit={addResource}
-    oncancel={() => (newResourceOpen = false)}
-  />
+  <PartGuard name="NewResourceDialog">
+    <NewResourceDialog
+      kinds={resourceKinds.list}
+      taken={preview.project.resources?.files.map((f) => f.name) ?? []}
+      error={newResourceError}
+      onsubmit={addResource}
+      oncancel={() => (newResourceOpen = false)}
+    />
+  </PartGuard>
 {/if}
 
 {#if newDiagramOpen && preview}
-  <NewDiagramDialog
-    kinds={diagramKinds}
-    taken={preview.project.diagrams.map((d) => d.name)}
-    error={newDiagramError}
-    onsubmit={addDiagram}
-    oncancel={() => (newDiagramOpen = false)}
-  />
+  <PartGuard name="NewDiagramDialog">
+    <NewDiagramDialog
+      kinds={diagramKinds}
+      taken={preview.project.diagrams.map((d) => d.name)}
+      error={newDiagramError}
+      onsubmit={addDiagram}
+      oncancel={() => (newDiagramOpen = false)}
+    />
+  </PartGuard>
 {/if}
 
 {#if newLanguageOpen && preview}
-  <NewLanguageDialog
-    taken={[preview.project.locale.language ?? "en", ...Object.keys(preview.project.translations)]}
-    error={newLanguageError}
-    onsubmit={addLanguage}
-    oncancel={() => (newLanguageOpen = false)}
-  />
+  <PartGuard name="NewLanguageDialog">
+    <NewLanguageDialog
+      taken={[preview.project.locale.language ?? "en", ...Object.keys(preview.project.translations)]}
+      error={newLanguageError}
+      onsubmit={addLanguage}
+      oncancel={() => (newLanguageOpen = false)}
+    />
+  </PartGuard>
 {/if}
 
 {#if newProjectIn}
-  <NewProjectDialog
-    catalog={newProjectIn.catalog}
-    folder={newProjectIn.folder}
-    error={newProjectError}
-    projects={newProjectIn.projects}
-    onsubmit={(chosen, name) => newProjectIn && createProject(newProjectIn.projects ? name : newProjectIn.folder, chosen)}
-    oncancel={() => (newProjectIn = null)}
-  />
+  <PartGuard name="NewProjectDialog">
+    <NewProjectDialog
+      catalog={newProjectIn.catalog}
+      folder={newProjectIn.folder}
+      error={newProjectError}
+      projects={newProjectIn.projects}
+      onsubmit={(chosen, name) => newProjectIn && createProject(newProjectIn.projects ? name : newProjectIn.folder, chosen)}
+      oncancel={() => (newProjectIn = null)}
+    />
+  </PartGuard>
 {/if}
 
 {#if newWindowIn && preview}
-  <NewWindowDialog
-    {preview}
-    file={newWindowIn}
-    error={newWindowError}
-    onsubmit={addWindow}
-    oncancel={() => (newWindowIn = null)}
-  />
+  <PartGuard name="NewWindowDialog">
+    <NewWindowDialog
+      {preview}
+      file={newWindowIn}
+      error={newWindowError}
+      onsubmit={addWindow}
+      oncancel={() => (newWindowIn = null)}
+    />
+  </PartGuard>
 {/if}
 
 <style>

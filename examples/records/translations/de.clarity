@@ -143,6 +143,7 @@ translation de
     ok "OK"
     cancel "Abbrechen"
     dismiss "Schließen"
+    undoChangedSince "Dies wurde inzwischen geändert und kann daher nicht rückgängig gemacht werden"
     languagePicker "Sprache"
     themePicker "Design"
     noPicture "Kein Bild"

@@ -143,6 +143,9 @@ struct Reply {
     std::vector<Hear> hears;
     /// The text the handler copied (`copy text`), for the screen to put on the clipboard.
     std::optional<Text> copy;
+    /// The id of the database step the handler made (DESIGN 5.29), which
+    /// the screen's edit keeps to undo it by; 0 when it changed nothing.
+    int64_t step = 0;
 };
 
 /// A record a reference field can point at, as a dropdown shows it.

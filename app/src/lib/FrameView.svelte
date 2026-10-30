@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PartGuard from "./ui/PartGuard.svelte";
   import { shownTab } from "./ribbons";
   import Icon from "./ui/Icon.svelte";
   import { STRIP_WIDTH, sidebarNow, sidebarWidth, type SidebarHere } from "./sidebars";
@@ -283,171 +284,179 @@
 {/snippet}
 
 <div class="frame">
-  {#if frame.menu && shows(frame.menu.value.name)}
-    {@const shown = frame.menu}
-    {@const editable = !shown.inherited}
-    <div
-      class="menubar"
-      class:inherited={design && shown.inherited}
-      class:disabled={!takesClicks(shown.value.name)}
-      inert={!takesClicks(shown.value.name)}
-      class:picked={design && pageDesigner.selected === shown.value.span.start}
-      role="menubar"
-      tabindex="-1"
-      onpointerdown={(e) => design && editable && pick(e, shown.value.span.start)}
-    >
-      {#each shown.value.items as item (item.span.start)}
-        {#if item.props.kind === "separator"}
-          <span class="vsep"></span>
-        {:else}
-          {@const open = openMenu === item.span.start || (design && containsPicked(item) && item.items.length > 0)}
-          <div class="top">
-            <button
-              class:open
-              class:picked={design && pageDesigner.selected === item.span.start}
-              onpointerdown={(e) => {
-                if (design && editable) pick(e, item.span.start);
-              }}
-              title={design && !editable ? "From the app: double-click to edit it in the app" : undefined}
-              onclick={(e) => {
-                if (item.items.length > 0) openMenu = openMenu === item.span.start ? null : item.span.start;
-                else run(e, item, editable);
-              }}
-              ondblclick={(e) => codeOf(e, item, editable)}>{item.props.caption ? tr(preview, item.props.caption) : ""}</button
-            >
-            {#if open && item.items.length > 0}
-              <div class="dropdown">{@render entries(item.items, editable)}</div>
-            {/if}
-          </div>
-        {/if}
-      {/each}
-      {#if design && shown.inherited}<span class="from">from app</span>{/if}
-    </div>
-  {/if}
-
-  {#if frame.toolbar && shows(frame.toolbar.value.name)}
-    {@const shown = frame.toolbar}
-    <div
-      class="toolbar"
-      class:inherited={design && shown.inherited}
-      class:disabled={!takesClicks(shown.value.name)}
-      inert={!takesClicks(shown.value.name)}
-      class:picked={design && pageDesigner.selected === shown.value.span.start}
-      role="toolbar"
-      tabindex="-1"
-      onpointerdown={(e) => design && !shown.inherited && pick(e, shown.value.span.start)}
-    >
-      {#each shown.value.items as item (item.span.start)}
-        {@render button(item, !shown.inherited, false)}
-      {/each}
-      {#if design && shown.inherited}<span class="from">from app</span>{/if}
-    </div>
-  {/if}
-
-  {#if frame.ribbon}
-    {@const shown = frame.ribbon}
-    {@const editable = !shown.inherited}
-    {@const r = shown.value}
-    {@const tabs = r.tabs}
-    {@const now = ribbonNow(r)}
-    {@const active = now.tab === null ? undefined : tabs[now.tab - 1]}
-    <div
-      class="ribbon"
-      class:inherited={design && shown.inherited}
-      class:picked={design && pageDesigner.selected === shown.value.span.start}
-      role="presentation"
-      onpointerdown={(e) => design && editable && pick(e, shown.value.span.start)}
-    >
-      <div class="ribbon-tabs" role="presentation" ondblclick={() => !design && r.collapsible && setRibbon(r, { collapsed: !now.collapsed })}>
-        {#each tabs as tab, i (tab.span.start)}
-          {#if shows(tab.name)}
-            <button
-              class:active={tab === active}
-              class:picked={design && pageDesigner.selected === tab.span.start}
-              title={!design && r.collapsible ? "Double-click to fold or unfold the ribbon" : undefined}
-              onpointerdown={(e) => {
-                // Opening a tab of a folded ribbon unfolds it.
-                setRibbon(r, { tab: i + 1, collapsed: false });
-                if (design && editable) pick(e, tab.span.start);
-              }}>{tr(preview, tab.title)}</button
-            >
+  <PartGuard name="menu">
+    {#if frame.menu && shows(frame.menu.value.name)}
+      {@const shown = frame.menu}
+      {@const editable = !shown.inherited}
+      <div
+        class="menubar"
+        class:inherited={design && shown.inherited}
+        class:disabled={!takesClicks(shown.value.name)}
+        inert={!takesClicks(shown.value.name)}
+        class:picked={design && pageDesigner.selected === shown.value.span.start}
+        role="menubar"
+        tabindex="-1"
+        onpointerdown={(e) => design && editable && pick(e, shown.value.span.start)}
+      >
+        {#each shown.value.items as item (item.span.start)}
+          {#if item.props.kind === "separator"}
+            <span class="vsep"></span>
+          {:else}
+            {@const open = openMenu === item.span.start || (design && containsPicked(item) && item.items.length > 0)}
+            <div class="top">
+              <button
+                class:open
+                class:picked={design && pageDesigner.selected === item.span.start}
+                onpointerdown={(e) => {
+                  if (design && editable) pick(e, item.span.start);
+                }}
+                title={design && !editable ? "From the app: double-click to edit it in the app" : undefined}
+                onclick={(e) => {
+                  if (item.items.length > 0) openMenu = openMenu === item.span.start ? null : item.span.start;
+                  else run(e, item, editable);
+                }}
+                ondblclick={(e) => codeOf(e, item, editable)}>{item.props.caption ? tr(preview, item.props.caption) : ""}</button
+              >
+              {#if open && item.items.length > 0}
+                <div class="dropdown">{@render entries(item.items, editable)}</div>
+              {/if}
+            </div>
           {/if}
         {/each}
         {#if design && shown.inherited}<span class="from">from app</span>{/if}
       </div>
-      {#if active && !now.collapsed}
-        <div class="ribbon-body">
-          {#each active.groups.filter((g) => shows(g.name)) as group (group.span.start)}
-            <div
-              class="ribbon-group"
-              class:picked={design && pageDesigner.selected === group.span.start}
-              role="group"
-              onpointerdown={(e) => design && editable && pick(e, group.span.start)}
-            >
-              <div class="ribbon-buttons">
-                {#each group.items as item (item.span.start)}
-                  {@render button(item, editable, true)}
-                {/each}
-              </div>
-              <div class="ribbon-title">{tr(preview, group.title)}</div>
-            </div>
+    {/if}
+  </PartGuard>
+
+  <PartGuard name="toolbar">
+    {#if frame.toolbar && shows(frame.toolbar.value.name)}
+      {@const shown = frame.toolbar}
+      <div
+        class="toolbar"
+        class:inherited={design && shown.inherited}
+        class:disabled={!takesClicks(shown.value.name)}
+        inert={!takesClicks(shown.value.name)}
+        class:picked={design && pageDesigner.selected === shown.value.span.start}
+        role="toolbar"
+        tabindex="-1"
+        onpointerdown={(e) => design && !shown.inherited && pick(e, shown.value.span.start)}
+      >
+        {#each shown.value.items as item (item.span.start)}
+          {@render button(item, !shown.inherited, false)}
+        {/each}
+        {#if design && shown.inherited}<span class="from">from app</span>{/if}
+      </div>
+    {/if}
+  </PartGuard>
+
+  <PartGuard name="ribbon">
+    {#if frame.ribbon}
+      {@const shown = frame.ribbon}
+      {@const editable = !shown.inherited}
+      {@const r = shown.value}
+      {@const tabs = r.tabs}
+      {@const now = ribbonNow(r)}
+      {@const active = now.tab === null ? undefined : tabs[now.tab - 1]}
+      <div
+        class="ribbon"
+        class:inherited={design && shown.inherited}
+        class:picked={design && pageDesigner.selected === shown.value.span.start}
+        role="presentation"
+        onpointerdown={(e) => design && editable && pick(e, shown.value.span.start)}
+      >
+        <div class="ribbon-tabs" role="presentation" ondblclick={() => !design && r.collapsible && setRibbon(r, { collapsed: !now.collapsed })}>
+          {#each tabs as tab, i (tab.span.start)}
+            {#if shows(tab.name)}
+              <button
+                class:active={tab === active}
+                class:picked={design && pageDesigner.selected === tab.span.start}
+                title={!design && r.collapsible ? "Double-click to fold or unfold the ribbon" : undefined}
+                onpointerdown={(e) => {
+                  // Opening a tab of a folded ribbon unfolds it.
+                  setRibbon(r, { tab: i + 1, collapsed: false });
+                  if (design && editable) pick(e, tab.span.start);
+                }}>{tr(preview, tab.title)}</button
+              >
+            {/if}
           {/each}
+          {#if design && shown.inherited}<span class="from">from app</span>{/if}
         </div>
-      {/if}
-    </div>
-  {/if}
+        {#if active && !now.collapsed}
+          <div class="ribbon-body">
+            {#each active.groups.filter((g) => shows(g.name)) as group (group.span.start)}
+              <div
+                class="ribbon-group"
+                class:picked={design && pageDesigner.selected === group.span.start}
+                role="group"
+                onpointerdown={(e) => design && editable && pick(e, group.span.start)}
+              >
+                <div class="ribbon-buttons">
+                  {#each group.items as item (item.span.start)}
+                    {@render button(item, editable, true)}
+                  {/each}
+                </div>
+                <div class="ribbon-title">{tr(preview, group.title)}</div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
+  </PartGuard>
 
   <div class="middle">
     {#if frame.left && (!filling || filling === frame.left.value)}
       {@const now = stateOf(frame.left.value)}
-      {@render sidebar(frame.left)}
+      <PartGuard name="sidebar">{@render sidebar(frame.left)}</PartGuard>
       {#if !design && frame.left.value.props.resizable && !now.collapsed && !now.maximized}<Splitter axis="x" label="Width of the left sidebar" onmove={(d) => resizeSidebar(frame.left, d)} />{/if}
     {/if}
     <div class="body" class:hidden={filling !== null}>{@render children()}</div>
     {#if frame.right && (!filling || filling === frame.right.value)}
       {@const now = stateOf(frame.right.value)}
       {#if !design && frame.right.value.props.resizable && !now.collapsed && !now.maximized}<Splitter axis="x" label="Width of the right sidebar" onmove={(d) => resizeSidebar(frame.right, -d)} />{/if}
-      {@render sidebar(frame.right)}
+      <PartGuard name="sidebar">{@render sidebar(frame.right)}</PartGuard>
     {/if}
   </div>
 
-  {#if frame.footer}
-    {@const shown = frame.footer}
-    {@const f = shown.value}
-    <div
-      class="footer"
-      class:inherited={design && shown.inherited}
-      class:picked={design && pageDesigner.selected === f.span.start}
-      role="contentinfo"
-      onpointerdown={(e) => design && !shown.inherited && pick(e, f.span.start)}
-    >
-      {#if f.status !== null && f.statusSpan}
-        {@const statusId = f.statusSpan.start}
-        <span
-          class="status"
-          class:picked={design && pageDesigner.selected === statusId}
-          role="status"
-          onpointerdown={(e) => design && !shown.inherited && pick(e, statusId)}>{tr(preview, f.status)}</span
-        >
-      {/if}
-      <div class="footer-grid">
-        {#if page}
-        <GridBox
-          {preview}
-          {page}
-          {data}
-          design={design && !shown.inherited}
-          widgets={f.widgets}
-          columns={f.columns}
-          container={f.span.start}
-          fixedRows={1}
-          {onnavigate}
-        />
+  <PartGuard name="footer">
+    {#if frame.footer}
+      {@const shown = frame.footer}
+      {@const f = shown.value}
+      <div
+        class="footer"
+        class:inherited={design && shown.inherited}
+        class:picked={design && pageDesigner.selected === f.span.start}
+        role="contentinfo"
+        onpointerdown={(e) => design && !shown.inherited && pick(e, f.span.start)}
+      >
+        {#if f.status !== null && f.statusSpan}
+          {@const statusId = f.statusSpan.start}
+          <span
+            class="status"
+            class:picked={design && pageDesigner.selected === statusId}
+            role="status"
+            onpointerdown={(e) => design && !shown.inherited && pick(e, statusId)}>{tr(preview, f.status)}</span
+          >
         {/if}
+        <div class="footer-grid">
+          {#if page}
+          <GridBox
+            {preview}
+            {page}
+            {data}
+            design={design && !shown.inherited}
+            widgets={f.widgets}
+            columns={f.columns}
+            container={f.span.start}
+            fixedRows={1}
+            {onnavigate}
+          />
+          {/if}
+        </div>
+        {#if design && shown.inherited}<span class="from">from app</span>{/if}
       </div>
-      {#if design && shown.inherited}<span class="from">from app</span>{/if}
-    </div>
-  {/if}
+    {/if}
+  </PartGuard>
 
   {#if regionDrag}
     {#each DOCKS.filter((d) => regionDrag.docks.includes(d)) as dock (dock)}

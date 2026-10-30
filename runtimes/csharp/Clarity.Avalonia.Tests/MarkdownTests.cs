@@ -48,7 +48,8 @@ public class MarkdownTests
         }
     }
 
-    [Fact]
+    // Avalonia registers the avares scheme, which keeps the assembly name's case.
+    [AvaloniaFact]
     public void ASourceIsTheResourceItNamesWhateverTheLanguage()
     {
         // Which file a language shows is up to its key, not the file's name.

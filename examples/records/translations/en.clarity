@@ -142,6 +142,7 @@ translation en
     ok "OK"
     cancel "Cancel"
     dismiss "Dismiss"
+    undoChangedSince "This was changed since, so it cannot be taken back"
     languagePicker "Language"
     themePicker "Theme"
     noPicture "No picture"

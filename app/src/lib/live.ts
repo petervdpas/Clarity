@@ -69,6 +69,8 @@ export interface Live {
   selected: Record<string, number>;
   /** A part's event, wired to `handler`; false when the handler refused or failed. */
   event(part: string, event: PartEvent, handler: string): Promise<boolean>;
+  /** A bound input changed a path of the window's data, for undo (DESIGN 5.29). */
+  edited?(part: string, path: string, before: JsonValue | undefined, after: JsonValue | undefined): void;
   select(part: string, row: number): void;
   /** Keeps what the user typed in an unbound text input, for the next event. */
   setText(part: string, text: string): void;

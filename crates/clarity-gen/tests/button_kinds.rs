@@ -38,7 +38,7 @@ fn avalonia_writes_a_toggle_button_a_joined_group_and_a_split_button() {
     has(&code, "<ToggleButton x:Name=\"favouriteToggle\"");
     has(&code, "IsChecked=\"{Binding Album.Favourite}\"");
     has(&code, "IsChecked=\"{Binding RightToggle.IsChecked}\"");
-    has(&code, "favouriteToggle.Click += (_, _) => Vm.FavouriteChangedCommand.Execute(null);");
+    has(&code, "favouriteToggle.Click += (_, _) => Vm.EditOf(\"favouriteToggle\", \"favouriteToggle\", true, () => Vm.FavouriteChangedCommand.Execute(null));");
     has(&code, "Classes=\"buttons\"");
     has(&code, "ColumnSpacing=\"0\"");
     has(&code, "<SplitButton x:Name=\"saveButton\"");

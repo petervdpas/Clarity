@@ -32,6 +32,8 @@ const CLOSE: &str = "close";
 const LANGUAGE: &str = "language";
 const THEME: &str = "theme";
 const KEYS: &str = "keys";
+const UNDO: &str = "undo";
+const REDO: &str = "redo";
 
 /// The width of a dialog's view, in pixels; its window fits it.
 const DIALOG_WIDTH: u32 = 560;
@@ -444,6 +446,8 @@ impl<'a> Window<'a> {
             // The commands Clarity makes itself have an underscore in their
             // names, which no part's name (camelCase) has, so they never clash.
             QUIT => Some("Quit_Command".into()),
+            UNDO => Some("Undo_Command".into()),
+            REDO => Some("Redo_Command".into()),
             KEYS => Some("Keys_Command".into()),
             CLOSE => Some("CloseWindow_Command".into()),
             target if self.project.pages().any(|p| p.name.name == target) => {
@@ -715,6 +719,11 @@ impl<'a> Window<'a> {
         let _ = writeln!(out, "{pad}</Grid>");
     }
 
+    /// Where a part's edits are undone (DESIGN 5.29): its form or panel, or itself; none without undo.
+    fn undo_scope(&self, p: &clarity_spec::model::WidgetProps) -> Option<String> {
+        p.undo_scope.clone()
+    }
+
     /// The bindings a named part has to its state.
     fn state(name: &str, read_only: bool) -> String {
         let part = member(name);
@@ -802,6 +811,12 @@ impl<'a> Window<'a> {
         }
         if let Some(order) = p.tab_order {
             let _ = write!(extra, " TabIndex=\"{order}\"");
+        }
+        // Undo (DESIGN 5.29): the scope its edits are undone in; `no undo` takes back nothing there.
+        if let Some(scope) = self.undo_scope(p) {
+            let _ = write!(extra, " c:Edits.Scope=\"{}\"", attr(&scope));
+        } else if p.no_undo {
+            extra.push_str(" c:Edits.Off=\"True\"");
         }
         let bound = p.bind.as_deref().map(|b| self.path(b));
         let shown = |path: &str| format!("{{Binding {path}, Converter={{x:Static local:Shown.Converter}}}}");
@@ -1532,9 +1547,15 @@ impl<'a> Window<'a> {
             if widget.props.kind == WidgetKind::File {
                 out.push(format!("{control}.CopySaved += _ => Vm.Say(Level.Info, Clarity.Runtime.Text.Of(\"fileCopySaved\"));"));
             }
+            let scope = self.undo_scope(&widget.props);
             for h in &widget.props.handlers {
                 let run = format!("Vm.{}Command.Execute(null)", self.command(h));
                 let kind = widget.props.kind;
+                // A change of a part with undo is an edit, with what its handler changed (DESIGN 5.29).
+                let run = match (&scope, h.event) {
+                    (Some(scope), Event::Change) => format!("Vm.EditOf(\"{name}\", \"{scope}\", true, () => {run})"),
+                    _ => run,
+                };
                 // Every input of the library tells when the person changed its value.
                 let input = matches!(
                     kind,
@@ -1916,14 +1937,18 @@ public partial class {name}View : UserControl
         // A click, a drag or a drop on a canvas: where it was, then its handler.
         for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Canvas) {
             let Some(canvas) = &widget.props.name else { continue };
+            let scope = self.undo_scope(&widget.props);
             for (event, command) in [(Event::Click, "ClickAt"), (Event::Drag, "DragAt"), (Event::Drop, "DropAt"), (Event::Bend, "BendAt")] {
                 let Some(handler) = Self::handler(widget, event) else { continue };
-                let _ = write!(
-                    events,
-                    "    [RelayCommand]\n    void {command}_{c}(Pointer at) => Handle(() =>\n    {{\n        {c}.Pointer = at;\n        On{}();\n    }}, [at]);\n\n",
-                    pascal(&handler.handler),
-                    c = member(canvas)
-                );
+                let run = format!("Handle(() =>\n    {{\n        {c}.Pointer = at;\n        On{}();\n    }}, [at])", pascal(&handler.handler), c = member(canvas));
+                // A drag, a drop and a bend are edits Ctrl+Z takes back (DESIGN 5.29); a drag starts one its drop ends.
+                let run = match (&scope, event) {
+                    (Some(scope), Event::Drag | Event::Drop | Event::Bend | Event::Click) => {
+                        format!("EditOf(\"{canvas}\", \"{scope}\", ends: {}, () => {run})", event != Event::Drag)
+                    }
+                    _ => run,
+                };
+                let _ = write!(events, "    [RelayCommand]\n    void {command}_{c}(Pointer at) => {run};\n\n", c = member(canvas));
             }
         }
 
@@ -1940,6 +1965,7 @@ public partial class {name}View : UserControl
         let mut quit = false;
         let mut close = false;
         let mut keys = false;
+        let mut undo = false;
         let targets = self
             .parts
             .iter()
@@ -1950,6 +1976,7 @@ public partial class {name}View : UserControl
                 QUIT => quit = true,
                 CLOSE => close = true,
                 KEYS => keys = true,
+                UNDO | REDO => undo = true,
                 t if self.project.pages().any(|p| p.name.name == t) => {
                     opens.insert((t.to_string(), new_window));
                 }
@@ -1995,6 +2022,9 @@ public partial class {name}View : UserControl
         }
         if keys {
             clicks.push_str("    [RelayCommand]\n    void Keys_() => ShowKeys();\n\n");
+        }
+        if undo {
+            clicks.push_str("    [RelayCommand]\n    void Undo_() => UndoFocused(true);\n\n    [RelayCommand]\n    void Redo_() => UndoFocused(false);\n\n");
         }
         if close {
             clicks.push_str("    [RelayCommand]\n    void CloseWindow_() => Handle(Close);\n\n");

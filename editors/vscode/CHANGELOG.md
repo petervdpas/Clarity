@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.23
+
+- Colors `undo` and `redo`: the part option `no undo` and the targets `-> undo` and `-> redo`.
+
+## 0.1.22
+
+- Colors the statement `copy`.
+
 ## 0.1.18
 
 - Colors the setting type `folder` and the `folder` part.

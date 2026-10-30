@@ -49,6 +49,8 @@ const OWN_TEXTS: Record<string, string> = {
   unconnectedFailed: "The database did not open: {problem}",
   // Why an engine beside the screen stopped (translations SCREEN_ENGINE_KEYS).
   screenEngineFailed: "The engine stopped: {problem}",
+  // Why an undo was refused (translations UNDO_KEYS).
+  undoChangedSince: "This was changed since, so it cannot be taken back",
   // The keys window (translations KEYS_WINDOW_KEYS).
   keysTitle: "Keys",
   keysEverywhere: "Everywhere",

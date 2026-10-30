@@ -1576,6 +1576,8 @@ fn parse_widget_props(
         digits: None,
         units: None,
         zoom: false,
+        grid: None,
+        snap: false,
         runs: None,
         tooltip: None,
         icon: None,
@@ -1958,6 +1960,19 @@ fn parse_widget_props(
             "zoom" => {
                 applies(WidgetProperty::Zoom)?;
                 props.zoom = true;
+            }
+            "grid" => {
+                applies(WidgetProperty::Grid)?;
+                let at = cursor.peek().map(|t| t.span).unwrap_or_default();
+                let grid = cursor.expect_number("the grid's size in units, as in grid 20")?;
+                if !(1..=10000).contains(&grid) {
+                    return Err(Diagnostic::error(widgets::CANVAS_GRID_PROBLEM, at));
+                }
+                props.grid = Some(grid);
+            }
+            "snap" => {
+                applies(WidgetProperty::Snap)?;
+                props.snap = true;
             }
             "to" => {
                 applies(WidgetProperty::To)?;

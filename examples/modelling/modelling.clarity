@@ -149,9 +149,9 @@ page Diagrams: window
 
     tabs name diagramTabs at 1,1 span 12 rows 12
         tab @diagramsClassDiagramTab
-            canvas name classCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom on draw: drawClasses on drag: classDragged on drop: classDropped
+            canvas name classCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom grid 20 snap on draw: drawClasses on drag: classDragged on drop: classDropped
         tab @diagramsEntityRelationshipDiagramTab
-            canvas name erdCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom on draw: drawEntities on drag: entityDragged on drop: entityDropped
+            canvas name erdCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom grid 20 snap on draw: drawEntities on drag: entityDragged on drop: entityDropped
 
 // The model as Mermaid and as an OpenAPI description, as they are now.
 page Output: window
@@ -446,12 +446,12 @@ code Diagrams
         placeTypes()
         placeEntities()
 
-    // Types without a place get one below the rest, eight to a row; dragging a box moves it.
+    // Types without a place get one below the rest, eight to a row, on the grid; dragging a box moves it by whole steps of it.
     handler placeTypes
         let top = 20
         for t in types
             if t.x != 0 or t.y != 0
-                let bottom = t.y + box_height(count(find p in Parameter where p.owner == t)) + 40
+                let bottom = grid_up(t.y + box_height(count(find p in Parameter where p.owner == t)) + 40)
                 if bottom > top
                     top = bottom
         let column = 0
@@ -462,9 +462,9 @@ code Diagrams
                 let height = box_height(count(find p in Parameter where p.owner == t))
                 if column == 8
                     column = 0
-                    top = top + tallest + 40
+                    top = grid_up(top + tallest + 40)
                     tallest = 0
-                t.x = 20 + column * 295
+                t.x = 20 + column * 300
                 t.y = top
                 save t
                 placed = true
@@ -478,7 +478,7 @@ code Diagrams
         let top = 20
         for e in entities
             if e.x != 0 or e.y != 0
-                let bottom = e.y + box_height(count(find c in Column where c.owner == e)) + 40
+                let bottom = grid_up(e.y + box_height(count(find c in Column where c.owner == e)) + 40)
                 if bottom > top
                     top = bottom
         let column = 0
@@ -489,9 +489,9 @@ code Diagrams
                 let height = box_height(count(find c in Column where c.owner == e))
                 if column == 8
                     column = 0
-                    top = top + tallest + 40
+                    top = grid_up(top + tallest + 40)
                     tallest = 0
-                e.x = 20 + column * 295
+                e.x = 20 + column * 300
                 e.y = top
                 save e
                 placed = true
@@ -678,6 +678,14 @@ code Versions
 // How tall a box is on a diagram, for its lines (parameters or columns).
 function box_height(lines: integer) -> integer
     return 34 + 18 * lines
+
+// A place on a diagram rounded up to its grid of 20.
+function grid_up(n: integer) -> integer
+    let up = 0
+    for step in 1 to 1000
+        if up < n
+            up = up + 20
+    return up
 
 // A place on a diagram, never left of or above it.
 function at_least_zero(n: integer) -> integer

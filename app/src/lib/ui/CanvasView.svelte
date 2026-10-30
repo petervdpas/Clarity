@@ -10,9 +10,14 @@
   // wheel zooms around the pointer, as a touchpad's pinch does, and the bars
   // say where the view is. With `ondrag` a press that moves runs the drag
   // handler as the pointer goes, one call at a time with the latest place,
-  // and `ondrop` when it is let go; without it, dragging moves the view.
+  // and `ondrop` when it is let go. A drag that moves nothing (the drawing
+  // stays the same after the handler's first call), and any drag without
+  // `ondrag`, moves the view instead, on a canvas that zooms. With `grid` it
+  // shows a grid behind the shapes (after the drawing's clear), and with
+  // `snap` every place it gives is the nearest point of that grid
+  // (conformance/drawing.json, grids).
   import { untrack } from "svelte";
-  import { pointIn, scrolled, svgOf, zoomed, type Shape, type View } from "../drawing";
+  import { colorOf, gridEvery, pointIn, scrolled, snapped, svgOf, zoomed, type Shape, type View } from "../drawing";
   import type { ShownText } from "../format";
   import type { Pointer } from "../live";
   import { pictureUrl } from "../pictures.svelte";
@@ -23,6 +28,8 @@
     shown,
     id,
     zoom = false,
+    grid = null,
+    snap = false,
     onpoint = null,
     ondrag = null,
     ondrop = null,
@@ -33,6 +40,10 @@
     id?: string;
     /** Whether the person zooms and scrolls the drawing. */
     zoom?: boolean;
+    /** The units between the grid's lines; none for no grid. */
+    grid?: number | null;
+    /** Whether the places it gives snap to the grid. */
+    snap?: boolean;
     /** A click on the drawing, in the canvas's units; none for a click beside it. */
     onpoint?: ((point: Pointer) => void) | null;
     /** The pointer moving with its button down, and where it was pressed; done when the handler is. */
@@ -55,11 +66,45 @@
 
   let svg: SVGSVGElement | undefined = $state();
 
+  // The part's size, for how far apart the grid's lines are shown.
+  let partWidth = $state(0);
+  let partHeight = $state(0);
+
+  /** Where the grid's lines go, in the view: every `gridEvery` units, thinned as the view zooms out. */
+  const gridLines = $derived.by(() => {
+    if (!grid) return { across: [] as number[], down: [] as number[] };
+    const scale = Math.min(partWidth / view[2], partHeight / view[3]);
+    const every = gridEvery(grid, scale > 0 ? scale : 1);
+    const along = (from: number, size: number, end: number) => {
+      const out: number[] = [];
+      for (let v = Math.ceil(from / every) * every; v <= Math.min(from + size, end); v += every) out.push(v);
+      return out;
+    };
+    return { across: along(view[0], view[2], units.width), down: along(view[1], view[3], units.height) };
+  });
+  /** The grid goes after the drawing's clear, so the shapes cover it; first when there is none. */
+  const gridAfter = $derived(drawing.findIndex((shape) => shape.op === "clear"));
+
+  /** A place the canvas gives: on the grid when it snaps. */
+  function placed<P extends { x: number; y: number }>(point: P): P {
+    return snap && grid ? { ...point, ...snapped(units, grid, point) } : point;
+  }
+
   /** A pixel moved this far is a drag, not a click. */
   const STILL = 4;
 
   /** The pointer that went down on the canvas, and where. */
-  let pressed: { id: number; at: { x: number; y: number }; from: { x: number; y: number } | null; moved: boolean; viewAt: View } | null = null;
+  let pressed: {
+    id: number;
+    at: { x: number; y: number };
+    from: { x: number; y: number } | null;
+    moved: boolean;
+    viewAt: View;
+    /** What the drag does: unknown until the handler's first call says, then the handler's or the view's. */
+    moves: "unknown" | "handler" | "view";
+    /** Where the pointer is now, in pixels. */
+    now: { x: number; y: number };
+  } | null = null;
   /** The latest drag not sent yet, while the handler runs with the one before. */
   let waiting: Pointer | null = null;
   let sending: Promise<unknown> | null = null;
@@ -91,13 +136,14 @@
   function held(at: { x: number; y: number }) {
     const p = exact(at);
     const edge = (v: number, from: number, size: number) => Math.min(Math.max(Math.floor(v), Math.floor(from)), Math.ceil(from + size) - 1);
-    return { x: edge(p.x, view[0], view[2]), y: edge(p.y, view[1], view[3]) };
+    return placed({ x: edge(p.x, view[0], view[2]), y: edge(p.y, view[1], view[3]) });
   }
 
   function down(e: PointerEvent) {
     if (!e.isPrimary || e.button !== 0 || !(onpoint || ondrag || zoom)) return;
     const at = offset(e);
-    pressed = { id: e.pointerId, at, from: pointIn(view, partSize().part, at), moved: false, viewAt: view };
+    const from = pointIn(view, partSize().part, at);
+    pressed = { id: e.pointerId, at, from: from && placed(from), moved: false, viewAt: view, moves: ondrag ? "unknown" : "view", now: at };
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
   }
 
@@ -106,14 +152,18 @@
     const at = offset(e);
     if (!pressed.moved && Math.hypot(at.x - pressed.at.x, at.y - pressed.at.y) < STILL) return;
     pressed.moved = true;
-    if (ondrag && pressed.from) {
+    pressed.now = at;
+    if (pressed.moves !== "view" && ondrag && pressed.from) {
       const now = held(at);
       drag({ x: now.x, y: now.y, fromX: pressed.from.x, fromY: pressed.from.y });
-    } else if (zoom) {
-      // Without a drag handler, dragging moves the view with the pointer.
-      const { scale } = fit();
-      view = scrolled(units, pressed.viewAt, { x: (pressed.at.x - at.x) / scale, y: (pressed.at.y - at.y) / scale });
-    }
+    } else pan();
+  }
+
+  /** Moves the view with the pointer, from where it was pressed. */
+  function pan() {
+    if (!zoom || !pressed) return;
+    const { scale } = fit();
+    view = scrolled(units, pressed.viewAt, { x: (pressed.at.x - pressed.now.x) / scale, y: (pressed.at.y - pressed.now.y) / scale });
   }
 
   /** Sends a drag, or keeps it as the next while one is running: only the latest place counts. */
@@ -122,8 +172,18 @@
       waiting = point;
       return;
     }
+    const before = JSON.stringify(drawing);
+    const press = pressed;
     sending = ondrag!(point).finally(() => {
       sending = null;
+      // The first call says what the drag does: a drawing that stayed the same moves the view.
+      if (press && press.moves === "unknown") {
+        press.moves = zoom && JSON.stringify(drawing) === before ? "view" : "handler";
+        if (press.moves === "view") {
+          waiting = null;
+          if (press === pressed) pan();
+        }
+      }
       const next = waiting;
       waiting = null;
       if (next) drag(next);
@@ -137,12 +197,13 @@
     const at = offset(e);
     if (!was.moved) {
       const point = pointIn(view, partSize().part, at);
-      if (onpoint && point) onpoint(point);
+      if (onpoint && point) onpoint(placed(point));
       return;
     }
     if (ondrag && was.from) {
-      // The drop comes after the drags the handler is still running.
+      // The drop comes after the drags the handler is still running; a drag that moved the view has none.
       while (sending) await sending;
+      if (was.moves === "view") return;
       const now = held(at);
       ondrop?.({ x: now.x, y: now.y, fromX: was.from.x, fromY: was.from.y });
     }
@@ -153,7 +214,7 @@
     e.preventDefault();
     const pixels = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
     if (e.ctrlKey || e.metaKey) {
-      view = zoomed(units, view, Math.exp((-e.deltaY * pixels) / 300), exact(offset(e)));
+      view = zoomed(units, partSize().part, view, Math.exp((-e.deltaY * pixels) / 300), exact(offset(e)));
     } else {
       const { scale } = fit();
       const across = e.shiftKey ? e.deltaY : e.deltaX;
@@ -170,7 +231,7 @@
   });
 </script>
 
-<div class="canvas-frame">
+<div class="canvas-frame" bind:clientWidth={partWidth} bind:clientHeight={partHeight}>
   <svg
     {id}
     bind:this={svg}
@@ -185,8 +246,10 @@
     onpointerup={up}
     onpointercancel={() => (pressed = null)}
   >
+    {#if grid && gridAfter < 0}{@render gridShown()}{/if}
     {#each elements as element, i (i)}
       <svelte:element this={element.tag} {...element.attrs}>{element.text ?? ""}</svelte:element>
+      {#if grid && i === gridAfter}{@render gridShown()}{/if}
     {/each}
   </svg>
   {#if zoom && zoomedIn}
@@ -199,6 +262,17 @@
     </div>
   {/if}
 </div>
+
+{#snippet gridShown()}
+  <g class="grid" stroke={colorOf("border")} stroke-width="1" vector-effect="non-scaling-stroke">
+    {#each gridLines.across as x (x)}
+      <line x1={x} y1={view[1]} x2={x} y2={Math.min(view[1] + view[3], units.height)} vector-effect="non-scaling-stroke" />
+    {/each}
+    {#each gridLines.down as y (y)}
+      <line x1={view[0]} y1={y} x2={Math.min(view[0] + view[2], units.width)} y2={y} vector-effect="non-scaling-stroke" />
+    {/each}
+  </g>
+{/snippet}
 
 <style>
   .canvas-frame {
@@ -221,6 +295,11 @@
 
   .canvas-view.draggable {
     touch-action: none;
+  }
+
+  .grid {
+    opacity: 0.5;
+    pointer-events: none;
   }
 
   .bar {

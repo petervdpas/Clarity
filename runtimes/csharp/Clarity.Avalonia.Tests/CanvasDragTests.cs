@@ -10,6 +10,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Clarity.Avalonia;
+using Clarity.Runtime;
 using CommunityToolkit.Mvvm.Input;
 using Xunit;
 
@@ -54,6 +55,52 @@ public class CanvasDragTests
         window.MouseUp(new Point(41, 21), MouseButton.Left);
         Dispatcher.UIThread.RunJobs();
         Assert.Equal([new Pointer(102, 52)], clicks);
+        window.Close();
+    }
+
+    /// On a canvas that zooms, a drag the handler does nothing with (the drawing
+    /// stays the same) moves the view, and sends no drop.
+    [AvaloniaFact]
+    public void ADragTheHandlerDoesNothingWithMovesTheView()
+    {
+        var drags = 0;
+        var drops = new List<Pointer>();
+        CanvasView canvas = null!;
+        // The same drawing each time, with a text that has a slot, as a redraw makes it.
+        IReadOnlyList<Shape> Drawn() => [new Shape.Words(10, 10, new Text("{n} km/h").With("n", Slot.OfInteger(5, null)))];
+        canvas = new CanvasView
+        {
+            Zoom = true,
+            Drawing = Drawn(),
+            DragCommand = new RelayCommand<Pointer>(_ => { drags++; canvas.Drawing = Drawn(); }),
+            DropCommand = new RelayCommand<Pointer>(p => drops.Add(p!)),
+        };
+        var (window, _) = Shown(canvas);
+        window.MouseWheel(new Point(200, 100), new Vector(0, 3 * Math.Log(2)), RawInputModifiers.Control);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(250, canvas.View.X, 6);
+        window.MouseDown(new Point(200, 100), MouseButton.Left);
+        window.MouseMove(new Point(160, 100));
+        window.MouseMove(new Point(120, 100));
+        window.MouseUp(new Point(120, 100), MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        // 80 pixels at 0.8 pixels a unit: the view moved 100 units to the right.
+        Assert.Equal(1, drags);
+        Assert.Equal(350, canvas.View.X, 6);
+        Assert.Empty(drops);
+        window.Close();
+    }
+
+    /// A canvas that snaps gives places on its grid: a click at 20, 30 pixels is 50, 75 units, snapped to 100, 100.
+    [AvaloniaFact]
+    public void ACanvasThatSnapsGivesPlacesOnItsGrid()
+    {
+        var clicks = new List<Pointer>();
+        var (window, _) = Shown(new CanvasView { Grid = 100, Snap = true, Command = new RelayCommand<Pointer>(p => clicks.Add(p!)) });
+        window.MouseDown(new Point(20, 30), MouseButton.Left);
+        window.MouseUp(new Point(20, 30), MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal([new Pointer(100, 100)], clicks);
         window.Close();
     }
 

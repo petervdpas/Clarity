@@ -101,6 +101,23 @@ public class DrawingTests
 
     static global::Avalonia.Rect RectOf(System.Text.Json.JsonElement v) => new(v[0].GetDouble(), v[1].GetDouble(), v[2].GetDouble(), v[3].GetDouble());
 
+    /// A grid thins its lines to 8 pixels apart or more, and a canvas that snaps
+    /// gives the nearest point of its grid, within the canvas.
+    [Fact]
+    public void ACanvasGridAsEveryRendererDrawsAndSnapsIt()
+    {
+        var grids = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "drawing.json"))).RootElement.GetProperty("grids");
+        foreach (var c in grids.GetProperty("lines").EnumerateArray())
+            Assert.Equal(c.GetProperty("every").GetDouble(), CanvasView.GridEvery(c.GetProperty("grid").GetDouble(), c.GetProperty("scale").GetDouble()));
+        foreach (var c in grids.GetProperty("snapped").EnumerateArray())
+        {
+            var units = new global::Avalonia.Size(c.GetProperty("units")[0].GetDouble(), c.GetProperty("units")[1].GetDouble());
+            var point = new Pointer(c.GetProperty("point")[0].GetInt64(), c.GetProperty("point")[1].GetInt64());
+            var expected = new Pointer(c.GetProperty("snapped")[0].GetInt64(), c.GetProperty("snapped")[1].GetInt64());
+            Assert.Equal(expected, CanvasView.Snapped(units, c.GetProperty("grid").GetDouble(), point));
+        }
+    }
+
     /// A canvas that zooms keeps the point under the pointer, within the canvas.
     [Fact]
     public void ACanvasZoomsAndScrollsAsEveryRendererDoes()
@@ -109,7 +126,8 @@ public class DrawingTests
         {
             var units = new global::Avalonia.Size(c.GetProperty("units")[0].GetDouble(), c.GetProperty("units")[1].GetDouble());
             var at = new global::Avalonia.Point(c.GetProperty("at")[0].GetDouble(), c.GetProperty("at")[1].GetDouble());
-            Assert.Equal(RectOf(c.GetProperty("result")), CanvasView.Zoomed(units, RectOf(c.GetProperty("view")), c.GetProperty("factor").GetDouble(), at));
+            var part = new global::Avalonia.Size(c.GetProperty("part")[0].GetDouble(), c.GetProperty("part")[1].GetDouble());
+            Assert.Equal(RectOf(c.GetProperty("result")), CanvasView.Zoomed(units, part, RectOf(c.GetProperty("view")), c.GetProperty("factor").GetDouble(), at));
         }
         foreach (var c in Views().GetProperty("scrolled").EnumerateArray())
         {

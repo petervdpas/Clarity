@@ -576,6 +576,12 @@ pub struct WidgetProps {
     /// `zoom`: the person zooms and scrolls the canvas's drawing.
     #[serde(default)]
     pub zoom: bool,
+    /// `grid 20`: a canvas shows a grid, every so many of its units.
+    #[serde(default)]
+    pub grid: Option<u32>,
+    /// `snap`: the pointer on a canvas snaps to its grid.
+    #[serde(default)]
+    pub snap: bool,
     /// `runs Screen`: the engine beside the screen that draws the canvas
     /// (DESIGN 5.12), in place of a draw handler.
     pub runs: Option<String>,

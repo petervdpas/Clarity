@@ -292,6 +292,10 @@ pub enum WidgetProperty {
     Units,
     /// `zoom`: a canvas the person zooms and scrolls.
     Zoom,
+    /// `grid 20`: a canvas shows a grid.
+    Grid,
+    /// `snap`: the pointer snaps to a canvas's grid.
+    Snap,
     /// `runs Screen`: a canvas an engine beside the screen draws.
     Runs,
     /// `foldable` and `folded`: a panel or form folds by its header.
@@ -916,7 +920,7 @@ const ENTRIES: &[Entry] = &[
         // a click runs a handler, which reads where as `canvas.x` and `canvas.y`;
         // a drag and a drop also read where it was pressed, `fromX` and `fromY`.
         events: &[Event::Draw, Event::Click, Event::Drag, Event::Drop, Event::Pointer, Event::Key],
-        properties: &[WidgetProperty::Units, WidgetProperty::Zoom, WidgetProperty::Runs, WidgetProperty::Surface],
+        properties: &[WidgetProperty::Units, WidgetProperty::Zoom, WidgetProperty::Grid, WidgetProperty::Snap, WidgetProperty::Runs, WidgetProperty::Surface],
     },
     // A custom part is written by its declared name; its keyword is two
     // words, so it is never typed and reads well in messages. The Parts
@@ -1183,6 +1187,8 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         digits: None,
         units: None,
         zoom: false,
+        grid: None,
+        snap: false,
         runs: None,
         tooltip: None,
         icon: (kind == WidgetKind::Icon).then(|| "star".to_string()),
@@ -1357,6 +1363,12 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if props.zoom {
         parts.push("zoom".to_string());
     }
+    if let Some(grid) = props.grid {
+        parts.push(format!("grid {grid}"));
+    }
+    if props.snap {
+        parts.push("snap".to_string());
+    }
     if let Some(engine) = &props.runs {
         parts.push(format!("runs {engine}"));
     }
@@ -1483,6 +1495,17 @@ pub fn dropdown_options(props: &WidgetProps) -> Result<(), String> {
     Ok(())
 }
 
+/// A canvas's grid is 1 to 10000 units, and it snaps only to a grid it has.
+pub fn canvas_options(props: &WidgetProps) -> Result<(), String> {
+    if props.grid.is_some_and(|g| !(1..=10000).contains(&g)) {
+        return Err(CANVAS_GRID_PROBLEM.to_string());
+    }
+    if props.snap && props.grid.is_none() {
+        return Err("'snap' snaps the pointer to the grid; give the canvas one, as in grid 20".to_string());
+    }
+    Ok(())
+}
+
 pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
     let name = keyword(props.kind);
     if props.col == 0 || props.row == 0 || props.width == 0 || props.height == 0 {
@@ -1556,6 +1579,8 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Digits, props.digits.is_some(), "digits"),
         (WidgetProperty::Units, props.units.is_some(), "units"),
         (WidgetProperty::Zoom, props.zoom, "zoom"),
+        (WidgetProperty::Grid, props.grid.is_some(), "grid"),
+        (WidgetProperty::Snap, props.snap, "snap"),
         (WidgetProperty::Runs, props.runs.is_some(), "runs"),
         (WidgetProperty::Resizable, props.resizable, "resizable"),
         (WidgetProperty::Sortable, props.sortable, "sortable"),
@@ -1594,6 +1619,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
     if props.units.is_some_and(|u| !canvas_units_fit(u.width, u.height)) {
         return Err(CANVAS_UNITS_PROBLEM.to_string());
     }
+    canvas_options(props)?;
     if let Some(field) = props.switches.iter().find(|f| !props.edit.contains(f)) {
         return Err(format!("'{field}' is a switch but is not edited"));
     }
@@ -1621,6 +1647,9 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
 /// The units a canvas draws in without `units W x H`.
 pub const DEFAULT_UNITS: (u32, u32) = (100, 100);
 pub const CANVAS_UNITS_PROBLEM: &str = "a canvas is 1 to 10000 units wide and high";
+
+/// A canvas's grid is so many of its units apart.
+pub const CANVAS_GRID_PROBLEM: &str = "a canvas's grid is 1 to 10000 units";
 
 pub fn canvas_units_fit(width: u32, height: u32) -> bool {
     (1..=10000).contains(&width) && (1..=10000).contains(&height)

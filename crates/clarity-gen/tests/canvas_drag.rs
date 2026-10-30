@@ -11,7 +11,7 @@ page Main: window
     data boxX: integer, default 20
     data boxY: integer, default 20
     data moved: integer
-    canvas name sheet at 1,1 span 12 rows 8 units 3000 x 2000 zoom on draw: drawSheet on drag: dragged on drop: dropped
+    canvas name sheet at 1,1 span 12 rows 8 units 3000 x 2000 zoom grid 20 snap on draw: drawSheet on drag: dragged on drop: dropped
 
 code Main
     handler drawSheet
@@ -46,7 +46,7 @@ fn every_stack_reads_where_a_drag_started() {
     has(&generated(Backend::C, Ui::Web), "clarity_ui_from_x(ui, \"sheet\")");
     has(&generated(Backend::Cpp, Ui::Web), "ui.from_x(\"sheet\")");
     let csharp = generated(Backend::Csharp, Ui::Avalonia);
-    has(&csharp, " Zoom=\"True\"");
+    has(&csharp, " Zoom=\"True\" Grid=\"20\" Snap=\"True\"");
     has(&csharp, " DragCommand=\"{Binding DragAt_SheetCommand}\"");
     has(&csharp, " DropCommand=\"{Binding DropAt_SheetCommand}\"");
     has(&csharp, "Sheet.FromX");

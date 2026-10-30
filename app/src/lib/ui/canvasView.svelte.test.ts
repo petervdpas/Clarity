@@ -8,6 +8,13 @@ import { expect, test } from "vitest";
 import type { Pointer } from "../live";
 import CanvasView from "./CanvasView.svelte";
 
+// The simulated page measures no sizes; the canvas watches its part's size all the same.
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
+
 /** A pointer event as a browser sends it, at a place in the part. */
 function pointer(type: string, x: number, y: number): MouseEvent {
   const e = new MouseEvent(type, { clientX: x, clientY: y, button: 0, bubbles: true, cancelable: true });
@@ -96,4 +103,71 @@ test("the wheel zooms and scrolls a canvas that zooms, and a redraw keeps the vi
   expect(Math.round(Number(svg.getAttribute("viewBox")!.split(" ")[2]))).toBe(500);
   unmount(part);
   holder.remove();
+});
+
+test("on a canvas that zooms, a drag the handler does nothing with moves the view", async () => {
+  const drops: Pointer[] = [];
+  let calls = 0;
+  const props = $state({
+    drawing: [] as never[],
+    units: { width: 1000, height: 500 },
+    shown: String,
+    zoom: true,
+    ondrag: () => (calls++, Promise.resolve()),
+    ondrop: (p: Pointer) => drops.push(p),
+  });
+  const holder = document.createElement("div");
+  document.body.append(holder);
+  const part = mount(CanvasView, { target: holder, props });
+  flushSync();
+  const svg = holder.querySelector("svg")!;
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 200, right: 400, bottom: 200, x: 0, y: 0, toJSON: () => ({}) });
+  // Zoomed in twice: 500 x 250 units in view, 0.8 pixels a unit.
+  svg.dispatchEvent(new WheelEvent("wheel", { deltaY: -300 * Math.log(2), ctrlKey: true, clientX: 200, clientY: 100, cancelable: true }));
+  flushSync();
+  svg.dispatchEvent(pointer("pointerdown", 200, 100));
+  svg.dispatchEvent(pointer("pointermove", 160, 100));
+  await new Promise((r) => setTimeout(r, 0));
+  flushSync();
+  // The handler drew the same: the view moved 40 pixels, 50 units, to the right.
+  expect(calls).toBe(1);
+  expect(Math.round(Number(svg.getAttribute("viewBox")!.split(" ")[0]))).toBe(300);
+  svg.dispatchEvent(pointer("pointermove", 120, 100));
+  flushSync();
+  expect(calls).toBe(1);
+  expect(Math.round(Number(svg.getAttribute("viewBox")!.split(" ")[0]))).toBe(350);
+  svg.dispatchEvent(pointer("pointerup", 120, 100));
+  await new Promise((r) => setTimeout(r, 0));
+  expect(drops).toEqual([]);
+  // A handler that changes the drawing keeps the drag, and gets the drop.
+  props.ondrag = () => ((props.drawing = [{ op: "clear", color: "panel" }] as never[]), Promise.resolve());
+  flushSync();
+  svg.dispatchEvent(pointer("pointerdown", 200, 100));
+  svg.dispatchEvent(pointer("pointermove", 160, 100));
+  await new Promise((r) => setTimeout(r, 0));
+  flushSync();
+  expect(Math.round(Number(svg.getAttribute("viewBox")!.split(" ")[0]))).toBe(350);
+  svg.dispatchEvent(pointer("pointerup", 160, 100));
+  await new Promise((r) => setTimeout(r, 0));
+  expect(drops.length).toBe(1);
+  unmount(part);
+  holder.remove();
+});
+
+test("a canvas with a grid shows it behind the shapes, and snaps the places it gives", () => {
+  const clicks: Pointer[] = [];
+  const drawing = [
+    { op: "clear", color: "panel" },
+    { op: "rect", x: 0, y: 0, width: 10, height: 10, color: "accent" },
+  ] as never[];
+  const { holder, svg, done } = canvas({ drawing, grid: 100, snap: true, onpoint: (p: Pointer) => clicks.push(p) });
+  const children = [...svg.children].map((c) => c.tagName.toLowerCase());
+  // The clear, then the grid, then the shapes.
+  expect(children).toEqual(["rect", "g", "rect"]);
+  expect(holder.querySelectorAll(".grid line").length).toBeGreaterThan(0);
+  // 2.5 units a pixel: a click at 20, 30 is 50, 75, which snaps to 100, 100.
+  svg.dispatchEvent(pointer("pointerdown", 20, 30));
+  svg.dispatchEvent(pointer("pointerup", 20, 30));
+  expect(clicks).toEqual([{ x: 100, y: 100 }]);
+  done();
 });

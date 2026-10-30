@@ -1472,6 +1472,12 @@ impl<'a> Window<'a> {
                 if p.zoom {
                     click.push_str(" Zoom=\"True\"");
                 }
+                if let Some(grid) = p.grid {
+                    let _ = write!(click, " Grid=\"{grid}\"");
+                }
+                if p.snap {
+                    click.push_str(" Snap=\"True\"");
+                }
                 if Self::handler(widget, Event::Drag).is_some() {
                     let _ = write!(click, " DragCommand=\"{{Binding DragAt_{name}Command}}\"");
                 }

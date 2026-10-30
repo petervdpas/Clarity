@@ -30,7 +30,8 @@ public sealed class PersonKeyTests
         Assert.Equal(KeyGesture.Parse("Shift+F5"), KeyRules.Gesture("Shift+F5"));
     }
 
-    [Fact]
+    // On the UI thread: setting keys walks the buttons other tests showed there.
+    [AvaloniaFact]
     public void The_persons_keys_are_kept_beside_the_settings()
     {
         var home = Directory.CreateTempSubdirectory("clarity-keys-");

@@ -1234,6 +1234,9 @@ impl<'a> Checker<'a> {
                     widget.span,
                 );
             }
+            if let Err(problem) = widgets::canvas_options(p) {
+                self.error(file, problem, widget.span);
+            }
             if p.kind == WidgetKind::Image && p.source.is_none() && p.bind.is_none() && p.caption.is_none() {
                 self.warning(
                     file,

@@ -107,7 +107,7 @@ export function pointOf(
 /** The rectangle of a canvas's units a part shows: `[x, y, width, height]`. */
 export type View = [number, number, number, number];
 
-/** A canvas zooms in to a sixteenth of its width at most. */
+/** A canvas zooms in to 16 times the scale that fits it whole. */
 const CLOSEST = 16;
 
 /** The view kept inside the canvas: never larger, and moved back within it. */
@@ -116,14 +116,26 @@ function within(units: { width: number; height: number }, x: number, y: number, 
 }
 
 /**
- * The view after zooming by `factor` (above 1 closer) around `at`, in
- * units, which stays where it is (conformance/drawing.json, views).
+ * The view after zooming by `factor` (above 1 closer) in a part of `part`
+ * pixels, around `at`, in units, which stays where it is: the scale changes
+ * by the factor, from the whole canvas fitted up to 16 times that, and the
+ * view fills the part at that scale, up to the canvas's own size
+ * (conformance/drawing.json, views).
  */
-export function zoomed(units: { width: number; height: number }, view: View, factor: number, at: { x: number; y: number }): View {
-  const width = Math.min(Math.max(view[2] / factor, units.width / CLOSEST), units.width);
-  const height = (width * units.height) / units.width;
-  const kept = width / view[2];
-  return within(units, at.x - (at.x - view[0]) * kept, at.y - (at.y - view[1]) * kept, width, height);
+export function zoomed(
+  units: { width: number; height: number },
+  part: { width: number; height: number },
+  view: View,
+  factor: number,
+  at: { x: number; y: number },
+): View {
+  const whole = Math.min(part.width / units.width, part.height / units.height);
+  const now = Math.min(part.width / view[2], part.height / view[3]);
+  if (!(whole > 0) || !(now > 0)) return view;
+  const scale = Math.min(Math.max(now * factor, whole), whole * CLOSEST);
+  const width = Math.min(part.width / scale, units.width);
+  const height = Math.min(part.height / scale, units.height);
+  return within(units, at.x - (at.x - view[0]) * (width / view[2]), at.y - (at.y - view[1]) * (height / view[3]), width, height);
 }
 
 /** The view moved by `by` units, kept inside the canvas. */
@@ -143,6 +155,22 @@ export function pointIn(view: View, part: { width: number; height: number }, at:
   const y = (at.y - (part.height - view[3] * scale) / 2) / scale;
   if (x < 0 || y < 0 || x >= view[2] || y >= view[3]) return null;
   return { x: Math.floor(view[0] + x), y: Math.floor(view[1] + y) };
+}
+
+/** The units between a grid's shown lines: every `grid`, doubled until they are 8 pixels apart (conformance/drawing.json, grids). */
+export function gridEvery(grid: number, scale: number): number {
+  let every = grid;
+  while (every * scale < 8 && every < 1e6) every *= 2;
+  return every;
+}
+
+/** The nearest point of the grid, a half rounding up, never past the canvas's last unit. */
+export function snapped(units: { width: number; height: number }, grid: number, point: { x: number; y: number }): { x: number; y: number } {
+  const near = (v: number, size: number) => {
+    const n = Math.floor(v / grid + 0.5) * grid;
+    return n > size - 1 ? n - grid : n;
+  };
+  return { x: near(point.x, units.width), y: near(point.y, units.height) };
 }
 
 /**

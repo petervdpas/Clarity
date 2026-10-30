@@ -176,3 +176,30 @@ code Main
     let button = "module x\n\npage Main: window\n    button \"Go\" name go at 1,1 span 2 zoom\n";
     assert_has(&errors(button), "zoom");
 }
+
+/// A canvas can show a grid (`grid 20`, in its units) and snap the pointer
+/// to it (`snap`): what handlers read is then on the grid.
+#[test]
+fn a_canvas_can_show_a_grid_and_snap_to_it() {
+    let sheet = "module diagram
+
+page Main: window
+    data moved: integer
+    canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom grid 20 snap on draw: drawSheet on drop: dropped
+
+code Main
+    handler drawSheet
+        sheet.clear(\"panel\")
+
+    handler dropped
+        moved = sheet.x
+";
+    let (file, diags) = parse(sheet, "diagram.clarity");
+    assert!(diags.is_empty(), "{diags:#?}");
+    let canvas = &file.pages[0].widgets[0];
+    assert_eq!((canvas.props.grid, canvas.props.snap), (Some(20), true));
+    assert_eq!(widget_line(&canvas.props), "canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom grid 20 snap on draw: drawSheet on drop: dropped");
+    assert!(errors(sheet).is_empty(), "{:#?}", errors(sheet));
+    assert_has(&errors(&sheet.replace(" grid 20 snap", " snap")), "'snap' snaps the pointer to the grid; give the canvas one, as in grid 20");
+    assert_has(&errors(&sheet.replace("grid 20", "grid 0")), "a canvas's grid is 1 to 10000 units");
+}

@@ -282,10 +282,14 @@
     }
   ],
   "views": {
-    "about": "A canvas with `zoom` shows a view of its units: the rectangle `[x, y, width, height]` of units in the part, fitted and centred as the whole drawing is without zoom, which is the view it starts with. `zoomed` gives the view after zooming by `factor` (above 1 closer, below 1 farther) around the point `at` in units, which stays where it is: the view keeps the canvas's proportion, is never larger than the canvas nor smaller than a sixteenth of its width, and is moved back inside it. `scrolled` gives the view moved by `by` units, kept inside the canvas. `points` gives where in units a pointer in the part is, as clicks do, through the view, rounded down; null beside the drawing.",
+    "about": "A canvas with `zoom` shows a view of its units: the rectangle `[x, y, width, height]` of units in the part, fitted and centred. It starts as the whole canvas, fitted whole in proportion, with empty bands where the part is wider or taller. `zoomed` gives the view after zooming by `factor` (above 1 closer, below 1 farther) in a part of size `part` (pixels), around the point `at` in units, which stays where it is: the pixels a unit takes (the scale) change by the factor, from the whole canvas fitted up to 16 times that; the view then fills the part at that scale, along each side up to the canvas's own size, and is moved back inside the canvas. `scrolled` gives the view moved by `by` units, kept inside the canvas. `points` gives where in units a pointer in the part is, as clicks do, through the view, rounded down; null beside the drawing.",
     "zoomed": [
       {
         "units": [
+          1000,
+          500
+        ],
+        "part": [
           1000,
           500
         ],
@@ -309,6 +313,10 @@
       },
       {
         "units": [
+          1000,
+          500
+        ],
+        "part": [
           1000,
           500
         ],
@@ -335,6 +343,10 @@
           1000,
           500
         ],
+        "part": [
+          1000,
+          500
+        ],
         "view": [
           250,
           125,
@@ -355,6 +367,10 @@
       },
       {
         "units": [
+          1000,
+          500
+        ],
+        "part": [
           1000,
           500
         ],
@@ -381,6 +397,10 @@
           1000,
           500
         ],
+        "part": [
+          1000,
+          500
+        ],
         "view": [
           0,
           0,
@@ -404,6 +424,10 @@
           1000,
           500
         ],
+        "part": [
+          1000,
+          500
+        ],
         "view": [
           500,
           250,
@@ -420,6 +444,60 @@
           187.5,
           625,
           312.5
+        ]
+      },
+      {
+        "units": [
+          1000,
+          1000
+        ],
+        "part": [
+          400,
+          200
+        ],
+        "view": [
+          0,
+          0,
+          1000,
+          1000
+        ],
+        "factor": 2,
+        "at": [
+          500,
+          500
+        ],
+        "result": [
+          0,
+          250,
+          1000,
+          500
+        ]
+      },
+      {
+        "units": [
+          1000,
+          1000
+        ],
+        "part": [
+          400,
+          200
+        ],
+        "view": [
+          0,
+          250,
+          1000,
+          500
+        ],
+        "factor": 2,
+        "at": [
+          500,
+          500
+        ],
+        "result": [
+          250,
+          375,
+          500,
+          250
         ]
       }
     ],
@@ -629,6 +707,108 @@
         "point": [
           94,
           94
+        ]
+      }
+    ]
+  },
+  "grids": {
+    "about": "A canvas with `grid N` shows a grid every N units, drawn after its drawing's `clear` (first, when it has none), in the theme's `border` color, one pixel wide whatever the zoom. Lines closer than 8 pixels apart are thinned: the grid shows every 2N, 4N, ... units, the smallest that is 8 pixels or more (`lines`: the grid, the pixels a unit takes, the units between shown lines). With `snap`, where the pointer is (x, y) and where it was pressed (fromX, fromY) are the nearest point of the grid, a half rounding up, and never past the canvas's last unit: a point that rounds out goes back one step (`snapped`: units, grid, the point, what handlers read).",
+    "lines": [
+      {
+        "grid": 20,
+        "scale": 1,
+        "every": 20
+      },
+      {
+        "grid": 20,
+        "scale": 0.25,
+        "every": 40
+      },
+      {
+        "grid": 20,
+        "scale": 0.05,
+        "every": 160
+      },
+      {
+        "grid": 5,
+        "scale": 2,
+        "every": 5
+      }
+    ],
+    "snapped": [
+      {
+        "units": [
+          3000,
+          2000
+        ],
+        "grid": 20,
+        "point": [
+          29,
+          31
+        ],
+        "snapped": [
+          20,
+          40
+        ]
+      },
+      {
+        "units": [
+          3000,
+          2000
+        ],
+        "grid": 20,
+        "point": [
+          30,
+          30
+        ],
+        "snapped": [
+          40,
+          40
+        ]
+      },
+      {
+        "units": [
+          3000,
+          2000
+        ],
+        "grid": 20,
+        "point": [
+          0,
+          9
+        ],
+        "snapped": [
+          0,
+          0
+        ]
+      },
+      {
+        "units": [
+          3000,
+          2000
+        ],
+        "grid": 20,
+        "point": [
+          2999,
+          1999
+        ],
+        "snapped": [
+          2980,
+          1980
+        ]
+      },
+      {
+        "units": [
+          100,
+          100
+        ],
+        "grid": 30,
+        "point": [
+          95,
+          46
+        ],
+        "snapped": [
+          90,
+          60
         ]
       }
     ]

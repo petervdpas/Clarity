@@ -706,7 +706,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 |---|---|---|---|
 | `image` | an `image` field, or nothing | `source "file"` for a fixed picture of the resources folder | `click` |
 | `display` | an integer, decimal or money: `bind shown` | `digits n`, 1 to 24, 12 without it | none |
-| `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `zoom`; `surface svg`, `surface bitmap` or `surface gpu` | `draw`, `click`, `drag`, `drop`, `pointer`, `key` |
+| `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `zoom`; `grid N` and `snap`; `surface svg`, `surface bitmap` or `surface gpu` | `draw`, `click`, `drag`, `drop`, `pointer`, `key` |
 
 **Media**
 
@@ -1353,8 +1353,9 @@ code Game
             square = square + 3
         status = "Square {square}"
 ```
-- `zoom` on a canvas lets the person zoom and scroll its drawing, for a drawing larger than the part shows well, such as a diagram: the wheel scrolls (with Shift sideways), Ctrl (Cmd on macOS) with the wheel or a touchpad's pinch zooms around the pointer, and bars at the edges show where the view is. The drawing starts whole; it zooms in to a sixteenth of the canvas's width at most and never past its edges. The view stays while the canvas is drawn anew. `canvas.x` and `canvas.y` stay in the canvas's units, whatever is in view.
-- `on drag: handler` runs while the pointer moves on the canvas with its button down, and `on drop: handler` once when it is let go. Both read where the pointer is (`canvas.x`, `canvas.y`, at the nearest edge when it is beside the drawing) and where it was pressed (`canvas.fromX`, `canvas.fromY`), in the canvas's units. A press that does not move is a click. The handler runs with the latest place: moves that come while it runs are not queued one by one. The canvas is drawn anew after each, so code that moves what it draws by `canvas.x - canvas.fromX` shows it moving; the drop is the place to save. On a canvas with `zoom` and no drag handler, dragging moves the view.
+- `zoom` on a canvas lets the person zoom and scroll its drawing, for a drawing larger than the part shows well, such as a diagram: the wheel scrolls (with Shift sideways), Ctrl (Cmd on macOS) with the wheel or a touchpad's pinch zooms around the pointer, and bars at the edges show where the view is. The drawing starts whole, fitted in proportion; zoomed in, it fills the part, up to 16 times the size it starts at, and never scrolls past its edges. The view stays while the canvas is drawn anew. `canvas.x` and `canvas.y` stay in the canvas's units, whatever is in view.
+- `on drag: handler` runs while the pointer moves on the canvas with its button down, and `on drop: handler` once when it is let go. Both read where the pointer is (`canvas.x`, `canvas.y`, at the nearest edge when it is beside the drawing) and where it was pressed (`canvas.fromX`, `canvas.fromY`), in the canvas's units. A press that does not move is a click. The handler runs with the latest place: moves that come while it runs are not queued one by one. The canvas is drawn anew after each, so code that moves what it draws by `canvas.x - canvas.fromX` shows it moving; the drop is the place to save. On a canvas with `zoom`, a drag moves the view instead when there is no drag handler, or when the handler's first run leaves the drawing as it was (a press on nothing it moves); that drag has no drop.
+- `grid 20` shows a grid every 20 of the canvas's units, behind the shapes: after the drawing's `clear`, first when it has none, in the theme's `border` color. Zoomed out, lines closer than 8 pixels are thinned to every second, fourth and so on. `snap` (with a grid) puts every place the canvas gives on the nearest point of the grid: `canvas.x`, `canvas.y`, `canvas.fromX` and `canvas.fromY` of a click, a drag and a drop. Code that moves a box by `canvas.x - canvas.fromX` then moves it by whole steps of the grid, and a box that starts on the grid stays on it.
 
 ```clarity
 page Sheet: window

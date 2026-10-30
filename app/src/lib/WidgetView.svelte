@@ -1074,6 +1074,8 @@
         units={p.units ?? { width: DEFAULT_UNITS, height: DEFAULT_UNITS }}
         shown={(text) => shownText(preview, text)}
         zoom={p.zoom && !design}
+        grid={p.grid}
+        snap={p.snap}
         onpoint={live && p.name && !design && p.handlers.some((h) => h.event === "click")
           ? (point) => {
               // Where it was clicked goes with the part's state, for the handler to read.

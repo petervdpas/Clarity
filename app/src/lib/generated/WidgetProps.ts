@@ -123,6 +123,14 @@ units: CanvasUnits | null,
  */
 zoom: boolean, 
 /**
+ * `grid 20`: a canvas shows a grid, every so many of its units.
+ */
+grid: number | null, 
+/**
+ * `snap`: the pointer on a canvas snaps to its grid.
+ */
+snap: boolean, 
+/**
  * `runs Screen`: the engine beside the screen that draws the canvas
  * (DESIGN 5.12), in place of a draw handler.
  */

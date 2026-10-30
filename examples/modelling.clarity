@@ -1,0 +1,13 @@
+// The data modelling example: the types of a domain as a class diagram and
+// its tables as an entity relationship diagram, both drawn over all their
+// records, written out as Mermaid and as an OpenAPI description, with
+// versions kept when the modeller says so. Its modules are in the
+// modelling folder next to this file.
+project Modelling
+    title "Data Modelling"
+    stack csharp avalonia desktop
+    output "out"
+    language "en"
+    datasource main sqlite "data/modelling.db"
+    filestore exports "setting:exportsFolder"
+    filestore code "setting:codeFolder"

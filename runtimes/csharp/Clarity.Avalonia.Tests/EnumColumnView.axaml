@@ -1,0 +1,13 @@
+<!-- An editable enum column, its choices given as generated code gives them:
+     an array of a static class, which the XAML compiler sets on the column. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:t="using:Clarity.Avalonia.Tests"
+             xmlns:c="using:Clarity.Avalonia"
+             x:Class="Clarity.Avalonia.Tests.EnumColumnView">
+  <c:ClarityTable x:Name="grid">
+    <c:ClarityTable.Columns>
+      <c:TableColumn Field="Size" Header="Size" Kind="Choice" Edit="True" Choices="{x:Static t:SizeChoices.Size}" />
+    </c:ClarityTable.Columns>
+  </c:ClarityTable>
+</UserControl>

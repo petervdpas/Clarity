@@ -1,0 +1,61 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "The model"
+    add entity Project
+        name: text(80), unique, search
+        summary: text, search
+        created: datetime
+    add entity ClassType
+        project: ref Project
+        name: text(80), search
+        namespace: text(120), search
+        kind: TypeKind, default Class
+        ontology: Ontology, default Entity
+        base: ref ClassType
+        interfaces: list<text>
+        summary: text, search
+        tags: list<text>, search
+        created: datetime
+        updated: datetime
+    add entity Parameter
+        owner: ref ClassType
+        position: integer, default 1
+        type: text(60)
+        name: text(60)
+    add entity Association
+        project: ref Project
+        source: ref ClassType
+        target: ref ClassType
+        link: Link, default Association
+        label: text(60)
+        multiplicity: text(12)
+    add entity DataEntity
+        project: ref Project
+        name: text(80), search
+        summary: text, search
+        created: datetime
+        updated: datetime
+    add entity Column
+        owner: ref DataEntity
+        position: integer, default 1
+        name: text(60)
+        type: text(40)
+        key: Key, default Plain
+        mandatory: bool, default false
+    add entity Relationship
+        project: ref Project
+        source: ref DataEntity
+        target: ref DataEntity
+        source_side: Cardinality, default ExactlyOne
+        target_side: Cardinality, default ZeroOrMore
+        label: text(60)
+    add entity Version
+        project: ref Project
+        number: integer
+        note: text
+        saved: datetime
+        types: integer
+        entities: integer
+        class_diagram: text
+        erd: text
+        openapi: text

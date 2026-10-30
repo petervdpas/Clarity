@@ -51,8 +51,11 @@ public sealed class TableColumn
     public bool Edit { get; set; }
     /// <summary>A bool column shown as a switch (<c>as switch</c>).</summary>
     public bool Switch { get; set; }
-    /// <summary>The choices of a choice column: an enum's values, or the records a reference can point at.</summary>
-    public IEnumerable<Choice>? Choices { get; set; }
+    /// <summary>
+    /// The choices of a choice column: an enum's values, or the records a reference can point at.
+    /// Not typed as choices, so XAML can set an array of them, as it does a dropdown's.
+    /// </summary>
+    public System.Collections.IEnumerable? Choices { get; set; }
     /// <summary>Where the table's window keeps the choices instead, by name, like <c>PersonChoices</c>: the records it read.</summary>
     public string? ChoicesFrom { get; set; }
     /// <summary>A value as the column shows it, when it is not edited.</summary>
@@ -544,7 +547,7 @@ public sealed class ClarityTable : UserControl
 
     /// <summary>A choice column's choices: its own, or those its window keeps.</summary>
     IEnumerable<Choice>? ChoicesOf(TableColumn column) =>
-        column.Choices ?? (column.ChoicesFrom is { } from && DataContext is { } window ? window.GetType().GetProperty(from)?.GetValue(window) as IEnumerable<Choice> : null);
+        column.Choices?.Cast<Choice>() ?? (column.ChoicesFrom is { } from && DataContext is { } window ? window.GetType().GetProperty(from)?.GetValue(window) as IEnumerable<Choice> : null);
 
     static Control Cell(TableColumn column, IEnumerable<Choice>? choices)
     {

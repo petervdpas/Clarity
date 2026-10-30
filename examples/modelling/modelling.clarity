@@ -1,0 +1,625 @@
+module modelling
+
+use model
+
+// What each person sets for themselves: the language, and where exports go.
+settings
+    language
+    exportsFolder: folder, default "exports", label @settingsExportsFolderLabel
+    codeFolder: folder, default "code", label @settingsCodeFolderLabel
+    openProject: text(80), label @settingsOpenProjectLabel
+
+app Modelling
+    title @modellingTitle
+    main Projects
+    menu name mainMenu
+        item @fileItem name fileItem
+            item @projectsItem name projectsItem key "Ctrl+0" on click -> Projects
+            separator
+            item @typesItem name typesItem key "Ctrl+1" on click -> Types
+            item @entitiesItem name entitiesItem key "Ctrl+2" on click -> Entities
+            item @relationsItem name relationsItem key "Ctrl+3" on click -> Relations
+            separator
+            item @settingsItem name settingsItem on click -> Preferences
+            item @languageItem name languageItem on click -> language
+            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
+        item @modelItem name modelItem
+            item @diagramsItem name diagramsItem key "Ctrl+4" on click -> Diagrams
+            item @outputItem name outputItem key "Ctrl+5" on click -> Output
+            item @versionsItem name versionsItem key "Ctrl+6" on click -> Versions
+    toolbar name mainToolbar
+        button @projectsButtonCaption name projectsButton icon "folder-open" on click -> Projects
+        separator
+        button @typesButtonCaption name typesButton icon "box" on click -> Types
+        button @entitiesButtonCaption name entitiesButton icon "database" on click -> Entities
+        button @relationsButtonCaption name relationsButton icon "git-merge" on click -> Relations
+        separator
+        button @diagramsButtonCaption name diagramsButton icon "network" on click -> Diagrams
+        button @outputButtonCaption name outputButton icon "file-code" on click -> Output
+        button @versionsButtonCaption name versionsButton icon "clock" on click -> Versions
+
+// The modelling projects: open one to work on its types and entities.
+page Projects: window
+    title @projectsTitle
+    size 900 x 560
+    data projects: list<Project>
+    data current: Project
+    on open: projectsOpened
+    on return: projectsOpened
+
+    textbox name projectSearch at 1,1 span 4 placeholder @projectSearchPlaceholder on change: showProjects
+    list name projectList at 1,2 span 4 rows 9 bind projects show name on select: projectSelected on open: openClicked
+    form name projectForm at 5,1 span 8 rows 3 bind current labels 2
+        textbox name projectName at 3,1 span 6 bind current.name
+        memo name projectSummary at 3,2 span 6 rows 2 bind current.summary
+    label name openNow at 5,5 span 8
+    button @newProjectCaption name newProject at 5,11 span 2 on click: newProjectClicked
+    button @saveProjectCaption name saveProject at 7,11 span 2 key "Ctrl+S" default on click: saveProjectClicked
+    button @deleteProjectCaption name deleteProject at 9,11 span 2 on click: deleteProjectClicked
+    button @openProjectButtonCaption name openProjectButton at 11,11 span 2 on click: openClicked
+
+// The types of the domain: the list on the left, the type on the right.
+page Types: window
+    title @typesTitle
+    size 1100 x 680
+    data project: Project
+    data types: list<ClassType>
+    data current: ClassType
+    data parameters: list<Parameter>
+    on open: typesOpened
+    on return: typesOpened
+
+    text name typesProject at 1,1 span 4 bind project.name
+    textbox name typeSearch at 1,2 span 4 placeholder @typeSearchPlaceholder on change: showTypes
+    list name typeList at 1,3 span 4 rows 10 bind types show name, namespace on select: typeSelected
+    form name typeForm at 5,1 span 8 rows 7 bind current labels 2
+        textbox name typeName at 3,1 span 6 bind current.name
+        textbox name typeNamespace at 3,2 span 6 bind current.namespace
+        dropdown name typeKind at 3,3 span 3 bind current.kind
+        radio name typeOntology at 3,4 span 4 bind current.ontology horizontal
+        dropdown name typeBase at 3,5 span 6 bind current.base
+        tags name typeInterfaces at 3,6 span 6 bind current.interfaces
+        textbox name typeSummary at 3,7 span 6 bind current.summary
+    table name parameterGrid at 5,8 span 8 rows 4 bind parameters columns position 60, type, name edit position, type, name on change: parameterChanged
+    button @addParameterCaption name addParameter at 5,12 span 2 on click: addParameterClicked
+    button @removeParameterCaption name removeParameter at 7,12 span 2 on click: removeParameterClicked
+    text name typeUpdated at 9,12 span 4 bind current.updated
+    button @newTypeCaption name newType at 5,13 span 2 on click: newTypeClicked
+    button @saveTypeCaption name saveType at 7,13 span 2 key "Ctrl+S" default on click: saveTypeClicked
+    button @deleteTypeCaption name deleteType at 9,13 span 2 on click: deleteTypeClicked
+
+// The entities of the ERD, with their columns.
+page Entities: window
+    title @entitiesTitle
+    size 1100 x 680
+    data project: Project
+    data entities: list<DataEntity>
+    data current: DataEntity
+    data columns: list<Column>
+    on open: entitiesOpened
+    on return: entitiesOpened
+
+    text name entitiesProject at 1,1 span 4 bind project.name
+    textbox name entitySearch at 1,2 span 4 placeholder @entitySearchPlaceholder on change: showEntities
+    list name entityList at 1,3 span 4 rows 10 bind entities show name on select: entitySelected
+    form name entityForm at 5,1 span 8 rows 2 bind current labels 2
+        textbox name entityName at 3,1 span 6 bind current.name
+        textbox name entitySummary at 3,2 span 6 bind current.summary
+    table name columnGrid at 5,3 span 8 rows 8 bind columns columns position 60, name, type, key, mandatory 80 edit position, name, type, key, mandatory on change: columnChanged
+    button @addColumnCaption name addColumn at 5,12 span 2 on click: addColumnClicked
+    button @removeColumnCaption name removeColumn at 7,12 span 2 on click: removeColumnClicked
+    text name entityUpdated at 9,12 span 4 bind current.updated
+    button @newEntityCaption name newEntity at 5,13 span 2 on click: newEntityClicked
+    button @saveEntityCaption name saveEntity at 7,13 span 2 key "Ctrl+S" default on click: saveEntityClicked
+    button @deleteEntityCaption name deleteEntity at 9,13 span 2 on click: deleteEntityClicked
+
+// The lines of both diagrams, edited in their tables.
+page Relations: window
+    title @relationsTitle
+    size 1100 x 600
+    data project: Project
+    data associations: list<Association>
+    data relationships: list<Relationship>
+    on open: relationsOpened
+
+    tabs name relationTabs at 1,1 span 12 rows 11
+        tab @relationsBetweenTypesTab
+            table name associationGrid at 1,1 span 12 rows 9 bind associations columns source, link, target, multiplicity 100, label edit source, link, target, multiplicity, label on change: associationChanged
+            button @addAssociationCaption name addAssociation at 1,10 span 2 on click: addAssociationClicked
+            button @removeAssociationCaption name removeAssociation at 3,10 span 2 on click: removeAssociationClicked
+        tab @relationsBetweenEntitiesTab
+            table name relationshipGrid at 1,1 span 12 rows 9 bind relationships columns source, source_side, target_side, target, label edit source, source_side, target_side, target, label on change: relationshipChanged
+            button @addRelationshipCaption name addRelationship at 1,10 span 2 on click: addRelationshipClicked
+            button @removeRelationshipCaption name removeRelationship at 3,10 span 2 on click: removeRelationshipClicked
+
+// Both diagrams, drawn over all their records.
+page Diagrams: window
+    title @diagramsTitle
+    size 1200 x 820
+    data project: Project
+    data types: list<ClassType>
+    data entities: list<DataEntity>
+    on open: diagramsOpened
+
+    tabs name diagramTabs at 1,1 span 12 rows 12
+        tab @diagramsClassDiagramTab
+            canvas name classCanvas at 1,1 span 12 rows 11 units 1200 x 820 on draw: drawClasses
+        tab @diagramsEntityRelationshipDiagramTab
+            canvas name erdCanvas at 1,1 span 12 rows 11 units 1200 x 820 on draw: drawEntities
+
+// The model as Mermaid and as an OpenAPI description, as they are now.
+page Output: window
+    title @outputTitle
+    size 1100 x 720
+    data project: Project
+    data classText: text
+    data erdText: text
+    data apiText: text
+    on open: showOutput
+
+    tabs name outputTabs at 1,1 span 12 rows 11
+        tab @outputClassDiagramMermaidTab
+            memo name classMemo at 1,1 span 12 rows 10 bind classText readonly
+        tab @outputERDMermaidTab
+            memo name erdMemo at 1,1 span 12 rows 10 bind erdText readonly
+        tab @outputOpenAPITab
+            memo name apiMemo at 1,1 span 12 rows 10 bind apiText readonly
+    button @refreshOutputCaption name refreshOutput at 1,12 span 2 on click: showOutput
+    button @exportOutputCaption name exportOutput at 3,12 span 2 on click: exportClicked
+    button @writeCsharpCaption name writeCsharp at 5,12 span 2 on click: writeCsharpClicked
+    button @saveVersionButtonCaption name saveVersionButton at 11,12 span 2 on click: saveVersionClicked
+
+// The versions kept, and what the model was in each.
+page Versions: window
+    title @versionsTitle
+    size 1100 x 720
+    data project: Project
+    data versions: list<Version>
+    data current: Version
+    on open: versionsOpened
+
+    table name versionGrid at 1,1 span 12 rows 4 bind versions columns number 80, saved 170, note, types 70, entities 70 order by number desc on select: versionSelected
+    tabs name versionTabs at 1,5 span 12 rows 8
+        tab @versionsClassDiagramTab
+            memo name versionClassMemo at 1,1 span 12 rows 7 bind current.class_diagram readonly
+        tab @versionsERDTab
+            memo name versionErdMemo at 1,1 span 12 rows 7 bind current.erd readonly
+        tab @versionsOpenAPITab
+            memo name versionApiMemo at 1,1 span 12 rows 7 bind current.openapi readonly
+
+page Preferences: dialog
+    title @preferencesTitle
+
+    form name settingsForm at 1,1 span 12 rows 3 bind settings labels 3
+        dropdown name languageBox at 4,1 span 6 bind settings.language
+        folder name exportsFolderBox at 4,2 span 9 bind settings.exportsFolder
+        folder name codeFolderBox at 4,3 span 9 bind settings.codeFolder
+    button @closePreferencesCaption name closePreferences at 11,5 span 2 cancel on click -> close
+
+code Projects
+    handler projectsOpened
+        showProjects()
+        showOpen()
+
+    handler showProjects
+        projects = find p in Project where p matches projectSearch.text order by p.name
+
+    handler showOpen
+        if settings.openProject == ""
+            openNow.caption = @noProjectIsOpenYet
+        else
+            openNow.caption = @openOpenProject(openProject = settings.openProject)
+
+    handler projectSelected
+        current = projectList.selected
+
+    handler newProjectClicked
+        current = new Project
+
+    handler saveProjectClicked
+        projectName.error = ""
+        if current.name == ""
+            projectName.error = @aProjectNeedsAName
+            return
+        save current
+        showProjects()
+        message @savedName(name = current.name)
+
+    // Opening a project makes it the one every other window works on.
+    handler openClicked
+        if current.id == 0
+            message warning @chooseAProjectToOpen
+            return
+        settings.openProject = current.name
+        showOpen()
+        open Types
+
+    handler deleteProjectClicked
+        if current.id == 0
+            return
+        ask @deleteNameWithEverythingIn(name = current.name) yes @delete no @keep then deleteConfirmed
+
+    handler deleteConfirmed
+        for t in find t in ClassType where t.project == current
+            for p in find p in Parameter where p.owner == t
+                delete p
+        for a in find a in Association where a.project == current
+            delete a
+        for t in find t in ClassType where t.project == current
+            delete t
+        for e in find e in DataEntity where e.project == current
+            for c in find c in Column where c.owner == e
+                delete c
+        for r in find r in Relationship where r.project == current
+            delete r
+        for e in find e in DataEntity where e.project == current
+            delete e
+        for v in find v in Version where v.project == current
+            delete v
+        if settings.openProject == current.name
+            settings.openProject = ""
+        delete current
+        current = new Project
+        showProjects()
+        showOpen()
+
+code Types
+    handler typesOpened
+        let open = find p in Project where p.name == settings.openProject
+        if count(open) == 0
+            message warning @openAProjectFirst
+            return
+        project = open[1]
+        showTypes()
+
+    handler showTypes
+        types = find t in ClassType where t.project == project and t matches typeSearch.text order by t.name
+
+    handler typeSelected
+        current = typeList.selected
+        parameters = find p in Parameter where p.owner == current order by p.position
+
+    handler newTypeClicked
+        current = new ClassType
+        parameters = find p in Parameter where p.owner == current
+
+    handler saveTypeClicked
+        typeName.error = ""
+        if project.id == 0
+            message warning @openAProjectFirst
+            return
+        if current.name == ""
+            typeName.error = @aTypeNeedsAName
+            return
+        current.project = project
+        save current
+        showTypes()
+        message @savedName(name = current.name)
+
+    handler deleteTypeClicked
+        if current.id == 0
+            return
+        ask @deleteNameAndItsParameters(name = current.name) yes @delete no @keep then deleteConfirmed
+
+    handler deleteConfirmed
+        for p in parameters
+            delete p
+        delete current
+        current = new ClassType
+        parameters = find p in Parameter where p.owner == current
+        showTypes()
+
+    handler addParameterClicked
+        if current.id == 0
+            message warning @saveTheTypeBeforeAdding
+            return
+        let parameter = new Parameter
+        parameter.owner = current
+        parameter.position = count(parameters) + 1
+        parameter.type = "string"
+        parameter.name = "value{parameter.position}"
+        save parameter
+        parameters = find p in Parameter where p.owner == current order by p.position
+
+    handler removeParameterClicked
+        if parameterGrid.selected.id != 0
+            delete parameterGrid.selected
+        parameters = find p in Parameter where p.owner == current order by p.position
+
+    handler parameterChanged
+        save parameterGrid.selected
+
+code Entities
+    handler entitiesOpened
+        let open = find p in Project where p.name == settings.openProject
+        if count(open) == 0
+            message warning @openAProjectFirst
+            return
+        project = open[1]
+        showEntities()
+
+    handler showEntities
+        entities = find e in DataEntity where e.project == project and e matches entitySearch.text order by e.name
+
+    handler entitySelected
+        current = entityList.selected
+        columns = find c in Column where c.owner == current order by c.position
+
+    handler newEntityClicked
+        current = new DataEntity
+        columns = find c in Column where c.owner == current
+
+    handler saveEntityClicked
+        entityName.error = ""
+        if project.id == 0
+            message warning @openAProjectFirst
+            return
+        if current.name == ""
+            entityName.error = @anEntityNeedsAName
+            return
+        current.project = project
+        save current
+        showEntities()
+        message @savedName(name = current.name)
+
+    handler deleteEntityClicked
+        if current.id == 0
+            return
+        ask @deleteNameAndItsColumns(name = current.name) yes @delete no @keep then deleteConfirmed
+
+    handler deleteConfirmed
+        for c in columns
+            delete c
+        delete current
+        current = new DataEntity
+        columns = find c in Column where c.owner == current
+        showEntities()
+
+    handler addColumnClicked
+        if current.id == 0
+            message warning @saveTheEntityBeforeAdding
+            return
+        let column = new Column
+        column.owner = current
+        column.position = count(columns) + 1
+        column.name = "column{column.position}"
+        column.type = "string"
+        save column
+        columns = find c in Column where c.owner == current order by c.position
+
+    handler removeColumnClicked
+        if columnGrid.selected.id != 0
+            delete columnGrid.selected
+        columns = find c in Column where c.owner == current order by c.position
+
+    handler columnChanged
+        save columnGrid.selected
+
+code Relations
+    handler relationsOpened
+        let open = find p in Project where p.name == settings.openProject
+        if count(open) == 0
+            message warning @openAProjectFirst
+            return
+        project = open[1]
+        showRelations()
+
+    handler showRelations
+        associations = find a in Association where a.project == project
+        relationships = find r in Relationship where r.project == project
+
+    handler addAssociationClicked
+        let types = find t in ClassType where t.project == project order by t.name
+        if count(types) == 0
+            message warning @addTypesFirst
+            return
+        let association = new Association
+        association.project = project
+        association.source = types[1]
+        association.target = types[1]
+        save association
+        showRelations()
+
+    handler removeAssociationClicked
+        if associationGrid.selected.id != 0
+            delete associationGrid.selected
+        showRelations()
+
+    handler associationChanged
+        save associationGrid.selected
+
+    handler addRelationshipClicked
+        let entities = find e in DataEntity where e.project == project order by e.name
+        if count(entities) == 0
+            message warning @addEntitiesFirst
+            return
+        let relationship = new Relationship
+        relationship.project = project
+        relationship.source = entities[1]
+        relationship.target = entities[1]
+        save relationship
+        showRelations()
+
+    handler removeRelationshipClicked
+        if relationshipGrid.selected.id != 0
+            delete relationshipGrid.selected
+        showRelations()
+
+    handler relationshipChanged
+        save relationshipGrid.selected
+
+code Diagrams
+    handler diagramsOpened
+        let open = find p in Project where p.name == settings.openProject
+        if count(open) == 0
+            message warning @openAProjectFirst
+            return
+        project = open[1]
+        types = find t in ClassType where t.project == project order by t.name
+        entities = find e in DataEntity where e.project == project order by e.name
+    // Every type as a box with its parameters, four to a row, and the lines between them.
+    handler drawClasses
+        classCanvas.clear("panel")
+        let names: list<text> = []
+        let xs: list<integer> = []
+        let ys: list<integer> = []
+        let heights: list<integer> = []
+        let column = 0
+        let top = 20
+        let tallest = 0
+        for t in types
+            let parameters = find p in Parameter where p.owner == t order by p.position
+            let height = 34 + 18 * count(parameters)
+            if column == 4
+                column = 0
+                top = top + tallest + 40
+                tallest = 0
+            names = names + [t.name]
+            xs = xs + [20 + column * 295]
+            ys = ys + [top]
+            heights = heights + [height]
+            if height > tallest
+                tallest = height
+            column = column + 1
+        // The lines first, so the boxes cover their ends.
+        for t in types
+            let from = place_of(names, t.name)
+            if t.base != none
+                let base = t.base
+                let to = place_of(names, base.name)
+                classCanvas.line(xs[from] + 130, ys[from], xs[to] + 130, ys[to] + heights[to], "accent", 3)
+        let associations = find a in Association where a.project == project
+        for a in associations
+            let source = a.source
+            let target = a.target
+            let from = place_of(names, source.name)
+            let to = place_of(names, target.name)
+            classCanvas.line(xs[from] + 130, ys[from] + heights[from] / 2, xs[to] + 130, ys[to] + heights[to] / 2, "border", 2)
+            if a.label != ""
+                classCanvas.text((xs[from] + xs[to]) / 2 + 130, (ys[from] + ys[to] + heights[from] / 2 + heights[to] / 2) / 2 - 8, a.label, "text", 11)
+        let i = 1
+        for t in types
+            let x = xs[i]
+            let y = ys[i]
+            classCanvas.rect(x - 2, y - 2, 264, heights[i] + 4, "border")
+            classCanvas.rect(x, y, 260, heights[i], "raised")
+            classCanvas.rect(x, y, 260, 28, "accent")
+            classCanvas.text(x + 130, y + 14, t.name, "#ffffff", 13)
+            let parameters = find p in Parameter where p.owner == t order by p.position
+            let line = 0
+            for p in parameters
+                classCanvas.text(x + 130, y + 44 + line * 18, "{p.type} {p.name}", "text", 11)
+                line = line + 1
+            i = i + 1
+
+    // Every entity as a box with its columns and keys, and the relationships between them.
+    handler drawEntities
+        erdCanvas.clear("panel")
+        let names: list<text> = []
+        let xs: list<integer> = []
+        let ys: list<integer> = []
+        let heights: list<integer> = []
+        let column = 0
+        let top = 20
+        let tallest = 0
+        for e in entities
+            let columns = find c in Column where c.owner == e order by c.position
+            let height = 34 + 18 * count(columns)
+            if column == 4
+                column = 0
+                top = top + tallest + 40
+                tallest = 0
+            names = names + [e.name]
+            xs = xs + [20 + column * 295]
+            ys = ys + [top]
+            heights = heights + [height]
+            if height > tallest
+                tallest = height
+            column = column + 1
+        let relationships = find r in Relationship where r.project == project
+        for r in relationships
+            let source = r.source
+            let target = r.target
+            let from = place_of(names, source.name)
+            let to = place_of(names, target.name)
+            erdCanvas.line(xs[from] + 130, ys[from] + heights[from] / 2, xs[to] + 130, ys[to] + heights[to] / 2, "border", 2)
+            let ends = left_end(r.source_side) + "--" + right_end(r.target_side)
+            erdCanvas.text((xs[from] + xs[to]) / 2 + 130, (ys[from] + ys[to] + heights[from] / 2 + heights[to] / 2) / 2 - 8, "{ends} {r.label}", "text", 11)
+        let i = 1
+        for e in entities
+            let x = xs[i]
+            let y = ys[i]
+            erdCanvas.rect(x - 2, y - 2, 264, heights[i] + 4, "border")
+            erdCanvas.rect(x, y, 260, heights[i], "raised")
+            erdCanvas.rect(x, y, 260, 28, "accent")
+            erdCanvas.text(x + 130, y + 14, e.name, "#ffffff", 13)
+            let columns = find c in Column where c.owner == e order by c.position
+            let line = 0
+            for c in columns
+                let mark = key_mark(c.key)
+                erdCanvas.text(x + 130, y + 44 + line * 18, "{c.type} {c.name}{mark}", "text", 11)
+                line = line + 1
+            i = i + 1
+
+code Output
+    handler showOutput
+        let open = find p in Project where p.name == settings.openProject
+        if count(open) == 0
+            message warning @openAProjectFirst
+            return
+        project = open[1]
+        classText = class_diagram(project)
+        erdText = erd_diagram(project)
+        apiText = openapi(project, latest_version(project))
+
+    handler exportClicked
+        if project.id == 0
+            return
+        export_model(project, latest_version(project))
+        message @wroteModelMdAndOpenapi(name = project.name)
+
+    handler writeCsharpClicked
+        if project.id == 0
+            return
+        let written = write_csharp(project)
+        message @wroteCountCsharpFiles(count = written, name = project.name)
+
+    handler saveVersionClicked
+        if project.id == 0
+            return
+        ask @aNoteForThisVersion for text then saveVersion
+
+    handler saveVersion(note: text)
+        let number = save_version(project, note)
+        message @savedVersionNumber(number = number)
+        showOutput()
+
+code Versions
+    handler versionsOpened
+        let open = find p in Project where p.name == settings.openProject
+        if count(open) == 0
+            message warning @openAProjectFirst
+            return
+        project = open[1]
+        versions = find v in Version where v.project == project order by v.number desc
+
+    handler versionSelected
+        current = versionGrid.selected
+
+// Where a name is in a list of names, counted from 1; 1 when it is not there.
+function place_of(names: list<text>, name: text) -> integer
+    let i = 1
+    for n in names
+        if n == name
+            return i
+        i = i + 1
+    return 1
+
+// The number of a project's latest version as text, or "draft" before the first.
+action latest_version(project: Project) -> text
+    effects db.read
+    let versions = find v in Version where v.project == project order by v.number desc
+    if count(versions) == 0
+        return "draft"
+    let latest = versions[1]
+    return "{latest.number}"

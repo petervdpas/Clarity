@@ -1,0 +1,354 @@
+module model
+
+// What a type is, as the class diagram shows it.
+enum TypeKind
+    Class label @typeKindClass
+    Record label @typeKindRecord
+    Struct label @typeKindStruct
+    Interface label @typeKindInterface
+
+// Whether a type is a thing that is, or a thing that happens.
+enum Ontology
+    Entity label @ontologyEntity
+    Event label @ontologyEvent
+
+// How one type leads to another in the class diagram.
+enum Link
+    Association label @linkAssociation
+    Aggregation label @linkAggregation
+    Composition label @linkComposition
+    Dependency label @linkDependency
+
+// What a column is to its entity.
+enum Key
+    Plain label @keyPlain
+    Primary label @keyPrimary
+    Foreign label @keyForeign
+    Unique label @keyUnique
+
+// How many records of one side the other side has, as an ERD draws it.
+enum Cardinality
+    ExactlyOne label @cardinalityExactlyOne
+    ZeroOrOne label @cardinalityZeroOrOne
+    ZeroOrMore label @cardinalityZeroOrMore
+    OneOrMore label @cardinalityOneOrMore
+
+// A modelling project: its own types, entities, relations and versions.
+entity Project
+    name: text(80), required, unique, search, label @projectNameLabel
+    summary: text, search, label @projectSummaryLabel
+    created: datetime, label @projectCreatedLabel
+
+// A type of the domain: a box of the class diagram, and a schema of the
+// OpenAPI description.
+entity ClassType
+    project: ref Project, required, label @classTypeProjectLabel
+    name: text(80), required, search, label @classTypeNameLabel
+    namespace: text(120), search, label @classTypeNamespaceLabel, help @classTypeNamespaceHelp
+    kind: TypeKind, default Class, label @classTypeKindLabel, help @classTypeKindHelp
+    ontology: Ontology, default Entity, label @classTypeOntologyLabel, help @classTypeOntologyHelp
+    base: ref ClassType, label @classTypeBaseLabel, help @classTypeBaseHelp
+    interfaces: list<text>, label @classTypeInterfacesLabel, help @classTypeInterfacesHelp
+    summary: text, search, label @classTypeSummaryLabel
+    tags: list<text>, search, label @classTypeTagsLabel
+    created: datetime, label @classTypeCreatedLabel
+    updated: datetime, label @classTypeUpdatedLabel
+
+// A parameter of a type's primary constructor: its type and name.
+entity Parameter
+    owner: ref ClassType, required, label @parameterOwnerLabel
+    position: integer, min 1, default 1, label @parameterPositionLabel
+    type: text(60), required, label @parameterTypeLabel
+    name: text(60), required, label @parameterNameLabel
+
+// A line between two types of the class diagram.
+entity Association
+    project: ref Project, required, label @associationProjectLabel
+    source: ref ClassType, required, label @associationSourceLabel
+    target: ref ClassType, required, label @associationTargetLabel
+    link: Link, default Association, label @associationLinkLabel
+    label: text(60), label @associationLabelLabel
+    multiplicity: text(12), label @associationMultiplicityLabel, help @associationMultiplicityHelp
+
+// An entity of the entity relationship diagram: a table of the database.
+entity DataEntity
+    project: ref Project, required, label @dataEntityProjectLabel
+    name: text(80), required, search, label @dataEntityNameLabel
+    summary: text, search, label @dataEntitySummaryLabel
+    created: datetime, label @dataEntityCreatedLabel
+    updated: datetime, label @dataEntityUpdatedLabel
+
+// A column of an entity.
+entity Column
+    owner: ref DataEntity, required, label @columnOwnerLabel
+    position: integer, min 1, default 1, label @columnPositionLabel
+    name: text(60), required, label @columnNameLabel
+    type: text(40), required, label @columnTypeLabel
+    key: Key, default Plain, label @columnKeyLabel
+    mandatory: bool, default false, label @columnMandatoryLabel
+
+// A line between two entities of the ERD, with how many are on each side.
+entity Relationship
+    project: ref Project, required, label @relationshipProjectLabel
+    source: ref DataEntity, required, label @relationshipSourceLabel
+    target: ref DataEntity, required, label @relationshipTargetLabel
+    source_side: Cardinality, default ExactlyOne, label @relationshipSourceSideLabel
+    target_side: Cardinality, default ZeroOrMore, label @relationshipTargetSideLabel
+    label: text(60), label @relationshipLabelLabel
+
+// The model as it was when the modeller saved a version.
+entity Version
+    project: ref Project, required, label @versionProjectLabel
+    number: integer, label @versionNumberLabel
+    note: text, label @versionNoteLabel
+    saved: datetime, label @versionSavedLabel
+    types: integer, label @versionTypesLabel
+    entities: integer, label @versionEntitiesLabel
+    class_diagram: text, label @versionClassDiagramLabel
+    erd: text, label @versionErdLabel
+    openapi: text, label @versionOpenapiLabel
+
+code Project
+    before save
+        if project.id == 0
+            project.created = now()
+
+code ClassType
+    before save
+        if class_type.id == 0
+            class_type.created = now()
+        class_type.updated = now()
+
+code DataEntity
+    before save
+        if data_entity.id == 0
+            data_entity.created = now()
+        data_entity.updated = now()
+
+// A type's kind as Mermaid writes it above the type's name.
+function stereotype(kind: TypeKind) -> text
+    if kind == Interface
+        return "interface"
+    if kind == Record
+        return "record"
+    if kind == Struct
+        return "struct"
+    return ""
+
+// The line Mermaid draws between two types, by its kind.
+function arrow(link: Link) -> text
+    if link == Aggregation
+        return "o--"
+    if link == Composition
+        return "*--"
+    if link == Dependency
+        return "..>"
+    return "-->"
+
+// The end of an ERD line at its left side, by how many there are.
+function left_end(side: Cardinality) -> text
+    if side == ZeroOrOne
+        return "|o"
+    if side == ZeroOrMore
+        return "}}o"
+    if side == OneOrMore
+        return "}}|"
+    return "||"
+
+// The end of an ERD line at its right side.
+function right_end(side: Cardinality) -> text
+    if side == ZeroOrOne
+        return "o|"
+    if side == ZeroOrMore
+        return "o{{"
+    if side == OneOrMore
+        return "|{{"
+    return "||"
+
+// What an ERD writes after a column for its key.
+function key_mark(key: Key) -> text
+    if key == Primary
+        return " PK"
+    if key == Foreign
+        return " FK"
+    if key == Unique
+        return " UK"
+    return ""
+
+// The JSON type of a parameter's type, as OpenAPI writes it, with its format.
+function json_type(type: text) -> text
+    if type in ["int", "short", "byte", "integer"]
+        return "type: integer\n          format: int32"
+    if type in ["long"]
+        return "type: integer\n          format: int64"
+    if type in ["decimal", "double", "float", "number"]
+        return "type: number"
+    if type in ["bool", "boolean"]
+        return "type: boolean"
+    if type in ["DateTime", "DateTimeOffset", "datetime"]
+        return "type: string\n          format: date-time"
+    if type in ["DateOnly", "date"]
+        return "type: string\n          format: date"
+    if type in ["Guid", "uuid"]
+        return "type: string\n          format: uuid"
+    return "type: string"
+
+// Every type, with its parameters, bases, interfaces and associations, as a Mermaid class diagram.
+action class_diagram(project: Project) -> text
+    effects db.read
+    let out = "classDiagram\n"
+    let types = find t in ClassType where t.project == project order by t.name
+    for t in types
+        out = out + "    class " + t.name + " {{\n"
+        if stereotype(t.kind) != ""
+            out = out + "        <<" + stereotype(t.kind) + ">>\n"
+        let parameters = find p in Parameter where p.owner == t order by p.position
+        for p in parameters
+            out = out + "        +" + p.type + " " + p.name + "\n"
+        out = out + "    }}\n"
+    for t in types
+        if t.base != none
+            let base = t.base
+            out = out + "    " + base.name + " <|-- " + t.name + "\n"
+        for name in t.interfaces
+            out = out + "    " + name + " <|.. " + t.name + "\n"
+    let associations = find a in Association where a.project == project
+    for a in associations
+        let source = a.source
+        let target = a.target
+        let line = "    " + source.name + " " + arrow(a.link)
+        if a.multiplicity != ""
+            line = line + " \"" + a.multiplicity + "\""
+        line = line + " " + target.name
+        if a.label != ""
+            line = line + " : " + a.label
+        out = out + line + "\n"
+    return out
+
+// Every entity with its columns and relationships, as a Mermaid entity relationship diagram.
+action erd_diagram(project: Project) -> text
+    effects db.read
+    let out = "erDiagram\n"
+    let entities = find e in DataEntity where e.project == project order by e.name
+    for e in entities
+        out = out + "    " + e.name + " {{\n"
+        let columns = find c in Column where c.owner == e order by c.position
+        for c in columns
+            out = out + "        " + c.type + " " + c.name + key_mark(c.key) + "\n"
+        out = out + "    }}\n"
+    let relationships = find r in Relationship where r.project == project
+    for r in relationships
+        let source = r.source
+        let target = r.target
+        let label = r.label
+        if label == ""
+            label = "has"
+        out = out + "    " + source.name + " " + left_end(r.source_side) + "--" + right_end(r.target_side) + " " + target.name + " : \"" + label + "\"\n"
+    return out
+
+// Every type as a schema of an OpenAPI 3 description, its parameters as properties.
+action openapi(project: Project, version: text) -> text
+    effects db.read
+    let out = "openapi: 3.0.3\ninfo:\n  title: \"" + project.name + "\"\n  version: \"" + version + "\"\npaths: {{}}\ncomponents:\n  schemas:\n"
+    let types = find t in ClassType where t.project == project order by t.name
+    for t in types
+        out = out + "    " + t.name + ":\n"
+        if t.summary != ""
+            out = out + "      description: \"" + t.summary + "\"\n"
+        if t.base != none
+            let base = t.base
+            out = out + "      allOf:\n        - $ref: '#/components/schemas/" + base.name + "'\n"
+        out = out + "      type: object\n"
+        let parameters = find p in Parameter where p.owner == t order by p.position
+        if count(parameters) > 0
+            out = out + "      properties:\n"
+            for p in parameters
+                out = out + "        " + p.name + ":\n"
+                let named = find n in ClassType where n.project == project and n.name == p.type
+                if count(named) > 0
+                    out = out + "          $ref: '#/components/schemas/" + p.type + "'\n"
+                else
+                    out = out + "          " + json_type(p.type) + "\n"
+            out = out + "      required:\n"
+            for p in parameters
+                out = out + "        - " + p.name + "\n"
+    return out
+
+// Both diagrams in one Markdown file, as places that show Mermaid read them.
+action markdown(project: Project) -> text
+    effects db.read
+    return "# " + project.name + "\n\n## Class diagram\n\n```mermaid\n" + class_diagram(project) + "```\n\n## Entity relationship diagram\n\n```mermaid\n" + erd_diagram(project) + "```\n"
+
+// Writes the diagrams and the description into the exports folder.
+// Each project's files are in a folder of their own, named after it.
+action export_model(project: Project, version: text)
+    effects db.read, files.write
+    write markdown(project) to exports project.name + "/model.md"
+    write openapi(project, version) to exports project.name + "/openapi.yaml"
+
+// A type as C# code: its namespace, its kind with its constructor's
+// parameters, its base and its interfaces; an interface gets a property per
+// parameter.
+action csharp_of(t: ClassType) -> text
+    effects db.read
+    let out = "// Written from the data model.\n"
+    if t.namespace != ""
+        out = out + "namespace " + t.namespace + ";\n\n"
+    let parameters = find p in Parameter where p.owner == t order by p.position
+    let bases = ""
+    if t.base != none
+        let base = t.base
+        bases = base.name
+    for name in t.interfaces
+        if bases == ""
+            bases = name
+        else
+            bases = bases + ", " + name
+    if bases != ""
+        bases = " : " + bases
+    if t.summary != ""
+        out = out + "/// <summary>" + t.summary + "</summary>\n"
+    if t.kind == Interface
+        out = out + "public interface " + t.name + bases + "\n{{\n"
+        for p in parameters
+            out = out + "    " + p.type + " " + p.name + " {{ get; }}\n"
+        return out + "}}\n"
+    let list = ""
+    for p in parameters
+        if list != ""
+            list = list + ", "
+        list = list + p.type + " " + p.name
+    let word = "class"
+    if t.kind == Record
+        word = "record"
+    if t.kind == Struct
+        word = "struct"
+    if t.kind == Record
+        return out + "public record " + t.name + "(" + list + ")" + bases + ";\n"
+    return out + "public " + word + " " + t.name + "(" + list + ")" + bases + "\n{{\n}}\n"
+
+// Writes every type of a project as a C# file into the C# folder, in a folder named after the project; gives how many.
+action write_csharp(project: Project) -> integer
+    effects db.read, files.write
+    let types = find t in ClassType where t.project == project order by t.name
+    for t in types
+        write csharp_of(t) to code project.name + "/" + t.name + ".cs"
+    return count(types)
+
+// Keeps the model as it is now, with a note, as the next version; gives its number.
+action save_version(project: Project, note: text) -> integer
+    effects db.read, db.write
+    let versions = find v in Version where v.project == project
+    let next = count(versions) + 1
+    let version = new Version
+    version.project = project
+    version.number = next
+    version.note = note
+    version.saved = now()
+    version.types = count(find t in ClassType where t.project == project)
+    version.entities = count(find e in DataEntity where e.project == project)
+    version.class_diagram = class_diagram(project)
+    version.erd = erd_diagram(project)
+    version.openapi = openapi(project, "{next}")
+    save version
+    return next

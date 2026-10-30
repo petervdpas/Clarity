@@ -21,7 +21,7 @@ fn every_example_is_here() {
     assert_eq!(found, EXAMPLES, "an example without a build test here, or a test without its example");
 }
 
-const EXAMPLES: [&str; 14] = ["calculator", "dial", "dice", "invaders", "ledger", "noughts", "orbs", "pills", "records", "shop", "stock", "todo", "walker", "waves"];
+const EXAMPLES: [&str; 15] = ["calculator", "dial", "dice", "invaders", "ledger", "modelling", "noughts", "orbs", "pills", "records", "shop", "stock", "todo", "walker", "waves"];
 
 #[test]
 #[ignore = "builds the calculator example (go web desktop); run with --ignored, one at a time"]
@@ -51,6 +51,12 @@ fn the_invaders_example_builds_without_warnings() {
 #[ignore = "builds the ledger example (csharp cli); run with --ignored, one at a time"]
 fn the_ledger_example_builds_without_warnings() {
     builds_without_warnings("ledger");
+}
+
+#[test]
+#[ignore = "builds the modelling example (csharp avalonia desktop); run with --ignored, one at a time"]
+fn the_modelling_example_builds_without_warnings() {
+    builds_without_warnings("modelling");
 }
 
 #[test]

@@ -5,7 +5,7 @@
 
 import type { Erd } from "./generated/Erd";
 import type { ErdEntity } from "./generated/ErdEntity";
-import { freeName, pinned, type Box, type CanvasEdit, type CanvasPick, type Link, type PaletteItem, type Shape } from "./designCanvas.ts";
+import { freeName, pinned, type Box, type CanvasEdit, type CanvasPick, type Link, type PaletteItem, type Shape, wholePoints } from "./designCanvas.ts";
 
 /** What the palette offers on an ERD. */
 export const ERD_PALETTE: PaletteItem[] = [
@@ -34,6 +34,7 @@ export function erdLinks(erd: Erd): Link[] {
     rightEnd: { kind: "count", count: r.rightCount },
     dashed: !r.identifying,
     label: r.label,
+    via: r.via.map(([x, y]) => ({ x, y })),
   }));
 }
 
@@ -71,7 +72,7 @@ export function removeEntity(erd: Erd, name: string): Erd {
 export function connect(erd: Erd, from: string, to: string): Erd {
   if (from === to) return erd;
   if (erd.relations.some((r) => (r.left === from && r.right === to) || (r.left === to && r.right === from))) return erd;
-  return { ...erd, relations: [...erd.relations, { left: from, right: to, leftCount: "zeroOrMore", rightCount: "exactlyOne", identifying: false, label: null }] };
+  return { ...erd, relations: [...erd.relations, { left: from, right: to, leftCount: "zeroOrMore", rightCount: "exactlyOne", identifying: false, label: null, via: [] }] };
 }
 
 /** Makes an edit of the canvas in the ERD, every other box pinned where it is shown; `pick` is what to pick after it. */
@@ -90,5 +91,7 @@ export function erdEdit(erd: Erd, edit: CanvasEdit, shown: Box[]): { next: Erd; 
       const next = connect(erd, edit.from, edit.to);
       return next === erd ? { next: pin(erd) } : { next: pin(next), pick: { kind: "link", index: next.relations.length - 1 } };
     }
+    case "bend":
+      return { next: pin({ ...erd, relations: erd.relations.map((r, i) => (i === edit.index ? { ...r, via: wholePoints(edit.via) } : r)) }) };
   }
 }

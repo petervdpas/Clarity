@@ -6,4 +6,8 @@ import type { ClassLink } from "./ClassLink";
  * A relation between two boxes. The left box refers (an association) or
  * is the whole (a composition or aggregation).
  */
-export type ClassRelation = { left: string, right: string, link: ClassLink, leftCount: Cardinality, rightCount: Cardinality, label: string | null, };
+export type ClassRelation = { left: string, right: string, link: ClassLink, leftCount: Cardinality, rightCount: Cardinality, label: string | null, 
+/**
+ * The points the line bends at, in order from left to right; none: straight.
+ */
+via: Array<[number, number]>, };

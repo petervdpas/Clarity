@@ -1,0 +1,92 @@
+erDiagram
+    Project {
+        text(80) name UK "required"
+        text summary
+        datetime created
+    }
+    ClassType {
+        Project project FK "required"
+        text(80) name "required"
+        text(120) namespace
+        TypeKind kind
+        Ontology ontology
+        ClassType base FK
+        text[] interfaces
+        text summary
+        text[] tags
+        datetime created
+        datetime updated
+        integer x
+        integer y
+    }
+    Parameter {
+        ClassType owner FK "required"
+        integer position
+        text(60) type "required"
+        text(60) name "required"
+    }
+    Association {
+        Project project FK "required"
+        ClassType source FK "required"
+        ClassType target FK "required"
+        Link link
+        text(60) label
+        text(12) multiplicity
+    }
+    DataEntity {
+        Project project FK "required"
+        text(80) name "required"
+        text summary
+        datetime created
+        datetime updated
+        integer x
+        integer y
+    }
+    Column {
+        DataEntity owner FK "required"
+        integer position
+        text(60) name "required"
+        text(40) type "required"
+        Key key
+        bool mandatory
+    }
+    Relationship {
+        Project project FK "required"
+        DataEntity source FK "required"
+        DataEntity target FK "required"
+        Cardinality source_side
+        Cardinality target_side
+        text(60) label
+    }
+    Version {
+        Project project FK "required"
+        integer number
+        text note
+        datetime saved
+        integer types
+        integer entities
+        text class_diagram
+        text erd
+        text openapi
+    }
+    ClassType }o..|| Project : project
+    ClassType }o..o| ClassType : base
+    Parameter }o..|| ClassType : owner
+    Association }o..|| Project : project
+    Association }o..|| ClassType : source
+    Association }o..|| ClassType : target
+    DataEntity }o..|| Project : project
+    Column }o..|| DataEntity : owner
+    Relationship }o..|| Project : project
+    Relationship }o..|| DataEntity : source
+    Relationship }o..|| DataEntity : target
+    Version }o..|| Project : project
+    %% clarity: Project at 40,40
+    %% clarity: ClassType at 770,-279
+    %% clarity: Parameter at 1235,-164
+    %% clarity: Association at -1,-252
+    %% clarity: DataEntity at 73,459
+    %% clarity: Column at 51,819
+    %% clarity: Relationship at 552,474
+    %% clarity: Version at -286,492
+    %% clarity: Relationship -> Project : project via 428,127

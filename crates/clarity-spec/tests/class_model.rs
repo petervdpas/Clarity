@@ -74,6 +74,7 @@ fn a_class_diagram_reads_into_boxes_of_each_kind_with_their_places_and_members()
                 left_count: Cardinality::ExactlyOne,
                 right_count: Cardinality::ZeroOrMore,
                 label: Some("lines".into()),
+                via: Vec::new(),
             },
             ClassRelation {
                 left: "Order".into(),
@@ -82,6 +83,7 @@ fn a_class_diagram_reads_into_boxes_of_each_kind_with_their_places_and_members()
                 left_count: Cardinality::ZeroOrMore,
                 right_count: Cardinality::ExactlyOne,
                 label: Some("status".into()),
+                via: Vec::new(),
             },
         ]
     );
@@ -150,6 +152,7 @@ fn the_written_text_is_plain_mermaid_with_places_as_comments() {
                 left_count: Cardinality::ZeroOrMore,
                 right_count: Cardinality::ExactlyOne,
                 label: None,
+                via: Vec::new(),
             },
             ClassRelation {
                 left: "Customer".into(),
@@ -158,6 +161,7 @@ fn the_written_text_is_plain_mermaid_with_places_as_comments() {
                 left_count: Cardinality::ExactlyOne,
                 right_count: Cardinality::ZeroOrMore,
                 label: Some("invoices".into()),
+                via: Vec::new(),
             },
         ],
     };
@@ -210,4 +214,17 @@ fn a_uses_arrow_from_a_module_reads_and_writes_back_without_a_problem() {
     assert_eq!(class_model::read(&written).0, design);
     let (diagram, _) = diagrams::parse(&written);
     assert!(diagram.relations.is_empty(), "a uses arrow makes no field");
+}
+
+/// A line of the class diagram can bend too, kept as in an ERD.
+#[test]
+fn a_relation_keeps_the_points_it_bends_at() {
+    let (design, _) = class_model::read(SKETCH);
+    let first = &design.relations[0];
+    let text = format!("{SKETCH}    %% clarity: {} -> {} : {} via 10,20 30,40\n", first.left, first.right, first.label.clone().unwrap_or_default());
+    let (design, problems) = class_model::read(&text);
+    assert!(problems.is_empty(), "{problems:?}");
+    assert_eq!(design.relations[0].via, [(10, 20), (30, 40)]);
+    let written = class_model::write(&design);
+    assert_eq!(class_model::read(&written).0, design);
 }

@@ -46,7 +46,16 @@ export type EndStyle =
   | { kind: "uml"; head: "none" | "arrow" | "diamond" | "filledDiamond"; text: string };
 
 /** A line between two boxes, as the canvas draws it. */
-export type Link = { left: string; right: string; leftEnd: EndStyle; rightEnd: EndStyle; dashed: boolean; label: string | null };
+export type Link = {
+  left: string;
+  right: string;
+  leftEnd: EndStyle;
+  rightEnd: EndStyle;
+  dashed: boolean;
+  label: string | null;
+  /** The points the line bends at, from left to right; none: straight. */
+  via?: Point[];
+};
 
 /** What is picked on the canvas: a box by name, or a line by its place in the list. */
 export type CanvasPick = { kind: "box"; name: string } | { kind: "link"; index: number } | null;
@@ -56,7 +65,9 @@ export type CanvasEdit =
   | { op: "add"; item: string; x: number; y: number }
   | { op: "move"; name: string; x: number; y: number }
   | { op: "moveAll"; moves: { name: string; x: number; y: number }[] }
-  | { op: "connect"; tool: string; from: string; to: string };
+  | { op: "connect"; tool: string; from: string; to: string }
+  /** A line's bend points, all of them as they are now. */
+  | { op: "bend"; index: number; via: Point[] };
 
 /** An item of the palette: a box to drag onto the canvas, or a tool that draws lines. */
 export type PaletteItem = { id: string; label: string; glyph: string; tool: boolean; title: string };
@@ -188,16 +199,19 @@ function sideOf(r: Rect, toward: Point): Side {
  * are spread along it, in the order of the boxes at their other ends, so
  * lines that meet one box do not lie on each other.
  */
-export function ends(shown: Box[], lines: { left: string; right: string }[]): ([Point, Point] | null)[] {
+export function ends(shown: Box[], lines: { left: string; right: string; via?: Point[] }[]): ([Point, Point] | null)[] {
   const byName = new Map(shown.map((b) => [b.name, b]));
-  type End = { line: number; at: 0 | 1; box: Box; other: Box; side: Side };
+  // Each end faces what it goes to: the line's nearest bend point, else the other box.
+  type End = { line: number; at: 0 | 1; box: Box; aim: Point; side: Side };
   const all: End[] = [];
   lines.forEach((l, line) => {
     const left = byName.get(l.left);
     const right = byName.get(l.right);
     if (!left || !right || left === right) return;
-    all.push({ line, at: 0, box: left, other: right, side: sideOf(left, center(right)) });
-    all.push({ line, at: 1, box: right, other: left, side: sideOf(right, center(left)) });
+    const first = l.via?.[0] ?? center(right);
+    const last = l.via?.at(-1) ?? center(left);
+    all.push({ line, at: 0, box: left, aim: first, side: sideOf(left, first) });
+    all.push({ line, at: 1, box: right, aim: last, side: sideOf(right, last) });
   });
   const result: ([Point, Point] | null)[] = lines.map(() => null);
   const points = new Map<End, Point>();
@@ -208,7 +222,7 @@ export function ends(shown: Box[], lines: { left: string; right: string }[]): ([
     groups.set(end.box, sides);
   }
   for (const group of [...groups.values()].flatMap((sides) => [...sides.values()])) {
-    const across = (e: End) => (e.side === "left" || e.side === "right" ? center(e.other).y : center(e.other).x);
+    const across = (e: End) => (e.side === "left" || e.side === "right" ? e.aim.y : e.aim.x);
     group.sort((a, b) => across(a) - across(b) || a.line - b.line);
     group.forEach((end, i) => {
       const share = (i + 1) / (group.length + 1);
@@ -222,7 +236,7 @@ export function ends(shown: Box[], lines: { left: string; right: string }[]): ([
     });
   }
   for (const end of all) {
-    const pair = (result[end.line] ??= [center(end.box), center(end.other)]);
+    const pair = (result[end.line] ??= [center(end.box), center(end.box)]);
     pair[end.at] = points.get(end)!;
   }
   return result;
@@ -287,4 +301,9 @@ export function freeName(base: string, taken: string[]): string {
   let n = 1;
   while (taken.includes(`${base}${n}`)) n++;
   return `${base}${n}`;
+}
+
+/** Bend points as a diagram keeps them: whole units, [x, y]. */
+export function wholePoints(via: Point[]): [number, number][] {
+  return via.map((p) => [Math.round(p.x), Math.round(p.y)]);
 }

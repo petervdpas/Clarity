@@ -9,7 +9,7 @@ import type { ClassBox } from "./generated/ClassBox";
 import type { ClassBoxKind } from "./generated/ClassBoxKind";
 import type { ClassDesign } from "./generated/ClassDesign";
 import type { ClassLink } from "./generated/ClassLink";
-import { freeName, pinned, type Box, type CanvasEdit, type CanvasPick, type Link, type PaletteItem, type Shape } from "./designCanvas.ts";
+import { freeName, pinned, type Box, type CanvasEdit, type CanvasPick, type Link, type PaletteItem, type Shape, wholePoints } from "./designCanvas.ts";
 
 /** What the palette offers on a class diagram: four kinds of box and three kinds of line. */
 export const CLASS_PALETTE: PaletteItem[] = [
@@ -60,7 +60,7 @@ export function classShapes(design: ClassDesign): Shape[] {
 export function classLinks(design: ClassDesign): Link[] {
   return design.relations.map((r) => {
     if (r.link === "uses") {
-      return { left: r.left, right: r.right, leftEnd: { kind: "uml", head: "none", text: "" }, rightEnd: { kind: "uml", head: "arrow", text: "" }, dashed: true, label: r.label };
+      return { left: r.left, right: r.right, leftEnd: { kind: "uml", head: "none", text: "" }, rightEnd: { kind: "uml", head: "arrow", text: "" }, dashed: true, label: r.label, via: r.via.map(([x, y]) => ({ x, y })) };
     }
     const whole = r.link === "composition" ? "filledDiamond" : r.link === "aggregation" ? "diamond" : "none";
     return {
@@ -70,6 +70,7 @@ export function classLinks(design: ClassDesign): Link[] {
       rightEnd: { kind: "uml", head: r.link === "association" ? "arrow" : "none", text: MULTIPLICITY[r.rightCount] },
       dashed: false,
       label: r.label,
+      via: r.via.map(([x, y]) => ({ x, y })),
     };
   });
 }
@@ -105,7 +106,7 @@ export function connectBoxes(design: ClassDesign, link: ClassLink, from: string,
   if (from === to) return design;
   if (design.relations.some((r) => (r.left === from && r.right === to) || (r.left === to && r.right === from))) return design;
   const counts: [Cardinality, Cardinality] = link === "association" ? ["zeroOrMore", "exactlyOne"] : ["exactlyOne", "zeroOrMore"];
-  return { ...design, relations: [...design.relations, { left: from, right: to, link, leftCount: counts[0], rightCount: counts[1], label: null }] };
+  return { ...design, relations: [...design.relations, { left: from, right: to, link, leftCount: counts[0], rightCount: counts[1], label: null, via: [] }] };
 }
 
 /** Makes an edit of the canvas in the design, every other box pinned where it is shown; `pick` is what to pick after it. */
@@ -127,5 +128,7 @@ export function classEdit(design: ClassDesign, edit: CanvasEdit, shown: Box[]): 
       const next = link ? connectBoxes(design, link, edit.from, edit.to) : design;
       return next === design ? { next: pin(design) } : { next: pin(next), pick: { kind: "link", index: next.relations.length - 1 } };
     }
+    case "bend":
+      return { next: pin({ ...design, relations: design.relations.map((r, i) => (i === edit.index ? { ...r, via: wholePoints(edit.via) } : r)) }) };
   }
 }

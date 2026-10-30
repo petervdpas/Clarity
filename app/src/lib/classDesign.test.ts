@@ -9,7 +9,7 @@ const design = (): ClassDesign => ({
     { name: "Status", kind: "enum", module: null, x: null, y: null, fields: [], values: ["Pending", "Shipped"], functions: [] },
     { name: "Pricing", kind: "engine", module: null, x: null, y: null, fields: [], values: [], functions: ["price(order: integer) -> money"] },
   ],
-  relations: [{ left: "Order", right: "Status", link: "association", leftCount: "zeroOrMore", rightCount: "exactlyOne", label: "status" }],
+  relations: [{ left: "Order", right: "Status", link: "association", leftCount: "zeroOrMore", rightCount: "exactlyOne", label: "status", via: [] }],
 });
 
 test("each kind of box shows its members, with its stereotype above the name", () => {
@@ -32,6 +32,7 @@ test("an association points at what is referred to; a composition has a filled d
     rightEnd: { kind: "uml", head: "arrow", text: "1" },
     dashed: false,
     label: "status",
+    via: [],
   });
   assert.deepEqual([composition.leftEnd, composition.rightEnd], [{ kind: "uml", head: "filledDiamond", text: "1" }, { kind: "uml", head: "none", text: "*" }]);
   assert.equal(aggregation.leftEnd.kind === "uml" && aggregation.leftEnd.head, "diamond");
@@ -75,7 +76,7 @@ test("dragging a frame moves all its boxes in one edit", () => {
 
 test("a uses arrow is dashed with an open head and no counts", () => {
   const d = design();
-  d.relations.push({ left: "Pricing", right: "Order", link: "uses", leftCount: "exactlyOne", rightCount: "exactlyOne", label: null });
+  d.relations.push({ left: "Pricing", right: "Order", link: "uses", leftCount: "exactlyOne", rightCount: "exactlyOne", label: null, via: [] });
   const uses = classLinks(d)[1];
   assert.deepEqual(uses, {
     left: "Pricing",
@@ -84,5 +85,6 @@ test("a uses arrow is dashed with an open head and no counts", () => {
     rightEnd: { kind: "uml", head: "arrow", text: "" },
     dashed: true,
     label: null,
+    via: [],
   });
 });

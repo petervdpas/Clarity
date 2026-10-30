@@ -122,3 +122,11 @@ test("boxes without a place are laid out a group at a time, each group starting 
   assert.equal(at.X.y, at.Y.y, "X and Y of group two share a row");
   assert.ok(at.X.y >= at.A.y + at.A.h + 16 + 20 + 16, "group two starts below group one's frame");
 });
+
+test("a line that bends meets each box facing its nearest point, not the other box", () => {
+  const a = box("A", 0, 0, 100, 50);
+  const b = box("B", 300, 0, 100, 50);
+  // Bent below both boxes: it leaves A's bottom and comes into B's bottom.
+  const [bent] = ends([a, b], [{ left: "A", right: "B", via: [{ x: 50, y: 200 }, { x: 350, y: 200 }] }]);
+  assert.deepEqual(bent, [{ x: 50, y: 50 }, { x: 350, y: 50 }]);
+});

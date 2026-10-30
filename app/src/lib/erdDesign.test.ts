@@ -8,7 +8,7 @@ const erd = (): Erd => ({
     { name: "Customer", x: 40, y: 60, fields: [{ name: "name", typeText: "text(80)", required: true, unique: false, extra: "" }] },
     { name: "Order", x: null, y: null, fields: [] },
   ],
-  relations: [{ left: "Order", right: "Customer", leftCount: "zeroOrMore", rightCount: "exactlyOne", identifying: false, label: "customer" }],
+  relations: [{ left: "Order", right: "Customer", leftCount: "zeroOrMore", rightCount: "exactlyOne", identifying: false, label: "customer", via: [] }],
 });
 
 test("a box shows its fields as rows: type, name and keys", () => {
@@ -21,7 +21,7 @@ test("an ERD is drawn as boxes and lines that show how many at each end, dashed 
   const shapes = erdShapes(erd());
   assert.deepEqual(shapes.map((s) => [s.name, s.x, s.y]), [["Customer", 40, 60], ["Order", null, null]]);
   assert.deepEqual(erdLinks(erd()), [
-    { left: "Order", right: "Customer", leftEnd: { kind: "count", count: "zeroOrMore" }, rightEnd: { kind: "count", count: "exactlyOne" }, dashed: true, label: "customer" },
+    { left: "Order", right: "Customer", leftEnd: { kind: "count", count: "zeroOrMore" }, rightEnd: { kind: "count", count: "exactlyOne" }, dashed: true, label: "customer", via: [] },
   ]);
 });
 
@@ -37,7 +37,7 @@ test("the canvas edits: a new entity takes a free name, moving and renaming keep
   assert.equal(e.relations[0].right, "Client");
   assert.equal(renameEntity(e, "Client", "Order"), e, "a name in use is refused");
   e = connect(e, "Entity1", "Client");
-  assert.deepEqual(e.relations[1], { left: "Entity1", right: "Client", leftCount: "zeroOrMore", rightCount: "exactlyOne", identifying: false, label: null });
+  assert.deepEqual(e.relations[1], { left: "Entity1", right: "Client", leftCount: "zeroOrMore", rightCount: "exactlyOne", identifying: false, label: null, via: [] });
   assert.equal(connect(e, "Entity1", "Client"), e, "one relation between the same two is enough");
   e = removeEntity(e, "Client");
   assert.deepEqual(e.relations, [], "its relations go with it");
@@ -59,4 +59,12 @@ test("an edit on the canvas changes the ERD, pins the other boxes and says what 
 test("several boxes move in one edit", () => {
   const { next } = erdEdit(erd(), { op: "moveAll", moves: [{ name: "Customer", x: 1, y: 2 }, { name: "Order", x: 3, y: 4 }] }, []);
   assert.deepEqual(next.entities.map((e) => [e.x, e.y]), [[1, 2], [3, 4]]);
+});
+
+test("a line bends at the points the canvas gives it, kept as whole numbers", () => {
+  const bent = erdEdit(erd(), { op: "bend", index: 0, via: [{ x: 200.4, y: 40 }, { x: 200, y: 139.6 }] }, []);
+  assert.deepEqual(bent.next.relations[0].via, [[200, 40], [200, 140]]);
+  assert.deepEqual(erdLinks(bent.next)[0].via, [{ x: 200, y: 40 }, { x: 200, y: 140 }]);
+  // A new line starts straight.
+  assert.deepEqual(connect(erd(), "Customer", "Customer").relations.at(-1)?.via ?? [], []);
 });

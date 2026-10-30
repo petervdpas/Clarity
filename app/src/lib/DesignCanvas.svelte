@@ -69,6 +69,11 @@
   let placing = $state<{ item: PaletteItem; x: number; y: number } | null>(null);
   /** The menu of a box's header, at the pointer on the screen. */
   let menu = $state<{ name: string; x: number; y: number } | null>(null);
+  /** A line whose bend points are being dragged: shown so until it is let go. */
+  let bending = $state<{ index: number; via: Point[] } | null>(null);
+
+  /** The lines as drawn: one being bent has the points the pointer gives it. */
+  const shownLinks = $derived(links.map((l, i) => (bending && bending.index === i ? { ...l, via: bending.via } : l)));
 
   // Boxes stand where the diagram has them; only the one being moved follows the pointer.
   const laid = $derived(
@@ -80,7 +85,7 @@
   );
   const framed = $derived(frames(laid));
   const byName = $derived(new Map(laid.map((b) => [b.name, b])));
-  const meetings = $derived(ends(laid, links));
+  const meetings = $derived(ends(laid, shownLinks));
 
   function edit(change: CanvasEdit) {
     const pick = onedit(change, laid);
@@ -191,10 +196,65 @@
     picked = { kind: "box", name: box.name };
   }
 
+  /**
+   * A press on a line picks it. Dragged from one of its bend points, it moves
+   * that point; dragged from anywhere else on it, it adds a point there and
+   * moves that. Letting go keeps the line's points.
+   */
   function pressLink(e: PointerEvent, index: number) {
     if (e.button !== 0 || readonly) return;
     e.stopPropagation();
+    menu = null;
     picked = { kind: "link", index };
+    const at = meetings[index];
+    if (!at) return;
+    const via = shownLinks[index].via ?? [];
+    const p = toDrawing(e.clientX, e.clientY);
+    const near = 8 / zoom;
+    let point = via.findIndex((v) => Math.hypot(v.x - p.x, v.y - p.y) <= near);
+    let points = [...via];
+    if (point < 0) {
+      // The segment pressed: the new point goes between its two ends.
+      const all = [at[0], ...via, at[1]];
+      let best = 0;
+      let bestDistance = Infinity;
+      for (let i = 0; i < all.length - 1; i++) {
+        const d = distanceToSegment(p, all[i], all[i + 1]);
+        if (d < bestDistance) [best, bestDistance] = [i, d];
+      }
+      point = best;
+      points = [...via.slice(0, best), p, ...via.slice(best)];
+    }
+    const start = points[point];
+    follow(
+      e,
+      (dx, dy) => {
+        const moved = [...points];
+        moved[point] = { x: start.x + dx / zoom, y: start.y + dy / zoom };
+        bending = { index, via: moved };
+      },
+      (moved) => {
+        const last = bending;
+        bending = null;
+        if (moved && last) edit({ op: "bend", index, via: last.via });
+      },
+    );
+  }
+
+  /** A double click on a bend point takes it away: the line goes straight there again. */
+  function unbend(e: MouseEvent, index: number, point: number) {
+    if (readonly) return;
+    e.stopPropagation();
+    const via = (shownLinks[index].via ?? []).filter((_, i) => i !== point);
+    edit({ op: "bend", index, via });
+  }
+
+  function distanceToSegment(p: Point, a: Point, b: Point): number {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = dx * dx + dy * dy;
+    const t = length === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length));
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
   }
 
   function pressBackground(e: PointerEvent) {
@@ -229,11 +289,36 @@
     );
   }
 
-  /** The line between two ends, with the direction along it and its middle. */
-  function line([a, b]: [Point, Point]) {
-    const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-    const u = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
-    return { a, b, u, mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
+  /**
+   * A line from end to end through its bend points: the points, the way it
+   * leaves its first end, the way it comes into its last, and the middle of
+   * its length, where its label goes.
+   */
+  function line([a, b]: [Point, Point], via: Point[] = []) {
+    const points = [a, ...via, b];
+    const unit = (from: Point, to: Point) => {
+      const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+      return { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
+    };
+    const lengths = points.slice(1).map((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y));
+    let half = lengths.reduce((sum, l) => sum + l, 0) / 2;
+    let mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    for (let i = 0; i < lengths.length; i++) {
+      if (half <= lengths[i] || i === lengths.length - 1) {
+        const t = lengths[i] ? Math.min(1, half / lengths[i]) : 0;
+        mid = { x: points[i].x + (points[i + 1].x - points[i].x) * t, y: points[i].y + (points[i + 1].y - points[i].y) * t };
+        break;
+      }
+      half -= lengths[i];
+    }
+    return {
+      points: points.map((p) => `${p.x},${p.y}`).join(" "),
+      a,
+      b,
+      u: unit(a, points[1]),
+      into: unit(b, points[points.length - 2]),
+      mid,
+    };
   }
 
   /** What is drawn at one end: an ERD's count, or a UML head with its multiplicity. */
@@ -286,13 +371,15 @@
       {#each links as link, i (i)}
         {@const at = meetings[i]}
         {#if at}
-          {@const l = line(at)}
+          {@const via = shownLinks[i].via ?? []}
+          {@const l = line(at, via)}
           {@const start = endOf(l.a, l.u, link.leftEnd)}
-          {@const end = endOf(l.b, { x: -l.u.x, y: -l.u.y }, link.rightEnd)}
+          {@const end = endOf(l.b, l.into, link.rightEnd)}
+          {@const isPicked = picked?.kind === "link" && picked.index === i}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <g class="link" class:picked={picked?.kind === "link" && picked.index === i} onpointerdown={(e) => pressLink(e, i)}>
-            <line class="hit" x1={l.a.x} y1={l.a.y} x2={l.b.x} y2={l.b.y} />
-            <line class="wire" class:dashed={link.dashed} x1={l.a.x} y1={l.a.y} x2={l.b.x} y2={l.b.y} />
+          <g class="link" class:picked={isPicked} onpointerdown={(e) => pressLink(e, i)}>
+            <polyline class="hit" points={l.points} />
+            <polyline class="wire" class:dashed={link.dashed} points={l.points} />
             {#each [start, end] as mark, m (m)}
               {#if mark.count}
                 <path class="wire" d={mark.count.path} />
@@ -303,6 +390,12 @@
               {/if}
             {/each}
             {#if link.label}<text class="label" x={l.mid.x} y={l.mid.y - 6} text-anchor="middle">{link.label}</text>{/if}
+            {#if isPicked && !readonly}
+              <!-- Its bend points: drag one to move it, double-click it to take it away. -->
+              {#each via as point, p (p)}
+                <circle class="bend" cx={point.x} cy={point.y} r={5 / zoom} ondblclick={(e) => unbend(e, i, p)} />
+              {/each}
+            {/if}
           </g>
         {/if}
       {/each}
@@ -526,7 +619,17 @@
   .hit {
     stroke: transparent;
     stroke-width: 12;
+    fill: none;
     cursor: pointer;
+  }
+
+  /* A picked line's bend points: drag one to move it, double-click it to take it away. */
+  .bend {
+    fill: var(--bg);
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+    cursor: move;
   }
 
   .link.picked .wire,

@@ -8,4 +8,8 @@ export type ErdRelation = { left: string, right: string, leftCount: Cardinality,
 /**
  * A solid line: the records at the many end are owned by the one.
  */
-identifying: boolean, label: string | null, };
+identifying: boolean, label: string | null, 
+/**
+ * The points the line bends at, in order from left to right; none: straight.
+ */
+via: Array<[number, number]>, };

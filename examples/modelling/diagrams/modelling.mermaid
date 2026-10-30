@@ -1,0 +1,161 @@
+classDiagram
+    namespace model {
+        class TypeKind {
+            <<enumeration>>
+            Class
+            Record
+            Struct
+            Interface
+        }
+        class Ontology {
+            <<enumeration>>
+            Entity
+            Event
+        }
+        class Link {
+            <<enumeration>>
+            Association
+            Aggregation
+            Composition
+            Dependency
+        }
+        class Key {
+            <<enumeration>>
+            Plain
+            Primary
+            Foreign
+            Unique
+        }
+        class Cardinality {
+            <<enumeration>>
+            ExactlyOne
+            ZeroOrOne
+            ZeroOrMore
+            OneOrMore
+        }
+        class Project {
+            +name: text(80), required, unique, search
+            +summary: text, search
+            +created: datetime
+        }
+        class ClassType {
+            +name: text(80), required, search
+            +namespace: text(120), search, help @classTypeNamespaceHelp
+            +kind: TypeKind, default Class, help @classTypeKindHelp
+            +ontology: Ontology, default Entity, help @classTypeOntologyHelp
+            +interfaces: list<text>, help @classTypeInterfacesHelp
+            +summary: text, search
+            +tags: list<text>, search
+            +created: datetime
+            +updated: datetime
+            +x: integer
+            +y: integer
+        }
+        class Parameter {
+            +position: integer, min 1, default 1
+            +type: text(60), required
+            +name: text(60), required
+        }
+        class Association {
+            +link: Link, default Association
+            +label: text(60)
+            +multiplicity: text(12), help @associationMultiplicityHelp
+        }
+        class DataEntity {
+            +name: text(80), required, search
+            +summary: text, search
+            +created: datetime
+            +updated: datetime
+            +x: integer
+            +y: integer
+        }
+        class Column {
+            +position: integer, min 1, default 1
+            +name: text(60), required
+            +type: text(40), required
+            +key: Key, default Plain
+            +mandatory: bool, default false
+        }
+        class Relationship {
+            +source_side: Cardinality, default ExactlyOne
+            +target_side: Cardinality, default ZeroOrMore
+            +label: text(60)
+        }
+        class Version {
+            +number: integer
+            +note: text
+            +saved: datetime
+            +types: integer
+            +entities: integer
+            +class_diagram: text
+            +erd: text
+            +openapi: text
+        }
+    }
+    class model {
+        <<module>>
+        +stereotype(kind: TypeKind) text
+        +arrow(link: Link) text
+        +left_end(side: Cardinality) text
+        +right_end(side: Cardinality) text
+        +key_mark(key: Key) text
+        +json_type(type: text) text
+        +class_diagram(project: Project) text
+        +erd_diagram(project: Project) text
+        +openapi(project: Project, version: text) text
+        +markdown(project: Project) text
+        +export_model(project: Project, version: text)
+        +csharp_of(t: ClassType) text
+        +write_csharp(project: Project) integer
+        +save_version(project: Project, note: text) integer
+    }
+    class modelling {
+        <<module>>
+        +box_height(lines: integer) integer
+        +grid_up(n: integer) integer
+        +at_least_zero(n: integer) integer
+        +place_of(names: list<text>, name: text) integer
+        +latest_version(project: Project) text
+    }
+    ClassType "*" --> "1" Project : project
+    ClassType "*" --> "0..1" ClassType : base
+    Parameter "*" --> "1" ClassType : owner
+    Association "*" --> "1" Project : project
+    Association "*" --> "1" ClassType : source
+    Association "*" --> "1" ClassType : target
+    DataEntity "*" --> "1" Project : project
+    Column "*" --> "1" DataEntity : owner
+    Relationship "*" --> "1" Project : project
+    Relationship "*" --> "1" DataEntity : source
+    Relationship "*" --> "1" DataEntity : target
+    Version "*" --> "1" Project : project
+    model ..> TypeKind
+    model ..> Link
+    model ..> Cardinality
+    model ..> Key
+    model ..> Project
+    model ..> ClassType
+    model ..> Parameter
+    model ..> Association
+    model ..> DataEntity
+    model ..> Column
+    model ..> Relationship
+    model ..> Version
+    modelling ..> Project
+    modelling ..> Version
+    %% clarity: TypeKind at 1083,1634
+    %% clarity: Ontology at 220,40
+    %% clarity: Link at 893,1699
+    %% clarity: Key at 707,1791
+    %% clarity: Cardinality at 528,1622
+    %% clarity: Project at 578,738
+    %% clarity: ClassType at 617,187
+    %% clarity: Parameter at 1049,223
+    %% clarity: Association at 40,580
+    %% clarity: DataEntity at 1132,963
+    %% clarity: Column at 1170,1340
+    %% clarity: Relationship at 1024,619
+    %% clarity: Version at 91,920
+    %% clarity: model at 585,1162
+    %% clarity: modelling at 40,1282
+    %% clarity: Association -> ClassType : source via 375,249

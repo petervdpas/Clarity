@@ -10,7 +10,7 @@ use ts_rs::TS;
 
 use crate::diagnostic::Diagnostic;
 
-use super::erd_model::{ErdField, PLACE, field, places};
+use super::erd_model::{ErdField, PLACE, bend_line, bends, field, places, take_bend};
 use super::{Cardinality, DiagramKind, parse};
 
 /// What the class diagram designer edits.
@@ -78,6 +78,9 @@ pub struct ClassRelation {
     #[ts(rename = "rightCount")]
     pub right_count: Cardinality,
     pub label: Option<String>,
+    /// The points the line bends at, in order from left to right; none: straight.
+    #[serde(default)]
+    pub via: Vec<(i32, i32)>,
 }
 
 /// A class diagram as the designer opens it, with the problems of its text.
@@ -139,6 +142,7 @@ pub fn read(text: &str) -> (ClassDesign, Vec<Diagnostic>) {
         left_count: Cardinality::ExactlyOne,
         right_count: Cardinality::ExactlyOne,
         label: None,
+        via: Vec::new(),
     });
     let relations = diagram
         .relations
@@ -154,10 +158,16 @@ pub fn read(text: &str) -> (ClassDesign, Vec<Diagnostic>) {
             left_count: r.left_count,
             right_count: r.right_count,
             label: r.label,
+            via: Vec::new(),
         })
         .chain(uses)
         .collect();
-    (ClassDesign { boxes, relations }, problems)
+    let mut design = ClassDesign { boxes, relations };
+    let mut bent = bends(text);
+    for r in &mut design.relations {
+        r.via = take_bend(&mut bent, &r.left, &r.right, r.label.as_deref());
+    }
+    (design, problems)
 }
 
 /// Writes the designer's class diagram as Mermaid: the boxes, those of a
@@ -207,6 +217,9 @@ pub fn write(design: &ClassDesign) -> String {
         if let (Some(x), Some(y)) = (b.x, b.y) {
             out.push_str(&format!("    {PLACE}{} at {x},{y}\n", b.name));
         }
+    }
+    for r in design.relations.iter().filter(|r| !r.via.is_empty()) {
+        out.push_str(&bend_line(&r.left, &r.right, r.label.as_deref(), &r.via));
     }
     out
 }

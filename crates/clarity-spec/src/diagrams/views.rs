@@ -155,6 +155,7 @@ pub fn classes_of(project: &Project, only: Option<&[String]>) -> ClassDesign {
                         left_count: Cardinality::ExactlyOne,
                         right_count: Cardinality::ZeroOrMore,
                         label: Some(field.name.name.clone()),
+                        via: Vec::new(),
                     }),
                     FieldType::Record { entity: other } if shown(&other.name) => design.relations.push(ClassRelation {
                         left: entity.name.name.clone(),
@@ -163,6 +164,7 @@ pub fn classes_of(project: &Project, only: Option<&[String]>) -> ClassDesign {
                         left_count: Cardinality::ExactlyOne,
                         right_count: Cardinality::ExactlyOne,
                         label: Some(field.name.name.clone()),
+                        via: Vec::new(),
                     }),
                     FieldType::Ref { entity: other } if shown(&other.name) => {
                         if other.name == entity.name.name || !listed(&entities, &other.name, &entity.name.name) {
@@ -173,6 +175,7 @@ pub fn classes_of(project: &Project, only: Option<&[String]>) -> ClassDesign {
                                 left_count: Cardinality::ZeroOrMore,
                                 right_count: if field.modifiers.required { Cardinality::ExactlyOne } else { Cardinality::ZeroOrOne },
                                 label: Some(field.name.name.clone()),
+                                via: Vec::new(),
                             });
                         }
                     }
@@ -212,6 +215,7 @@ pub fn classes_of(project: &Project, only: Option<&[String]>) -> ClassDesign {
                     left_count: Cardinality::ExactlyOne,
                     right_count: Cardinality::ExactlyOne,
                     label: None,
+                    via: Vec::new(),
                 });
             }
         }

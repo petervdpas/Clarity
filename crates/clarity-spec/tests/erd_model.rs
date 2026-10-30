@@ -58,6 +58,7 @@ fn an_erd_reads_into_entities_with_their_places_fields_and_relations() {
             right_count: Cardinality::ZeroOrMore,
             identifying: true,
             label: Some("places".into()),
+            via: Vec::new(),
         }
     );
 }
@@ -106,6 +107,7 @@ fn the_written_text_is_plain_mermaid_with_places_as_comments() {
             right_count: Cardinality::ExactlyOne,
             identifying: false,
             label: None,
+            via: Vec::new(),
         }],
     };
     assert_eq!(
@@ -120,4 +122,18 @@ fn the_written_text_is_plain_mermaid_with_places_as_comments() {
     %% clarity: Customer at 40,60
 "
     );
+}
+
+/// A line can bend: its points are a `%% clarity: Left -> Right : label via x,y x,y`
+/// line, which Mermaid ignores, read onto the relation and written back.
+#[test]
+fn a_relation_keeps_the_points_it_bends_at() {
+    let text = format!("{SKETCH}    %% clarity: Customer -> Order : places via 200,40 200,140\n");
+    let (erd, problems) = erd_model::read(&text);
+    assert!(problems.is_empty(), "{problems:?}");
+    assert_eq!(erd.relations[0].via, [(200, 40), (200, 140)]);
+    assert!(erd.relations[1].via.is_empty());
+    let written = erd_model::write(&erd);
+    assert!(written.contains("    %% clarity: Customer -> Order : places via 200,40 200,140\n"), "{written}");
+    assert_eq!(erd_model::read(&written).0, erd);
 }

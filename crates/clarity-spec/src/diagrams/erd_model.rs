@@ -60,6 +60,9 @@ pub struct ErdRelation {
     /// A solid line: the records at the many end are owned by the one.
     pub identifying: bool,
     pub label: Option<String>,
+    /// The points the line bends at, in order from left to right; none: straight.
+    #[serde(default)]
+    pub via: Vec<(i32, i32)>,
 }
 
 /// An ERD as the designer opens it, with the problems of its text.
@@ -103,9 +106,15 @@ pub fn read(text: &str) -> (Erd, Vec<Diagnostic>) {
             right_count: r.right_count,
             identifying: r.identifying,
             label: r.label,
+            via: Vec::new(),
         })
         .collect();
-    (Erd { entities, relations }, problems)
+    let mut erd = Erd { entities, relations };
+    let mut bent = bends(text);
+    for r in &mut erd.relations {
+        r.via = take_bend(&mut bent, &r.left, &r.right, r.label.as_deref());
+    }
+    (erd, problems)
 }
 
 /// The places the `%% clarity:` lines give: name, x and y.
@@ -113,11 +122,50 @@ pub fn places(text: &str) -> Vec<(String, i32, i32)> {
     text.lines()
         .filter_map(|line| {
             let rest = line.trim().strip_prefix(PLACE)?;
+            if rest.contains(" -> ") {
+                return None;
+            }
             let (name, at) = rest.split_once(" at ")?;
             let (x, y) = at.trim().split_once(',')?;
             Some((name.trim().to_string(), x.trim().parse().ok()?, y.trim().parse().ok()?))
         })
         .collect()
+}
+
+/// The points lines bend at, from `%% clarity: Left -> Right : label via x,y x,y`
+/// lines: the line's ends, its label, and the points in order.
+pub(super) fn bends(text: &str) -> Vec<(String, String, String, Vec<(i32, i32)>)> {
+    text.lines()
+        .filter_map(|line| {
+            let rest = line.trim().strip_prefix(PLACE)?;
+            let (ends, points) = rest.rsplit_once(" via ")?;
+            let (ends, label) = ends.split_once(" : ").unwrap_or((ends, ""));
+            let (left, right) = ends.split_once(" -> ")?;
+            let points: Option<Vec<(i32, i32)>> = points
+                .split_whitespace()
+                .map(|p| {
+                    let (x, y) = p.split_once(',')?;
+                    Some((x.trim().parse().ok()?, y.trim().parse().ok()?))
+                })
+                .collect();
+            Some((left.trim().to_string(), right.trim().to_string(), label.trim().to_string(), points?))
+        })
+        .collect()
+}
+
+/// The points of the first bend line kept for a relation with these ends and label; it is used up.
+pub(super) fn take_bend(bent: &mut Vec<(String, String, String, Vec<(i32, i32)>)>, left: &str, right: &str, label: Option<&str>) -> Vec<(i32, i32)> {
+    let label = label.unwrap_or("").trim();
+    match bent.iter().position(|(l, r, t, _)| l == left && r == right && t == label) {
+        Some(i) => bent.remove(i).3,
+        None => Vec::new(),
+    }
+}
+
+/// The bend line of a relation that bends: `%% clarity: Left -> Right : label via x,y x,y`.
+pub(super) fn bend_line(left: &str, right: &str, label: Option<&str>, via: &[(i32, i32)]) -> String {
+    let points: Vec<String> = via.iter().map(|(x, y)| format!("{x},{y}")).collect();
+    format!("    {PLACE}{left} -> {right} : {} via {}\n", label.unwrap_or("").trim(), points.join(" "))
 }
 
 /// A field of a diagram as the designers show it.
@@ -167,6 +215,9 @@ pub fn write(erd: &Erd) -> String {
         if let (Some(x), Some(y)) = (entity.x, entity.y) {
             out.push_str(&format!("    {PLACE}{} at {x},{y}\n", entity.name));
         }
+    }
+    for r in erd.relations.iter().filter(|r| !r.via.is_empty()) {
+        out.push_str(&bend_line(&r.left, &r.right, r.label.as_deref(), &r.via));
     }
     out
 }

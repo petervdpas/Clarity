@@ -509,6 +509,16 @@ impl Ui {
         self.pointer(part, "y")
     }
 
+    /// Where a drag on a canvas started, across: `canvas.fromX`; 0 without one.
+    pub fn from_x(&self, part: &str) -> i64 {
+        self.pointer(part, "fromX")
+    }
+
+    /// Where a drag on a canvas started, down: `canvas.fromY`.
+    pub fn from_y(&self, part: &str) -> i64 {
+        self.pointer(part, "fromY")
+    }
+
     fn pointer(&self, part: &str, key: &str) -> i64 {
         let value = self.parts.get(part).and_then(|p| p.pointer.as_ref()).and_then(|p| p.get(key));
         value.and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f.floor() as i64))).unwrap_or(0)

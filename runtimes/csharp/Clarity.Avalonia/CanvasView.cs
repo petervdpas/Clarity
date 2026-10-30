@@ -9,6 +9,12 @@
 // the pointer while it is down, and takes the keyboard when clicked or
 // tabbed to. What handlers tell it through its State (hears) goes to the
 // engine; what the engine tells comes out as Told, which runs its handler.
+// With Zoom the control shows a view of the units (conformance/drawing.json,
+// views): the wheel scrolls it (with Shift sideways), Control or Command
+// with the wheel zooms around the pointer, and bars say where the view is.
+// With DragCommand a press that moves runs it as the pointer goes, with
+// where it was pressed, and DropCommand when it is let go; without it,
+// dragging moves the view.
 
 using System.Globalization;
 using System.Windows.Input;
@@ -21,8 +27,11 @@ using Clarity.Runtime;
 
 namespace Clarity.Avalonia;
 
-public class CanvasView : Control
+public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
 {
+    /// The pointer is the canvas's anywhere on it, where it drew nothing too.
+    public bool HitTest(Point point) => new Rect(Bounds.Size).Contains(point);
+
     public static readonly StyledProperty<IReadOnlyList<Shape>> DrawingProperty =
         AvaloniaProperty.Register<CanvasView, IReadOnlyList<Shape>>(nameof(Drawing), []);
 
@@ -34,6 +43,36 @@ public class CanvasView : Control
 
     public static readonly StyledProperty<ICommand?> CommandProperty =
         AvaloniaProperty.Register<CanvasView, ICommand?>(nameof(Command));
+
+    public static readonly StyledProperty<bool> ZoomProperty =
+        AvaloniaProperty.Register<CanvasView, bool>(nameof(Zoom));
+
+    public static readonly StyledProperty<ICommand?> DragCommandProperty =
+        AvaloniaProperty.Register<CanvasView, ICommand?>(nameof(DragCommand));
+
+    public static readonly StyledProperty<ICommand?> DropCommandProperty =
+        AvaloniaProperty.Register<CanvasView, ICommand?>(nameof(DropCommand));
+
+    /// <summary>Whether the person zooms and scrolls the drawing.</summary>
+    public bool Zoom
+    {
+        get => GetValue(ZoomProperty);
+        set => SetValue(ZoomProperty, value);
+    }
+
+    /// <summary>What a drag runs as the pointer moves, given where it is and where it was pressed.</summary>
+    public ICommand? DragCommand
+    {
+        get => GetValue(DragCommandProperty);
+        set => SetValue(DragCommandProperty, value);
+    }
+
+    /// <summary>What runs when the pointer is let go after a drag.</summary>
+    public ICommand? DropCommand
+    {
+        get => GetValue(DropCommandProperty);
+        set => SetValue(DropCommandProperty, value);
+    }
 
     public static readonly StyledProperty<Func<IFrames>?> RunsProperty =
         AvaloniaProperty.Register<CanvasView, Func<IFrames>?>(nameof(Runs));
@@ -117,6 +156,11 @@ public class CanvasView : Control
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
+        if (pressed)
+        {
+            Dragged(e);
+            return;
+        }
         if (!Pointing || (engineDown is not null && engineDown != e.Pointer))
             return;
         if (EnginePoint(e.GetPosition(this), engineDown is not null) is { } point)
@@ -199,6 +243,86 @@ public class CanvasView : Control
         base.OnPropertyChanged(change);
         if (change.Property == CommandProperty)
             Cursor = Command is null ? null : new Cursor(StandardCursorType.Hand);
+        // Only a canvas of other units starts over: a redraw keeps the view.
+        if (change.Property == UnitsWidthProperty || change.Property == UnitsHeightProperty)
+            view = null;
+    }
+
+    /// The units shown, once the person zoomed or scrolled; the whole canvas until then.
+    Rect? view;
+
+    /// <summary>The rectangle of units the control shows.</summary>
+    public Rect View => view ?? new Rect(0, 0, UnitsWidth, UnitsHeight);
+
+    /// A canvas zooms in to a sixteenth of its width at most.
+    const double Closest = 16;
+
+    static Rect Within(Size units, double x, double y, double width, double height) =>
+        new(Math.Min(Math.Max(x, 0), units.Width - width), Math.Min(Math.Max(y, 0), units.Height - height), width, height);
+
+    /// <summary>The view after zooming by <paramref name="factor"/> (above 1 closer) around
+    /// <paramref name="at"/>, in units, which stays where it is (conformance/drawing.json, views).</summary>
+    public static Rect Zoomed(Size units, Rect view, double factor, Point at)
+    {
+        var width = Math.Min(Math.Max(view.Width / factor, units.Width / Closest), units.Width);
+        var height = width * units.Height / units.Width;
+        var kept = width / view.Width;
+        return Within(units, at.X - (at.X - view.X) * kept, at.Y - (at.Y - view.Y) * kept, width, height);
+    }
+
+    /// <summary>The view moved by <paramref name="by"/> units, kept inside the canvas.</summary>
+    public static Rect Scrolled(Size units, Rect view, Vector by) => Within(units, view.X + by.X, view.Y + by.Y, view.Width, view.Height);
+
+    /// <summary>Where in units a pointer in the part is, through the view it shows, fitted and
+    /// centered, rounded down; null beside the drawing. With the whole canvas as its view this is PointOf.</summary>
+    public static Pointer? PointIn(Rect view, Size part, Point at)
+    {
+        var scale = Math.Min(part.Width / view.Width, part.Height / view.Height);
+        if (!(scale > 0) || !double.IsFinite(scale))
+            return null;
+        var x = (at.X - (part.Width - view.Width * scale) / 2) / scale;
+        var y = (at.Y - (part.Height - view.Height * scale) / 2) / scale;
+        if (x < 0 || y < 0 || x >= view.Width || y >= view.Height)
+            return null;
+        return new Pointer((long)Math.Floor(view.X + x), (long)Math.Floor(view.Y + y));
+    }
+
+    /// Where a pixel is in units, not rounded; beside the drawing too.
+    Point Exact(Point at)
+    {
+        var (scale, left, top) = Placement();
+        return scale <= 0 ? default : new Point((at.X - left) / scale, (at.Y - top) / scale);
+    }
+
+    /// Where a pointer that is down is, in whole units, at the view's nearest edge beside the drawing.
+    Pointer Held(Point at)
+    {
+        var p = Exact(at);
+        var v = View;
+        static long Edge(double value, double from, double size) => (long)Math.Min(Math.Max(Math.Floor(value), Math.Floor(from)), Math.Ceiling(from + size) - 1);
+        return new Pointer(Edge(p.X, v.X, v.Width), Edge(p.Y, v.Y, v.Height));
+    }
+
+    protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+    {
+        base.OnPointerWheelChanged(e);
+        if (!Zoom || Runs is not null)
+            return;
+        e.Handled = true;
+        var units = new Size(UnitsWidth, UnitsHeight);
+        if ((e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) != 0)
+            view = Zoomed(units, View, Math.Exp(e.Delta.Y / 3), Exact(e.GetPosition(this)));
+        else
+        {
+            // A wheel's notch is 50 pixels, as browsers scroll about.
+            var (scale, _, _) = Placement();
+            if (scale <= 0)
+                return;
+            var across = (e.KeyModifiers & KeyModifiers.Shift) != 0 ? -e.Delta.Y : -e.Delta.X;
+            var down = (e.KeyModifiers & KeyModifiers.Shift) != 0 ? 0 : -e.Delta.Y;
+            view = Scrolled(units, View, new Vector(across * 50 / scale, down * 50 / scale));
+        }
+        InvalidateVisual();
     }
 
     /// Where in a drawing of `units` a click `at` a part of size `part` is,
@@ -248,9 +372,48 @@ public class CanvasView : Control
             }
             return;
         }
-        pressed = Command is not null && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed;
-        if (pressed)
-            e.Handled = true;
+        pressed = (Command is not null || DragCommand is not null || Zoom) && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed;
+        if (!pressed)
+            return;
+        e.Handled = true;
+        pressAt = e.GetPosition(this);
+        from = PointIn(View, Bounds.Size, pressAt);
+        viewAt = View;
+        moved = false;
+        if (DragCommand is not null || Zoom)
+            e.Pointer.Capture(this);
+    }
+
+    // Where the press was, in pixels and in units, the view then, and whether it moved since.
+    Point pressAt;
+    Pointer? from;
+    Rect viewAt;
+    bool moved;
+
+    /// A pixel moved this far is a drag, not a click.
+    const double Still = 4;
+
+    void Dragged(PointerEventArgs e)
+    {
+        var at = e.GetPosition(this);
+        if (!moved && Math.Sqrt(Math.Pow(at.X - pressAt.X, 2) + Math.Pow(at.Y - pressAt.Y, 2)) < Still)
+            return;
+        moved = true;
+        if (DragCommand is not null && from is not null)
+        {
+            var now = Held(at) with { FromX = from.X, FromY = from.Y };
+            if (DragCommand.CanExecute(now))
+                DragCommand.Execute(now);
+        }
+        else if (Zoom)
+        {
+            // Without a drag handler, dragging moves the view with the pointer.
+            var (scale, _, _) = Placement();
+            if (scale <= 0)
+                return;
+            view = Scrolled(new Size(UnitsWidth, UnitsHeight), viewAt, (pressAt - at) / scale);
+            InvalidateVisual();
+        }
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
@@ -268,10 +431,22 @@ public class CanvasView : Control
         if (!pressed)
             return;
         pressed = false;
+        e.Pointer.Capture(null);
         var at = e.GetPosition(this);
+        if (moved)
+        {
+            if (DragCommand is not null && from is not null && DropCommand is not null)
+            {
+                var dropped = Held(at) with { FromX = from.X, FromY = from.Y };
+                if (DropCommand.CanExecute(dropped))
+                    DropCommand.Execute(dropped);
+            }
+            e.Handled = true;
+            return;
+        }
         if (at.X < 0 || at.Y < 0 || at.X > Bounds.Width || at.Y > Bounds.Height)
             return;
-        var point = PointOf(new Size(UnitsWidth, UnitsHeight), Bounds.Size, at);
+        var point = PointIn(View, Bounds.Size, at);
         if (point is not null && Command?.CanExecute(point) == true)
         {
             Command.Execute(point);
@@ -297,10 +472,11 @@ public class CanvasView : Control
     /// proportion, centered in the control.
     public (double Scale, double Left, double Top) Placement()
     {
-        var scale = Math.Min(Bounds.Width / UnitsWidth, Bounds.Height / UnitsHeight);
+        var v = View;
+        var scale = Math.Min(Bounds.Width / v.Width, Bounds.Height / v.Height);
         if (!double.IsFinite(scale) || scale <= 0)
             return (0, 0, 0);
-        return (scale, (Bounds.Width - UnitsWidth * scale) / 2, (Bounds.Height - UnitsHeight * scale) / 2);
+        return (scale, (Bounds.Width - v.Width * scale) / 2 - v.X * scale, (Bounds.Height - v.Height * scale) / 2 - v.Y * scale);
     }
 
     public override void Render(DrawingContext context)
@@ -317,6 +493,8 @@ public class CanvasView : Control
         var (scale, left, top) = Placement();
         if (scale <= 0)
             return;
+        // A zoomed drawing shows only the part of it in view.
+        using var clip = context.PushClip(new Rect(Bounds.Size));
         Point At(double x, double y) => new(left + x * scale, top + y * scale);
         foreach (var shape in Drawing)
         {
@@ -346,6 +524,16 @@ public class CanvasView : Control
                     context.DrawText(text, At(words.X, words.Y) - new Point(text.Width / 2, text.Height / 2));
                     break;
             }
+        }
+        // Where the view is in the whole canvas, while zoomed in.
+        var v = View;
+        if (Zoom && (v.Width < UnitsWidth || v.Height < UnitsHeight))
+        {
+            var bar = BrushOf("muted");
+            var across = Bounds.Width - 12;
+            var down = Bounds.Height - 12;
+            context.DrawRectangle(bar, null, new RoundedRect(new Rect(2 + across * v.X / UnitsWidth, Bounds.Height - 8, across * v.Width / UnitsWidth, 6), 3));
+            context.DrawRectangle(bar, null, new RoundedRect(new Rect(Bounds.Width - 8, 2 + down * v.Y / UnitsHeight, 6, down * v.Height / UnitsHeight), 3));
         }
     }
 }

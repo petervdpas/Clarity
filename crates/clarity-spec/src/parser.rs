@@ -1575,6 +1575,7 @@ fn parse_widget_props(
         placeholder: None,
         digits: None,
         units: None,
+        zoom: false,
         runs: None,
         tooltip: None,
         icon: None,
@@ -1953,6 +1954,10 @@ fn parse_widget_props(
             "search" => {
                 applies(WidgetProperty::Search)?;
                 props.search = true;
+            }
+            "zoom" => {
+                applies(WidgetProperty::Zoom)?;
+                props.zoom = true;
             }
             "to" => {
                 applies(WidgetProperty::To)?;

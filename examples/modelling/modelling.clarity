@@ -139,13 +139,19 @@ page Diagrams: window
     data project: Project
     data types: list<ClassType>
     data entities: list<DataEntity>
+    // The box being dragged: its record's id (0 for none), where in it the pointer holds it, and where it is now.
+    data movingId: integer
+    data grabX: integer
+    data grabY: integer
+    data movedX: integer
+    data movedY: integer
     on open: diagramsOpened
 
     tabs name diagramTabs at 1,1 span 12 rows 12
         tab @diagramsClassDiagramTab
-            canvas name classCanvas at 1,1 span 12 rows 11 units 1200 x 820 on draw: drawClasses
+            canvas name classCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom on draw: drawClasses on drag: classDragged on drop: classDropped
         tab @diagramsEntityRelationshipDiagramTab
-            canvas name erdCanvas at 1,1 span 12 rows 11 units 1200 x 820 on draw: drawEntities
+            canvas name erdCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom on draw: drawEntities on drag: entityDragged on drop: entityDropped
 
 // The model as Mermaid and as an OpenAPI description, as they are now.
 page Output: window
@@ -437,30 +443,80 @@ code Diagrams
         project = settings.openProject
         types = find t in ClassType where t.project == project order by t.name
         entities = find e in DataEntity where e.project == project order by e.name
-    // Every type as a box with its parameters, four to a row, and the lines between them.
+        placeTypes()
+        placeEntities()
+
+    // Types without a place get one below the rest, eight to a row; dragging a box moves it.
+    handler placeTypes
+        let top = 20
+        for t in types
+            if t.x != 0 or t.y != 0
+                let bottom = t.y + box_height(count(find p in Parameter where p.owner == t)) + 40
+                if bottom > top
+                    top = bottom
+        let column = 0
+        let tallest = 0
+        let placed = false
+        for t in types
+            if t.x == 0 and t.y == 0
+                let height = box_height(count(find p in Parameter where p.owner == t))
+                if column == 8
+                    column = 0
+                    top = top + tallest + 40
+                    tallest = 0
+                t.x = 20 + column * 295
+                t.y = top
+                save t
+                placed = true
+                if height > tallest
+                    tallest = height
+                column = column + 1
+        if placed
+            types = find t in ClassType where t.project == project order by t.name
+
+    handler placeEntities
+        let top = 20
+        for e in entities
+            if e.x != 0 or e.y != 0
+                let bottom = e.y + box_height(count(find c in Column where c.owner == e)) + 40
+                if bottom > top
+                    top = bottom
+        let column = 0
+        let tallest = 0
+        let placed = false
+        for e in entities
+            if e.x == 0 and e.y == 0
+                let height = box_height(count(find c in Column where c.owner == e))
+                if column == 8
+                    column = 0
+                    top = top + tallest + 40
+                    tallest = 0
+                e.x = 20 + column * 295
+                e.y = top
+                save e
+                placed = true
+                if height > tallest
+                    tallest = height
+                column = column + 1
+        if placed
+            entities = find e in DataEntity where e.project == project order by e.name
+
+    // Every type as a box with its parameters, where it was put, and the lines between them.
     handler drawClasses
         classCanvas.clear("panel")
         let names: list<text> = []
         let xs: list<integer> = []
         let ys: list<integer> = []
         let heights: list<integer> = []
-        let column = 0
-        let top = 20
-        let tallest = 0
         for t in types
-            let parameters = find p in Parameter where p.owner == t order by p.position
-            let height = 34 + 18 * count(parameters)
-            if column == 4
-                column = 0
-                top = top + tallest + 40
-                tallest = 0
             names = names + [t.name]
-            xs = xs + [20 + column * 295]
-            ys = ys + [top]
-            heights = heights + [height]
-            if height > tallest
-                tallest = height
-            column = column + 1
+            if t.id == movingId
+                xs = xs + [movedX]
+                ys = ys + [movedY]
+            else
+                xs = xs + [t.x]
+                ys = ys + [t.y]
+            heights = heights + [box_height(count(find p in Parameter where p.owner == t))]
         // The lines first, so the boxes cover their ends.
         for t in types
             let from = place_of(names, t.name)
@@ -492,30 +548,44 @@ code Diagrams
                 line = line + 1
             i = i + 1
 
-    // Every entity as a box with its columns and keys, and the relationships between them.
+    // A drag on a box moves it with the pointer; letting go keeps it there.
+    handler classDragged
+        if movingId == 0
+            for t in types
+                let height = box_height(count(find p in Parameter where p.owner == t))
+                if classCanvas.fromX >= t.x and classCanvas.fromX <= t.x + 260 and classCanvas.fromY >= t.y and classCanvas.fromY <= t.y + height
+                    movingId = t.id
+                    grabX = classCanvas.fromX - t.x
+                    grabY = classCanvas.fromY - t.y
+        if movingId != 0
+            movedX = at_least_zero(classCanvas.x - grabX)
+            movedY = at_least_zero(classCanvas.y - grabY)
+
+    handler classDropped
+        for t in types
+            if t.id == movingId
+                t.x = movedX
+                t.y = movedY
+                save t
+        movingId = 0
+        types = find t in ClassType where t.project == project order by t.name
+
+    // Every entity as a box with its columns and keys, where it was put, and the relationships between them.
     handler drawEntities
         erdCanvas.clear("panel")
         let names: list<text> = []
         let xs: list<integer> = []
         let ys: list<integer> = []
         let heights: list<integer> = []
-        let column = 0
-        let top = 20
-        let tallest = 0
         for e in entities
-            let columns = find c in Column where c.owner == e order by c.position
-            let height = 34 + 18 * count(columns)
-            if column == 4
-                column = 0
-                top = top + tallest + 40
-                tallest = 0
             names = names + [e.name]
-            xs = xs + [20 + column * 295]
-            ys = ys + [top]
-            heights = heights + [height]
-            if height > tallest
-                tallest = height
-            column = column + 1
+            if e.id == movingId
+                xs = xs + [movedX]
+                ys = ys + [movedY]
+            else
+                xs = xs + [e.x]
+                ys = ys + [e.y]
+            heights = heights + [box_height(count(find c in Column where c.owner == e))]
         let relationships = find r in Relationship where r.project == project
         for r in relationships
             let source = r.source
@@ -540,6 +610,27 @@ code Diagrams
                 erdCanvas.text(x + 130, y + 44 + line * 18, "{c.type} {c.name}{mark}", "text", 11)
                 line = line + 1
             i = i + 1
+
+    handler entityDragged
+        if movingId == 0
+            for e in entities
+                let height = box_height(count(find c in Column where c.owner == e))
+                if erdCanvas.fromX >= e.x and erdCanvas.fromX <= e.x + 260 and erdCanvas.fromY >= e.y and erdCanvas.fromY <= e.y + height
+                    movingId = e.id
+                    grabX = erdCanvas.fromX - e.x
+                    grabY = erdCanvas.fromY - e.y
+        if movingId != 0
+            movedX = at_least_zero(erdCanvas.x - grabX)
+            movedY = at_least_zero(erdCanvas.y - grabY)
+
+    handler entityDropped
+        for e in entities
+            if e.id == movingId
+                e.x = movedX
+                e.y = movedY
+                save e
+        movingId = 0
+        entities = find e in DataEntity where e.project == project order by e.name
 
 code Output
     handler showOutput
@@ -583,6 +674,16 @@ code Versions
 
     handler versionSelected
         current = versionGrid.selected
+
+// How tall a box is on a diagram, for its lines (parameters or columns).
+function box_height(lines: integer) -> integer
+    return 34 + 18 * lines
+
+// A place on a diagram, never left of or above it.
+function at_least_zero(n: integer) -> integer
+    if n < 0
+        return 0
+    return n
 
 // Where a name is in a list of names, counted from 1; 1 when it is not there.
 function place_of(names: list<text>, name: text) -> integer

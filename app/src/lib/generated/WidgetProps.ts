@@ -119,6 +119,10 @@ digits: number | null,
  */
 units: CanvasUnits | null, 
 /**
+ * `zoom`: the person zooms and scrolls the canvas's drawing.
+ */
+zoom: boolean, 
+/**
  * `runs Screen`: the engine beside the screen that draws the canvas
  * (DESIGN 5.12), in place of a draw handler.
  */

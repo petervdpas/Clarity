@@ -104,6 +104,47 @@ export function pointOf(
   return { x: Math.floor(x), y: Math.floor(y) };
 }
 
+/** The rectangle of a canvas's units a part shows: `[x, y, width, height]`. */
+export type View = [number, number, number, number];
+
+/** A canvas zooms in to a sixteenth of its width at most. */
+const CLOSEST = 16;
+
+/** The view kept inside the canvas: never larger, and moved back within it. */
+function within(units: { width: number; height: number }, x: number, y: number, width: number, height: number): View {
+  return [Math.min(Math.max(x, 0), units.width - width), Math.min(Math.max(y, 0), units.height - height), width, height];
+}
+
+/**
+ * The view after zooming by `factor` (above 1 closer) around `at`, in
+ * units, which stays where it is (conformance/drawing.json, views).
+ */
+export function zoomed(units: { width: number; height: number }, view: View, factor: number, at: { x: number; y: number }): View {
+  const width = Math.min(Math.max(view[2] / factor, units.width / CLOSEST), units.width);
+  const height = (width * units.height) / units.width;
+  const kept = width / view[2];
+  return within(units, at.x - (at.x - view[0]) * kept, at.y - (at.y - view[1]) * kept, width, height);
+}
+
+/** The view moved by `by` units, kept inside the canvas. */
+export function scrolled(units: { width: number; height: number }, view: View, by: { x: number; y: number }): View {
+  return within(units, view[0] + by.x, view[1] + by.y, view[2], view[3]);
+}
+
+/**
+ * Where in a canvas's units a pointer in the part is, through the view it
+ * shows, fitted and centred; null beside the drawing. With the whole canvas
+ * as its view this is pointOf.
+ */
+export function pointIn(view: View, part: { width: number; height: number }, at: { x: number; y: number }): { x: number; y: number } | null {
+  const scale = Math.min(part.width / view[2], part.height / view[3]);
+  if (!(scale > 0)) return null;
+  const x = (at.x - (part.width - view[2] * scale) / 2) / scale;
+  const y = (at.y - (part.height - view[3] * scale) / 2) / scale;
+  if (x < 0 || y < 0 || x >= view[2] || y >= view[3]) return null;
+  return { x: Math.floor(view[0] + x), y: Math.floor(view[1] + y) };
+}
+
 /**
  * Where in a canvas's units a pointer that is down is, as pointOf finds it,
  * but beside the drawing at its nearest edge; null when the part shows

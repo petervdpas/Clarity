@@ -706,7 +706,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 |---|---|---|---|
 | `image` | an `image` field, or nothing | `source "file"` for a fixed picture of the resources folder | `click` |
 | `display` | an integer, decimal or money: `bind shown` | `digits n`, 1 to 24, 12 without it | none |
-| `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `surface svg`, `surface bitmap` or `surface gpu` | `draw`, `click`, `pointer`, `key` |
+| `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `zoom`; `surface svg`, `surface bitmap` or `surface gpu` | `draw`, `click`, `drag`, `drop`, `pointer`, `key` |
 
 **Media**
 
@@ -1352,6 +1352,33 @@ code Game
         else if board.y >= 100
             square = square + 3
         status = "Square {square}"
+```
+- `zoom` on a canvas lets the person zoom and scroll its drawing, for a drawing larger than the part shows well, such as a diagram: the wheel scrolls (with Shift sideways), Ctrl (Cmd on macOS) with the wheel or a touchpad's pinch zooms around the pointer, and bars at the edges show where the view is. The drawing starts whole; it zooms in to a sixteenth of the canvas's width at most and never past its edges. The view stays while the canvas is drawn anew. `canvas.x` and `canvas.y` stay in the canvas's units, whatever is in view.
+- `on drag: handler` runs while the pointer moves on the canvas with its button down, and `on drop: handler` once when it is let go. Both read where the pointer is (`canvas.x`, `canvas.y`, at the nearest edge when it is beside the drawing) and where it was pressed (`canvas.fromX`, `canvas.fromY`), in the canvas's units. A press that does not move is a click. The handler runs with the latest place: moves that come while it runs are not queued one by one. The canvas is drawn anew after each, so code that moves what it draws by `canvas.x - canvas.fromX` shows it moving; the drop is the place to save. On a canvas with `zoom` and no drag handler, dragging moves the view.
+
+```clarity
+page Sheet: window
+    data boxX: integer, default 20
+    data boxY: integer, default 20
+    data startX: integer
+    data startY: integer
+    canvas name sheet at 1,1 span 12 rows 10 units 3000 x 2000 zoom on draw: drawSheet on drag: dragged on drop: dropped
+
+code Sheet
+    handler drawSheet
+        sheet.clear("panel")
+        sheet.rect(boxX, boxY, 200, 100, "raised")
+
+    handler dragged
+        if startX == 0
+            startX = boxX
+            startY = boxY
+        boxX = startX + sheet.x - sheet.fromX
+        boxY = startY + sheet.y - sheet.fromY
+
+    handler dropped
+        startX = 0
+        startY = 0
 ```
 - `sin(degrees)` and `cos(degrees)` give a decimal, rounded to 10 decimals.
 

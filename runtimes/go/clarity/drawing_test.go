@@ -65,9 +65,11 @@ func TestACanvasSaysWhereItWasClickedAsEveryRuntimeDoes(t *testing.T) {
 	}
 	var file struct {
 		Points []struct {
-			Part json.RawMessage `json:"part"`
-			X    int64           `json:"x"`
-			Y    int64           `json:"y"`
+			Part  json.RawMessage `json:"part"`
+			X     int64           `json:"x"`
+			Y     int64           `json:"y"`
+			FromX int64           `json:"fromX"`
+			FromY int64           `json:"fromY"`
 		} `json:"points"`
 	}
 	if err := json.Unmarshal(text, &file); err != nil || len(file.Points) == 0 {
@@ -81,6 +83,9 @@ func TestACanvasSaysWhereItWasClickedAsEveryRuntimeDoes(t *testing.T) {
 		ui := NewUi(WindowState{Window: "Main", Parts: map[string]PartState{"board": part}})
 		if x, y := ui.X("board"), ui.Y("board"); x != c.X || y != c.Y {
 			t.Errorf("%s: %d,%d, want %d,%d", c.Part, x, y, c.X, c.Y)
+		}
+		if x, y := ui.FromX("board"), ui.FromY("board"); x != c.FromX || y != c.FromY {
+			t.Errorf("%s: from %d,%d, want %d,%d", c.Part, x, y, c.FromX, c.FromY)
 		}
 		// What the pointer holds besides x and y travels back unchanged.
 		reply, _ := ui.Reply("Main", map[string]any{})

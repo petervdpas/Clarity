@@ -2913,6 +2913,10 @@ impl<'a> BodyChecker<'_, 'a> {
             "x" | "y" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Canvas) => {
                 Some(Place::Value { ty: Ty::Integer, writable: Err(format!("{name}.{property} is read, not set: it is where the canvas was clicked")) })
             }
+            // Where a drag on a canvas started, in its own units.
+            "fromX" | "fromY" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Canvas) => {
+                Some(Place::Value { ty: Ty::Integer, writable: Err(format!("{name}.{property} is read, not set: it is where a drag on the canvas started")) })
+            }
             "selected" => {
                 let Part::Widget(props) = part else { return None };
                 if !matches!(props.kind, WidgetKind::Table | WidgetKind::List | WidgetKind::Tree | WidgetKind::TreeTable) {

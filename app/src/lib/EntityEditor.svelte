@@ -106,6 +106,7 @@
       required: false,
       unique: false,
       owned: false,
+      cascade: false,
       computed: false,
       search: false,
       min: null,

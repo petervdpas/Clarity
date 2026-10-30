@@ -184,6 +184,8 @@ fn part_property(property: &str) -> Option<&'static str> {
         "selected" => "SelectedItem",
         "x" => "X",
         "y" => "Y",
+        "fromX" => "FromX",
+        "fromY" => "FromY",
         _ => return None,
     })
 }

@@ -979,6 +979,8 @@ impl<'a> Emitter<'a> {
         }
         match property.as_str() {
             "visible" | "enabled" | "error" | "text" | "checked" | "x" | "y" => format!("ui.{property}({quoted})"),
+            "fromX" => format!("ui.from_x({quoted})"),
+            "fromY" => format!("ui.from_y({quoted})"),
             "caption" => format!("ui.caption({quoted}, {})", string(info.caption.as_deref().unwrap_or_default())),
             "readonly" => format!("ui.readonly({quoted}, {})", info.readonly),
             "folded" => format!("ui.folded({quoted}, {})", info.folded),

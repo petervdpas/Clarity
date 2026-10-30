@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { colorOf, pointOf, svgOf, type Shape } from "./drawing.ts";
+import { colorOf, pointIn, pointOf, scrolled, svgOf, zoomed, type Shape, type View } from "./drawing.ts";
 
 type Click = { units: [number, number]; part: [number, number]; at: [number, number]; point: [number, number] | null };
 
@@ -46,5 +46,32 @@ test("a click on a canvas is where in its units, as every renderer finds it", ()
     const units = { width: c.units[0], height: c.units[1] };
     const got = pointOf(units, { width: c.part[0], height: c.part[1] }, { x: c.at[0], y: c.at[1] });
     assert.deepEqual(got && [got.x, got.y], c.point, JSON.stringify(c));
+  }
+});
+
+type Pair = [number, number];
+type Views = {
+  zoomed: { units: Pair; view: View; factor: number; at: Pair; result: View }[];
+  scrolled: { units: Pair; view: View; by: Pair; result: View }[];
+  points: { view: View; part: Pair; at: Pair; point: Pair | null }[];
+};
+const views: Views = JSON.parse(readFileSync(new URL("../../../conformance/drawing.json", import.meta.url), "utf8")).views;
+
+test("a canvas that zooms keeps the point under the pointer, within the canvas", () => {
+  for (const c of views.zoomed) {
+    assert.deepEqual(zoomed({ width: c.units[0], height: c.units[1] }, c.view, c.factor, { x: c.at[0], y: c.at[1] }), c.result, JSON.stringify(c));
+  }
+});
+
+test("a canvas that scrolls stays within the canvas", () => {
+  for (const c of views.scrolled) {
+    assert.deepEqual(scrolled({ width: c.units[0], height: c.units[1] }, c.view, { x: c.by[0], y: c.by[1] }), c.result, JSON.stringify(c));
+  }
+});
+
+test("a pointer in a zoomed canvas is found through its view", () => {
+  for (const c of views.points) {
+    const found = pointIn(c.view, { width: c.part[0], height: c.part[1] }, { x: c.at[0], y: c.at[1] });
+    assert.deepEqual(found ? [found.x, found.y] : null, c.point, JSON.stringify(c));
   }
 });

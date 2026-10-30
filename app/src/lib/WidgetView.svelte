@@ -1073,11 +1073,24 @@
         drawing={partState.drawing}
         units={p.units ?? { width: DEFAULT_UNITS, height: DEFAULT_UNITS }}
         shown={(text) => shownText(preview, text)}
+        zoom={p.zoom && !design}
         onpoint={live && p.name && !design && p.handlers.some((h) => h.event === "click")
           ? (point) => {
               // Where it was clicked goes with the part's state, for the handler to read.
               if (live && p.name) live.setPointer(p.name, point);
               fire("click");
+            }
+          : null}
+        ondrag={live && p.name && !design && p.handlers.some((h) => h.event === "drag")
+          ? (point) => {
+              if (live && p.name) live.setPointer(p.name, point);
+              return fire("drag");
+            }
+          : null}
+        ondrop={live && p.name && !design && p.handlers.some((h) => h.event === "drop")
+          ? (point) => {
+              if (live && p.name) live.setPointer(p.name, point);
+              fire("drop");
             }
           : null}
       />

@@ -96,6 +96,36 @@ public class DrawingTests
         Assert.Equal((2.0, 0.0, 50.0), view.Placement());
     }
 
+    static System.Text.Json.JsonElement Views() =>
+        System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "drawing.json"))).RootElement.GetProperty("views");
+
+    static global::Avalonia.Rect RectOf(System.Text.Json.JsonElement v) => new(v[0].GetDouble(), v[1].GetDouble(), v[2].GetDouble(), v[3].GetDouble());
+
+    /// A canvas that zooms keeps the point under the pointer, within the canvas.
+    [Fact]
+    public void ACanvasZoomsAndScrollsAsEveryRendererDoes()
+    {
+        foreach (var c in Views().GetProperty("zoomed").EnumerateArray())
+        {
+            var units = new global::Avalonia.Size(c.GetProperty("units")[0].GetDouble(), c.GetProperty("units")[1].GetDouble());
+            var at = new global::Avalonia.Point(c.GetProperty("at")[0].GetDouble(), c.GetProperty("at")[1].GetDouble());
+            Assert.Equal(RectOf(c.GetProperty("result")), CanvasView.Zoomed(units, RectOf(c.GetProperty("view")), c.GetProperty("factor").GetDouble(), at));
+        }
+        foreach (var c in Views().GetProperty("scrolled").EnumerateArray())
+        {
+            var units = new global::Avalonia.Size(c.GetProperty("units")[0].GetDouble(), c.GetProperty("units")[1].GetDouble());
+            var by = new global::Avalonia.Vector(c.GetProperty("by")[0].GetDouble(), c.GetProperty("by")[1].GetDouble());
+            Assert.Equal(RectOf(c.GetProperty("result")), CanvasView.Scrolled(units, RectOf(c.GetProperty("view")), by));
+        }
+        foreach (var c in Views().GetProperty("points").EnumerateArray())
+        {
+            var part = new global::Avalonia.Size(c.GetProperty("part")[0].GetDouble(), c.GetProperty("part")[1].GetDouble());
+            var at = new global::Avalonia.Point(c.GetProperty("at")[0].GetDouble(), c.GetProperty("at")[1].GetDouble());
+            var point = c.GetProperty("point");
+            Assert.Equal(point.ValueKind == System.Text.Json.JsonValueKind.Null ? null : new Pointer(point[0].GetInt64(), point[1].GetInt64()), CanvasView.PointIn(RectOf(c.GetProperty("view")), part, at));
+        }
+    }
+
     [Fact]
     public void ACanvasFindsWhereItWasClickedAsEveryRendererDoes()
     {
@@ -119,6 +149,18 @@ public class DrawingTests
         Assert.Equal((0L, 0L), (vm.Dial.X, vm.Dial.Y));
         vm.DialClicked(new Pointer(120, 150));
         Assert.Equal(("120,150", 2), (vm.Clicked, vm.Draws));
+    }
+
+    /// A drag gives where the pointer is and where it was pressed; a click has no start.
+    [AvaloniaFact]
+    public void ADragOnACanvasSaysWhereItStarted()
+    {
+        var vm = new GaugeViewModel(null!);
+        vm.Opened();
+        vm.DialClicked(new Pointer(900, 410) { FromX = 860, FromY = 400 });
+        Assert.Equal((900L, 410L, 860L, 400L), (vm.Dial.X, vm.Dial.Y, vm.Dial.FromX, vm.Dial.FromY));
+        vm.DialClicked(new Pointer(7, 3));
+        Assert.Equal((0L, 0L), (vm.Dial.FromX, vm.Dial.FromY));
     }
 
     /// A foldable panel or form is open while it is not folded: the Expander

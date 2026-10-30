@@ -573,6 +573,9 @@ pub struct WidgetProps {
     pub digits: Option<u32>,
     /// The units a canvas draws in: `units 200 x 100`.
     pub units: Option<CanvasUnits>,
+    /// `zoom`: the person zooms and scrolls the canvas's drawing.
+    #[serde(default)]
+    pub zoom: bool,
     /// `runs Screen`: the engine beside the screen that draws the canvas
     /// (DESIGN 5.12), in place of a draw handler.
     pub runs: Option<String>,

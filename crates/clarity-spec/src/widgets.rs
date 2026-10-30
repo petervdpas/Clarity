@@ -139,6 +139,10 @@ pub enum Event {
     /// A canvas is drawn: when its window opens and after every other
     /// handler of the window.
     Draw,
+    /// The pointer moves on a canvas with its button down.
+    Drag,
+    /// The pointer is let go on a canvas after a drag.
+    Drop,
     /// Next is pressed in a wizard, before it moves on; a refusal keeps the step.
     Next,
     /// Finish is pressed on a wizard's last step.
@@ -152,7 +156,7 @@ pub enum Event {
 
 /// The events a window has, in the order the designer lists them.
 /// Every event, in the order the language lists them.
-pub const ALL_EVENTS: [Event; 17] = [
+pub const ALL_EVENTS: [Event; 19] = [
     Event::Click,
     Event::Change,
     Event::Enter,
@@ -166,6 +170,8 @@ pub const ALL_EVENTS: [Event; 17] = [
     Event::Start,
     Event::Submit,
     Event::Draw,
+    Event::Drag,
+    Event::Drop,
     Event::Next,
     Event::Finish,
     Event::Tick,
@@ -193,6 +199,8 @@ impl Event {
             Event::Start => "start",
             Event::Submit => "submit",
             Event::Draw => "draw",
+            Event::Drag => "drag",
+            Event::Drop => "drop",
             Event::Next => "next",
             Event::Finish => "finish",
             Event::Tick => "tick",
@@ -215,6 +223,8 @@ impl Event {
             "start" => Some(Event::Start),
             "submit" => Some(Event::Submit),
             "draw" => Some(Event::Draw),
+            "drag" => Some(Event::Drag),
+            "drop" => Some(Event::Drop),
             "next" => Some(Event::Next),
             "finish" => Some(Event::Finish),
             "tick" => Some(Event::Tick),
@@ -280,6 +290,8 @@ pub enum WidgetProperty {
     /// `repeat`: a sound plays its source until it is stopped.
     Repeat,
     Units,
+    /// `zoom`: a canvas the person zooms and scrolls.
+    Zoom,
     /// `runs Screen`: a canvas an engine beside the screen draws.
     Runs,
     /// `foldable` and `folded`: a panel or form folds by its header.
@@ -901,9 +913,10 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         // Drawn by its draw handler (`on draw`);
-        // a click runs a handler, which reads where as `canvas.x` and `canvas.y`.
-        events: &[Event::Draw, Event::Click, Event::Pointer, Event::Key],
-        properties: &[WidgetProperty::Units, WidgetProperty::Runs, WidgetProperty::Surface],
+        // a click runs a handler, which reads where as `canvas.x` and `canvas.y`;
+        // a drag and a drop also read where it was pressed, `fromX` and `fromY`.
+        events: &[Event::Draw, Event::Click, Event::Drag, Event::Drop, Event::Pointer, Event::Key],
+        properties: &[WidgetProperty::Units, WidgetProperty::Zoom, WidgetProperty::Runs, WidgetProperty::Surface],
     },
     // A custom part is written by its declared name; its keyword is two
     // words, so it is never typed and reads well in messages. The Parts
@@ -1169,6 +1182,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         placeholder: None,
         digits: None,
         units: None,
+        zoom: false,
         runs: None,
         tooltip: None,
         icon: (kind == WidgetKind::Icon).then(|| "star".to_string()),
@@ -1339,6 +1353,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(units) = props.units {
         parts.push(format!("units {} x {}", units.width, units.height));
+    }
+    if props.zoom {
+        parts.push("zoom".to_string());
     }
     if let Some(engine) = &props.runs {
         parts.push(format!("runs {engine}"));
@@ -1538,6 +1555,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Cancel, props.cancel, "cancel"),
         (WidgetProperty::Digits, props.digits.is_some(), "digits"),
         (WidgetProperty::Units, props.units.is_some(), "units"),
+        (WidgetProperty::Zoom, props.zoom, "zoom"),
         (WidgetProperty::Runs, props.runs.is_some(), "runs"),
         (WidgetProperty::Resizable, props.resizable, "resizable"),
         (WidgetProperty::Sortable, props.sortable, "sortable"),

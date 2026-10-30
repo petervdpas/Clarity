@@ -53,6 +53,9 @@ entity ClassType
     tags: list<text>, search, label @classTypeTagsLabel
     created: datetime, label @classTypeCreatedLabel
     updated: datetime, label @classTypeUpdatedLabel
+    // Where its box is on the class diagram, in the canvas's units; 0, 0 until it has a place.
+    x: integer, label @classTypeXLabel
+    y: integer, label @classTypeYLabel
 
 // A parameter of a type's primary constructor: its type and name.
 entity Parameter
@@ -77,6 +80,9 @@ entity DataEntity
     summary: text, search, label @dataEntitySummaryLabel
     created: datetime, label @dataEntityCreatedLabel
     updated: datetime, label @dataEntityUpdatedLabel
+    // Where its box is on the entity relationship diagram.
+    x: integer, label @dataEntityXLabel
+    y: integer, label @dataEntityYLabel
 
 // A column of an entity.
 entity Column

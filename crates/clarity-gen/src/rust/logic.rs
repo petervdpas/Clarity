@@ -556,6 +556,8 @@ impl<'a> Emitter<'a> {
             "selected" => "selected",
             "x" => "x",
             "y" => "y",
+            "fromX" => "from_x",
+            "fromY" => "from_y",
             _ => return None,
         };
         Some((name.clone(), property))

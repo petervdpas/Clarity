@@ -1465,10 +1465,19 @@ impl<'a> Window<'a> {
             WidgetKind::Canvas if named.is_some() && Self::handler(widget, Event::Draw).is_some() => {
                 let (width, height) = p.units.map_or(clarity_spec::widgets::DEFAULT_UNITS, |u| (u.width, u.height));
                 let name = member(named.unwrap_or_default());
-                let click = match Self::handler(widget, Event::Click) {
+                let mut click = match Self::handler(widget, Event::Click) {
                     Some(_) => format!(" Command=\"{{Binding ClickAt_{name}Command}}\""),
                     None => String::new(),
                 };
+                if p.zoom {
+                    click.push_str(" Zoom=\"True\"");
+                }
+                if Self::handler(widget, Event::Drag).is_some() {
+                    let _ = write!(click, " DragCommand=\"{{Binding DragAt_{name}Command}}\"");
+                }
+                if Self::handler(widget, Event::Drop).is_some() {
+                    let _ = write!(click, " DropCommand=\"{{Binding DropAt_{name}Command}}\"");
+                }
                 let _ = writeln!(
                     out,
                     "{pad}<c:CanvasView {at} Drawing=\"{{Binding {name}.Drawing}}\" UnitsWidth=\"{width}\" UnitsHeight=\"{height}\"{click}{plain_state}{extra} />",
@@ -1876,15 +1885,18 @@ public partial class {name}View : UserControl
             let _ = write!(events, "    protected override void Redraw()\n    {{\n{body}    }}\n\n");
         }
 
-        // A click on a canvas: where it was, then its handler.
+        // A click, a drag or a drop on a canvas: where it was, then its handler.
         for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Canvas) {
-            let (Some(canvas), Some(click)) = (&widget.props.name, Self::handler(widget, Event::Click)) else { continue };
-            let _ = write!(
-                events,
-                "    [RelayCommand]\n    void ClickAt_{c}(Pointer at) => Handle(() =>\n    {{\n        {c}.Pointer = at;\n        On{}();\n    }}, [at]);\n\n",
-                pascal(&click.handler),
-                c = member(canvas)
-            );
+            let Some(canvas) = &widget.props.name else { continue };
+            for (event, command) in [(Event::Click, "ClickAt"), (Event::Drag, "DragAt"), (Event::Drop, "DropAt")] {
+                let Some(handler) = Self::handler(widget, event) else { continue };
+                let _ = write!(
+                    events,
+                    "    [RelayCommand]\n    void {command}_{c}(Pointer at) => Handle(() =>\n    {{\n        {c}.Pointer = at;\n        On{}();\n    }}, [at]);\n\n",
+                    pascal(&handler.handler),
+                    c = member(canvas)
+                );
+            }
         }
 
         // A wizard's Next: its handler, saying whether it refused.

@@ -126,6 +126,10 @@ int64_t clarity_ui_x(const ClarityUi* ui, const char* part) { return pointer_at(
 
 int64_t clarity_ui_y(const ClarityUi* ui, const char* part) { return pointer_at(ui, part, "y"); }
 
+int64_t clarity_ui_from_x(const ClarityUi* ui, const char* part) { return pointer_at(ui, part, "fromX"); }
+
+int64_t clarity_ui_from_y(const ClarityUi* ui, const char* part) { return pointer_at(ui, part, "fromY"); }
+
 const char* clarity_ui_error(const ClarityUi* ui, const char* part) {
     const ClarityPart* p = found(ui, part);
     return p && p->error ? clarity_text_show(p->error) : "";

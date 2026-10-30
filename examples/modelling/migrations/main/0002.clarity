@@ -1,0 +1,7 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Places on the diagrams"
+    add field ClassType.x: integer
+    add field ClassType.y: integer
+    add field DataEntity.x: integer
+    add field DataEntity.y: integer

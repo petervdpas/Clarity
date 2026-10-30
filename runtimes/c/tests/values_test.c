@@ -158,6 +158,8 @@ void a_canvas_says_where_it_was_clicked_as_every_runtime_does(void) {
         ClarityUi* ui = clarity_ui(&state);
         CHECK(clarity_ui_x(ui, "board") == (int64_t)cJSON_GetObjectItemCaseSensitive(c, "x")->valuedouble);
         CHECK(clarity_ui_y(ui, "board") == (int64_t)cJSON_GetObjectItemCaseSensitive(c, "y")->valuedouble);
+        CHECK(clarity_ui_from_x(ui, "board") == (int64_t)cJSON_GetObjectItemCaseSensitive(c, "fromX")->valuedouble);
+        CHECK(clarity_ui_from_y(ui, "board") == (int64_t)cJSON_GetObjectItemCaseSensitive(c, "fromY")->valuedouble);
         // What the pointer holds besides x and y travels back unchanged.
         cJSON* back = clarity_window_state_json(&clarity_ui_reply(ui, "Main", cJSON_CreateObject())->state);
         CHECK_JSON(cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(back, "parts"), "board"),

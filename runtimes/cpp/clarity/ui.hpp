@@ -169,6 +169,9 @@ public:
     /// Where a canvas was last clicked, across (`canvas.x`) and down (`canvas.y`); 0 before any click.
     int64_t x(const std::string& part) const { return pointer(part, "x"); }
     int64_t y(const std::string& part) const { return pointer(part, "y"); }
+    /// Where a drag on a canvas started: `canvas.fromX`, `canvas.fromY`; 0 without one.
+    int64_t from_x(const std::string& part) const { return pointer(part, "fromX"); }
+    int64_t from_y(const std::string& part) const { return pointer(part, "fromY"); }
     /// The message a handler set on an input, or empty text.
     std::string error(const std::string& part) const;
     void set_error(const std::string& part, Text value) { parts_[part].error = std::move(value); }

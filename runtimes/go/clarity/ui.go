@@ -347,6 +347,12 @@ func (u *Ui) X(part string) int64 { return u.pointer(part, "x") }
 // Y is where a canvas was last clicked, down: canvas.y.
 func (u *Ui) Y(part string) int64 { return u.pointer(part, "y") }
 
+// FromX is where a drag on a canvas started, across: canvas.fromX; 0 without one.
+func (u *Ui) FromX(part string) int64 { return u.pointer(part, "fromX") }
+
+// FromY is where a drag on a canvas started, down: canvas.fromY.
+func (u *Ui) FromY(part string) int64 { return u.pointer(part, "fromY") }
+
 func (u *Ui) pointer(part, key string) int64 {
 	if at, ok := u.parts[part].Pointer[key].(float64); ok {
 		return int64(math.Floor(at))

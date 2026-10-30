@@ -73,6 +73,12 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     /// <summary>Where a canvas was last clicked, down: <c>canvas.y</c>.</summary>
     public long Y => Pointer?.Y ?? 0;
 
+    /// <summary>Where a drag on a canvas started, across: <c>canvas.fromX</c>; 0 without one.</summary>
+    public long FromX => Pointer?.FromX ?? 0;
+
+    /// <summary>Where a drag on a canvas started, down: <c>canvas.fromY</c>.</summary>
+    public long FromY => Pointer?.FromY ?? 0;
+
     /// <summary>Whether a foldable panel or form is folded, as the person or a handler left it
     /// (conformance/folding.json).</summary>
     public bool IsFolded

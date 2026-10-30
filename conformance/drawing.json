@@ -1,5 +1,5 @@
 {
-  "about": "A canvas drawn by code (DESIGN 5.7, backend renderer). The draw handler of a canvas runs when its window opens and after every other handler of the window; each run starts an empty drawing, which the backend sends as the canvas part's `drawing`, a list of shapes in the canvas's own units (`units W x H`, 100 x 100 without it, x to the right and y down). A renderer scales the units to fit the part, keeping their proportion, centered, and draws the shapes in order. A color is a color of the theme by name (`accent`, `text`) or written out (`#rrggbb`); a name the theme does not have is its text color. Widths and sizes are in units too. `text` is centered on its point, horizontally and vertically, its text filled in the person's format like any shown text. `image` draws a picture of the project's resources folder by its name (`picture`: a .png, .jpg, .gif, .bmp, .webp or .svg file) stretched to fill its box, `x` and `y` its top left corner; a picture that is not there draws nothing. `shapes` gives the code each shape is drawn by and what it sends. `angles` gives sin and cos of degrees, rounded to 10 decimals, as every runtime computes them. A canvas can be clicked (`on click`): the renderer finds where in the canvas's units, rounded down, from where in the part the click was (clicks: the part's size and the click in pixels, the drawing fitted as it is drawn, whole and centred), sets it in the part's `pointer` and runs the handler, which reads `canvas.x` and `canvas.y` (points: a part's state and what they read, 0 without a pointer). The pointer is a record that grows: it holds `x` and `y` now, and a runtime keeps any other field it is sent without failing on it. A click beside the drawing, where the part shows none of it, runs nothing.",
+  "about": "A canvas drawn by code (DESIGN 5.7, backend renderer). The draw handler of a canvas runs when its window opens and after every other handler of the window; each run starts an empty drawing, which the backend sends as the canvas part's `drawing`, a list of shapes in the canvas's own units (`units W x H`, 100 x 100 without it, x to the right and y down). A renderer scales the units to fit the part, keeping their proportion, centered, and draws the shapes in order. A color is a color of the theme by name (`accent`, `text`) or written out (`#rrggbb`); a name the theme does not have is its text color. Widths and sizes are in units too. `text` is centered on its point, horizontally and vertically, its text filled in the person's format like any shown text. `image` draws a picture of the project's resources folder by its name (`picture`: a .png, .jpg, .gif, .bmp, .webp or .svg file) stretched to fill its box, `x` and `y` its top left corner; a picture that is not there draws nothing. `shapes` gives the code each shape is drawn by and what it sends. `angles` gives sin and cos of degrees, rounded to 10 decimals, as every runtime computes them. A canvas can be clicked (`on click`): the renderer finds where in the canvas's units, rounded down, from where in the part the click was (clicks: the part's size and the click in pixels, the drawing fitted as it is drawn, whole and centred), sets it in the part's `pointer` and runs the handler, which reads `canvas.x` and `canvas.y` (points: a part's state and what they read, 0 without a pointer). A drag (`on drag`, while the pointer moves with its button down) and a drop (`on drop`, when it is let go) set the pointer the same way, with `fromX` and `fromY` where it was pressed, which the handler reads as `canvas.fromX` and `canvas.fromY` (0 when the pointer has none). The pointer is a record that grows: it holds `x`, `y`, `fromX` and `fromY` now, and a runtime keeps any other field it is sent without failing on it. A click beside the drawing, where the part shows none of it, runs nothing.",
   "shapes": [
     {
       "code": "dial.clear(\"#101810\")",
@@ -241,7 +241,23 @@
         }
       },
       "x": 120,
-      "y": 150
+      "y": 150,
+      "fromX": 0,
+      "fromY": 0
+    },
+    {
+      "part": {
+        "pointer": {
+          "x": 900,
+          "y": 410,
+          "fromX": 860,
+          "fromY": 400
+        }
+      },
+      "x": 900,
+      "y": 410,
+      "fromX": 860,
+      "fromY": 400
     },
     {
       "part": {
@@ -253,12 +269,368 @@
         }
       },
       "x": 7,
-      "y": 3
+      "y": 3,
+      "fromX": 0,
+      "fromY": 0
     },
     {
       "part": {},
       "x": 0,
-      "y": 0
+      "y": 0,
+      "fromX": 0,
+      "fromY": 0
     }
-  ]
+  ],
+  "views": {
+    "about": "A canvas with `zoom` shows a view of its units: the rectangle `[x, y, width, height]` of units in the part, fitted and centred as the whole drawing is without zoom, which is the view it starts with. `zoomed` gives the view after zooming by `factor` (above 1 closer, below 1 farther) around the point `at` in units, which stays where it is: the view keeps the canvas's proportion, is never larger than the canvas nor smaller than a sixteenth of its width, and is moved back inside it. `scrolled` gives the view moved by `by` units, kept inside the canvas. `points` gives where in units a pointer in the part is, as clicks do, through the view, rounded down; null beside the drawing.",
+    "zoomed": [
+      {
+        "units": [
+          1000,
+          500
+        ],
+        "view": [
+          0,
+          0,
+          1000,
+          500
+        ],
+        "factor": 2,
+        "at": [
+          500,
+          250
+        ],
+        "result": [
+          250,
+          125,
+          500,
+          250
+        ]
+      },
+      {
+        "units": [
+          1000,
+          500
+        ],
+        "view": [
+          0,
+          0,
+          1000,
+          500
+        ],
+        "factor": 2,
+        "at": [
+          0,
+          0
+        ],
+        "result": [
+          0,
+          0,
+          500,
+          250
+        ]
+      },
+      {
+        "units": [
+          1000,
+          500
+        ],
+        "view": [
+          250,
+          125,
+          500,
+          250
+        ],
+        "factor": 0.25,
+        "at": [
+          500,
+          250
+        ],
+        "result": [
+          0,
+          0,
+          1000,
+          500
+        ]
+      },
+      {
+        "units": [
+          1000,
+          500
+        ],
+        "view": [
+          0,
+          0,
+          1000,
+          500
+        ],
+        "factor": 100,
+        "at": [
+          100,
+          100
+        ],
+        "result": [
+          93.75,
+          93.75,
+          62.5,
+          31.25
+        ]
+      },
+      {
+        "units": [
+          1000,
+          500
+        ],
+        "view": [
+          0,
+          0,
+          500,
+          250
+        ],
+        "factor": 0.5,
+        "at": [
+          500,
+          250
+        ],
+        "result": [
+          0,
+          0,
+          1000,
+          500
+        ]
+      },
+      {
+        "units": [
+          1000,
+          500
+        ],
+        "view": [
+          500,
+          250,
+          500,
+          250
+        ],
+        "factor": 0.8,
+        "at": [
+          1000,
+          500
+        ],
+        "result": [
+          375,
+          187.5,
+          625,
+          312.5
+        ]
+      }
+    ],
+    "scrolled": [
+      {
+        "units": [
+          1000,
+          500
+        ],
+        "view": [
+          250,
+          125,
+          500,
+          250
+        ],
+        "by": [
+          100,
+          -50
+        ],
+        "result": [
+          350,
+          75,
+          500,
+          250
+        ]
+      },
+      {
+        "units": [
+          1000,
+          500
+        ],
+        "view": [
+          250,
+          125,
+          500,
+          250
+        ],
+        "by": [
+          1000,
+          1000
+        ],
+        "result": [
+          500,
+          250,
+          500,
+          250
+        ]
+      },
+      {
+        "units": [
+          1000,
+          500
+        ],
+        "view": [
+          250,
+          125,
+          500,
+          250
+        ],
+        "by": [
+          -1000,
+          0
+        ],
+        "result": [
+          0,
+          125,
+          500,
+          250
+        ]
+      },
+      {
+        "units": [
+          1000,
+          500
+        ],
+        "view": [
+          0,
+          0,
+          1000,
+          500
+        ],
+        "by": [
+          40,
+          40
+        ],
+        "result": [
+          0,
+          0,
+          1000,
+          500
+        ]
+      }
+    ],
+    "points": [
+      {
+        "view": [
+          250,
+          125,
+          500,
+          250
+        ],
+        "part": [
+          400,
+          200
+        ],
+        "at": [
+          200,
+          100
+        ],
+        "point": [
+          500,
+          250
+        ]
+      },
+      {
+        "view": [
+          250,
+          125,
+          500,
+          250
+        ],
+        "part": [
+          400,
+          200
+        ],
+        "at": [
+          0,
+          0
+        ],
+        "point": [
+          250,
+          125
+        ]
+      },
+      {
+        "view": [
+          250,
+          125,
+          500,
+          250
+        ],
+        "part": [
+          400,
+          300
+        ],
+        "at": [
+          200,
+          40
+        ],
+        "point": null
+      },
+      {
+        "view": [
+          250,
+          125,
+          500,
+          250
+        ],
+        "part": [
+          400,
+          300
+        ],
+        "at": [
+          200,
+          150
+        ],
+        "point": [
+          500,
+          250
+        ]
+      },
+      {
+        "view": [
+          0,
+          0,
+          300,
+          300
+        ],
+        "part": [
+          150,
+          200
+        ],
+        "at": [
+          60,
+          100
+        ],
+        "point": [
+          120,
+          150
+        ]
+      },
+      {
+        "view": [
+          93.75,
+          93.75,
+          62.5,
+          31.25
+        ],
+        "part": [
+          625,
+          312.5
+        ],
+        "at": [
+          5,
+          5
+        ],
+        "point": [
+          94,
+          94
+        ]
+      }
+    ]
+  }
 }

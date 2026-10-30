@@ -1507,6 +1507,8 @@ impl<'a> Emitter<'a> {
         }
         match property.as_str() {
             "visible" | "enabled" | "error" | "text" | "checked" | "x" | "y" => format!("clarity_ui_{property}(ui, {quoted})"),
+            "fromX" => format!("clarity_ui_from_x(ui, {quoted})"),
+            "fromY" => format!("clarity_ui_from_y(ui, {quoted})"),
             "caption" => format!("clarity_ui_caption(ui, {quoted}, {})", string(info.caption.as_deref().unwrap_or_default())),
             "readonly" => format!("clarity_ui_readonly(ui, {quoted}, {})", info.readonly),
             "folded" => format!("clarity_ui_folded(ui, {quoted}, {})", info.folded),

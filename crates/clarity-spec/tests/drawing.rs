@@ -137,3 +137,42 @@ code Main
     let wired = board.replace("on click: againClicked", "on click: drawCross(0, 0)");
     assert_has(&errors(&wired), "'board' is drawn only by its draw handler, drawBoard, and the handlers only it runs");
 }
+
+/// A canvas can be zoomed and scrolled (`zoom`), and dragged on: `on drag`
+/// runs while the pointer moves with its button down, `on drop` when it is
+/// let go, both reading where it is now (`x`, `y`) and where it was pressed
+/// (`fromX`, `fromY`), in the canvas's units.
+#[test]
+fn a_canvas_can_zoom_and_be_dragged_on() {
+    let board = "module diagram
+
+page Main: window
+    data boxX: integer, default 20
+    data boxY: integer, default 20
+    data moved: integer
+    canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom on draw: drawSheet on drag: dragged on drop: dropped
+
+code Main
+    handler drawSheet
+        sheet.clear(\"panel\")
+        sheet.rect(boxX, boxY, 200, 100, \"raised\")
+
+    handler dragged
+        boxX = boxX + sheet.x - sheet.fromX
+        boxY = boxY + sheet.y - sheet.fromY
+
+    handler dropped
+        moved = moved + 1
+";
+    let (file, diags) = parse(board, "diagram.clarity");
+    assert!(diags.is_empty(), "{diags:#?}");
+    let sheet = &file.pages[0].widgets[0];
+    assert!(sheet.props.zoom);
+    assert_eq!(sheet.props.handlers.iter().map(|h| h.event).collect::<Vec<_>>(), [Event::Draw, Event::Drag, Event::Drop]);
+    assert_eq!(widget_line(&sheet.props), "canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom on draw: drawSheet on drag: dragged on drop: dropped");
+    assert!(errors(board).is_empty(), "{:#?}", errors(board));
+    assert_has(&errors(&board.replace("        moved = moved + 1\n", "        sheet.fromX = 5\n")), "sheet.fromX is read, not set");
+    // Only a canvas zooms and is dragged on.
+    let button = "module x\n\npage Main: window\n    button \"Go\" name go at 1,1 span 2 zoom\n";
+    assert_has(&errors(button), "zoom");
+}

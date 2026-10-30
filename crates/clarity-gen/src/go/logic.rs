@@ -1273,6 +1273,8 @@ impl<'a> Emitter<'a> {
             "checked" => format!("ui.Checked({quoted})"),
             "x" => format!("ui.X({quoted})"),
             "y" => format!("ui.Y({quoted})"),
+            "fromX" => format!("ui.FromX({quoted})"),
+            "fromY" => format!("ui.FromY({quoted})"),
             "selected" => match info.bind {
                 Some(bind) => self.lift(format!("clarity.Selected(ui, {quoted}, w.{})", pascal(&bind)), pre),
                 None => {

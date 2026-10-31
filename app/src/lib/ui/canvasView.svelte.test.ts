@@ -268,3 +268,82 @@ test("a press on a shape drawn over a link is not a bend", () => {
   expect(drags.length).toBe(1);
   done();
 });
+
+// Canvas modes (DESIGN 5.31): the gesture goes to the runtime as one action.
+test("mode objects: an object dragged and let go is sent where it was dropped", async () => {
+  const actions: Record<string, unknown>[] = [];
+  const { svg, done } = canvas({
+    mode: "objects",
+    drawing: [
+      { op: "object", record: 7, x: 100, y: 50, width: 200, height: 100 },
+      { op: "rect", x: 100, y: 50, width: 200, height: 100, color: "raised" },
+    ],
+    oncanvas: async (action: Record<string, unknown>) => (actions.push(action), true),
+  });
+  // 2.5 units a pixel: the box is at pixels 40..120 across.
+  svg.dispatchEvent(pointer("pointerdown", 60, 30));
+  svg.dispatchEvent(pointer("pointermove", 80, 40));
+  flushSync();
+  expect(svg.querySelector("rect")!.getAttribute("transform")).toBe("translate(50 25)");
+  svg.dispatchEvent(pointer("pointerup", 80, 40));
+  await Promise.resolve();
+  expect(actions).toEqual([{ move: { id: 7, x: 150, y: 75 } }]);
+  // A press beside every object is no move.
+  svg.dispatchEvent(pointer("pointerdown", 390, 190));
+  svg.dispatchEvent(pointer("pointerup", 395, 195));
+  expect(actions.length).toBe(1);
+  done();
+});
+
+test("mode vector: the SVG shows, and a tool's drag adds its shape in the ink", async () => {
+  const actions: Record<string, unknown>[] = [];
+  const { holder, svg, done } = canvas({
+    mode: "vector",
+    tools: ["select", "rect"],
+    tool: "rect",
+    ink: "#ff0000",
+    vector: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 500">\n<rect x="10" y="20" width="30" height="40" fill="#00ff00"/>\n</svg>\n',
+    oncanvas: async (action: Record<string, unknown>) => (actions.push(action), true),
+  });
+  expect(svg.querySelector('[data-shape="0"]')!.getAttribute("fill")).toBe("#00ff00");
+  expect([...holder.querySelectorAll(".tools button")].map((b) => b.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
+  svg.dispatchEvent(pointer("pointerdown", 40, 20));
+  svg.dispatchEvent(pointer("pointermove", 80, 60));
+  svg.dispatchEvent(pointer("pointerup", 80, 60));
+  await Promise.resolve();
+  expect(actions).toEqual([{ add: { op: "rect", x: 100, y: 50, width: 100, height: 100, color: "#ff0000" } }]);
+  done();
+});
+
+test("mode objects: a drawing drawn anew while an object is dragged keeps the drag on it", async () => {
+  const actions: Record<string, unknown>[] = [];
+  const box = [
+    { op: "object", record: 7, x: 100, y: 50, width: 200, height: 100 },
+    { op: "rect", x: 100, y: 50, width: 200, height: 100, color: "raised" },
+  ];
+  const props = $state({
+    drawing: box as Record<string, unknown>[] as never[],
+    units: { width: 1000, height: 500 },
+    shown: String,
+    mode: "objects" as const,
+    oncanvas: async (action: Record<string, unknown>) => (actions.push(action), true),
+  });
+  const holder = document.createElement("div");
+  document.body.append(holder);
+  const part = mount(CanvasView, { target: holder, props });
+  flushSync();
+  const svg = holder.querySelector("svg")!;
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 200, right: 400, bottom: 200, x: 0, y: 0, toJSON: () => ({}) });
+  svg.dispatchEvent(pointer("pointerdown", 60, 30));
+  svg.dispatchEvent(pointer("pointermove", 80, 40));
+  // A timer's handler ran: the draw handler drew it anew, a clear first.
+  props.drawing = [{ op: "clear" }, ...box] as never[];
+  flushSync();
+  // The dragged box still moves with the pointer: now the third shape.
+  expect(svg.querySelectorAll("rect")[1].getAttribute("transform")).toBe("translate(50 25)");
+  svg.dispatchEvent(pointer("pointerup", 80, 40));
+  await Promise.resolve();
+  expect(actions).toEqual([{ move: { id: 7, x: 150, y: 75 } }]);
+  unmount(part);
+  holder.remove();
+});

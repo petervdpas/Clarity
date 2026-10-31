@@ -42,6 +42,10 @@ struct PartState {
     // A canvas's grid dots, as a handler set them: pixels across, and color (empty is the theme's border).
     std::optional<int64_t> dot_size;
     std::optional<std::string> dot_color;
+    // A painting or vector canvas's tool in hand, how wide it paints and its color, as a handler set them (DESIGN 5.31).
+    std::optional<std::string> tool;
+    std::optional<int64_t> brush;
+    std::optional<std::string> ink;
     std::optional<bool> maximized;
     /// The open tab of a ribbon, counted from 1 (conformance/ribbons.json).
     std::optional<int64_t> tab;
@@ -219,6 +223,17 @@ public:
     void set_dot_size(const std::string& part, int64_t value) { parts_[part].dot_size = value; }
     std::string dot_color(const std::string& part, const std::string& design) const;
     void set_dot_color(const std::string& part, const std::string& value) { parts_[part].dot_color = value; }
+    std::string tool(const std::string& part, const std::string& design) const;
+    void set_tool(const std::string& part, const std::string& value) { parts_[part].tool = value; }
+    int64_t brush(const std::string& part, int64_t design) const;
+    void set_brush(const std::string& part, int64_t value) { parts_[part].brush = value; }
+    std::string ink(const std::string& part, const std::string& design) const;
+    void set_ink(const std::string& part, const std::string& value) { parts_[part].ink = value; }
+    /// The place of the shape a person touched last on a vector canvas, counted from 1; 0 when none (DESIGN 5.31).
+    int64_t shape_chosen(const std::string& part) const {
+        auto found = selected_.find(part);
+        return found == selected_.end() || found->second < 0 ? 0 : int64_t(found->second) + 1;
+    }
     /// Whether a maximizable sidebar fills the window.
     bool maximized(const std::string& part) const;
     void set_maximized(const std::string& part, bool value) { parts_[part].maximized = value; }

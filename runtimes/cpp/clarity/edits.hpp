@@ -50,6 +50,9 @@ public:
     /// The window's data as a reply that is no edit left it: the edits start
     /// from here. While an edit goes on (a drag), it waits for its end.
     void reset(const nlohmann::json& data);
+    /// A copy of the window's data where the next edit starts: what a change
+    /// the runtime refuses is taken back to; none before any reply.
+    std::optional<nlohmann::json> baseline();
     /// An edit that goes on: `steps` are the database steps its handler
     /// made; it ends with edit.
     void drag(const std::string& part, const std::string& scope, const std::vector<int64_t>& steps);
@@ -66,10 +69,16 @@ public:
 private:
     std::mutex mutex_;
     nlohmann::json baseline_ = nlohmann::json::object();
+    bool based_ = false;
     std::optional<Edit> going_;
     std::vector<Edit> done_;
     std::vector<Edit> undone_;
 };
+
+/// Whether a table's edit, its list before and after, kept to its `editable`
+/// fields: the same rows in the same order, every other field as it was (a
+/// new or a removed field is a change of it).
+bool table_edit_fits(const nlohmann::json& before, const nlohmann::json& after, const std::vector<std::string>& editable);
 
 /// The edit bus of the window numbered `instance`.
 std::shared_ptr<EditBus> edits_of(uint64_t instance);

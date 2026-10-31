@@ -41,7 +41,40 @@ const std::string part_state = "#parts.";
 
 void EditBus::reset(const json& data) {
     std::lock_guard lock(mutex_);
-    if (!going_) baseline_ = data;
+    if (going_) return;
+    baseline_ = data;
+    based_ = true;
+}
+
+std::optional<json> EditBus::baseline() {
+    std::lock_guard lock(mutex_);
+    if (!based_) return std::nullopt;
+    return baseline_;
+}
+
+bool table_edit_fits(const json& before, const json& after, const std::vector<std::string>& editable) {
+    json was = before.is_array() ? before : json::array();
+    json now = after.is_array() ? after : json::array();
+    if (was.size() != now.size()) return false;
+    for (size_t i = 0; i < was.size(); ++i) {
+        const json& a = was[i];
+        const json& b = now[i];
+        if (!a.is_object() || !b.is_object()) {
+            if (a != b) return false;
+            continue;
+        }
+        for (const json* row : {&a, &b}) {
+            for (auto it = row->begin(); it != row->end(); ++it) {
+                const std::string& field = it.key();
+                if (std::find(editable.begin(), editable.end(), field) != editable.end()) continue;
+                // A field one of them has not is null there.
+                json x = a.contains(field) ? a[field] : json(nullptr);
+                json y = b.contains(field) ? b[field] : json(nullptr);
+                if (x != y || a.contains(field) != b.contains(field)) return false;
+            }
+        }
+    }
+    return true;
 }
 
 void EditBus::drag(const std::string& part, const std::string& scope, const std::vector<int64_t>& steps) {

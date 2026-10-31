@@ -86,6 +86,28 @@ fn the_every_part_project_uses_every_part() {
     assert!(missing.is_empty(), "parts the every-part project does not use yet: {}", missing.join(", "));
 }
 
+/// Every mode of a canvas (DESIGN 5.31), so each stack builds them.
+#[test]
+fn the_every_part_project_uses_every_canvas_mode() {
+    use clarity_spec::model::CanvasMode;
+    fn modes(widgets: &[Widget], found: &mut Vec<CanvasMode>) {
+        for w in widgets {
+            found.extend(w.props.mode);
+            modes(&w.children, found);
+            for page in &w.pages {
+                modes(&page.children, found);
+            }
+        }
+    }
+    let mut found = Vec::new();
+    for page in project().pages() {
+        modes(&page.widgets, &mut found);
+    }
+    for mode in [CanvasMode::Objects, CanvasMode::Paint, CanvasMode::Vector] {
+        assert!(found.contains(&mode), "the every-part project has no canvas in mode {}", mode.keyword());
+    }
+}
+
 #[test]
 fn the_every_part_project_uses_every_field_type_and_kind_of_page() {
     let project = project();

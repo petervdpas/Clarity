@@ -101,3 +101,40 @@ func TestTheEditBusKeepsTheRecordAsEveryRuntimeDoes(t *testing.T) {
 		}
 	}
 }
+
+// The baseline is the window's data as the last reply or edit left it: what
+// the runtime puts back when it takes a change back.
+func TestTheEditBusGivesItsBaseline(t *testing.T) {
+	bus := &EditBus{}
+	if bus.Baseline() != nil {
+		t.Fatal("a bus without a reply has no baseline")
+	}
+	bus.Reset(map[string]any{"name": "Ada"})
+	kept := bus.Baseline()
+	kept["name"] = "changed"
+	bus.Edit("nameBox", "form", map[string]any{"name": "Ann"}, nil)
+	if got := bus.Baseline(); got["name"] != "Ann" {
+		t.Fatal("the edit moved the baseline on, and a copy changed nothing", got)
+	}
+}
+
+// A table's edit keeps to its editable columns: rows the same in number and
+// order, other fields as they were.
+func TestATableEditKeepsToItsEditableColumns(t *testing.T) {
+	before := []any{map[string]any{"id": 1.0, "title": "Milk", "hours": 9.0}}
+	cases := []struct {
+		after any
+		fits  bool
+	}{
+		{[]any{map[string]any{"id": 1, "title": "Milk", "hours": 10}}, true},
+		{[]any{map[string]any{"id": 1, "title": "Tea", "hours": 9}}, false},
+		{[]any{map[string]any{"id": 1, "title": "Milk", "hours": 9, "note": "x"}}, false},
+		{[]any{map[string]any{"id": 1, "title": "Milk", "hours": 9}, map[string]any{"id": 2}}, false},
+		{[]any{}, false},
+	}
+	for _, c := range cases {
+		if got := TableEditFits(before, c.after, []string{"hours"}); got != c.fits {
+			t.Errorf("%v: %v", c.after, got)
+		}
+	}
+}

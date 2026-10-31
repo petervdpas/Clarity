@@ -103,7 +103,7 @@ fn tasks() -> WindowState {
     data.insert("tasks".into(), json!([{ "id": 1, "title": "Milk", "up": null }, { "id": 2, "title": "bread", "up": 1 }, { "id": 3, "title": "Apples", "up": 2 }]));
     let mut state = WindowState::new("Tasks", data);
     let view = |v: Value| v.as_object().unwrap().clone();
-    state.views.insert("grid".into(), view(json!({ "kind": "table", "list": "tasks", "columns": [{ "field": "title", "kind": "text" }], "order": null, "page": 2, "at": 1 })));
+    state.views.insert("grid".into(), view(json!({ "kind": "table", "list": "tasks", "columns": [{ "field": "title", "kind": "text" }], "order": null, "page": 2, "at": 1, "sortable": true })));
     state.views.insert("all".into(), view(json!({ "kind": "table", "list": "tasks", "columns": [], "order": null, "page": null })));
     state.views.insert("tree".into(), view(json!({ "kind": "tree", "list": "tasks", "parent": "up", "key": "id", "open": [] })));
     state.views.insert("chart".into(), view(json!({ "kind": "chart", "list": "tasks", "by": "title", "byKind": "text", "measure": "count", "of": "", "values": [] })));
@@ -183,4 +183,27 @@ fn a_view_event_sorts_turns_and_opens() {
     let nothing = views::event(state.clone(), "grid", &Map::new(), drawn).unwrap();
     assert_eq!(nothing.state.views, state.views, "an empty action changes nothing");
     assert!(views::event(state.clone(), "nowhere", &action(json!({ "page": 1 })), drawn).is_err());
+}
+
+#[test]
+fn a_table_that_is_not_sortable_does_not_sort() {
+    let state = tasks();
+    let reply = views::event(state.clone(), "all", &action(json!({ "sort": "title" })), drawn).unwrap();
+    assert_eq!(reply.state.views["all"], state.views["all"], "no error, nothing changed");
+}
+
+#[test]
+fn a_chart_of_numbers_shows_the_last_points() {
+    let mut data = Map::new();
+    data.insert("readings".into(), json!([1, "2.5", "", " ", "x", null, 4, "1e400", 7]));
+    let mut state = WindowState::new("Meter", data);
+    let numbers = |points: Value| json!({ "kind": "numbers", "list": "readings", "points": points }).as_object().unwrap().clone();
+    state.views.insert("last".into(), numbers(json!(2)));
+    state.views.insert("all".into(), numbers(json!(0)));
+    state.views.insert("none".into(), numbers(Value::Null));
+    let reply = filled(state);
+    let got = |part: &str| reply.state.views[part]["numbers"].as_array().unwrap().iter().map(|n| n.as_f64().unwrap()).collect::<Vec<_>>();
+    assert_eq!(got("last"), vec![4.0, 7.0]);
+    assert_eq!(got("all"), vec![1.0, 2.5, 4.0, 7.0]);
+    assert_eq!(got("none"), vec![1.0, 2.5, 4.0, 7.0]);
 }

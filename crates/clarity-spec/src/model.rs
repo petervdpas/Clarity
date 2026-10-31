@@ -479,6 +479,47 @@ pub struct WidgetPage {
     pub span: Span,
 }
 
+/// What the person does on a canvas (DESIGN 5.31): drags the records of a
+/// list, paints a picture, or draws and edits shapes. A canvas without one is
+/// drawn by its draw handler.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum CanvasMode {
+    Objects,
+    Paint,
+    Vector,
+}
+
+impl CanvasMode {
+    pub fn keyword(self) -> &'static str {
+        match self {
+            CanvasMode::Objects => "objects",
+            CanvasMode::Paint => "paint",
+            CanvasMode::Vector => "vector",
+        }
+    }
+
+    /// The tools of the mode, in the order its toolbar shows them.
+    pub fn tools(self) -> &'static [&'static str] {
+        match self {
+            CanvasMode::Objects => &[],
+            CanvasMode::Paint => &["pen", "eraser"],
+            CanvasMode::Vector => &["select", "line", "rect", "ellipse", "path", "text"],
+        }
+    }
+}
+
+/// The objects of a canvas in `mode objects`: the records of `list`, placed
+/// by their fields `x` and `y` (`mode objects types at x, y`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct CanvasObjects {
+    pub list: String,
+    pub x: String,
+    pub y: String,
+}
+
 /// The order a table's rows show in first: `order by title`, `order by year desc`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -540,6 +581,22 @@ pub struct WidgetProps {
     /// (DESIGN 5.30). Without it the rows stay where the data has them.
     #[serde(default)]
     pub reorder: Option<String>,
+    /// `mode objects types at x, y`, `mode paint`, `mode vector`: what the
+    /// person does on a canvas (DESIGN 5.31); none: its draw handler draws it.
+    #[serde(default)]
+    pub mode: Option<CanvasMode>,
+    /// The list and fields of a canvas in `mode objects`.
+    #[serde(default)]
+    pub objects: Option<CanvasObjects>,
+    /// `tools pen, eraser`: the tools of the canvas's mode the person may use; all without it.
+    #[serde(default)]
+    pub tools: Vec<String>,
+    /// `brush 4`: how wide a canvas paints or draws, in pixels.
+    #[serde(default)]
+    pub brush: Option<u32>,
+    /// `ink accent`: the color a canvas paints or draws with.
+    #[serde(default)]
+    pub ink: Option<String>,
     /// `page 50`: a table shows its rows that many at a time (U1c).
     #[serde(default)]
     pub page: Option<u32>,

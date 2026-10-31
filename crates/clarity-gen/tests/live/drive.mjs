@@ -385,6 +385,52 @@ try {
     await undoIn("dial", "canvas");
   });
 
+  // ---- Canvas modes (DESIGN 5.31): each gesture is one edit the runtime makes.
+  const places = () => rows("SELECT id || ':' || copies || ',' || position FROM album ORDER BY id");
+  await step("an object dragged on a board lands on the grid, saved; Ctrl+Z takes it back", async () => {
+    const before = places();
+    // The object drawn last is on top: its box is the last rect of the size the draw handler gives.
+    const marked = await b.eval(`(() => { const boxes = [...document.querySelectorAll('${part("board")} svg rect[width="200"]')]; boxes.at(-1)?.setAttribute("data-live", "top"); return boxes.length; })()`);
+    check(marked > 0, "the board shows its objects");
+    const from = await b.at(`${part("board")} [data-live="top"]`, 0.5, 0.5);
+    await b.drag(from, { x: from.x + 60, y: from.y + 30 });
+    await b.settle(500);
+    const after = places();
+    const moved = after.filter((row, i) => row !== before[i]);
+    check(moved.length === 1, `one object moved: ${moved.join(" ")}`);
+    const [x, y] = moved[0].split(":")[1].split(",").map(Number);
+    check(x % 20 === 0 && y % 20 === 0, `snapped to the grid of 20: ${x}, ${y}`);
+    await undoIn("board", ".canvas-frame");
+    await sameSoon(places, before, "Ctrl+Z puts it back");
+  });
+
+  const covers = () => sql("SELECT count(*) FROM album WHERE cover IS NOT NULL AND cover != ''");
+  await step("a stroke painted on a picture is saved; Ctrl+Z takes it back", async () => {
+    const before = covers();
+    const from = await b.at(part("sketch"), 0.3, 0.5);
+    await b.drag(from, { x: from.x + 50, y: from.y + 10 });
+    await b.until(`document.querySelector('${part("sketch")} svg image')`, "the painted picture");
+    await sameSoon(covers, String(Number(before) + 1), "the picture saved");
+    await undoIn("sketch", ".canvas-frame");
+    await sameSoon(covers, before, "Ctrl+Z takes the stroke back");
+  });
+
+  const drawn = () => sql("SELECT count(*) FROM album WHERE notes LIKE '%<rect %'");
+  await step("a rectangle drawn on a vector drawing is saved as SVG; Delete takes it away, Ctrl+Z brings it back", async () => {
+    same(drawn(), "0", "no rectangle yet");
+    await press("Rectangle", part("drawing"));
+    const from = await b.at(part("drawing"), 0.3, 0.4);
+    await b.drag(from, { x: from.x + 40, y: from.y + 30 });
+    await sameSoon(drawn, "1", "the rectangle saved");
+    await press("Select", part("drawing"));
+    await b.until(`document.querySelector('${part("drawing")} [data-shape="0"]')`, "the rectangle shown");
+    await b.click(`${part("drawing")} [data-shape="0"]`);
+    await b.key("Delete");
+    await sameSoon(drawn, "0", "Delete takes it away");
+    await undoIn("drawing", ".canvas-frame");
+    await sameSoon(drawn, "1", "Ctrl+Z brings it back");
+  });
+
   await step("a sound plays and an engine call answers", async () => {
     await b.click(part("playButton"));
     await b.click(part("planButton"));

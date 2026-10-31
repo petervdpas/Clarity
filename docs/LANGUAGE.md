@@ -706,7 +706,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 |---|---|---|---|
 | `image` | an `image` field, or nothing | `source "file"` for a fixed picture of the resources folder | `click` |
 | `display` | an integer, decimal or money: `bind shown` | `digits n`, 1 to 24, 12 without it | none |
-| `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `zoom`; `grid N` and `snap`; `background color`; `dots N color`; `surface svg`, `surface bitmap` or `surface gpu` | `draw`, `click`, `drag`, `drop`, `bend`, `pointer`, `key` |
+| `canvas` | nothing; an `image` field in `mode paint`, a `text` field in `mode vector` | `units W x H`, 1 to 10000 each, 100 x 100 without it; `zoom`; `grid N` and `snap`; `background color`; `dots N color`; `surface svg`, `surface bitmap` or `surface gpu`; `mode objects list at x, y`, `mode paint` or `mode vector`, with `tools`, `brush N` and `ink color` | `draw`, `click`, `drag`, `drop`, `bend`, `pointer`, `key`, `change` |
 
 **Media**
 
@@ -1371,6 +1371,9 @@ code Main
 | `canvas.text(x, y, text, color, size)` | color `"text"` and size 10 when left out | Text centered on x, y; slots are filled in the person's format, like a message. |
 | `canvas.link(name, x1, y1, x2, y2, via, color, width)` | width 1 when left out | A line people bend, from x1, y1 through its bend points to x2, y2. `via` is a `list<integer>` of the points, x, y, x, y, ... (`[]` for straight); `name` is plain text the code knows it by, as `"a{association.id}"`. See `on bend` below. |
 | `canvas.image(x, y, width, height, picture)` | | A picture of the resources folder by its name (`"pill.svg"`, or a picture constant), stretched to fill the box whose top left corner is x, y. |
+| `canvas.ellipse(x, y, rx, ry, color)` | | A filled ellipse around x, y, rx across and ry high from its center. |
+| `canvas.path(points, color, width)` | width 1 when left out | An open line through its points, a `list<integer>` x, y, x, y, .... |
+| `canvas.object(record, x, y, width, height)` | | On a canvas in `mode objects`: the box of an object, the record of its list. It draws nothing itself; the shapes drawn after it, until the next `object`, are the object and move with it while it is dragged. |
 
 - A color is a color of the theme by name (`"accent"`, `"text"`, a color the theme declares) or written out (`"#101810"`); a name the theme does not have is its text color.
 - The draw handler runs when the window opens and after every other handler of the window, each time on an empty drawing, so the canvas always shows the data as it is. Only a canvas's own draw handler draws on it, and the handlers it calls that nothing else runs: `draw_mark(5, 100, 100)` can draw one square of a board. A handler that an event or another handler also runs cannot draw, since its shapes would land outside a drawing.
@@ -1429,6 +1432,61 @@ code Sheet
         startY = 0
 ```
 - `sin(degrees)` and `cos(degrees)` give a decimal, rounded to 10 decimals.
+
+### Canvas modes
+
+A canvas the person changes has a `mode`; without one, its draw handler draws it and code handles its pointer. Every mode shares the same parameters, the same event and the same property, and each change the person makes is one edit, which Ctrl+Z takes back (see [Undo](#undo)). The runtime does what the gesture says: it snaps to the grid when `snap` is on, keeps the change in the data, and chooses what was touched.
+
+| Mode | Binds | What the person does |
+|---|---|---|
+| `mode objects types at x, y` | nothing: its objects are the records of the list `types`, placed by their integer fields `x` and `y` | drags an object (the box its draw handler marks with `canvas.object`) and lets it go; the record's `x` and `y` move there |
+| `mode paint` | an `image` field: `bind note.picture` | paints with the pen or rubs out with the eraser; each stroke is the picture after it |
+| `mode vector` | a `text` field, which holds the drawing as SVG: `bind note.drawing` | draws lines, rectangles, ellipses, paths and texts with the tools of its toolbar; with `select` drags a shape, and Delete deletes it |
+
+- `tools pen, eraser` names the tools of the mode the person may use, in the order its toolbar shows them: `pen` and `eraser` for paint, `select`, `line`, `rect`, `ellipse`, `path` and `text` for vector; all of them without it.
+- `brush 4` (1 to 100 pixels, 2 without it) and `ink accent` (a theme color by name, or written out) are how wide and in which color paint and vector draw. A vector drawing keeps a theme color written out, so other programs show it alike.
+- `on change: handler` runs when an edit of the canvas ended: an object dropped, a stroke painted, a shape added, changed, moved or deleted. Without it the change is lost, which the designer warns about.
+- `canvas.selected` is what the person touched last: the record of the object (mode objects), or the place of the shape in the drawing, from 1, and 0 for none (mode vector). Handlers set `canvas.tool`, `canvas.brush` and `canvas.ink`, so buttons can be a palette.
+- The SVG of a vector drawing has one element on a line. A drawing made in another program shows too; a line Clarity does not read as one of its shapes is kept as it is, and shows, but does not move.
+
+```clarity
+entity ClassType
+    name: text
+    x: integer
+    y: integer
+
+entity Note
+    picture: image
+    drawing: text
+
+page Diagram: window
+    data types: list<ClassType>
+    canvas name diagram at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap mode objects types at x, y on draw: drawTypes on change: typeMoved
+
+code Diagram
+    handler drawTypes
+        diagram.clear()
+        for t in types
+            diagram.object(t, t.x, t.y, 260, 120)
+            diagram.rect(t.x, t.y, 260, 120, "raised")
+            diagram.text(t.x + 130, t.y + 14, t.name)
+
+    handler typeMoved
+        save diagram.selected
+
+page Sketch: window
+    data note: Note
+    canvas name sketch at 1,1 span 6 rows 8 bind note.picture mode paint brush 4 ink accent on change: saveNote
+    canvas name drawing at 7,1 span 6 rows 8 bind note.drawing mode vector grid 10 snap on change: saveNote
+    button "Red" name redButton at 1,9 span 2 on click: red
+
+code Sketch
+    handler saveNote
+        save note
+
+    handler red
+        sketch.ink = "#ff0000"
+```
 
 ### Data events
 

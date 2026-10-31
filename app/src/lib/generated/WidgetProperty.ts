@@ -3,4 +3,4 @@
 /**
  * Extra properties beyond position, caption, binding and events.
  */
-export type WidgetProperty = "columns" | "edit" | "show" | "orientation" | "surface" | "source" | "for" | "placeholder" | "readonly" | "noUndo" | "tabOrder" | "shortcut" | "default" | "cancel" | "digits" | "volume" | "repeat" | "units" | "zoom" | "grid" | "snap" | "background" | "dots" | "runs" | "foldable" | "resizable" | "sortable" | "orderBy" | "reorder" | "icon" | "to" | "max" | "min" | "step" | "split" | "labels" | "typed" | "search" | "page" | "children" | "by" | "measure" | "points" | "every";
+export type WidgetProperty = "columns" | "edit" | "show" | "orientation" | "surface" | "source" | "for" | "placeholder" | "readonly" | "noUndo" | "tabOrder" | "shortcut" | "default" | "cancel" | "digits" | "volume" | "repeat" | "units" | "zoom" | "grid" | "snap" | "background" | "dots" | "runs" | "foldable" | "resizable" | "sortable" | "orderBy" | "reorder" | "mode" | "tools" | "brush" | "ink" | "icon" | "to" | "max" | "min" | "step" | "split" | "labels" | "typed" | "search" | "page" | "children" | "by" | "measure" | "points" | "every";

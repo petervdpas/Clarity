@@ -10,6 +10,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "clarity/canvas.h"
 #include "clarity/db_internal.h"
 #include "clarity/dropdown_options.h"
 #include "clarity/edits.h"
@@ -279,6 +280,45 @@ static cJSON* unchanged(ClarityService* s, const ClarityWindowState* state, bool
     return answered(s, reply);
 }
 
+/// What the screen changed of a readonly part, or of a table's column it
+/// does not edit, taken back (DESIGN 1.7): the window's data as its edit
+/// baseline had it, answered refused. No handler runs and no edit is kept.
+static cJSON* taken_back(ClarityService* s, const ClarityWindowState* state) {
+    cJSON* baseline = clarity_edits_baseline(clarity_edits_of(state->instance));
+    ClarityWindowState back = baseline ? clarity_with_edit_data(state, baseline) : *state;
+    return unchanged(s, &back, true);
+}
+
+static bool is_readonly(const cJSON* args) { return cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(args, "readonly")); }
+
+static bool named(const cJSON* names, const char* name) {
+    const cJSON* item;
+    cJSON_ArrayForEach(item, names) {
+        if (cJSON_IsString(item) && strcmp(item->valuestring, name) == 0) return true;
+    }
+    return false;
+}
+
+/// Whether the rows at `path` changed from `before` to `after` only in the
+/// fields of `editable`: the same rows, in the same order.
+static bool edits_only(const cJSON* before, const cJSON* after, const char* path, const cJSON* editable) {
+    const cJSON* was = clarity_data_at(before, path);
+    const cJSON* now = clarity_data_at(after, path);
+    if (!cJSON_IsArray(was) || !cJSON_IsArray(now)) return (!was && !now) || (was && now && cJSON_Compare(was, now, true));
+    if (cJSON_GetArraySize(was) != cJSON_GetArraySize(now)) return false;
+    for (const cJSON *a = was->child, *b = now->child; a && b; a = a->next, b = b->next) {
+        const cJSON* field;
+        cJSON_ArrayForEach(field, a) {
+            const cJSON* other = cJSON_GetObjectItemCaseSensitive(b, field->string);
+            if (!named(editable, field->string) && !(other && cJSON_Compare(field, other, true))) return false;
+        }
+        cJSON_ArrayForEach(field, b) {
+            if (!named(editable, field->string) && !cJSON_GetObjectItemCaseSensitive(a, field->string)) return false;
+        }
+    }
+    return true;
+}
+
 /// The end of an edit the runtime made of the window's data (DESIGN 1.7),
 /// as edit_event ends one: its handler runs as one database step and, with
 /// a scope, the edit goes on the window's record. No handler: the window as it is.
@@ -294,6 +334,7 @@ static cJSON* edit_made(ClarityService* s, const ClarityWindowState* changed, co
 /// new order, each record's number in `by` and, in a tree, its parent, and
 /// the moved row selected.
 static cJSON* reordered(ClarityService* s, const ClarityWindowState* state, const cJSON* args) {
+    if (is_readonly(args)) return taken_back(s, state);
     const char* list = text_of(args, "list");
     const char* by = text_of(args, "by");
     const char* parent = text_of(args, "parent");
@@ -329,6 +370,7 @@ static cJSON* reordered(ClarityService* s, const ClarityWindowState* state, cons
 
 /// A typed item for a list field (U1c): added, or refused so the screen keeps the text.
 static cJSON* item_added(ClarityService* s, const ClarityWindowState* state, const cJSON* args) {
+    if (is_readonly(args)) return taken_back(s, state);
     const char* path = text_of(args, "path");
     const cJSON* items = clarity_data_at(state->data, path);
     cJSON* gives = clarity_item_added(text_of(args, "item"), cJSON_GetObjectItemCaseSensitive(args, "values"), items, text_of(args, "typed"));
@@ -342,6 +384,7 @@ static cJSON* item_added(ClarityService* s, const ClarityWindowState* state, con
 
 /// A slider's or a spin box's value after a key, a drag or typed text (U1c).
 static cJSON* ranged(ClarityService* s, const ClarityWindowState* state, const cJSON* args) {
+    if (is_readonly(args)) return taken_back(s, state);
     const char* path = text_of(args, "path");
     const char* step = number_text(cJSON_GetObjectItemCaseSensitive(args, "step"));
     ClarityRange range = {number_text(cJSON_GetObjectItemCaseSensitive(args, "min")), number_text(cJSON_GetObjectItemCaseSensitive(args, "max")), step ? step : "1"};
@@ -356,6 +399,48 @@ static cJSON* ranged(ClarityService* s, const ClarityWindowState* state, const c
     if (now && cJSON_Compare(now, value, true)) return unchanged(s, state, false);
     ClarityWindowState changed = with_own_data(state);
     if (!put_at_path(changed.data, path, value)) return failed();
+    return edit_made(s, &changed, args);
+}
+
+/// `state` with nothing of `part` selected.
+static ClarityWindowState without_selected(const ClarityWindowState* state, const char* part) {
+    ClarityWindowState out = *state;
+    out.selected = CLARITY_NEW(ClaritySelected, state->selected_count + 1);
+    out.selected_count = 0;
+    for (size_t i = 0; i < state->selected_count; ++i)
+        if (strcmp(state->selected[i].name, part) != 0) out.selected[out.selected_count++] = state->selected[i];
+    return out;
+}
+
+/// The person's action on a canvas (DESIGN 5.31): an object dropped, a
+/// stroke painted, or a shape added, changed, moved or deleted, snapped to
+/// the canvas's grid, with what it touched selected. An action that changes
+/// nothing is refused and runs nothing.
+static cJSON* canvas_changed(ClarityService* s, const ClarityWindowState* state, const cJSON* args) {
+    if (is_readonly(args)) return taken_back(s, state);
+    const char* part = text_of(args, "part");
+    const cJSON* at = cJSON_GetObjectItemCaseSensitive(args, "at");
+    const cJSON* grid = cJSON_GetObjectItemCaseSensitive(args, "grid");
+    const cJSON* sized = cJSON_GetObjectItemCaseSensitive(args, "units");
+    int units[2];
+    bool has_units = cJSON_GetArraySize(sized) == 2 && cJSON_IsNumber(cJSON_GetArrayItem(sized, 0)) && cJSON_IsNumber(cJSON_GetArrayItem(sized, 1));
+    if (has_units) units[0] = (int)cJSON_GetArrayItem(sized, 0)->valuedouble, units[1] = (int)cJSON_GetArrayItem(sized, 1)->valuedouble;
+    ClarityCanvas canvas = {text_of(args, "mode"), text_of(args, "list"), {"", ""}, text_of(args, "path"), has_units ? units : NULL,
+                            cJSON_IsNumber(grid) ? (int64_t)grid->valuedouble : 0, cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(args, "snap")), false};
+    if (strcmp(canvas.mode, "objects") == 0) {
+        if (cJSON_GetArraySize(at) != 2 || !cJSON_IsString(cJSON_GetArrayItem(at, 0)) || !cJSON_IsString(cJSON_GetArrayItem(at, 1)))
+            return error_text("a canvas of objects names their x and y fields, as at: [\"x\", \"y\"]");
+        canvas.at[0] = cJSON_GetArrayItem(at, 0)->valuestring;
+        canvas.at[1] = cJSON_GetArrayItem(at, 1)->valuestring;
+    }
+    ClarityWindowState changed = with_own_data(state);
+    ClarityCanvasTouched touched;
+    switch (clarity_canvas_event(changed.data, &canvas, cJSON_GetObjectItemCaseSensitive(args, "action"), &touched)) {
+    case CLARITY_CANVAS_FAILED: return failed();
+    case CLARITY_CANVAS_REFUSED: return unchanged(s, state, true);
+    case CLARITY_CANVAS_CHANGED: break;
+    }
+    changed = touched.selects ? with_selected(&changed, part, touched.selected) : without_selected(&changed, part);
     return edit_made(s, &changed, args);
 }
 
@@ -418,7 +503,7 @@ void clarity_service_stop(ClarityService* service) { service->stop = 1; }
 
 bool clarity_service_watches(const char* command) {
     static const char* const watched[] = {"start_app", "open_window", "close_window", "return_to", "dispatch_event", "answer_event", "edit_event",
-                                         "reorder_event", "item_event", "range_event", "step_event"};
+                                         "reorder_event", "item_event", "range_event", "step_event", "canvas_event"};
     for (size_t i = 0; i < sizeof watched / sizeof *watched; ++i)
         if (strcmp(command, watched[i]) == 0) return true;
     return false;
@@ -549,7 +634,12 @@ static cJSON* answer_command(ClarityService* s, const char* command, const cJSON
     if (strcmp(command, "edit_event") == 0) {
         // The person ended an edit of a part (DESIGN 5.29): its handler runs as
         // one database step, and the edit goes on the window's record with
-        // what it changed. A drag goes on until its drop.
+        // what it changed. A drag goes on until its drop. A readonly part, or a
+        // table's column it does not edit, changes nothing (DESIGN 1.7).
+        if (is_readonly(args)) return taken_back(s, &state);
+        const cJSON* editable = cJSON_GetObjectItemCaseSensitive(args, "editable");
+        cJSON* baseline = clarity_edits_baseline(clarity_edits_of(state.instance));
+        if (cJSON_IsArray(editable) && baseline && !edits_only(baseline, state.data, text_of(args, "path"), editable)) return taken_back(s, &state);
         ClarityReply* reply;
         if (!stepped(s, &state, text_of(args, "handler"), &reply)) return failed();
         ClarityEdits* bus = clarity_edits_of(state.instance);
@@ -564,6 +654,7 @@ static cJSON* answer_command(ClarityService* s, const char* command, const cJSON
     if (strcmp(command, "reorder_event") == 0) return reordered(s, &state, args);
     if (strcmp(command, "item_event") == 0) return item_added(s, &state, args);
     if (strcmp(command, "range_event") == 0) return ranged(s, &state, args);
+    if (strcmp(command, "canvas_event") == 0) return canvas_changed(s, &state, args);
     if (strcmp(command, "step_event") == 0) return stepped_wizard(s, &state, args);
     if (strcmp(command, "find_options") == 0) return found_options(s, args);
     if (strcmp(command, "view_event") == 0) {

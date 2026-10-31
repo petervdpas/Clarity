@@ -112,3 +112,20 @@ cJSON* clarity_chart_groups(const cJSON* rows, const char* by, const char* measu
     }
     return out;
 }
+
+cJSON* clarity_numbers_of(const cJSON* list, const cJSON* points) {
+    cJSON* numbers = cJSON_CreateArray();
+    const cJSON* items = cJSON_IsArray(list) ? list : NULL;
+    const cJSON* item;
+    cJSON_ArrayForEach(item, items) {
+        double n;
+        // Text of only spaces is no number, as on the screen.
+        if (cJSON_IsString(item) && strspn(item->valuestring, " \t\r\n") == strlen(item->valuestring)) continue;
+        if (cJSON_IsBool(item) || !number_of(item, &n) || !isfinite(n)) continue;
+        cJSON_AddItemToArray(numbers, cJSON_CreateNumber(n));
+    }
+    // Only the last `points`.
+    int most = cJSON_IsNumber(points) ? (int)points->valuedouble : 0;
+    while (most > 0 && cJSON_GetArraySize(numbers) > most) cJSON_DeleteItemFromArray(numbers, 0);
+    return numbers;
+}

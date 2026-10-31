@@ -352,6 +352,24 @@
    * new order, each row its number in the `reorder by` field (and in a tree
    * its parent), chooses the moved row and runs `on reorder`, as one edit.
    */
+  /** The tools of a canvas's mode the person may use (DESIGN 5.31), as crates/clarity-spec's CanvasMode::tools names them. */
+  const MODE_TOOLS: Record<string, string[]> = { objects: [], paint: ["pen", "eraser"], vector: ["select", "line", "rect", "ellipse", "path", "text"] };
+  function canvasTools(props: typeof p): string[] {
+    return props.tools.length ? props.tools : (props.mode ? MODE_TOOLS[props.mode] : []);
+  }
+
+  /** What the person did on a canvas with a mode, for the runtime to apply and keep as one edit (DESIGN 5.31). */
+  function canvasActed(action: Record<string, unknown>): Promise<boolean> {
+    if (!live?.canvas || !p.name || !p.mode) return Promise.resolve(false);
+    const objects = p.objects;
+    const units: [number, number] | null = p.units ? [p.units.width, p.units.height] : null;
+    const canvas =
+      p.mode === "objects" && objects
+        ? { mode: p.mode, list: objects.list, at: [objects.x, objects.y] as [string, string], grid: partState?.grid ?? p.grid ?? 0, snap: partState?.snap ?? p.snap }
+        : { mode: p.mode, path: p.bind ?? "", units, grid: partState?.grid ?? p.grid ?? 0, snap: partState?.snap ?? p.snap };
+    return live.canvas(p.name, canvas, action, wiredCall(p.handlers, "change"));
+  }
+
   function reordered(move: Move) {
     if (!live || design || !p.name || !p.bind || !p.reorder || !collection) return;
     const tree = p.kind === "tree" || p.kind === "treeTable";
@@ -400,13 +418,17 @@
    * in (DESIGN 1.7): declared when it shows in a running application.
    */
   const viewDeclared = $derived.by((): Record<string, unknown> | null => {
-    if (!live || design || !p.name || !p.bind || !collection) return null;
+    if (!live || design || !p.name || !p.bind) return null;
+    // A chart of a list of numbers: its last `points` of them.
+    if (p.kind === "chart" && p.chart && bound?.field.type.kind === "values") return { kind: "numbers", list: p.bind, points: p.points ?? null };
+    if (!collection) return null;
     if (p.kind === "table") {
       return {
         kind: "table",
         list: p.bind,
         columns: tableColumns.map((c) => ({ field: c.field, kind: c.kind, choices: (c.choices ?? []).map((ch) => [ch.value, ch.label]) })),
         order: p.order ? { field: p.order.field, desc: p.order.desc } : null,
+        sortable: p.sortable,
         page: p.page ?? null,
       };
     }
@@ -1084,7 +1106,7 @@
         kind={p.chart === "bar" ? "bar" : "line"}
         label={p.name ?? undefined}
         top={p.max ? Number(p.max) : null}
-        groups={numbersOf(value, p.points).map((v) => ({ label: "", value: v, text: String(v) }))}
+        groups={(Array.isArray(viewFilled?.numbers) ? (viewFilled.numbers as number[]) : numbersOf(value, p.points)).map((v) => ({ label: "", value: v, text: String(v) }))}
       />
     {:else if p.kind === "trend"}
       <!-- A trend (DESIGN 5.26): the bound number's last values, taken while the window runs. -->
@@ -1191,10 +1213,37 @@
         shown={(text) => shownText(preview, text)}
         language={() => languageOf(preview) ?? ""}
       />
-    {:else if p.kind === "canvas" && partState?.drawing}
+    {:else if p.kind === "canvas" && (partState?.drawing || p.mode)}
+      {@const linkedPicture = p.mode === "paint" ? linkedFile(value) : null}
+      {@const fetchedPicture = p.mode !== "paint" || !live || !bound
+        ? undefined
+        : linkedPicture && bound.field.modifiers.store
+          ? live.storeFile(bound.field.modifiers.store, linkedPicture)
+          : boundEntity && isStored(value)
+            ? live.picture(boundEntity, Number(bound.record.id ?? 0), bound.field.name.name)
+            : undefined}
       <CanvasView
+        mode={p.mode}
+        picture={p.mode === "paint" ? recordPictureUrl(value, fetchedPicture) : null}
+        vector={p.mode === "vector" && typeof value === "string" ? value : null}
+        tools={canvasTools(p)}
+        tool={partState?.tool ?? null}
+        brush={partState?.brush ?? p.brush}
+        ink={partState?.ink ?? p.ink}
+        toolWords={{
+          select: ownWord(preview, "Select"),
+          line: ownWord(preview, "Line"),
+          rect: ownWord(preview, "Rectangle"),
+          ellipse: ownWord(preview, "Ellipse"),
+          path: ownWord(preview, "Path"),
+          text: ownWord(preview, "Text"),
+          pen: ownWord(preview, "Pen"),
+          eraser: ownWord(preview, "Eraser"),
+          canvasText: ownWord(preview, "The text"),
+        }}
+        oncanvas={live && p.name && !design && p.mode ? (action) => canvasActed(action) : null}
         {id}
-        drawing={partState.drawing}
+        drawing={partState?.drawing ?? []}
         units={p.units ?? { width: DEFAULT_UNITS, height: DEFAULT_UNITS }}
         shown={(text) => shownText(preview, text)}
         zoom={p.zoom && !design}

@@ -461,6 +461,39 @@ void the_runtime_moves_a_value_within_its_range(void) {
     clarity_db_close(db);
 }
 
+// A canvas (DESIGN 1.7, 5.31): the screen sends what the person did, and the
+// runtime snaps it, chooses what it touched, runs on change as one edit that
+// Ctrl+Z takes back, and refuses an action that changes nothing.
+void the_runtime_moves_an_object_and_edits_a_drawing(void) {
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    REQUIRE_OK(clarity_db_batch(db, "", "CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"));
+    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityService* s = clarity_service_new(&options);
+    CHECK(clarity_service_watches("canvas_event"));
+    const char* types = "[{\"id\":1,\"x\":0,\"y\":0},{\"id\":2,\"x\":40,\"y\":40}]";
+    const char* card = clarity_format("{\"window\":\"Card\",\"instance\":31,\"data\":{\"types\":%s,\"note\":{\"drawing\":\"\"}}}", types);
+    invoked(s, "dispatch_event", clarity_format("{\"state\":%s,\"handler\":\"noop\"}", card), NULL);
+    const char* diagram = "\"part\":\"diagram\",\"scope\":\"diagram\",\"mode\":\"objects\",\"list\":\"types\",\"at\":[\"x\",\"y\"],\"grid\":20,\"snap\":true,\"handler\":\"remember\"";
+    cJSON* moved = invoked(s, "canvas_event", clarity_format("{\"state\":%s,%s,\"action\":{\"move\":{\"id\":2,\"x\":67,\"y\":31}}}", card, diagram), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(data_of(moved), "types"), "[{\"id\":1,\"x\":0,\"y\":0},{\"id\":2,\"x\":60,\"y\":40}]");
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(moved, "value"), "state"), "selected"), "{\"diagram\":1}");
+    CHECK(cJSON_GetObjectItem(cJSON_GetObjectItem(moved, "value"), "step"));
+    CHECK_INT(memos(db), 1);
+    // Ctrl+Z takes the move back.
+    cJSON* back = invoked(s, "undo_edit", clarity_format("{\"state\":{\"window\":\"Card\",\"instance\":31,\"data\":%s},\"scope\":\"diagram\",\"back\":true}", cJSON_PrintUnformatted(data_of(moved))), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(data_of(back), "types"), types);
+    // Dropped where it is: refused, running nothing.
+    cJSON* refused = invoked(s, "canvas_event", clarity_format("{\"state\":%s,%s,\"action\":{\"move\":{\"id\":1,\"x\":5,\"y\":-4}}}", card, diagram), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(refused, "value"), "refused"), "true");
+    CHECK_INT(memos(db), 0);
+    cJSON* drawn = invoked(s, "canvas_event", clarity_format("{\"state\":%s,\"part\":\"drawing\",\"scope\":\"drawing\",\"mode\":\"vector\",\"path\":\"note.drawing\",\"units\":[400,300],\"action\":{\"add\":{\"op\":\"rect\",\"x\":1,\"y\":2,\"width\":3,\"height\":4,\"color\":\"#ff0000\"}}}", card), NULL);
+    CHECK_TEXT(cJSON_GetObjectItem(cJSON_GetObjectItem(data_of(drawn), "note"), "drawing")->valuestring,
+               "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">\n<rect x=\"1\" y=\"2\" width=\"3\" height=\"4\" fill=\"#ff0000\"/>\n</svg>\n");
+    clarity_service_free(s);
+    clarity_db_close(db);
+}
+
 /// The step a reply's wizard is on.
 static const cJSON* step_of(const cJSON* answer) {
     return cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(answer, "value"), "state"), "parts"), "wizard"), "step");
@@ -534,8 +567,10 @@ static const cJSON* view_of(const cJSON* answer, const char* part) {
 
 static const char* const planner =
     "{\"window\":\"Card\",\"data\":{\"tasks\":[{\"id\":1,\"title\":\"Milk\",\"up\":null},{\"id\":2,\"title\":\"bread\",\"up\":1},{\"id\":3,\"title\":\"apples\",\"up\":null}],"
-    "\"sales\":[{\"city\":\"Gent\",\"amount\":\"2\"},{\"city\":\"Gent\",\"amount\":3},{\"city\":\"Ams\",\"amount\":1}]},"
-    "\"views\":{\"grid\":{\"kind\":\"table\",\"list\":\"tasks\",\"columns\":[{\"field\":\"title\",\"kind\":\"text\"}],\"order\":{\"field\":\"title\",\"desc\":false},\"page\":2,\"at\":1},"
+    "\"sales\":[{\"city\":\"Gent\",\"amount\":\"2\"},{\"city\":\"Gent\",\"amount\":3},{\"city\":\"Ams\",\"amount\":1}],\"readings\":[1,\"2.5\",3]},"
+    "\"views\":{\"grid\":{\"kind\":\"table\",\"list\":\"tasks\",\"columns\":[{\"field\":\"title\",\"kind\":\"text\"}],\"order\":{\"field\":\"title\",\"desc\":false},\"page\":2,\"at\":1,\"sortable\":true},"
+    "\"plain\":{\"kind\":\"table\",\"list\":\"tasks\",\"columns\":[{\"field\":\"title\",\"kind\":\"text\"}],\"order\":null},"
+    "\"trend\":{\"kind\":\"numbers\",\"list\":\"readings\",\"points\":2},"
     "\"outline\":{\"kind\":\"tree\",\"list\":\"tasks\",\"parent\":\"up\",\"key\":\"id\",\"open\":[]},"
     "\"chart\":{\"kind\":\"chart\",\"list\":\"sales\",\"by\":\"city\",\"byKind\":\"text\",\"measure\":\"sum\",\"of\":\"amount\"}}}";
 
@@ -550,6 +585,7 @@ void a_reply_fills_the_shown_rows_of_its_views(void) {
     CHECK_JSON(cJSON_GetObjectItem(view_of(reply, "grid"), "shown"), "[2,1]");
     CHECK_JSON(cJSON_GetObjectItem(view_of(reply, "grid"), "pages"), "{\"page\":1,\"pages\":2,\"from\":1,\"to\":2,\"count\":3}");
     CHECK_JSON(cJSON_GetObjectItem(view_of(reply, "outline"), "shown"), "[[0,0,true],[2,0,false]]");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(reply, "trend"), "numbers"), "[2.5,3]");
     CHECK_JSON(cJSON_GetObjectItem(view_of(reply, "chart"), "groups"), "[{\"key\":\"Ams\",\"value\":1},{\"key\":\"Gent\",\"value\":5}]");
     // A row a handler chose shows: the tree opens the rows above it, the table turns to its page.
     cJSON* chosen = invoked(s, "dispatch_event", clarity_format("{\"state\":%s,\"handler\":\"choose\"}", planner), NULL);
@@ -595,8 +631,77 @@ void a_view_event_sorts_pages_opens_and_closes(void) {
     CHECK_JSON(cJSON_GetObjectItem(view_of(closed, "outline"), "shown"), "[[0,0,true],[2,0,false]]");
     cJSON* opened = viewed(s, closed, "outline", "{\"open\":1}");
     CHECK_JSON(cJSON_GetObjectItem(view_of(opened, "outline"), "open"), "[1]");
+    // A table that is not sortable keeps its order.
+    cJSON* plain = viewed(s, first, "plain", "{\"sort\":\"title\"}");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(plain, "plain"), "order"), "null");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(plain, "plain"), "shown"), "[0,1,2]");
     CHECK(cJSON_GetObjectItem(viewed(s, first, "nothing", "{\"page\":1}"), "error"));
     CHECK(cJSON_GetObjectItem(viewed(s, first, "grid", "{\"jump\":1}"), "error"));
+    clarity_service_free(s);
+    clarity_db_close(db);
+}
+
+/// The window Card's data a command is answered with.
+static cJSON* answer_data(ClarityService* s, const char* command, const char* args) { return (cJSON*)data_of(invoked(s, command, args, NULL)); }
+
+// A readonly part (DESIGN 1.7): the runtime takes back what the screen
+// changed, runs no handler and records no edit, and says it refused.
+void a_readonly_part_takes_back_what_the_screen_changed(void) {
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    REQUIRE_OK(clarity_db_batch(db, "", "CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"));
+    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityService* s = clarity_service_new(&options);
+    invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"instance\":21,\"data\":{\"name\":\"Ada\",\"volume\":5,\"tags\":[\"jazz\"],\"rows\":[{\"id\":1,\"n\":1},{\"id\":2,\"n\":2}]}},\"handler\":\"noop\"}", NULL);
+    const char* typed = "{\"window\":\"Card\",\"instance\":21,\"data\":{\"name\":\"Ann\",\"volume\":5,\"tags\":[\"jazz\"],\"rows\":[{\"id\":1,\"n\":1},{\"id\":2,\"n\":2}]}}";
+    cJSON* edited = invoked(s, "edit_event", clarity_format("{\"state\":%s,\"part\":\"nameBox\",\"scope\":\"form\",\"handler\":\"remember\",\"ends\":true,\"readonly\":true}", typed), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(edited, "value"), "refused"), "true");
+    CHECK_JSON(cJSON_GetObjectItem(data_of(edited), "name"), "\"Ada\"");
+    CHECK_INT(memos(db), 0);
+    // Nothing was recorded, so Ctrl+Z finds nothing to take back.
+    CHECK_JSON(answer_data(s, "undo_edit", "{\"state\":{\"window\":\"Card\",\"instance\":21,\"data\":{\"name\":\"Zed\"}},\"scope\":\"form\",\"back\":true}"), "{\"name\":\"Zed\"}");
+    invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"instance\":21,\"data\":{\"name\":\"Ada\",\"volume\":5,\"tags\":[\"jazz\"],\"rows\":[{\"id\":1,\"n\":1},{\"id\":2,\"n\":2}]}},\"handler\":\"noop\"}", NULL);
+    const char* kept = "{\"window\":\"Card\",\"instance\":21,\"data\":{\"name\":\"Ada\",\"volume\":5,\"tags\":[\"jazz\"],\"rows\":[{\"id\":1,\"n\":1},{\"id\":2,\"n\":2}]}}";
+    // A readonly list, tags input, slider: nothing moves, and the reply says refused.
+    cJSON* moved = invoked(s, "reorder_event", clarity_format("{\"state\":%s,\"part\":\"list\",\"list\":\"rows\",\"by\":\"n\",\"move\":{\"row\":0,\"key\":\"down\"},\"handler\":\"remember\",\"readonly\":true}", kept), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(moved, "value"), "refused"), "true");
+    CHECK_JSON(cJSON_GetObjectItem(data_of(moved), "rows"), "[{\"id\":1,\"n\":1},{\"id\":2,\"n\":2}]");
+    cJSON* added = invoked(s, "item_event", clarity_format("{\"state\":%s,\"part\":\"tags\",\"path\":\"tags\",\"item\":\"text\",\"typed\":\"live\",\"readonly\":true}", kept), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(added, "value"), "refused"), "true");
+    CHECK_JSON(cJSON_GetObjectItem(data_of(added), "tags"), "[\"jazz\"]");
+    cJSON* slid = invoked(s, "range_event", clarity_format("{\"state\":%s,\"part\":\"volume\",\"path\":\"volume\",\"min\":0,\"max\":10,\"step\":1,\"whole\":true,\"key\":\"up\",\"readonly\":true}", kept), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(slid, "value"), "refused"), "true");
+    CHECK_JSON(cJSON_GetObjectItem(data_of(slid), "volume"), "5");
+    CHECK_INT(memos(db), 0);
+    clarity_service_free(s);
+    clarity_db_close(db);
+}
+
+// A table edits only the columns of its `edit` (DESIGN 1.7): a change to
+// any other field of its rows, or rows added, removed or moved, is taken back.
+void a_table_takes_back_a_change_to_a_column_it_does_not_edit(void) {
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityService* s = clarity_service_new(&options);
+    const char* rows = "[{\"id\":1,\"title\":\"Milk\",\"hours\":2},{\"id\":2,\"title\":\"Eggs\",\"hours\":1}]";
+    invoked(s, "dispatch_event", clarity_format("{\"state\":{\"window\":\"Card\",\"instance\":22,\"data\":{\"tasks\":%s}},\"handler\":\"noop\"}", rows), NULL);
+    const char* edit = "\"part\":\"grid\",\"scope\":\"form\",\"ends\":true,\"path\":\"tasks\",\"editable\":[\"hours\"]";
+    // A cell of an edited column: kept.
+    cJSON* hours = invoked(s, "edit_event", clarity_format("{\"state\":{\"window\":\"Card\",\"instance\":22,\"data\":{\"tasks\":[{\"id\":1,\"title\":\"Milk\",\"hours\":3},{\"id\":2,\"title\":\"Eggs\",\"hours\":1}]}},%s}", edit), NULL);
+    CHECK(!cJSON_GetObjectItem(cJSON_GetObjectItem(hours, "value"), "refused"));
+    CHECK_JSON(data_of(hours), "{\"tasks\":[{\"id\":1,\"title\":\"Milk\",\"hours\":3},{\"id\":2,\"title\":\"Eggs\",\"hours\":1}]}");
+    const char* now = "[{\"id\":1,\"title\":\"Milk\",\"hours\":3},{\"id\":2,\"title\":\"Eggs\",\"hours\":1}]";
+    // Another column: taken back.
+    cJSON* title = invoked(s, "edit_event", clarity_format("{\"state\":{\"window\":\"Card\",\"instance\":22,\"data\":{\"tasks\":[{\"id\":1,\"title\":\"Bread\",\"hours\":3},{\"id\":2,\"title\":\"Eggs\",\"hours\":1}]}},%s}", edit), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(title, "value"), "refused"), "true");
+    CHECK_JSON(cJSON_GetObjectItem(data_of(title), "tasks"), now);
+    // A row more, or the rows in another order: taken back.
+    cJSON* more = invoked(s, "edit_event", clarity_format("{\"state\":{\"window\":\"Card\",\"instance\":22,\"data\":{\"tasks\":[{\"id\":1,\"title\":\"Milk\",\"hours\":3},{\"id\":2,\"title\":\"Eggs\",\"hours\":1},{\"id\":3,\"hours\":1}]}},%s}", edit), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(data_of(more), "tasks"), now);
+    cJSON* swapped = invoked(s, "edit_event", clarity_format("{\"state\":{\"window\":\"Card\",\"instance\":22,\"data\":{\"tasks\":[{\"id\":2,\"title\":\"Eggs\",\"hours\":1},{\"id\":1,\"title\":\"Milk\",\"hours\":3}]}},%s}", edit), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(swapped, "value"), "refused"), "true");
+    CHECK_JSON(cJSON_GetObjectItem(data_of(swapped), "tasks"), now);
     clarity_service_free(s);
     clarity_db_close(db);
 }

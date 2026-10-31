@@ -403,3 +403,67 @@ fn the_web_target_serves_the_renderer() {
     let both = main_of(vec![Target::Desktop, Target::Web]);
     has(&both, "    if (serving)\n        status = clarity_serve(&options, clarity_serve_address(argc, argv, \"127.0.0.1:8080\"));\n    else\n        status = clarity_shell_run(&options);\n");
 }
+
+// A canvas with a mode (DESIGN 5.31): its tool, brush and ink are part state
+// a handler reads and sets, as its line says until then; `selected` is the
+// record of the objects list at the chosen place, or the chosen shape from 1.
+const CANVASES: &str = "module m
+
+entity ClassType
+    name: text, label \"Name\"
+    x: integer
+    y: integer
+
+entity Note
+    title: text, label \"Title\"
+    picture: image
+    drawing: text
+
+page Diagram: window
+    data types: list<ClassType>
+    canvas name diagram at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap mode objects types at x, y on draw: drawTypes on change: typeMoved
+
+code Diagram
+    handler drawTypes
+        diagram.clear()
+        for t in types
+            diagram.object(t, t.x, t.y, 260, 120)
+
+    handler typeMoved
+        save diagram.selected
+
+page Sketch: window
+    data note: Note
+    data shape: integer
+    canvas name sketch at 1,1 span 6 rows 8 bind note.picture mode paint tools pen, eraser brush 4 ink accent on change: saveNote
+    canvas name drawing at 7,1 span 6 rows 8 bind note.drawing mode vector tools select, line, rect grid 10 snap on change: saveNote
+    button \"Red\" name redButton at 1,9 span 2 on click: red
+
+code Sketch
+    handler saveNote
+        save note
+
+    handler red
+        sketch.ink = \"#ff0000\"
+        sketch.brush = sketch.brush + 2
+        drawing.tool = \"rect\"
+        shape = drawing.selected
+        if drawing.ink == \"text\" and drawing.tool == \"rect\"
+            shape = 0
+";
+
+#[test]
+fn a_canvas_keeps_its_tool_brush_and_ink_and_says_what_is_selected() {
+    let project = load_sources([("m.clarity", CANVASES)]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let all: String = files.iter().map(|f| f.text.as_str()).collect::<Vec<_>>().join("\n");
+    has(&all, "clarity_ui_set_ink(ui, \"sketch\", \"#ff0000\");");
+    has(&all, "clarity_ui_set_brush(ui, \"sketch\", clarity_ui_brush(ui, \"sketch\", 4) + 2);");
+    has(&all, "clarity_ui_set_tool(ui, \"drawing\", \"rect\");");
+    has(&all, "clarity_ui_selected_shape(ui, \"drawing\")");
+    has(&all, "clarity_ui_ink(ui, \"drawing\", \"text\")");
+    has(&all, "clarity_ui_tool(ui, \"drawing\", \"select\")");
+    // The moved object is the record of the list at the chosen place.
+    has(&all, "clarity_ui_selected(ui, \"diagram\", w->types.count, &");
+}

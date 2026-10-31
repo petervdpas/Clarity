@@ -1227,7 +1227,8 @@ impl<'a> Checker<'a> {
             } else if p.kind == WidgetKind::Canvas && !p.tells.is_empty() {
                 let canvas = p.name.clone().unwrap_or_else(|| format!("at {},{}", p.col, p.row));
                 self.error(file, format!("canvas {canvas} runs no engine, so it tells nothing"), widget.span);
-            } else if p.kind == WidgetKind::Canvas && !draws {
+            // A painted or vector canvas shows what it binds (DESIGN 5.31).
+            } else if p.kind == WidgetKind::Canvas && !draws && !matches!(p.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)) {
                 self.warning(
                     file,
                     format!("canvas at {},{} draws nothing yet; wire 'on draw: handler'", p.col, p.row),
@@ -1278,6 +1279,9 @@ impl<'a> Checker<'a> {
         let name = widgets::keyword(p.kind);
         let info = widgets::info(p.kind);
         let at = format!("{name} at {},{}", p.col, p.row);
+        if p.kind == WidgetKind::Canvas {
+            self.check_canvas_mode(file, page, widget, &at);
+        }
 
         // A markdown or an image shows one thing: a key, a file of the resources (source), or what it binds.
         if matches!(p.kind, WidgetKind::Markdown | WidgetKind::Image)
@@ -1566,6 +1570,75 @@ impl<'a> Checker<'a> {
         let parents = entity.fields.iter().filter(|f| matches!(&f.ty, FieldType::Ref { entity: e } if e.name == *name)).count();
         if parents != 1 {
             self.error(file, format!("{at}: a tree of {name} needs one field 'ref {name}' to know a row's parent"), widget.span);
+        }
+    }
+
+    /// A canvas's mode (DESIGN 5.31): the records of a list placed by integer
+    /// fields, a painted picture in an image field, or a vector drawing in a
+    /// text field; its tools, brush and ink belong to its mode, and what the
+    /// person changes is lost without `on change`.
+    fn check_canvas_mode(&mut self, file: usize, page: &PageContext<'a>, widget: &Widget, at: &str) {
+        use crate::model::CanvasMode;
+        let p = &widget.props;
+        let changes = p.handlers.iter().any(|h| h.event == widgets::Event::Change);
+        let Some(mode) = p.mode else {
+            if p.bind.is_some() {
+                self.error(file, format!("{at}: a canvas binds a picture in mode paint or a drawing in mode vector; give it its mode"), widget.span);
+            }
+            for (given, word) in [(!p.tools.is_empty(), "tools"), (p.brush.is_some(), "brush"), (p.ink.is_some(), "ink"), (changes, "on change")] {
+                if given {
+                    self.error(file, format!("{at}: '{word}' belongs to a canvas with a mode (objects, paint or vector)"), widget.span);
+                }
+            }
+            return;
+        };
+        if !changes {
+            self.warning(file, format!("{at} is changed by the person in mode {} but has no 'on change' handler to keep it", mode.keyword()), widget.span);
+        }
+        for tool in &p.tools {
+            if !mode.tools().contains(&tool.as_str()) {
+                let tools = mode.tools();
+                let offered = if tools.is_empty() { "no tools".to_string() } else { tools.join(", ") };
+                self.error(file, format!("{at}: '{tool}' is no tool of mode {}, which has {offered}", mode.keyword()), widget.span);
+            }
+        }
+        if mode == CanvasMode::Objects && (p.brush.is_some() || p.ink.is_some()) {
+            self.error(file, format!("{at}: a brush and ink are for mode paint and mode vector"), widget.span);
+        }
+        match mode {
+            CanvasMode::Objects => {
+                if p.bind.is_some() {
+                    self.error(file, format!("{at}: a canvas of objects binds nothing; its objects are the records of its list"), widget.span);
+                }
+                let Some(objects) = &p.objects else { return };
+                let entity = match page.data.get(objects.list.as_str()) {
+                    Some(Held::List(Some(entity))) => *entity,
+                    Some(_) => return self.error(file, format!("{at}: '{}' is no list of records; objects are records, as in data types: list<ClassType>", objects.list), widget.span),
+                    None => return self.error(file, format!("{at}: unknown data '{}'", objects.list), widget.span),
+                };
+                for field in [&objects.x, &objects.y] {
+                    match entity.field(field) {
+                        None => self.error(file, format!("{at}: {} has no field '{field}'", entity.name.name), widget.span),
+                        Some(f) if f.ty != FieldType::Integer => self.error(
+                            file,
+                            format!("{at}: '{field}' is {}; an object's place is an integer field", widgets::field_type_tag(&f.ty)),
+                            widget.span,
+                        ),
+                        Some(_) => {}
+                    }
+                }
+            }
+            CanvasMode::Paint | CanvasMode::Vector => {
+                let what = if mode == CanvasMode::Paint { "an image field, which holds the picture" } else { "a text field, which holds the drawing as SVG" };
+                let bound = p.bind.as_deref().and_then(|b| b.split_once('.')).and_then(|(data, field)| match page.data.get(data) {
+                    Some(Held::Record(Some(entity))) => entity.field(field).map(|f| f.ty.clone()),
+                    _ => None,
+                });
+                let fits = matches!((&bound, mode), (Some(FieldType::Image), CanvasMode::Paint) | (Some(FieldType::Text { .. }), CanvasMode::Vector));
+                if !fits {
+                    self.error(file, format!("{at}: a canvas in mode {} binds {what}", mode.keyword()), widget.span);
+                }
+            }
         }
     }
 

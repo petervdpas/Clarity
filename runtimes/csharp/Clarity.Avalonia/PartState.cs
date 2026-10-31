@@ -125,6 +125,34 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     }
     string dotColor = "";
 
+    /// <summary>The tool in hand of a painting or vector canvas (DESIGN 5.31): <c>canvas.tool</c>; empty for its mode's first.</summary>
+    public string Tool
+    {
+        get => tool;
+        set => SetProperty(ref tool, value);
+    }
+    string tool = "";
+
+    /// <summary>How wide a painting or vector canvas paints or draws, in pixels: <c>canvas.brush</c>.</summary>
+    public long Brush
+    {
+        get => brush;
+        set => SetProperty(ref brush, value);
+    }
+    long brush = 2;
+
+    /// <summary>The color a painting or vector canvas paints or draws with: <c>canvas.ink</c>.</summary>
+    public string Ink
+    {
+        get => ink;
+        set => SetProperty(ref ink, value);
+    }
+    string ink = "text";
+
+    /// <summary>The place of the shape a person touched last on a vector canvas, from 1: <c>canvas.selected</c>; 0 for none.
+    /// The canvas keeps it from 0 in <see cref="SelectedItem"/>, as a table's chosen row.</summary>
+    public long SelectedShape => SelectedItem is long place ? place + 1 : 0;
+
     /// <summary>Whether a foldable panel or form is folded, as the person or a handler left it
     /// (conformance/folding.json).</summary>
     public bool IsFolded
@@ -171,7 +199,15 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     bool isChecked;
 
     /// <summary>The row selected in a table or list; null when none is.</summary>
-    public object? SelectedItem { get => selected; set => SetProperty(ref selected, value); }
+    public object? SelectedItem
+    {
+        get => selected;
+        set
+        {
+            if (SetProperty(ref selected, value))
+                OnPropertyChanged(nameof(SelectedShape));
+        }
+    }
     object? selected;
 
     /// <summary>What is wrong with the input, as a handler wrote it; empty when nothing is.</summary>

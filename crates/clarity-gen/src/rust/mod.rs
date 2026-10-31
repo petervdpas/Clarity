@@ -818,13 +818,13 @@ fn open_databases() -> Result<Db> {{
 /// The person ended an edit of a part (DESIGN 5.29): its handler, if any, runs
 /// as one database step, and the edit goes on the window's record in the
 /// runtime with what it changed. A drag goes on until its drop (`ends`).
+/// A readonly part's change, or a table's change outside its `editable`
+/// fields (`path` its list), is taken back and refused (DESIGN 1.7).
 #[tauri::command]
-{asynced}fn edit_event(app: {app_state}{watch_params}, state: WindowState, handler: Option<String>, part: String, scope: String, ends: bool) -> Answer<Reply> {{
+#[allow(clippy::too_many_arguments)]
+{asynced}fn edit_event(app: {app_state}{watch_params}, state: WindowState, handler: Option<String>, part: String, scope: String, ends: bool, readonly: Option<bool>, path: Option<String>, editable: Option<Vec<String>>) -> Answer<Reply> {{
     let sent = clarity_runtime::views::Sent::of(&state);
-    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| match handler.as_deref() {{
-        Some(handler) if !handler.is_empty() => dispatch(db, state, handler),
-        _ => drawn(db, state),
-    }})){watched_end})
+    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), path.as_deref(), editable.as_deref(), |state| drawn(db, state), |state| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| handled(db, state, handler.as_deref())))){watched_end})
 }}
 
 /// Ctrl+Z (`back`) or Ctrl+Y on a scope: its last edit taken back or done
@@ -839,29 +839,40 @@ fn undo_edit(app: tauri::State<App>, state: WindowState, scope: String, back: bo
 /// its order, numbers and parents, then runs the handler as an edit ends.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-{asynced}fn reorder_event(app: {app_state}{watch_params}, state: WindowState, part: String, scope: Option<String>, list: String, by: String, parent: Option<String>, r#move: clarity_runtime::reorder::Move, handler: Option<String>) -> Answer<Reply> {{
+{asynced}fn reorder_event(app: {app_state}{watch_params}, state: WindowState, part: String, scope: Option<String>, list: String, by: String, parent: Option<String>, r#move: clarity_runtime::reorder::Move, handler: Option<String>, readonly: Option<bool>) -> Answer<Reply> {{
     let sent = clarity_runtime::views::Sent::of(&state);
-    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &r#move, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))){watched_end})
+    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &r#move, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))){watched_end})
 }}
 
 /// An item typed for a list field (DESIGN 1.7): added, kept once, or refused.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-{asynced}fn item_event(app: {app_state}{watch_params}, state: WindowState, part: String, scope: Option<String>, path: String, item: clarity_runtime::list_fields::ItemKind, values: Option<Vec<String>>, typed: String, handler: Option<String>) -> Answer<Reply> {{
+{asynced}fn item_event(app: {app_state}{watch_params}, state: WindowState, part: String, scope: Option<String>, path: String, item: clarity_runtime::list_fields::ItemKind, values: Option<Vec<String>>, typed: String, handler: Option<String>, readonly: Option<bool>) -> Answer<Reply> {{
     let values = values.unwrap_or_default();
     let sent = clarity_runtime::views::Sent::of(&state);
-    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::list_fields::event(db, state, &part, &path, item, &values, &typed, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))){watched_end})
+    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::list_fields::event(db, state, &part, &path, item, &values, &typed, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))){watched_end})
 }}
 
 /// A key, a drag or typed text on a slider or spin box (DESIGN 1.7): the
 /// runtime gives the value within its range.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-{asynced}fn range_event(app: {app_state}{watch_params}, state: WindowState, part: String, scope: Option<String>, path: String, min: Option<String>, max: Option<String>, step: String, whole: bool, key: Option<clarity_runtime::ranges::RangeKey>, at: Option<String>, typed: Option<String>, handler: Option<String>) -> Answer<Reply> {{
+{asynced}fn range_event(app: {app_state}{watch_params}, state: WindowState, part: String, scope: Option<String>, path: String, min: Option<String>, max: Option<String>, step: String, whole: bool, key: Option<clarity_runtime::ranges::RangeKey>, at: Option<String>, typed: Option<String>, handler: Option<String>, readonly: Option<bool>) -> Answer<Reply> {{
     let range = clarity_runtime::ranges::Range {{ min, max, step }};
     let mv = clarity_runtime::ranges::RangeMove::of(key, at, typed).map_err(|err| Value::from(err.to_string()))?;
     let sent = clarity_runtime::views::Sent::of(&state);
-    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &mv, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))){watched_end})
+    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &mv, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))){watched_end})
+}}
+
+/// The person's action on a canvas (DESIGN 5.31): the runtime applies it,
+/// snapped to the grid, chooses what it touched, and runs `on change` as
+/// one edit.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+{asynced}fn canvas_event(app: {app_state}{watch_params}, state: WindowState, part: String, scope: Option<String>, mode: String, list: Option<String>, at: Option<[String; 2]>, path: Option<String>, units: Option<[i64; 2]>, grid: Option<i64>, snap: Option<bool>, action: Map<String, Value>, handler: Option<String>, readonly: Option<bool>) -> Answer<Reply> {{
+    let canvas = clarity_runtime::canvas::CanvasArgs {{ part, mode, list: list.unwrap_or_default(), at, path: path.unwrap_or_default(), units, grid: grid.unwrap_or_default(), snap: snap.unwrap_or_default(), readonly: false }};
+    let sent = clarity_runtime::views::Sent::of(&state);
+    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::canvas::event(db, state, &canvas, &action, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))){watched_end})
 }}
 
 /// Next, Back or Finish on a wizard (DESIGN 1.7): the runtime runs its
@@ -1006,6 +1017,7 @@ pub(crate) fn run(db: Db{problem_param}) {{
             range_event,
             step_event,
             view_event,
+            canvas_event,
             answer_event,
             ref_options,
             field_values,
@@ -1368,11 +1380,10 @@ fn served(app: &App{connecting}, command: &str, args: Value) -> Value {{
         "edit_event" => given((|| {{
             let (state, handler, part, scope, ends): (WindowState, Option<String>, String, String, bool) =
                 (arg(&args, "state")?, arg(&args, "handler")?, arg(&args, "part")?, arg(&args, "scope")?, arg(&args, "ends")?);
+            let readonly: Option<bool> = arg(&args, "readonly")?;
+            let (path, editable): (Option<String>, Option<Vec<String>>) = (arg(&args, "path")?, arg(&args, "editable")?);
             let sent = clarity_runtime::views::Sent::of(&state);
-            window_reply(&sent, locked(app, |db| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| match handler.as_deref() {{
-                Some(handler) if !handler.is_empty() => dispatch(db, state, handler),
-                _ => drawn(db, state),
-            }})))
+            window_reply(&sent, locked(app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), path.as_deref(), editable.as_deref(), |state| drawn(db, state), |state| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| handled(db, state, handler.as_deref())))))
         }})()),
         "undo_edit" => given((|| {{
             let (state, scope, back): (WindowState, String, bool) = (arg(&args, "state")?, arg(&args, "scope")?, arg(&args, "back")?);
@@ -1383,16 +1394,18 @@ fn served(app: &App{connecting}, command: &str, args: Value) -> Value {{
             let (state, part, scope, list, by, parent): (WindowState, String, Option<String>, String, String, Option<String>) =
                 (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "scope")?, arg(&args, "list")?, arg(&args, "by")?, arg(&args, "parent")?);
             let (r#move, handler): (clarity_runtime::reorder::Move, Option<String>) = (arg(&args, "move")?, arg(&args, "handler")?);
+            let readonly: Option<bool> = arg(&args, "readonly")?;
             let sent = clarity_runtime::views::Sent::of(&state);
-            window_reply(&sent, locked(app, |db| clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &r#move, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))))
+            window_reply(&sent, locked(app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &r#move, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))
         }})()),
         "item_event" => given((|| {{
             let (state, part, scope, path): (WindowState, String, Option<String>, String) = (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "scope")?, arg(&args, "path")?);
             let (item, values, typed, handler): (clarity_runtime::list_fields::ItemKind, Option<Vec<String>>, String, Option<String>) =
                 (arg(&args, "item")?, arg(&args, "values")?, arg(&args, "typed")?, arg(&args, "handler")?);
             let values = values.unwrap_or_default();
+            let readonly: Option<bool> = arg(&args, "readonly")?;
             let sent = clarity_runtime::views::Sent::of(&state);
-            window_reply(&sent, locked(app, |db| clarity_runtime::list_fields::event(db, state, &part, &path, item, &values, &typed, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))))
+            window_reply(&sent, locked(app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::list_fields::event(db, state, &part, &path, item, &values, &typed, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))
         }})()),
         "range_event" => given((|| {{
             let (state, part, scope, path, whole): (WindowState, String, Option<String>, String, bool) =
@@ -1400,8 +1413,18 @@ fn served(app: &App{connecting}, command: &str, args: Value) -> Value {{
             let range = clarity_runtime::ranges::Range {{ min: arg(&args, "min")?, max: arg(&args, "max")?, step: arg(&args, "step")? }};
             let mv = clarity_runtime::ranges::RangeMove::of(arg(&args, "key")?, arg(&args, "at")?, arg(&args, "typed")?).map_err(|err| Value::from(err.to_string()))?;
             let handler: Option<String> = arg(&args, "handler")?;
+            let readonly: Option<bool> = arg(&args, "readonly")?;
             let sent = clarity_runtime::views::Sent::of(&state);
-            window_reply(&sent, locked(app, |db| clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &mv, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))))
+            window_reply(&sent, locked(app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &mv, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))
+        }})()),
+        "canvas_event" => given((|| {{
+            let (state, part, scope, mode, action, handler): (WindowState, String, Option<String>, String, Map<String, Value>, Option<String>) =
+                (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "scope")?, arg(&args, "mode")?, arg(&args, "action")?, arg(&args, "handler")?);
+            let (list, path, grid, snap): (Option<String>, Option<String>, Option<i64>, Option<bool>) = (arg(&args, "list")?, arg(&args, "path")?, arg(&args, "grid")?, arg(&args, "snap")?);
+            let canvas = clarity_runtime::canvas::CanvasArgs {{ part, mode, list: list.unwrap_or_default(), at: arg(&args, "at")?, path: path.unwrap_or_default(), units: arg(&args, "units")?, grid: grid.unwrap_or_default(), snap: snap.unwrap_or_default(), readonly: false }};
+            let readonly: Option<bool> = arg(&args, "readonly")?;
+            let sent = clarity_runtime::views::Sent::of(&state);
+            window_reply(&sent, locked(app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::canvas::event(db, state, &canvas, &action, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))
         }})()),
         "step_event" => given((|| {{
             let (state, part, button, steps, next, finish): (WindowState, String, clarity_runtime::steps::StepButton, i64, Option<String>, Option<String>) =

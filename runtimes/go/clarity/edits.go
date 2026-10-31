@@ -13,6 +13,7 @@ package clarity
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -55,6 +56,46 @@ func (b *EditBus) Reset(data map[string]any) {
 	if b.going == nil {
 		b.baseline = copied(data)
 	}
+}
+
+// Baseline is a copy of the window's data where the next edit starts: what
+// a change the runtime refuses is taken back to; nil before any reply.
+func (b *EditBus) Baseline() map[string]any {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.baseline == nil {
+		return nil
+	}
+	return copied(b.baseline)
+}
+
+// TableEditFits says whether a table's edit, its list before and after,
+// kept to its editable fields: the same rows in the same order, every other
+// field as it was.
+func TableEditFits(before, after any, editable []string) bool {
+	was, _ := asJSON(before).([]any)
+	now, _ := asJSON(after).([]any)
+	if len(was) != len(now) {
+		return false
+	}
+	for i := range was {
+		a, okA := was[i].(map[string]any)
+		b, okB := now[i].(map[string]any)
+		if !okA || !okB {
+			if !reflect.DeepEqual(was[i], now[i]) {
+				return false
+			}
+			continue
+		}
+		for _, row := range []map[string]any{a, b} {
+			for field := range row {
+				if !slices.Contains(editable, field) && !reflect.DeepEqual(a[field], b[field]) {
+					return false
+				}
+			}
+		}
+	}
+	return true
 }
 
 // Drag is an edit that goes on: data is the window's data now, steps the

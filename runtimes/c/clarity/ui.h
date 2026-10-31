@@ -32,6 +32,11 @@ typedef struct {
     bool has_dot_size;
     int64_t dot_size;
     const char* dot_color;
+    /// A painting or vector canvas's tool in hand, brush and ink, as a handler set them (DESIGN 5.31); NULL keeps the design.
+    const char* tool;
+    bool has_brush;
+    int64_t brush;
+    const char* ink;
     bool has_maximized, maximized;
     /// The open tab of a ribbon, counted from 1 (conformance/ribbons.json).
     bool has_tab;
@@ -216,6 +221,16 @@ int64_t clarity_ui_dot_size(const ClarityUi* ui, const char* part, int64_t desig
 void clarity_ui_set_dot_size(ClarityUi* ui, const char* part, int64_t value);
 const char* clarity_ui_dot_color(const ClarityUi* ui, const char* part, const char* design);
 void clarity_ui_set_dot_color(ClarityUi* ui, const char* part, const char* value);
+/// A painting or vector canvas's tool in hand (`canvas.tool`), how wide it
+/// paints (`canvas.brush`) and its color (`canvas.ink`), as its line says until a handler sets them.
+const char* clarity_ui_tool(const ClarityUi* ui, const char* part, const char* design);
+void clarity_ui_set_tool(ClarityUi* ui, const char* part, const char* value);
+int64_t clarity_ui_brush(const ClarityUi* ui, const char* part, int64_t design);
+void clarity_ui_set_brush(ClarityUi* ui, const char* part, int64_t value);
+const char* clarity_ui_ink(const ClarityUi* ui, const char* part, const char* design);
+void clarity_ui_set_ink(ClarityUi* ui, const char* part, const char* value);
+/// The shape a vector canvas chose last (`canvas.selected`), from 1; 0 for none.
+int64_t clarity_ui_selected_shape(const ClarityUi* ui, const char* part);
 /// Whether a maximizable sidebar fills the window.
 bool clarity_ui_maximized(const ClarityUi* ui, const char* part);
 void clarity_ui_set_maximized(ClarityUi* ui, const char* part, bool value);

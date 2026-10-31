@@ -121,6 +121,8 @@ void clarity_edits_reset(ClarityEdits* bus, const cJSON* data) {
     if (!bus->going) set_baseline(bus, data);
 }
 
+cJSON* clarity_edits_baseline(const ClarityEdits* bus) { return bus->baseline ? cJSON_Parse(bus->baseline) : NULL; }
+
 void clarity_edits_drag(ClarityEdits* bus, const char* part, const char* scope, const int64_t* steps, size_t step_count) {
     if (!bus->going) bus->going = edit_new(part, scope);
     add_steps(bus->going, steps, step_count);

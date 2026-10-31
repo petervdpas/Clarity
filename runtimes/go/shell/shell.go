@@ -315,10 +315,21 @@ type Args struct {
 	// Action is what the person did to a part's view (view_event): sort,
 	// page, open or close, with its field, page or row id.
 	Action map[string]json.RawMessage `json:"action"`
+	// Readonly is the part's readonly as the screen has it (DESIGN 1.7): the
+	// runtime takes back what the person changed. Editable are the fields a
+	// table's cells edit (edit_event, its list at Path); nil when not given.
+	Readonly bool     `json:"readonly"`
+	Editable []string `json:"editable"`
+	// A canvas's mode and its parameters (canvas_event, DESIGN 5.31), with
+	// List, Path, At (an object's x and y fields) and Action.
+	Mode  string  `json:"mode"`
+	Units *[2]int `json:"units"`
+	Grid  int     `json:"grid"`
+	Snap  bool    `json:"snap"`
 }
 
 // watched are the commands that run a handler, which may make a long engine call.
-var watched = map[string]bool{"start_app": true, "open_window": true, "close_window": true, "return_to": true, "dispatch_event": true, "answer_event": true, "edit_event": true, "reorder_event": true, "item_event": true, "range_event": true, "step_event": true}
+var watched = map[string]bool{"start_app": true, "open_window": true, "close_window": true, "return_to": true, "dispatch_event": true, "answer_event": true, "edit_event": true, "reorder_event": true, "item_event": true, "range_event": true, "step_event": true, "canvas_event": true}
 
 // progressScript tells the screen how far a long call is; none once it ended.
 func progressScript(done, total int64, ended bool) string {
@@ -492,6 +503,9 @@ func (c *Service) command(ctx context.Context, command string, a Args) Answer {
 		// The person ended an edit of a part (DESIGN 5.29): its handler runs as
 		// one database step, and the edit goes on the window's record with
 		// what it changed. A drag goes on until its drop.
+		if a.Readonly || !c.keptToEditable(a) {
+			return c.takenBack(a.State)
+		}
 		reply, steps, err := c.stepped(a.State, a.Handler)
 		if err != nil {
 			return failed(err)
@@ -503,10 +517,13 @@ func (c *Service) command(ctx context.Context, command string, a Args) Answer {
 			bus.Drag(a.Part, a.Scope, clarity.EditData(reply.State), steps)
 		}
 		return answer(reply, nil)
-	case "reorder_event", "item_event", "range_event":
+	case "reorder_event", "item_event", "range_event", "canvas_event":
 		// The person's action, which the runtime decides (DESIGN 1.7), then
 		// ends as an edit does.
-		decide := map[string]func(Args) (bool, bool, error){"reorder_event": reordered, "item_event": itemAdded, "range_event": ranged}[command]
+		if a.Readonly {
+			return c.takenBack(a.State)
+		}
+		decide := map[string]func(Args) (bool, bool, error){"reorder_event": reordered, "item_event": itemAdded, "range_event": ranged, "canvas_event": canvasChanged}[command]
 		if a.State.Selected == nil {
 			a.State.Selected = map[string]int{}
 		}
@@ -647,6 +664,18 @@ func (c *Service) edited(state clarity.WindowState, part, scope, handler string)
 // reordered moves a row of the list at a.List (conformance/reorder.json):
 // the list in its new order, each row's number in a.By and, in a tree, its
 // parent, and the moved row chosen. False when the move changes nothing.
+// canvasChanged applies the person's action on a canvas (DESIGN 5.31).
+func canvasChanged(a Args) (bool, bool, error) {
+	canvas := clarity.CanvasArgs{Part: a.Part, Mode: a.Mode, List: a.List, Path: a.Path, Units: a.Units, Grid: a.Grid, Snap: a.Snap}
+	if a.Mode == "objects" {
+		if err := json.Unmarshal(a.At, &canvas.At); err != nil {
+			return false, false, &clarity.InvalidError{What: "a canvas of objects names their x and y fields, as at: [\"x\", \"y\"]"}
+		}
+	}
+	changed, err := clarity.CanvasEvent(a.State, canvas, a.Action)
+	return changed, !changed, err
+}
+
 func reordered(a Args) (bool, bool, error) {
 	value, _ := clarity.ValueAt(a.State.Data, a.List)
 	list, ok := value.([]any)
@@ -888,4 +917,31 @@ func (c *Service) findOptions(a Args) Answer {
 		return Answer{Value: clarity.Searched(options, typed, a.Show)}
 	}
 	return Answer{Error: "a dropdown finds its options by typed or search, not " + a.Kind}
+}
+
+// takenBack refuses what the person changed (DESIGN 1.7): the window's data
+// as its edit baseline had it, no handler run, no edit recorded, and the
+// reply refused.
+func (c *Service) takenBack(state clarity.WindowState) Answer {
+	if baseline := clarity.EditsOf(state.Instance).Baseline(); baseline != nil {
+		state = clarity.WithEditData(state, baseline)
+	}
+	reply, err := c.onEventless(state)
+	reply.Refused = true
+	return answer(reply, err)
+}
+
+// keptToEditable says whether a table's edit kept to its editable fields,
+// against the list at a.Path as the edit baseline had it.
+func (c *Service) keptToEditable(a Args) bool {
+	if a.Editable == nil {
+		return true
+	}
+	baseline := clarity.EditsOf(a.State.Instance).Baseline()
+	before, had := clarity.ValueAt(baseline, a.Path)
+	if baseline == nil || !had {
+		return true
+	}
+	after, _ := clarity.ValueAt(a.State.Data, a.Path)
+	return clarity.TableEditFits(before, after, a.Editable)
 }

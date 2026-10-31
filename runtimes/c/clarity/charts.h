@@ -11,3 +11,8 @@
 /// kind `by` (text, number, date, enum, bool), with `measure` count, sum or
 /// average; `order` gives an enum's values in their order.
 cJSON* clarity_chart_groups(const cJSON* rows, const char* by, const char* measure, const cJSON* order);
+
+/// The numbers of a list a chart of numbers draws (DESIGN 5.26): its last
+/// `points` (a number, or null for all of them), decimals as their text;
+/// an item that is no number is left out.
+cJSON* clarity_numbers_of(const cJSON* list, const cJSON* points);

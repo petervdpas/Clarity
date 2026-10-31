@@ -28,15 +28,17 @@ std::optional<size_t> place_of(const nlohmann::json& list, const std::string& na
 
 }  // namespace
 
-nlohmann::json value_at(const nlohmann::json& data, const std::string& path) {
+std::optional<nlohmann::json> found_at(const nlohmann::json& data, const std::string& path) {
     const nlohmann::json* at = &data;
     for (const auto& name : names_of(path)) {
         if (auto place = place_of(*at, name)) at = &(*at)[*place];
         else if (at->is_object() && at->contains(name)) at = &(*at)[name];
-        else return nullptr;
+        else return std::nullopt;
     }
     return *at;
 }
+
+nlohmann::json value_at(const nlohmann::json& data, const std::string& path) { return found_at(data, path).value_or(nullptr); }
 
 nlohmann::json& place_at(nlohmann::json& data, const std::string& path) {
     nlohmann::json* at = &data;

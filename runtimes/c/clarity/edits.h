@@ -35,6 +35,9 @@ void clarity_edits_closed(uint64_t instance);
 /// The window's data as a reply that is no edit left it: the edits start
 /// from here. While an edit goes on (a drag), it waits for its end.
 void clarity_edits_reset(ClarityEdits* bus, const cJSON* data);
+/// The window's data as the edits start from it (what clarity_edits_reset
+/// or the last edit left), in the scratch arena; NULL before any reply.
+cJSON* clarity_edits_baseline(const ClarityEdits* bus);
 /// An edit that goes on: `steps` are the database steps its handler made;
 /// it ends with clarity_edits_edit.
 void clarity_edits_drag(ClarityEdits* bus, const char* part, const char* scope, const int64_t* steps, size_t step_count);

@@ -318,7 +318,7 @@ json card_with(json data) { return {{"window", "Card"}, {"instance", 8}, {"data"
 
 // The person's actions the runtime decides (DESIGN 1.7) are watched handlers, as an edit is.
 TEST(the_runtime_watches_the_actions_it_decides) {
-    for (const char* command : {"reorder_event", "item_event", "range_event", "step_event"}) CHECK(shell::Service::watches(command));
+    for (const char* command : {"reorder_event", "item_event", "range_event", "step_event", "canvas_event"}) CHECK(shell::Service::watches(command));
 }
 
 // A dragged row (DESIGN 5.30): the runtime gives the list its new order and
@@ -351,6 +351,44 @@ TEST(the_runtime_reorders_a_list_as_one_edit) {
     json under = app.service.invoke("reorder_event", right)["value"];
     CHECK_EQ(under["state"]["data"]["tasks"], json::parse(R"([{"id":1,"up":null,"rank":1},{"id":2,"up":1,"rank":1}])"));
     CHECK_EQ(under["state"]["selected"]["taskTree"], json(1));
+}
+
+// A canvas (DESIGN 5.31): the runtime moves an object to its grid and edits
+// a drawing, chooses what it touched and runs on change, as one edit.
+TEST(the_runtime_moves_an_object_and_edits_a_drawing) {
+    Running app;
+    json types = json::parse(R"([{"id":1,"x":0,"y":0},{"id":2,"x":40,"y":40}])");
+    json state = card_with({{"types", types}, {"note", {{"drawing", ""}}}});
+    app.service.invoke("dispatch_event", {{"state", state}, {"handler", "noop"}});
+    json drop = {{"state", state}, {"part", "diagram"}, {"scope", "diagram"}, {"mode", "objects"}, {"list", "types"}, {"at", {"x", "y"}}, {"grid", 20}, {"snap", true},
+                 {"action", {{"move", {{"id", 2}, {"x", 67}, {"y", 31}}}}}, {"handler", "remember"}};
+    json moved = app.service.invoke("canvas_event", drop)["value"];
+    CHECK_EQ(moved["state"]["data"]["types"], json::parse(R"([{"id":1,"x":0,"y":0},{"id":2,"x":60,"y":40}])"));
+    CHECK_EQ(moved["state"]["selected"], json::parse(R"({"diagram":1})"));
+    CHECK_EQ(moved["step"], json(1));
+    CHECK_EQ(app.db.all<Memo>().size(), size_t(1));
+    // Ctrl+Z takes the move back with its handler's step.
+    json back = app.service.invoke("undo_edit", {{"state", moved["state"]}, {"scope", "diagram"}, {"back", true}})["value"];
+    CHECK_EQ(back["state"]["data"]["types"], types);
+    CHECK(app.db.all<Memo>().empty());
+    // Dropped where it is: refused, running nothing.
+    drop["action"] = {{"move", {{"id", 1}, {"x", 5}, {"y", -4}}}};
+    json refused = app.service.invoke("canvas_event", drop)["value"];
+    CHECK_EQ(refused["refused"], json(true));
+    CHECK(!refused.contains("step"));
+    CHECK(app.db.all<Memo>().empty());
+    json add = {{"state", state}, {"part", "drawing"}, {"scope", "drawing"}, {"mode", "vector"}, {"path", "note.drawing"}, {"units", {400, 300}},
+                {"action", {{"add", {{"op", "rect"}, {"x", 1}, {"y", 2}, {"width", 3}, {"height", 4}, {"color", "#ff0000"}}}}}};
+    json drawn = app.service.invoke("canvas_event", add)["value"];
+    CHECK_EQ(drawn["state"]["data"]["note"]["drawing"],
+             json("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">\n<rect x=\"1\" y=\"2\" width=\"3\" height=\"4\" fill=\"#ff0000\"/>\n</svg>\n"));
+    CHECK_EQ(drawn["state"]["selected"]["drawing"], json(0));
+    // A readonly canvas refuses every action.
+    add["state"] = drawn["state"];
+    add["readonly"] = true;
+    json kept = app.service.invoke("canvas_event", add)["value"];
+    CHECK_EQ(kept["refused"], json(true));
+    CHECK_EQ(kept["state"]["data"]["note"], drawn["state"]["data"]["note"]);
 }
 
 // A typed item of a list field (U1c): added by the runtime, or refused with the list as it was.
@@ -462,7 +500,7 @@ json board(json views) {
     return {{"window", "Card"}, {"instance", 9}, {"data", {{"tasks", json::parse(R"([{"id":1,"title":"Milk","up":null},{"id":2,"title":"bread","up":1},{"id":3,"title":"Apples","up":2}])")}}}, {"views", std::move(views)}};
 }
 
-const json table_view = json::parse(R"({"kind":"table","list":"tasks","columns":[{"field":"title","kind":"text","choices":[]}],"order":null,"page":2})");
+const json table_view = json::parse(R"({"kind":"table","list":"tasks","columns":[{"field":"title","kind":"text","choices":[]}],"order":null,"page":2,"sortable":true})");
 const json tree_view = json::parse(R"({"kind":"tree","list":"tasks","parent":"up","key":"id","open":[]})");
 
 }  // namespace
@@ -509,4 +547,68 @@ TEST(a_handlers_reply_fills_the_views) {
     // Any other reply shows the chosen row's page again.
     json again = app.service.invoke("dispatch_event", {{"state", turned}, {"handler", "noop"}})["value"]["state"];
     CHECK_EQ(again["views"]["taskTable"]["shown"], json::parse("[2,3]"));
+}
+
+// A readonly part (DESIGN 1.7): whatever the screen changed is taken back to
+// the window's data as the last reply left it, no handler runs, no edit is
+// kept, and the reply says refused.
+TEST(the_runtime_takes_back_a_change_of_a_readonly_part) {
+    Running app;
+    json tasks = json::parse(R"([{"id":1,"rank":1},{"id":2,"rank":2}])");
+    json shown = {{"window", "Card"}, {"instance", 10}, {"data", {{"name", "Ada"}, {"volume", 5}, {"tags", {"jazz"}}, {"tasks", tasks}}}};
+    app.service.invoke("dispatch_event", {{"state", shown}, {"handler", "noop"}});
+    json typed = shown;
+    typed["data"]["name"] = "Ann";
+    std::vector<json> commands{
+        {{"command", "edit_event"}, {"args", {{"state", typed}, {"part", "nameBox"}, {"scope", "form"}, {"ends", true}, {"handler", "remember"}, {"readonly", true}}}},
+        {{"command", "reorder_event"}, {"args", {{"state", typed}, {"part", "taskList"}, {"list", "tasks"}, {"by", "rank"}, {"move", {{"row", 1}, {"key", "up"}}}, {"handler", "remember"}, {"scope", "form"}, {"readonly", true}}}},
+        {{"command", "item_event"}, {"args", {{"state", typed}, {"part", "tagsBox"}, {"path", "tags"}, {"item", "text"}, {"typed", "live"}, {"handler", "remember"}, {"scope", "form"}, {"readonly", true}}}},
+        {{"command", "range_event"}, {"args", {{"state", typed}, {"part", "volumeBox"}, {"path", "volume"}, {"min", "0"}, {"max", "10"}, {"key", "up"}, {"whole", true}, {"handler", "remember"}, {"scope", "form"}, {"readonly", true}}}},
+    };
+    for (const auto& c : commands) {
+        std::string command = c["command"];
+        json reply = app.service.invoke(command, c["args"])["value"];
+        if (reply["refused"] != json(true)) check::fail(__FILE__, __LINE__, command + ": not refused");
+        if (reply["state"]["data"] != shown["data"]) check::fail(__FILE__, __LINE__, command + ": " + reply["state"]["data"].dump());
+    }
+    CHECK(app.db.all<Memo>().empty());
+    // Nothing went on the window's edits.
+    CHECK_EQ(app.service.invoke("undo_edit", {{"state", shown}, {"scope", "form"}, {"back", true}})["value"]["state"]["data"], shown["data"]);
+    // Not readonly, the edit is taken.
+    json taken = app.service.invoke("edit_event", {{"state", typed}, {"part", "nameBox"}, {"scope", "form"}, {"ends", true}, {"readonly", false}})["value"];
+    CHECK(!taken.contains("refused"));
+    CHECK_EQ(taken["state"]["data"]["name"], json("Ann"));
+}
+
+// A table's edit keeps to its editable columns: any other change of its rows is taken back.
+TEST(the_runtime_takes_back_a_table_edit_outside_its_editable_fields) {
+    Running app;
+    json rows = json::parse(R"([{"id":1,"title":"Milk","done":false},{"id":2,"title":"Tea","done":false}])");
+    json shown = {{"window", "Card"}, {"instance", 11}, {"data", {{"tasks", rows}}}};
+    app.service.invoke("dispatch_event", {{"state", shown}, {"handler", "noop"}});
+    auto edit = [&](const char* changed) {
+        json state = shown;
+        state["data"]["tasks"] = json::parse(changed);
+        return app.service.invoke("edit_event", {{"state", state}, {"part", "taskTable"}, {"scope", "taskTable"}, {"ends", true}, {"handler", "remember"},
+                                                 {"path", "tasks"}, {"editable", {"done"}}})["value"];
+    };
+    json outside = edit(R"([{"id":1,"title":"Oats","done":false},{"id":2,"title":"Tea","done":false}])");
+    CHECK_EQ(outside["refused"], json(true));
+    CHECK_EQ(outside["state"]["data"]["tasks"], rows);
+    CHECK(app.db.all<Memo>().empty());
+    json inside = edit(R"([{"id":1,"title":"Milk","done":true},{"id":2,"title":"Tea","done":false}])");
+    CHECK(!inside.contains("refused"));
+    CHECK_EQ(inside["state"]["data"]["tasks"][0]["done"], json(true));
+    CHECK_EQ(app.db.all<Memo>().size(), size_t(1));
+}
+
+// A sort on a table that is not sortable changes nothing, and is no error.
+TEST(the_runtime_sorts_only_a_sortable_table) {
+    Running app;
+    json view = table_view;
+    view.erase("sortable");
+    json state = board({{"taskTable", view}});
+    json reply = app.service.invoke("view_event", {{"state", state}, {"part", "taskTable"}, {"action", {{"sort", "title"}}}})["value"]["state"];
+    CHECK_EQ(reply["views"]["taskTable"]["order"], json(nullptr));
+    CHECK_EQ(reply["views"]["taskTable"]["shown"], json::parse("[0,1]"));
 }

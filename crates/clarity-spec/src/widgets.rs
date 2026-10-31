@@ -324,6 +324,14 @@ pub enum WidgetProperty {
     OrderBy,
     /// `reorder by position`: the person puts the rows in their own order (DESIGN 5.30).
     Reorder,
+    /// `mode objects ... | paint | vector`: what the person does on a canvas (DESIGN 5.31).
+    Mode,
+    /// `tools pen, eraser`: the tools of a canvas's mode.
+    Tools,
+    /// `brush 4`: how wide a canvas paints or draws.
+    Brush,
+    /// `ink accent`: the color a canvas paints or draws with.
+    Ink,
     /// `icon "save"`: the icon a button shows beside its caption.
     Icon,
     /// `to "https://..."`: the address a link opens.
@@ -930,16 +938,32 @@ const ENTRIES: &[Entry] = &[
         category: Category::Graphics,
         size: (6, 4),
         caption: None,
-        bind: BindTarget::Nothing,
-        field_types: &[],
+        // A painted canvas binds its picture, a vector one its drawing as SVG text (DESIGN 5.31).
+        bind: BindTarget::Field,
+        field_types: &["image", "text"],
         input: false,
         container: None,
         clickable: false,
         // Drawn by its draw handler (`on draw`);
         // a click runs a handler, which reads where as `canvas.x` and `canvas.y`;
         // a drag and a drop also read where it was pressed, `fromX` and `fromY`.
-        events: &[Event::Draw, Event::Click, Event::Drag, Event::Drop, Event::Bend, Event::Pointer, Event::Key],
-        properties: &[WidgetProperty::Units, WidgetProperty::NoUndo, WidgetProperty::Zoom, WidgetProperty::Grid, WidgetProperty::Snap, WidgetProperty::Background, WidgetProperty::Dots, WidgetProperty::Runs, WidgetProperty::Surface],
+        // `on change`: an edit of a canvas with a mode ended (DESIGN 5.31).
+        events: &[Event::Draw, Event::Click, Event::Drag, Event::Drop, Event::Bend, Event::Pointer, Event::Key, Event::Change],
+        properties: &[
+            WidgetProperty::Units,
+            WidgetProperty::NoUndo,
+            WidgetProperty::Zoom,
+            WidgetProperty::Grid,
+            WidgetProperty::Snap,
+            WidgetProperty::Background,
+            WidgetProperty::Dots,
+            WidgetProperty::Runs,
+            WidgetProperty::Surface,
+            WidgetProperty::Mode,
+            WidgetProperty::Tools,
+            WidgetProperty::Brush,
+            WidgetProperty::Ink,
+        ],
     },
     // A custom part is written by its declared name; its keyword is two
     // words, so it is never typed and reads well in messages. The Parts
@@ -1223,6 +1247,11 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         resizable: false,
         sortable: false,
         reorder: None,
+        mode: None,
+        objects: None,
+        tools: Vec::new(),
+        brush: None,
+        ink: None,
         order: None,
         show: Vec::new(),
         // A splitter is written with its direction; a separator is level unless written vertical.
@@ -1467,6 +1496,20 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if let Some(field) = &props.reorder {
         parts.push(format!("reorder by {field}"));
     }
+    match (props.mode, &props.objects) {
+        (Some(crate::model::CanvasMode::Objects), Some(o)) => parts.push(format!("mode objects {} at {}, {}", o.list, o.x, o.y)),
+        (Some(mode), _) => parts.push(format!("mode {}", mode.keyword())),
+        (None, _) => {}
+    }
+    if !props.tools.is_empty() {
+        parts.push(format!("tools {}", props.tools.join(", ")));
+    }
+    if let Some(brush) = props.brush {
+        parts.push(format!("brush {brush}"));
+    }
+    if let Some(ink) = &props.ink {
+        parts.push(format!("ink {ink}"));
+    }
     if let Some(page) = props.page {
         parts.push(format!("page {page}"));
     }
@@ -1662,6 +1705,10 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Sortable, props.sortable, "sortable"),
         (WidgetProperty::OrderBy, props.order.is_some(), "order by"),
         (WidgetProperty::Reorder, props.reorder.is_some(), "reorder"),
+        (WidgetProperty::Mode, props.mode.is_some(), "mode"),
+        (WidgetProperty::Tools, !props.tools.is_empty(), "tools"),
+        (WidgetProperty::Brush, props.brush.is_some(), "brush"),
+        (WidgetProperty::Ink, props.ink.is_some(), "ink"),
         (WidgetProperty::Icon, props.icon.is_some() && props.kind != WidgetKind::Icon, "icon"),
         (WidgetProperty::To, props.to.is_some(), "to"),
         (WidgetProperty::Max, props.max.is_some(), "max"),

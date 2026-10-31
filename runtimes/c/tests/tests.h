@@ -34,12 +34,15 @@
     X(a_typed_item_is_added_as_every_runtime_adds_it)             \
     X(every_reorder_case_moves_as_every_runtime_does)             \
     X(every_range_case_moves_as_every_runtime_does)               \
+    X(a_drawing_is_svg_text_as_every_runtime_writes_it)           \
+    X(a_canvas_acts_as_every_runtime_does)                        \
     X(a_wizard_walks_its_steps_as_every_runtime_does)             \
     X(a_dropdown_offers_what_every_runtime_offers)                \
     X(a_table_shows_its_rows_in_the_order_every_runtime_does)     \
     X(a_table_pages_its_rows_as_every_runtime_does)               \
     X(a_tree_shows_its_rows_as_every_runtime_does)                \
     X(a_chart_groups_its_rows_as_every_runtime_does)              \
+    X(a_chart_of_numbers_takes_its_last_points)                   \
     X(text_travels_as_the_other_runtimes_send_it)                 \
     X(the_scratch_arena_is_emptied_after_a_command)               \
     X(every_query_case_gives_its_sql_on_every_database)           \
@@ -70,10 +73,13 @@
     X(the_runtime_reorders_a_list_and_ctrl_z_puts_it_back)     \
     X(the_runtime_adds_a_typed_item_or_refuses_it)             \
     X(the_runtime_moves_a_value_within_its_range)              \
+    X(the_runtime_moves_an_object_and_edits_a_drawing)         \
     X(the_runtime_walks_a_wizard)                              \
     X(the_runtime_finds_a_dropdowns_options)                   \
     X(a_reply_fills_the_shown_rows_of_its_views)               \
     X(a_view_event_sorts_pages_opens_and_closes)               \
+    X(a_readonly_part_takes_back_what_the_screen_changed)      \
+    X(a_table_takes_back_a_change_to_a_column_it_does_not_edit) \
     X(the_edit_bus_keeps_the_record_as_every_runtime_does)     \
     X(a_parts_own_text_and_tick_are_edit_data)                 \
     X(the_server_serves_the_page_and_answers_its_commands)        \

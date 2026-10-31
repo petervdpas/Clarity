@@ -30,6 +30,16 @@ public abstract record Shape
     /// (<paramref name="Via"/>, x, y, x, y, ...) to X2, Y2.</summary>
     public sealed record Link(string Name, double X1, double Y1, double X2, double Y2, IReadOnlyList<long> Via, string Color, double Width = 1) : Shape;
 
+    /// <summary>The box of an object of a canvas in mode objects (DESIGN 5.31), by its record's id:
+    /// it draws nothing itself; what is drawn after it, until the next object, moves with it while it is dragged.</summary>
+    public sealed record Object(object? Record, double X, double Y, double Width, double Height) : Shape;
+
+    /// <summary>A filled ellipse by its center and its radii.</summary>
+    public sealed record Ellipse(double X, double Y, double Rx, double Ry, string Color) : Shape;
+
+    /// <summary>An open line through its points (x, y, x, y, ...).</summary>
+    public sealed record Path(IReadOnlyList<long> Points, string Color, double Width = 1) : Shape;
+
     /// <summary>A shape as a draw handler or an engine sends it (conformance/drawing.json).</summary>
     public static Shape Of(JsonNode sent)
     {
@@ -51,6 +61,9 @@ public abstract record Shape
             "link" => new Link(T("name", ""), N("x1"), N("y1"), N("x2"), N("y2"),
                 sent["via"] is JsonArray via ? [.. via.Select(v => v is JsonValue n && n.TryGetValue<double>(out var d) ? (long)Math.Round(d) : 0L)] : [],
                 T("color", "text"), N("width", 1)),
+            "object" => new Object(sent["record"] is JsonValue r ? (r.TryGetValue<long>(out var id) ? id : r.TryGetValue<double>(out var d) ? (long)d : r.ToString()) : null, N("x"), N("y"), N("width"), N("height")),
+            "ellipse" => new Ellipse(N("x"), N("y"), N("rx"), N("ry"), T("color", "text")),
+            "path" => new Path(sent["points"] is JsonArray points ? [.. points.Select(v => v is JsonValue n && n.TryGetValue<double>(out var d) ? (long)Math.Round(d) : 0L)] : [], T("color", "text"), N("width", 1)),
             var op => throw new EngineException($"'{op}' is no shape: {sent.ToJsonString()}"),
         };
     }

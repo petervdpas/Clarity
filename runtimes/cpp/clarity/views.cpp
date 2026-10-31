@@ -1,11 +1,14 @@
 #include "clarity/views.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <optional>
 
 #include "clarity/charts.hpp"
 #include "clarity/paths.hpp"
 #include "clarity/tables.hpp"
+#include "clarity/text.hpp"
 #include "clarity/trees.hpp"
 
 namespace clarity {
@@ -89,6 +92,28 @@ void fill_chart(json& view, const json& rows) {
     view["groups"] = groups;
 }
 
+/// A value as a number: a number, or text that is not blank and reads as a finite one.
+std::optional<double> number_in(const json& v) {
+    if (v.is_number()) return v.get<double>();
+    if (!v.is_string()) return std::nullopt;
+    std::string t = trimmed(v.get<std::string>());
+    if (t.empty()) return std::nullopt;
+    char* end = nullptr;
+    double n = std::strtod(t.c_str(), &end);
+    if (end != t.c_str() + t.size() || !std::isfinite(n)) return std::nullopt;
+    return n;
+}
+
+/// The last `points` numbers of the list a chart of numbers draws; all of them without `points`.
+void fill_numbers(json& view, const json& rows) {
+    json numbers = json::array();
+    for (const auto& v : rows)
+        if (auto n = number_in(v)) numbers.push_back(*n == std::floor(*n) && std::fabs(*n) < 9e15 ? json(int64_t(*n)) : json(*n));
+    int64_t points = view.contains("points") && view["points"].is_number_integer() ? view["points"].get<int64_t>() : 0;
+    if (points > 0 && int64_t(numbers.size()) > points) numbers.erase(numbers.begin(), numbers.end() - points);
+    view["numbers"] = numbers;
+}
+
 }  // namespace
 
 void fill_views(WindowState& state, const std::map<std::string, int>* sent) {
@@ -112,6 +137,7 @@ void fill_views(WindowState& state, const std::map<std::string, int>* sent) {
         if (kind == "table") fill_table(view, rows, chosen);
         else if (kind == "tree") fill_tree(view, rows, chosen);
         else if (kind == "chart") fill_chart(view, rows);
+        else if (kind == "numbers") fill_numbers(view, rows);
     }
 }
 
@@ -120,7 +146,8 @@ void view_action(WindowState& state, const std::string& part, const json& action
     if (!action.is_object() || action.empty()) return;
     if (!state.views.is_object() || !state.views.contains(part) || !state.views[part].is_object()) throw InvalidError(part + " shows no list");
     json& view = state.views[part];
-    if (action.contains("sort") && action["sort"].is_string()) {
+    // Only a sortable table sorts by a header.
+    if (action.contains("sort") && action["sort"].is_string() && view.value("sortable", json(false)) == json(true)) {
         auto order = next_order(order_in(view), action["sort"]);
         view["order"] = {{"field", order->field}, {"desc", order->desc}};
         // A new order starts on the first page.

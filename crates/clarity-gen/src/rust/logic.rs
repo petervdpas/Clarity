@@ -11,7 +11,7 @@ use clarity_spec::code::{HttpMethod,
     AskForm, BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
     UnaryOp, path_text, template,
 };
-use clarity_spec::model::{Command, DataKind, FieldType, Frame, SpecFile, Widget};
+use clarity_spec::model::{CanvasMode, Command, DataKind, FieldType, Frame, SpecFile, Widget};
 
 use super::names::{decimal, ident, value_type};
 use crate::print;
@@ -360,6 +360,9 @@ impl<'a> Emitter<'a> {
                         (ShapeValue::Number, Err(default)) => format!("{default}.0"),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Ok(arg)) => self.value(arg),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Err(default)) => format!("{default:?}"),
+                        // An object sends its record's id (DESIGN 5.31).
+                        (ShapeValue::Record, Ok(arg)) => self.value(&clarity_spec::code::check::object_id(arg)),
+                        (ShapeValue::Record, Err(_)) => "null".to_string(),
                         (ShapeValue::Text, Ok(arg)) => format!("serde_json::to_value({}).unwrap_or_default()", self.shown(arg)),
                         (ShapeValue::Text, Err(default)) => format!("{default:?}"),
                     };
@@ -569,6 +572,9 @@ impl<'a> Emitter<'a> {
             "background" => "background",
             "dotSize" => "dot_size",
             "dotColor" => "dot_color",
+            "tool" => "tool",
+            "brush" => "brush",
+            "ink" => "ink",
             _ => return None,
         };
         Some((name.clone(), property))
@@ -610,6 +616,14 @@ impl<'a> Emitter<'a> {
             ("background", Some(info)) => format!("ui.background({part:?}, {:?})", info.background),
             ("dot_size", Some(info)) => format!("ui.dot_size({part:?}, {})", info.dot_size),
             ("dot_color", Some(info)) => format!("ui.dot_color({part:?}, {:?})", info.dot_color),
+            ("tool", Some(info)) => format!("ui.tool({part:?}, {:?})", info.tool),
+            ("brush", Some(info)) => format!("ui.brush({part:?}, {})", info.brush),
+            ("ink", Some(info)) => format!("ui.ink({part:?}, {:?})", info.ink),
+            // A canvas with a mode (DESIGN 5.31): the object's record, as a table's selected row; a shape's place from 1.
+            ("selected", Some(PartInfo { mode: Some(CanvasMode::Objects), objects: Some(list), .. })) => {
+                format!("ui.selected({part:?}, &w.{})?", ident(&list))
+            }
+            ("selected", Some(PartInfo { mode: Some(_), .. })) => format!("ui.selected_place({part:?})"),
             ("selected", Some(PartInfo { bind: Some(bind), .. })) => {
                 format!("ui.selected({part:?}, &w.{})?", ident(&bind))
             }
@@ -1351,6 +1365,13 @@ pub struct PartInfo {
     /// A canvas's grid dots as its line says: pixels across (2 without it) and color (empty is the theme's border).
     pub dot_size: u32,
     pub dot_color: String,
+    /// A canvas's mode (DESIGN 5.31), and in mode objects the list of its objects.
+    pub mode: Option<CanvasMode>,
+    pub objects: Option<String>,
+    /// A painting or vector canvas's tool (its first of `tools`, or none), brush (2 without it) and ink ("text" without it).
+    pub tool: String,
+    pub brush: u32,
+    pub ink: String,
     /// A custom part (DESIGN 5.19): its kind and the values written on its line.
     pub custom: Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)>,
 }
@@ -1387,6 +1408,11 @@ impl WindowCtx {
                         background: widget.props.background.clone().unwrap_or_default(),
                         dot_size: widget.props.dot_size.unwrap_or(2),
                         dot_color: widget.props.dot_color.clone().unwrap_or_default(),
+                        mode: widget.props.mode,
+                        objects: widget.props.objects.as_ref().map(|o| o.list.clone()),
+                        tool: crate::canvas_tool(&widget.props),
+                        brush: widget.props.brush.unwrap_or(2),
+                        ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()),
                         custom: widget.props.part.clone().map(|kind| (kind, widget.props.values.clone())),
                     },
                 );
@@ -1414,6 +1440,11 @@ impl WindowCtx {
                         background: String::new(),
                         dot_size: 2,
                         dot_color: String::new(),
+                        mode: None,
+                        objects: None,
+                        tool: String::new(),
+                        brush: 2,
+                        ink: "text".to_string(),
                         custom: None,
                     },
                 );

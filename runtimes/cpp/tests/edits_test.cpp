@@ -75,3 +75,26 @@ TEST(a_parts_own_text_and_tick_are_edit_data) {
     CHECK(!back.parts["okBox"].checked);
     CHECK(back.parts.contains("title"));
 }
+
+// Where a refused change goes back to: the window's data as the last reply left it.
+TEST(the_edit_bus_gives_its_baseline) {
+    EditBus bus;
+    CHECK(!bus.baseline());
+    bus.reset(json::parse(R"({"name":"Ada"})"));
+    CHECK_EQ(bus.baseline().value_or(json()), json::parse(R"({"name":"Ada"})"));
+}
+
+// A table's edit keeps to its editable fields: the same rows in the same order, every other field as it was.
+TEST(a_table_edit_fits_its_editable_fields) {
+    json before = json::parse(R"([{"id":1,"title":"Milk","done":false},{"id":2,"title":"Tea","done":false}])");
+    std::vector<std::string> editable{"done"};
+    CHECK(table_edit_fits(before, json::parse(R"([{"id":1,"title":"Milk","done":true},{"id":2,"title":"Tea","done":false}])"), editable));
+    CHECK(!table_edit_fits(before, json::parse(R"([{"id":1,"title":"Oats","done":false},{"id":2,"title":"Tea","done":false}])"), editable));
+    CHECK(!table_edit_fits(before, json::parse(R"([{"id":2,"title":"Tea","done":false},{"id":1,"title":"Milk","done":false}])"), editable));
+    CHECK(!table_edit_fits(before, json::parse(R"([{"id":1,"title":"Milk","done":false}])"), editable));
+    // A new or a removed field is a change of it.
+    CHECK(!table_edit_fits(before, json::parse(R"([{"id":1,"title":"Milk","done":false,"x":1},{"id":2,"title":"Tea","done":false}])"), editable));
+    CHECK(!table_edit_fits(before, json::parse(R"([{"id":1,"done":false},{"id":2,"title":"Tea","done":false}])"), editable));
+    CHECK(table_edit_fits(json::parse("[1,2]"), json::parse("[1,2]"), {}));
+    CHECK(!table_edit_fits(json::parse("[1,2]"), json::parse("[1,3]"), {}));
+}

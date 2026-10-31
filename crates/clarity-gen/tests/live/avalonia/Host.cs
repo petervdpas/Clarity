@@ -23,8 +23,11 @@ public static class Host
         }
         Steps.Seed(args[0]);
         var lifetime = new ClassicDesktopStyleApplicationLifetime { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        // Drawn by the real renderer, as on a person's screen: a painted
+        // picture is real pixels, as the app saves them.
         AppBuilder.Configure<App>()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = true })
+            .UseSkia()
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
             .SetupWithLifetime(lifetime);
         Dispatcher.UIThread.RunJobs();
         var main = lifetime.MainWindow ?? throw new InvalidOperationException("the app opened no window");

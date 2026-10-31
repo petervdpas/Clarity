@@ -339,6 +339,13 @@ pub(crate) fn canvas_draws(page: &clarity_spec::model::Page) -> Vec<(String, Str
 /// Each value of a shape as a draw statement gives it: its key on the
 /// wire, what it is, and the argument written, or the value it has when
 /// left out (conformance/drawing.json).
+/// The tool a painting or vector canvas starts with (DESIGN 5.31): the
+/// first of its `tools`, else the first of its mode's; empty for none.
+pub(crate) fn canvas_tool(props: &clarity_spec::model::WidgetProps) -> String {
+    let first = props.tools.first().map(String::as_str).or_else(|| props.mode.and_then(|m| m.tools().first().copied()));
+    first.unwrap_or_default().to_string()
+}
+
 pub(crate) fn shape_values<'a>(
     shape: &str,
     args: &'a [clarity_spec::code::Expr],

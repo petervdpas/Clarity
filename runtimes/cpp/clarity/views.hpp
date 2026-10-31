@@ -2,7 +2,8 @@
 // the window's state carries a view per such part, by its name, saying what
 // it shows of which list and how. The runtime fills in what shows after
 // every reply: a table's `shown` places and `pages`, a tree's `shown` rows,
-// a chart's `groups`. The person's sort, page and tree rows change the view.
+// a chart's `groups`, a chart of numbers its `numbers`. The person's sort
+// (on a `sortable` table only), page and tree rows change the view.
 
 #pragma once
 
@@ -22,7 +23,7 @@ namespace clarity {
 void fill_views(WindowState& state, const std::map<std::string, int>* sent = nullptr);
 
 /// The person's action on the view of `part`: `{"sort": field}` (the same
-/// field again sorts the other way), `{"page": n}`, `{"open": id}` or
+/// field again sorts the other way; nothing on a table that is not sortable), `{"page": n}`, `{"open": id}` or
 /// `{"close": id}`. An empty one changes nothing and is no error; any other
 /// throws InvalidError when the part has no view.
 void view_action(WindowState& state, const std::string& part, const nlohmann::json& action);

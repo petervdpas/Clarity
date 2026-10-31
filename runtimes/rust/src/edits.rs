@@ -38,7 +38,8 @@ const MAX_EDITS: usize = 500;
 /// The record of one window's edits.
 #[derive(Debug, Default)]
 pub struct EditBus {
-    baseline: Map<String, Value>,
+    /// Where the next edit starts; none before the window's first reply.
+    baseline: Option<Map<String, Value>>,
     going: Option<Edit>,
     done: Vec<Edit>,
     undone: Vec<Edit>,
@@ -49,8 +50,14 @@ impl EditBus {
     /// from here. While an edit goes on (a drag), it waits for its end.
     pub fn reset(&mut self, data: &Map<String, Value>) {
         if self.going.is_none() {
-            self.baseline = data.clone();
+            self.baseline = Some(data.clone());
         }
+    }
+
+    /// The window's data where the next edit starts: what a change the
+    /// runtime refuses is taken back to; none before any reply.
+    pub fn baseline(&self) -> Option<&Map<String, Value>> {
+        self.baseline.as_ref()
     }
 
     /// An edit that goes on: `steps` its handler made; it ends with `edit`.
@@ -65,8 +72,8 @@ impl EditBus {
     pub fn edit(&mut self, part: &str, scope: &str, data: &Map<String, Value>, steps: &[u64]) {
         let mut all = self.going.take().map(|g| g.steps).unwrap_or_default();
         all.extend_from_slice(steps);
-        let changes = between(&self.baseline, data);
-        self.baseline = data.clone();
+        let changes = between(self.baseline.as_ref().unwrap_or(&Map::new()), data);
+        self.baseline = Some(data.clone());
         if changes.is_empty() && all.is_empty() {
             return;
         }
@@ -105,7 +112,7 @@ impl EditBus {
             }
         }
         if back { self.undone.push(edit) } else { self.done.push(edit) }
-        self.baseline = result.clone();
+        self.baseline = Some(result.clone());
         Ok(Some(result))
     }
 }
@@ -207,6 +214,52 @@ pub fn ended(db: &Db, state: WindowState, part: &str, scope: Option<&str>, run: 
         Some(scope) => edit(db, state, part, scope, true, run),
         None => crate::stepped(db, || run(state)),
     }
+}
+
+/// Whether a table's edit, its list `before` and `after`, kept to its
+/// `editable` fields: the same rows in the same order, every other field as
+/// it was (one added or taken away is changed).
+pub fn table_edit_fits(before: &Value, after: &Value, editable: &[String]) -> bool {
+    let (Some(was), Some(now)) = (before.as_array(), after.as_array()) else { return before == after };
+    was.len() == now.len()
+        && was.iter().zip(now).all(|(a, b)| match (a.as_object(), b.as_object()) {
+            (Some(x), Some(y)) => x.keys().chain(y.keys()).all(|field| editable.contains(field) || x.get(field) == y.get(field)),
+            _ => a == b,
+        })
+}
+
+/// A part's options as the runtime's parameters (DESIGN 1.7): a `readonly`
+/// part's change, or a table's change (its list at `path`) outside the
+/// fields of `editable`, is taken back to the window's edit baseline and
+/// answered `refused` (`draw`), with no handler run and no edit kept. Any
+/// other change goes on (`go`). The table is checked only when the baseline
+/// has its list.
+pub fn guarded(
+    state: WindowState,
+    readonly: bool,
+    path: Option<&str>,
+    editable: Option<&[String]>,
+    draw: impl FnOnce(WindowState) -> Result<Reply>,
+    go: impl FnOnce(WindowState) -> Result<Reply>,
+) -> Result<Reply> {
+    let baseline = buses().get(&state.instance).and_then(|bus| bus.baseline().cloned());
+    let outside = match (path.filter(|p| !p.is_empty()), editable, &baseline) {
+        (Some(path), Some(editable), Some(baseline)) => match crate::ui::data_at(baseline, path) {
+            Some(before) => !table_edit_fits(before, crate::ui::data_at(&state.data, path).unwrap_or(&Value::Null), editable),
+            None => false,
+        },
+        _ => false,
+    };
+    if !readonly && !outside {
+        return go(state);
+    }
+    let state = match baseline {
+        Some(data) => with_edit_data(state, data),
+        None => state,
+    };
+    let mut reply = draw(state)?;
+    reply.refused = true;
+    Ok(reply)
 }
 
 /// Ctrl+Z (`back`) or Ctrl+Y on `scope`: its last edit taken back or done

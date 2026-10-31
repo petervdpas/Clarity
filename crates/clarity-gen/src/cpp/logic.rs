@@ -168,6 +168,12 @@ pub struct PartInfo {
     /// A canvas's grid dots as its line says: pixels across (2 without it) and color (empty is the theme's border).
     pub dot_size: u32,
     pub dot_color: String,
+    /// A canvas's mode (DESIGN 5.31), the list of its objects, and its tool, brush and ink as its line says.
+    pub mode: Option<clarity_spec::model::CanvasMode>,
+    pub objects: Option<String>,
+    pub tool: String,
+    pub brush: u32,
+    pub ink: String,
     /// A custom part (DESIGN 5.19): its kind and the values written on its line.
     pub custom: Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)>,
 }
@@ -189,7 +195,7 @@ impl WindowCtx {
         for widget in widgets {
             if let Some(name) = &widget.props.name {
                 let custom = widget.props.part.clone().map(|kind| (kind, widget.props.values.clone()));
-                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), custom };
+                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
                 self.parts.insert(name.clone(), info);
             }
             self.widgets(&widget.children);
@@ -483,6 +489,7 @@ impl<'a> Emitter<'a> {
                         "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "tab" | "step" | "grid" | "snap" | "background" => format!("set_{property}"),
                         "dotSize" => "set_dot_size".to_string(),
                         "dotColor" => "set_dot_color".to_string(),
+                        "tool" | "brush" | "ink" => format!("set_{property}"),
                         "open" => "set_open_section".to_string(),
                         other => {
                             self.errors.push(format!("'{other}' of a part cannot be set"));
@@ -643,6 +650,9 @@ impl<'a> Emitter<'a> {
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name, Ok(arg)) => self.value(arg),
                         (ShapeValue::Points, Ok(arg)) => format!("nlohmann::json({})", self.value(arg)),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text | ShapeValue::Name | ShapeValue::Points, Err(default)) => string(default),
+                        // An object sends its record's id (DESIGN 5.31).
+                        (ShapeValue::Record, Ok(arg)) => format!("nlohmann::json({})", self.value(&clarity_spec::code::check::object_id(arg))),
+                        (ShapeValue::Record, Err(_)) => "nullptr".to_string(),
                         (ShapeValue::Text, Ok(arg)) => format!("nlohmann::json({})", self.shown(arg)),
                     };
                     fields.push(format!("{{{}, {value}}}", string(key)));
@@ -1007,6 +1017,12 @@ impl<'a> Emitter<'a> {
             "background" => format!("ui.background({quoted}, {})", string(&info.background)),
             "dotSize" => format!("ui.dot_size({quoted}, {})", info.dot_size),
             "dotColor" => format!("ui.dot_color({quoted}, {})", string(&info.dot_color)),
+            "tool" => format!("ui.tool({quoted}, {})", string(&info.tool)),
+            "brush" => format!("ui.brush({quoted}, {})", info.brush),
+            "ink" => format!("ui.ink({quoted}, {})", string(&info.ink)),
+            // A canvas's choice (DESIGN 5.31): the object's record, or the shape's place from 1.
+            "selected" if info.mode == Some(clarity_spec::model::CanvasMode::Vector) => format!("ui.shape_chosen({quoted})"),
+            "selected" if info.objects.is_some() => format!("ui.selected({quoted}, {})", ident(info.objects.as_deref().unwrap_or_default())),
             "maximized" => format!("ui.maximized({quoted})"),
             "tab" => format!("ui.tab({quoted})"),
             "step" => format!("ui.step({quoted})"),

@@ -9,7 +9,9 @@ package clarity
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"slices"
+	"strings"
 )
 
 // tableView is a table's view: its list, its columns, its order, the rows
@@ -133,6 +135,15 @@ func FillViews(state WindowState, chosen map[string]bool) error {
 			}
 			view["open"] = open
 			view["shown"] = ShownTree(rows, open)
+		case "numbers":
+			var v struct {
+				List   string `json:"list"`
+				Points *int   `json:"points"`
+			}
+			if err := viewAs(view, &v); err != nil {
+				return err
+			}
+			view["numbers"] = NumbersOf(state.Data, v.List, v.Points)
 		case "chart":
 			var v chartView
 			if err := viewAs(view, &v); err != nil {
@@ -172,6 +183,10 @@ func ViewEvent(state WindowState, part string, action map[string]json.RawMessage
 	}
 	switch {
 	case action["sort"] != nil:
+		// Only a sortable table sorts by a header.
+		if view["sortable"] != true {
+			return nil
+		}
 		var v tableView
 		var field string
 		if err := viewAs(view, &v); err != nil {
@@ -214,4 +229,25 @@ func ViewEvent(state WindowState, part string, action map[string]json.RawMessage
 		return &InvalidError{"a view event sorts, turns a page, or opens or closes a row"}
 	}
 	return nil
+}
+
+// NumbersOf are the numbers of the list at path a chart of numbers draws:
+// its last points (all when points is nil or 0), decimals as their value;
+// what is no number is left out.
+func NumbersOf(data map[string]any, path string, points *int) []float64 {
+	value, _ := ValueAt(data, path)
+	list, _ := value.([]any)
+	numbers := []float64{}
+	for _, item := range list {
+		if text, ok := item.(string); ok && strings.TrimSpace(text) == "" {
+			continue
+		}
+		if n, ok := chartNumber(item); ok && !math.IsInf(n, 0) && !math.IsNaN(n) {
+			numbers = append(numbers, n)
+		}
+	}
+	if points != nil && *points > 0 && len(numbers) > *points {
+		numbers = numbers[len(numbers)-*points:]
+	}
+	return numbers
 }

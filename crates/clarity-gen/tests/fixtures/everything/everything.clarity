@@ -359,6 +359,10 @@ page Gallery: window
     folder name scansBox at 1,17 span 6 bind settings.scansFolder
     button @play name playButton at 7,16 span 2 on click: playClicked
     button @plan name planButton at 7,17 span 2 on click: planClicked
+    // Canvas modes (DESIGN 5.31): objects dragged, a picture painted, a vector drawing.
+    canvas name board at 1,18 span 4 rows 3 units 1000 x 600 grid 20 snap mode objects albums at copies, position on draw: drawBoard on change: albumPlaced
+    canvas name sketch at 5,18 span 4 rows 3 bind album.cover mode paint tools pen, eraser brush 4 ink accent on change: sketched
+    canvas name drawing at 9,18 span 4 rows 3 bind album.notes mode vector grid 10 snap on change: sketched
     sound name ding source "ding.wav" volume 80
     timer name clock every 1 on tick: sampled
 
@@ -421,6 +425,24 @@ code Gallery
 
     handler playClicked
         ding.play()
+        // A palette: the tool, brush and ink of a canvas, and what was touched last.
+        sketch.ink = "#ff0000"
+        sketch.brush = sketch.brush + 1
+        drawing.tool = "rect"
+        speed = drawing.selected
+
+    handler drawBoard
+        board.clear()
+        for a in albums
+            board.object(a, a.copies, a.position, 200, 80)
+            board.rect(a.copies, a.position, 200, 80, "raised")
+            board.text(a.copies + 100, a.position + 40, a.title)
+
+    handler albumPlaced
+        save board.selected
+
+    handler sketched
+        save album
 
     handler planClicked
         album.level = Planner.plan([1, 2, 3], 3)

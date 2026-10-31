@@ -17,6 +17,15 @@
   // links bend: a press on one adds a point there or takes the point under it,
   // dragging moves that point, a double click on a point takes it away, and
   // letting go gives the link's name and its points (as the IDE's designer).
+  //
+  // With a `mode` (DESIGN 5.31) the person changes what it shows, and each
+  // gesture goes to the runtime as one action (`oncanvas`), which snaps it,
+  // keeps it and chooses what it touched: in mode objects an object (an
+  // `object` box and the shapes drawn after it) is dragged and dropped; in
+  // mode paint the pen or eraser strokes the bound picture; in mode vector
+  // the tools of its toolbar add shapes to the bound SVG drawing, select one
+  // to drag it, Delete or Backspace delete it.
+  import { anchorOf, cleanSvg, objectAt, objectsOf, shapeOfDrag, type CanvasObject } from "./canvasModes";
   import { colorOf, gridEvery, linkPoints, pointIn, scrolled, svgOf, wholeView, zoomed, type Shape, type View } from "../drawing";
   import type { ShownText } from "../format";
   import type { Pointer } from "../live";
@@ -37,6 +46,15 @@
     ondrag = null,
     ondrop = null,
     onbend = null,
+    mode = null,
+    picture = null,
+    vector = null,
+    tools = [],
+    tool = null,
+    brush = null,
+    ink = null,
+    toolWords = {},
+    oncanvas = null,
   }: {
     drawing: Shape[];
     units: { width: number; height: number };
@@ -61,7 +79,231 @@
     ondrop?: ((point: Pointer) => void) | null;
     /** A link bent and let go: its name, and its bend points as whole numbers, x, y, x, y, .... */
     onbend?: ((bend: { name: string; via: number[] }) => void) | null;
+    /** What the person does on the canvas; none: its draw handler draws it. */
+    mode?: "objects" | "paint" | "vector" | null;
+    /** Mode paint: the bound picture, as a URL; none for a blank one. */
+    picture?: string | null;
+    /** Mode vector: the bound drawing, as SVG text. */
+    vector?: string | null;
+    /** The tools of its mode the person may use, in the order its toolbar shows them. */
+    tools?: string[];
+    /** The tool, brush width and ink as the part has them (a handler sets them). */
+    tool?: string | null;
+    brush?: number | null;
+    ink?: string | null;
+    /** Clarity's words for the tools, and for the text the text tool asks, in the person's language. */
+    toolWords?: Record<string, string>;
+    /** An action of the person's on a canvas with a mode, for the runtime; false when it refused it. */
+    oncanvas?: ((action: Record<string, unknown>) => Promise<boolean>) | null;
   } = $props();
+
+  /** The tool in hand: the part's, else the one the person chose, else the first. */
+  let chosenTool = $state<string | null>(null);
+  $effect.pre(() => {
+    // A handler that sets the tool sets the one in hand.
+    if (tool) chosenTool = tool;
+  });
+  const toolNow = $derived(chosenTool && tools.includes(chosenTool) ? chosenTool : (tools[0] ?? null));
+  const brushNow = $derived(brush ?? 2);
+
+  /** A color as the drawing keeps it: written out, so other programs show it alike. */
+  function inkNow(): string {
+    const color = colorOf(ink ?? "text");
+    const role = /^var\((--[\w-]+)/.exec(color);
+    if (!role || !frame) return color.startsWith("#") ? color : "#000000";
+    const value = getComputedStyle(frame).getPropertyValue(role[1]).trim();
+    return value || "#000000";
+  }
+
+  /** Mode objects: the objects of the drawing, and the one being dragged with how far. */
+  const objects = $derived(mode === "objects" ? objectsOf(drawing) : []);
+  let objectHeld = $state<{ object: CanvasObject; id: number; start: { x: number; y: number }; dx: number; dy: number; dropped: boolean } | null>(null);
+  /** Mode vector: the drawing's elements, the one chosen (from 0), and a move or a shape being made. */
+  const vectorShown = $derived(mode === "vector" ? cleanSvg(vector ?? "", [units.width, units.height]) : null);
+  let chosenShape = $state<number | null>(null);
+  let shapeHeld = $state<{ index: number; id: number; start: { x: number; y: number }; dx: number; dy: number; dropped: boolean } | null>(null);
+  let making = $state<{ id: number; points: { x: number; y: number }[] } | null>(null);
+  /** The text tool's box, where the person clicked, until Enter or Escape. */
+  let typing = $state<{ x: number; y: number; text: string } | null>(null);
+  /** Mode paint: the stroke being painted, kept until the picture comes back with it. */
+  let stroke = $state<{ id: number; points: { x: number; y: number }[]; done: boolean } | null>(null);
+  // What comes back from the runtime shows the gesture: the canvas stops showing its own.
+  $effect.pre(() => {
+    void drawing;
+    void vector;
+    void picture;
+    if (objectHeld?.dropped) objectHeld = null;
+    if (shapeHeld?.dropped) shapeHeld = null;
+    if (stroke?.done) stroke = null;
+  });
+
+  /** The canvas's own gesture in mode objects and vector: moved by how far, while it goes. */
+  function heldMove(i: number): string | undefined {
+    if (!objectHeld) return undefined;
+    // By its record: a drawing drawn anew while it is dragged (a timer's tick) has it at another place.
+    const held = objectHeld.object;
+    const now = objects.find((o) => o.record === held.record) ?? held;
+    if (i >= now.from && i < now.to) return `translate(${objectHeld.dx} ${objectHeld.dy})`;
+    return undefined;
+  }
+
+  /** An element's attributes, moved while it is dragged. */
+  function shifted(attrs: Record<string, string | number>, transform: string | undefined): Record<string, string | number> {
+    return transform ? { ...attrs, transform } : attrs;
+  }
+
+  /** Sends an action, and lets the gesture go when the runtime refused it. */
+  async function act(action: Record<string, unknown>) {
+    const taken = await oncanvas?.(action);
+    if (!taken) {
+      objectHeld = null;
+      shapeHeld = null;
+      stroke = null;
+    }
+  }
+
+  /** The press of a canvas with a mode; true when the mode took it. */
+  function modeDown(e: PointerEvent): boolean {
+    if (!mode || !oncanvas) return false;
+    const p = unitAt(offset(e));
+    if (mode === "objects") {
+      const object = objectAt(objects, p);
+      if (!object) return false;
+      objectHeld = { object, id: e.pointerId, start: p, dx: 0, dy: 0, dropped: false };
+    } else if (mode === "paint") {
+      stroke = { id: e.pointerId, points: [p], done: false };
+    } else if (toolNow === "select" || toolNow === null) {
+      const index = shapeUnder(e);
+      chosenShape = index;
+      if (index === null) return false;
+      shapeHeld = { index, id: e.pointerId, start: p, dx: 0, dy: 0, dropped: false };
+    } else if (toolNow === "text") {
+      typing = { x: Math.round(p.x), y: Math.round(p.y), text: "" };
+      return true;
+    } else {
+      making = { id: e.pointerId, points: [p] };
+    }
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    return true;
+  }
+
+  function modeMove(e: PointerEvent): boolean {
+    const p = unitAt(offset(e));
+    if (objectHeld && objectHeld.id === e.pointerId && !objectHeld.dropped) {
+      objectHeld = { ...objectHeld, dx: p.x - objectHeld.start.x, dy: p.y - objectHeld.start.y };
+      return true;
+    }
+    if (shapeHeld && shapeHeld.id === e.pointerId && !shapeHeld.dropped) {
+      shapeHeld = { ...shapeHeld, dx: p.x - shapeHeld.start.x, dy: p.y - shapeHeld.start.y };
+      return true;
+    }
+    if (making && making.id === e.pointerId) {
+      making = { ...making, points: toolNow === "path" ? [...making.points, p] : [making.points[0], p] };
+      return true;
+    }
+    if (stroke && stroke.id === e.pointerId && !stroke.done) {
+      stroke = { ...stroke, points: [...stroke.points, p] };
+      return true;
+    }
+    return false;
+  }
+
+  function modeUp(e: PointerEvent): boolean {
+    if (objectHeld && objectHeld.id === e.pointerId && !objectHeld.dropped) {
+      const held = objectHeld;
+      if (!held.dx && !held.dy) {
+        objectHeld = null;
+        return true;
+      }
+      objectHeld = { ...held, dropped: true };
+      void act({ move: { id: held.object.record, x: held.object.x + held.dx, y: held.object.y + held.dy } });
+      return true;
+    }
+    if (shapeHeld && shapeHeld.id === e.pointerId && !shapeHeld.dropped) {
+      const held = shapeHeld;
+      const element = vectorShown?.shapes[held.index];
+      const anchor = element ? anchorOf(element.tag, element.attrs) : null;
+      if (!anchor || (!held.dx && !held.dy)) {
+        shapeHeld = null;
+        return true;
+      }
+      shapeHeld = { ...held, dropped: true };
+      void act({ move: { index: held.index + 1, x: anchor.x + held.dx, y: anchor.y + held.dy } });
+      return true;
+    }
+    if (making && making.id === e.pointerId) {
+      const shape = toolNow ? shapeOfDrag(toolNow, making.points, inkNow(), brushNow) : null;
+      making = null;
+      if (shape) void act({ add: shape });
+      return true;
+    }
+    if (stroke && stroke.id === e.pointerId && !stroke.done) {
+      const points = stroke.points;
+      stroke = { ...stroke, done: true };
+      void painted(points).then((data) => (data ? act({ stroke: { data } }) : (stroke = null)));
+      return true;
+    }
+    return false;
+  }
+
+  /** The element of the vector drawing under the pointer, from 0; null when none is. */
+  function shapeUnder(e: PointerEvent): number | null {
+    const hit = document.elementFromPoint?.(e.clientX, e.clientY);
+    const place = hit?.closest?.("[data-shape]")?.getAttribute("data-shape");
+    return place === null || place === undefined ? null : Number(place);
+  }
+
+  /** The picture after a stroke: the picture as it is with the stroke painted on, a PNG in base64. */
+  async function painted(points: { x: number; y: number }[]): Promise<string | null> {
+    const sheet = document.createElement("canvas");
+    sheet.width = Math.max(1, Math.round(units.width));
+    sheet.height = Math.max(1, Math.round(units.height));
+    const pen = sheet.getContext("2d");
+    if (!pen) return null;
+    if (picture) {
+      const image = new Image();
+      image.src = picture;
+      try {
+        await image.decode();
+        pen.drawImage(image, 0, 0, sheet.width, sheet.height);
+      } catch {
+        // A picture that does not load is painted over as blank.
+      }
+    }
+    pen.lineWidth = brushNow;
+    pen.lineCap = "round";
+    pen.lineJoin = "round";
+    pen.strokeStyle = inkNow();
+    if (toolNow === "eraser") pen.globalCompositeOperation = "destination-out";
+    pen.beginPath();
+    points.forEach((p, i) => (i ? pen.lineTo(p.x, p.y) : pen.moveTo(p.x, p.y)));
+    // A press that did not move paints a dot.
+    if (points.length === 1) pen.lineTo(points[0].x + 0.01, points[0].y);
+    pen.stroke();
+    return sheet.toDataURL("image/png").split(",")[1] ?? null;
+  }
+
+  /** Delete or Backspace deletes the chosen shape of a vector drawing. */
+  function key(e: KeyboardEvent) {
+    if (mode !== "vector" || chosenShape === null || typing || !oncanvas) return;
+    if (e.key !== "Delete" && e.key !== "Backspace") return;
+    e.preventDefault();
+    const index = chosenShape;
+    chosenShape = null;
+    void act({ delete: index + 1 });
+  }
+
+  /** The text tool's box: Enter adds the text there, Escape lets it go. */
+  function typed(e: KeyboardEvent) {
+    const box = typing;
+    if (!box) return;
+    if (e.key === "Escape") typing = null;
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const { x, y, text } = box;
+    typing = null;
+    if (text.trim()) void act({ add: { op: "text", x, y, text, color: inkNow(), size: Math.max(brushNow * 4, 10) } });
+  }
 
   /** A link being bent: its points as the pointer has them, until the drawing comes back with them. */
   let bending = $state<{ name: string; via: { x: number; y: number }[] } | null>(null);
@@ -221,6 +463,7 @@
   function down(e: PointerEvent) {
     if (!e.isPrimary || e.button !== 0) return;
     frame?.focus({ preventScroll: true });
+    if (modeDown(e)) return;
     if (onbend) {
       const at = offset(e);
       const found = linkAt(unitAt(at));
@@ -240,6 +483,7 @@
   }
 
   function move(e: PointerEvent) {
+    if (modeMove(e)) return;
     if (bendPress && bendPress.id === e.pointerId) {
       const at = offset(e);
       if (!bendPress.moved && Math.hypot(at.x - bendPress.at.x, at.y - bendPress.at.y) < STILL) return;
@@ -292,6 +536,7 @@
   }
 
   async function up(e: PointerEvent) {
+    if (modeUp(e)) return;
     if (bendPress && bendPress.id === e.pointerId) {
       const was = bendPress;
       bendPress = null;
@@ -310,7 +555,8 @@
     if (ondrag && was.from) {
       // The drop comes after the drags the handler is still running; a drag that moved the view has none.
       while (sending) await sending;
-      if (was.moves === "view") return;
+      // The part may have closed while the handler ran.
+      if (was.moves === "view" || !svg) return;
       const now = held(at);
       ondrop?.({ x: now.x, y: now.y, fromX: was.from.x, fromY: was.from.y });
     }
@@ -344,7 +590,8 @@
 </script>
 
 <!-- It takes the focus when pressed, so Ctrl+Z takes back its own edits (DESIGN 5.29). -->
-<div class="canvas-frame" tabindex="-1" bind:this={frame} bind:clientWidth={partWidth} bind:clientHeight={partHeight}>
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions (Delete takes the chosen shape away) -->
+<div class="canvas-frame" tabindex="-1" role="application" bind:this={frame} bind:clientWidth={partWidth} bind:clientHeight={partHeight} onkeydown={key}>
   <svg
     {id}
     bind:this={svg}
@@ -357,7 +604,7 @@
     onpointerdown={down}
     onpointermove={move}
     onpointerup={up}
-    onpointercancel={() => ((pressed = null), (bendPress = null))}
+    onpointercancel={() => ((pressed = null), (bendPress = null), (objectHeld = null), (shapeHeld = null), (making = null), (stroke = null))}
     ondblclick={unbend}
   >
     {#if dots}
@@ -371,14 +618,65 @@
       </defs>
     {/if}
     {#if dots && gridAfter < 0}{@render gridShown()}{/if}
+    {#if mode === "paint" && picture}
+      <image href={picture} x="0" y="0" width={units.width} height={units.height} preserveAspectRatio="none" />
+    {/if}
     {#each elements as element, i (i)}
-      <svelte:element this={element.tag} {...element.attrs}>{element.text ?? ""}</svelte:element>
+      <svelte:element this={element.tag} {...shifted(element.attrs, heldMove(i))}>{element.text ?? ""}</svelte:element>
       {#if dots && i === gridAfter}{@render gridShown()}{/if}
     {/each}
+    {#if vectorShown}
+      {#each vectorShown.shapes as element, i (i)}
+        <svelte:element
+          this={element.tag}
+          {...shifted(element.attrs, shapeHeld?.index === i ? `translate(${shapeHeld.dx} ${shapeHeld.dy})` : undefined)}
+          data-shape={i}
+          class:chosen={chosenShape === i}>{element.text}</svelte:element>
+      {/each}
+    {/if}
+    {#if making && toolNow}
+      {@const shape = shapeOfDrag(toolNow, making.points, inkNow(), brushNow)}
+      {#if shape}
+        {@const shown = svgOf(shape, units, () => "")}
+        <svelte:element this={shown.tag} {...shown.attrs} class="making" />
+      {/if}
+    {/if}
+    {#if stroke}
+      <polyline
+        class="stroke"
+        points={stroke.points.map((p) => `${p.x},${p.y}`).join(" ")}
+        fill="none"
+        stroke={toolNow === "eraser" ? "var(--panel)" : inkNow()}
+        stroke-width={brushNow}
+        stroke-linecap="round"
+        stroke-linejoin="round" />
+    {/if}
     {#each handles as point, p (p)}
       <circle class="bend" cx={point.x} cy={point.y} r={5 / view[0]} />
     {/each}
   </svg>
+  {#if (mode === "paint" || mode === "vector") && tools.length > 1 && oncanvas}
+    <!-- The mode's tools: the one in hand is pressed. -->
+    <div class="tools" role="toolbar">
+      {#each tools as t (t)}
+        <button type="button" class:on={toolNow === t} aria-pressed={toolNow === t} title={toolWords[t] ?? t} onclick={() => (chosenTool = t)}>{toolWords[t] ?? t}</button>
+      {/each}
+    </div>
+  {/if}
+  {#if typing}
+    {@const v = view}
+    <!-- svelte-ignore a11y_autofocus -->
+    <input
+      class="typing"
+      style:left="{(typing.x - v[1]) * v[0]}px"
+      style:top="{(typing.y - v[2]) * v[0]}px"
+      placeholder={toolWords.canvasText ?? "The text"}
+      aria-label={toolWords.canvasText ?? "The text"}
+      autofocus
+      bind:value={typing.text}
+      onkeydown={typed}
+      onblur={() => (typing = null)} />
+  {/if}
   {#if zoom}
     <!-- As the designer's: out, back to whole (the zoom it is at), in. -->
     <div class="zoom">
@@ -432,6 +730,48 @@
     stroke-width: 1.5;
     vector-effect: non-scaling-stroke;
     cursor: move;
+  }
+
+  /* The chosen shape of a vector drawing. */
+  .canvas-view :global(.chosen) {
+    filter: drop-shadow(0 0 2px var(--accent));
+  }
+
+  .making,
+  .stroke {
+    pointer-events: none;
+    opacity: 0.8;
+  }
+
+  .tools {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    display: flex;
+    gap: 2px;
+  }
+
+  .tools button {
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .tools button.on {
+    background: var(--accent);
+    color: var(--on-accent, #fff);
+  }
+
+  .typing {
+    position: absolute;
+    min-width: 120px;
+    font: inherit;
   }
 
   .zoom {

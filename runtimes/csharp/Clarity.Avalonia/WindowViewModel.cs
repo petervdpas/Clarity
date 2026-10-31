@@ -169,6 +169,137 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
             Edited(part, scope);
     }
 
+    /// <summary>
+    /// The person's action on a canvas with a mode (DESIGN 5.31): the runtime
+    /// applies it to the window's own records, snapped to the canvas's grid
+    /// (CanvasModes decides as every runtime does), chooses what it touched
+    /// in <paramref name="part"/>'s selection, and runs <paramref name="changed"/>
+    /// (`on change`): with undo one edit, which Ctrl+Z takes back whole. A
+    /// refused action, and every action on a readonly canvas, runs nothing:
+    /// false. The paths of <paramref name="args"/> name the window's
+    /// properties (<c>Note.Picture</c>).
+    /// </summary>
+    public bool CanvasEvent(PartState part, string? scope, CanvasArgs args, JsonObject action, Action? changed, [CallerMemberName] string command = "")
+    {
+        // A mirror's handlers run on the server, which decides.
+        if (Remote is not null)
+        {
+            Remote.Command(this, command, [action]);
+            return true;
+        }
+        if (args.Readonly || part.IsReadOnly || !part.IsEnabled || LongCall.Waiting)
+            return false;
+        Action? apply;
+        try
+        {
+            apply = CanvasChange(part, args, action);
+        }
+        catch (ClarityException e)
+        {
+            Say(Level.Error, Text.Plain(e.Message));
+            return false;
+        }
+        if (apply is null)
+            return false;
+        void Run()
+        {
+            apply();
+            changed?.Invoke();
+        }
+        if (scope is null)
+            Handle(Run, [action], command);
+        else
+            EditOf(part.Name, scope, ends: true, Run);
+        return true;
+    }
+
+    /// <summary>What an action on a canvas changes, to do; null when it is refused.</summary>
+    Action? CanvasChange(PartState part, CanvasArgs args, JsonObject action)
+    {
+        switch (args.Mode)
+        {
+            case "objects":
+                {
+                    var (id, x, y) = CanvasModes.Move(action);
+                    if (ValueOf(args.List) is not System.Collections.IList list)
+                        throw new InvalidValueException($"the window has no list {args.List}");
+                    foreach (var record in list)
+                    {
+                        if (record is null || !CanvasModes.SameId(Json(Member(record, "Id")), id))
+                            continue;
+                        if (CanvasModes.Placed(args, Number(Member(record, args.At[0])), Number(Member(record, args.At[1])), x, y) is not var (px, py))
+                            return null;
+                        return () =>
+                        {
+                            SetMember(record, args.At[0], px);
+                            SetMember(record, args.At[1], py);
+                            part.SelectedItem = record;
+                        };
+                    }
+                    return null;
+                }
+            case "paint":
+                {
+                    // A stroke that is no picture is refused: the record never holds it.
+                    if (!CanvasModes.IsPicture(action))
+                        return null;
+                    var picture = Picture.New(CanvasModes.StrokeBytes(action));
+                    var (owner, field) = Owner(args.Path);
+                    if (picture.Equals(Member(owner, field)))
+                        return null;
+                    return () =>
+                    {
+                        SetMember(owner, field, picture);
+                        part.SelectedItem = null;
+                    };
+                }
+            case "vector":
+                {
+                    var (owner, field) = Owner(args.Path);
+                    if (CanvasModes.Vector(Member(owner, field) as string ?? "", args, action) is not { } drawn)
+                        return null;
+                    return () =>
+                    {
+                        SetMember(owner, field, drawn.Text);
+                        // A place from 0, as a table's chosen row.
+                        part.SelectedItem = drawn.Selected > 0 ? (long)(drawn.Selected - 1) : null;
+                    };
+                }
+        }
+        throw new InvalidValueException($"a canvas's mode is objects, paint or vector, not \"{args.Mode}\"");
+    }
+
+    static object? Member(object owner, string name) => owner.GetType().GetProperty(name)?.GetValue(owner);
+
+    static void SetMember(object owner, string name, object? value)
+    {
+        if (owner.GetType().GetProperty(name) is not { CanWrite: true } p)
+            throw new InvalidValueException($"{owner.GetType().Name} has no {name} to set");
+        var type = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+        p.SetValue(owner, value is null || type.IsInstanceOfType(value) ? value : Convert.ChangeType(value, type, System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    static double? Number(object? value) => value is IConvertible c and not string and not bool ? c.ToDouble(System.Globalization.CultureInfo.InvariantCulture) : null;
+
+    static JsonNode? Json(object? value) => value is null ? null : System.Text.Json.JsonSerializer.SerializeToNode(value, value.GetType());
+
+    /// <summary>The value at a path of the window's properties: <c>Boxes</c>, <c>Note.Picture</c>.</summary>
+    object? ValueOf(string path)
+    {
+        object? at = this;
+        foreach (var name in path.Split('.'))
+            at = at is null ? null : Member(at, name);
+        return at;
+    }
+
+    /// <summary>The record a path ends in, and its field.</summary>
+    (object Owner, string Field) Owner(string path)
+    {
+        var dot = path.LastIndexOf('.');
+        var owner = dot < 0 ? this : ValueOf(path[..dot]);
+        return (owner ?? throw new InvalidValueException($"the window has no {path}"), path[(dot + 1)..]);
+    }
+
     /// <summary>Takes back (<paramref name="back"/>) or does again the last edit of <paramref name="scope"/>.</summary>
     public void UndoEdit(string scope, bool back)
     {

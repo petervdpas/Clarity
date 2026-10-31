@@ -1,0 +1,455 @@
+{
+  "about": "Canvas modes (DESIGN 5.31), as every runtime does them. A vector drawing is kept as SVG text, one element on a line: the svg line with its viewBox (the canvas's units, 1000 x 1000 without them), each shape, then </svg>, every line ending in a newline. A shape is a drawing shape (conformance/drawing.json) with whole numbers: rect {x, y, width, height, color} is <rect ... fill>, line {x1, y1, x2, y2, color, width} is <line ... stroke stroke-width>, ellipse {x, y, rx, ry, color} is <ellipse cx cy rx ry fill>, path {points, color, width} is <polyline points=\"x,y x,y\" fill=\"none\" stroke stroke-width>, text {x, y, text, color, size} is <text x y fill font-size>, with &, <, > and \" written as entities. A line the runtime does not read as one of these is the shape {op: \"svg\", text: line}, kept as it is. Empty text is an empty drawing. A number is rounded half away from zero. With snap and a grid, a place (x, y, x1, y1, x2, y2, each point) is rounded to the nearest multiple of the grid; sizes are kept. An action that changes nothing, or names no object or shape, is refused; a readonly canvas refuses every action. A stroke is the picture after it as an image field holds a new picture, {data: base64 of a PNG} (conformance/pictures.json), and is kept as it comes; one whose data is no picture (conformance/pictures.json) is refused, so the record never holds it. `selected` is what the action touched, as a table's chosen row is kept: the object's place in its list, or the shape's place in the drawing, both from 0; null for none.",
+  "svg": [
+    {
+      "name": "an empty drawing",
+      "units": [
+        400,
+        300
+      ],
+      "shapes": [],
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">\n</svg>\n"
+    },
+    {
+      "name": "every shape",
+      "units": [
+        400,
+        300
+      ],
+      "shapes": [
+        {
+          "op": "rect",
+          "x": 10,
+          "y": 20,
+          "width": 30,
+          "height": 40,
+          "color": "#ff0000"
+        },
+        {
+          "op": "line",
+          "x1": 0,
+          "y1": 0,
+          "x2": 10,
+          "y2": 10,
+          "color": "#000000",
+          "width": 2
+        },
+        {
+          "op": "ellipse",
+          "x": 50,
+          "y": 50,
+          "rx": 10,
+          "ry": 5,
+          "color": "#00ff00"
+        },
+        {
+          "op": "path",
+          "points": [
+            0,
+            0,
+            10,
+            10,
+            20,
+            0
+          ],
+          "color": "#0000ff",
+          "width": 3
+        },
+        {
+          "op": "text",
+          "x": 5,
+          "y": 15,
+          "text": "a & \"b\" <c>",
+          "color": "#333333",
+          "size": 12
+        }
+      ],
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">\n<rect x=\"10\" y=\"20\" width=\"30\" height=\"40\" fill=\"#ff0000\"/>\n<line x1=\"0\" y1=\"0\" x2=\"10\" y2=\"10\" stroke=\"#000000\" stroke-width=\"2\"/>\n<ellipse cx=\"50\" cy=\"50\" rx=\"10\" ry=\"5\" fill=\"#00ff00\"/>\n<polyline points=\"0,0 10,10 20,0\" fill=\"none\" stroke=\"#0000ff\" stroke-width=\"3\"/>\n<text x=\"5\" y=\"15\" fill=\"#333333\" font-size=\"12\">a &amp; &quot;b&quot; &lt;c&gt;</text>\n</svg>\n"
+    },
+    {
+      "name": "a line it does not read is kept",
+      "units": [
+        100,
+        100
+      ],
+      "shapes": [
+        {
+          "op": "svg",
+          "text": "<circle cx=\"5\" cy=\"5\" r=\"2\"/>"
+        },
+        {
+          "op": "rect",
+          "x": 1,
+          "y": 2,
+          "width": 3,
+          "height": 4,
+          "color": "red"
+        }
+      ],
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n<circle cx=\"5\" cy=\"5\" r=\"2\"/>\n<rect x=\"1\" y=\"2\" width=\"3\" height=\"4\" fill=\"red\"/>\n</svg>\n"
+    }
+  ],
+  "read": [
+    {
+      "name": "empty text is an empty drawing",
+      "text": "",
+      "shapes": []
+    },
+    {
+      "name": "its own viewBox is kept",
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 50 60\">\n</svg>\n",
+      "units": [
+        50,
+        60
+      ],
+      "shapes": []
+    }
+  ],
+  "actions": [
+    {
+      "name": "an object moves, snapped",
+      "mode": "objects",
+      "list": "types",
+      "at": [
+        "x",
+        "y"
+      ],
+      "grid": 20,
+      "snap": true,
+      "data": {
+        "types": [
+          {
+            "id": 1,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "id": 2,
+            "x": 40,
+            "y": 40
+          }
+        ]
+      },
+      "action": {
+        "move": {
+          "id": 2,
+          "x": 67,
+          "y": 31
+        }
+      },
+      "after": {
+        "types": [
+          {
+            "id": 1,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "id": 2,
+            "x": 60,
+            "y": 40
+          }
+        ]
+      },
+      "selected": 1
+    },
+    {
+      "name": "an object moves without snap, rounded",
+      "mode": "objects",
+      "list": "types",
+      "at": [
+        "x",
+        "y"
+      ],
+      "grid": 20,
+      "snap": false,
+      "data": {
+        "types": [
+          {
+            "id": 1,
+            "x": 0,
+            "y": 0
+          }
+        ]
+      },
+      "action": {
+        "move": {
+          "id": 1,
+          "x": 12.5,
+          "y": -3.5
+        }
+      },
+      "after": {
+        "types": [
+          {
+            "id": 1,
+            "x": 13,
+            "y": -4
+          }
+        ]
+      },
+      "selected": 0
+    },
+    {
+      "name": "an object put where it is changes nothing",
+      "mode": "objects",
+      "list": "types",
+      "at": [
+        "x",
+        "y"
+      ],
+      "grid": 20,
+      "snap": true,
+      "data": {
+        "types": [
+          {
+            "id": 1,
+            "x": 40,
+            "y": 40
+          }
+        ]
+      },
+      "action": {
+        "move": {
+          "id": 1,
+          "x": 45,
+          "y": 38
+        }
+      },
+      "refused": true
+    },
+    {
+      "name": "an unknown object",
+      "mode": "objects",
+      "list": "types",
+      "at": [
+        "x",
+        "y"
+      ],
+      "data": {
+        "types": [
+          {
+            "id": 1,
+            "x": 0,
+            "y": 0
+          }
+        ]
+      },
+      "action": {
+        "move": {
+          "id": 9,
+          "x": 10,
+          "y": 10
+        }
+      },
+      "refused": true
+    },
+    {
+      "name": "a readonly canvas",
+      "mode": "objects",
+      "list": "types",
+      "at": [
+        "x",
+        "y"
+      ],
+      "readonly": true,
+      "data": {
+        "types": [
+          {
+            "id": 1,
+            "x": 0,
+            "y": 0
+          }
+        ]
+      },
+      "action": {
+        "move": {
+          "id": 1,
+          "x": 10,
+          "y": 10
+        }
+      },
+      "refused": true
+    },
+    {
+      "name": "a stroke is the picture after it",
+      "mode": "paint",
+      "path": "note.picture",
+      "data": {
+        "note": {
+          "id": 1,
+          "picture": null
+        }
+      },
+      "action": {
+        "stroke": {
+          "data": "iVBORw0KGgo="
+        }
+      },
+      "after": {
+        "note": {
+          "id": 1,
+          "picture": {
+            "data": "iVBORw0KGgo="
+          }
+        }
+      },
+      "selected": null
+    },
+    {
+      "name": "a stroke that is no picture is refused",
+      "mode": "paint",
+      "path": "note.picture",
+      "data": {
+        "note": {
+          "id": 1,
+          "picture": null
+        }
+      },
+      "action": {
+        "stroke": {
+          "data": "AAAA"
+        }
+      },
+      "refused": true
+    },
+    {
+      "name": "a shape is added to an empty drawing, snapped",
+      "mode": "vector",
+      "path": "note.drawing",
+      "units": [
+        400,
+        300
+      ],
+      "grid": 10,
+      "snap": true,
+      "data": {
+        "note": {
+          "id": 1,
+          "drawing": ""
+        }
+      },
+      "action": {
+        "add": {
+          "op": "rect",
+          "x": 12,
+          "y": 18,
+          "width": 33,
+          "height": 41,
+          "color": "#ff0000"
+        }
+      },
+      "after": {
+        "note": {
+          "id": 1,
+          "drawing": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">\n<rect x=\"10\" y=\"20\" width=\"33\" height=\"41\" fill=\"#ff0000\"/>\n</svg>\n"
+        }
+      },
+      "selected": 0
+    },
+    {
+      "name": "a shape is changed",
+      "mode": "vector",
+      "path": "note.drawing",
+      "units": [
+        400,
+        300
+      ],
+      "data": {
+        "note": {
+          "drawing": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">\n<rect x=\"10\" y=\"20\" width=\"30\" height=\"40\" fill=\"#ff0000\"/>\n<line x1=\"0\" y1=\"0\" x2=\"10\" y2=\"10\" stroke=\"#000000\" stroke-width=\"2\"/>\n</svg>\n"
+        }
+      },
+      "action": {
+        "change": {
+          "index": 2,
+          "shape": {
+            "op": "line",
+            "x1": 0,
+            "y1": 0,
+            "x2": 50,
+            "y2": 10,
+            "color": "#000000",
+            "width": 4
+          }
+        }
+      },
+      "after": {
+        "note": {
+          "drawing": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">\n<rect x=\"10\" y=\"20\" width=\"30\" height=\"40\" fill=\"#ff0000\"/>\n<line x1=\"0\" y1=\"0\" x2=\"50\" y2=\"10\" stroke=\"#000000\" stroke-width=\"4\"/>\n</svg>\n"
+        }
+      },
+      "selected": 1
+    },
+    {
+      "name": "a shape moves by its first place, the rest with it",
+      "mode": "vector",
+      "path": "note.drawing",
+      "units": [
+        400,
+        300
+      ],
+      "grid": 10,
+      "snap": true,
+      "data": {
+        "note": {
+          "drawing": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">\n<polyline points=\"0,0 10,10 20,0\" fill=\"none\" stroke=\"#0000ff\" stroke-width=\"3\"/>\n</svg>\n"
+        }
+      },
+      "action": {
+        "move": {
+          "index": 1,
+          "x": 31,
+          "y": 49
+        }
+      },
+      "after": {
+        "note": {
+          "drawing": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">\n<polyline points=\"30,50 40,60 50,50\" fill=\"none\" stroke=\"#0000ff\" stroke-width=\"3\"/>\n</svg>\n"
+        }
+      },
+      "selected": 0
+    },
+    {
+      "name": "a shape is deleted",
+      "mode": "vector",
+      "path": "note.drawing",
+      "units": [
+        400,
+        300
+      ],
+      "data": {
+        "note": {
+          "drawing": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">\n<rect x=\"10\" y=\"20\" width=\"30\" height=\"40\" fill=\"#ff0000\"/>\n</svg>\n"
+        }
+      },
+      "action": {
+        "delete": 1
+      },
+      "after": {
+        "note": {
+          "drawing": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">\n</svg>\n"
+        }
+      },
+      "selected": null
+    },
+    {
+      "name": "a shape that is not there",
+      "mode": "vector",
+      "path": "note.drawing",
+      "units": [
+        400,
+        300
+      ],
+      "data": {
+        "note": {
+          "drawing": ""
+        }
+      },
+      "action": {
+        "delete": 1
+      },
+      "refused": true
+    }
+  ]
+}

@@ -19,6 +19,7 @@
 extern char** environ;
 #endif
 
+#include "clarity/canvas.hpp"
 #include "clarity/dropdown_options.hpp"
 #include "clarity/edits.hpp"
 #include "clarity/list_fields.hpp"
@@ -62,6 +63,20 @@ json answered(Reply reply, const std::map<std::string, int>* sent = nullptr) {
     fill_views(reply.state, sent);
     edits_of(reply.state.instance)->reset(edit_data(reply.state));
     return value(reply);
+}
+
+/// Whether a table's edit kept to its `editable` fields, against the list at
+/// `path` as the edit baseline had it; any edit without `editable` does.
+bool kept_to_editable(const WindowState& state, const json& args) {
+    if (!args.contains("editable") || !args["editable"].is_array()) return true;
+    auto baseline = edits_of(state.instance)->baseline();
+    std::string path = text_of(args, "path");
+    auto before = baseline && !path.empty() ? found_at(*baseline, path) : std::nullopt;
+    if (!before) return true;
+    std::vector<std::string> editable;
+    for (const auto& field : args["editable"])
+        if (field.is_string()) editable.push_back(field);
+    return table_edit_fits(*before, value_at(state.data, path), editable);
 }
 
 /// The reply keeps the views of the window a handler ran on, when it gave none of its own.
@@ -121,6 +136,13 @@ Reply Service::stepped(const WindowState& state, const std::string& handler, std
     return reply;
 }
 
+Reply Service::taken_back(const WindowState& state) {
+    auto baseline = edits_of(state.instance)->baseline();
+    Reply reply = drawn(baseline ? with_edit_data(state, *baseline) : state);
+    reply.refused = true;
+    return reply;
+}
+
 Reply Service::edited(const WindowState& state, const std::string& part, const std::string& scope, const std::string& handler) {
     std::vector<int64_t> steps;
     Reply reply = handler.empty() ? drawn(state) : stepped(state, handler, &steps);
@@ -130,7 +152,7 @@ Reply Service::edited(const WindowState& state, const std::string& part, const s
 
 bool Service::watches(const std::string& command) {
     static const std::set<std::string> watched{"start_app", "open_window", "close_window", "return_to", "dispatch_event", "answer_event", "edit_event",
-                                                "reorder_event", "item_event", "range_event", "step_event"};
+                                                "reorder_event", "item_event", "range_event", "step_event", "canvas_event"};
     return watched.contains(command);
 }
 
@@ -211,6 +233,11 @@ json Service::answer(const std::string& command, const json& args, Desktop* call
         if (command == "start_app") return answered(on_event(WindowState{}, "start"));
         // One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
         if (command == "dispatch_event") return answered(stepped(state, text_of(args, "handler")));
+        // A readonly part changes nothing (DESIGN 1.7), and a table's edit keeps
+        // to its editable fields: what the screen changed is taken back.
+        static const std::set<std::string> edits{"edit_event", "reorder_event", "item_event", "range_event", "canvas_event"};
+        if (edits.contains(command) && args.contains("readonly") && args["readonly"] == json(true)) return answered(taken_back(state));
+        if (command == "edit_event" && !kept_to_editable(state, args)) return answered(taken_back(state));
         if (command == "edit_event") {
             // The person ended an edit of a part (DESIGN 5.29): its handler runs as
             // one database step, and the edit goes on the window's record with
@@ -291,6 +318,18 @@ json Service::answer(const std::string& command, const json& args, Desktop* call
             if (now == before) return answered(drawn(state));
             WindowState changed = state;
             place_at(changed.data, path) = std::move(now);
+            return answered(edited(changed, part, scope, handler));
+        }
+        if (command == "canvas_event") {
+            // A canvas's action (DESIGN 5.31): an object moved, a stroke painted or
+            // a shape drawn, snapped to the grid, with what it touched chosen.
+            // Refused or the same: the window as it is, running nothing.
+            WindowState changed = state;
+            if (!canvas_event(changed, canvas_args_of(args), args.value("action", json::object()))) {
+                Reply reply = drawn(state);
+                reply.refused = true;
+                return answered(reply);
+            }
             return answered(edited(changed, part, scope, handler));
         }
         if (command == "step_event") {

@@ -4,6 +4,7 @@
 //! contracts. It is published as the crate clarity-runtime, which every
 //! generated project depends on.
 
+pub mod canvas;
 pub mod charts;
 pub mod cli;
 pub mod dialect;

@@ -190,6 +190,9 @@ private:
     /// a scope, the change goes on the window's edits; without a handler the
     /// window is drawn as it is.
     Reply edited(const WindowState& state, const std::string& part, const std::string& scope, const std::string& handler);
+    /// What the person changed, refused (DESIGN 1.7): the window's data as
+    /// its edit baseline had it, no handler run, no edit kept.
+    Reply taken_back(const WindowState& state);
 };
 
 /// Shows the application's window and runs until its last window closes.

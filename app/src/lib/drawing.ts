@@ -89,6 +89,18 @@ export function svgOf(
           "data-link": String(shape.name ?? ""),
         },
       };
+    // An ellipse by its center and radii, and a line through points (DESIGN 5.31).
+    case "ellipse":
+      return { tag: "ellipse", attrs: { cx: n(shape.x), cy: n(shape.y), rx: n(shape.rx), ry: n(shape.ry), fill: color } };
+    case "path": {
+      const points = Array.isArray(shape.points) ? (shape.points as unknown[]).map(n) : [];
+      const pairs = Array.from({ length: Math.floor(points.length / 2) }, (_, i) => `${points[2 * i]},${points[2 * i + 1]}`);
+      return {
+        tag: "polyline",
+        attrs: { points: pairs.join(" "), fill: "none", stroke: color, "stroke-width": n(shape.width ?? 1), "stroke-linecap": "round", "stroke-linejoin": "round" },
+      };
+    }
+    // An object's box (mode objects) draws nothing: the shapes after it are the object.
     // A picture of the resources folder, stretched to fill its box; one that is not there draws nothing.
     case "image": {
       const href = picture(String(shape.picture ?? ""));

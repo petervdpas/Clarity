@@ -1542,8 +1542,8 @@ fn parse_widget_page(
 }
 
 /// The words a part's line is written with, which a color after `dots 3` is not.
-const LINE_WORDS: [&str; 62] = [
-    "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "order", "reorder", "edit", "show", "surface", "renderer", "source", "for",
+const LINE_WORDS: [&str; 66] = [
+    "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
     "children", "page", "typed", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
     "foldable", "folded", "taborder", "key", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window",
@@ -1575,6 +1575,11 @@ fn parse_widget_props(
         resizable: false,
         sortable: false,
         reorder: None,
+        mode: None,
+        objects: None,
+        tools: Vec::new(),
+        brush: None,
+        ink: None,
         order: None,
         show: Vec::new(),
         orientation: None,
@@ -1814,6 +1819,54 @@ fn parse_widget_props(
                 let field = cursor.expect_ident("a column to order by")?.name;
                 let desc = cursor.eat_keyword("desc");
                 props.order = Some(crate::model::TableOrder { field, desc });
+            }
+            // `mode objects types at x, y`, `mode paint`, `mode vector` (DESIGN 5.31).
+            "mode" => {
+                applies(WidgetProperty::Mode)?;
+                let word = cursor.expect_ident("objects, paint or vector, as in mode paint")?;
+                props.mode = Some(match word.name.as_str() {
+                    "objects" => {
+                        let list = cursor.expect_ident("the list whose records are the objects, as in mode objects types at x, y")?.name;
+                        if !cursor.eat_keyword("at") {
+                            return Err(cursor.error_here("expected 'at', as in mode objects types at x, y".to_string()));
+                        }
+                        let x = cursor.expect_ident("the field of an object's x")?.name;
+                        if !cursor.eat(TokenKind::Comma) {
+                            return Err(cursor.error_here("expected ',' and the field of an object's y, as in at x, y".to_string()));
+                        }
+                        let y = cursor.expect_ident("the field of an object's y")?.name;
+                        props.objects = Some(crate::model::CanvasObjects { list, x, y });
+                        crate::model::CanvasMode::Objects
+                    }
+                    "paint" => crate::model::CanvasMode::Paint,
+                    "vector" => crate::model::CanvasMode::Vector,
+                    other => return Err(Diagnostic::error(format!("a canvas's mode is objects, paint or vector, not '{other}'"), word.span)),
+                });
+            }
+            "tools" => {
+                applies(WidgetProperty::Tools)?;
+                loop {
+                    props.tools.push(cursor.expect_ident("a tool, as in tools pen, eraser")?.name);
+                    if !cursor.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+            }
+            "brush" => {
+                applies(WidgetProperty::Brush)?;
+                let at = cursor.peek().map(|t| t.span).unwrap_or(clause.span);
+                let width = cursor.expect_number("how wide the brush is, in pixels, as in brush 4")?;
+                if !(1..=100).contains(&width) {
+                    return Err(Diagnostic::error(format!("a brush is 1 to 100 pixels wide, not {width}"), at));
+                }
+                props.brush = Some(width);
+            }
+            "ink" => {
+                applies(WidgetProperty::Ink)?;
+                props.ink = Some(match cursor.peek().map(|t| t.kind) {
+                    Some(TokenKind::Str) => cursor.expect_string("a color")?,
+                    _ => cursor.expect_ident("a color of the theme, as in ink accent")?.name,
+                });
             }
             "reorder" => {
                 applies(WidgetProperty::Reorder)?;

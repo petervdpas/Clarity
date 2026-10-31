@@ -48,6 +48,10 @@ export type PartState = {
   /** A canvas's grid dots, as a handler set them: pixels across, and color (empty is the theme's border). */
   dotSize?: number | null;
   dotColor?: string | null;
+  /** A painting or vector canvas's tool in hand, brush width and ink, as a handler set them (DESIGN 5.31). */
+  tool?: string | null;
+  brush?: number | null;
+  ink?: string | null;
   /** Whether a foldable panel or form is folded, as the person or a handler left it (conformance/folding.json). */
   folded?: boolean | null;
   /** Whether a collapsible sidebar is folded to its button (conformance/sidebars.json). */
@@ -62,6 +66,17 @@ export type PartState = {
   open?: number | null;
   /** A custom part's properties as code set them, by name (conformance/custom-parts.json). */
   values?: Record<string, JsonValue> | null;
+};
+
+/** A canvas's mode and its parameters, as a canvas event carries them (DESIGN 5.31). */
+export type CanvasParams = {
+  mode: "objects" | "paint" | "vector";
+  list?: string;
+  at?: [string, string];
+  path?: string;
+  units?: [number, number] | null;
+  grid: number;
+  snap: boolean;
 };
 
 export interface Live {
@@ -81,6 +96,13 @@ export interface Live {
   edited?(part: string): void;
   /** A row of `part` moved by the person: the runtime reorders the list and runs `handler`, as one edit (DESIGN 5.30). */
   reorder?(part: string, rows: { list: string; by: string; parent: string | null; move: Move }, handler: string | null): Promise<boolean>;
+  /**
+   * What the person did on a canvas with a mode (DESIGN 5.31): an object
+   * dropped (`{move: {id, x, y}}`), a stroke painted (`{stroke: picture}`),
+   * a shape added, changed, moved or deleted. The runtime applies it, snapped,
+   * and runs `handler`, as one edit; false when it refused it.
+   */
+  canvas?(part: string, canvas: CanvasParams, action: Record<string, unknown>, handler: string | null): Promise<boolean>;
   /** An item typed or picked for the list at `path`: the runtime adds it, or says false when it refused it (U1c, DESIGN 1.7). */
   item?(part: string, item: { path: string; item: string; values: string[]; typed: string }, handler: string | null): Promise<boolean>;
   /** A key, a drag or a typed number on a slider or spin box: the runtime makes the value at `path` (DESIGN 1.7). */

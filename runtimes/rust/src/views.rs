@@ -127,6 +127,10 @@ pub fn fill(state: &mut WindowState, chosen: impl Fn(&str) -> bool) -> Result<()
                 view.insert("shown".into(), json(trees::shown_tree(&rows, &open)));
                 view.insert("open".into(), Value::Array(open));
             }
+            Some("numbers") => {
+                let points = view.get("points").and_then(Value::as_u64).unwrap_or(0) as usize;
+                view.insert("numbers".into(), json(numbers_of(&state.data, &list_of(view), points)));
+            }
             Some("chart") => {
                 let v: ChartView = view_as(view)?;
                 let of = v.of.as_deref().filter(|o| !o.is_empty());
@@ -140,6 +144,30 @@ pub fn fill(state: &mut WindowState, chosen: impl Fn(&str) -> bool) -> Result<()
         }
     }
     Ok(())
+}
+
+fn list_of(view: &Map<String, Value>) -> String {
+    view.get("list").and_then(Value::as_str).unwrap_or_default().to_string()
+}
+
+/// The numbers of the list at `path` a chart of numbers draws: its last
+/// `points` (all when 0), decimals as their value; what is no number, or
+/// blank text, is left out.
+pub fn numbers_of(data: &Map<String, Value>, path: &str, points: usize) -> Vec<f64> {
+    let numbers: Vec<f64> = match data_at(data, path) {
+        Some(Value::Array(list)) => list
+            .iter()
+            .filter_map(|item| match item {
+                Value::Number(n) => n.as_f64(),
+                Value::String(s) if !s.trim().is_empty() => s.trim().parse::<f64>().ok(),
+                _ => None,
+            })
+            .filter(|n| n.is_finite())
+            .collect(),
+        _ => vec![],
+    };
+    let skip = if points > 0 { numbers.len().saturating_sub(points) } else { 0 };
+    numbers[skip..].to_vec()
 }
 
 /// What the screen sent with a message, which its reply's views start from.
@@ -196,6 +224,10 @@ pub fn event(mut state: WindowState, part: &str, action: &Map<String, Value>, dr
     let unfit = |name: &str| Error::Invalid(format!("a view's {name} does not fit: {}", action[name]));
     if let Some(field) = action.get("sort") {
         let field = field.as_str().ok_or_else(|| unfit("sort"))?;
+        // Only a sortable table sorts by a header.
+        if view.get("sortable") != Some(&Value::Bool(true)) {
+            return draw(state);
+        }
         let v: TableView = view_as(view)?;
         view.insert("order".into(), json(tables::next_order(v.order.as_ref(), field)));
         view.insert("at".into(), Value::from(1));

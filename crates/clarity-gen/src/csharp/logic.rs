@@ -95,6 +95,8 @@ pub struct PartInfo {
     pub bind: Option<String>,
     /// A custom part (DESIGN 5.19): its kind and the values written on its line.
     pub custom: Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)>,
+    /// A canvas's mode (DESIGN 5.31); a canvas of objects has its list as `bind`.
+    pub mode: Option<clarity_spec::model::CanvasMode>,
 }
 
 /// The window or app a handler belongs to.
@@ -193,6 +195,9 @@ fn part_property(property: &str) -> Option<&'static str> {
         "background" => "Background",
         "dotSize" => "DotSize",
         "dotColor" => "DotColor",
+        "tool" => "Tool",
+        "brush" => "Brush",
+        "ink" => "Ink",
         _ => return None,
     })
 }
@@ -435,6 +440,9 @@ impl<'a> Emitter<'a> {
                     "ring" => "Ring",
                     "image" => "Image",
                     "link" => "Link",
+                    "object" => "Object",
+                    "ellipse" => "Ellipse",
+                    "path" => "Path",
                     _ => "Words",
                 };
                 let mut values = Vec::new();
@@ -447,6 +455,9 @@ impl<'a> Emitter<'a> {
                         (ShapeValue::Number, Err(default)) => default.to_string(),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Ok(arg)) => self.value(arg),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text | ShapeValue::Name | ShapeValue::Points, Err(default)) => string(default),
+                        // An object sends its record's id (DESIGN 5.31).
+                        (ShapeValue::Record, Ok(arg)) => self.value(&clarity_spec::code::check::object_id(arg)),
+                        (ShapeValue::Record, Err(_)) => "null".to_string(),
                         (ShapeValue::Text, Ok(arg)) => self.shown(arg),
                     });
                 }
@@ -776,6 +787,10 @@ impl<'a> Emitter<'a> {
         }
         let ExprKind::Member { object, .. } = &expr.kind else { return String::new() };
         let ExprKind::Name { name } = &object.kind else { return String::new() };
+        // A vector canvas's chosen shape, its place from 1 (DESIGN 5.31).
+        if self.window.and_then(|w| w.parts.get(name)).and_then(|p| p.mode) == Some(clarity_spec::model::CanvasMode::Vector) {
+            return format!("{part}.SelectedShape");
+        }
         let entity = self
             .window
             .and_then(|w| w.parts.get(name))

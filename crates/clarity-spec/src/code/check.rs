@@ -1655,6 +1655,17 @@ struct BodyChecker<'e, 'a> {
 /// The id every record has, which code can read.
 pub const RECORD_ID: &str = "id";
 
+/// The id of the record an `object` shape marks (DESIGN 5.31): `record.id`,
+/// read at the end of the record's own text, so the checker types it and every
+/// generator compiles it as any other field read.
+pub fn object_id(record: &Expr) -> Expr {
+    let at = Span { start: record.span.end, end: record.span.end, ..record.span };
+    Expr {
+        kind: ExprKind::Member { object: Box::new(record.clone()), member: Ident { name: RECORD_ID.to_string(), span: at } },
+        span: at,
+    }
+}
+
 /// A random number from 1 to its argument, in an engine that uses random.
 pub const RANDOM: &str = "random";
 /// `join(texts, separator)`: a list of texts put together.
@@ -1692,6 +1703,8 @@ pub enum ShapeValue {
     Name,
     /// Points as whole numbers, x, y, x, y, ...: a list<integer>.
     Points,
+    /// A record of a canvas's objects (DESIGN 5.31); the shape keeps its id.
+    Record,
 }
 
 /// A shape a draw handler draws on its canvas: its name and its values, in
@@ -1701,7 +1714,7 @@ pub struct Shape {
     pub values: &'static [(&'static str, ShapeValue, Option<&'static str>)],
 }
 
-pub const SHAPES: [Shape; 8] = [
+pub const SHAPES: [Shape; 11] = [
     // Without a color, the canvas's background.
     Shape { name: "clear", values: &[("color", ShapeValue::Color, Some(""))] },
     Shape {
@@ -1762,6 +1775,33 @@ pub const SHAPES: [Shape; 8] = [
             ("color", ShapeValue::Color, None),
             ("width", ShapeValue::Number, Some("1")),
         ],
+    },
+    // The box of an object of a canvas in mode objects (DESIGN 5.31): what is
+    // drawn after it, until the next object, moves with it while it is dragged.
+    Shape {
+        name: "object",
+        values: &[
+            ("record", ShapeValue::Record, None),
+            ("x", ShapeValue::Number, None),
+            ("y", ShapeValue::Number, None),
+            ("width", ShapeValue::Number, None),
+            ("height", ShapeValue::Number, None),
+        ],
+    },
+    // An ellipse by its center and its radii, and a line through points: shapes a vector canvas keeps too.
+    Shape {
+        name: "ellipse",
+        values: &[
+            ("x", ShapeValue::Number, None),
+            ("y", ShapeValue::Number, None),
+            ("rx", ShapeValue::Number, None),
+            ("ry", ShapeValue::Number, None),
+            ("color", ShapeValue::Color, None),
+        ],
+    },
+    Shape {
+        name: "path",
+        values: &[("points", ShapeValue::Points, None), ("color", ShapeValue::Color, None), ("width", ShapeValue::Number, Some("1"))],
     },
     Shape {
         name: "image",
@@ -2020,6 +2060,14 @@ impl<'a> BodyChecker<'_, 'a> {
             }
             return;
         };
+        // The objects of a canvas in mode objects, which `object` marks.
+        let objects = match self.part(&canvas.name) {
+            Some((_, Part::Widget(p))) if p.mode == Some(crate::model::CanvasMode::Objects) => p.objects.as_ref().map(|o| o.list.as_str()),
+            _ => None,
+        };
+        if found.name == "object" && objects.is_none() {
+            self.error(format!("'object' marks an object of a canvas in mode objects; '{}' has no objects", canvas.name), shape.span);
+        }
         let needed = found.values.iter().filter(|(_, _, default)| default.is_none()).count();
         if args.len() < needed || args.len() > found.values.len() {
             let names: Vec<&str> = found.values.iter().map(|(n, _, _)| *n).collect();
@@ -2035,12 +2083,20 @@ impl<'a> BodyChecker<'_, 'a> {
             let ty = match kind {
                 ShapeValue::Text => self.shown_text(arg),
                 ShapeValue::Points => self.expr(arg, Some(Ty::Values(Item::Integer))),
+                ShapeValue::Record => {
+                    let ty = self.expr(arg, None);
+                    if self.is_object(objects, &ty) && !matches!(ty, Ty::Unknown) {
+                        self.expr(&object_id(arg), None);
+                    }
+                    ty
+                }
                 _ => self.expr(arg, None),
             };
             let problem = match kind {
                 ShapeValue::Number if !matches!(ty, Ty::Integer | Ty::Decimal | Ty::Money | Ty::Unknown) => Some("a number"),
                 ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name if !matches!(ty, Ty::Text | Ty::Unknown) => Some("text"),
                 ShapeValue::Points if !matches!(ty, Ty::Values(Item::Integer) | Ty::Unknown) => Some("a list of whole numbers"),
+                ShapeValue::Record if !self.is_object(objects, &ty) => Some("a record of the canvas's objects"),
                 ShapeValue::Text if !ty.is_value() => Some("text or a value"),
                 _ => None,
             };
@@ -2050,6 +2106,18 @@ impl<'a> BodyChecker<'_, 'a> {
         }
         for arg in args.iter().skip(found.values.len()) {
             self.expr(arg, None);
+        }
+    }
+
+    /// Whether `ty` is a record of the canvas's objects, the list `objects`.
+    fn is_object(&self, objects: Option<&str>, ty: &Ty<'a>) -> bool {
+        if matches!(ty, Ty::Unknown) {
+            return true;
+        }
+        let Some(list) = objects else { return false };
+        match (self.data(list).map(|d| self.env.data_type(d)), ty) {
+            (Some(Ty::List(listed)), Ty::Record(record)) => std::ptr::eq(listed, *record) || listed.name.name == record.name.name,
+            _ => false,
         }
     }
 
@@ -2963,6 +3031,22 @@ impl<'a> BodyChecker<'_, 'a> {
             "via" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Canvas) => {
                 Some(Place::Value { ty: Ty::Values(Item::Integer), writable: Err(format!("{name}.{property} is read, not set: it is where the line a person bent bends now")) })
             }
+            // What the person changed last on a canvas with a mode (DESIGN 5.31):
+            // the record of an object, or the place of a shape in the drawing, from 1.
+            "selected" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && p.mode.is_some()) => {
+                let Part::Widget(props) = part else { return None };
+                let ty = match (props.mode, &props.objects) {
+                    (Some(crate::model::CanvasMode::Objects), Some(objects)) => match self.data(&objects.list).map(|d| self.env.data_type(d)) {
+                        Some(Ty::List(entity)) => Ty::Record(entity),
+                        _ => Ty::Unknown,
+                    },
+                    _ => Ty::Integer,
+                };
+                Some(Place::Value { ty, writable: Err(format!("'selected' of canvas '{name}' can only be read")) })
+            }
+            // A painting or vector canvas's tool, brush and ink, which a palette of buttons sets.
+            "tool" | "ink" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && matches!(p.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector))) => value(Ty::Text),
+            "brush" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && matches!(p.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector))) => value(Ty::Integer),
             "selected" => {
                 let Part::Widget(props) = part else { return None };
                 if !matches!(props.kind, WidgetKind::Table | WidgetKind::List | WidgetKind::Tree | WidgetKind::TreeTable) {

@@ -598,6 +598,47 @@ func TestTheRuntimeReordersAMovedRow(t *testing.T) {
 	}
 }
 
+// Canvas modes (DESIGN 5.31): the screen sends where the person dropped an
+// object, the runtime snaps it, chooses it and runs on change, as one edit
+// Ctrl+Z takes back; a vector canvas keeps its drawing as SVG.
+func TestTheRuntimeMovesAnObjectAndEditsADrawing(t *testing.T) {
+	c, windows := service(t)
+	db := c.options.Db
+	types := []any{map[string]any{"id": 1, "x": 0, "y": 0}, map[string]any{"id": 2, "x": 40, "y": 40}}
+	state := map[string]any{"window": "Card", "instance": 31, "data": map[string]any{"types": types, "note": map[string]any{"drawing": ""}}}
+	call(t, c, "dispatch_event", wire(t, map[string]any{"state": state, "handler": "noop"}))
+	drop := map[string]any{"state": state, "part": "diagram", "scope": "diagram", "mode": "objects", "list": "types", "at": []any{"x", "y"},
+		"grid": 20, "snap": true, "action": map[string]any{"move": map[string]any{"id": 2, "x": 67, "y": 31}}, "handler": "remember"}
+	reply := asked(t, c, "canvas_event", drop)
+	if got := wire(t, dataOf(reply)["types"]); got != `[{"id":1,"x":0,"y":0},{"id":2,"x":60,"y":40}]` {
+		t.Fatal("the object, snapped:", got)
+	}
+	if got := wire(t, reply["state"].(map[string]any)["selected"]); got != `{"diagram":1}` {
+		t.Fatal("the moved object is chosen:", got)
+	}
+	if memos, _ := clarity.All[memo](db); len(memos) != 1 || reply["step"] == nil {
+		t.Fatal("on change ran as a step", memos, reply["step"])
+	}
+	moved := map[string]any{"window": "Card", "instance": 31, "data": dataOf(reply)}
+	back := asked(t, c, "undo_edit", map[string]any{"state": moved, "scope": "diagram", "back": true})
+	if got := wire(t, dataOf(back)["types"]); got != wire(t, types) {
+		t.Fatal("Ctrl+Z takes the move back:", got)
+	}
+	// Dropped where it is: refused, running nothing.
+	ran := len(windows.log)
+	drop["action"] = map[string]any{"move": map[string]any{"id": 1, "x": 5, "y": -4}}
+	refused := asked(t, c, "canvas_event", drop)
+	if refused["refused"] != true || len(windows.log) != ran {
+		t.Fatal("a drop where it is ran its handler", wire(t, refused))
+	}
+	drawn := asked(t, c, "canvas_event", map[string]any{"state": state, "part": "drawing", "scope": "drawing", "mode": "vector", "path": "note.drawing",
+		"units": []any{400, 300}, "action": map[string]any{"add": map[string]any{"op": "rect", "x": 1, "y": 2, "width": 3, "height": 4, "color": "#ff0000"}}})
+	want := "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">\n<rect x=\"1\" y=\"2\" width=\"3\" height=\"4\" fill=\"#ff0000\"/>\n</svg>\n"
+	if got := dataOf(drawn)["note"].(map[string]any)["drawing"]; got != want {
+		t.Fatal("the drawing:", got)
+	}
+}
+
 // A typed item for a list field (U1c): the runtime adds it, or refuses it
 // and the list stays.
 func TestTheRuntimeAddsATypedItemOrRefusesIt(t *testing.T) {
@@ -720,7 +761,7 @@ func tasksWindow() map[string]any {
 		map[string]any{"id": 3, "title": "Apples", "hours": 9, "up": 2},
 	}
 	views := map[string]any{
-		"tasksTable": map[string]any{"kind": "table", "list": "tasks", "columns": []any{map[string]any{"field": "title", "kind": "text"}, map[string]any{"field": "hours", "kind": "number"}}, "order": nil, "page": 2, "at": 1},
+		"tasksTable": map[string]any{"kind": "table", "sortable": true, "list": "tasks", "columns": []any{map[string]any{"field": "title", "kind": "text"}, map[string]any{"field": "hours", "kind": "number"}}, "order": nil, "page": 2, "at": 1},
 		"tasksTree":  map[string]any{"kind": "tree", "list": "tasks", "parent": "up", "key": "id", "open": []any{}},
 		"hoursChart": map[string]any{"kind": "chart", "list": "tasks", "by": "hours", "byKind": "number", "measure": "count", "of": "", "values": []any{}},
 	}
@@ -804,5 +845,89 @@ func TestAViewEventChangesHowAPartShowsItsRows(t *testing.T) {
 	}
 	if got := wire(t, call(t, c, "view_event", wire(t, map[string]any{"state": state, "part": "nope", "action": map[string]any{"page": 1}}))); !strings.Contains(got, "error") {
 		t.Error("a part without a view:", got)
+	}
+}
+
+// readonly (DESIGN 1.7): the runtime takes back what the screen changed, as
+// the window's last reply had it, runs no handler, records no edit, and
+// answers refused.
+func TestAReadonlyPartsChangeIsTakenBack(t *testing.T) {
+	c, windows := service(t)
+	db := c.options.Db
+	start := map[string]any{"name": "Ada", "volume": 5, "tags": []any{"jazz"}, "songs": []any{map[string]any{"id": 1, "place": 1}, map[string]any{"id": 2, "place": 2}}}
+	call(t, c, "dispatch_event", wire(t, map[string]any{"state": map[string]any{"window": "Card", "instance": 41, "data": start}, "handler": "noop"}))
+	changed := map[string]any{"window": "Card", "instance": 41, "data": map[string]any{"name": "Ann", "volume": 5, "tags": []any{"jazz"}, "songs": start["songs"]}}
+	ran := len(windows.log)
+	for _, ask := range []struct {
+		command string
+		args    map[string]any
+	}{
+		{"edit_event", map[string]any{"ends": true}},
+		{"reorder_event", map[string]any{"list": "songs", "by": "place", "move": map[string]any{"row": 1, "key": "up"}}},
+		{"item_event", map[string]any{"path": "tags", "item": "text", "typed": "live"}},
+		{"range_event", map[string]any{"path": "volume", "min": "0", "max": "10", "step": "1", "whole": true, "key": "up"}},
+	} {
+		args := map[string]any{"state": changed, "part": "box", "scope": "form", "handler": "remember", "readonly": true}
+		for k, v := range ask.args {
+			args[k] = v
+		}
+		reply := asked(t, c, ask.command, args)
+		if reply["refused"] != true || wire(t, dataOf(reply)) != wire(t, start) {
+			t.Errorf("%s: %s", ask.command, wire(t, reply))
+		}
+	}
+	if memos, _ := clarity.All[memo](db); len(memos) != 0 || len(windows.log) != ran {
+		t.Fatal("a readonly part ran its handler", memos, windows.log[ran:])
+	}
+	if got := wire(t, call(t, c, "undo_edit", wire(t, map[string]any{"state": changed, "scope": "form", "back": true}))); !strings.Contains(got, `"name":"Ann"`) {
+		t.Fatal("a readonly change was recorded as an edit:", got)
+	}
+}
+
+// editable (DESIGN 1.7): a table's edit keeps to the columns its cells edit;
+// a change to any other field of its rows is taken back.
+func TestATablesEditKeepsToItsEditableColumns(t *testing.T) {
+	c, _ := service(t)
+	start := map[string]any{"tasks": []any{map[string]any{"id": 1, "title": "Milk", "hours": 9}}}
+	call(t, c, "dispatch_event", wire(t, map[string]any{"state": map[string]any{"window": "Card", "instance": 42, "data": start}, "handler": "noop"}))
+	edit := func(row map[string]any) map[string]any {
+		state := map[string]any{"window": "Card", "instance": 42, "data": map[string]any{"tasks": []any{row}}}
+		return asked(t, c, "edit_event", map[string]any{"state": state, "part": "tasksTable", "scope": "tasksTable", "ends": true, "path": "tasks", "editable": []string{"hours"}})
+	}
+	if reply := edit(map[string]any{"id": 1, "title": "Tea", "hours": 9}); reply["refused"] != true || wire(t, dataOf(reply)) != wire(t, start) {
+		t.Error("a title that is not editable:", wire(t, reply))
+	}
+	if reply := edit(map[string]any{"id": 1, "title": "Milk", "hours": 12}); reply["refused"] != nil || wire(t, dataOf(reply)["tasks"]) != `[{"hours":12,"id":1,"title":"Milk"}]` {
+		t.Error("hours are editable:", wire(t, reply))
+	}
+}
+
+// sortable (DESIGN 1.7): a header click on a table that is not sortable changes nothing.
+func TestATableThatIsNotSortableKeepsItsOrder(t *testing.T) {
+	c, _ := service(t)
+	state := tasksWindow()
+	state["views"].(map[string]any)["tasksTable"].(map[string]any)["sortable"] = false
+	reply := asked(t, c, "view_event", map[string]any{"state": state, "part": "tasksTable", "action": map[string]any{"sort": "title"}})
+	if got := viewOf(reply, "tasksTable"); !strings.Contains(got, `"order":null`) || !strings.Contains(got, `"shown":[0,1]`) {
+		t.Error(got)
+	}
+}
+
+// A chart of a list of numbers (DESIGN 1.7, points): its last points
+// numbers, decimals as their value; what is no number is left out.
+func TestANumbersViewShowsTheLastPoints(t *testing.T) {
+	c, _ := service(t)
+	views := map[string]any{
+		"last": map[string]any{"kind": "numbers", "list": "readings", "points": 2},
+		"all":  map[string]any{"kind": "numbers", "list": "readings", "points": nil},
+	}
+	state := map[string]any{"window": "Card", "data": map[string]any{"readings": []any{1, "2.5", "", nil, "x", 4}}, "views": views}
+	reply := asked(t, c, "dispatch_event", map[string]any{"state": state, "handler": "noop"})
+	shown := reply["state"].(map[string]any)["views"].(map[string]any)
+	if got := wire(t, shown["last"].(map[string]any)["numbers"]); got != `[2.5,4]` {
+		t.Error("last:", got)
+	}
+	if got := wire(t, shown["all"].(map[string]any)["numbers"]); got != `[1,2.5,4]` {
+		t.Error("all:", got)
 	}
 }

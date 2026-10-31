@@ -1489,6 +1489,41 @@ impl<'a> Window<'a> {
                     "{pad}<c:CanvasView {at} Runs=\"{{x:Static local:ScreenEngines.{engine}}}\"{state} UnitsWidth=\"{width}\" UnitsHeight=\"{height}\"{plain_state}{extra} />",
                 );
             }
+            // A canvas with a mode (DESIGN 5.31): the person drags its objects, paints or draws; the runtime decides.
+            WidgetKind::Canvas if named.is_some() && p.mode.is_some() => {
+                let (width, height) = p.units.map_or(clarity_spec::widgets::DEFAULT_UNITS, |u| (u.width, u.height));
+                let name = member(named.unwrap_or_default());
+                let mode = p.mode.map(|m| m.keyword()).unwrap_or_default();
+                let mut options = format!(" Mode=\"{mode}\" ActionCommand=\"{{Binding CanvasAt_{name}Command}}\" IsReadOnly=\"{{Binding {name}.IsReadOnly}}\"");
+                if p.zoom {
+                    options.push_str(" Zoom=\"True\"");
+                }
+                let _ = write!(options, " Grid=\"{{Binding {name}.Grid}}\" Paper=\"{{Binding {name}.Background}}\" DotSize=\"{{Binding {name}.DotSize}}\" DotColor=\"{{Binding {name}.DotColor}}\"");
+                if !p.tools.is_empty() {
+                    let _ = write!(options, " Tools=\"{}\"", attr(&p.tools.join(",")));
+                }
+                match p.mode {
+                    Some(clarity_spec::model::CanvasMode::Paint | clarity_spec::model::CanvasMode::Vector) => {
+                        let _ = write!(options, " Tool=\"{{Binding {name}.Tool}}\" Brush=\"{{Binding {name}.Brush}}\" Ink=\"{{Binding {name}.Ink}}\"");
+                    }
+                    _ => {}
+                }
+                let path = bound.as_deref().unwrap_or_default();
+                match p.mode {
+                    Some(clarity_spec::model::CanvasMode::Paint) => {
+                        let (data, field) = p.bind.as_deref().and_then(|b| b.split_once('.')).unwrap_or_default();
+                        let _ = write!(options, " Picture=\"{{Binding {path}}}\" Fetch=\"{{Binding {}}}\"", picture_fetch(data, field));
+                    }
+                    Some(clarity_spec::model::CanvasMode::Vector) => {
+                        let _ = write!(options, " Svg=\"{{Binding {path}}}\" Chosen=\"{{Binding {name}.SelectedItem}}\"");
+                    }
+                    _ => {}
+                }
+                let _ = writeln!(
+                    out,
+                    "{pad}<c:CanvasView {at} Drawing=\"{{Binding {name}.Drawing}}\" UnitsWidth=\"{width}\" UnitsHeight=\"{height}\"{options}{plain_state}{extra} />",
+                );
+            }
             // A canvas drawn by its draw handler, through the runtime.
             WidgetKind::Canvas if named.is_some() && Self::handler(widget, Event::Draw).is_some() => {
                 let (width, height) = p.units.map_or(clarity_spec::widgets::DEFAULT_UNITS, |u| (u.width, u.height));
@@ -1591,6 +1626,8 @@ impl<'a> Window<'a> {
                 );
                 let line = match h.event {
                     Event::Click => continue,
+                    // A canvas's own events are its commands; its `on change` runs in the runtime's CanvasEvent (DESIGN 5.31).
+                    _ if kind == WidgetKind::Canvas => continue,
                     // A toggle tells its change when the person presses it, not when code sets it.
                     Event::Change if kind == WidgetKind::Toggle => format!("{control}.Click += (_, _) => {run};"),
                     // An accordion tells when the person opened or folded a section.
@@ -1662,7 +1699,9 @@ public partial class {name}View : UserControl
         for widget in &self.parts {
             if let Some(n) = &widget.props.name {
                 let custom = widget.props.part.clone().map(|kind| (kind, widget.props.values.clone()));
-                ctx.parts.insert(n.clone(), PartInfo { bind: widget.props.bind.clone(), custom });
+                // A canvas of objects chooses a record of its list, as a table of its bound list does.
+                let bind = widget.props.objects.as_ref().map(|o| o.list.clone()).or_else(|| widget.props.bind.clone());
+                ctx.parts.insert(n.clone(), PartInfo { bind, custom, mode: widget.props.mode });
             }
         }
         for command in &self.commands {
@@ -1714,7 +1753,9 @@ public partial class {name}View : UserControl
         }
         // The picture each picture field shows when the record has one stored.
         let mut fetches: BTreeMap<String, (&str, String)> = BTreeMap::new();
-        for widget in self.parts.iter().filter(|w| matches!(w.props.kind, WidgetKind::Image | WidgetKind::File)) {
+        // A painting canvas paints on its field's picture (DESIGN 5.31).
+        let paints = |w: &&&Widget| w.props.kind == WidgetKind::Canvas && w.props.mode == Some(clarity_spec::model::CanvasMode::Paint);
+        for widget in self.parts.iter().filter(|w| matches!(w.props.kind, WidgetKind::Image | WidgetKind::File) || paints(w)) {
             let Some((data, field)) = widget.props.bind.as_deref().and_then(|b| b.split_once('.')) else { continue };
             let Some(entity) = self.entity_of(data) else { continue };
             // Through Fetched, so a mirror in a browser asks the server for it (DESIGN 7.6).
@@ -1853,6 +1894,17 @@ public partial class {name}View : UserControl
                 if let Some(color) = &widget.props.dot_color {
                     set.push(format!("DotColor = {}", string(color)));
                 }
+                // A painting or vector canvas's tool, brush and ink (DESIGN 5.31).
+                let tool = crate::canvas_tool(&widget.props);
+                if !tool.is_empty() {
+                    set.push(format!("Tool = {}", string(&tool)));
+                }
+                if let Some(brush) = widget.props.brush {
+                    set.push(format!("Brush = {brush}"));
+                }
+                if let Some(ink) = &widget.props.ink {
+                    set.push(format!("Ink = {}", string(ink)));
+                }
                 if set.is_empty() { starts } else { format!(" {{ {} }}", set.join(", ")) }
             } else {
                 starts
@@ -1969,6 +2021,36 @@ public partial class {name}View : UserControl
                 };
                 let _ = write!(events, "    [RelayCommand]\n    void {command}_{c}(Pointer at) => {run};\n\n", c = member(canvas));
             }
+        }
+
+        // An action on a canvas with a mode (DESIGN 5.31): the runtime applies it, then `on change`, as one edit.
+        for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Canvas && w.props.mode.is_some()) {
+            let Some(canvas) = &widget.props.name else { continue };
+            let p = &widget.props;
+            let scope = self.undo_scope(p).map_or("null".to_string(), |s| string(&s));
+            let mut args = format!("new CanvasArgs({})", string(p.mode.map(|m| m.keyword()).unwrap_or_default()));
+            let mut set = vec![format!("Grid = {c}.Grid", c = member(canvas)), format!("Snap = {c}.Snap", c = member(canvas))];
+            if let Some(objects) = &p.objects {
+                let entity = self.entity_of(&objects.list).map(|e| e.name.name.clone()).unwrap_or_default();
+                set.push(format!("List = {}", string(&member(&objects.list))));
+                set.push(format!("At = [{}, {}]", string(&property(&entity, &objects.x)), string(&property(&entity, &objects.y))));
+            }
+            if let Some(bind) = &p.bind {
+                set.push(format!("Path = {}", string(&self.path(bind))));
+            }
+            if let Some(units) = p.units {
+                set.push(format!("Units = [{}, {}]", units.width, units.height));
+            }
+            if p.readonly {
+                set.push("Readonly = true".to_string());
+            }
+            let _ = write!(args, " {{ {} }}", set.join(", "));
+            let changed = Self::handler(widget, Event::Change).map_or("null".to_string(), |h| format!("On{}", pascal(&h.handler)));
+            let _ = write!(
+                events,
+                "    [RelayCommand]\n    void CanvasAt_{c}(System.Text.Json.Nodes.JsonObject action) => CanvasEvent({c}, {scope}, {args}, action, {changed});\n\n",
+                c = member(canvas)
+            );
         }
 
         // A wizard's Next: its handler, saying whether it refused.

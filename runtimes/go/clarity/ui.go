@@ -38,6 +38,12 @@ type PartState struct {
 	// pixels across, and color (empty is the theme's border).
 	DotSize  *int64  `json:"dotSize,omitempty"`
 	DotColor *string `json:"dotColor,omitempty"`
+	// Tool, Brush and Ink are the tool in hand of a painting or vector
+	// canvas, how wide it paints and its color, as a handler set them
+	// (DESIGN 5.31); nil keeps the design.
+	Tool  *string `json:"tool,omitempty"`
+	Brush *int64  `json:"brush,omitempty"`
+	Ink   *string `json:"ink,omitempty"`
 	// Maximized is whether a maximizable sidebar fills the window; nil is not.
 	Maximized *bool `json:"maximized,omitempty"`
 	// Tab is the open tab of a ribbon, counted from 1; nil is the first
@@ -377,6 +383,51 @@ func (u *Ui) DotColor(part string, design string) string {
 
 func (u *Ui) SetDotColor(part string, value string) {
 	u.part(part, func(p *PartState) { p.DotColor = &value })
+}
+
+// Tool is the tool in hand of a painting or vector canvas: canvas.tool.
+func (u *Ui) Tool(part string, design string) string {
+	if t := u.parts[part].Tool; t != nil {
+		return *t
+	}
+	return design
+}
+
+func (u *Ui) SetTool(part string, value string) {
+	u.part(part, func(p *PartState) { p.Tool = &value })
+}
+
+// Brush is how wide a painting or vector canvas paints: canvas.brush.
+func (u *Ui) Brush(part string, design int64) int64 {
+	if b := u.parts[part].Brush; b != nil {
+		return *b
+	}
+	return design
+}
+
+func (u *Ui) SetBrush(part string, value int64) {
+	u.part(part, func(p *PartState) { p.Brush = &value })
+}
+
+// Ink is the color a painting or vector canvas paints with: canvas.ink.
+func (u *Ui) Ink(part string, design string) string {
+	if i := u.parts[part].Ink; i != nil {
+		return *i
+	}
+	return design
+}
+
+func (u *Ui) SetInk(part string, value string) {
+	u.part(part, func(p *PartState) { p.Ink = &value })
+}
+
+// ShapeChosen is the place of the shape a person touched last on a vector
+// canvas, counted from 1; 0 when none (DESIGN 5.31).
+func (u *Ui) ShapeChosen(part string) int64 {
+	if i, ok := u.selected[part]; ok && i >= 0 {
+		return int64(i) + 1
+	}
+	return 0
 }
 
 // Maximized is whether a maximizable sidebar fills the window.

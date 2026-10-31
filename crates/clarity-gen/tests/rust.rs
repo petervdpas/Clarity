@@ -944,16 +944,28 @@ fn the_runtime_decides_what_the_persons_action_does() {
     use clarity_project::Target;
     let project = load_sources([("sales.clarity", SALES)]);
     let main = program(&files());
-    for (command, call) in [
-        ("reorder_event", "clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &r#move, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
-        ("item_event", "clarity_runtime::list_fields::event(db, state, &part, &path, item, &values, &typed, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
-        ("range_event", "clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &mv, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
-        ("step_event", "clarity_runtime::steps::event(db, state, &part, button, steps, next.as_deref(), finish.as_deref(), |state, handler| dispatch(db, state, handler), |state| drawn(db, state))"),
+    for (command, readonly, call) in [
+        ("reorder_event", true, "clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &r#move, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
+        ("item_event", true, "clarity_runtime::list_fields::event(db, state, &part, &path, item, &values, &typed, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
+        ("range_event", true, "clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &mv, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
+        ("step_event", false, "clarity_runtime::steps::event(db, state, &part, button, steps, next.as_deref(), finish.as_deref(), |state, handler| dispatch(db, state, handler), |state| drawn(db, state))"),
     ] {
         assert!(main.contains(&format!("fn {command}(app: tauri::State<App>, state: WindowState, part: String")), "{command} in\n{main}");
         assert!(main.contains(&format!("            {command},\n")), "{command} is registered");
-        assert!(main.contains(&format!("window_reply(&sent, locked(&app, |db| {call}))")), "{command} calls\n{call}");
+        // A part's options are the runtime's parameters (DESIGN 1.7): a readonly part's change is taken back.
+        let call = if readonly { format!("clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| {call})") } else { call.to_string() };
+        assert!(main.contains(&format!("window_reply(&sent, locked(&app, |db| {call}))")), "{command} calls\n{call}\nin\n{main}");
+        if readonly {
+            assert!(main.contains(&format!("fn {command}(")) && main.contains("readonly: Option<bool>"), "{command} takes readonly");
+        }
     }
+    // Canvas modes (DESIGN 5.31): the runtime applies the person's action and runs on change as one edit.
+    assert!(main.contains("fn canvas_event(app: tauri::State<App>, state: WindowState, part: String, scope: Option<String>, mode: String, list: Option<String>, at: Option<[String; 2]>, path: Option<String>, units: Option<[i64; 2]>, grid: Option<i64>, snap: Option<bool>, action: Map<String, Value>, handler: Option<String>, readonly: Option<bool>) -> Answer<Reply> {"), "{main}");
+    assert!(main.contains("let canvas = clarity_runtime::canvas::CanvasArgs { part, mode, list: list.unwrap_or_default(), at, path: path.unwrap_or_default(), units, grid: grid.unwrap_or_default(), snap: snap.unwrap_or_default(), readonly: false };"), "{main}");
+    assert!(main.contains("window_reply(&sent, locked(&app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::canvas::event(db, state, &canvas, &action, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))"), "{main}");
+    assert!(main.contains("            canvas_event,\n"), "canvas_event is registered");
+    assert!(main.contains("fn edit_event(app: tauri::State<App>, state: WindowState, handler: Option<String>, part: String, scope: String, ends: bool, readonly: Option<bool>, path: Option<String>, editable: Option<Vec<String>>) -> Answer<Reply> {"), "{main}");
+    assert!(main.contains("clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), path.as_deref(), editable.as_deref(), |state| drawn(db, state), |state| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| handled(db, state, handler.as_deref())))"), "{main}");
     // The shown rows (DESIGN 1.7): every window reply fills the views; a view event is no edit and not watched.
     assert!(main.contains("clarity_runtime::views::replied(sent, &mut reply)"), "{main}");
     assert!(main.contains("fn view_event(app: tauri::State<App>, state: WindowState, part: String, action: Map<String, Value>) -> Answer<Reply> {"), "{main}");
@@ -966,8 +978,61 @@ fn the_runtime_decides_what_the_persons_action_does() {
     settings.stack.targets = vec![Target::Web];
     let web = generate(&project, &settings).unwrap();
     let web = file(&web, "src/main.rs");
-    for command in ["reorder_event", "item_event", "range_event", "step_event", "view_event", "find_options"] {
+    for command in ["reorder_event", "item_event", "range_event", "step_event", "view_event", "canvas_event", "find_options"] {
         assert!(web.contains(&format!("        \"{command}\" => given((|| {{")), "{command} served in\n{web}");
     }
+    assert_eq!(web.matches("let readonly: Option<bool> = arg(&args, \"readonly\")?;").count(), 5, "{web}");
+    assert!(web.contains("let (path, editable): (Option<String>, Option<Vec<String>>) = (arg(&args, \"path\")?, arg(&args, \"editable\")?);"), "{web}");
     assert!(web.contains("clarity_runtime::dropdown_options::find(&kind, &show.unwrap_or_default(), &typed, || values_of(db, &entity, field.as_deref().unwrap_or_default()), || options(db, &entity))"), "{web}");
+}
+
+/// A canvas with a mode (DESIGN 5.31): handlers read and set its tool, brush
+/// and ink as part state, each with its design value, and read what the
+/// person touched: an object's record, or a shape's place from 1.
+#[test]
+fn a_canvas_with_a_mode_has_its_tool_brush_ink_and_selected() {
+    let source = "module board
+
+entity Shape
+    x: integer
+    y: integer
+
+entity Note
+    drawing: text
+
+page Board: window
+    data shapes: list<Shape>
+    data note: Note
+    data picked: integer
+    canvas name diagram at 1,1 span 6 rows 6 mode objects shapes at x, y on draw: drawBoard on change: moved
+    canvas name sketch at 7,1 span 6 rows 6 bind note.drawing mode vector tools rect, line brush 4 ink accent on change: drew
+    canvas name plain at 1,7 span 6 rows 6 bind note.drawing mode vector on change: drew
+
+code Board
+    handler drawBoard
+        diagram.clear(\"#ffffff\")
+
+    handler moved
+        picked = diagram.selected.x
+
+    handler drew
+        picked = sketch.selected
+        sketch.tool = \"line\"
+        sketch.brush = sketch.brush + plain.brush
+        sketch.ink = plain.ink + plain.tool
+";
+    let project = load_sources([("board.clarity", source)]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let board = file(&files, "src/modules/board.rs");
+    for code in [
+        "ui.selected(\"diagram\", &w.shapes)?.x",
+        "ui.selected_place(\"sketch\")",
+        "ui.set_tool(\"sketch\", String::from(\"line\"));",
+        "ui.set_brush(\"sketch\", (ui.brush(\"sketch\", 4) + ui.brush(\"plain\", 2)));",
+        "ui.ink(\"plain\", \"text\")",
+        "ui.tool(\"plain\", \"select\")",
+    ] {
+        assert!(board.contains(code), "{code} in\n{board}");
+    }
 }

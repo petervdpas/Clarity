@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.25
+
+- Colors the canvas modes: `mode` with `objects`, `paint` and `vector`, and `tools`, `brush` and `ink`.
+
 ## 0.1.24
 
 - Colors `reorder`: the part option `reorder by position` and the event `on reorder`.

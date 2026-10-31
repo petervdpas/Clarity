@@ -339,6 +339,59 @@ public sealed class Steps(Window main, string database, string fixture)
             Undo();
         });
 
+        // ---- Canvas modes (DESIGN 5.31): each gesture is one edit the runtime makes.
+        List<string> Places() => SqlRows("SELECT id || ':' || copies || ',' || position FROM album ORDER BY id");
+        Step("an object dragged on a board lands on the grid, saved; Ctrl+Z takes it back", () =>
+        {
+            var board = (CanvasView)Part("board");
+            var before = Places();
+            // The object drawn last is on top.
+            var top = board.Drawing.OfType<Shape.Object>().LastOrDefault();
+            Check(top is not null, "the board shows its objects");
+            var at = new Point(top!.X + top.Width / 2, top.Y + top.Height / 2);
+            DragUnits(board, at, at + new Vector(150, 75));
+            var after = Places();
+            var moved = after.Where((row, i) => row != before[i]).ToList();
+            Check(moved.Count == 1, $"one object moved: {string.Join(" ", moved)} (mode {board.Mode}, command {board.ActionCommand is not null}, readonly {board.IsReadOnly}, pressed at {at}, top object {top})");
+            var xy = moved[0].Split(':')[1].Split(',').Select(int.Parse).ToArray();
+            Check(xy[0] % 20 == 0 && xy[1] % 20 == 0, $"snapped to the grid of 20: {xy[0]}, {xy[1]}");
+            board.Focus();
+            Undo();
+            Same(Places(), before, "Ctrl+Z puts it back");
+        });
+
+        string Covers() => Sql("SELECT count(*) FROM album WHERE cover IS NOT NULL AND cover != ''");
+        Step("a stroke painted on a picture is saved; Ctrl+Z takes it back", () =>
+        {
+            var sketch = (CanvasView)Part("sketch");
+            var before = Covers();
+            DragUnits(sketch, new Point(sketch.UnitsWidth * 0.3, sketch.UnitsHeight * 0.5), new Point(sketch.UnitsWidth * 0.6, sketch.UnitsHeight * 0.55));
+            Same(Covers(), (int.Parse(before) + 1).ToString(), "the picture saved");
+            sketch.Focus();
+            Undo();
+            Same(Covers(), before, "Ctrl+Z takes the stroke back");
+        });
+
+        string Drawn() => Sql("SELECT count(*) FROM album WHERE notes LIKE '%<rect %'");
+        Step("a rectangle drawn on a vector drawing is saved as SVG; Delete takes it away, Ctrl+Z brings it back", () =>
+        {
+            var drawing = (CanvasView)Part("drawing");
+            Same(Drawn(), "0", "no rectangle yet");
+            Click(drawing.ToolButtons.First(b => Equals(b.Tag, "rect")));
+            var from = new Point(drawing.UnitsWidth * 0.3, drawing.UnitsHeight * 0.4);
+            var to = new Point(drawing.UnitsWidth * 0.5, drawing.UnitsHeight * 0.6);
+            DragUnits(drawing, from, to);
+            Same(Drawn(), "1", "the rectangle saved");
+            Click(drawing.ToolButtons.First(b => Equals(b.Tag, "select")));
+            ClickUnits(drawing, new Point((from.X + to.X) / 2, (from.Y + to.Y) / 2));
+            drawing.Focus();
+            Key(PhysicalKey.Delete);
+            Same(Drawn(), "0", "Delete takes it away");
+            drawing.Focus();
+            Undo();
+            Same(Drawn(), "1", "Ctrl+Z brings it back");
+        });
+
         Step("a sound plays and an engine call answers", () =>
         {
             Click(Part("playButton"));
@@ -490,8 +543,9 @@ public sealed class Steps(Window main, string database, string fixture)
         catch (Exception e)
         {
             failed.Add(name);
-            Console.WriteLine($"FAIL {name}\n     {e.Message.Replace("\n", "\n     ")}\n     edits: {EditsNow()}");
-            SaidError();
+            // What the app said goes with the failure: it is often why.
+            var said = SaidError();
+            Console.WriteLine($"FAIL {name}\n     {e.Message.Replace("\n", "\n     ")}\n     edits: {EditsNow()}{(said is null ? "" : $"\n     the app said: {said}")}");
             // Whatever the step left open is closed, as a person would.
             foreach (var w in main.OwnedWindows.ToList())
                 w.Close();
@@ -588,6 +642,57 @@ public sealed class Steps(Window main, string database, string fixture)
             top.MouseMove(new Point(a.X + (b.X - a.X) * i / 8, a.Y + (b.Y - a.Y) * i / 8), RawInputModifiers.LeftMouseButton);
         top.MouseUp(b, MouseButton.Left);
         Settle(400);
+    }
+
+    /// <summary>The place on screen of a point of a canvas, in its own units.</summary>
+    /// The window scrolls to it first, as a person scrolls to what they press.
+    Point OnScreen(CanvasView canvas, Point units, TopLevel top)
+    {
+        var v = canvas.Viewport;
+        var local = new Point((units.X - v.X) * v.Scale, (units.Y - v.Y) * v.Scale);
+        canvas.BringIntoView(new Rect(local - new Point(20, 20), new Size(40, 40)));
+        Settle(100);
+        return canvas.TranslatePoint(local, top)!.Value;
+    }
+
+    /// <summary>A person's drag on a canvas, from one point to another in its units.</summary>
+    void DragUnits(CanvasView canvas, Point from, Point to)
+    {
+        var top = TopLevel.GetTopLevel(canvas)!;
+        // Both ends in view, the start read again after the end scrolled.
+        OnScreen(canvas, from, top);
+        var b = OnScreen(canvas, to, top);
+        var a = OnScreen(canvas, from, top);
+        Lands(canvas, a, top);
+        top.MouseMove(a);
+        top.MouseDown(a, MouseButton.Left);
+        for (var i = 1; i <= 8; i++)
+            top.MouseMove(new Point(a.X + (b.X - a.X) * i / 8, a.Y + (b.Y - a.Y) * i / 8), RawInputModifiers.LeftMouseButton);
+        top.MouseUp(b, MouseButton.Left);
+        Settle(500);
+    }
+
+    /// <summary>Checks a press at <paramref name="at"/> reaches the canvas, as it reaches it on a person's screen.</summary>
+    static void Lands(CanvasView canvas, Point at, TopLevel top)
+    {
+        var hit = top.InputHitTest(at) as Visual;
+        for (var v = hit; v is not null; v = v.GetVisualParent())
+            if (v == canvas)
+                return;
+        var v0 = canvas.Viewport;
+        throw new Exception($"a press at {at} lands on {hit?.GetType().Name ?? "nothing"} ({(hit as Control)?.Name}), not on {canvas.Name}: canvas bounds {canvas.Bounds}, view {v0.X},{v0.Y} x{v0.Scale}, drawing {canvas.Drawing.Count} shapes");
+    }
+
+    /// <summary>A click on a canvas at a point in its units.</summary>
+    void ClickUnits(CanvasView canvas, Point at)
+    {
+        var top = TopLevel.GetTopLevel(canvas)!;
+        var p = OnScreen(canvas, at, top);
+        Lands(canvas, p, top);
+        top.MouseMove(p);
+        top.MouseDown(p, MouseButton.Left);
+        top.MouseUp(p, MouseButton.Left);
+        Settle(300);
     }
 
     /// <summary>Clicks the part's text box, selects what is there, types, and leaves with Tab.</summary>

@@ -454,6 +454,25 @@ void a_canvas_keeps_the_grid_and_snap_code_sets(void) {
     clarity_ui_set_dot_color(ui, "sheet", "muted");
     CHECK_INT(clarity_ui_dot_size(ui, "sheet", 2), 3);
     CHECK_TEXT(clarity_ui_dot_color(ui, "sheet", ""), "muted");
+    // A painting or vector canvas's tool, brush and ink (DESIGN 5.31), and the chosen shape from 1.
+    CHECK_TEXT(clarity_ui_tool(ui, "sheet", "pen"), "pen");
+    CHECK_INT(clarity_ui_brush(ui, "sheet", 2), 2);
+    CHECK_TEXT(clarity_ui_ink(ui, "sheet", "text"), "text");
+    clarity_ui_set_tool(ui, "sheet", "eraser");
+    clarity_ui_set_brush(ui, "sheet", 6);
+    clarity_ui_set_ink(ui, "sheet", "#ff0000");
+    CHECK_TEXT(clarity_ui_tool(ui, "sheet", "pen"), "eraser");
+    CHECK_INT(clarity_ui_brush(ui, "sheet", 2), 6);
+    CHECK_TEXT(clarity_ui_ink(ui, "sheet", "text"), "#ff0000");
+    cJSON* kept = clarity_window_state_json(&clarity_ui_reply(ui, "Main", cJSON_CreateObject())->state);
+    const cJSON* sheet = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(kept, "parts"), "sheet");
+    CHECK_JSON(cJSON_GetObjectItemCaseSensitive(sheet, "tool"), "\"eraser\"");
+    CHECK_JSON(cJSON_GetObjectItemCaseSensitive(sheet, "brush"), "6");
+    CHECK_JSON(cJSON_GetObjectItemCaseSensitive(sheet, "ink"), "\"#ff0000\"");
+    CHECK_INT(clarity_ui_selected_shape(ui, "drawing"), 0);
+    ClaritySelected chosen = {"drawing", 2};
+    ClarityWindowState drawn = {.selected = &chosen, .selected_count = 1};
+    CHECK_INT(clarity_ui_selected_shape(clarity_ui(&drawn), "drawing"), 3);
 }
 
 // `copy text`: the reply hands the text to the screen for its clipboard; of several, the last.

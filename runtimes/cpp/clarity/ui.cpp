@@ -36,6 +36,9 @@ bool Ui::snap(const std::string& part, bool design) const { return part_or(parts
 std::string Ui::background(const std::string& part, const std::string& design) const { return part_or(parts_, part, &PartState::background, design); }
 int64_t Ui::dot_size(const std::string& part, int64_t design) const { return part_or(parts_, part, &PartState::dot_size, design); }
 std::string Ui::dot_color(const std::string& part, const std::string& design) const { return part_or(parts_, part, &PartState::dot_color, design); }
+std::string Ui::tool(const std::string& part, const std::string& design) const { return part_or(parts_, part, &PartState::tool, design); }
+int64_t Ui::brush(const std::string& part, int64_t design) const { return part_or(parts_, part, &PartState::brush, design); }
+std::string Ui::ink(const std::string& part, const std::string& design) const { return part_or(parts_, part, &PartState::ink, design); }
 bool Ui::maximized(const std::string& part) const { return part_or(parts_, part, &PartState::maximized, false); }
 int64_t Ui::tab(const std::string& part) const { return part_or(parts_, part, &PartState::tab, int64_t(1)); }
 int64_t Ui::step(const std::string& part) const { return part_or(parts_, part, &PartState::step, int64_t(1)); }
@@ -139,6 +142,9 @@ void to_json(nlohmann::json& out, const PartState& p) {
     if (p.background) out["background"] = *p.background;
     if (p.dot_size) out["dotSize"] = *p.dot_size;
     if (p.dot_color) out["dotColor"] = *p.dot_color;
+    if (p.tool) out["tool"] = *p.tool;
+    if (p.brush) out["brush"] = *p.brush;
+    if (p.ink) out["ink"] = *p.ink;
     if (p.maximized) out["maximized"] = *p.maximized;
     if (p.tab) out["tab"] = *p.tab;
     if (p.step) out["step"] = *p.step;
@@ -166,6 +172,9 @@ void from_json(const nlohmann::json& in, PartState& p) {
     take("background", p.background);
     take("dotSize", p.dot_size);
     take("dotColor", p.dot_color);
+    take("tool", p.tool);
+    take("brush", p.brush);
+    take("ink", p.ink);
     take("maximized", p.maximized);
     take("tab", p.tab);
     take("step", p.step);

@@ -12,7 +12,7 @@
   import { frameForPage } from "../lib/frame";
   import type { Event as PartEvent } from "../lib/generated/Event";
   import type { Preview } from "../lib/generated/Preview";
-  import { provideLive, type PartState, type Pointer } from "../lib/live";
+  import { provideLive, type CanvasParams, type PartState, type Pointer } from "../lib/live";
   import { languageOf, offeredThemes, ownWord, shownText, themeArea, themeOf, tr, type Row } from "../lib/model";
   import ChoicePicker from "../lib/ChoicePicker.svelte";
   import KeysWindow from "../lib/KeysWindow.svelte";
@@ -596,6 +596,18 @@
   /** An input's edit, sent when this moment's work is done, unless its own handler takes it along. */
   let pendingInput: { part: string; scope: string } | null = null;
 
+  /**
+   * The part's options the runtime enforces (DESIGN 1.7): whether it is read
+   * only (as a handler set it, else as designed), and a table's edited
+   * columns with its list.
+   */
+  function optionsOf(part: string): Record<string, unknown> {
+    const widget = page ? allParts(page).find((w) => w.props.name === part) : undefined;
+    const readonly = current?.parts[part]?.readonly ?? widget?.props.readonly ?? false;
+    const table = widget?.props.kind === "table" && widget.props.bind ? { editable: widget.props.edit, path: widget.props.bind } : {};
+    return { readonly, ...table };
+  }
+
   /** Waits while a handler runs, ahead of what parts tell: the person's turn comes next. */
   async function waitTurn() {
     if (!busy) return;
@@ -652,7 +664,7 @@
     busy = true;
     const index = stack.length - 1;
     try {
-      const reply = received(await invoke<Reply>("edit_event", { state: $state.snapshot(current), handler, part, scope, ends }));
+      const reply = received(await invoke<Reply>("edit_event", { state: $state.snapshot(current), handler, part, scope, ends, ...optionsOf(part) }));
       lastStep = reply.step ?? 0;
       await nav.apply(index, reply);
       return true;
@@ -679,7 +691,7 @@
     busy = true;
     const index = stack.length - 1;
     try {
-      const reply = received(await invoke<Reply>(command, { state: $state.snapshot(current), part, scope, ...args }));
+      const reply = received(await invoke<Reply>(command, { state: $state.snapshot(current), part, scope, ...optionsOf(part), ...args }));
       lastStep = reply.step ?? 0;
       await nav.apply(index, reply);
       return !reply.refused;
@@ -820,6 +832,9 @@
     },
     reorder(part: string, rows: { list: string; by: string; parent: string | null; move: Move }, handler: string | null) {
       return partEvent(part, "reorder_event", { ...rows, handler });
+    },
+    canvas(part: string, canvas: CanvasParams, action: Record<string, unknown>, handler: string | null) {
+      return partEvent(part, "canvas_event", { ...canvas, action, handler });
     },
     range(part: string, range: { path: string; min: string | null; max: string | null; step: string; whole: boolean } & RangeMove, handler: string | null) {
       return partEvent(part, "range_event", { ...range, handler });

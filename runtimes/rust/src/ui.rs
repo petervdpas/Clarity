@@ -283,6 +283,14 @@ pub struct PartState {
     pub dot_size: Option<i64>,
     #[serde(default, rename = "dotColor", skip_serializing_if = "Option::is_none")]
     pub dot_color: Option<String>,
+    /// A painting or vector canvas's tool, brush and ink, as a handler or the
+    /// person set them (DESIGN 5.31).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brush: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ink: Option<String>,
     /// Whether a collapsible sidebar is folded to its button, as the person or
     /// a handler left it; none keeps the design (conformance/sidebars.json).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -653,6 +661,33 @@ impl Ui {
         self.parts.entry(part.to_string()).or_default().dot_color = Some(value);
     }
 
+    /// A canvas's tool, as a handler or the person set it, else `design`.
+    pub fn tool(&self, part: &str, design: &str) -> String {
+        self.parts.get(part).and_then(|p| p.tool.clone()).unwrap_or_else(|| design.to_string())
+    }
+
+    pub fn set_tool(&mut self, part: &str, value: String) {
+        self.parts.entry(part.to_string()).or_default().tool = Some(value);
+    }
+
+    /// How wide a canvas paints or draws, in pixels.
+    pub fn brush(&self, part: &str, design: i64) -> i64 {
+        self.parts.get(part).and_then(|p| p.brush).unwrap_or(design)
+    }
+
+    pub fn set_brush(&mut self, part: &str, value: i64) {
+        self.parts.entry(part.to_string()).or_default().brush = Some(value);
+    }
+
+    /// The color a canvas paints or draws with.
+    pub fn ink(&self, part: &str, design: &str) -> String {
+        self.parts.get(part).and_then(|p| p.ink.clone()).unwrap_or_else(|| design.to_string())
+    }
+
+    pub fn set_ink(&mut self, part: &str, value: String) {
+        self.parts.entry(part.to_string()).or_default().ink = Some(value);
+    }
+
     pub fn collapsed(&self, part: &str, design: bool) -> bool {
         self.parts.get(part).and_then(|p| p.collapsed).unwrap_or(design)
     }
@@ -728,6 +763,12 @@ impl Ui {
             .and_then(|i| rows.get(*i))
             .cloned()
             .ok_or_else(|| Error::Invalid(format!("no row of {part} is selected")))
+    }
+
+    /// The shape a vector canvas's person touched last, its place in the
+    /// drawing counted from 1; 0 when none (DESIGN 5.31).
+    pub fn selected_place(&self, part: &str) -> i64 {
+        self.selected.get(part).map_or(0, |at| *at as i64 + 1)
     }
 
     pub fn message(&mut self, level: Level, text: Text) {

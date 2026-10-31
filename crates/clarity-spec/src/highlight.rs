@@ -75,6 +75,8 @@ const KEYWORDS: &[&str] = &[
     "undo", "redo",
     // Reordering (DESIGN 5.30): `reorder by position`.
     "reorder",
+    // Canvas modes (DESIGN 5.31): `mode objects ... | paint | vector`, `tools`, `brush`, `ink`.
+    "mode", "objects", "paint", "vector", "tools", "brush", "ink",
 ];
 
 /// Clarity's own types.

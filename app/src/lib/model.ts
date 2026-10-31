@@ -97,6 +97,16 @@ const OWN_WORDS: Record<string, { key: string; written: string }> = {
   "Zoom out": { key: "zoomOut", written: "Zoom out" },
   "Show it whole": { key: "zoomWhole", written: "Show it whole" },
   "Zoom in": { key: "zoomIn", written: "Zoom in" },
+  // The toolbar of a canvas the person paints or draws on (DESIGN 5.31).
+  Select: { key: "toolSelect", written: "Select" },
+  Line: { key: "toolLine", written: "Line" },
+  Rectangle: { key: "toolRect", written: "Rectangle" },
+  Ellipse: { key: "toolEllipse", written: "Ellipse" },
+  Path: { key: "toolPath", written: "Path" },
+  Text: { key: "toolText", written: "Text" },
+  Pen: { key: "toolPen", written: "Pen" },
+  Eraser: { key: "toolEraser", written: "Eraser" },
+  "The text": { key: "canvasText", written: "The text" },
   // The page bar of a table shown a page at a time.
   "First page": { key: "firstPage", written: "First page" },
   "Previous page": { key: "previousPage", written: "Previous page" },

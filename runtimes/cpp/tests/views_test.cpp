@@ -23,7 +23,7 @@ const json tasks = json::parse(R"([{"id":1,"title":"Milk","up":null},{"id":2,"ti
 
 TEST(a_table_view_shows_its_page_in_order) {
     auto state = window_with({{"tasks", tasks}}, json::parse(R"({"taskTable":{"kind":"table","list":"tasks","columns":[{"field":"title","kind":"text","choices":[]}],
-        "order":{"field":"title","desc":false},"page":2,"at":9}})"));
+        "order":{"field":"title","desc":false},"page":2,"at":9,"sortable":true}})"));
     fill_views(state);
     json view = state.views["taskTable"];
     CHECK_EQ(view["shown"], json::parse("[0]"));
@@ -82,4 +82,25 @@ TEST(a_window_state_carries_its_views) {
     CHECK(!json(WindowState{}).contains("views"));
     // A handler's reply keeps them.
     CHECK_EQ(Ui(state).reply("Board", json::object()).state.views, state.views);
+}
+
+// Only a sortable table sorts by a header: on any other the click changes nothing.
+TEST(a_table_that_is_not_sortable_keeps_its_order) {
+    auto state = window_with({{"tasks", tasks}}, json::parse(R"({"taskTable":{"kind":"table","list":"tasks","columns":[],"order":null,"page":null}})"));
+    view_action(state, "taskTable", {{"sort", "title"}});
+    CHECK_EQ(state.views["taskTable"]["order"], json(nullptr));
+    state.views["taskTable"]["sortable"] = false;
+    view_action(state, "taskTable", {{"sort", "title"}});
+    CHECK_EQ(state.views["taskTable"]["order"], json(nullptr));
+}
+
+// A chart of numbers draws the last `points` numbers of its list: numbers, and text that reads as one.
+TEST(a_numbers_view_shows_the_last_numbers_of_its_list) {
+    auto state = window_with({{"readings", json::parse(R"([1, "2.5", " ", "x", null, 4, "1e400", -3])")}},
+                             json::parse(R"({"trend":{"kind":"numbers","list":"readings","points":3},"all":{"kind":"numbers","list":"readings","points":null},
+                                 "none":{"kind":"numbers","list":"missing","points":0}})"));
+    fill_views(state);
+    CHECK_EQ(state.views["trend"]["numbers"], json::parse("[2.5,4,-3]"));
+    CHECK_EQ(state.views["all"]["numbers"], json::parse("[1,2.5,4,-3]"));
+    CHECK_EQ(state.views["none"]["numbers"], json::array());
 }

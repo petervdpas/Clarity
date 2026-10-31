@@ -44,6 +44,19 @@ pub const FOLDER_KEYS: [(&str, &str); 1] = [("chooseFolder", "Choose a folder")]
 
 /// The buttons of a canvas that zooms: out, back to whole, in.
 pub const ZOOM_KEYS: [(&str, &str); 3] = [("zoomOut", "Zoom out"), ("zoomWhole", "Show it whole"), ("zoomIn", "Zoom in")];
+/// The toolbar of a canvas the person paints or draws on (DESIGN 5.31), and
+/// what it asks when the text tool places a text.
+pub const CANVAS_TOOL_KEYS: [(&str, &str); 9] = [
+    ("toolSelect", "Select"),
+    ("toolLine", "Line"),
+    ("toolRect", "Rectangle"),
+    ("toolEllipse", "Ellipse"),
+    ("toolPath", "Path"),
+    ("toolText", "Text"),
+    ("toolPen", "Pen"),
+    ("toolEraser", "Eraser"),
+    ("canvasText", "The text"),
+];
 pub const LANGUAGE_PICKER_KEYS: [(&str, &str); 1] = [("languagePicker", "Language")];
 pub const THEME_PICKER_KEYS: [(&str, &str); 1] = [("themePicker", "Theme")];
 /// Clarity's words of a file part bound to a file field: its empty state,
@@ -140,6 +153,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&FILE_KEYS)
         .chain(&FOLDER_KEYS)
         .chain(&ZOOM_KEYS)
+        .chain(&CANVAS_TOOL_KEYS)
         .chain(&PROGRESS_KEYS)
         .chain(&TAGS_KEYS)
         .chain(&PAGE_KEYS)
@@ -521,6 +535,9 @@ fn shown(project: &Project) -> Shown {
     let folders = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Folder));
     let paged = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.page.is_some()));
     let zooms = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.zoom));
+    let paints = project.files.iter().flat_map(|f| &f.pages).any(|p| {
+        any_widget(&p.widgets, &|w| matches!(w.props.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)))
+    });
     let trees = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| matches!(w.props.kind, crate::widgets::WidgetKind::Tree | crate::widgets::WidgetKind::TreeTable)));
     let bound_tags = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
         w.props.kind == crate::widgets::WidgetKind::Tags && w.props.bind.is_some()
@@ -543,6 +560,7 @@ fn shown(project: &Project) -> Shown {
         .chain(if bound_file { FILE_KEYS.as_slice() } else { &[] })
         .chain(if folders { FOLDER_KEYS.as_slice() } else { &[] })
         .chain(if zooms { ZOOM_KEYS.as_slice() } else { &[] })
+        .chain(if paints { CANVAS_TOOL_KEYS.as_slice() } else { &[] })
         .chain(if progress { PROGRESS_KEYS.as_slice() } else { &[] })
         .chain(if bound_tags { TAGS_KEYS.as_slice() } else { &[] })
         .chain(if paged { PAGE_KEYS.as_slice() } else { &[] })

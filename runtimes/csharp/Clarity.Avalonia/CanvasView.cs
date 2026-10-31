@@ -22,6 +22,7 @@
 // the point under it, dragging moves that point, a double click on a point
 // takes it away, and letting go runs BendCommand with the link's name and its
 // points (Pointer.Bent and Pointer.Via), as the web canvas does.
+// With a Mode the person drags its objects, paints or draws (CanvasView.Modes.cs).
 
 using System.Globalization;
 using System.Windows.Input;
@@ -34,7 +35,7 @@ using Clarity.Runtime;
 
 namespace Clarity.Avalonia;
 
-public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
+public partial class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
 {
     /// The pointer is the canvas's anywhere on it, where it drew nothing too.
     public bool HitTest(Point point) => new Rect(Bounds.Size).Contains(point);
@@ -125,7 +126,7 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
     (IPointer Pointer, string Name, List<Point> Via, int Point, Point Start, Point At, bool Moved)? bendPress;
 
     /// The drawing's shapes, a link being bent with the points the pointer gives it.
-    IEnumerable<Shape> ShapesShown => Drawing.Select(shape => bending is { } b && shape is Shape.Link link && link.Name == b.Name
+    IEnumerable<Shape> ShapesShown => ModeShapes(Drawing).Select(shape => bending is { } b && shape is Shape.Link link && link.Name == b.Name
         ? link with { Via = [.. b.Via.SelectMany(p => new[] { (long)Math.Round(p.X), (long)Math.Round(p.Y) })] }
         : shape);
 
@@ -324,6 +325,8 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
         // A zoom button says what it does, in Clarity's words.
         var button = ZoomButtonAt(e.GetPosition(this));
         ToolTip.SetTip(this, button is null ? null : ZoomWord(button));
+        if (ModeMoved(e))
+            return;
         if (bendPress is { } press && press.Pointer == e.Pointer)
         {
             var at = e.GetPosition(this);
@@ -352,11 +355,14 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
     {
         base.OnPointerCaptureLost(e);
         engineDown = null;
+        ModeCaptureLost();
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        if (ModeKey(e))
+            return;
         // A shortcut with Control, Alt or the command key is the window's.
         if (loop is not { Hears.Keys: true } || ScreenKeys.NameOf(e.Key) is not { } name)
             return;
@@ -424,6 +430,7 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+        ModeChanged(change);
         if (change.Property == CommandProperty)
             Cursor = Command is null ? null : new Cursor(StandardCursorType.Hand);
         // A drawing that comes back after a bend has the points: the canvas stops showing its own.
@@ -479,6 +486,7 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
         a.Count == b.Count && a.Zip(b).All(p => p switch
         {
             (Shape.Words x, Shape.Words y) => (x.X, x.Y, x.Color, x.Size, Locale.Show(x.Text)) == (y.X, y.Y, y.Color, y.Size, Locale.Show(y.Text)),
+            (Shape.Path x, Shape.Path y) => (x.Color, x.Width) == (y.Color, y.Width) && x.Points.SequenceEqual(y.Points),
             (Shape.Link x, Shape.Link y) => (x.Name, x.X1, x.Y1, x.X2, x.Y2, x.Color, x.Width) == (y.Name, y.X1, y.Y1, y.X2, y.Y2, y.Color, y.Width) && x.Via.SequenceEqual(y.Via),
             var (x, y) => Equals(x, y),
         });
@@ -601,6 +609,8 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
                 ZoomBy(button == "zoomIn" ? 1.2 : 1 / 1.2);
             return;
         }
+        if (ModePressed(e))
+            return;
         if (BendCommand is not null && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             var at = e.GetPosition(this);
@@ -680,6 +690,8 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
             e.Handled = true;
             return;
         }
+        if (ModeReleased(e))
+            return;
         if (bendPress is { } bent && bent.Pointer == e.Pointer)
         {
             bendPress = null;
@@ -796,45 +808,72 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
                         DrawGrid(context, scale, At);
                     }
                     break;
-                case Shape.Line line:
-                    context.DrawLine(new Pen(BrushOf(line.Color), line.Width * scale, lineCap: PenLineCap.Round), At(line.X1, line.Y1), At(line.X2, line.Y2));
-                    break;
-                case Shape.Rect rect:
-                    context.FillRectangle(BrushOf(rect.Color), new Rect(At(rect.X, rect.Y), new Size(rect.Width * scale, rect.Height * scale)));
-                    break;
-                case Shape.Circle circle:
-                    context.DrawEllipse(BrushOf(circle.Color), null, At(circle.X, circle.Y), circle.R * scale, circle.R * scale);
-                    break;
-                case Shape.Ring ring:
-                    context.DrawEllipse(null, new Pen(BrushOf(ring.Color), ring.Width * scale), At(ring.X, ring.Y), ring.R * scale, ring.R * scale);
-                    break;
-                case Shape.Link link:
-                    var route = LinkPoints(link);
-                    var geometry = new StreamGeometry();
-                    using (var g = geometry.Open())
-                    {
-                        g.BeginFigure(At(route[0].X, route[0].Y), false);
-                        foreach (var p in route.Skip(1))
-                            g.LineTo(At(p.X, p.Y));
-                        g.EndFigure(false);
-                    }
-                    context.DrawGeometry(null, new Pen(BrushOf(link.Color), link.Width * scale, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round), geometry);
-                    break;
-                case Shape.Image image when ResourcePictures.Of(image.Picture) is { } picture:
-                    context.DrawImage(picture, new Rect(At(image.X, image.Y), new Size(image.Width * scale, image.Height * scale)));
-                    break;
-                case Shape.Words words:
-                    var font = this.TryFindResource("ClarityFont", ActualThemeVariant, out var family) && family is FontFamily f ? f : FontFamily.Default;
-                    var text = new FormattedText(Locale.Show(words.Text), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, new Typeface(font), words.Size * scale, BrushOf(words.Color));
-                    context.DrawText(text, At(words.X, words.Y) - new Point(text.Width / 2, text.Height / 2));
+                default:
+                    DrawShape(context, shape, scale, At);
                     break;
             }
         }
+        RenderMode(context, scale, At);
         // The bend points of the link in hand: drag one to move it, double-click it to take it away.
         foreach (var handle in Handles())
             context.DrawEllipse(BrushOf("panel"), new Pen(BrushOf("accent"), 1.5), At(handle.X, handle.Y), 5, 5);
         if (Zoom && Runs is null)
             DrawZoomButtons(context);
+    }
+
+    /// <summary>Draws one shape of a drawing, in its units, <paramref name="at"/> giving each unit's pixel.</summary>
+    void DrawShape(DrawingContext context, Shape shape, double scale, Func<double, double, Point> at)
+    {
+        switch (shape)
+        {
+            case Shape.Line line:
+                context.DrawLine(new Pen(BrushOf(line.Color), line.Width * scale, lineCap: PenLineCap.Round), at(line.X1, line.Y1), at(line.X2, line.Y2));
+                break;
+            case Shape.Rect rect:
+                context.FillRectangle(BrushOf(rect.Color), new Rect(at(rect.X, rect.Y), new Size(rect.Width * scale, rect.Height * scale)));
+                break;
+            case Shape.Circle circle:
+                context.DrawEllipse(BrushOf(circle.Color), null, at(circle.X, circle.Y), circle.R * scale, circle.R * scale);
+                break;
+            case Shape.Ring ring:
+                context.DrawEllipse(null, new Pen(BrushOf(ring.Color), ring.Width * scale), at(ring.X, ring.Y), ring.R * scale, ring.R * scale);
+                break;
+            case Shape.Link link:
+                var route = LinkPoints(link);
+                var geometry = new StreamGeometry();
+                using (var g = geometry.Open())
+                {
+                    g.BeginFigure(at(route[0].X, route[0].Y), false);
+                    foreach (var p in route.Skip(1))
+                        g.LineTo(at(p.X, p.Y));
+                    g.EndFigure(false);
+                }
+                context.DrawGeometry(null, new Pen(BrushOf(link.Color), link.Width * scale, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round), geometry);
+                break;
+            case Shape.Image image when ResourcePictures.Of(image.Picture) is { } picture:
+                context.DrawImage(picture, new Rect(at(image.X, image.Y), new Size(image.Width * scale, image.Height * scale)));
+                break;
+            case Shape.Words words:
+                var font = this.TryFindResource("ClarityFont", ActualThemeVariant, out var family) && family is FontFamily f ? f : FontFamily.Default;
+                var text = new FormattedText(Locale.Show(words.Text), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, new Typeface(font), words.Size * scale, BrushOf(words.Color));
+                context.DrawText(text, at(words.X, words.Y) - new Point(text.Width / 2, text.Height / 2));
+                break;
+            case Shape.Ellipse ellipse:
+                context.DrawEllipse(BrushOf(ellipse.Color), null, at(ellipse.X, ellipse.Y), ellipse.Rx * scale, ellipse.Ry * scale);
+                break;
+            case Shape.Path path when path.Points.Count >= 2:
+                var polyline = new StreamGeometry();
+                using (var g = polyline.Open())
+                {
+                    g.BeginFigure(at(path.Points[0], path.Points[1]), false);
+                    for (var i = 2; i + 1 < path.Points.Count; i += 2)
+                        g.LineTo(at(path.Points[i], path.Points[i + 1]));
+                    g.EndFigure(false);
+                }
+                context.DrawGeometry(null, new Pen(BrushOf(path.Color), path.Width * scale, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round), polyline);
+                break;
+            // An object's box draws nothing itself: the shapes after it show it.
+        }
     }
 
     /// The zoom buttons, as the designer's: out, the zoom it is at (back to whole), in.

@@ -128,6 +128,7 @@ void clarity_fill_views(ClarityWindowState* state, const ClaritySelected* sent, 
         if (strcmp(kind, "table") == 0) fill_table(view, list, chosen);
         else if (strcmp(kind, "tree") == 0) fill_tree(view, list, chosen);
         else if (strcmp(kind, "chart") == 0) fill_chart(view, list);
+        else if (strcmp(kind, "numbers") == 0) put(view, "numbers", clarity_numbers_of(list, cJSON_GetObjectItemCaseSensitive(view, "points")));
     }
 }
 
@@ -141,7 +142,8 @@ bool clarity_view_event(ClarityWindowState* state, const char* part, const cJSON
     const cJSON* open = cJSON_GetObjectItemCaseSensitive(action, "open");
     const cJSON* close = cJSON_GetObjectItemCaseSensitive(action, "close");
     if (cJSON_IsString(sort)) {
-        // A new order starts on the first page.
+        // Only a sortable table sorts; a new order starts on the first page.
+        if (!cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(view, "sortable"))) return true;
         put(view, "order", clarity_next_order(cJSON_GetObjectItemCaseSensitive(view, "order"), sort->valuestring));
         put(view, "at", cJSON_CreateNumber(1));
     } else if (cJSON_IsNumber(page)) {

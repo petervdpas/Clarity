@@ -13,7 +13,7 @@
 cJSON* clarity_data_at(const cJSON* data, const char* path);
 
 /// Fills each view of `state` from its data: a table's `shown` and `pages`,
-/// a tree's `shown`, a chart's `groups`. A part whose chosen row differs
+/// a tree's `shown`, a chart's `groups`, a chart of numbers' `numbers`. A part whose chosen row differs
 /// from `sent` (the selected rows the screen sent, before a handler ran)
 /// shows that row: a table turns to its page, a tree opens the rows above
 /// it. The views are a copy of their own, in the scratch arena.

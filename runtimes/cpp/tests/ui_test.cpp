@@ -268,6 +268,29 @@ TEST(a_canvas_keeps_the_grid_and_snap_code_sets) {
     CHECK_EQ(ui.dot_color("sheet", ""), std::string("muted"));
 }
 
+// A canvas's tool, brush and ink (DESIGN 5.31): the design's until a handler
+// sets them, kept in the part's state; a vector canvas's chosen shape from 1.
+TEST(a_canvas_keeps_the_tool_brush_and_ink_code_sets) {
+    clarity::WindowState state;
+    state.selected["drawing"] = 2;
+    clarity::Ui ui(state);
+    CHECK_EQ(ui.tool("drawing", "rect"), std::string("rect"));
+    CHECK_EQ(ui.brush("drawing", 2), int64_t{2});
+    CHECK_EQ(ui.ink("drawing", "text"), std::string("text"));
+    ui.set_tool("drawing", "ellipse");
+    ui.set_brush("drawing", 5);
+    ui.set_ink("drawing", "#ff0000");
+    CHECK_EQ(ui.tool("drawing", "rect"), std::string("ellipse"));
+    CHECK_EQ(ui.brush("drawing", 2), int64_t{5});
+    CHECK_EQ(ui.ink("drawing", "text"), std::string("#ff0000"));
+    CHECK_EQ(ui.shape_chosen("drawing"), int64_t{3});
+    CHECK_EQ(ui.shape_chosen("sheet"), int64_t{0});
+    clarity::PartState kept = nlohmann::json(clarity::PartState{.tool = "line", .brush = 3, .ink = "accent"}).get<clarity::PartState>();
+    CHECK_EQ(kept.tool, std::optional<std::string>("line"));
+    CHECK_EQ(kept.brush, std::optional<int64_t>(3));
+    CHECK_EQ(kept.ink, std::optional<std::string>("accent"));
+}
+
 // `copy text`: the reply hands the text to the screen for its clipboard; of several, the last.
 TEST(a_handler_copies_the_last_text_it_copies) {
     clarity::Ui ui(clarity::WindowState{});

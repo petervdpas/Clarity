@@ -219,6 +219,12 @@ pub struct PartInfo {
     /// A canvas's grid dots as its line says: pixels across (2 without it) and color (empty is the theme's border).
     pub dot_size: u32,
     pub dot_color: String,
+    /// A canvas's mode (DESIGN 5.31), the list of its objects, and its tool, brush and ink as its line says.
+    pub mode: Option<clarity_spec::model::CanvasMode>,
+    pub objects: Option<String>,
+    pub tool: String,
+    pub brush: u32,
+    pub ink: String,
     /// A custom part (DESIGN 5.19): its kind and the values written on its line.
     pub custom: Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)>,
 }
@@ -242,7 +248,7 @@ impl WindowCtx {
         for widget in widgets {
             if let Some(name) = &widget.props.name {
                 let custom = widget.props.part.clone().map(|kind| (kind, widget.props.values.clone()));
-                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), custom };
+                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
                 self.parts.insert(name.clone(), info);
             }
             self.widgets(&widget.children);
@@ -718,6 +724,7 @@ impl<'a> Emitter<'a> {
                         "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "tab" | "step" | "grid" | "snap" | "background" => format!("clarity_ui_set_{property}"),
                         "dotSize" => "clarity_ui_set_dot_size".to_string(),
                         "dotColor" => "clarity_ui_set_dot_color".to_string(),
+                        "tool" | "brush" | "ink" => format!("clarity_ui_set_{property}"),
                         "open" => "clarity_ui_set_open_section".to_string(),
                         other => {
                             self.errors.push(format!("'{other}' of a part cannot be set"));
@@ -966,6 +973,9 @@ impl<'a> Emitter<'a> {
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name, Ok(arg)) => format!("cJSON_AddStringToObject({json}, {key}, {});", bare(self.value(arg, &mut pre))),
                         (ShapeValue::Points, Ok(arg)) => format!("cJSON_AddItemToObject({json}, {key}, clarity_json_integers({}));", bare(self.value(arg, &mut pre))),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text | ShapeValue::Name | ShapeValue::Points, Err(default)) => format!("cJSON_AddStringToObject({json}, {key}, {});", string(default)),
+                        // An object sends its record's id (DESIGN 5.31).
+                        (ShapeValue::Record, Ok(arg)) => format!("cJSON_AddNumberToObject({json}, {key}, (double)({}));", bare(self.value(&clarity_spec::code::check::object_id(arg), &mut pre))),
+                        (ShapeValue::Record, Err(_)) => format!("cJSON_AddNullToObject({json}, {key});"),
                         (ShapeValue::Text, Ok(arg)) => format!("cJSON_AddItemToObject({json}, {key}, clarity_text_json({}));", self.shown(arg, &mut pre)),
                     });
                 }
@@ -1536,12 +1546,19 @@ impl<'a> Emitter<'a> {
             "background" => format!("clarity_ui_background(ui, {quoted}, {})", string(&info.background)),
             "dotSize" => format!("clarity_ui_dot_size(ui, {quoted}, {})", info.dot_size),
             "dotColor" => format!("clarity_ui_dot_color(ui, {quoted}, {})", string(&info.dot_color)),
+            "tool" => format!("clarity_ui_tool(ui, {quoted}, {})", string(&info.tool)),
+            "brush" => format!("clarity_ui_brush(ui, {quoted}, {})", info.brush),
+            "ink" => format!("clarity_ui_ink(ui, {quoted}, {})", string(&info.ink)),
+            // A vector canvas's chosen shape, from 1 (0 for none).
+            "selected" if info.mode == Some(clarity_spec::model::CanvasMode::Vector) => format!("clarity_ui_selected_shape(ui, {quoted})"),
             "maximized" => format!("clarity_ui_maximized(ui, {quoted})"),
             "tab" => format!("clarity_ui_tab(ui, {quoted})"),
             "step" => format!("clarity_ui_step(ui, {quoted})"),
             "open" => format!("clarity_ui_open_section(ui, {quoted})"),
             "selected" => {
-                let found = info.bind.and_then(|bind| self.window.and_then(|w| w.data.iter().find(|(n, _, _)| *n == bind)).cloned());
+                // A canvas of objects chooses a record of its objects list, as a table of its bound list.
+                let list = if info.mode == Some(clarity_spec::model::CanvasMode::Objects) { info.objects } else { info.bind };
+                let found = list.and_then(|bind| self.window.and_then(|w| w.data.iter().find(|(n, _, _)| *n == bind)).cloned());
                 match found {
                     Some((bind, entity, true)) => {
                         let rows = format!("w->{}", ident(&bind));

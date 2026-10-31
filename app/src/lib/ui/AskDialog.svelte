@@ -68,9 +68,21 @@
   const cancel = $derived(form.kind === "confirm" && form.no ? shownText(model, form.no) : ownWord(model, "Cancel"));
   const ready = $derived(answerable(form, value));
 
+  let formElement = $state<HTMLFormElement | null>(null);
+
+  /** Enter in the answer's box answers, as OK does: the box has taken the value first. */
+  function answerNow() {
+    formElement?.requestSubmit();
+    return true;
+  }
+
+  /** A question is answered once, however Enter and OK came together. */
+  let answered = false;
+
   function submit(e: SubmitEvent) {
     e.preventDefault();
-    if (!ready) return;
+    if (answered || !ready) return;
+    answered = true;
     onanswer(form.kind === "confirm" ? null : value);
   }
 
@@ -80,20 +92,20 @@
 </script>
 
 <Dialog label={question} onclose={oncancel}>
-  <form onsubmit={submit} use:focused>
+  <form bind:this={formElement} onsubmit={submit} use:focused>
     <p class="question">{question}</p>
     {#if asked}
       {#if choices}
         <ChoiceInput label={question} {value} {choices} onchange={(next) => (value = next)} />
       {:else if number}
         {@const editing = numberEditing(number, formatsOf(model))}
-        <NumberInput label={question} {value} text={editing.text} read={editing.read} onchange={(next) => (value = next)} onsubmit={() => true} />
+        <NumberInput label={question} {value} text={editing.text} read={editing.read} onchange={(next) => (value = next)} onsubmit={answerNow} />
       {:else if asked.type === "date"}
         <DateInput label={question} {value} onchange={(next) => (value = next)} />
       {:else if asked.type === "datetime"}
         <DateTimeInput label={question} {value} onchange={(next) => (value = next)} />
       {:else}
-        <TextInput label={question} value={value ?? ""} onchange={(next) => (value = next)} onsubmit={() => true} />
+        <TextInput label={question} value={value ?? ""} onchange={(next) => (value = next)} onsubmit={answerNow} />
       {/if}
     {/if}
     <div class="buttons">

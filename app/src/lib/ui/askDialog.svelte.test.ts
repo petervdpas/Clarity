@@ -73,6 +73,19 @@ test("a number starts at its default and answers what is typed", async () => {
   expect(typed.answer).toBe(5);
 });
 
+/** Enter in the box answers, as OK does: a person types and presses Enter. */
+test("Enter in a number or a text answers what is typed", async () => {
+  const ask: Ask = { question: { key: "howMany" }, form: { kind: "value", type: "integer", of: null, only: null, default: 2 }, handler: "setCopies", values: [] };
+  const typed = await asked(ask, (d) => {
+    const input = d.querySelector<HTMLInputElement>("input")!;
+    input.value = "7";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    flushSync();
+  });
+  expect(typed.answer).toBe(7);
+});
+
 test("a record is chosen among those `from` gave, the first chosen to start with", async () => {
   const ask: Ask = { question: { key: "lendTo" }, form: { kind: "value", type: "record", of: "Friend", only: [3, 5], default: null }, handler: "lend", values: [{ id: 7 }] };
   const chosen = await asked(ask, (d) => {

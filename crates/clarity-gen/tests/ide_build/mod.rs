@@ -97,6 +97,38 @@ pub fn warnings(said: &str) -> Vec<String> {
     found
 }
 
+/// Builds the program of the project of `file` for `target` as Run does (a
+/// debug build, on the runtimes in this repository), and gives the folder it
+/// runs in and the program itself.
+pub fn build_for_run(file: &Path, project: &clarity_spec::Project, settings: &clarity_project::Settings, target: clarity_project::Target) -> (PathBuf, PathBuf) {
+    let dir = clarity_project::module_dir(file);
+    let built = clarity_project::build_settings(&dir, settings);
+    let programs = clarity_gen::programs(project, &built).unwrap_or_else(|e| panic!("{}: {e:?}", file.display()));
+    let out = clarity_project::out_dir(file, settings);
+    clarity_gen::write_programs(&out, &programs, settings.stack.backend, &settings.keeps).unwrap();
+    let program = programs.iter().find(|p| p.target == target).unwrap_or_else(|| panic!("{} has no {target:?} program", file.display()));
+    let folder = clarity_project::target_dir(&out, program.target);
+    for step in clarity_gen::parts::steps_before(&folder, settings.stack.backend) {
+        let (tool, args) = step.split_first().unwrap();
+        let ran = Command::new(tool).args(args).current_dir(&folder).output().unwrap();
+        assert!(ran.status.success(), "{tool} {args:?}:\n{}", String::from_utf8_lossy(&ran.stderr));
+    }
+    let toolchain = clarity_gen::toolchain(&built, false).expect("Clarity builds this stack");
+    let mut command = Command::new(toolchain.tool);
+    command.args(&toolchain.args).envs(toolchain.env.iter().copied()).current_dir(&folder);
+    local_runtime(&folder, settings.stack.backend, &mut command);
+    let ran = command.output().unwrap_or_else(|e| panic!("{}: {e}", toolchain.tool));
+    assert!(ran.status.success(), "{} {}:\n{}{}", toolchain.tool, toolchain.args.join(" "), String::from_utf8_lossy(&ran.stdout), String::from_utf8_lossy(&ran.stderr));
+    // Rust builds into the shared target folder.
+    let program = if settings.stack.backend == Backend::Rust {
+        repo().join("target/generated/ide-build-target/debug").join(toolchain.program.file_name().unwrap())
+    } else {
+        folder.join(&toolchain.program)
+    };
+    assert!(program.exists(), "no program at {}", program.display());
+    (folder, program)
+}
+
 /// Builds the project of `file` as the IDE does, every program of its stack
 /// in each configuration, and fails with every warning there was. Removes
 /// the build when it is clean.

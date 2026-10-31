@@ -629,9 +629,11 @@ impl<'a> Window<'a> {
             let _ = writeln!(out, "{pad}</MenuItem>");
             return;
         }
-        let mut attrs = match self.pickers.get(&address(item)) {
-            Some(picker) => format!("x:Name=\"{picker}\" Header=\"{header}\""),
-            None => format!("Header=\"{header}\""),
+        // A named item carries its name, as every part does.
+        let mut attrs = match (self.pickers.get(&address(item)), &item.props.name) {
+            (Some(picker), _) => format!("x:Name=\"{picker}\" Header=\"{header}\""),
+            (None, Some(name)) => format!("x:Name=\"{name}\" Header=\"{header}\""),
+            (None, None) => format!("Header=\"{header}\""),
         };
         if let Some(key) = &item.props.shortcut {
             let _ = write!(attrs, " InputGesture=\"{key}\" c:Keys.Frame=\"{key}\"", key = attr(&gesture(key)));
@@ -661,9 +663,11 @@ impl<'a> Window<'a> {
             return;
         }
         let content = self.text(item.props.caption.as_deref().unwrap_or_default());
-        let mut attrs = match self.pickers.get(&address(item)) {
-            Some(picker) => format!("x:Name=\"{picker}\" Content=\"{content}\""),
-            None => format!("Content=\"{content}\""),
+        // A named button carries its name, as every part does.
+        let mut attrs = match (self.pickers.get(&address(item)), &item.props.name) {
+            (Some(picker), _) => format!("x:Name=\"{picker}\" Content=\"{content}\""),
+            (None, Some(name)) => format!("x:Name=\"{name}\" Content=\"{content}\""),
+            (None, None) => format!("Content=\"{content}\""),
         };
         if let Some(command) = self.click_command(item.props.handler.as_deref().map(pascal), item.props.on_click.as_deref(), item.props.new_window) {
             let _ = write!(attrs, " Command=\"{{Binding {command}}}\"");
@@ -1602,7 +1606,8 @@ impl<'a> Window<'a> {
                     Event::Leave => format!("{control}.LostFocus += (_, _) => {run};"),
                     Event::Submit => format!("Events.OnEnter({control}, () => {run});"),
                     // A wizard's Next asks whether the handler refused, so it keeps the step.
-                    Event::Next => format!("{control}.Next = Vm.Next_{};", member(name)),
+                    // Looked up when Next is pressed: the view has no view model yet while it is made.
+                    Event::Next => format!("{control}.Next = () => Vm.Next_{}();", member(name)),
                     Event::Finish => format!("{control}.Finished += () => {run};"),
                     // A row the person moved (DESIGN 5.30): the list has its new order, the row is chosen.
                     Event::Reorder if kind == WidgetKind::List => format!("RowMoves.OnReorder({control}, () => {run});"),
@@ -1681,6 +1686,8 @@ public partial class {name}View : UserControl
             } else if self.project.entity(entity).is_some_and(|e| e.settings) {
                 // Every window shows the same settings.
                 let _ = write!(properties, "    public {entity} {prop} => {entity}.Current;\n\n");
+                // A part bound to a setting changes it: its edit takes it along for Ctrl+Z (DESIGN 5.29).
+                let _ = write!(properties, "    protected override ISettings? AppSettings => {entity}.Current;\n\n");
             } else {
                 let _ = write!(
                     properties,

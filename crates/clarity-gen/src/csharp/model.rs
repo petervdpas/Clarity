@@ -94,6 +94,7 @@ fn settings_class(project: &Project, entity: &Entity, program: &str, cli: bool) 
     let mut properties = String::new();
     let mut described = String::new();
     let mut taken = String::new();
+    let mut applied = String::new();
     let mut json = String::new();
     let mut follow = String::new();
     let mut shown = String::new();
@@ -140,6 +141,13 @@ fn settings_class(project: &Project, entity: &Entity, program: &str, cli: bool) 
         };
         taken.push_str(&format!("        if (kept[{key}] is {{ }} {field}Kept) settings.{prop} = {};
 ", read.replace("v.", &format!("{field}Kept."))));
+        // What was sent may also clear a setting that can be none: a reference, a date, a moment.
+        applied.push_str(&format!("        if (kept[{key}] is {{ }} {field}Sent) settings.{prop} = {};
+", read.replace("v.", &format!("{field}Sent."))));
+        if matches!(f.ty, FieldType::Ref { .. } | FieldType::Date | FieldType::DateTime) {
+            applied.push_str(&format!("        else if (sent.TryGetPropertyValue({key}, out var {field}None) && {field}None is null) settings.{prop} = null;
+"));
+        }
         let written = match &f.ty {
             FieldType::Decimal { .. } | FieldType::Money => format!("{prop}.ToString(CultureInfo.InvariantCulture)"),
             FieldType::Date => format!("{prop}?.ToString(\"yyyy-MM-dd\", CultureInfo.InvariantCulture)"),
@@ -193,7 +201,7 @@ fn settings_class(project: &Project, entity: &Entity, program: &str, cli: bool) 
     let keep = if cli { format!("\n    /// <summary>Keeps the settings as they are now.</summary>\n    public static void Keep() => KeptSettings.Keep(ProgramName, Current.ToJson(){secrets_arg});\n") } else { String::new() };
     format!(
         "/// <summary>The person's settings: one for the whole application, shared by every window, kept on their machine as they change.</summary>
-public sealed partial class {name} : ObservableObject
+public sealed partial class {name} : ObservableObject, ISettings
 {{
     const string ProgramName = {program};
 {secrets_field}
@@ -215,7 +223,7 @@ public sealed partial class {name} : ObservableObject
     {{
         var settings = this;
         var kept = KeptSettings.Taken(Described(), sent);
-{taken}    }}
+{applied}    }}
 {keep}
     /// <summary>The settings as a kept value is checked against them.</summary>
     static Dictionary<string, Setting> Described() => new()

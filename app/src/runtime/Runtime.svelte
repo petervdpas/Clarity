@@ -148,6 +148,14 @@
     waiting = waiting.slice(1);
   }
 
+  /** The question on screen was answered: it leaves the list, and its handler runs. */
+  function answerFirst(value: JsonValue | null) {
+    const asked = waiting[0];
+    if (asked?.kind !== "ask") return;
+    shown();
+    void answer(asked, value);
+  }
+
   /** The answer to a question: runs the handler it goes to on the window that asked, if that is still open. */
   async function answer(item: Extract<Waiting, { kind: "ask" }>, value: JsonValue | null) {
     const state = stack[item.window];
@@ -490,21 +498,25 @@
     }
   });
 
+  /**
+   * A tick runs its handler on the window it is in, the top one or one under
+   * it, as that window's own event. It is left out while a handler runs, and
+   * its reply is left out when the person changed something or took an edit
+   * back while it ran: a tick never overwrites what the person did.
+   */
   async function tick(instance: number, part: string) {
-    if (busy) return;
+    if (busy || personWaiting > 0) return;
     const index = stack.findIndex((s) => (s.instance ?? 0) === instance);
     const state = stack[index];
     const target = model && state ? findPage(model, state.window) : undefined;
     const widget = target ? allParts(target).find((w) => w.props.name === part) : undefined;
     const wired = widget?.props.handlers.find((h) => h.event === "tick");
     if (!state || !wired || state.parts?.[part]?.enabled === false) return;
-    if (index === stack.length - 1) {
-      await run(handlerCall(wired));
-      return;
-    }
+    const seen = personChanges;
     busy = true;
     try {
-      const reply = received(await invoke<Reply>("answer_event", { state: $state.snapshot(state), handler: wired.handler, values: [] }));
+      const reply = received(await invoke<Reply>("dispatch_event", { state: $state.snapshot(state), handler: wired.handler }));
+      if (personChanges !== seen) return;
       await nav.apply(index, reply);
     } catch (err) {
       say({ level: "error", text: errorText(err) });
@@ -570,8 +582,12 @@
   // or the part itself), so in a form it walks back field by field.
   const buses = new Map<number, EditBus>();
   const busOf = (instance: number) => buses.get(instance) ?? buses.set(instance, new EditBus()).get(instance)!;
-  /** The events that end an edit of a part; a canvas's drag starts one that its drop ends, and a click on a canvas is one. */
-  const EDIT_ENDS = new Set<string>(["drop", "bend", "change"]);
+  /**
+   * The events that end an edit of a part: a canvas's drag starts one that its
+   * drop ends, a click on a canvas is one, and a row moved in a part that
+   * reorders is one (DESIGN 5.30), its handler's step joined to the move.
+   */
+  const EDIT_ENDS = new Set<string>(["drop", "bend", "change", "reorder"]);
   /** Paths of a part's own state (an unbound input's text) start so; no name of the window's data does. */
   const PART_STATE = "#parts.";
   /** The window's data where each part's edit started. */
@@ -580,6 +596,8 @@
   let lastEdit: Edit | null = null;
   /** The step the last handler made. */
   let lastStep = 0;
+  /** How often the person changed the window's data or took an edit back: a tick that ran meanwhile is left out. */
+  let personChanges = 0;
   /** The part that had the focus last, for an Undo in a menu. */
   let focusedPart: string | null = null;
   /** Text inputs the person typed in since their value was last taken: Ctrl+Z there is their own text undo. */
@@ -589,6 +607,7 @@
 
   /** A part's edit through its handler: the window's data before and after it, and the step it made. */
   async function edited(part: string, event: string, handler: string): Promise<boolean> {
+    personChanges++;
     const scope = page ? undoScope(page, part) : null;
     const joining = lastEdit?.part === part ? lastEdit : null;
     lastEdit = null;
@@ -599,6 +618,7 @@
     if (event === "drag") return run(handler);
     const before = editStarts.get(part)!;
     editStarts.delete(part);
+    typingTaken(part);
     const ran = await run(handler);
     // A handler that failed left nothing behind.
     if (!ran) return false;
@@ -614,10 +634,22 @@
     return true;
   }
 
+  /**
+   * An edit of `part` was taken: what was typed in its inputs is part of it,
+   * no longer theirs to take back. By the part, not the focus: a date is
+   * taken as it is left, when the focus is elsewhere already.
+   */
+  function typingTaken(part: string) {
+    for (const input of document.querySelectorAll(`[data-part="${CSS.escape(part)}"] :is(input, textarea)`)) typed.delete(input);
+  }
+
   /** A bound input changed one path of the window's data. */
   function inputEdited(part: string, path: string, before: JsonValue | undefined, after: JsonValue | undefined) {
+    personChanges++;
     const scope = page ? undoScope(page, part) : null;
     if (!scope || !current) return;
+    // A tag added with Enter, say, takes the typing without a change event.
+    typingTaken(part);
     const edit: Edit = { part, scope, changes: [{ path, before, after }], step: 0 };
     busOf(current.instance ?? 0).push(edit);
     lastEdit = edit;
@@ -637,6 +669,17 @@
     if (!current || !page || !part) return;
     const scope = undoScope(page, part);
     if (!scope) return;
+    personChanges++;
+    // An undo waits its turn after a handler that runs, as a click does.
+    if (busy) {
+      personWaiting++;
+      try {
+        while (busy) await new Promise((done) => setTimeout(done, 5));
+      } finally {
+        personWaiting--;
+      }
+    }
+    if (!current) return;
     const bus = busOf(current.instance ?? 0);
     const edit = back ? bus.undo(scope) : bus.redo(scope);
     if (!edit) return;
@@ -648,6 +691,7 @@
       else setPath(data, c.path, value);
     }
     const index = stack.length - 1;
+    busy = true;
     try {
       const reply = received(await invoke<Reply>("undo_step", { state: { ...$state.snapshot(current), data, parts }, step: edit.step, back }));
       await nav.apply(index, reply);
@@ -656,6 +700,8 @@
     } catch (err) {
       bus.refused(edit, back);
       say({ level: "error", text: errorText(err) });
+    } finally {
+      busy = false;
     }
   }
 
@@ -1000,10 +1046,7 @@
           {model}
           ask={first.ask}
           options={(entity) => invoke("ref_options", { entity })}
-          onanswer={(value) => {
-            shown();
-            void answer(first, value);
-          }}
+          onanswer={answerFirst}
           oncancel={shown}
         />
       {/key}

@@ -75,6 +75,21 @@ public class EditTests
         Assert.Equal("Ann", window.Name);
     }
 
+    /// A change and what its handler changed in the same data are one edit: undo gives back what was there first, redo what came last.
+    [Fact]
+    public void An_edit_that_changed_the_same_data_twice_is_taken_back_to_the_first()
+    {
+        using var db = Drawing();
+        var window = new SketchViewModel(db);
+        window.Opened();
+        window.Edits.Push(new Edit("nameBox", "customerForm", [new Changed("Name", System.Text.Json.Nodes.JsonValue.Create("Ada"), System.Text.Json.Nodes.JsonValue.Create("Ann")), new Changed("Name", System.Text.Json.Nodes.JsonValue.Create("Ann"), System.Text.Json.Nodes.JsonValue.Create("Bea"))], 0));
+        window.Name = "Bea";
+        window.UndoEdit("customerForm", back: true);
+        Assert.Equal("Ada", window.Name);
+        window.UndoEdit("customerForm", back: false);
+        Assert.Equal("Bea", window.Name);
+    }
+
     [Fact]
     public void A_canvas_drop_is_taken_back_with_what_its_handler_saved()
     {

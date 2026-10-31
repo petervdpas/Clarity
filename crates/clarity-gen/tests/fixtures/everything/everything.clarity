@@ -181,6 +181,7 @@ page Folders: window
     chart pie name lentChart at 9,9 span 4 rows 6 bind albums by lentTo average copies
 
 page PickFriend: dialog gives Friend
+    on open: loadFriends
     data friends: list<Friend>
     data onlyNamed: bool
     table name grid at 1,1 span 12 rows 6 bind friends columns name reorder by position page 20 on reorder: friendsMoved
@@ -276,6 +277,9 @@ code Albums
         album = made
 
 code PickFriend
+    handler loadFriends
+        friends = find f in Friend order by f.position
+
     handler picked
         close with grid.selected
 
@@ -362,7 +366,7 @@ page Overview: view
 
 code Gallery
     handler galleryOpened
-        albums = find a in Album order by a.title
+        albums = find a in Album order by a.position
         shown = 0
 
     handler albumPicked

@@ -148,6 +148,30 @@ public class RowMoveTests
         Assert.Same(tasks[2], table.Grid.SelectedItem);
     }
 
+    /// A generated window holds a list as a plain List, which tells nobody it moved: the list shows the new order all the same.
+    [AvaloniaFact]
+    public void A_list_of_a_plain_list_shows_its_new_order()
+    {
+        List<Task> tasks = [.. Tasks()];
+        var list = new ListBox
+        {
+            ItemsSource = tasks,
+            ItemTemplate = new FuncDataTemplate<Task>((t, _) => new TextBlock { [!TextBlock.TextProperty] = new global::Avalonia.Data.Binding("Title") }),
+        };
+        RowMoves.SetBy(list, "Position");
+        var window = new Window { Width = 300, Height = 300, Content = list };
+        window.Show();
+        list.SelectedItem = tasks[0];
+        Dispatcher.UIThread.RunJobs();
+        list.ContainerFromIndex(0)!.Focus();
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.Alt);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("Two1,One2,Three3", Order(tasks));
+        var shown = Enumerable.Range(0, 3).Select(i => ((list.ContainerFromIndex(i) as ListBoxItem)?.DataContext as Task)?.Title).ToList();
+        Assert.Equal(["Two", "One", "Three"], shown);
+        Assert.Same(tasks[1], list.SelectedItem);
+    }
+
     [AvaloniaFact]
     public void Without_reorder_rows_stay_put()
     {

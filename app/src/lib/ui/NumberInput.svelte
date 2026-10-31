@@ -81,7 +81,26 @@
     if (next !== (value ?? null)) onchange(next);
   }
 
+  /** The text Enter took last: leaving the input with it says nothing new. */
+  let takenOnEnter: string | null = null;
+
+  /**
+   * The input was left (or the browser said its text changed): what was
+   * typed is taken, unless Enter took that text already. A dialog that closes
+   * on Enter removes the input, and the browser says its text once more.
+   */
+  function left(typed: string) {
+    if (typed === takenOnEnter) {
+      takenOnEnter = null;
+      return;
+    }
+    takenOnEnter = null;
+    take(typed);
+  }
+
   function key(e: KeyboardEvent & { currentTarget: HTMLInputElement }) {
+    // Typing again after Enter: the next leave takes what it brings.
+    if (e.key !== "Enter") takenOnEnter = null;
     const k = range ? rangeKey(e.key) : null;
     if (k === "up" || k === "down" || k === "pageUp" || k === "pageDown") {
       // Left and right move the caret in the text.
@@ -92,6 +111,7 @@
     }
     if (e.key !== "Enter") return;
     take(e.currentTarget.value);
+    takenOnEnter = e.currentTarget.value;
     if (onsubmit && onsubmit() !== false) e.preventDefault();
   }
 </script>
@@ -127,7 +147,7 @@
   title={bad !== null ? "Not a number" : undefined}
   {disabled}
   {readonly}
-  onchange={(e) => take(e.currentTarget.value)}
+  onchange={(e) => left(e.currentTarget.value)}
   onkeydown={key}
   {onfocus}
   {onblur}

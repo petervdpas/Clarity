@@ -13,9 +13,18 @@ namespace Clarity.Runtime;
 
 public static class Secrets
 {
+    /// <summary>
+    /// Where secrets are kept instead of the system's protected store: a host
+    /// that has none, as a test that runs the app apart from the person's
+    /// desktop (and its keyring). None: the system's store.
+    /// </summary>
+    public static (Func<string, string, string?> Get, Action<string, string, string> Set)? Store { get; set; }
+
     /// <summary>The secret <paramref name="name"/> of <paramref name="program"/>; null when it was never kept or the store cannot be reached.</summary>
     public static string? Get(string program, string name)
     {
+        if (Store is { } store)
+            return store.Get(program, name);
         try
         {
             if (OperatingSystem.IsWindows())
@@ -33,6 +42,11 @@ public static class Secrets
     /// <summary>Keeps <paramref name="value"/> as the secret; empty text forgets it.</summary>
     public static void Set(string program, string name, string value)
     {
+        if (Store is { } store)
+        {
+            store.Set(program, name, value);
+            return;
+        }
         try
         {
             if (OperatingSystem.IsWindows())

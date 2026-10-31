@@ -12,6 +12,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.VisualTree;
 using Avalonia.LogicalTree;
 using Avalonia.Threading;
 
@@ -122,18 +123,43 @@ public static class Edits
     {
         if (sender is not Control control || !Values.Contains(e.Property.Name) || GetScope(control) is not { } scope)
             return;
+        // Only the part the person uses edits: a part that shows the same data
+        // follows the change, which is not its edit. A click, a key or a
+        // slide gives the part the focus first.
+        if (!control.IsKeyboardFocusWithin)
+            return;
         // A text input's edit is its text as it is when it is left; its own undo has the typing.
-        if (control.IsKeyboardFocusWithin && TopLevel.GetTopLevel(control)?.FocusManager?.GetFocusedElement() is TextBox)
+        if (TopLevel.GetTopLevel(control)?.FocusManager?.GetFocusedElement() is TextBox)
             return;
         if (control.DataContext is WindowViewModel window)
             window.Edited(control.Name ?? scope, scope);
     }
 
-    /// <summary>A text box is left: what was typed in it is taken, one edit.</summary>
+    /// <summary>
+    /// A part is left: what was typed in it is taken, one edit. The part may be
+    /// a text box, or an input that wraps one (a color, a typed dropdown, a
+    /// date). Its text boxes then forget their own typing: it is the window's
+    /// edit now, which Ctrl+Z there takes back with the rest of its form.
+    /// </summary>
     static void Left(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (sender is TextBox box && GetScope(box) is { } scope && box.DataContext is WindowViewModel window)
-            window.Edited(box.Name ?? scope, scope);
+        if (sender is not Control part || GetScope(part) is not { } scope || part.DataContext is not WindowViewModel window)
+            return;
+        // The focus moved inside the part (from its text to its button): it is not left.
+        if (part.IsKeyboardFocusWithin)
+            return;
+        window.Edited(part.Name ?? scope, scope);
+        foreach (var box in part.GetSelfAndVisualDescendants().OfType<TextBox>())
+            ForgetTyping(box);
+    }
+
+    /// <summary>A text box's own undo starts again from what it shows now.</summary>
+    static void ForgetTyping(TextBox box)
+    {
+        if (!box.IsUndoEnabled)
+            return;
+        box.IsUndoEnabled = false;
+        box.IsUndoEnabled = true;
     }
 
     /// <summary>

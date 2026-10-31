@@ -38,7 +38,7 @@ fn the_web_stacks_close_a_popover_and_disable_an_item_in_the_parts_state() {
 fn avalonia_writes_a_context_menu_and_a_popup() {
     let code = generated(Backend::Csharp, Ui::Avalonia);
     has(&code, "<Panel.ContextMenu>");
-    has(&code, "<MenuItem Header=");
+    has(&code, "<MenuItem x:Name=\"pickItem\" Header=");
     has(&code, "Command=\"{Binding PickedCommand}\" IsEnabled=\"{Binding PickItem.IsEnabled}\" IsVisible=\"{Binding PickItem.IsVisible}\"");
     has(&code, "Command=\"{Binding Show_filtersCommand}\"");
     has(&code, "<Popup x:Name=\"filters\" IsOpen=\"{Binding Filters.IsVisible, Mode=TwoWay}\" PlacementTarget=\"{Binding ElementName=filterButton}\"");

@@ -4,6 +4,7 @@
   // it is left or Enter is pressed; a time that is no time is marked and the
   // moment stays.
   import { joinMoment, readTime, splitMoment } from "../moment";
+  import { typedDay } from "./typedDay";
 
   let {
     value,
@@ -63,7 +64,7 @@
     {readonly}
     aria-describedby={describedBy}
     aria-invalid={invalid}
-    onchange={(e) => pickDay(e.currentTarget.value)}
+    use:typedDay={pickDay}
     {onkeydown}
   />
   <input

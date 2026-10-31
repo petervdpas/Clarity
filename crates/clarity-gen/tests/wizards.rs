@@ -48,7 +48,8 @@ fn avalonia_writes_a_steps_view_whose_next_asks_whether_the_handler_refused() {
     has(&code, "Step=\"{Binding Wizard.Step}\"");
     has(&code, "<c:StepItem Header=");
     has(&code, "public bool Next_Wizard() => Handle(() => OnCheckStep());");
-    has(&code, "wizard.Next = Vm.Next_Wizard;");
+    // The view model is looked up when Next is pressed: the view has none yet while it is made.
+    has(&code, "wizard.Next = () => Vm.Next_Wizard();");
     has(&code, "wizard.Finished += () => Vm.DoneCommand.Execute(null);");
     has(&code, "Wizard.Step = 3");
 }

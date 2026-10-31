@@ -35,7 +35,9 @@ public abstract class TypeAhead : UserControl, IInput
     /// <summary>What fits the typed text.</summary>
     public ListBox Offered { get; } = new() { MaxHeight = 240, Classes = { "offered" } };
 
-    readonly Popup popup = new() { Placement = PlacementMode.BottomEdgeAlignedLeft, IsLightDismissEnabled = true };
+    // A click outside closes the list and reaches what it was on, as on the
+    // web: the box is left, so what was typed is taken.
+    readonly Popup popup = new() { Placement = PlacementMode.BottomEdgeAlignedLeft, IsLightDismissEnabled = true, OverlayDismissEventPassThrough = true };
     bool showing;
 
     protected TypeAhead()

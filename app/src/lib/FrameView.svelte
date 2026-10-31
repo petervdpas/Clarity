@@ -194,6 +194,7 @@
     {:else}
       <div class="entry" class:sub={item.items.length > 0} class:show={design && containsPicked(item)}>
         <button
+          data-part={item.props.name}
           class:picked={design && pageDesigner.selected === item.span.start}
           disabled={!takesClicks(item.props.name)}
           title={design && !editable ? "From the app: double-click to edit it in the app" : undefined}
@@ -225,6 +226,7 @@
   {:else}
     <button
       class="tool"
+      data-part={item.props.name}
       class:large={large && item.props.large}
       class:picked={design && pageDesigner.selected === item.span.start}
       title={design && !editable ? "From the app: double-click to edit it in the app" : keysNow(item, fromApp(item)).join(", ") || undefined}
@@ -305,6 +307,7 @@
             {@const open = openMenu === item.span.start || (design && containsPicked(item) && item.items.length > 0)}
             <div class="top">
               <button
+                data-part={item.props.name}
                 class:open
                 class:picked={design && pageDesigner.selected === item.span.start}
                 onpointerdown={(e) => {

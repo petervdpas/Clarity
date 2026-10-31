@@ -72,6 +72,12 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// <summary>Names of a part's own state (an unbound input's text) start so; no name of the window's data does.</summary>
     const string PartState = "#parts.";
 
+    /// <summary>The name the person's settings go by in an edit; no name of the window's data has a #.</summary>
+    const string SettingsState = "#settings";
+
+    /// <summary>The person's settings, which parts may change (bound to <c>settings.x</c>); none in a window without them.</summary>
+    protected virtual ISettings? AppSettings => null;
+
     /// <summary>The window's data, and the parts' own text and ticks, as an edit compares them.</summary>
     JsonObject DataNow()
     {
@@ -90,6 +96,9 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
             if (own.Count > 0)
                 now[PartState + name] = own;
         }
+        // A part bound to a setting changes the settings, not the window's data.
+        if (AppSettings is { } settings)
+            now[SettingsState] = settings.ToJson();
         return now;
     }
 
@@ -184,10 +193,14 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         }
         var data = new JsonObject();
         var parts = new JsonObject();
-        foreach (var changed in edit.Changes)
+        JsonObject? settings = null;
+        // Back from the last change to the first, so the first one's before is what stays; again from the first to the last.
+        foreach (var changed in back ? Enumerable.Reverse(edit.Changes) : edit.Changes)
         {
             var value = (back ? changed.Before : changed.After)?.DeepClone();
-            if (changed.Name.StartsWith(PartState, StringComparison.Ordinal))
+            if (changed.Name == SettingsState)
+                settings = value as JsonObject;
+            else if (changed.Name.StartsWith(PartState, StringComparison.Ordinal))
                 parts[changed.Name[PartState.Length..]] = value;
             else
                 data[changed.Name] = value;
@@ -196,6 +209,8 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         try
         {
             Snapshot.Apply(this, new JsonObject { ["data"] = data, ["parts"] = parts });
+            if (settings is not null)
+                AppSettings?.Apply(settings);
         }
         finally
         {

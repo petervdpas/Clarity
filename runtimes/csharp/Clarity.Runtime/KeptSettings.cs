@@ -107,7 +107,10 @@ public static partial class KeptSettings
         {
             values.Remove(name);
             if (Store is null && Secrets.Get(program, name) is { } secret)
+            {
                 values[name] = secret;
+                keptSecrets[(program, name)] = secret;
+            }
         }
         return values;
     }
@@ -122,11 +125,20 @@ public static partial class KeptSettings
             if (!plain.TryGetPropertyValue(name, out var value))
                 continue;
             plain.Remove(name);
-            if (Store is null)
-                Secrets.Set(program, name, value?.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : "");
+            var text = value?.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : "";
+            // Only a secret that changed goes to the protected store: another
+            // setting changing never needs it, nor fails where it cannot be reached.
+            if (Store is null && keptSecrets.GetValueOrDefault((program, name), "") != text)
+            {
+                Secrets.Set(program, name, text);
+                keptSecrets[(program, name)] = text;
+            }
         }
         Keep(program, plain);
     }
+
+    /// <summary>Each secret as the protected store holds it now, as read or kept; none is empty.</summary>
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<(string Program, string Name), string> keptSecrets = new();
 
     /// <summary>Whether a kept value fits its setting.</summary>
     public static bool Fits(Setting setting, JsonNode? value)

@@ -11,7 +11,11 @@ use clarity_spec::keyed::load_keyed;
 const MUSIC: &str = include_str!("fixtures/asks.clarity");
 
 fn generated(backend: Backend, ui: Ui) -> String {
-    let project = load_keyed([("music.clarity", MUSIC)], &[], "en");
+    generated_from(MUSIC, backend, ui)
+}
+
+fn generated_from(source: &str, backend: Backend, ui: Ui) -> String {
+    let project = load_keyed([("music.clarity", source)], &[], "en");
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     let mut settings: Settings = starter("Music", "music");
@@ -56,7 +60,9 @@ fn the_other_web_stacks_keep_settings_out_of_the_database() {
 #[test]
 fn avalonia_shares_one_settings_started_with_the_application() {
     let code = generated(Backend::Csharp, Ui::Avalonia);
-    has(&code, "public sealed partial class Settings : ObservableObject\n");
+    has(&code, "public sealed partial class Settings : ObservableObject, ISettings\n");
+    // A part bound to a setting takes it along in its edit, for Ctrl+Z.
+    has(&code, "    protected override ISettings? AppSettings => Settings.Current;\n");
     lacks(&code, "IRecord<Settings>");
     has(&code, "public static void Start()");
     has(&code, "KeptSettings.Taken(Described(), KeptSettings.Read(ProgramName))");
@@ -65,4 +71,13 @@ fn avalonia_shares_one_settings_started_with_the_application() {
     has(&code, "public Settings Settings => Settings.Current;");
     has(&code, "            Themes.Start(AppThemes.Offered);\n            Settings.Start();\n");
     has(&code, "Choices=\"{x:Static c:Choice.LanguagesOffered}\"");
+}
+
+/// Ctrl+Z, or a browser, may send a setting that can be none back as none:
+/// it is cleared, not skipped.
+#[test]
+fn avalonia_clears_a_setting_sent_as_none() {
+    let source = MUSIC.replace("    pageSize: integer, min 10, max 200, default 50\n", "    pageSize: integer, min 10, max 200, default 50\n    favouriteFriend: ref Friend\n");
+    let code = generated_from(&source, Backend::Csharp, Ui::Avalonia);
+    has(&code, "        else if (sent.TryGetPropertyValue(\"favouriteFriend\", out var _favouriteFriendNone) && _favouriteFriendNone is null) settings.FavouriteFriend = null;\n");
 }

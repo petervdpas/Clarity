@@ -1,8 +1,11 @@
 <script lang="ts">
   // Clarity's date input on the web, the same as on Avalonia
   // (conformance/forms.json, tables.json): a day picked from the calendar or
-  // typed, and only another day picked by the person is a change. Its value
+  // typed (taken when the input is left or Enter is pressed), and only
+  // another day picked by the person is a change. Its value
   // is the day as the backends send it (2026-10-20), or none.
+
+  import { typedDay } from "./typedDay";
 
   let {
     value,
@@ -48,7 +51,7 @@
   aria-invalid={invalid}
   {disabled}
   {readonly}
-  onchange={(e) => pick(e.currentTarget.value)}
+  use:typedDay={pick}
   onkeydown={(e) => {
     if (e.key === "Enter" && onsubmit && onsubmit() !== false) e.preventDefault();
   }}

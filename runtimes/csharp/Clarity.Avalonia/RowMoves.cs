@@ -33,8 +33,25 @@ public static class RowMoves
         {
             if (e.OldValue is null && e.NewValue is string)
                 Attach(list, () => list.ItemsSource as IList, () => GetBy(list), () => null, v => (v as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true),
-                    () => list.SelectedItem, row => list.SelectedItem = row, () => { if (moved.TryGetValue(list, out var run)) run(); });
+                    () => list.SelectedItem, row =>
+                    {
+                        Reload(list);
+                        list.SelectedItem = row;
+                    }, () => { if (moved.TryGetValue(list, out var run)) run(); });
         });
+    }
+
+    /// <summary>
+    /// Shows a list's rows in their new order. A window holds its lists as
+    /// plain lists, which tell nobody they changed: the list reads them again,
+    /// its binding kept.
+    /// </summary>
+    static void Reload(ListBox list)
+    {
+        if (list.ItemsSource is not { } items || items is System.Collections.Specialized.INotifyCollectionChanged)
+            return;
+        list.SetCurrentValue(ItemsControl.ItemsSourceProperty, null);
+        list.SetCurrentValue(ItemsControl.ItemsSourceProperty, items);
     }
 
     /// <summary>Runs <paramref name="run"/> when the person moved a row of a list.</summary>

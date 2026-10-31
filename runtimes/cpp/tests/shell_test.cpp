@@ -58,6 +58,16 @@ public:
         if (handler == "opened") ui.set_caption("title", Text::plain("Card of " + state.data["name"].get<std::string>()));
         if (handler == "save") refuse(Text("{name} is taken").with("name", slot_text("Ada")));
         if (handler == "fail") throw StorageError("locked");
+        // A wizard's on next that sends it to its last step.
+        if (handler == "jump") ui.set_step("wizard", 3);
+        // A task added and chosen, as a New button does.
+        if (handler == "add") {
+            json data = state.data;
+            data["tasks"].push_back({{"id", 4}, {"title", "Zebra"}});
+            Reply added = ui.reply(state.window, data);
+            added.state.selected["taskTable"] = 3;
+            return added;
+        }
         if (handler == "plan") {
             // As a long engine call does: it says how far it is until it is stopped.
             const EngineWatch* watch = current_watch();
@@ -76,7 +86,14 @@ public:
         data["name"] = values.back();
         return Ui(state).reply(state.window, data);
     }
-    std::vector<RefOption> options(Db&, const std::string&) override { return {{1, "Ada"}}; }
+    std::vector<RefOption> options(Db&, const std::string& entity) override {
+        if (entity == "Artist") return {{1, "Jansen", {{"city", "Utrecht"}}}, {2, "Janssens", {{"city", "Gent"}}}};
+        return {{1, "Ada"}};
+    }
+    std::vector<std::string> values(Db&, const std::string& entity, const std::string& field) override {
+        if (entity == "Album" && field == "city") return {"Utrecht", "amsterdam", "", "Amstelveen", "Utrecht"};
+        return {};
+    }
     std::optional<Bytes> picture(Db&, const std::string& entity, int64_t id, const std::string& field) override {
         if (entity != "Card" || field != "photo") throw InvalidError(entity + " has no picture " + field);
         if (id == 1) return Bytes{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
@@ -253,22 +270,243 @@ TEST(a_long_handler_shows_how_far_it_is_and_stops) {
     stopping = nullptr;
 }
 
-// Undo (DESIGN 5.29): a handler that changed the database answers with its
-// step, and undo_step takes it back or does it again, drawing the window as
-// its data is.
-TEST(a_handler_answers_with_its_step_and_undo_step_takes_it_back) {
+// Undo (DESIGN 5.29): the runtime keeps the window's edits, each with the
+// database steps its handler made, and Ctrl+Z takes them back together.
+TEST(the_runtime_keeps_the_edits_and_ctrl_z_takes_them_back) {
     Db db = Db::memory();
     db.migrate({{"CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"}});
     Cards cards;
     shell::Service service({"shop", "Shop", "Card", R"({"project":{}})", "", &db, &cards});
-    json state = {{"window", "Card"}, {"data", json::object()}};
-    json remembered = service.invoke("dispatch_event", {{"state", state}, {"handler", "remember"}});
-    CHECK_EQ(remembered["value"]["step"], json(1));
-    CHECK(!service.invoke("dispatch_event", {{"state", state}, {"handler", "fail"}}).contains("value"));
-    CHECK(!service.invoke("dispatch_event", {{"state", state}, {"handler", "noop"}})["value"].contains("step"));
-    json undone = service.invoke("undo_step", {{"state", state}, {"step", 1}, {"back", true}});
-    CHECK(undone.contains("value"));
-    CHECK(db.all<Memo>().empty());
-    service.invoke("undo_step", {{"state", state}, {"step", 1}, {"back", false}});
+    auto card = [](const char* name) { return json{{"window", "Card"}, {"instance", 7}, {"data", {{"name", name}}}}; };
+    // A handler that failed made no step.
+    CHECK(!service.invoke("dispatch_event", {{"state", card("Ada")}, {"handler", "fail"}}).contains("value"));
+    // A reply: the edits start from the window as it is.
+    CHECK(!service.invoke("dispatch_event", {{"state", card("Ada")}, {"handler", "noop"}})["value"].contains("step"));
+    // The person typed a name, then pressed a part whose handler saves: two edits of the form.
+    service.invoke("edit_event", {{"state", card("Ann")}, {"part", "nameBox"}, {"scope", "form"}, {"ends", true}});
+    json saved = service.invoke("edit_event", {{"state", card("Ann")}, {"handler", "remember"}, {"part", "saveBox"}, {"scope", "form"}, {"ends", true}});
+    CHECK_EQ(saved["value"]["step"], json(1));
     CHECK_EQ(db.all<Memo>().size(), size_t(1));
+    json back = {{"state", card("Ann")}, {"scope", "form"}, {"back", true}};
+    CHECK(service.invoke("undo_edit", back).contains("value"));
+    CHECK(db.all<Memo>().empty());
+    CHECK_EQ(service.invoke("undo_edit", back)["value"]["state"]["data"], json::parse(R"({"name":"Ada"})"));
+    json again = {{"state", card("Ada")}, {"scope", "form"}, {"back", false}};
+    CHECK_EQ(service.invoke("undo_edit", again)["value"]["state"]["data"], json::parse(R"({"name":"Ann"})"));
+    service.invoke("undo_edit", again);
+    CHECK_EQ(db.all<Memo>().size(), size_t(1));
+    // A closed window's edits go.
+    service.invoke("close_window", {{"state", card("Ann")}});
+    CHECK_EQ(service.invoke("undo_edit", back)["value"]["state"]["data"], json::parse(R"({"name":"Ann"})"));
+    // The old command is gone.
+    CHECK(service.invoke("undo_step", {{"state", card("Ann")}, {"step", 1}, {"back", true}}).contains("error"));
+}
+
+namespace {
+
+/// A shell with the memo table a handler keeps a record in.
+struct Running {
+    Db db = Db::memory();
+    Cards cards;
+    shell::Service service{{"shop", "Shop", "Card", R"({"project":{}})", "", &db, &cards}};
+    Running() { db.migrate({{"CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"}}); }
+};
+
+json card_with(json data) { return {{"window", "Card"}, {"instance", 8}, {"data", std::move(data)}}; }
+
+}  // namespace
+
+// The person's actions the runtime decides (DESIGN 1.7) are watched handlers, as an edit is.
+TEST(the_runtime_watches_the_actions_it_decides) {
+    for (const char* command : {"reorder_event", "item_event", "range_event", "step_event"}) CHECK(shell::Service::watches(command));
+}
+
+// A dragged row (DESIGN 5.30): the runtime gives the list its new order and
+// numbers, chooses the moved row and runs on reorder, as one edit.
+TEST(the_runtime_reorders_a_list_as_one_edit) {
+    Running app;
+    json tasks = json::parse(R"([{"id":1,"rank":1},{"id":2,"rank":2},{"id":3,"rank":3}])");
+    json state = card_with({{"tasks", tasks}});
+    app.service.invoke("dispatch_event", {{"state", state}, {"handler", "noop"}});
+    json move = {{"state", state}, {"part", "taskList"}, {"list", "tasks"}, {"by", "rank"}, {"parent", nullptr}, {"handler", "remember"}, {"scope", "taskList"},
+                 {"move", {{"row", 2}, {"where", "before"}, {"target", 0}}}};
+    json moved = app.service.invoke("reorder_event", move)["value"];
+    CHECK_EQ(moved["state"]["data"]["tasks"], json::parse(R"([{"id":3,"rank":1},{"id":1,"rank":2},{"id":2,"rank":3}])"));
+    CHECK_EQ(moved["state"]["selected"]["taskList"], json(0));
+    CHECK_EQ(moved["step"], json(1));
+    CHECK_EQ(app.db.all<Memo>().size(), size_t(1));
+    // Ctrl+Z takes the move back with its handler's step.
+    json back = app.service.invoke("undo_edit", {{"state", moved["state"]}, {"scope", "taskList"}, {"back", true}})["value"];
+    CHECK_EQ(back["state"]["data"]["tasks"], tasks);
+    CHECK(app.db.all<Memo>().empty());
+    // A refused move answers the window as it is and runs nothing.
+    move["move"] = {{"row", 0}, {"key", "up"}};
+    json refused = app.service.invoke("reorder_event", move)["value"];
+    CHECK_EQ(refused["state"]["data"]["tasks"], tasks);
+    CHECK(!refused.contains("step"));
+    CHECK(app.db.all<Memo>().empty());
+    // In a tree a row takes its new parent; without a handler the window is drawn as it is.
+    json tree = json::parse(R"([{"id":1,"up":null,"rank":1},{"id":2,"up":null,"rank":2}])");
+    json right = {{"state", card_with({{"tasks", tree}})}, {"part", "taskTree"}, {"list", "tasks"}, {"by", "rank"}, {"parent", "up"}, {"move", {{"row", 1}, {"key", "right"}}}};
+    json under = app.service.invoke("reorder_event", right)["value"];
+    CHECK_EQ(under["state"]["data"]["tasks"], json::parse(R"([{"id":1,"up":null,"rank":1},{"id":2,"up":1,"rank":1}])"));
+    CHECK_EQ(under["state"]["selected"]["taskTree"], json(1));
+}
+
+// A typed item of a list field (U1c): added by the runtime, or refused with the list as it was.
+TEST(the_runtime_adds_a_typed_item_or_refuses_it) {
+    Running app;
+    json state = card_with({{"album", {{"tags", {"jazz"}}, {"years", {1999}}}}});
+    app.service.invoke("dispatch_event", {{"state", state}, {"handler", "noop"}});
+    json typed = {{"state", state}, {"part", "tagsBox"}, {"path", "album.tags"}, {"item", "text"}, {"typed", "  live "}, {"handler", "remember"}, {"scope", "form"}};
+    json added = app.service.invoke("item_event", typed)["value"];
+    CHECK_EQ(added["state"]["data"]["album"]["tags"], json::parse(R"(["jazz","live"])"));
+    CHECK(!added.contains("refused"));
+    CHECK_EQ(app.db.all<Memo>().size(), size_t(1));
+    json back = app.service.invoke("undo_edit", {{"state", added["state"]}, {"scope", "form"}, {"back", true}})["value"];
+    CHECK_EQ(back["state"]["data"]["album"]["tags"], json::parse(R"(["jazz"])"));
+    CHECK(app.db.all<Memo>().empty());
+    // No whole number: the list stays, nothing runs, and the reply says so.
+    json wrong = {{"state", state}, {"part", "yearsBox"}, {"path", "album.years"}, {"item", "integer"}, {"typed", "1.5"}, {"handler", "remember"}};
+    json refused = app.service.invoke("item_event", wrong)["value"];
+    CHECK_EQ(refused["refused"], json(true));
+    CHECK_EQ(refused["state"]["data"]["album"]["years"], json::parse("[1999]"));
+    CHECK(app.db.all<Memo>().empty());
+    // Without a scope the handler runs as a dispatch does; an enum item is one of its values.
+    json genre = {{"state", state}, {"part", "genresBox"}, {"path", "genres"}, {"item", "enum"}, {"values", {"Jazz", "Rock"}}, {"typed", "Rock"}, {"handler", "remember"}};
+    json chosen = app.service.invoke("item_event", genre)["value"];
+    CHECK_EQ(chosen["state"]["data"]["genres"], json::parse(R"(["Rock"])"));
+    CHECK_EQ(chosen["step"], json(2));
+}
+
+// A slider's or spin box's value after a key, a drag or typed text, decided by the runtime.
+TEST(the_runtime_moves_a_value_within_its_range) {
+    Running app;
+    json range = {{"state", card_with({{"volume", 5}})}, {"part", "volumeSlider"}, {"path", "volume"}, {"min", "0"}, {"max", "10"}, {"step", "1"}, {"whole", true}};
+    json up = range;
+    up["key"] = "up";
+    CHECK_EQ(app.service.invoke("range_event", up)["value"]["state"]["data"]["volume"], json(6));
+    json drag = range;
+    drag["at"] = "7.4";
+    json dragged = app.service.invoke("range_event", drag)["value"];
+    CHECK_EQ(dragged["state"]["data"]["volume"], json(7));
+    // The screen goes on from the window the reply gave.
+    json typed = range;
+    typed["state"] = dragged["state"];
+    typed["typed"] = "120";
+    typed["handler"] = "remember";
+    typed["scope"] = "volumeSlider";
+    json kept = app.service.invoke("range_event", typed)["value"];
+    CHECK_EQ(kept["state"]["data"]["volume"], json(10));
+    CHECK_EQ(kept["step"], json(1));
+    json back = app.service.invoke("undo_edit", {{"state", kept["state"]}, {"scope", "volumeSlider"}, {"back", true}})["value"];
+    CHECK_EQ(back["state"]["data"]["volume"], json(7));
+    CHECK(app.db.all<Memo>().empty());
+    // A decimal stays exact, as text.
+    json price = {{"state", card_with({{"item", {{"price", "0.2"}}}})}, {"part", "priceBox"}, {"path", "item.price"}, {"min", "0"}, {"max", nullptr}, {"step", "0.1"}, {"whole", false}, {"key", "up"}};
+    CHECK_EQ(app.service.invoke("range_event", price)["value"]["state"]["data"]["item"]["price"], json("0.3"));
+    // Nothing to move by is an error.
+    json none = range;
+    CHECK(app.service.invoke("range_event", none).contains("error"));
+}
+
+// A wizard's Next, Back and Finish (DESIGN 5.15), decided by the runtime.
+TEST(the_runtime_walks_a_wizard) {
+    Running app;
+    auto on_step = [](int64_t step) {
+        json state = card_with({{"name", "Ada"}});
+        state["parts"] = {{"wizard", {{"step", step}}}};
+        return state;
+    };
+    json next = {{"state", card_with({{"name", "Ada"}})}, {"part", "wizard"}, {"button", "next"}, {"steps", 3}, {"next", "remember"}, {"finish", "remember"}};
+    json moved = app.service.invoke("step_event", next)["value"];
+    CHECK_EQ(moved["state"]["parts"]["wizard"]["step"], json(2));
+    CHECK_EQ(moved["step"], json(1));
+    // A refusal keeps the step: the screen shows it and keeps its state.
+    next["next"] = "save";
+    CHECK(app.service.invoke("step_event", next).contains("error"));
+    // A handler that sets the step decides where the wizard goes.
+    next["next"] = "jump";
+    CHECK_EQ(app.service.invoke("step_event", next)["value"]["state"]["parts"]["wizard"]["step"], json(3));
+    // Next on the last step stays; Back runs nothing.
+    next["next"] = "";
+    next["state"] = on_step(3);
+    CHECK_EQ(app.service.invoke("step_event", next)["value"]["state"]["parts"]["wizard"]["step"], json(3));
+    json back = {{"state", on_step(3)}, {"part", "wizard"}, {"button", "back"}, {"steps", 3}, {"next", "remember"}};
+    json went = app.service.invoke("step_event", back)["value"];
+    CHECK_EQ(went["state"]["parts"]["wizard"]["step"], json(2));
+    CHECK_EQ(app.db.all<Memo>().size(), size_t(1));
+    // Finish runs on finish on the step shown.
+    json finish = {{"state", on_step(3)}, {"part", "wizard"}, {"button", "finish"}, {"steps", 3}, {"finish", "remember"}};
+    json finished = app.service.invoke("step_event", finish)["value"];
+    CHECK_EQ(finished["state"]["parts"]["wizard"]["step"], json(3));
+    CHECK_EQ(app.db.all<Memo>().size(), size_t(2));
+    finish["button"] = "sideways";
+    CHECK(app.service.invoke("step_event", finish).contains("error"));
+}
+
+// What a dropdown offers for typed text (U1c), found by the runtime.
+TEST(the_runtime_finds_a_dropdowns_options) {
+    Running app;
+    CHECK_EQ(app.service.invoke("find_options", {{"kind", "typed"}, {"entity", "Album"}, {"field", "city"}, {"typed", "AMST"}}),
+             json::parse(R"({"value":["Amstelveen","amsterdam"]})"));
+    CHECK_EQ(app.service.invoke("find_options", {{"kind", "search"}, {"entity", "Artist"}, {"show", {"city"}}, {"typed", "utrecht"}}),
+             json::parse(R"({"value":[{"id":1,"text":"Jansen","fields":{"city":"Utrecht"}}]})"));
+    CHECK_EQ(app.service.invoke("find_options", {{"kind", "search"}, {"entity", "Artist"}, {"show", json::array()}, {"typed", "jan"}})["value"].size(), size_t(2));
+    CHECK(app.service.invoke("find_options", {{"kind", "other"}, {"entity", "Artist"}}).contains("error"));
+}
+
+namespace {
+
+json board(json views) {
+    return {{"window", "Card"}, {"instance", 9}, {"data", {{"tasks", json::parse(R"([{"id":1,"title":"Milk","up":null},{"id":2,"title":"bread","up":1},{"id":3,"title":"Apples","up":2}])")}}}, {"views", std::move(views)}};
+}
+
+const json table_view = json::parse(R"({"kind":"table","list":"tasks","columns":[{"field":"title","kind":"text","choices":[]}],"order":null,"page":2})");
+const json tree_view = json::parse(R"({"kind":"tree","list":"tasks","parent":"up","key":"id","open":[]})");
+
+}  // namespace
+
+// The person sorts, turns a page or opens a tree row (DESIGN 1.7): the runtime
+// changes the part's view and answers the window, never as an edit.
+TEST(the_runtime_changes_a_view_for_the_person) {
+    Running app;
+    CHECK(!shell::Service::watches("view_event"));
+    json state = board({{"taskTable", table_view}, {"taskTree", tree_view}});
+    // Nothing to do: the views are filled.
+    json filled = app.service.invoke("view_event", {{"state", state}, {"part", "taskTable"}, {"action", json::object()}})["value"]["state"];
+    CHECK_EQ(filled["views"]["taskTable"]["shown"], json::parse("[0,1]"));
+    CHECK_EQ(filled["views"]["taskTree"]["shown"], json::parse("[[0,0,true]]"));
+    json sorted = app.service.invoke("view_event", {{"state", filled}, {"part", "taskTable"}, {"action", {{"sort", "title"}}}})["value"]["state"];
+    CHECK_EQ(sorted["views"]["taskTable"]["order"], json::parse(R"({"field":"title","desc":false})"));
+    CHECK_EQ(sorted["views"]["taskTable"]["shown"], json::parse("[2,1]"));
+    json turned = app.service.invoke("view_event", {{"state", sorted}, {"part", "taskTable"}, {"action", {{"page", 2}}}})["value"]["state"];
+    CHECK_EQ(turned["views"]["taskTable"]["shown"], json::parse("[0]"));
+    CHECK_EQ(turned["views"]["taskTable"]["pages"], json::parse(R"({"page":2,"pages":2,"from":3,"to":3,"count":3})"));
+    json opened = app.service.invoke("view_event", {{"state", turned}, {"part", "taskTree"}, {"action", {{"open", 1}}}})["value"]["state"];
+    CHECK_EQ(opened["views"]["taskTree"]["shown"], json::parse("[[0,0,true],[1,1,true]]"));
+    json closed = app.service.invoke("view_event", {{"state", opened}, {"part", "taskTree"}, {"action", {{"close", 1}}}})["value"]["state"];
+    CHECK_EQ(closed["views"]["taskTree"]["open"], json::array());
+    // No edit: there is nothing to take back.
+    CHECK_EQ(app.service.invoke("undo_edit", {{"state", closed}, {"scope", "taskTable"}, {"back", true}})["value"]["state"]["views"]["taskTable"]["at"], json(2));
+    CHECK(app.service.invoke("view_event", {{"state", closed}, {"part", "nothing"}, {"action", {{"page", 1}}}}).contains("error"));
+    // An empty action is no error, even for a part with no view yet.
+    CHECK(app.service.invoke("view_event", {{"state", closed}, {"part", "nothing"}, {"action", json::object()}}).contains("value"));
+}
+
+// A handler that changes the list, and chooses a row, is shown at once: the
+// table turns to the chosen row's page.
+TEST(a_handlers_reply_fills_the_views) {
+    Running app;
+    json state = board({{"taskTable", table_view}});
+    json added = app.service.invoke("dispatch_event", {{"state", state}, {"handler", "add"}})["value"]["state"];
+    CHECK_EQ(added["views"]["taskTable"]["shown"], json::parse("[2,3]"));
+    CHECK_EQ(added["views"]["taskTable"]["pages"]["count"], json(4));
+    CHECK_EQ(added["views"]["taskTable"]["at"], json(2));
+    // The person turns back to the first page: that reply keeps it.
+    json turned = app.service.invoke("view_event", {{"state", added}, {"part", "taskTable"}, {"action", {{"page", 1}}}})["value"]["state"];
+    CHECK_EQ(turned["views"]["taskTable"]["shown"], json::parse("[0,1]"));
+    // Any other reply shows the chosen row's page again.
+    json again = app.service.invoke("dispatch_event", {{"state", turned}, {"handler", "noop"}})["value"]["state"];
+    CHECK_EQ(again["views"]["taskTable"]["shown"], json::parse("[2,3]"));
 }

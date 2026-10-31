@@ -125,6 +125,29 @@ void clarity_grow(void** items, size_t* capacity, size_t count, size_t item_size
     *capacity = room;
 }
 
+void clarity_sort(void* items, size_t count, size_t size, int (*compare)(const void* a, const void* b, void* context), void* context) {
+    // A merge sort, from runs of one item up, between the items and a copy.
+    char* from = items;
+    char* to = clarity_alloc(count * size);
+    for (size_t run = 1; run < count; run *= 2) {
+        for (size_t left = 0; left < count; left += 2 * run) {
+            size_t middle = left + run < count ? left + run : count;
+            size_t right = left + 2 * run < count ? left + 2 * run : count;
+            size_t i = left, j = middle, k = left;
+            while (i < middle && j < right) {
+                bool second = compare(from + j * size, from + i * size, context) < 0;
+                memcpy(to + k++ * size, from + (second ? j++ : i++) * size, size);
+            }
+            while (i < middle) memcpy(to + k++ * size, from + i++ * size, size);
+            while (j < right) memcpy(to + k++ * size, from + j++ * size, size);
+        }
+        char* was = from;
+        from = to;
+        to = was;
+    }
+    if (from != items) memcpy(items, from, count * size);
+}
+
 void clarity_buffer_add_n(ClarityBuffer* buffer, const char* text, size_t length) {
     if (buffer->length + length + 1 > buffer->capacity) {
         size_t room = buffer->capacity ? buffer->capacity : 64;

@@ -33,6 +33,7 @@ public sealed class Steps(Window main, string database, string fixture)
         Albums();
         Gallery();
         Folders();
+        Views();
         Friends();
         Console.WriteLine(failed.Count > 0 ? $"\n{failed.Count} failed on csharp avalonia: {string.Join("; ", failed)}" : "\nall steps passed on csharp avalonia");
         return failed.Count > 0 ? 1 : 0;
@@ -402,6 +403,37 @@ public sealed class Steps(Window main, string database, string fixture)
             Same(SqlRows("SELECT name FROM folder WHERE parent IS NULL ORDER BY position"), ["Docs", "Music"], "moved");
             Undo();
             Same(SqlRows("SELECT name FROM folder WHERE parent IS NULL ORDER BY position"), ["Docs", "Music"], "kept: no undo");
+        });
+    }
+
+    // ---- What a table and a tree show, a page at a time, sorted, opened.
+    void Views()
+    {
+        Step("a table shows its first order a page at a time, and turns pages", () =>
+        {
+            Same(Rows("albumGrid"), ["Alpha | 1", "Beta | 2"], "the first page, by title");
+            Click(((ClarityTable)Part("albumGrid")).Next);
+            Same(Rows("albumGrid"), ["Gamma | 3"], "the second page");
+        });
+
+        Step("a header click sorts the other way, from the first page", () =>
+        {
+            var header = Part("albumGrid").GetVisualDescendants().OfType<DataGridColumnHeader>().First(h => Texts(h).Contains("Title"));
+            Click(header);
+            Same(Rows("albumGrid"), ["Gamma | 3", "Beta | 2"], "sorted the other way");
+        });
+
+        Step("a tree row's toggle opens and closes the rows under it", () =>
+        {
+            bool Toggle()
+            {
+                var music = RowControls("folderTree").First(r => Texts(r).Contains("Music"));
+                Click(music.GetVisualDescendants().OfType<Button>().First());
+                return Rows("folderTree").Contains("Rock");
+            }
+            var before = Rows("folderTree").Contains("Rock");
+            Same(Toggle(), !before, "the first press turns it");
+            Same(Toggle(), before, "the second press turns it back");
         });
     }
 

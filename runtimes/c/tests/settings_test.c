@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #ifndef _WIN32
 #include <unistd.h>
 #endif
@@ -51,6 +52,57 @@ void settings_kept_are_read_back(void) {
     cJSON_Delete(kept);
     cJSON_Delete(values);
     // What the test kept goes, so the next run starts without it.
+    remove_tree(folder);
+#ifdef _WIN32
+    _putenv_s("APPDATA", was);
+#endif
+}
+
+// A protected store that counts what it is asked to keep.
+static int store_sets = 0;
+static char store_token[64] = "abc";
+
+static const char* store_get(const char* program, const char* name) {
+    (void)program;
+    return strcmp(name, "token") == 0 ? store_token : NULL;
+}
+
+static bool store_set(const char* program, const char* name, const char* value) {
+    (void)program;
+    store_sets++;
+    if (strcmp(name, "token") == 0) snprintf(store_token, sizeof store_token, "%s", value);
+    return true;
+}
+
+// Keeping the settings writes a secret only when it changed: another setting
+// changing never needs the protected store, nor fails where it cannot be
+// reached (DESIGN 5.27).
+void a_secret_goes_to_the_store_only_when_it_changed(void) {
+    const char* folder = clarity_format("%s/clarity-secrets-c-%d", temp_folder(), rand());
+#ifdef _WIN32
+    const char* was = getenv("APPDATA") ? clarity_format("%s", getenv("APPDATA")) : "";
+    _putenv_s("APPDATA", folder);
+#else
+    setenv("XDG_CONFIG_HOME", folder, 1);
+#endif
+    ClaritySecretStore before = clarity_secret_store;
+    clarity_secret_store = (ClaritySecretStore){store_get, store_set};
+    cJSON* secrets = cJSON_Parse("[\"token\", \"other\"]");
+    cJSON* values = clarity_read_settings_with("clarity-secrets-test", secrets);
+    cJSON_AddFalseToObject(values, "showToolbar");
+    REQUIRE(clarity_keep_settings_with("clarity-secrets-test", values, secrets));
+    CHECK(store_sets == 0);
+    cJSON_ReplaceItemInObjectCaseSensitive(values, "token", cJSON_CreateString("xyz"));
+    REQUIRE(clarity_keep_settings_with("clarity-secrets-test", values, secrets));
+    CHECK(store_sets == 1);
+    CHECK_TEXT(store_token, "xyz");
+    // A secret never kept is empty: keeping it empty writes nothing.
+    cJSON_AddStringToObject(values, "other", "");
+    REQUIRE(clarity_keep_settings_with("clarity-secrets-test", values, secrets));
+    CHECK(store_sets == 1);
+    cJSON_Delete(values);
+    cJSON_Delete(secrets);
+    clarity_secret_store = before;
     remove_tree(folder);
 #ifdef _WIN32
     _putenv_s("APPDATA", was);

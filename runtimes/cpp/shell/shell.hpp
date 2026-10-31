@@ -182,6 +182,14 @@ private:
     Reply drawn(const WindowState& state);
     /// Runs a handler, then draws the window's canvases anew.
     Reply dispatch(const WindowState& state, const std::string& handler);
+    /// Runs a handler as one database step (DESIGN 5.29): the reply carries
+    /// the step's id when it changed the database, and `steps` gets it.
+    Reply stepped(const WindowState& state, const std::string& handler, std::vector<int64_t>* steps = nullptr);
+    /// A change of `part` the runtime made to `state` (DESIGN 1.7), ended as
+    /// edit_event ends one: its handler runs as one database step and, with
+    /// a scope, the change goes on the window's edits; without a handler the
+    /// window is drawn as it is.
+    Reply edited(const WindowState& state, const std::string& part, const std::string& scope, const std::string& handler);
 };
 
 /// Shows the application's window and runs until its last window closes.

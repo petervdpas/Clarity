@@ -513,6 +513,7 @@ cJSON* clarity_window_state_json(const ClarityWindowState* s) {
     for (size_t i = 0; i < s->part_count; ++i) cJSON_AddItemToObject(parts, s->parts[i].name, part_json(&s->parts[i]));
     cJSON* selected = cJSON_AddObjectToObject(out, "selected");
     for (size_t i = 0; i < s->selected_count; ++i) cJSON_AddNumberToObject(selected, s->selected[i].name, s->selected[i].index);
+    if (s->views) cJSON_AddItemToObject(out, "views", cJSON_Duplicate(s->views, true));
     return out;
 }
 
@@ -538,6 +539,8 @@ bool clarity_window_state_from_json(const cJSON* in, ClarityWindowState* out) {
         if (!cJSON_IsNumber(item)) continue;
         s.selected[s.selected_count++] = (ClaritySelected){clarity_copy(item->string), (int)item->valuedouble};
     }
+    const cJSON* views = cJSON_GetObjectItemCaseSensitive(in, "views");
+    if (cJSON_IsObject(views)) s.views = cJSON_Duplicate(views, true);
     *out = s;
     return true;
 }
@@ -576,6 +579,7 @@ cJSON* clarity_reply_json(const ClarityReply* r) {
     if (r->hears) cJSON_AddItemToObject(out, "hears", cJSON_Duplicate(r->hears, true));
     if (r->copy) cJSON_AddItemToObject(out, "copy", clarity_text_json(r->copy));
     if (r->step) cJSON_AddNumberToObject(out, "step", (double)r->step);
+    if (r->refused) cJSON_AddTrueToObject(out, "refused");
     if (r->ask_count > 0) {
         cJSON* asks = cJSON_AddArrayToObject(out, "asks");
         for (size_t i = 0; i < r->ask_count; ++i) {

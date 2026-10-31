@@ -80,6 +80,10 @@ type WindowState struct {
 	Data     map[string]any       `json:"data"`
 	Parts    map[string]PartState `json:"parts"`
 	Selected map[string]int       `json:"selected"`
+	// Views are what the screen shows of the list of each table, tree and
+	// chart, by the part's name (DESIGN 1.7): how it is shown, as the screen
+	// sends it, and what shows, as the runtime fills it after every reply.
+	Views map[string]map[string]any `json:"views,omitempty"`
 }
 
 // nextInstance is the number the next window that opens gets.
@@ -169,6 +173,10 @@ type Reply struct {
 	// Step is the id of the database step the handler made (DESIGN 5.29),
 	// which the screen's edit keeps to undo it by; 0 when it changed nothing.
 	Step int64 `json:"step,omitempty"`
+	// Refused says the runtime took nothing of what the person typed (an
+	// item for a list that is no value of its kind): the screen keeps the
+	// text and marks it.
+	Refused bool `json:"refused,omitempty"`
 }
 
 // RefOption is a record a reference field can point at, as a dropdown shows it.
@@ -184,6 +192,7 @@ type Ui struct {
 	instance uint64
 	parts    map[string]PartState
 	selected map[string]int
+	views    map[string]map[string]any
 	messages []Message
 	shown    map[string]Text
 	open     []OpenRequest
@@ -196,7 +205,7 @@ type Ui struct {
 }
 
 func NewUi(state WindowState) *Ui {
-	ui := &Ui{instance: state.Instance, parts: map[string]PartState{}, selected: map[string]int{}, messages: []Message{}, open: []OpenRequest{}}
+	ui := &Ui{instance: state.Instance, parts: map[string]PartState{}, selected: map[string]int{}, views: state.Views, messages: []Message{}, open: []OpenRequest{}}
 	for k, v := range state.Parts {
 		ui.parts[k] = v
 	}
@@ -539,7 +548,7 @@ func (u *Ui) Reply(window string, data any) (Reply, error) {
 		}
 	}
 	return Reply{
-		State:    WindowState{Window: window, Instance: u.instance, Data: values, Parts: u.parts, Selected: u.selected},
+		State:    WindowState{Window: window, Instance: u.instance, Data: values, Parts: u.parts, Selected: u.selected, Views: u.views},
 		Messages: u.messages,
 		Shown:    u.shown,
 		Open:     u.open,

@@ -4,6 +4,8 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <map>
+#include <mutex>
 #include <sstream>
 
 #include "clarity/errors.hpp"
@@ -89,6 +91,14 @@ void keep_settings(const std::string& program, const nlohmann::json& values) {
 
 SecretStore secret_store;
 
+namespace {
+// Each secret as the store holds it now, as read or kept, by program and
+// name; one never kept is "". Only a secret that changed goes to the store:
+// another setting changing never needs it, nor fails where it cannot be reached.
+std::map<std::pair<std::string, std::string>, std::string> kept_secrets;
+std::mutex kept_secrets_lock;
+}  // namespace
+
 nlohmann::json read_settings_with(const std::string& program, const nlohmann::json& secrets) {
     nlohmann::json values = read_settings(program);
     if (!secrets.is_array()) return values;
@@ -96,7 +106,11 @@ nlohmann::json read_settings_with(const std::string& program, const nlohmann::js
         if (!name.is_string()) continue;
         values.erase(name.get<std::string>());
         if (!secret_store.get) continue;
-        if (auto secret = secret_store.get(program, name.get<std::string>())) values[name.get<std::string>()] = *secret;
+        if (auto secret = secret_store.get(program, name.get<std::string>())) {
+            values[name.get<std::string>()] = *secret;
+            std::lock_guard held(kept_secrets_lock);
+            kept_secrets[{program, name.get<std::string>()}] = *secret;
+        }
     }
     return values;
 }
@@ -107,7 +121,15 @@ void keep_settings_with(const std::string& program, const nlohmann::json& values
         for (const auto& name : secrets) {
             if (!name.is_string() || !plain.contains(name.get<std::string>())) continue;
             const auto& value = plain[name.get<std::string>()];
-            if (secret_store.set) secret_store.set(program, name.get<std::string>(), value.is_string() ? value.get<std::string>() : "");
+            const std::string text = value.is_string() ? value.get<std::string>() : "";
+            if (secret_store.set) {
+                std::lock_guard held(kept_secrets_lock);
+                auto& was = kept_secrets[{program, name.get<std::string>()}];
+                if (was != text) {
+                    secret_store.set(program, name.get<std::string>(), text);
+                    was = text;
+                }
+            }
             plain.erase(name.get<std::string>());
         }
     }

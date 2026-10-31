@@ -8,6 +8,8 @@ import type { RefOption } from "./dropdownOptions";
 import type { Shape } from "./drawing";
 import { getContext, setContext } from "svelte";
 import type { Event as PartEvent } from "./generated/Event";
+import type { Move } from "./ui/rowDrag";
+import type { RangeMove } from "./ranges";
 import type { ShownText } from "./format";
 import type { Place } from "./customParts";
 import type { JsonValue } from "./generated/serde_json/JsonValue";
@@ -67,10 +69,24 @@ export interface Live {
   parts: Record<string, PartState>;
   /** The selected row of each table or list, by part name. */
   selected: Record<string, number>;
+  /** What each table, tree and chart shows of its list, as the runtime filled it in (DESIGN 1.7). */
+  views?: Record<string, Record<string, unknown>>;
+  /** A part says what it shows of its list: its list, columns, order, page size, tree parent or chart grouping. */
+  declareView?(part: string, view: Record<string, unknown>): void;
+  /** The person sorted (`{sort}`), turned a page (`{page}`) or opened or closed a tree row (`{open}`, `{close}`). */
+  view?(part: string, action: Record<string, unknown>): Promise<boolean>;
   /** A part's event, wired to `handler`; false when the handler refused or failed. */
   event(part: string, event: PartEvent, handler: string): Promise<boolean>;
   /** A bound input changed a path of the window's data, for undo (DESIGN 5.29). */
-  edited?(part: string, path: string, before: JsonValue | undefined, after: JsonValue | undefined): void;
+  edited?(part: string): void;
+  /** A row of `part` moved by the person: the runtime reorders the list and runs `handler`, as one edit (DESIGN 5.30). */
+  reorder?(part: string, rows: { list: string; by: string; parent: string | null; move: Move }, handler: string | null): Promise<boolean>;
+  /** An item typed or picked for the list at `path`: the runtime adds it, or says false when it refused it (U1c, DESIGN 1.7). */
+  item?(part: string, item: { path: string; item: string; values: string[]; typed: string }, handler: string | null): Promise<boolean>;
+  /** A key, a drag or a typed number on a slider or spin box: the runtime makes the value at `path` (DESIGN 1.7). */
+  range?(part: string, range: { path: string; min: string | null; max: string | null; step: string; whole: boolean } & RangeMove, handler: string | null): Promise<boolean>;
+  /** Next, Back or Finish on a wizard of `steps` steps: the runtime runs its handlers and decides the step (DESIGN 5.15, 1.7). */
+  step?(part: string, button: "back" | "next" | "finish", steps: number, next: string | null, finish: string | null): Promise<boolean>;
   select(part: string, row: number): void;
   /** Keeps what the user typed in an unbound text input, for the next event. */
   setText(part: string, text: string): void;
@@ -111,6 +127,9 @@ export interface Live {
   keysOf(part: string | null, designed: string | null, appFrame: boolean): string[];
   /** The records a reference field can point at, as id and display text, with the fields a search dropdown shows. */
   refOptions(entity: string): RefOption[];
+  /** What a dropdown offers for typed text, decided by the runtime (DESIGN 1.7, conformance/dropdown-options.json). */
+  findOptions?(query: { kind: "typed"; entity: string; field: string; typed: string }): Promise<string[]>;
+  findOptions?(query: { kind: "search"; entity: string; show: string[]; typed: string }): Promise<RefOption[]>;
   /** The values a text field already has, which a typed dropdown offers (U1c). */
   fieldValues(entity: string, field: string): string[];
   /**

@@ -7,6 +7,7 @@ package clarity
 
 import (
 	"strings"
+	"sync"
 )
 
 // SecretStore keeps a program's secrets: Get gives "" for none, Set with ""
@@ -19,6 +20,10 @@ type SecretStore interface {
 // Secrets is the store of this program's secret settings; nil when it has none.
 var Secrets SecretStore
 
+// keptSecrets is each secret as the store holds it now, as read or kept, by
+// program and name; none is "".
+var keptSecrets sync.Map
+
 // ReadSettingsWith is ReadSettings with the secrets named, each from the
 // store, beside the file's values.
 func ReadSettingsWith(program string, secrets []string) map[string]any {
@@ -30,6 +35,7 @@ func ReadSettingsWith(program string, secrets []string) map[string]any {
 		}
 		if secret := Secrets.Get(program, name); secret != "" {
 			values[name] = secret
+			keptSecrets.Store(program+"\x00"+name, secret)
 		}
 	}
 	return values
@@ -48,12 +54,21 @@ func KeepSettingsWith(program string, values map[string]any, secrets []string) e
 			continue
 		}
 		delete(plain, name)
-		if Secrets != nil {
-			text, _ := value.(string)
-			if err := Secrets.Set(program, name, text); err != nil {
-				return err
-			}
+		if Secrets == nil {
+			continue
 		}
+		// Only a secret that changed goes to the store: another setting
+		// changing never needs it, nor fails where it cannot be reached.
+		text, _ := value.(string)
+		key := program + "\x00" + name
+		before, _ := keptSecrets.Load(key)
+		if was, _ := before.(string); was == text {
+			continue
+		}
+		if err := Secrets.Set(program, name, text); err != nil {
+			return err
+		}
+		keptSecrets.Store(key, text)
 	}
 	return KeepSettings(program, plain)
 }

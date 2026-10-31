@@ -80,7 +80,7 @@ std::string Ui::error(const std::string& part) const {
 
 Reply Ui::reply(const std::string& window, nlohmann::json data) const {
     if (!data.is_object()) data = nlohmann::json::object();
-    return Reply{WindowState{window, std::move(data), parts_, selected_, instance_}, messages_, shown_, open_, close_, asks_, result_, hears_, copied_};
+    return Reply{WindowState{window, std::move(data), parts_, selected_, instance_, views_}, messages_, shown_, open_, close_, asks_, result_, hears_, copied_};
 }
 
 std::optional<nlohmann::json> Ui::part_value(const std::string& part, const std::string& name) const {
@@ -179,6 +179,7 @@ void from_json(const nlohmann::json& in, PartState& p) {
 
 void to_json(nlohmann::json& out, const WindowState& s) {
     out = {{"window", s.window}, {"instance", s.instance}, {"data", s.data}, {"parts", s.parts}, {"selected", s.selected}};
+    if (s.views.is_object() && !s.views.empty()) out["views"] = s.views;
 }
 
 void from_json(const nlohmann::json& in, WindowState& s) {
@@ -187,6 +188,7 @@ void from_json(const nlohmann::json& in, WindowState& s) {
     s.data = in.value("data", nlohmann::json::object());
     if (in.contains("parts")) s.parts = in["parts"].get<std::map<std::string, PartState>>();
     if (in.contains("selected")) s.selected = in["selected"].get<std::map<std::string, int>>();
+    if (in.contains("views") && in["views"].is_object()) s.views = in["views"];
 }
 
 void to_json(nlohmann::json& out, const Reply& r) {
@@ -203,6 +205,7 @@ void to_json(nlohmann::json& out, const Reply& r) {
     if (r.result) out["result"] = *r.result;
     if (r.copy) out["copy"] = *r.copy;
     if (r.step) out["step"] = r.step;
+    if (r.refused) out["refused"] = true;
     if (!r.asks.empty()) {
         nlohmann::json asks = nlohmann::json::array();
         for (const auto& a : r.asks) asks.push_back({{"question", a.question}, {"form", a.form}, {"handler", a.handler}, {"values", a.values}});

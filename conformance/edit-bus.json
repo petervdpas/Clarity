@@ -1,0 +1,94 @@
+{
+  "about": "The edit bus every runtime keeps per open window (DESIGN 5.29): a record of the person's edits, each a message with the part, its scope (its form or panel, or itself), what it changed (each name of the window's data, or `#parts.<name>` for a part's own text or tick, with its value before and after) and the database steps its handler made. A case starts with the window's data as `start` and runs `steps` in order. `edit`: the person ended an edit of `part` in `scope`, and the window's data is now `data` (with what the edit's handler changed); `steps` are the database steps that handler made. `drag`: a part's edit goes on (a canvas's drag before its drop): the window's data is now `data`, with the handler's `steps`, and the edit is not ended. `reply`: a handler that is no edit replied with `data`; the edits start from there. `undo` and `redo` take back or do again the last edit of that scope: `data` is the window's data after it, `steps` the database steps taken back (last first) or done again (first first), `refused` when the database refused it (the edit stays where it was), and `nothing` when the scope has no edit to take back or do again. An edit that changed nothing and made no step is no message; a new edit ends what could be done again in its scope, and only there.",
+  "cases": [
+    {
+      "name": "a form walks back field by field, the last first, and does them again",
+      "start": { "name": "Ada", "city": "Rome" },
+      "steps": [
+        { "edit": { "part": "nameBox", "scope": "form", "data": { "name": "Ann", "city": "Rome" } } },
+        { "edit": { "part": "cityBox", "scope": "form", "data": { "name": "Ann", "city": "Oslo" } } },
+        { "undo": "form", "data": { "name": "Ann", "city": "Rome" }, "steps": [] },
+        { "undo": "form", "data": { "name": "Ada", "city": "Rome" }, "steps": [] },
+        { "undo": "form", "nothing": true },
+        { "redo": "form", "data": { "name": "Ann", "city": "Rome" }, "steps": [] }
+      ]
+    },
+    {
+      "name": "what a handler that is no edit changed is not taken back",
+      "start": { "count": 0 },
+      "steps": [
+        { "reply": { "data": { "count": 5 } } },
+        { "edit": { "part": "countBox", "scope": "countBox", "data": { "count": 6 } } },
+        { "undo": "countBox", "data": { "count": 5 }, "steps": [] },
+        { "undo": "countBox", "nothing": true }
+      ]
+    },
+    {
+      "name": "an edit and what its handler saved are one, taken back together",
+      "start": { "x": 1, "saved": false },
+      "steps": [
+        { "edit": { "part": "canvas", "scope": "canvas", "data": { "x": 9, "saved": true }, "steps": [3] } },
+        { "undo": "canvas", "data": { "x": 1, "saved": false }, "steps": [3] },
+        { "redo": "canvas", "data": { "x": 9, "saved": true }, "steps": [3] }
+      ]
+    },
+    {
+      "name": "a drag and its drop are one edit, its steps taken back last first",
+      "start": { "x": 0 },
+      "steps": [
+        { "drag": { "part": "canvas", "scope": "canvas", "data": { "x": 5 }, "steps": [1] } },
+        { "drag": { "part": "canvas", "scope": "canvas", "data": { "x": 7 }, "steps": [2] } },
+        { "edit": { "part": "canvas", "scope": "canvas", "data": { "x": 9 }, "steps": [3] } },
+        { "undo": "canvas", "data": { "x": 0 }, "steps": [3, 2, 1] },
+        { "redo": "canvas", "data": { "x": 9 }, "steps": [1, 2, 3] }
+      ]
+    },
+    {
+      "name": "an edit that changed nothing and made no step is no message",
+      "start": { "name": "Ada" },
+      "steps": [
+        { "edit": { "part": "nameBox", "scope": "nameBox", "data": { "name": "Ada" } } },
+        { "undo": "nameBox", "nothing": true }
+      ]
+    },
+    {
+      "name": "a new edit ends what could be done again in its scope, and only there",
+      "start": { "a": 1, "b": 1 },
+      "steps": [
+        { "edit": { "part": "aBox", "scope": "aBox", "data": { "a": 2, "b": 1 } } },
+        { "edit": { "part": "bBox", "scope": "bBox", "data": { "a": 2, "b": 2 } } },
+        { "undo": "aBox", "data": { "a": 1, "b": 2 }, "steps": [] },
+        { "undo": "bBox", "data": { "a": 1, "b": 1 }, "steps": [] },
+        { "edit": { "part": "aBox", "scope": "aBox", "data": { "a": 3, "b": 1 } } },
+        { "redo": "aBox", "nothing": true },
+        { "redo": "bBox", "data": { "a": 3, "b": 2 }, "steps": [] }
+      ]
+    },
+    {
+      "name": "a refused undo keeps the edit, to be tried again",
+      "start": { "x": 1 },
+      "steps": [
+        { "edit": { "part": "grid", "scope": "grid", "data": { "x": 2 }, "steps": [4] } },
+        { "undo": "grid", "refused": true },
+        { "undo": "grid", "data": { "x": 1 }, "steps": [4] }
+      ]
+    },
+    {
+      "name": "a part's own text is part of its edit",
+      "start": { "#parts.pinBox": { "text": "" }, "count": 0 },
+      "steps": [
+        { "edit": { "part": "pinBox", "scope": "pinBox", "data": { "#parts.pinBox": { "text": "1234" }, "count": 0 } } },
+        { "undo": "pinBox", "data": { "#parts.pinBox": { "text": "" }, "count": 0 }, "steps": [] }
+      ]
+    },
+    {
+      "name": "an undo puts back only what the edit changed, keeping what changed since elsewhere",
+      "start": { "name": "Ada", "load": 0 },
+      "steps": [
+        { "edit": { "part": "nameBox", "scope": "nameBox", "data": { "name": "Ann", "load": 0 } } },
+        { "reply": { "data": { "name": "Ann", "load": 7 } } },
+        { "undo": "nameBox", "data": { "name": "Ada", "load": 7 }, "steps": [] }
+      ]
+    }
+  ]
+}

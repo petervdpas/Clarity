@@ -29,8 +29,8 @@
   }: {
     /** What the box shows while it is not being typed in. */
     text: string;
-    /** What fits the typed text. */
-    offer: (typed: string) => Offered[];
+    /** What fits the typed text; in a running application the runtime's answer, which comes later (DESIGN 1.7). */
+    offer: (typed: string) => Offered[] | Promise<Offered[]>;
     /** Any typed text is a value (`typed`); else only a picked item is. */
     free?: boolean;
     id?: string;
@@ -52,7 +52,20 @@
   let draft = $state<string | null>(null);
   let at = $state(-1);
   let place = $state<{ left: number; top: number; width: number } | null>(null);
-  const items = $derived(place ? offer(draft ?? "") : []);
+  // What is offered for the text typed now; an answer to text typed before is left out.
+  let items = $state<Offered[]>([]);
+  let asking = 0;
+  $effect(() => {
+    const typed = draft ?? "";
+    const asked = ++asking;
+    if (!place) {
+      items = [];
+      return;
+    }
+    void Promise.resolve(offer(typed)).then((list) => {
+      if (asked === asking) items = list;
+    });
+  });
   const listId = `offered-${Math.random().toString(36).slice(2)}`;
 
   function open() {

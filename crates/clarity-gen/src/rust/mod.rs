@@ -673,17 +673,19 @@ fn check(state: &WindowState) -> Result<()> {{
     Ok(())
 }}
 
-/// Takes step `step` back or does it again, then draws the window anew.
-fn undone(db: &Db, state: WindowState, step: u64, back: bool) -> Result<Reply> {{
-    if step > 0 {{
-        if back {{
-            db.undo(step)?;
-        }} else {{
-            db.redo(step)?;
-        }}
-    }}
+/// Draws the window as its data is, running no handler: what an edit with
+/// no handler, or an undo, answers with.
+fn drawn(db: &Db, state: WindowState) -> Result<Reply> {{
     let data = state.data.clone();
     redraw(db, Ui::from_state(&state).reply(&state.window, data))
+}}
+
+/// Runs a part's handler, if it has one; else draws the window as its data is.
+fn handled(db: &Db, state: WindowState, handler: Option<&str>) -> Result<Reply> {{
+    match handler {{
+        Some(handler) if !handler.is_empty() => dispatch(db, state, handler),
+        _ => drawn(db, state),
+    }}
 }}
 
 /// Runs a handler on a window's state, then draws its canvases anew.
@@ -754,6 +756,16 @@ fn locked<T>(app: &App, run: impl FnOnce(&Db) -> Result<T>) -> Answer<T> {{
     clarity_runtime::run_guarded(&app.0, run)
 }}
 
+/// A window's reply: what each table, tree and chart shows is filled in
+/// (DESIGN 1.7), and its edits start there (DESIGN 5.29): what a handler
+/// changed is never the person's edit. `sent` is what the screen sent.
+fn window_reply(sent: &clarity_runtime::views::Sent, answer: Answer<Reply>) -> Answer<Reply> {{
+    let mut reply = answer?;
+    clarity_runtime::views::replied(sent, &mut reply).map_err(|err| Value::from(err.to_string()))?;
+    clarity_runtime::edits::replied(&reply);
+    Ok(reply)
+}}
+
 {start_command}
 /// Opens every database, brings it up to date and adds its file stores.
 fn open_databases() -> Result<Db> {{
@@ -770,7 +782,7 @@ fn open_databases() -> Result<Db> {{
 //~desktop
 #[tauri::command]
 {asynced}fn open_window(app: {app_state}{watch_params}, window: String, with: Map<String, Value>) -> Answer<Reply> {{
-    {watching}locked(&app, |db| open(db, &window, with)){watched_end}
+    window_reply(&clarity_runtime::views::Sent::none(), {watching}locked(&app, |db| open(db, &window, with)){watched_end})
 }}
 
 /// Runs a window's `on close` before the screen closes it.
@@ -778,39 +790,102 @@ fn open_databases() -> Result<Db> {{
 {asynced}fn close_window(app: {app_state}{watch_params}, state: WindowState) -> Answer<Reply> {{
     let instance = state.instance;
     let reply = {watching}locked(&app, |db| on_event(db, state, "close")){watched_end}?;
-    // The window has closed: what it had of an engine goes.
+    // The window has closed: what it had of an engine goes, and its edits.
+    clarity_runtime::edits::closed(instance);
 {close_engines}    Ok(reply)
 }}
 
 /// Runs a window's `on return` when it is on top again.
 #[tauri::command]
 {asynced}fn return_to(app: {app_state}{watch_params}, state: WindowState) -> Answer<Reply> {{
-    {watching}locked(&app, |db| on_event(db, state, "return")){watched_end}
+    let sent = clarity_runtime::views::Sent::of(&state);
+    window_reply(&sent, {watching}locked(&app, |db| on_event(db, state, "return")){watched_end})
 }}
 
 /// Runs the app's `on start`, before its main window opens.
 #[tauri::command]
 {asynced}fn start_app(app: {app_state}{watch_params}) -> Answer<Reply> {{
-    {watching}locked(&app, |db| on_event(db, WindowState::new("", Map::new()), "start")){watched_end}
+    window_reply(&clarity_runtime::views::Sent::none(), {watching}locked(&app, |db| on_event(db, WindowState::new("", Map::new()), "start")){watched_end})
 }}
 
 #[tauri::command]
 {asynced}fn dispatch_event(app: {app_state}{watch_params}, state: WindowState, handler: String) -> Answer<Reply> {{
     // One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
-    {watching}locked(&app, |db| clarity_runtime::stepped(db, || dispatch(db, state, &handler))){watched_end}
+    let sent = clarity_runtime::views::Sent::of(&state);
+    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::stepped(db, || dispatch(db, state, &handler))){watched_end})
 }}
 
-/// Takes a step back (`back`) or does it again, on the window's data as the
-/// screen put it back, and draws its canvases anew (DESIGN 5.29).
+/// The person ended an edit of a part (DESIGN 5.29): its handler, if any, runs
+/// as one database step, and the edit goes on the window's record in the
+/// runtime with what it changed. A drag goes on until its drop (`ends`).
 #[tauri::command]
-fn undo_step(app: tauri::State<App>, state: WindowState, step: u64, back: bool) -> Answer<Reply> {{
-    locked(&app, |db| undone(db, state, step, back))
+{asynced}fn edit_event(app: {app_state}{watch_params}, state: WindowState, handler: Option<String>, part: String, scope: String, ends: bool) -> Answer<Reply> {{
+    let sent = clarity_runtime::views::Sent::of(&state);
+    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| match handler.as_deref() {{
+        Some(handler) if !handler.is_empty() => dispatch(db, state, handler),
+        _ => drawn(db, state),
+    }})){watched_end})
+}}
+
+/// Ctrl+Z (`back`) or Ctrl+Y on a scope: its last edit taken back or done
+/// again from the window's record, with its database steps (DESIGN 5.29).
+#[tauri::command]
+fn undo_edit(app: tauri::State<App>, state: WindowState, scope: String, back: bool) -> Answer<Reply> {{
+    let sent = clarity_runtime::views::Sent::of(&state);
+    window_reply(&sent, locked(&app, |db| clarity_runtime::edits::undo(db, state, &scope, back, |state| drawn(db, state))))
+}}
+
+/// A row moved by a drag or a key (DESIGN 1.7): the runtime gives the list
+/// its order, numbers and parents, then runs the handler as an edit ends.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+{asynced}fn reorder_event(app: {app_state}{watch_params}, state: WindowState, part: String, scope: Option<String>, list: String, by: String, parent: Option<String>, r#move: clarity_runtime::reorder::Move, handler: Option<String>) -> Answer<Reply> {{
+    let sent = clarity_runtime::views::Sent::of(&state);
+    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &r#move, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))){watched_end})
+}}
+
+/// An item typed for a list field (DESIGN 1.7): added, kept once, or refused.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+{asynced}fn item_event(app: {app_state}{watch_params}, state: WindowState, part: String, scope: Option<String>, path: String, item: clarity_runtime::list_fields::ItemKind, values: Option<Vec<String>>, typed: String, handler: Option<String>) -> Answer<Reply> {{
+    let values = values.unwrap_or_default();
+    let sent = clarity_runtime::views::Sent::of(&state);
+    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::list_fields::event(db, state, &part, &path, item, &values, &typed, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))){watched_end})
+}}
+
+/// A key, a drag or typed text on a slider or spin box (DESIGN 1.7): the
+/// runtime gives the value within its range.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+{asynced}fn range_event(app: {app_state}{watch_params}, state: WindowState, part: String, scope: Option<String>, path: String, min: Option<String>, max: Option<String>, step: String, whole: bool, key: Option<clarity_runtime::ranges::RangeKey>, at: Option<String>, typed: Option<String>, handler: Option<String>) -> Answer<Reply> {{
+    let range = clarity_runtime::ranges::Range {{ min, max, step }};
+    let mv = clarity_runtime::ranges::RangeMove::of(key, at, typed).map_err(|err| Value::from(err.to_string()))?;
+    let sent = clarity_runtime::views::Sent::of(&state);
+    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &mv, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))){watched_end})
+}}
+
+/// Next, Back or Finish on a wizard (DESIGN 1.7): the runtime runs its
+/// handlers and decides the step.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+{asynced}fn step_event(app: {app_state}{watch_params}, state: WindowState, part: String, button: clarity_runtime::steps::StepButton, steps: i64, next: Option<String>, finish: Option<String>) -> Answer<Reply> {{
+    let sent = clarity_runtime::views::Sent::of(&state);
+    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::steps::event(db, state, &part, button, steps, next.as_deref(), finish.as_deref(), |state, handler| dispatch(db, state, handler), |state| drawn(db, state))){watched_end})
+}}
+
+/// The person sorted, turned a page, or opened or closed a tree row (DESIGN
+/// 1.7): that view changes, and the window is answered. Never an edit.
+#[tauri::command]
+fn view_event(app: tauri::State<App>, state: WindowState, part: String, action: Map<String, Value>) -> Answer<Reply> {{
+    let sent = clarity_runtime::views::Sent::view_event(&state);
+    window_reply(&sent, locked(&app, |db| clarity_runtime::views::event(state, &part, &action, |state| drawn(db, state))))
 }}
 
 /// The answer to a question a handler asked: runs the handler it goes to.
 #[tauri::command]
 {asynced}fn answer_event(app: {app_state}{watch_params}, state: WindowState, handler: String, values: Vec<Value>) -> Answer<Reply> {{
-    {watching}locked(&app, |db| answer_to(db, state, &handler, values)){watched_end}
+    let sent = clarity_runtime::views::Sent::of(&state);
+    window_reply(&sent, {watching}locked(&app, |db| answer_to(db, state, &handler, values)){watched_end})
 }}
 
 {watched_fn}
@@ -823,6 +898,13 @@ fn ref_options(app: tauri::State<App>, entity: String) -> Answer<Vec<RefOption>>
 #[tauri::command]
 fn field_values(app: tauri::State<App>, entity: String, field: String) -> Answer<Vec<String>> {{
     locked(&app, |db| values_of(db, &entity, &field))
+}}
+
+/// What a dropdown offers for typed text (DESIGN 1.7): a field's values, or
+/// the records of an entity with the fields it shows.
+#[tauri::command]
+fn find_options(app: tauri::State<App>, kind: String, entity: String, field: Option<String>, show: Option<Vec<String>>, typed: String) -> Answer<Value> {{
+    locked(&app, |db| clarity_runtime::dropdown_options::find(&kind, &show.unwrap_or_default(), &typed, || values_of(db, &entity, field.as_deref().unwrap_or_default()), || options(db, &entity)))
 }}
 
 /// A picture of a record, fetched on its own, as the page shows it.
@@ -917,10 +999,17 @@ pub(crate) fn run(db: Db{problem_param}) {{
             close_window,
             return_to,
             dispatch_event,
-            undo_step,
+            edit_event,
+            undo_edit,
+            reorder_event,
+            item_event,
+            range_event,
+            step_event,
+            view_event,
             answer_event,
             ref_options,
             field_values,
+            find_options,
             picture,
             file_data,
             open_file,
@@ -1254,32 +1343,81 @@ fn served(app: &App{connecting}, command: &str, args: Value) -> Value {{
     }}
     match command {{
         "start" => given(Ok({start})),
-{connect}        "start_app" => given(locked(app, |db| on_event(db, WindowState::new("", Map::new()), "start"))),
+{connect}        "start_app" => given(window_reply(&clarity_runtime::views::Sent::none(), locked(app, |db| on_event(db, WindowState::new("", Map::new()), "start")))),
         "open_window" => given((|| {{
             let (window, with): (String, Map<String, Value>) = (arg(&args, "window")?, arg(&args, "with")?);
-            locked(app, |db| open(db, &window, with))
+            window_reply(&clarity_runtime::views::Sent::none(), locked(app, |db| open(db, &window, with)))
         }})()),
         "close_window" => given((|| {{
             let state: WindowState = arg(&args, "state")?;
             let instance = state.instance;
             let reply = locked(app, |db| on_event(db, state, "close"))?;
+            clarity_runtime::edits::closed(instance);
 {close_engines}            Ok(reply)
         }})()),
         "return_to" => given((|| {{
             let state: WindowState = arg(&args, "state")?;
-            locked(app, |db| on_event(db, state, "return"))
+            let sent = clarity_runtime::views::Sent::of(&state);
+            window_reply(&sent, locked(app, |db| on_event(db, state, "return")))
         }})()),
         "dispatch_event" => given((|| {{
             let (state, handler): (WindowState, String) = (arg(&args, "state")?, arg(&args, "handler")?);
-            locked(app, |db| clarity_runtime::stepped(db, || dispatch(db, state, &handler)))
+            let sent = clarity_runtime::views::Sent::of(&state);
+            window_reply(&sent, locked(app, |db| clarity_runtime::stepped(db, || dispatch(db, state, &handler))))
         }})()),
-        "undo_step" => given((|| {{
-            let (state, step, back): (WindowState, u64, bool) = (arg(&args, "state")?, arg(&args, "step")?, arg(&args, "back")?);
-            locked(app, |db| undone(db, state, step, back))
+        "edit_event" => given((|| {{
+            let (state, handler, part, scope, ends): (WindowState, Option<String>, String, String, bool) =
+                (arg(&args, "state")?, arg(&args, "handler")?, arg(&args, "part")?, arg(&args, "scope")?, arg(&args, "ends")?);
+            let sent = clarity_runtime::views::Sent::of(&state);
+            window_reply(&sent, locked(app, |db| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| match handler.as_deref() {{
+                Some(handler) if !handler.is_empty() => dispatch(db, state, handler),
+                _ => drawn(db, state),
+            }})))
+        }})()),
+        "undo_edit" => given((|| {{
+            let (state, scope, back): (WindowState, String, bool) = (arg(&args, "state")?, arg(&args, "scope")?, arg(&args, "back")?);
+            let sent = clarity_runtime::views::Sent::of(&state);
+            window_reply(&sent, locked(app, |db| clarity_runtime::edits::undo(db, state, &scope, back, |state| drawn(db, state))))
+        }})()),
+        "reorder_event" => given((|| {{
+            let (state, part, scope, list, by, parent): (WindowState, String, Option<String>, String, String, Option<String>) =
+                (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "scope")?, arg(&args, "list")?, arg(&args, "by")?, arg(&args, "parent")?);
+            let (r#move, handler): (clarity_runtime::reorder::Move, Option<String>) = (arg(&args, "move")?, arg(&args, "handler")?);
+            let sent = clarity_runtime::views::Sent::of(&state);
+            window_reply(&sent, locked(app, |db| clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &r#move, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))))
+        }})()),
+        "item_event" => given((|| {{
+            let (state, part, scope, path): (WindowState, String, Option<String>, String) = (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "scope")?, arg(&args, "path")?);
+            let (item, values, typed, handler): (clarity_runtime::list_fields::ItemKind, Option<Vec<String>>, String, Option<String>) =
+                (arg(&args, "item")?, arg(&args, "values")?, arg(&args, "typed")?, arg(&args, "handler")?);
+            let values = values.unwrap_or_default();
+            let sent = clarity_runtime::views::Sent::of(&state);
+            window_reply(&sent, locked(app, |db| clarity_runtime::list_fields::event(db, state, &part, &path, item, &values, &typed, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))))
+        }})()),
+        "range_event" => given((|| {{
+            let (state, part, scope, path, whole): (WindowState, String, Option<String>, String, bool) =
+                (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "scope")?, arg(&args, "path")?, arg(&args, "whole")?);
+            let range = clarity_runtime::ranges::Range {{ min: arg(&args, "min")?, max: arg(&args, "max")?, step: arg(&args, "step")? }};
+            let mv = clarity_runtime::ranges::RangeMove::of(arg(&args, "key")?, arg(&args, "at")?, arg(&args, "typed")?).map_err(|err| Value::from(err.to_string()))?;
+            let handler: Option<String> = arg(&args, "handler")?;
+            let sent = clarity_runtime::views::Sent::of(&state);
+            window_reply(&sent, locked(app, |db| clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &mv, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))))
+        }})()),
+        "step_event" => given((|| {{
+            let (state, part, button, steps, next, finish): (WindowState, String, clarity_runtime::steps::StepButton, i64, Option<String>, Option<String>) =
+                (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "button")?, arg(&args, "steps")?, arg(&args, "next")?, arg(&args, "finish")?);
+            let sent = clarity_runtime::views::Sent::of(&state);
+            window_reply(&sent, locked(app, |db| clarity_runtime::steps::event(db, state, &part, button, steps, next.as_deref(), finish.as_deref(), |state, handler| dispatch(db, state, handler), |state| drawn(db, state))))
+        }})()),
+        "view_event" => given((|| {{
+            let (state, part, action): (WindowState, String, Map<String, Value>) = (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "action")?);
+            let sent = clarity_runtime::views::Sent::view_event(&state);
+            window_reply(&sent, locked(app, |db| clarity_runtime::views::event(state, &part, &action, |state| drawn(db, state))))
         }})()),
         "answer_event" => given((|| {{
             let (state, handler, values): (WindowState, String, Vec<Value>) = (arg(&args, "state")?, arg(&args, "handler")?, arg(&args, "values")?);
-            locked(app, |db| answer_to(db, state, &handler, values))
+            let sent = clarity_runtime::views::Sent::of(&state);
+            window_reply(&sent, locked(app, |db| answer_to(db, state, &handler, values)))
         }})()),
         "ref_options" => given((|| {{
             let entity: String = arg(&args, "entity")?;
@@ -1288,6 +1426,11 @@ fn served(app: &App{connecting}, command: &str, args: Value) -> Value {{
         "field_values" => given((|| {{
             let (entity, field): (String, String) = (arg(&args, "entity")?, arg(&args, "field")?);
             locked(app, |db| values_of(db, &entity, &field))
+        }})()),
+        "find_options" => given((|| {{
+            let (kind, entity, field, show, typed): (String, String, Option<String>, Option<Vec<String>>, String) =
+                (arg(&args, "kind")?, arg(&args, "entity")?, arg(&args, "field")?, arg(&args, "show")?, arg(&args, "typed")?);
+            locked(app, |db| clarity_runtime::dropdown_options::find(&kind, &show.unwrap_or_default(), &typed, || values_of(db, &entity, field.as_deref().unwrap_or_default()), || options(db, &entity)))
         }})()),
         "picture" => given((|| {{
             let (entity, id, field): (String, i64, String) = (arg(&args, "entity")?, arg(&args, "id")?, arg(&args, "field")?);

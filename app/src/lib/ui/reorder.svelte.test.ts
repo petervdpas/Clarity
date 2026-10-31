@@ -5,7 +5,7 @@
 import { flushSync, mount, unmount } from "svelte";
 import { expect, test } from "vitest";
 import Table, { type Row } from "./Table.svelte";
-import type { Move } from "./reorder";
+import type { Move } from "./rowDrag";
 
 const columns = [{ field: "title", label: "Title", kind: "text" as const, edit: false }];
 

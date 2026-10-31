@@ -179,6 +179,8 @@ page Folders: window
     chart bar name formatChart at 1,9 span 4 rows 6 bind albums by format count
     chart line name copiesChart at 5,9 span 4 rows 6 bind albums by copies sum rating
     chart pie name lentChart at 9,9 span 4 rows 6 bind albums by lentTo average copies
+    // Sorted by a header click and shown a page at a time, by the runtime (DESIGN 1.7).
+    table name albumGrid at 1,15 span 12 rows 4 bind albums columns title, copies sortable order by title page 2
 
 page PickFriend: dialog gives Friend
     on open: loadFriends

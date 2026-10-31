@@ -79,6 +79,9 @@ struct WindowState {
     /// The number of this open window, its own while it is open: what belongs
     /// to it, such as an engine's state per window, goes by it.
     uint64_t instance = 0;
+    /// What the window's tables, trees and charts show of their lists, by
+    /// part (DESIGN 1.7): the screen says how, the runtime fills in what.
+    nlohmann::json views = nlohmann::json::object();
 };
 
 /// Has `listen` hear of every window that closes, by its number, for as long
@@ -146,6 +149,9 @@ struct Reply {
     /// The id of the database step the handler made (DESIGN 5.29), which
     /// the screen's edit keeps to undo it by; 0 when it changed nothing.
     int64_t step = 0;
+    /// Whether the runtime refused what the person typed (a list field's
+    /// item), so the screen keeps the typed text and marks it.
+    bool refused = false;
 };
 
 /// A record a reference field can point at, as a dropdown shows it.
@@ -159,7 +165,7 @@ struct RefOption {
 /// What a handler can do to the screen.
 class Ui {
 public:
-    explicit Ui(const WindowState& state) : parts_(state.parts), selected_(state.selected), instance_(state.instance) {}
+    explicit Ui(const WindowState& state) : parts_(state.parts), selected_(state.selected), instance_(state.instance), views_(state.views) {}
 
     /// The number of the open window the handler runs in.
     uint64_t instance() const { return instance_; }
@@ -289,6 +295,7 @@ private:
     std::map<std::string, PartState> parts_;
     std::map<std::string, int> selected_;
     uint64_t instance_ = 0;
+    nlohmann::json views_;
     std::vector<Message> messages_;
     std::map<std::string, Text> shown_;
     std::vector<OpenRequest> open_;

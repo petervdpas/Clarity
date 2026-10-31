@@ -76,6 +76,9 @@ typedef struct {
     size_t part_count;
     ClaritySelected* selected;
     size_t selected_count;
+    /// What the window's tables, lists, trees and charts show, by part name
+    /// (DESIGN 1.7, clarity/views.h): an object, NULL when it has none.
+    cJSON* views;
 } ClarityWindowState;
 
 /// How a message shows: info goes away by itself.
@@ -146,6 +149,9 @@ typedef struct {
     /// The id of the database step the handler made (DESIGN 5.29), which
     /// the screen's edit keeps to undo it by; 0 when it changed nothing.
     int64_t step;
+    /// The runtime refused what the person gave (a list field's typed item):
+    /// the screen keeps it and marks it.
+    bool refused;
 } ClarityReply;
 
 /// What a handler can do to the screen.

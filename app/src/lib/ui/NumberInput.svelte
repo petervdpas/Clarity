@@ -7,7 +7,7 @@
   // With a range it is a spin box (conformance/ranges.json): its arrows and
   // keys move it a step, or ten, and a typed number is kept within the range.
   import type { JsonValue } from "../generated/serde_json/JsonValue";
-  import { keyed, rangeKey, rangeValue, typedIn, type Range } from "../ranges";
+  import { keyed, rangeKey, rangeValue, typedIn, type Range, type RangeMove } from "../ranges";
 
   let {
     value,
@@ -22,6 +22,7 @@
     disabled = false,
     readonly = false,
     range = undefined,
+    onrange = undefined,
     whole = true,
     onchange,
     onsubmit = undefined,
@@ -43,6 +44,8 @@
     readonly?: boolean;
     /** A spin box's range. */
     range?: Range;
+    /** In a running application the runtime makes a spin box's value (DESIGN 1.7): it gets the key or the typed number. */
+    onrange?: (move: RangeMove) => void;
     /** The number is whole: kept as a number, else as text. */
     whole?: boolean;
     /** The person typed another number: Clarity's `change`. */
@@ -68,6 +71,10 @@
       return;
     }
     bad = null;
+    if (range && onrange && (typeof number === "number" || typeof number === "string")) {
+      if (String(number) !== String(value ?? "")) onrange({ typed: String(number) });
+      return;
+    }
     const next = range && (typeof number === "number" || typeof number === "string") ? rangeValue(typedIn(number, range), whole) : number;
     if (next !== (value ?? null)) onchange(next);
   }
@@ -76,6 +83,10 @@
   function spin(k: "up" | "down" | "pageUp" | "pageDown") {
     if (!range || readonly || disabled) return;
     bad = null;
+    if (onrange) {
+      onrange({ key: k });
+      return;
+    }
     const now = typeof value === "number" || typeof value === "string" ? value : null;
     const next = rangeValue(keyed(now, range, k), whole);
     if (next !== (value ?? null)) onchange(next);

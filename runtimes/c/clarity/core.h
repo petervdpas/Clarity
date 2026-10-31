@@ -66,6 +66,10 @@ const char* clarity_buffer_text(const ClarityBuffer* buffer);
 /// Room for one more item in a growing array of the scratch arena.
 void clarity_grow(void** items, size_t* capacity, size_t count, size_t item_size);
 
+/// Sorts `count` items of `size` bytes by `compare`, keeping equal items in
+/// their order; the room it needs is in the scratch arena.
+void clarity_sort(void* items, size_t count, size_t size, int (*compare)(const void* a, const void* b, void* context), void* context);
+
 /// What went wrong.
 typedef enum {
     /// The database or the disk failed.

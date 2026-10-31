@@ -1,5 +1,7 @@
 #include "clarity/list_fields.h"
 
+#include <ctype.h>
+#include <stdlib.h>
 #include <string.h>
 
 static bool unfit(const char* name) { return clarity_fail(CLARITY_INVALID, "%s is no list of its values", name); }
@@ -135,4 +137,63 @@ bool clarity_json_get_decimals(const cJSON* in, const char* name, ClarityDecimal
 
 bool clarity_json_get_dates(const cJSON* in, const char* name, ClarityDates* out) {
     return given_items(in, name, sizeof(ClarityDate), date_item, (void**)&out->items, &out->count);
+}
+
+/// Whether `text` is digits, after a minus, with decimals after a point when `point`.
+static bool is_number(const char* text, bool point) {
+    const char* at = text + (*text == '-');
+    if (!isdigit((unsigned char)*at)) return false;
+    while (isdigit((unsigned char)*at)) ++at;
+    if (point && *at == '.') {
+        if (!isdigit((unsigned char)*++at)) return false;
+        while (isdigit((unsigned char)*at)) ++at;
+    }
+    return *at == '\0';
+}
+
+/// Whether two items of a list of `item` are the same value: 1.50 is 1.5.
+static bool same_item(const char* item, const cJSON* a, const cJSON* b) {
+    if (strcmp(item, "decimal") == 0) {
+        ClarityDecimal x, y;
+        return decimal_item(a, &x) && decimal_item(b, &y) && clarity_decimal_compare(x, y) == 0;
+    }
+    return cJSON_Compare(a, b, true);
+}
+
+cJSON* clarity_item_added(const char* item, const cJSON* values, const cJSON* items, const char* typed) {
+    cJSON* list = cJSON_IsArray(items) ? cJSON_Duplicate(items, true) : cJSON_CreateArray();
+    // The typed text, trimmed.
+    const char* from = typed ? typed : "";
+    while (isspace((unsigned char)*from)) ++from;
+    size_t length = strlen(from);
+    while (length > 0 && isspace((unsigned char)from[length - 1])) --length;
+    const char* text = clarity_copy_n(from, length);
+    if (!*text) return list;
+    cJSON* added;
+    if (strcmp(item, "integer") == 0) {
+        if (!is_number(text, false)) return NULL;
+        added = cJSON_CreateNumber((double)strtoll(text, NULL, 10));
+    } else if (strcmp(item, "decimal") == 0) {
+        if (!is_number(text, true)) return NULL;
+        added = cJSON_CreateString(text);
+    } else if (strcmp(item, "date") == 0) {
+        ClarityDate date;
+        if (!clarity_date_parse(text, &date)) return NULL;
+        added = cJSON_CreateString(text);
+    } else {
+        added = cJSON_CreateString(text);
+        // An enum's list takes only its values.
+        if (strcmp(item, "enum") == 0 && cJSON_IsArray(values)) {
+            const cJSON* value;
+            bool known = false;
+            cJSON_ArrayForEach(value, values) known = known || cJSON_Compare(value, added, true);
+            if (!known) return NULL;
+        }
+    }
+    const cJSON* had;
+    cJSON_ArrayForEach(had, list) {
+        if (same_item(item, had, added)) return list;
+    }
+    cJSON_AddItemToArray(list, added);
+    return list;
 }

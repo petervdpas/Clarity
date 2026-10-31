@@ -344,6 +344,11 @@ pub struct WindowState {
     pub parts: BTreeMap<String, PartState>,
     #[serde(default)]
     pub selected: BTreeMap<String, usize>,
+    /// What the screen shows of the list of each table, tree and chart, by
+    /// the part's name (DESIGN 1.7): the screen sends how, the runtime fills
+    /// in what shows after every reply (`views::replied`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub views: BTreeMap<String, Map<String, Value>>,
 }
 
 /// The number the next window that opens gets.
@@ -462,6 +467,10 @@ pub struct Reply {
     /// the screen's edit keeps to undo it by; 0 when it changed nothing.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub step: u64,
+    /// The runtime refused what the person typed, such as an item that is no
+    /// value of its list's kind: the screen keeps the text and marks it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub refused: bool,
 }
 
 /// What a handler can do to the screen.
@@ -470,6 +479,7 @@ pub struct Ui {
     instance: u64,
     parts: BTreeMap<String, PartState>,
     selected: BTreeMap<String, usize>,
+    views: BTreeMap<String, Map<String, Value>>,
     messages: Vec<Message>,
     shown: BTreeMap<String, Text>,
     open: Vec<OpenRequest>,
@@ -491,6 +501,7 @@ impl Ui {
             instance: state.instance,
             parts: state.parts.clone(),
             selected: state.selected.clone(),
+            views: state.views.clone(),
             ..Ui::default()
         }
     }
@@ -760,6 +771,7 @@ impl Ui {
                 data,
                 parts: self.parts,
                 selected: self.selected,
+                views: self.views,
             },
             messages: self.messages,
             shown: self.shown,
@@ -770,6 +782,7 @@ impl Ui {
             hears: self.hears,
             copy: self.copied,
             step: 0,
+            refused: false,
         }
     }
 
@@ -984,4 +997,33 @@ mod tests {
 
 fn is_zero(n: &u64) -> bool {
     *n == 0
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+/// The value a path names in a window's data: `album.tags` is the field
+/// `tags` of the record `album`, `readings` a value of its own.
+pub fn data_at<'a>(data: &'a Map<String, Value>, path: &str) -> Option<&'a Value> {
+    let mut names = path.split('.');
+    let mut value = data.get(names.next()?)?;
+    for name in names {
+        value = value.get(name)?;
+    }
+    Some(value)
+}
+
+/// Sets the value a path names in a window's data; a record on the way that
+/// is not there fails.
+pub fn set_data_at(data: &mut Map<String, Value>, path: &str, value: Value) -> Result<()> {
+    let missing = || Error::Invalid(format!("the window has no {path}"));
+    let names: Vec<&str> = path.split('.').collect();
+    let (last, way) = names.split_last().ok_or_else(missing)?;
+    let mut map = data;
+    for name in way {
+        map = map.get_mut(*name).and_then(Value::as_object_mut).ok_or_else(missing)?;
+    }
+    map.insert(last.to_string(), value);
+    Ok(())
 }

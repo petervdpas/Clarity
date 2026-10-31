@@ -48,7 +48,7 @@
   import { readWidths, resized } from "../columnWidths";
   import { nextOrder, pageOf, pageWith, shownOrder, type Order } from "./tableView";
   import { above, shownTree } from "./trees";
-  import type { Move } from "./reorder";
+  import type { Move } from "./rowDrag";
   import { keyMove, rowDrag } from "./rowDrag";
 
   let {
@@ -73,6 +73,8 @@
     onchanged = () => {},
     reorder = false,
     onreorder = () => {},
+    view = null,
+    onview = undefined,
   }: {
     columns: TableColumn[];
     rows: Row[];
@@ -116,7 +118,19 @@
     reorder?: boolean;
     /** A row was moved: by its place in the list, onto another row or by a key. */
     onreorder?: (move: Move) => void;
+    /**
+     * What the runtime filled in of this part's view (DESIGN 1.7): the places
+     * of the rows shown (a tree's as [place, depth, children]), the page, the
+     * order, the open rows. Without one (the designer, or before the first
+     * answer) the table arranges its rows itself.
+     */
+    view?: { shown?: unknown[]; pages?: { page: number; pages: number; from: number; to: number; count: number }; order?: Order; open?: unknown[] } | null;
+    /** The person sorted, turned a page or opened a tree row: for the runtime to decide. */
+    onview?: (action: Record<string, unknown>) => void;
   } = $props();
+
+  /** Whether the runtime has filled in what shows. */
+  const filled = $derived(Array.isArray(view?.shown));
 
   const inert = $derived(design || disabled);
 
@@ -130,44 +144,70 @@
       sorting = order;
     }
   });
-  const orderedRows = $derived(shownOrder(rows, columns, sorting));
+  const orderedRows = $derived(filled && !tree ? (view!.shown as number[]) : shownOrder(rows, columns, sorting));
+  /** The order shown: the runtime's, else the table's own. */
+  const shownSorting = $derived(filled && view?.order !== undefined ? view.order : sorting);
 
   // A page at a time (conformance/table-pages.json): the page stays when the
   // rows come again, the first one shows when the order changes, and a row
   // selected by code shows its page.
   let at = $state(1);
-  const paged = $derived(page ? pageOf(orderedRows.length, page, at) : null);
+  const paged = $derived(
+    filled && view?.pages
+      ? { ...view.pages, text: view.pages.count === 0 ? "0 / 0" : `${view.pages.from}-${view.pages.to} / ${view.pages.count}` }
+      : page
+        ? pageOf(orderedRows.length, page, at)
+        : null,
+  );
   // A tree (conformance/trees.json): the rows under their parents, the open ones showing theirs.
   let opened = $state(new Set<unknown>());
   const idOf = (row: Row | undefined) => (row ? row[tree?.key ?? "id"] : undefined);
   const treeRows = $derived(tree ? rows.map((r) => ({ id: idOf(r), parent: r[tree.parent] ?? null })) : []);
   // The designer shows a tree all open, so its levels show.
-  const openIds = $derived(design ? new Set(treeRows.map((r) => r.id)) : opened);
-  const treeShown = $derived(tree ? shownTree(treeRows, openIds) : []);
+  const openIds = $derived(design ? new Set(treeRows.map((r) => r.id)) : filled ? new Set(view?.open ?? []) : opened);
+  const treeShown = $derived(
+    !tree ? [] : filled ? (view!.shown as [number, number, boolean][]).map(([place, depth, children]) => ({ place, depth, children })) : shownTree(treeRows, openIds),
+  );
   const depths = $derived(new Map(treeShown.map((t) => [t.place, t])));
   function toggle(place: number) {
     const id = idOf(rows[place]);
+    if (onview && filled) {
+      onview(openIds.has(id) ? { close: id } : { open: id });
+      return;
+    }
     const next = new Set(opened);
     if (next.has(id)) next.delete(id);
     else next.add(id);
     opened = next;
   }
   $effect.pre(() => {
-    if (!tree || selected === null) return;
+    // The runtime opens the rows above a chosen row itself.
+    if (!tree || selected === null || filled) return;
     const missing = above(treeRows, selected).filter((id) => !opened.has(id));
     if (missing.length) opened = new Set([...opened, ...missing]);
   });
-  const shownRows = $derived(tree ? treeShown.map((t) => t.place) : paged ? orderedRows.slice(Math.max(paged.from - 1, 0), paged.to) : orderedRows);
+  const shownRows = $derived(tree ? treeShown.map((t) => t.place) : filled ? orderedRows : paged ? orderedRows.slice(Math.max(paged.from - 1, 0), paged.to) : orderedRows);
   $effect.pre(() => {
-    if (!page || selected === null) return;
+    // The runtime shows the page of a chosen row itself.
+    if (!page || selected === null || filled) return;
     const place = orderedRows.indexOf(selected);
     if (place >= 0) at = pageWith(page, place);
   });
 
   function sortBy(field: string) {
     if (!sortable || design) return;
+    if (onview && filled) {
+      onview({ sort: field });
+      return;
+    }
     sorting = nextOrder(sorting, field);
     at = 1;
+  }
+
+  /** A page button: the runtime turns the page when it shows the rows, else the table. */
+  function turn(page: number) {
+    if (onview && filled) onview({ page });
+    else at = page;
   }
 
   // Widths: the person's (remembered), else the designed ones; while an edge is dragged, those being dragged.
@@ -283,18 +323,18 @@
     <thead>
       <tr bind:this={head}>
         {#each columns as column (column.field)}
-          {@const sortedHere = sorting?.field === column.field}
+          {@const sortedHere = shownSorting?.field === column.field}
           <th
             data-field={column.field}
             class:sortable={sortable && !design}
             style:width={widthOf(column) ? `${widthOf(column)}px` : undefined}
-            aria-sort={sortedHere ? (sorting?.desc ? "descending" : "ascending") : undefined}
+            aria-sort={sortedHere ? (shownSorting?.desc ? "descending" : "ascending") : undefined}
             tabindex={sortable && !design ? 0 : undefined}
             onclick={() => sortBy(column.field)}
             onkeydown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), sortBy(column.field))}
           >
             <span class="label">{column.label}</span>
-            {#if sortedHere}<span class="arrow" aria-hidden="true">{sorting?.desc ? "▼" : "▲"}</span>{/if}
+            {#if sortedHere}<span class="arrow" aria-hidden="true">{shownSorting?.desc ? "▼" : "▲"}</span>{/if}
             {#if grips}
               <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
               <span
@@ -381,17 +421,17 @@
 {#if paged}
   <!-- The page bar: to the first, previous, next and last page, and which rows show. -->
   <div class="pager">
-    <button type="button" title={pageWords.first} aria-label={pageWords.first} disabled={design || paged.page === 1} onclick={() => (at = 1)}
+    <button type="button" title={pageWords.first} aria-label={pageWords.first} disabled={design || paged.page === 1} onclick={() => turn(1)}
       ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M 17 18 l -6 -6 l 6 -6 M 7 6 v 12" /></svg></button
     >
-    <button type="button" title={pageWords.previous} aria-label={pageWords.previous} disabled={design || paged.page === 1} onclick={() => (at = paged.page - 1)}
+    <button type="button" title={pageWords.previous} aria-label={pageWords.previous} disabled={design || paged.page === 1} onclick={() => turn(paged.page - 1)}
       ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M 15 18 l -6 -6 l 6 -6" /></svg></button
     >
     <span class="shown">{paged.text}</span>
-    <button type="button" title={pageWords.next} aria-label={pageWords.next} disabled={design || paged.page === paged.pages} onclick={() => (at = paged.page + 1)}
+    <button type="button" title={pageWords.next} aria-label={pageWords.next} disabled={design || paged.page === paged.pages} onclick={() => turn(paged.page + 1)}
       ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M 9 18 l 6 -6 l -6 -6" /></svg></button
     >
-    <button type="button" title={pageWords.last} aria-label={pageWords.last} disabled={design || paged.page === paged.pages} onclick={() => (at = paged.pages)}
+    <button type="button" title={pageWords.last} aria-label={pageWords.last} disabled={design || paged.page === paged.pages} onclick={() => turn(paged.pages)}
       ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M 7 18 l 6 -6 l -6 -6 M 17 6 v 12" /></svg></button
     >
   </div>

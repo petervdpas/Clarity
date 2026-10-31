@@ -9,9 +9,25 @@
 //! which roams with the person's account, so a secret forgotten here could
 //! come back from it.
 
+type GetSecret = Box<dyn Fn(&str, &str) -> Option<String> + Send + Sync>;
+type SetSecret = Box<dyn Fn(&str, &str, &str) -> crate::Result<()> + Send + Sync>;
+
+/// Where secrets are kept instead of the system's protected store, as on
+/// every stack: a host that has none, such as a test run apart from the
+/// person's desktop and its keyring. None: the system's store.
+static STORE: std::sync::RwLock<Option<(GetSecret, SetSecret)>> = std::sync::RwLock::new(None);
+
+/// Keeps secrets with `get` and `set` instead of the system's protected store.
+pub fn use_store(get: impl Fn(&str, &str) -> Option<String> + Send + Sync + 'static, set: impl Fn(&str, &str, &str) -> crate::Result<()> + Send + Sync + 'static) {
+    *STORE.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some((Box::new(get), Box::new(set)));
+}
+
 /// The secret `name` of `program`; none when it was never kept, or the store
 /// cannot be reached.
 pub fn get(program: &str, name: &str) -> Option<String> {
+    if let Some((get, _)) = STORE.read().unwrap_or_else(|poisoned| poisoned.into_inner()).as_ref() {
+        return get(program, name);
+    }
     #[cfg(windows)]
     {
         from_windows_blob(&credentials::read(&windows_target(program, name))?)
@@ -24,6 +40,9 @@ pub fn get(program: &str, name: &str) -> Option<String> {
 
 /// Keeps `value` as the secret `name` of `program`; empty text forgets it.
 pub fn set(program: &str, name: &str, value: &str) -> crate::Result<()> {
+    if let Some((_, set)) = STORE.read().unwrap_or_else(|poisoned| poisoned.into_inner()).as_ref() {
+        return set(program, name, value);
+    }
     #[cfg(windows)]
     let done = {
         let target = windows_target(program, name);

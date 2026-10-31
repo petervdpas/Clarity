@@ -3,7 +3,7 @@
   // (conformance/ranges.json): dragged, it takes the nearest step when let
   // go; its keys move a step, ten, or to an end. Only a value that differs
   // is a change.
-  import { dragged, keyed, rangeKey, rangeValue, type Range } from "../ranges";
+  import { dragged, keyed, rangeKey, rangeValue, type Range, type RangeMove } from "../ranges";
 
   let {
     value,
@@ -16,6 +16,7 @@
     disabled = false,
     readonly = false,
     onchange,
+    onrange = undefined,
     onfocus = undefined,
     onblur = undefined,
   }: {
@@ -31,6 +32,8 @@
     readonly?: boolean;
     /** The person moved the slider to another value: Clarity's `change`. */
     onchange: (next: string | number) => void;
+    /** In a running application the runtime makes the value (DESIGN 1.7): it gets the key or the place dragged to. */
+    onrange?: (move: RangeMove) => void;
     onfocus?: () => void;
     onblur?: () => void;
   } = $props();
@@ -46,6 +49,10 @@
     const k = rangeKey(e.key);
     if (k === null) return;
     e.preventDefault();
+    if (onrange) {
+      if (!readonly) onrange({ key: k });
+      return;
+    }
     take(keyed(value ?? null, range, k));
   }
 </script>
@@ -64,7 +71,7 @@
   aria-describedby={describedBy}
   aria-readonly={readonly}
   {disabled}
-  onchange={(e) => take(dragged(e.currentTarget.value, range))}
+  onchange={(e) => (onrange ? !readonly && onrange({ at: e.currentTarget.value }) : take(dragged(e.currentTarget.value, range)))}
   onkeydown={key}
   {onfocus}
   {onblur}

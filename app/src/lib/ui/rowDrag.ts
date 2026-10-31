@@ -4,7 +4,10 @@
 // Pointer events, not the browser's drag and drop, so it works alike in every
 // desktop window and browser.
 
-import type { Move } from "./reorder.ts";
+/** A row moved: dropped before, after or (in a tree) into another, or moved with Alt and an arrow; places count from 0 in the list. The runtime decides what it makes of it (conformance/reorder.json). */
+export type Move =
+  | { row: number; where: "before" | "after" | "into"; target: number }
+  | { row: number; key: "up" | "down" | "left" | "right" };
 
 /** What a container of rows needs to move them. */
 export type RowDrag = {

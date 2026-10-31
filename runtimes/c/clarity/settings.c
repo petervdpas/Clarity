@@ -84,6 +84,46 @@ bool clarity_keep_settings(const char* program, const cJSON* values) {
 
 ClaritySecretStore clarity_secret_store = {0};
 
+// Each secret as the store holds it now, as read or kept, by program and
+// name; one never kept is "". Only a secret that changed goes to the store:
+// another setting changing never needs it, nor fails where it cannot be reached.
+typedef struct KeptSecret {
+    char* program;
+    char* name;
+    char* value;
+    struct KeptSecret* next;
+} KeptSecret;
+
+static KeptSecret* kept_secrets = NULL;
+
+static KeptSecret* kept_secret(const char* program, const char* name) {
+    for (KeptSecret* k = kept_secrets; k; k = k->next) {
+        if (strcmp(k->program, program) == 0 && strcmp(k->name, name) == 0) return k;
+    }
+    return NULL;
+}
+
+static char* copied(const char* text) {
+    size_t length = strlen(text) + 1;
+    char* copy = malloc(length);
+    if (copy) memcpy(copy, text, length);
+    return copy;
+}
+
+static void remember_secret(const char* program, const char* name, const char* value) {
+    KeptSecret* k = kept_secret(program, name);
+    if (!k) {
+        k = calloc(1, sizeof *k);
+        if (!k) return;
+        k->program = copied(program);
+        k->name = copied(name);
+        k->next = kept_secrets;
+        kept_secrets = k;
+    }
+    free(k->value);
+    k->value = copied(value);
+}
+
 cJSON* clarity_read_settings_with(const char* program, const cJSON* secrets) {
     cJSON* values = clarity_read_settings(program);
     const cJSON* name;
@@ -91,7 +131,10 @@ cJSON* clarity_read_settings_with(const char* program, const cJSON* secrets) {
         if (!cJSON_IsString(name)) continue;
         cJSON_DeleteItemFromObjectCaseSensitive(values, name->valuestring);
         const char* secret = clarity_secret_store.get ? clarity_secret_store.get(program, name->valuestring) : NULL;
-        if (secret) cJSON_AddStringToObject(values, name->valuestring, secret);
+        if (secret) {
+            cJSON_AddStringToObject(values, name->valuestring, secret);
+            remember_secret(program, name->valuestring, secret);
+        }
     }
     return values;
 }
@@ -104,9 +147,14 @@ bool clarity_keep_settings_with(const char* program, const cJSON* values, const 
         const cJSON* value = cJSON_GetObjectItemCaseSensitive(plain, name->valuestring);
         if (!value) continue;
         const char* text = cJSON_IsString(value) ? value->valuestring : "";
-        if (clarity_secret_store.set && !clarity_secret_store.set(program, name->valuestring, text)) {
-            cJSON_Delete(plain);
-            return false;
+        KeptSecret* was = kept_secret(program, name->valuestring);
+        const char* before = was && was->value ? was->value : "";
+        if (clarity_secret_store.set && strcmp(before, text) != 0) {
+            if (!clarity_secret_store.set(program, name->valuestring, text)) {
+                cJSON_Delete(plain);
+                return false;
+            }
+            remember_secret(program, name->valuestring, text);
         }
         cJSON_DeleteItemFromObjectCaseSensitive(plain, name->valuestring);
     }

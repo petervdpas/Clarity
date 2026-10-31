@@ -4,8 +4,11 @@
 //! contracts. It is published as the crate clarity-runtime, which every
 //! generated project depends on.
 
+pub mod charts;
 pub mod cli;
 pub mod dialect;
+pub mod dropdown_options;
+pub mod edits;
 #[cfg(feature = "engines")]
 pub mod engine;
 pub mod files;
@@ -13,18 +16,25 @@ pub mod files;
 pub mod http;
 pub mod i18n;
 pub mod json;
+pub mod list_fields;
 pub mod picture;
 pub mod query;
 #[cfg(feature = "parts")]
 pub mod parts;
+pub mod ranges;
 pub mod record_file;
+pub mod reorder;
 #[cfg(feature = "secrets")]
 pub mod secrets;
 pub mod serve;
 pub mod settings;
 pub mod sql;
+pub mod steps;
 mod store;
+pub mod tables;
+pub mod trees;
 pub mod ui;
+pub mod views;
 
 #[cfg(feature = "mssql")]
 mod mssql;

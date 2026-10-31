@@ -82,6 +82,7 @@ pub fn read_with(program: &str, secrets: &[&str]) -> Map<String, Value> {
     for name in secrets {
         values.remove(*name);
         if let Some(secret) = crate::secrets::get(program, name) {
+            kept_secrets().insert((program.to_string(), name.to_string()), secret.clone());
             values.insert(name.to_string(), Value::String(secret));
         }
     }
@@ -95,8 +96,24 @@ pub fn keep_with(program: &str, values: &Map<String, Value>, secrets: &[&str]) -
     let mut plain = values.clone();
     for name in secrets {
         if let Some(value) = plain.remove(*name) {
-            crate::secrets::set(program, name, value.as_str().unwrap_or_default())?;
+            let text = value.as_str().unwrap_or_default();
+            let key = (program.to_string(), name.to_string());
+            // Only a secret that changed goes to the store: another setting
+            // changing never needs it, nor fails where it cannot be reached.
+            if kept_secrets().get(&key).map_or("", String::as_str) == text {
+                continue;
+            }
+            crate::secrets::set(program, name, text)?;
+            kept_secrets().insert(key, text.to_string());
         }
     }
     keep(program, &plain)
+}
+
+/// Each secret as the protected store holds it now, as read or kept, by
+/// program and name; none is empty.
+#[cfg(feature = "secrets")]
+fn kept_secrets() -> std::sync::MutexGuard<'static, std::collections::HashMap<(String, String), String>> {
+    static KEPT: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<(String, String), String>>> = std::sync::OnceLock::new();
+    KEPT.get_or_init(Default::default).lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }

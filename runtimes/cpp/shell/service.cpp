@@ -5,6 +5,7 @@
 
 #include "shell/shell.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -18,7 +19,15 @@
 extern char** environ;
 #endif
 
+#include "clarity/dropdown_options.hpp"
+#include "clarity/edits.hpp"
+#include "clarity/list_fields.hpp"
+#include "clarity/paths.hpp"
+#include "clarity/ranges.hpp"
+#include "clarity/reorder.hpp"
 #include "clarity/settings.hpp"
+#include "clarity/steps.hpp"
+#include "clarity/views.hpp"
 
 namespace clarity::shell {
 
@@ -35,6 +44,31 @@ json failed(const std::exception& e) {
 json value(json v) { return {{"value", std::move(v)}}; }
 
 std::string text_of(const json& args, const char* key) { return args.contains(key) && args[key].is_string() ? args[key].get<std::string>() : ""; }
+
+/// A number as text, as a range reads it: none for null or empty text.
+std::optional<std::string> number_text(const json& v) {
+    if (v.is_string()) return v.get<std::string>().empty() ? std::nullopt : std::optional(v.get<std::string>());
+    if (v.is_number()) return v.dump();
+    return std::nullopt;
+}
+
+std::optional<std::string> number_of(const json& args, const char* key) { return args.contains(key) ? number_text(args[key]) : std::nullopt; }
+
+/// A window's reply, which is where its edits start (DESIGN 5.29): what a
+/// handler changed is never the person's edit. Its views show what its
+/// lists are now (DESIGN 1.7); `sent`, for a view_event, the chosen rows
+/// the screen sent.
+json answered(Reply reply, const std::map<std::string, int>* sent = nullptr) {
+    fill_views(reply.state, sent);
+    edits_of(reply.state.instance)->reset(edit_data(reply.state));
+    return value(reply);
+}
+
+/// The reply keeps the views of the window a handler ran on, when it gave none of its own.
+Reply with_views(Reply reply, const WindowState& state) {
+    if (reply.state.views.empty() && reply.state.window == state.window) reply.state.views = state.views;
+    return reply;
+}
 
 }  // namespace
 
@@ -72,11 +106,31 @@ Reply Service::on_event(const WindowState& state, const std::string& event) {
 Reply Service::drawn(const WindowState& state) { return options_.windows->redraw(*options_.db, Ui(state).reply(state.window, state.data)); }
 
 Reply Service::dispatch(const WindowState& state, const std::string& handler) {
-    return options_.windows->redraw(*options_.db, options_.windows->dispatch(*options_.db, state, handler));
+    return options_.windows->redraw(*options_.db, with_views(options_.windows->dispatch(*options_.db, state, handler), state));
+}
+
+Reply Service::stepped(const WindowState& state, const std::string& handler, std::vector<int64_t>* steps) {
+    Db& db = *options_.db;
+    int64_t before = db.last_step();
+    Reply reply;
+    db.step([&] { reply = dispatch(state, handler); });
+    if (db.last_step() != before) {
+        reply.step = db.last_step();
+        if (steps) steps->push_back(reply.step);
+    }
+    return reply;
+}
+
+Reply Service::edited(const WindowState& state, const std::string& part, const std::string& scope, const std::string& handler) {
+    std::vector<int64_t> steps;
+    Reply reply = handler.empty() ? drawn(state) : stepped(state, handler, &steps);
+    if (!scope.empty()) edits_of(state.instance)->edit(part, scope, edit_data(reply.state), steps);
+    return reply;
 }
 
 bool Service::watches(const std::string& command) {
-    static const std::set<std::string> watched{"start_app", "open_window", "close_window", "return_to", "dispatch_event", "answer_event"};
+    static const std::set<std::string> watched{"start_app", "open_window", "close_window", "return_to", "dispatch_event", "answer_event", "edit_event",
+                                                "reorder_event", "item_event", "range_event", "step_event"};
     return watched.contains(command);
 }
 
@@ -145,38 +199,162 @@ json Service::answer(const std::string& command, const json& args, Desktop* call
             keep_settings_with(options_.name, settings, args.value("secrets", json(nullptr)));
             return value(nullptr);
         }
-        if (command == "open_window") return value(on_event(options_.windows->open(db, text_of(args, "window"), with), "open"));
+        if (command == "open_window") return answered(on_event(options_.windows->open(db, text_of(args, "window"), with), "open"));
         if (command == "close_window") {
             auto reply = on_event(state, "close");
-            // The window has closed: what it had of an engine goes.
+            // The window has closed: what it had of an engine goes, and its edits.
             window_closed(state.instance);
+            edits_closed(state.instance);
             return value(reply);
         }
-        if (command == "return_to") return value(on_event(state, "return"));
-        if (command == "start_app") return value(on_event(WindowState{}, "start"));
-        if (command == "dispatch_event") {
-            // One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
-            int64_t before = db.last_step();
-            Reply reply;
-            db.step([&] { reply = dispatch(state, text_of(args, "handler")); });
-            if (db.last_step() != before) reply.step = db.last_step();
-            return value(reply);
+        if (command == "return_to") return answered(on_event(state, "return"));
+        if (command == "start_app") return answered(on_event(WindowState{}, "start"));
+        // One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
+        if (command == "dispatch_event") return answered(stepped(state, text_of(args, "handler")));
+        if (command == "edit_event") {
+            // The person ended an edit of a part (DESIGN 5.29): its handler runs as
+            // one database step, and the edit goes on the window's record with
+            // what it changed. A drag goes on until its drop.
+            std::string handler = text_of(args, "handler");
+            std::vector<int64_t> steps;
+            Reply reply = handler.empty() ? drawn(state) : stepped(state, handler, &steps);
+            auto bus = edits_of(state.instance);
+            if (args.value("ends", false)) bus->edit(text_of(args, "part"), text_of(args, "scope"), edit_data(reply.state), steps);
+            else bus->drag(text_of(args, "part"), text_of(args, "scope"), steps);
+            return answered(reply);
         }
-        if (command == "undo_step") {
-            // A step taken back or done again, on the window's data as the screen put it back.
-            int64_t step = args.contains("step") && args["step"].is_number_integer() ? args["step"].get<int64_t>() : 0;
-            if (step > 0) {
-                if (args.value("back", false)) db.undo(step);
-                else db.redo(step);
+        // The person's actions the runtime decides (DESIGN 1.7): it changes the
+        // window's data, and the change ends as an edit does.
+        std::string part = text_of(args, "part");
+        std::string scope = text_of(args, "scope");
+        std::string handler = text_of(args, "handler");
+        if (command == "reorder_event") {
+            // A row moved (DESIGN 5.30): the list's new order, each row's number
+            // in `by` and, in a tree, its parent; the moved row is chosen.
+            std::string list = text_of(args, "list"), by = text_of(args, "by"), parent = text_of(args, "parent");
+            json rows = value_at(state.data, list);
+            if (!rows.is_array()) throw InvalidError(list + " is no list to reorder");
+            bool tree = !parent.empty();
+            std::vector<ReorderRow> places;
+            for (const auto& row : rows) {
+                bool record = row.is_object();
+                places.push_back({record ? row.value("id", json(nullptr)) : json(nullptr), tree && record ? row.value(parent, json(nullptr)) : json(nullptr)});
             }
-            return value(drawn(state));
+            RowMove move = move_of(args.value("move", json(nullptr)));
+            auto moved = reorder(places, move, tree);
+            if (!moved) return answered(drawn(state));
+            json after = json::array();
+            for (size_t i = 0; i < moved->order.size(); ++i) {
+                json row = rows[size_t(moved->order[i])];
+                if (row.is_object() && !by.empty()) row[by] = moved->numbers[i];
+                if (row.is_object() && tree) row[parent] = moved->parents[i];
+                after.push_back(std::move(row));
+            }
+            WindowState changed = state;
+            place_at(changed.data, list) = std::move(after);
+            auto at = std::find(moved->order.begin(), moved->order.end(), move.row);
+            changed.selected[part] = int(at - moved->order.begin());
+            return answered(edited(changed, part, scope, handler));
+        }
+        if (command == "item_event") {
+            // A typed item of a list field (U1c): added, or refused with the list as it was.
+            std::string path = text_of(args, "path");
+            json before = value_at(state.data, path);
+            if (!before.is_array()) before = json::array();
+            auto added = add_typed(text_of(args, "item"), before, text_of(args, "typed"), args.value("values", json::array()));
+            if (added.refused || added.items == before) {
+                Reply reply = drawn(state);
+                reply.refused = added.refused;
+                return answered(reply);
+            }
+            WindowState changed = state;
+            place_at(changed.data, path) = added.items;
+            return answered(edited(changed, part, scope, handler));
+        }
+        if (command == "range_event") {
+            // A slider's or spin box's value after a key, a drag to a place or typed text.
+            std::string path = text_of(args, "path");
+            NumberRange range{number_of(args, "min"), number_of(args, "max"), number_of(args, "step").value_or("1")};
+            json before = value_at(state.data, path);
+            json now;
+            if (args.contains("key")) {
+                now = range_value(keyed(number_text(before), range, text_of(args, "key")), args.value("whole", false));
+            } else if (args.contains("at")) {
+                now = range_value(dragged(number_of(args, "at").value_or("0"), range), args.value("whole", false));
+            } else if (args.contains("typed")) {
+                // Nothing typed is no value.
+                auto typed = number_of(args, "typed");
+                now = typed ? range_value(typed_in(*typed, range), args.value("whole", false)) : json(nullptr);
+            } else {
+                throw InvalidError("range_event takes a key, a place (at) or typed text");
+            }
+            if (now == before) return answered(drawn(state));
+            WindowState changed = state;
+            place_at(changed.data, path) = std::move(now);
+            return answered(edited(changed, part, scope, handler));
+        }
+        if (command == "step_event") {
+            // Next, Back or Finish on a wizard (DESIGN 5.15): Next runs on next on
+            // the step shown and moves on, unless it refused or set the step itself.
+            std::string button = text_of(args, "button");
+            int64_t count = args.value("steps", int64_t(1));
+            WindowState at = state;
+            auto& step = at.parts[part].step;
+            int64_t shown = shown_step(step, count);
+            if (button == "back") {
+                step = step_after_back(step, count);
+                return answered(drawn(at));
+            }
+            if (button == "finish") {
+                std::string finish = text_of(args, "finish");
+                return answered(finish.empty() ? drawn(at) : stepped(at, finish));
+            }
+            if (button != "next") throw InvalidError("a wizard has no button " + button);
+            step = shown;
+            std::string next = text_of(args, "next");
+            Reply reply = next.empty() ? drawn(at) : stepped(at, next);
+            auto& left = reply.state.parts[part].step;
+            left = step_after_next(shown, left, count);
+            return answered(reply);
+        }
+        if (command == "view_event") {
+            // The person sorted, turned a page or opened a tree row (DESIGN 1.7):
+            // the part's view changes and the window is answered. Never an edit.
+            WindowState changed = state;
+            view_action(changed, part, args.value("action", json::object()));
+            return answered(drawn(changed), &state.selected);
+        }
+        if (command == "undo_edit") {
+            // Ctrl+Z (back) or Ctrl+Y on a scope: its last edit taken back or done
+            // again, with its database steps, and the window as it was.
+            auto data = edits_of(state.instance)->undo(text_of(args, "scope"), edit_data(state), args.value("back", false), [&](const std::vector<int64_t>& steps, bool back) {
+                for (int64_t step : steps) {
+                    if (back) db.undo(step);
+                    else db.redo(step);
+                }
+            });
+            return answered(drawn(data ? with_edit_data(state, *data) : state));
         }
         if (command == "answer_event") {
             // The answer to a question a handler asked runs the handler it goes to.
             json values = args.contains("values") && args["values"].is_array() ? args["values"] : json::array();
-            return value(options_.windows->redraw(db, options_.windows->answer(db, state, text_of(args, "handler"), values)));
+            return answered(options_.windows->redraw(db, with_views(options_.windows->answer(db, state, text_of(args, "handler"), values), state)));
         }
         if (command == "ref_options") return value(options_.windows->options(db, text_of(args, "entity")));
+        if (command == "find_options") {
+            // What a dropdown offers for typed text (U1c): a typed one the values
+            // its field has, a search one the records with the fields it shows.
+            std::string kind = text_of(args, "kind"), entity = text_of(args, "entity"), typed = text_of(args, "typed");
+            if (kind == "typed") return value(suggestions(options_.windows->values(db, entity, text_of(args, "field")), typed));
+            if (kind == "search") {
+                std::vector<std::string> show;
+                if (args.contains("show") && args["show"].is_array())
+                    for (const auto& name : args["show"])
+                        if (name.is_string()) show.push_back(name);
+                return value(searched(options_.windows->options(db, entity), typed, show));
+            }
+            return {{"error", "a dropdown finds its options typed or by search, not " + kind}};
+        }
         if (command == "field_values") return value(options_.windows->values(db, text_of(args, "entity"), text_of(args, "field")));
         if (command == "picture") {
             // A picture of a record, fetched on its own, as the page shows it.

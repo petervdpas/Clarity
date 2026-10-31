@@ -71,3 +71,29 @@ void a_list_is_kept_as_compact_json(void) {
     CHECK(!clarity_get_integers("tags", clarity_text_value("[\"x\"]"), &wrong));
     cJSON_Delete(cases);
 }
+
+void a_typed_item_is_added_as_every_runtime_adds_it(void) {
+    cJSON* cases = conformance("list-fields.json");
+    REQUIRE(cases);
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItem(cases, "added")) {
+        cJSON* got = clarity_item_added(cJSON_GetObjectItem(c, "item")->valuestring, NULL, cJSON_GetObjectItem(c, "items"), cJSON_GetObjectItem(c, "typed")->valuestring);
+        const char* typed = cJSON_GetObjectItem(c, "typed")->valuestring;
+        if (cJSON_IsTrue(cJSON_GetObjectItem(c, "refused"))) {
+            if (got) check_fail(__FILE__, __LINE__, clarity_format("'%s' was not refused", typed));
+            continue;
+        }
+        if (!got || !check_json(got, cJSON_PrintUnformatted(cJSON_GetObjectItem(c, "gives"))))
+            check_fail(__FILE__, __LINE__, clarity_format("'%s' gives %s", typed, got ? cJSON_PrintUnformatted(got) : "a refusal"));
+    }
+    // An enum's list takes only its values, and a date list only dates.
+    cJSON* genres = cJSON_Parse("[\"Jazz\",\"Rock\"]");
+    CHECK_JSON(clarity_item_added("enum", genres, cJSON_Parse("[\"Jazz\"]"), " Rock"), "[\"Jazz\",\"Rock\"]");
+    CHECK(!clarity_item_added("enum", genres, cJSON_Parse("[\"Jazz\"]"), "Polka"));
+    CHECK_JSON(clarity_item_added("date", NULL, cJSON_Parse("[]"), "2026-10-31"), "[\"2026-10-31\"]");
+    CHECK(!clarity_item_added("date", NULL, cJSON_Parse("[]"), "tomorrow"));
+    // A list not set yet is empty; 1.50 is the 1.5 the list has.
+    CHECK_JSON(clarity_item_added("text", NULL, NULL, "jazz"), "[\"jazz\"]");
+    CHECK_JSON(clarity_item_added("decimal", NULL, cJSON_Parse("[\"1.5\"]"), "1.50"), "[\"1.5\"]");
+    cJSON_Delete(cases);
+}

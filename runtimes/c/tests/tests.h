@@ -24,12 +24,22 @@
     X(dates_and_times_read_and_write_as_text)                     \
     X(the_settings_file_is_where_every_runtime_puts_it)           \
     X(settings_kept_are_read_back)                               \
+    X(a_secret_goes_to_the_store_only_when_it_changed)           \
     X(a_folder_setting_is_where_every_runtime_puts_a_store)      \
     X(a_store_keeps_its_files_in_a_folder_setting)               \
     X(a_file_in_a_store_is_kept_under_its_name_in_a_folder_of_its_contents) \
     X(a_copy_goes_to_the_downloads_folder_under_a_free_name)     \
     X(a_file_is_kept_with_its_name_in_the_database_or_its_store) \
     X(a_list_is_kept_as_compact_json)                             \
+    X(a_typed_item_is_added_as_every_runtime_adds_it)             \
+    X(every_reorder_case_moves_as_every_runtime_does)             \
+    X(every_range_case_moves_as_every_runtime_does)               \
+    X(a_wizard_walks_its_steps_as_every_runtime_does)             \
+    X(a_dropdown_offers_what_every_runtime_offers)                \
+    X(a_table_shows_its_rows_in_the_order_every_runtime_does)     \
+    X(a_table_pages_its_rows_as_every_runtime_does)               \
+    X(a_tree_shows_its_rows_as_every_runtime_does)                \
+    X(a_chart_groups_its_rows_as_every_runtime_does)              \
     X(text_travels_as_the_other_runtimes_send_it)                 \
     X(the_scratch_arena_is_emptied_after_a_command)               \
     X(every_query_case_gives_its_sql_on_every_database)           \
@@ -56,7 +66,16 @@
     X(a_window_opens_with_its_data_and_with)                      \
     X(the_shell_answers_the_renderers_commands)                   \
     X(a_long_handler_shows_how_far_it_is_and_stops)              \
-    X(a_handler_answers_with_its_step_and_undo_step_takes_it_back) \
+    X(the_runtime_keeps_the_edits_and_ctrl_z_takes_them_back)  \
+    X(the_runtime_reorders_a_list_and_ctrl_z_puts_it_back)     \
+    X(the_runtime_adds_a_typed_item_or_refuses_it)             \
+    X(the_runtime_moves_a_value_within_its_range)              \
+    X(the_runtime_walks_a_wizard)                              \
+    X(the_runtime_finds_a_dropdowns_options)                   \
+    X(a_reply_fills_the_shown_rows_of_its_views)               \
+    X(a_view_event_sorts_pages_opens_and_closes)               \
+    X(the_edit_bus_keeps_the_record_as_every_runtime_does)     \
+    X(a_parts_own_text_and_tick_are_edit_data)                 \
     X(the_server_serves_the_page_and_answers_its_commands)        \
     X(the_server_listens_where_it_is_told)                        \
     X(every_open_window_has_its_own_number)                       \

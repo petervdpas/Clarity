@@ -4,8 +4,7 @@
   import { untrack } from "svelte";
   import DateTimeInput from "./ui/DateTimeInput.svelte";
   import Table, { type CellKind, type TableColumn } from "./ui/Table.svelte";
-  import { reorder as reorderRows, type Move } from "./ui/reorder";
-  import { keyMove, rowDrag } from "./ui/rowDrag";
+  import { keyMove, rowDrag, type Move } from "./ui/rowDrag";
   import CheckInput from "./ui/CheckInput.svelte";
   import ChoiceInput from "./ui/ChoiceInput.svelte";
   import DateInput from "./ui/DateInput.svelte";
@@ -22,7 +21,7 @@
   import { groupsOf, type ByKind } from "./ui/charts";
   import { searched, suggestions, type RefOption } from "./dropdownOptions";
   import type { Item, ItemKind } from "./listFields";
-  import { numberRange } from "./ranges";
+  import { numberRange, type RangeMove } from "./ranges";
   import RadioInput from "./ui/RadioInput.svelte";
   import TextInput from "./ui/TextInput.svelte";
   import SegmentDisplay from "./ui/SegmentDisplay.svelte";
@@ -177,7 +176,7 @@
   function setValue(next: JsonValue) {
     if (!bound) return;
     // An edit for undo (DESIGN 5.29): the path, what it was and what it is now.
-    if (live && !design && p.name && p.bind) live.edited?.(p.name, p.bind, structuredClone($state.snapshot(bound.record[bound.field.name.name] as unknown)) as JsonValue, next);
+    if (live && !design && p.name && p.bind) live.edited?.(p.name);
     bound.record[bound.field.name.name] = next;
     // A setting is kept at once, and switches the language or theme it names.
     if (live && !design && p.bind?.split(".")[0] === "settings") live.keepSettings();
@@ -257,6 +256,11 @@
   function pressStep(button: StepButton) {
     if (design) return;
     const count = widget.pages.length;
+    // In a running application the runtime decides the step (DESIGN 1.7); a preview moves on its own.
+    if (live?.step && p.name) {
+      void live.step(p.name, button, count, wiredCall(p.handlers, "next"), wiredCall(p.handlers, "finish"));
+      return;
+    }
     if (button === "back") goBack(stepPlace, count);
     else if (button === "next") void goNext(stepPlace, count, wiredCall(p.handlers, "next") !== null ? () => fire("next") : undefined);
     else void fire("finish");
@@ -329,29 +333,31 @@
     if (other) fire("select");
   }
 
+  /**
+   * What the person did to a bound slider or spin box, in a running
+   * application: the runtime makes the value within the range and runs
+   * `on change`, as one edit (DESIGN 1.7). Elsewhere the input makes it.
+   */
+  const rangeMoved = $derived(
+    live?.range && p.name && p.bind && bound
+      ? (move: RangeMove) => void live.range!(p.name!, { path: p.bind!, min: range.min, max: range.max, step: range.step, whole, ...move }, wiredCall(p.handlers, "change"))
+      : undefined,
+  );
+
   /** Whether the person moves this part's rows now (`reorder by`, DESIGN 5.30). */
   const reorders = $derived(!!p.reorder && !!live && !design && !disabled);
 
   /**
-   * A row moved by the person (DESIGN 5.30): the list takes its new order,
-   * each row its number in the `reorder by` field (and in a tree its parent),
-   * as one edit for undo. Then the moved row is chosen and `on reorder` runs.
+   * A row moved by the person (DESIGN 5.30): the runtime gives the list its
+   * new order, each row its number in the `reorder by` field (and in a tree
+   * its parent), chooses the moved row and runs `on reorder`, as one edit.
    */
   function reordered(move: Move) {
-    if (!live || design || !p.name || !p.bind || !p.reorder || !Array.isArray(collection?.rows)) return;
-    const rows = collection.rows as Record<string, JsonValue>[];
+    if (!live || design || !p.name || !p.bind || !p.reorder || !collection) return;
     const tree = p.kind === "tree" || p.kind === "treeTable";
     const own = collection.entity;
-    const parent = tree ? own.fields.find((f) => f.type.kind === "ref" && f.type.entity.name === own.name.name)?.name.name : undefined;
-    const moved = reorderRows(rows.map((r) => ({ id: r.id, parent: parent ? (r[parent] ?? null) : null })), move, tree);
-    if (!moved) return;
-    const before = structuredClone($state.snapshot(rows) as unknown) as Record<string, JsonValue>[];
-    const field = p.reorder;
-    const after = moved.order.map((place, i) => ({ ...before[place], [field]: moved.numbers[i], ...(parent ? { [parent]: moved.parents[i] as JsonValue } : {}) }));
-    live.edited?.(p.name, p.bind, before as JsonValue, structuredClone(after) as JsonValue);
-    rows.splice(0, rows.length, ...after);
-    live.select(p.name, moved.order.indexOf(move.row));
-    void fire("reorder");
+    const parent = tree ? (own.fields.find((f) => f.type.kind === "ref" && f.type.entity.name === own.name.name)?.name.name ?? null) : null;
+    void live.reorder?.(p.name, { list: p.bind, by: p.reorder, parent, move }, wiredCall(p.handlers, "reorder"));
   }
 
   /** A column's width dragged in the designer: written into the part, 0 taking it away. */
@@ -388,6 +394,43 @@
       };
     });
   });
+
+  /**
+   * What this table, tree or chart shows of its list, for the runtime to fill
+   * in (DESIGN 1.7): declared when it shows in a running application.
+   */
+  const viewDeclared = $derived.by((): Record<string, unknown> | null => {
+    if (!live || design || !p.name || !p.bind || !collection) return null;
+    if (p.kind === "table") {
+      return {
+        kind: "table",
+        list: p.bind,
+        columns: tableColumns.map((c) => ({ field: c.field, kind: c.kind, choices: (c.choices ?? []).map((ch) => [ch.value, ch.label]) })),
+        order: p.order ? { field: p.order.field, desc: p.order.desc } : null,
+        page: p.page ?? null,
+      };
+    }
+    if (p.kind === "tree" || p.kind === "treeTable") {
+      const own = collection.entity;
+      const parent = own.fields.find((f) => f.type.kind === "ref" && f.type.entity.name === own.name.name)?.name.name ?? "parent";
+      return { kind: "tree", list: p.bind, parent, key: "id" };
+    }
+    if (p.kind === "chart" && p.chart && p.by) {
+      const own = collection.entity;
+      const type = findField(own, p.by)?.type;
+      const byKind = type?.kind === "enum" ? "enum" : type?.kind === "bool" ? "bool" : type && ["integer", "decimal", "money", "duration", "id"].includes(type.kind) ? "number" : type?.kind === "date" || type?.kind === "dateTime" ? "date" : "text";
+      const values = type?.kind === "enum" ? (findEnum(preview, type.name.name)?.variants ?? []).map((v) => v.name.name) : [];
+      const measure = p.measure;
+      return { kind: "chart", list: p.bind, by: p.by, byKind, measure: measure?.kind ?? "count", of: measure && measure.kind !== "count" ? measure.field : null, values };
+    }
+    return null;
+  });
+  $effect(() => {
+    if (viewDeclared && p.name) live?.declareView?.(p.name, viewDeclared);
+  });
+  /** What the runtime filled in of this part's view; none in the designer or before the first answer. */
+  const viewFilled = $derived(live && p.name ? (live.views?.[p.name] ?? null) : null);
+  const onview = $derived(live?.view && p.name ? (action: Record<string, unknown>) => void live.view!(p.name!, action) : undefined);
 
   /** What a cell of a field's type holds. */
   function cellKind(kind: string): CellKind {
@@ -580,6 +623,7 @@
         {readonly}
         {range}
         {whole}
+        onrange={rangeMoved}
         onchange={(next) => {
           if (bound) setValue(next);
           else setText(String(next));
@@ -651,6 +695,19 @@
           setValue(next);
           fire("change");
         }}
+        onadd={live?.item && p.name && p.bind
+          ? (typed) =>
+              live.item!(
+                p.name!,
+                {
+                  path: p.bind!,
+                  item: listed?.kind === "enum" ? "enum" : (listed?.kind ?? "text"),
+                  values: listed?.kind === "enum" ? (findEnum(preview, listed.name.name)?.variants ?? []).map((v) => v.name.name) : [],
+                  typed,
+                },
+                wiredCall(p.handlers, "change"),
+              )
+          : undefined}
       />
     {:else if p.kind === "color"}
       <ColorInput
@@ -673,6 +730,7 @@
         value={bound ? (value as string | number | null) : shown}
         {range}
         {whole}
+        onrange={rangeMoved}
         tabindex={p.tabOrder ?? undefined}
         {describedBy}
         {disabled}
@@ -759,7 +817,9 @@
         text={typeof value === "string" ? value : ""}
         free
         offer={(typed) =>
-          suggestions(known, typed).map((v) => ({ key: v, cells: [v] }))}
+          live?.findOptions && owner && fieldName
+            ? live.findOptions({ kind: "typed", entity: owner, field: fieldName, typed }).then((list) => list.map((v) => ({ key: v, cells: [v] })))
+            : suggestions(known, typed).map((v) => ({ key: v, cells: [v] }))}
         tabindex={p.tabOrder ?? undefined}
         {describedBy}
         invalid={error !== null}
@@ -784,7 +844,10 @@
       <TypeAheadInput
         {id}
         text={records.find((o) => o.id === value || o.text === value)?.text ?? ""}
-        offer={(typed) => searched(records, typed, cellsOf).map((o) => ({ key: String(o.id), cells: [o.text, ...cellsOf(o)] }))}
+        offer={(typed) =>
+          live?.findOptions
+            ? live.findOptions({ kind: "search", entity: target, show: p.show, typed }).then((list) => list.map((o) => ({ key: String(o.id), cells: [o.text, ...cellsOf(o)] })))
+            : searched(records, typed, cellsOf).map((o) => ({ key: String(o.id), cells: [o.text, ...cellsOf(o)] }))}
         tabindex={p.tabOrder ?? undefined}
         {describedBy}
         invalid={error !== null}
@@ -974,10 +1037,12 @@
         onchanged={(record, field, before, after) => {
           // The cell's path in the window's data, by the record's place in its list, for undo.
           const at = (collection?.rows ?? []).indexOf(record);
-          if (live && !design && p.name && p.bind && at >= 0) live.edited?.(p.name, `${p.bind}.${at}.${field}`, before, after);
+          if (live && !design && p.name && p.bind && at >= 0) live.edited?.(p.name);
         }}
         reorder={reorders}
         onreorder={reordered}
+        view={viewFilled as never}
+        {onview}
       />
     {:else if p.kind === "tree" || p.kind === "treeTable"}
       <!-- A tree (U1c): the rows under their parents, by the one reference to their own kind. -->
@@ -1006,10 +1071,12 @@
         onchanged={(record, field, before, after) => {
           // The cell's path in the window's data, by the record's place in its list, for undo.
           const at = (collection?.rows ?? []).indexOf(record);
-          if (live && !design && p.name && p.bind && at >= 0) live.edited?.(p.name, `${p.bind}.${at}.${field}`, before, after);
+          if (live && !design && p.name && p.bind && at >= 0) live.edited?.(p.name);
         }}
         reorder={reorders}
         onreorder={reordered}
+        view={viewFilled as never}
+        {onview}
       />
     {:else if p.kind === "chart" && p.chart && bound?.field.type.kind === "values"}
       <!-- A chart of a list of numbers (DESIGN 5.26): drawn as they are, the last points of them. -->
@@ -1045,12 +1112,14 @@
         // A reference groups by the text it shows.
         return { by: byType?.kind === "ref" && value !== null && value !== undefined ? displayValue(preview, byField!, value) : value, of: ofField ? r[ofField.name.name] : null };
       })}
-      {@const groups = groupsOf(rows, by, measure?.kind ?? "count", order)}
+      <!-- The runtime's groups when it filled them in (DESIGN 1.7); a reference then groups by its record, labelled with its text. -->
+      {@const runtimeGroups = Array.isArray(viewFilled?.groups) ? (viewFilled.groups as { key: unknown; value: number }[]) : null}
+      {@const groups = runtimeGroups ?? groupsOf(rows, by, measure?.kind ?? "count", order)}
       <ChartView
         kind={p.chart}
         label={p.name ?? undefined}
         groups={groups.map((g) => ({
-          label: byField && byType?.kind !== "ref" ? displayValue(preview, byField, g.key as JsonValue) : String(g.key),
+          label: byField && (byType?.kind !== "ref" || runtimeGroups) ? displayValue(preview, byField, g.key as JsonValue) : String(g.key),
           value: g.value,
           text: ofField && measure && measure.kind !== "count" ? displayValue(preview, ofField, g.value) : String(g.value),
         }))}

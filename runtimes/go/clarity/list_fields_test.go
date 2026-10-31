@@ -106,3 +106,51 @@ func TestAListHoldsItemsByTheirValue(t *testing.T) {
 		t.Error("text as it is")
 	}
 }
+
+// A typed item for a list (the tags input): trimmed, kept once, refused
+// when it is no value of the list's kind.
+func TestATypedItemIsAddedAsEveryRuntimeAddsIt(t *testing.T) {
+	text, err := os.ReadFile("../../../conformance/list-fields.json")
+	must(t, err)
+	var file struct {
+		Added []struct {
+			Item    string          `json:"item"`
+			Items   []any           `json:"items"`
+			Typed   string          `json:"typed"`
+			Gives   json.RawMessage `json:"gives"`
+			Refused bool            `json:"refused"`
+		} `json:"added"`
+	}
+	must(t, json.Unmarshal(text, &file))
+	if len(file.Added) == 0 {
+		t.Fatal("no cases")
+	}
+	for _, c := range file.Added {
+		got, refused := AddTyped(c.Item, c.Items, c.Typed, nil)
+		if refused != c.Refused {
+			t.Errorf("%s %q: refused %v", c.Item, c.Typed, refused)
+			continue
+		}
+		if c.Refused {
+			continue
+		}
+		var want any
+		must(t, json.Unmarshal(c.Gives, &want))
+		if string(mustJSON(t, got)) != string(mustJSON(t, want)) {
+			t.Errorf("%s %q: %s, want %s", c.Item, c.Typed, mustJSON(t, got), c.Gives)
+		}
+	}
+	// An enum takes only its values; a date only a day that is.
+	if _, refused := AddTyped("enum", []any{}, "Polka", []string{"Jazz", "Rock"}); !refused {
+		t.Error("an enum took a value it has not")
+	}
+	if got, refused := AddTyped("enum", []any{}, "Rock", []string{"Jazz", "Rock"}); refused || len(got) != 1 {
+		t.Error("an enum refused its value", got)
+	}
+	if _, refused := AddTyped("date", []any{}, "2026-02-30", nil); !refused {
+		t.Error("a date took a day that is not")
+	}
+	if got, refused := AddTyped("decimal", []any{"1.5"}, "1.50", nil); refused || len(got) != 1 {
+		t.Error("1.50 is the 1.5 the list has", got)
+	}
+}

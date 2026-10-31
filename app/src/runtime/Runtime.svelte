@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { Move } from "../lib/ui/rowDrag";
+  import type { RangeMove } from "../lib/ranges";
   import type { RefOption } from "../lib/dropdownOptions";
   // A running application: the windows the backend opens, drawn by the
   // renderer, with every event sent to the backend. The backend owns the
@@ -23,7 +25,6 @@
   import { copyText } from "../lib/clipboard";
   import { catchUncaught } from "../lib/uncaught";
   import { allParts, findPage, undoScope, valueEntry, windowSize, type PageData } from "../lib/pages";
-  import { changesOf, EditBus, setPath, type Edit } from "../lib/editBus";
   import { handlerCall } from "../lib/calls";
   import type { Place } from "../lib/customParts";
   import { SoundPart } from "../lib/sound";
@@ -47,6 +48,8 @@
     data: Record<string, unknown>;
     parts: Record<string, PartState>;
     selected: Record<string, number>;
+    /** What each table, tree and chart shows of its list, filled in by the runtime (DESIGN 1.7). */
+    views?: Record<string, Record<string, unknown>>;
   };
   type Message = { level: "info" | "warning" | "error"; text: ShownText };
   type Reply = {
@@ -62,6 +65,8 @@
     hears?: { part: string; hear: string; values: JsonValue[] }[];
     /** The database step its handler made, to undo it by (DESIGN 5.29); none when it changed nothing. */
     step?: number;
+    /** What the person gave was refused, as a list item no list takes (DESIGN 1.7): the screen keeps it, marked. */
+    refused?: boolean;
   };
 
   /**
@@ -445,14 +450,7 @@
    */
   async function run(handler: string): Promise<boolean> {
     lastStep = 0;
-    if (busy) {
-      personWaiting++;
-      try {
-        while (busy) await new Promise((done) => setTimeout(done, 5));
-      } finally {
-        personWaiting--;
-      }
-    }
+    await waitTurn();
     if (!current) return false;
     busy = true;
     const index = stack.length - 1;
@@ -575,25 +573,18 @@
   // not open (DESIGN 5.27): every window closes, and closing the last connects again.
   (globalThis as unknown as { clarityCloseRequested: () => void }).clarityCloseRequested = () => void nav.closeAll();
 
-  // Undo (DESIGN 5.29): each open window has an edit bus, by its instance.
-  // Every edit of a part goes on it as a message: what changed in the
-  // window's data, and the database step its handler made. Ctrl+Z takes
-  // back the last message of the focused part's scope (its form or panel,
-  // or the part itself), so in a form it walks back field by field.
-  const buses = new Map<number, EditBus>();
-  const busOf = (instance: number) => buses.get(instance) ?? buses.set(instance, new EditBus()).get(instance)!;
+  // Undo (DESIGN 5.29): the runtime keeps each window's edits, not the
+  // screen. When the person ends an edit of a part, the screen tells the
+  // runtime (`edit_event`), with the handler the edit runs; Ctrl+Z and
+  // Ctrl+Y ask it to take back or do again the last edit of the focused
+  // part's scope (its form or panel, or the part itself) (`undo_edit`), and
+  // it answers with the window as it was.
   /**
    * The events that end an edit of a part: a canvas's drag starts one that its
    * drop ends, a click on a canvas is one, and a row moved in a part that
-   * reorders is one (DESIGN 5.30), its handler's step joined to the move.
+   * reorders is one (DESIGN 5.30).
    */
   const EDIT_ENDS = new Set<string>(["drop", "bend", "change", "reorder"]);
-  /** Paths of a part's own state (an unbound input's text) start so; no name of the window's data does. */
-  const PART_STATE = "#parts.";
-  /** The window's data where each part's edit started. */
-  const editStarts = new Map<string, Record<string, JsonValue>>();
-  /** The edit a bound input just made, which its `on change` handler joins. */
-  let lastEdit: Edit | null = null;
   /** The step the last handler made. */
   let lastStep = 0;
   /** How often the person changed the window's data or took an edit back: a tick that ran meanwhile is left out. */
@@ -602,36 +593,30 @@
   let focusedPart: string | null = null;
   /** Text inputs the person typed in since their value was last taken: Ctrl+Z there is their own text undo. */
   const typed = new WeakSet<EventTarget>();
+  /** An input's edit, sent when this moment's work is done, unless its own handler takes it along. */
+  let pendingInput: { part: string; scope: string } | null = null;
 
-  const dataNow = () => structuredClone($state.snapshot(current?.data ?? {})) as Record<string, JsonValue>;
+  /** Waits while a handler runs, ahead of what parts tell: the person's turn comes next. */
+  async function waitTurn() {
+    if (!busy) return;
+    personWaiting++;
+    try {
+      while (busy) await new Promise((done) => setTimeout(done, 5));
+    } finally {
+      personWaiting--;
+    }
+  }
 
-  /** A part's edit through its handler: the window's data before and after it, and the step it made. */
+  /** A part's event: an edit the runtime records when it ends one, else its handler as it is. */
   async function edited(part: string, event: string, handler: string): Promise<boolean> {
     personChanges++;
     const scope = page ? undoScope(page, part) : null;
-    const joining = lastEdit?.part === part ? lastEdit : null;
-    lastEdit = null;
     const canvasClick = event === "click" && page !== undefined && allParts(page).some((w) => w.props.name === part && w.props.kind === "canvas");
     if (!scope || !current || !(event === "drag" || EDIT_ENDS.has(event) || canvasClick)) return run(handler);
-    const instance = current.instance ?? 0;
-    if (!editStarts.has(part)) editStarts.set(part, dataNow());
-    if (event === "drag") return run(handler);
-    const before = editStarts.get(part)!;
-    editStarts.delete(part);
+    // The input change this handler follows is part of its edit.
+    if (pendingInput?.part === part) pendingInput = null;
     typingTaken(part);
-    const ran = await run(handler);
-    // A handler that failed left nothing behind.
-    if (!ran) return false;
-    const after = stack.find((s) => s.instance === instance);
-    if (!after) return true;
-    const changes = changesOf(before, structuredClone($state.snapshot(after.data)) as Record<string, JsonValue>);
-    if (joining) {
-      joining.changes.push(...changes);
-      joining.step = lastStep;
-    } else {
-      busOf(instance).push({ part, scope, changes, step: lastStep });
-    }
-    return true;
+    return editEvent(part, scope, handler, event !== "drag");
   }
 
   /**
@@ -643,19 +628,110 @@
     for (const input of document.querySelectorAll(`[data-part="${CSS.escape(part)}"] :is(input, textarea)`)) typed.delete(input);
   }
 
-  /** A bound input changed one path of the window's data. */
-  function inputEdited(part: string, path: string, before: JsonValue | undefined, after: JsonValue | undefined) {
+  /** The person changed an input's value (bound, or its own text or tick): an edit, unless its handler takes it along. */
+  function inputEdited(part: string) {
     personChanges++;
     const scope = page ? undoScope(page, part) : null;
     if (!scope || !current) return;
     // A tag added with Enter, say, takes the typing without a change event.
     typingTaken(part);
-    const edit: Edit = { part, scope, changes: [{ path, before, after }], step: 0 };
-    busOf(current.instance ?? 0).push(edit);
-    lastEdit = edit;
+    const pending = { part, scope };
+    pendingInput = pending;
     setTimeout(() => {
-      if (lastEdit === edit) lastEdit = null;
+      if (pendingInput !== pending) return;
+      pendingInput = null;
+      void editEvent(part, scope, null, true);
     }, 0);
+  }
+
+  /** Tells the runtime of an edit of `part`, which runs `handler` (if any) and records it; `ends` false while a drag goes on. */
+  async function editEvent(part: string, scope: string, handler: string | null, ends: boolean): Promise<boolean> {
+    lastStep = 0;
+    await waitTurn();
+    if (!current) return false;
+    busy = true;
+    const index = stack.length - 1;
+    try {
+      const reply = received(await invoke<Reply>("edit_event", { state: $state.snapshot(current), handler, part, scope, ends }));
+      lastStep = reply.step ?? 0;
+      await nav.apply(index, reply);
+      return true;
+    } catch (err) {
+      say({ level: "error", text: errorText(err) });
+      return false;
+    } finally {
+      busy = false;
+    }
+  }
+
+  /**
+   * A person's action on `part` that the runtime decides (DESIGN 1.7): sent as
+   * `command` with `args`, its outcome is an edit when the part has undo.
+   */
+  async function partEvent(part: string, command: string, args: Record<string, unknown>): Promise<boolean> {
+    personChanges++;
+    if (pendingInput?.part === part) pendingInput = null;
+    typingTaken(part);
+    const scope = page ? undoScope(page, part) : null;
+    lastStep = 0;
+    await waitTurn();
+    if (!current) return false;
+    busy = true;
+    const index = stack.length - 1;
+    try {
+      const reply = received(await invoke<Reply>(command, { state: $state.snapshot(current), part, scope, ...args }));
+      lastStep = reply.step ?? 0;
+      await nav.apply(index, reply);
+      return !reply.refused;
+    } catch (err) {
+      say({ level: "error", text: errorText(err) });
+      return false;
+    } finally {
+      busy = false;
+    }
+  }
+
+  /**
+   * A part says what it shows of its list (DESIGN 1.7): kept in the window's
+   * state, which every message carries, and filled in by the runtime. A new
+   * or changed one is filled at once; what the runtime filled stays.
+   */
+  function declareView(part: string, view: Record<string, unknown>) {
+    if (!current) return;
+    // Against what this window's part declared last: what the runtime changed since (a sort, a page) stays.
+    const key = `${current.instance ?? 0}:${part}`;
+    const written = JSON.stringify(view);
+    if (declaredViews.get(key) === written && current.views?.[part]) return;
+    declaredViews.set(key, written);
+    const was = current.views?.[part] ?? {};
+    current.views = { ...current.views, [part]: { ...was, ...view } };
+    viewsToFill.add(part);
+    queueMicrotask(() => {
+      const parts = [...viewsToFill];
+      viewsToFill.clear();
+      if (parts.length > 0) void viewEvent(parts[0], {});
+    });
+  }
+  const viewsToFill = new Set<string>();
+  /** What each window's parts declared last, by instance and part. */
+  const declaredViews = new Map<string, string>();
+
+  /** The person sorted, turned a page or opened a tree row: the runtime changes the part's view and answers. Never an edit. */
+  async function viewEvent(part: string, action: Record<string, unknown>): Promise<boolean> {
+    await waitTurn();
+    if (!current) return false;
+    busy = true;
+    const index = stack.length - 1;
+    try {
+      const reply = received(await invoke<Reply>("view_event", { state: $state.snapshot(current), part, action }));
+      await nav.apply(index, reply);
+      return true;
+    } catch (err) {
+      say({ level: "error", text: errorText(err) });
+      return false;
+    } finally {
+      busy = false;
+    }
   }
 
   /** Takes back (`back`) or does again the last edit of the part with the focus, or the one that had it last. */
@@ -671,34 +747,18 @@
     if (!scope) return;
     personChanges++;
     // An undo waits its turn after a handler that runs, as a click does.
-    if (busy) {
-      personWaiting++;
-      try {
-        while (busy) await new Promise((done) => setTimeout(done, 5));
-      } finally {
-        personWaiting--;
-      }
-    }
+    await waitTurn();
     if (!current) return;
-    const bus = busOf(current.instance ?? 0);
-    const edit = back ? bus.undo(scope) : bus.redo(scope);
-    if (!edit) return;
-    const data = dataNow();
-    const parts = structuredClone($state.snapshot(current.parts)) as Record<string, JsonValue>;
-    for (const c of back ? [...edit.changes].reverse() : edit.changes) {
-      const value = back ? c.before : c.after;
-      if (c.path.startsWith(PART_STATE)) setPath(parts, c.path.slice(PART_STATE.length), value);
-      else setPath(data, c.path, value);
-    }
     const index = stack.length - 1;
+    const settingsBefore = JSON.stringify($state.snapshot(current.data[SETTINGS]) ?? null);
     busy = true;
     try {
-      const reply = received(await invoke<Reply>("undo_step", { state: { ...$state.snapshot(current), data, parts }, step: edit.step, back }));
+      const reply = received(await invoke<Reply>("undo_edit", { state: $state.snapshot(current), scope, back }));
       await nav.apply(index, reply);
       // A setting taken back is kept again.
-      if (edit.changes.some((c) => c.path.split(".")[0] === SETTINGS) && current) adopt($state.snapshot(current.data[SETTINGS]));
+      const settings = current ? $state.snapshot(current.data[SETTINGS]) : undefined;
+      if (settings !== undefined && JSON.stringify(settings ?? null) !== settingsBefore) adopt(settings);
     } catch (err) {
-      bus.refused(edit, back);
       say({ level: "error", text: errorText(err) });
     } finally {
       busy = false;
@@ -743,11 +803,32 @@
     get selected() {
       return current?.selected ?? {};
     },
+    get views() {
+      return current?.views ?? {};
+    },
+    declareView(part: string, view: Record<string, unknown>) {
+      declareView(part, view);
+    },
+    view(part: string, action: Record<string, unknown>) {
+      return viewEvent(part, action);
+    },
     event(part: string, event: PartEvent, handler: string) {
       return edited(part, event, handler);
     },
-    edited(part: string, path: string, before: JsonValue | undefined, after: JsonValue | undefined) {
-      inputEdited(part, path, before, after);
+    edited(part: string) {
+      inputEdited(part);
+    },
+    reorder(part: string, rows: { list: string; by: string; parent: string | null; move: Move }, handler: string | null) {
+      return partEvent(part, "reorder_event", { ...rows, handler });
+    },
+    range(part: string, range: { path: string; min: string | null; max: string | null; step: string; whole: boolean } & RangeMove, handler: string | null) {
+      return partEvent(part, "range_event", { ...range, handler });
+    },
+    item(part: string, item: { path: string; item: string; values: string[]; typed: string }, handler: string | null) {
+      return partEvent(part, "item_event", { ...item, handler });
+    },
+    step(part: string, button: "back" | "next" | "finish", steps: number, next: string | null, finish: string | null) {
+      return partEvent(part, "step_event", { button, steps, next, finish });
     },
     select(part: string, row: number) {
       if (current) current.selected[part] = row;
@@ -755,13 +836,13 @@
     setText(part: string, text: string) {
       if (!current) return;
       // An unbound input keeps its own text: an edit of the part's state, for undo.
-      inputEdited(part, `${PART_STATE}${part}.text`, current.parts[part]?.text ?? undefined, text);
       current.parts[part] = { ...current.parts[part], text };
+      inputEdited(part);
     },
     setChecked(part: string, checked: boolean) {
       if (!current) return;
-      inputEdited(part, `${PART_STATE}${part}.checked`, current.parts[part]?.checked ?? undefined, checked);
       current.parts[part] = { ...current.parts[part], checked };
+      inputEdited(part);
     },
     screen(part: string, hear: (hear: string, values: JsonValue[]) => void) {
       // The window the canvas shows in: what it tells runs there, even if another opens over it.
@@ -821,6 +902,12 @@
           .finally(() => loading.delete(at));
       }
       return known ?? [];
+    },
+    findOptions(query: { kind: "typed" | "search"; entity: string; field?: string; show?: string[]; typed: string }) {
+      return invoke<never>("find_options", query).catch((err) => {
+        say({ level: "error", text: errorText(err) });
+        return [] as never;
+      });
     },
     refOptions(entity: string) {
       const known = options[entity];

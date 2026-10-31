@@ -46,6 +46,48 @@ TEST(settings_kept_are_read_back) {
 #endif
 }
 
+// Keeping the settings writes a secret only when it changed: another setting
+// changing never needs the protected store, nor fails where it cannot be
+// reached (DESIGN 5.27).
+TEST(a_secret_goes_to_the_store_only_when_it_changed) {
+    auto folder = std::filesystem::temp_directory_path() / "clarity-secrets-cpp";
+    std::filesystem::remove_all(folder);
+#ifdef _WIN32
+    const char* had = std::getenv("APPDATA");
+    std::string was = had ? had : "";
+    _putenv_s("APPDATA", folder.string().c_str());
+#else
+    setenv("XDG_CONFIG_HOME", folder.string().c_str(), 1);
+#endif
+    std::string token = "abc";
+    int sets = 0;
+    SecretStore before = secret_store;
+    secret_store.get = [&](const std::string&, const std::string& name) -> std::optional<std::string> {
+        return name == "token" ? std::optional<std::string>(token) : std::nullopt;
+    };
+    secret_store.set = [&](const std::string&, const std::string& name, const std::string& value) {
+        sets++;
+        if (name == "token") token = value;
+    };
+    json secrets = {"token", "other"};
+    json values = read_settings_with("clarity-secrets-test", secrets);
+    values["showToolbar"] = false;
+    keep_settings_with("clarity-secrets-test", values, secrets);
+    CHECK(sets == 0);
+    values["token"] = "xyz";
+    keep_settings_with("clarity-secrets-test", values, secrets);
+    CHECK(sets == 1 && token == "xyz");
+    // A secret never kept is empty: keeping it empty writes nothing.
+    values["other"] = "";
+    keep_settings_with("clarity-secrets-test", values, secrets);
+    CHECK(sets == 1);
+    secret_store = before;
+    std::filesystem::remove_all(folder);
+#ifdef _WIN32
+    _putenv_s("APPDATA", was.c_str());
+#endif
+}
+
 TEST(a_folder_setting_is_where_every_runtime_puts_a_store) {
     json cases = conformance("settings.json");
     for (const auto& c : cases["folders"]) {

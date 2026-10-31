@@ -936,3 +936,38 @@ fn the_web_target_serves_the_renderer() {
     has(&both, "    if std::env::args().any(|a| a == \"--serve\") {\n        let app = App(Mutex::new(db));\n");
     has(&both, "        return;\n    }\n    desktop::run(db);\n");
 }
+
+/// Backend drives frontend (DESIGN 1.7): the screen sends the person's
+/// action and the runtime decides what it does, on the desktop and on the web.
+#[test]
+fn the_runtime_decides_what_the_persons_action_does() {
+    use clarity_project::Target;
+    let project = load_sources([("sales.clarity", SALES)]);
+    let main = program(&files());
+    for (command, call) in [
+        ("reorder_event", "clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &r#move, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
+        ("item_event", "clarity_runtime::list_fields::event(db, state, &part, &path, item, &values, &typed, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
+        ("range_event", "clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &mv, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
+        ("step_event", "clarity_runtime::steps::event(db, state, &part, button, steps, next.as_deref(), finish.as_deref(), |state, handler| dispatch(db, state, handler), |state| drawn(db, state))"),
+    ] {
+        assert!(main.contains(&format!("fn {command}(app: tauri::State<App>, state: WindowState, part: String")), "{command} in\n{main}");
+        assert!(main.contains(&format!("            {command},\n")), "{command} is registered");
+        assert!(main.contains(&format!("window_reply(&sent, locked(&app, |db| {call}))")), "{command} calls\n{call}");
+    }
+    // The shown rows (DESIGN 1.7): every window reply fills the views; a view event is no edit and not watched.
+    assert!(main.contains("clarity_runtime::views::replied(sent, &mut reply)"), "{main}");
+    assert!(main.contains("fn view_event(app: tauri::State<App>, state: WindowState, part: String, action: Map<String, Value>) -> Answer<Reply> {"), "{main}");
+    assert!(main.contains("    let sent = clarity_runtime::views::Sent::view_event(&state);\n    window_reply(&sent, locked(&app, |db| clarity_runtime::views::event(state, &part, &action, |state| drawn(db, state))))"), "{main}");
+    assert!(main.contains("            view_event,\n"));
+    assert!(main.contains("let sent = clarity_runtime::views::Sent::of(&state);\n    window_reply(&sent, locked(&app, |db| clarity_runtime::stepped(db, || dispatch(db, state, &handler))))"), "{main}");
+    assert!(main.contains("fn find_options(app: tauri::State<App>, kind: String, entity: String, field: Option<String>, show: Option<Vec<String>>, typed: String) -> Answer<Value> {"), "{main}");
+    assert!(main.contains("            find_options,\n"));
+    let mut settings = shop();
+    settings.stack.targets = vec![Target::Web];
+    let web = generate(&project, &settings).unwrap();
+    let web = file(&web, "src/main.rs");
+    for command in ["reorder_event", "item_event", "range_event", "step_event", "view_event", "find_options"] {
+        assert!(web.contains(&format!("        \"{command}\" => given((|| {{")), "{command} served in\n{web}");
+    }
+    assert!(web.contains("clarity_runtime::dropdown_options::find(&kind, &show.unwrap_or_default(), &typed, || values_of(db, &entity, field.as_deref().unwrap_or_default()), || options(db, &entity))"), "{web}");
+}

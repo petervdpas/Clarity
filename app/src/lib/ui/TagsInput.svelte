@@ -18,6 +18,7 @@
     disabled = false,
     readonly = false,
     onchange,
+    onadd = undefined,
   }: {
     items: Item[] | null | undefined;
     kind: ItemKind;
@@ -33,6 +34,11 @@
     readonly?: boolean;
     /** The person added or removed an item: Clarity's `change`. */
     onchange: (next: Item[]) => void;
+    /**
+     * In a running application the runtime adds an item (DESIGN 1.7): it gets
+     * what was typed or picked, and says false when it refused it.
+     */
+    onadd?: (typed: string) => Promise<boolean>;
   } = $props();
 
   const list = $derived(items ?? []);
@@ -44,7 +50,19 @@
     if (next !== list) onchange(next);
   }
 
+  /** An item picked or typed: the runtime's to add when one runs, else added here. */
+  async function give(item: string, local: () => void) {
+    if (!onadd) return local();
+    const taken = await onadd(item);
+    bad = !taken;
+    if (taken) typed = "";
+  }
+
   function take() {
+    if (onadd) {
+      if (typed.trim() !== "") void give(typed, () => {});
+      return;
+    }
     const got = addTyped(kind, list, typed);
     if ("refused" in got) {
       bad = true;
@@ -85,7 +103,7 @@
         onchange={(e) => {
           const picked = offered[Number(e.currentTarget.value)];
           e.currentTarget.value = "";
-          if (picked) offer(added(kind, list, picked.value));
+          if (picked) void give(String(picked.value), () => offer(added(kind, list, picked.value)));
         }}
       >
         <option value="" disabled selected>{words.add}</option>
@@ -103,7 +121,7 @@
         onchange={(e) => {
           const day = e.currentTarget.value;
           e.currentTarget.value = "";
-          if (day) offer(added(kind, list, day));
+          if (day) void give(day, () => offer(added(kind, list, day)));
         }}
       />
     {:else}

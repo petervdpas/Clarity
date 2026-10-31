@@ -11,9 +11,16 @@
 #include <time.h>
 
 #include "clarity/db_internal.h"
+#include "clarity/dropdown_options.h"
+#include "clarity/edits.h"
+#include "clarity/list_fields.h"
+#include "clarity/ranges.h"
 #include "clarity/record_file.h"
+#include "clarity/reorder.h"
 #include "clarity/settings.h"
+#include "clarity/steps.h"
 #include "clarity/store.h"
+#include "clarity/views.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -56,6 +63,10 @@ struct ClarityService {
     ClarityPartsHost parts;
     /// The title bar's close of the main window goes to the screen.
     bool to_screen;
+    /// The selected rows the screen sent with the command that runs, before
+    /// a handler changed them: a row chosen since shows (DESIGN 1.7).
+    ClaritySelected* sent;
+    size_t sent_count;
 };
 
 bool clarity_service_closes_to_screen(const ClarityService* service) { return service->to_screen; }
@@ -183,9 +194,222 @@ static bool dispatched_step(void* context) {
     return dispatched(step->service, step->state, step->handler, &step->reply);
 }
 
+/// A window's reply, which is where its edits start (DESIGN 5.29): what a
+/// handler changed is never the person's edit.
+static cJSON* answered(ClarityService* s, ClarityReply* reply) {
+    // What the window's tables, trees and charts show, from its data now (DESIGN 1.7).
+    clarity_fill_views(&reply->state, s->sent, s->sent_count);
+    clarity_edits_reset(clarity_edits_of(reply->state.instance), clarity_edit_data(&reply->state));
+    return value(clarity_reply_json(reply));
+}
+
 static cJSON* replied(ClarityService* s, const ClarityWindowState* state, const char* event) {
     ClarityReply* reply;
-    return on_event(s, state, event, &reply) ? value(clarity_reply_json(reply)) : failed();
+    return on_event(s, state, event, &reply) ? answered(s, reply) : failed();
+}
+
+/// Runs a handler, if any, as one database step: the reply, with the step it
+/// made in `step` (0 when it changed nothing). No handler: the window as it is.
+static bool stepped(ClarityService* s, const ClarityWindowState* state, const char* handler, ClarityReply** out) {
+    if (!*handler) return drawn(s, state, out);
+    ClarityDb* db = s->options.db;
+    int64_t before = clarity_last_step(db);
+    Stepping step = {s, state, handler, NULL};
+    if (!clarity_step(db, dispatched_step, &step)) return false;
+    if (clarity_last_step(db) != before) step.reply->step = clarity_last_step(db);
+    *out = step.reply;
+    return true;
+}
+
+/// Takes an edit's database steps back or does them again, in order; the
+/// first the database refuses stops it.
+static bool take_steps(const int64_t* steps, size_t count, bool back, void* context) {
+    ClarityDb* db = context;
+    for (size_t i = 0; i < count; ++i) {
+        if (!(back ? clarity_undo(db, steps[i], NULL) : clarity_redo(db, steps[i], NULL))) return false;
+    }
+    return true;
+}
+
+/// Puts `value` as the field `name` of `object`.
+static void put(cJSON* object, const char* name, cJSON* value) {
+    if (cJSON_GetObjectItemCaseSensitive(object, name)) cJSON_ReplaceItemInObjectCaseSensitive(object, name, value);
+    else cJSON_AddItemToObject(object, name, value);
+}
+
+/// Puts `value` at `path` of the window's data; an error when the record it is in is not there.
+static bool put_at_path(cJSON* data, const char* path, cJSON* value) {
+    const char* dot = strrchr(path, '.');
+    cJSON* record = dot ? clarity_data_at(data, clarity_copy_n(path, (size_t)(dot - path))) : data;
+    if (!*path || !cJSON_IsObject(record)) return clarity_fail(CLARITY_INVALID, "the window has no %s", path);
+    put(record, dot ? dot + 1 : path, value);
+    return true;
+}
+
+/// A number as text, as the range functions take it: NULL for none.
+static const char* number_text(const cJSON* v) {
+    if (cJSON_IsString(v)) return v->valuestring;
+    if (cJSON_IsNumber(v)) return clarity_format("%.15g", v->valuedouble);
+    return NULL;
+}
+
+/// `state` with a copy of its data, for the runtime to change.
+static ClarityWindowState with_own_data(const ClarityWindowState* state) {
+    ClarityWindowState out = *state;
+    out.data = cJSON_Duplicate(state->data, true);
+    return out;
+}
+
+/// `state` with row `index` of `part` selected.
+static ClarityWindowState with_selected(const ClarityWindowState* state, const char* part, int index) {
+    ClarityWindowState out = *state;
+    out.selected = CLARITY_NEW(ClaritySelected, state->selected_count + 1);
+    out.selected_count = 0;
+    for (size_t i = 0; i < state->selected_count; ++i)
+        if (strcmp(state->selected[i].name, part) != 0) out.selected[out.selected_count++] = state->selected[i];
+    out.selected[out.selected_count++] = (ClaritySelected){clarity_copy(part), index};
+    return out;
+}
+
+/// The window as it is, after an action the runtime refused or that changed nothing.
+static cJSON* unchanged(ClarityService* s, const ClarityWindowState* state, bool refused) {
+    ClarityReply* reply;
+    if (!drawn(s, state, &reply)) return failed();
+    reply->refused = refused;
+    return answered(s, reply);
+}
+
+/// The end of an edit the runtime made of the window's data (DESIGN 1.7),
+/// as edit_event ends one: its handler runs as one database step and, with
+/// a scope, the edit goes on the window's record. No handler: the window as it is.
+static cJSON* edit_made(ClarityService* s, const ClarityWindowState* changed, const cJSON* args) {
+    ClarityReply* reply;
+    if (!stepped(s, changed, text_of(args, "handler"), &reply)) return failed();
+    const char* scope = text_of(args, "scope");
+    if (*scope) clarity_edits_edit(clarity_edits_of(changed->instance), text_of(args, "part"), scope, clarity_edit_data(&reply->state), &reply->step, reply->step ? 1 : 0);
+    return answered(s, reply);
+}
+
+/// A row of a list moved by a drag or a key (DESIGN 5.30): the list in its
+/// new order, each record's number in `by` and, in a tree, its parent, and
+/// the moved row selected.
+static cJSON* reordered(ClarityService* s, const ClarityWindowState* state, const cJSON* args) {
+    const char* list = text_of(args, "list");
+    const char* by = text_of(args, "by");
+    const char* parent = text_of(args, "parent");
+    const cJSON* move = cJSON_GetObjectItemCaseSensitive(args, "move");
+    const cJSON* records = clarity_data_at(state->data, list);
+    cJSON* rows = cJSON_CreateArray();
+    const cJSON* record;
+    const cJSON* each = cJSON_IsArray(records) ? records : rows;
+    cJSON_ArrayForEach(record, each) {
+        cJSON* row = cJSON_CreateObject();
+        cJSON_AddItemToArray(rows, row);
+        const cJSON* id = cJSON_GetObjectItemCaseSensitive(record, "id");
+        cJSON_AddItemToObject(row, "id", id ? cJSON_Duplicate(id, true) : cJSON_CreateNull());
+        const cJSON* up = *parent ? cJSON_GetObjectItemCaseSensitive(record, parent) : NULL;
+        if (up) cJSON_AddItemToObject(row, "parent", cJSON_Duplicate(up, true));
+    }
+    ClarityReordered moved;
+    if (!clarity_reorder(rows, move, *parent != '\0', &moved)) return unchanged(s, state, false);
+    cJSON* ordered = cJSON_CreateArray();
+    int row = (int)cJSON_GetObjectItemCaseSensitive(move, "row")->valuedouble, chosen = 0;
+    for (size_t i = 0; i < moved.count; ++i) {
+        cJSON* r = cJSON_Duplicate(cJSON_GetArrayItem(records, (int)moved.order[i]), true);
+        if (*by) put(r, by, cJSON_CreateNumber((double)moved.numbers[i]));
+        if (*parent) put(r, parent, moved.parents[i] ? cJSON_Duplicate(moved.parents[i], true) : cJSON_CreateNull());
+        cJSON_AddItemToArray(ordered, r);
+        if ((int)moved.order[i] == row) chosen = (int)i;
+    }
+    ClarityWindowState changed = with_own_data(state);
+    if (!put_at_path(changed.data, list, ordered)) return failed();
+    changed = with_selected(&changed, text_of(args, "part"), chosen);
+    return edit_made(s, &changed, args);
+}
+
+/// A typed item for a list field (U1c): added, or refused so the screen keeps the text.
+static cJSON* item_added(ClarityService* s, const ClarityWindowState* state, const cJSON* args) {
+    const char* path = text_of(args, "path");
+    const cJSON* items = clarity_data_at(state->data, path);
+    cJSON* gives = clarity_item_added(text_of(args, "item"), cJSON_GetObjectItemCaseSensitive(args, "values"), items, text_of(args, "typed"));
+    if (!gives) return unchanged(s, state, true);
+    // Empty text or an item the list has adds nothing.
+    if (cJSON_GetArraySize(gives) == (cJSON_IsArray(items) ? cJSON_GetArraySize(items) : -1)) return unchanged(s, state, false);
+    ClarityWindowState changed = with_own_data(state);
+    if (!put_at_path(changed.data, path, gives)) return failed();
+    return edit_made(s, &changed, args);
+}
+
+/// A slider's or a spin box's value after a key, a drag or typed text (U1c).
+static cJSON* ranged(ClarityService* s, const ClarityWindowState* state, const cJSON* args) {
+    const char* path = text_of(args, "path");
+    const char* step = number_text(cJSON_GetObjectItemCaseSensitive(args, "step"));
+    ClarityRange range = {number_text(cJSON_GetObjectItemCaseSensitive(args, "min")), number_text(cJSON_GetObjectItemCaseSensitive(args, "max")), step ? step : "1"};
+    const cJSON* now = clarity_data_at(state->data, path);
+    const cJSON* key = cJSON_GetObjectItemCaseSensitive(args, "key");
+    const cJSON* at = cJSON_GetObjectItemCaseSensitive(args, "at");
+    const char* after = cJSON_IsString(key) ? clarity_range_keyed(number_text(now), range, key->valuestring)
+                        : at                ? clarity_range_dragged(number_text(at), range)
+                                            : clarity_range_typed(number_text(cJSON_GetObjectItemCaseSensitive(args, "typed")), range);
+    if (!after) return failed();
+    cJSON* value = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(args, "whole")) ? cJSON_CreateNumber(strtod(after, NULL)) : cJSON_CreateString(after);
+    if (now && cJSON_Compare(now, value, true)) return unchanged(s, state, false);
+    ClarityWindowState changed = with_own_data(state);
+    if (!put_at_path(changed.data, path, value)) return failed();
+    return edit_made(s, &changed, args);
+}
+
+/// `state` with the wizard `part` on `step`.
+static ClarityWindowState on_step(const ClarityWindowState* state, const char* part, int64_t step) {
+    ClarityUi* ui = clarity_ui(state);
+    clarity_ui_set_step(ui, part, step);
+    return clarity_ui_reply(ui, state->window, state->data)->state;
+}
+
+/// Next, Back or Finish on a wizard (DESIGN 5.15): Next runs `on next` on
+/// the step shown, stays when it refused or failed, keeps the step it set,
+/// else moves on; Back goes back and runs nothing; Finish runs `on finish`.
+static cJSON* stepped_wizard(ClarityService* s, const ClarityWindowState* state, const cJSON* args) {
+    const char* part = text_of(args, "part");
+    const char* button = text_of(args, "button");
+    const cJSON* steps = cJSON_GetObjectItemCaseSensitive(args, "steps");
+    int64_t count = cJSON_IsNumber(steps) ? (int64_t)steps->valuedouble : 1;
+    int64_t step = clarity_ui_step(clarity_ui(state), part);
+    int64_t shown = clarity_shown_step(step, count);
+    ClarityReply* reply;
+    if (strcmp(button, "back") == 0) {
+        ClarityWindowState back = on_step(state, part, clarity_step_back(step, count));
+        return drawn(s, &back, &reply) ? answered(s, reply) : failed();
+    }
+    ClarityWindowState on = on_step(state, part, shown);
+    if (strcmp(button, "finish") == 0) return stepped(s, &on, text_of(args, "finish"), &reply) ? answered(s, reply) : failed();
+    if (strcmp(button, "next") != 0) return error_text(clarity_format("a wizard has no button %s", button));
+    // A refusal or a failure answers as dispatch_event does: the step stays.
+    if (!stepped(s, &on, text_of(args, "next"), &reply)) return failed();
+    int64_t now = clarity_ui_step(clarity_ui(&reply->state), part);
+    int64_t after = clarity_step_after_next(shown, now, count);
+    if (after != now) reply->state = on_step(&reply->state, part, after);
+    return answered(s, reply);
+}
+
+/// What a dropdown offers for typed text (U1c): the values a field has, or
+/// the records a reference can point at. The list, not a window.
+static cJSON* found_options(ClarityService* s, const cJSON* args) {
+    const ClarityWindows* windows = s->options.windows;
+    const char* kind = text_of(args, "kind");
+    const char* typed = text_of(args, "typed");
+    cJSON* found;
+    if (strcmp(kind, "typed") == 0) {
+        if (!windows->values) return value(cJSON_CreateArray());
+        if (!windows->values(s->options.db, text_of(args, "entity"), text_of(args, "field"), &found)) return failed();
+        return value(clarity_suggestions(found, typed));
+    }
+    if (strcmp(kind, "search") == 0) {
+        if (!windows->options(s->options.db, text_of(args, "entity"), &found)) return failed();
+        const cJSON* show = cJSON_GetObjectItemCaseSensitive(args, "show");
+        return value(clarity_searched(found, cJSON_IsArray(show) ? show : NULL, typed));
+    }
+    return error_text(clarity_format("a dropdown is typed or search, not %s", kind));
 }
 
 static cJSON* answer_command(ClarityService* s, const char* command, const cJSON* args, ClarityDesktop* caller);
@@ -193,7 +417,8 @@ static cJSON* answer_command(ClarityService* s, const char* command, const cJSON
 void clarity_service_stop(ClarityService* service) { service->stop = 1; }
 
 bool clarity_service_watches(const char* command) {
-    static const char* const watched[] = {"start_app", "open_window", "close_window", "return_to", "dispatch_event", "answer_event"};
+    static const char* const watched[] = {"start_app", "open_window", "close_window", "return_to", "dispatch_event", "answer_event", "edit_event",
+                                         "reorder_event", "item_event", "range_event", "step_event"};
     for (size_t i = 0; i < sizeof watched / sizeof *watched; ++i)
         if (strcmp(command, watched[i]) == 0) return true;
     return false;
@@ -248,6 +473,12 @@ static cJSON* answer_command(ClarityService* s, const char* command, const cJSON
     ClarityWindowState state = {.window = "", .data = cJSON_CreateObject()};
     const cJSON* given = cJSON_GetObjectItemCaseSensitive(args, "state");
     if (given && !clarity_window_state_from_json(given, &state)) return failed();
+    s->sent = CLARITY_NEW(ClaritySelected, state.selected_count + 1);
+    if (state.selected_count) memcpy(s->sent, state.selected, state.selected_count * sizeof *state.selected);
+    // Every reply shows the chosen rows (their page, the tree rows above them
+    // open), as a handler or a move may have changed where they are; only the
+    // person's own view action leaves the view as they set it.
+    s->sent_count = strcmp(command, "view_event") == 0 ? state.selected_count : 0;
     const cJSON* with = cJSON_GetObjectItemCaseSensitive(args, "with");
     cJSON* empty = cJSON_CreateObject();
     if (!cJSON_IsObject(with)) with = empty;
@@ -300,8 +531,9 @@ static cJSON* answer_command(ClarityService* s, const char* command, const cJSON
     if (strcmp(command, "close_window") == 0) {
         ClarityReply* reply;
         if (!on_event(s, &state, "close", &reply)) return failed();
-        // The window has closed: what it had of an engine goes.
+        // The window has closed: what it had of an engine goes, and its edits.
         clarity_window_closed(state.instance);
+        clarity_edits_closed(state.instance);
         return value(clarity_reply_json(reply));
     }
     if (strcmp(command, "return_to") == 0) return replied(s, &state, "return");
@@ -312,18 +544,45 @@ static cJSON* answer_command(ClarityService* s, const char* command, const cJSON
         Stepping step = {s, &state, text_of(args, "handler"), NULL};
         if (!clarity_step(db, dispatched_step, &step)) return failed();
         if (clarity_last_step(db) != before) step.reply->step = clarity_last_step(db);
-        return value(clarity_reply_json(step.reply));
+        return answered(s, step.reply);
     }
-    if (strcmp(command, "undo_step") == 0) {
-        // A step taken back or done again, on the window's data as the screen put it back.
-        const cJSON* step = cJSON_GetObjectItemCaseSensitive(args, "step");
-        int64_t id = cJSON_IsNumber(step) ? (int64_t)step->valuedouble : 0;
-        if (id > 0) {
-            bool undone = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(args, "back")) ? clarity_undo(db, id, NULL) : clarity_redo(db, id, NULL);
-            if (!undone) return failed();
-        }
+    if (strcmp(command, "edit_event") == 0) {
+        // The person ended an edit of a part (DESIGN 5.29): its handler runs as
+        // one database step, and the edit goes on the window's record with
+        // what it changed. A drag goes on until its drop.
         ClarityReply* reply;
-        return drawn(s, &state, &reply) ? value(clarity_reply_json(reply)) : failed();
+        if (!stepped(s, &state, text_of(args, "handler"), &reply)) return failed();
+        ClarityEdits* bus = clarity_edits_of(state.instance);
+        size_t count = reply->step ? 1 : 0;
+        if (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(args, "ends")))
+            clarity_edits_edit(bus, text_of(args, "part"), text_of(args, "scope"), clarity_edit_data(&reply->state), &reply->step, count);
+        else
+            clarity_edits_drag(bus, text_of(args, "part"), text_of(args, "scope"), &reply->step, count);
+        return answered(s, reply);
+    }
+    // What the person did to a part, which the runtime decides (DESIGN 1.7).
+    if (strcmp(command, "reorder_event") == 0) return reordered(s, &state, args);
+    if (strcmp(command, "item_event") == 0) return item_added(s, &state, args);
+    if (strcmp(command, "range_event") == 0) return ranged(s, &state, args);
+    if (strcmp(command, "step_event") == 0) return stepped_wizard(s, &state, args);
+    if (strcmp(command, "find_options") == 0) return found_options(s, args);
+    if (strcmp(command, "view_event") == 0) {
+        // The person sorted, turned a page, or opened or closed a tree's row: no handler, no edit.
+        ClarityReply* reply;
+        if (!clarity_view_event(&state, text_of(args, "part"), cJSON_GetObjectItemCaseSensitive(args, "action"))) return failed();
+        return drawn(s, &state, &reply) ? answered(s, reply) : failed();
+    }
+    if (strcmp(command, "undo_edit") == 0) {
+        // Ctrl+Z (back) or Ctrl+Y on a scope: its last edit taken back or done
+        // again, with its database steps, and the window as it was.
+        bool back = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(args, "back"));
+        bool found;
+        cJSON* data;
+        if (!clarity_edits_undo(clarity_edits_of(state.instance), text_of(args, "scope"), clarity_edit_data(&state), back, take_steps, db, &found, &data))
+            return failed();
+        ClarityWindowState undone = found ? clarity_with_edit_data(&state, data) : state;
+        ClarityReply* reply;
+        return drawn(s, &undone, &reply) ? answered(s, reply) : failed();
     }
     if (strcmp(command, "answer_event") == 0) {
         // The answer to a question a handler asked runs the handler it goes to.
@@ -332,7 +591,7 @@ static cJSON* answer_command(ClarityService* s, const char* command, const cJSON
         if (!windows->answer) return error_text("this program asks nothing");
         if (!windows->answer(db, &state, text_of(args, "handler"), cJSON_IsArray(values) ? values : cJSON_CreateArray(), &reply)) return failed();
         if (!windows->redraw(db, reply)) return failed();
-        return value(clarity_reply_json(reply));
+        return answered(s, reply);
     }
     if (strcmp(command, "ref_options") == 0) {
         cJSON* options;

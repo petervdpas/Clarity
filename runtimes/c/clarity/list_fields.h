@@ -32,3 +32,9 @@ bool clarity_json_get_texts(const cJSON* in, const char* name, ClarityTexts* out
 bool clarity_json_get_integers(const cJSON* in, const char* name, ClarityIntegers* out);
 bool clarity_json_get_decimals(const cJSON* in, const char* name, ClarityDecimals* out);
 bool clarity_json_get_dates(const cJSON* in, const char* name, ClarityDates* out);
+
+/// What a typed item does to the list `items` of kind `item` (text, integer,
+/// decimal, date, or enum with its `values`): trimmed and added at the end,
+/// the same list for empty text or an item it has, NULL when the text is no
+/// value of its kind (refused). In the scratch arena.
+cJSON* clarity_item_added(const char* item, const cJSON* values, const cJSON* items, const char* typed);

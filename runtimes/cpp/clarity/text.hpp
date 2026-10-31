@@ -87,6 +87,12 @@ std::optional<std::string> key_value(const std::string& key);
 /// names none: what an engine gives.
 std::string text_of(const std::string& key_or_text);
 
+/// Text without the spaces it starts and ends with.
+std::string trimmed(const std::string& text);
+/// Text in lower case, as a search or a sort that ignores case compares it:
+/// ASCII, and the capitals of Latin-1.
+std::string lower_case(const std::string& text);
+
 /// Decimals travel as text, so no precision is lost; dates as `2026-10-17`.
 void to_json(nlohmann::json& out, const Decimal& value);
 void from_json(const nlohmann::json& in, Decimal& value);

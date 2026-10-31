@@ -15,7 +15,8 @@ import { resolve } from "node:path";
 const [url, given, stack, database] = process.argv.slice(2);
 const folder = resolve(given);
 
-const sql = (query) => execFileSync("sqlite3", ["-separator", "|", database, query]).toString().trim();
+// As any client of the database does, it waits a moment for the app's write to end.
+const sql = (query) => execFileSync("sqlite3", ["-cmd", ".timeout 5000", "-separator", "|", database, query]).toString().trim();
 const rows = (query) => (sql(query) ? sql(query).split("\n") : []);
 
 const failed = [];
@@ -23,6 +24,17 @@ let current = "";
 function check(ok, what) {
   if (!ok) throw new Error(what);
 }
+/** Waits up to 3 s for `read()` to give `expected`: what follows a round trip to the runtime. */
+async function sameSoon(read, expected, what) {
+  const end = Date.now() + 3000;
+  let actual = await read();
+  while (JSON.stringify(actual) !== JSON.stringify(expected) && Date.now() < end) {
+    await new Promise((r) => setTimeout(r, 100));
+    actual = await read();
+  }
+  same(actual, expected, what);
+}
+
 function same(actual, expected, what) {
   const a = JSON.stringify(actual);
   const e = JSON.stringify(expected);
@@ -281,7 +293,7 @@ try {
     await focusRow("albumList", 0);
     await b.key("ArrowDown", ["Alt"]);
     await b.settle(500);
-    same(await shownRows("albumList"), ["Beta | 2", "Alpha | 1", "Gamma | 3"], "moved down");
+    await sameSoon(() => shownRows("albumList"), ["Beta | 2", "Alpha | 1", "Gamma | 3"], "moved down");
     same(rows("SELECT title FROM album WHERE title IN ('Alpha','Beta','Gamma') ORDER BY position"), ["Beta", "Alpha", "Gamma"], "saved order");
     await undo();
     same(await shownRows("albumList"), ["Alpha | 1", "Beta | 2", "Gamma | 3"], "taken back");
@@ -295,7 +307,7 @@ try {
     const from = await b.at(`${part("albumList")} [data-row="2"]`);
     const to = await b.at(`${part("albumList")} [data-row="0"]`, 0.5, 0.2);
     await b.drag(from, to);
-    same(await shownRows("albumList"), ["Gamma | 3", "Alpha | 1", "Beta | 2"], "dragged to the top");
+    await sameSoon(() => shownRows("albumList"), ["Gamma | 3", "Alpha | 1", "Beta | 2"], "dragged to the top");
     same(rows("SELECT title FROM album WHERE title IN ('Alpha','Beta','Gamma') ORDER BY position"), ["Gamma", "Alpha", "Beta"], "saved");
     await openWindow("foldersButton");
     await openWindow("galleryButton");
@@ -439,7 +451,35 @@ try {
     same(rows("SELECT name FROM folder WHERE parent IS NULL ORDER BY position"), ["Docs", "Music"], "kept: no undo");
   });
 
-  // ---- A dialog with a paged table that reorders.
+  // ---- What a table, a tree and a chart show, as the runtime decides it (DESIGN 1.7).
+  await step("a table shows its first order a page at a time, and turns pages", async () => {
+    await b.until(`document.querySelectorAll('${part("albumGrid")} [data-row]').length >= 2`, "the albums");
+    await sameSoon(() => shownRows("albumGrid"), ["Alpha 1", "Beta 2"], "the first page, by title");
+    // The page buttons are icons, named by their label.
+    await b.click(`${part("albumGrid")} button[aria-label="Next page"]`);
+    await b.settle(400);
+    await sameSoon(() => shownRows("albumGrid"), ["Gamma 3"], "the second page");
+  });
+
+  await step("a header click sorts the other way, from the first page", async () => {
+    await b.click(`${part("albumGrid")} th[data-field="title"]`);
+    await b.settle(400);
+    await sameSoon(() => shownRows("albumGrid"), ["Gamma 3", "Beta 2"], "sorted the other way");
+  });
+
+  await step("a tree row's toggle opens and closes the rows under it", async () => {
+    const toggle = async () => {
+      await b.eval(`[...document.querySelectorAll('${part("folderTree")} [data-row]')].find(r => r.textContent.includes("Music")).querySelector("button.toggle").setAttribute("data-live", "toggle")`);
+      await b.click('[data-live="toggle"]');
+      await b.eval(`document.querySelector('[data-live="toggle"]')?.removeAttribute("data-live")`);
+      await b.settle(400);
+      return (await shownRows("folderTree")).includes("Rock");
+    };
+    const before = (await shownRows("folderTree")).includes("Rock");
+    same(await toggle(), !before, "the first press turns it");
+    same(await toggle(), before, "the second press turns it back");
+  });
+
   await step("a table in a dialog reorders, saved, and Ctrl+Z takes it back", async () => {
     await openWindow("albumsButton");
     await b.click(part("pickButton"));

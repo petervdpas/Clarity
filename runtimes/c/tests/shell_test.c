@@ -60,6 +60,24 @@ static bool dispatch(ClarityDb* db, const ClarityWindowState* state, const char*
         const char* name = cJSON_GetObjectItem(state->data, "name")->valuestring;
         clarity_ui_set_caption(ui, "title", clarity_plain_text(clarity_join("Card of ", name)));
     }
+    // A handler that adds a task to the window's list.
+    if (strcmp(handler, "addTask") == 0) {
+        cJSON* data = cJSON_Duplicate(state->data, true);
+        cJSON_AddItemToArray(cJSON_GetObjectItem(data, "tasks"), cJSON_Parse("{\"id\":4,\"title\":\"Eggs\",\"up\":null}"));
+        *out = clarity_ui_reply(clarity_ui(state), state->window, data);
+        return true;
+    }
+    // A handler that chooses rows: bread in the tree, Milk in the table.
+    if (strcmp(handler, "choose") == 0) {
+        *out = clarity_ui_reply(clarity_ui(state), state->window, state->data);
+        (*out)->state.selected = CLARITY_NEW(ClaritySelected, 2);
+        (*out)->state.selected[0] = (ClaritySelected){"outline", 1};
+        (*out)->state.selected[1] = (ClaritySelected){"grid", 0};
+        (*out)->state.selected_count = 2;
+        return true;
+    }
+    // A wizard's on next that sends it to its last step.
+    if (strcmp(handler, "jump") == 0) clarity_ui_set_step(ui, "wizard", 3);
     if (strcmp(handler, "save") == 0) return clarity_refuse(clarity_text_with(clarity_text("{name} is taken"), "name", clarity_slot_text("Ada")));
     if (strcmp(handler, "fail") == 0) return clarity_fail(CLARITY_STORAGE, "locked");
     *out = clarity_ui_reply(ui, state->window, state->data);
@@ -320,25 +338,265 @@ static size_t memos(ClarityDb* db) {
     return count;
 }
 
-// Undo (DESIGN 5.29): a handler that changed the database answers with its
-// step, and undo_step takes it back or does it again, drawing the window as
-// its data is.
-void a_handler_answers_with_its_step_and_undo_step_takes_it_back(void) {
+// Undo (DESIGN 5.29): the runtime keeps the window's edits, each with the
+// database steps its handler made, and Ctrl+Z takes them back together.
+void the_runtime_keeps_the_edits_and_ctrl_z_takes_them_back(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
     REQUIRE_OK(clarity_db_batch(db, "", "CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"));
     ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
     ClarityService* s = clarity_service_new(&options);
-    cJSON* remembered = invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"data\":{}},\"handler\":\"remember\"}", NULL);
-    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(remembered, "value"), "step"), "1");
+    // A handler that changed the database answers with its step; one that failed or changed nothing, with none.
     CHECK(cJSON_GetObjectItem(invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"data\":{}},\"handler\":\"fail\"}", NULL), "error"));
-    cJSON* nothing = invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"data\":{}},\"handler\":\"noop\"}", NULL);
+    // A reply: the edits start from the window as it is.
+    cJSON* nothing = invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"instance\":7,\"data\":{\"name\":\"Ada\"}},\"handler\":\"noop\"}", NULL);
     CHECK(!cJSON_GetObjectItem(cJSON_GetObjectItem(nothing, "value"), "step"));
-    cJSON* undone = invoked(s, "undo_step", "{\"state\":{\"window\":\"Card\",\"data\":{}},\"step\":1,\"back\":true}", NULL);
-    CHECK(cJSON_GetObjectItem(undone, "value"));
-    CHECK_INT(memos(db), 0);
-    invoked(s, "undo_step", "{\"state\":{\"window\":\"Card\",\"data\":{}},\"step\":1,\"back\":false}", NULL);
+    // The person typed a name, then pressed a part whose handler saves: two edits of the form.
+    invoked(s, "edit_event", "{\"state\":{\"window\":\"Card\",\"instance\":7,\"data\":{\"name\":\"Ann\"}},\"part\":\"nameBox\",\"scope\":\"form\",\"ends\":true}", NULL);
+    cJSON* saved = invoked(s, "edit_event", "{\"state\":{\"window\":\"Card\",\"instance\":7,\"data\":{\"name\":\"Ann\"}},\"handler\":\"remember\",\"part\":\"saveBox\",\"scope\":\"form\",\"ends\":true}", NULL);
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(saved, "value"), "step"), "1");
     CHECK_INT(memos(db), 1);
+    const char* back = "{\"state\":{\"window\":\"Card\",\"instance\":7,\"data\":{\"name\":\"Ann\"}},\"scope\":\"form\",\"back\":true}";
+    CHECK(cJSON_GetObjectItem(invoked(s, "undo_edit", back, NULL), "value"));
+    CHECK_INT(memos(db), 0);
+    cJSON* typed = invoked(s, "undo_edit", back, NULL);
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(typed, "value"), "state"), "data"), "{\"name\":\"Ada\"}");
+    const char* again = "{\"state\":{\"window\":\"Card\",\"instance\":7,\"data\":{\"name\":\"Ada\"}},\"scope\":\"form\",\"back\":false}";
+    cJSON* retyped = invoked(s, "undo_edit", again, NULL);
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(retyped, "value"), "state"), "data"), "{\"name\":\"Ann\"}");
+    invoked(s, "undo_edit", again, NULL);
+    CHECK_INT(memos(db), 1);
+    // A closed window's edits go.
+    invoked(s, "close_window", "{\"state\":{\"window\":\"Card\",\"instance\":7,\"data\":{\"name\":\"Ann\"}}}", NULL);
+    cJSON* gone = invoked(s, "undo_edit", back, NULL);
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(gone, "value"), "state"), "data"), "{\"name\":\"Ann\"}");
+    // The old command is gone.
+    CHECK(cJSON_GetObjectItem(invoked(s, "undo_step", "{\"step\":1,\"back\":true}", NULL), "error"));
+    clarity_service_free(s);
+    clarity_db_close(db);
+}
+
+/// The data of the window a reply shows.
+static const cJSON* data_of(const cJSON* answer) {
+    return cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(answer, "value"), "state"), "data");
+}
+
+static const char* const tasks = "{\"window\":\"Card\",\"instance\":9,\"data\":{\"tasks\":[{\"id\":1,\"position\":1},{\"id\":2,\"position\":2},{\"id\":3,\"position\":3}]}}";
+
+// Reordering (DESIGN 1.7, 5.30): the screen sends the move, and the runtime
+// gives the list its order and numbers, chooses the moved row, and keeps the
+// move as an edit that Ctrl+Z takes back.
+void the_runtime_reorders_a_list_and_ctrl_z_puts_it_back(void) {
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    REQUIRE_OK(clarity_db_batch(db, "", "CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"));
+    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityService* s = clarity_service_new(&options);
+    CHECK(clarity_service_watches("reorder_event"));
+    invoked(s, "dispatch_event", clarity_format("{\"state\":%s,\"handler\":\"noop\"}", tasks), NULL);
+    const char* drag = "{\"row\":2,\"where\":\"before\",\"target\":0}";
+    cJSON* moved = invoked(s, "reorder_event", clarity_format("{\"state\":%s,\"part\":\"taskList\",\"list\":\"tasks\",\"by\":\"position\",\"parent\":null,\"move\":%s,\"handler\":null,\"scope\":\"form\"}", tasks, drag), NULL);
+    CHECK_JSON(data_of(moved), "{\"tasks\":[{\"id\":3,\"position\":1},{\"id\":1,\"position\":2},{\"id\":2,\"position\":3}]}");
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(moved, "value"), "state"), "selected"), "taskList"), "0");
+    // A refused move answers the window as it is.
+    cJSON* refused = invoked(s, "reorder_event", clarity_format("{\"state\":%s,\"part\":\"taskList\",\"list\":\"tasks\",\"by\":\"position\",\"move\":{\"row\":0,\"key\":\"up\"},\"scope\":\"form\"}", tasks), NULL);
+    CHECK_JSON(data_of(refused), "{\"tasks\":[{\"id\":1,\"position\":1},{\"id\":2,\"position\":2},{\"id\":3,\"position\":3}]}");
+    // Ctrl+Z takes the move back.
+    cJSON* back = invoked(s, "undo_edit", clarity_format("{\"state\":{\"window\":\"Card\",\"instance\":9,\"data\":%s},\"scope\":\"form\",\"back\":true}", cJSON_PrintUnformatted(data_of(moved))), NULL);
+    CHECK_JSON(data_of(back), "{\"tasks\":[{\"id\":1,\"position\":1},{\"id\":2,\"position\":2},{\"id\":3,\"position\":3}]}");
+    // In a tree a row takes its new parent; without a scope the handler runs as dispatch_event does.
+    const char* tree = "{\"window\":\"Card\",\"instance\":9,\"data\":{\"rows\":[{\"id\":1,\"up\":null,\"n\":1},{\"id\":2,\"up\":null,\"n\":2}]}}";
+    cJSON* under = invoked(s, "reorder_event", clarity_format("{\"state\":%s,\"part\":\"outline\",\"list\":\"rows\",\"by\":\"n\",\"parent\":\"up\",\"move\":{\"row\":1,\"key\":\"right\"},\"handler\":\"remember\"}", tree), NULL);
+    CHECK_JSON(data_of(under), "{\"rows\":[{\"id\":1,\"up\":null,\"n\":1},{\"id\":2,\"up\":1,\"n\":1}]}");
+    CHECK(cJSON_GetObjectItem(cJSON_GetObjectItem(under, "value"), "step"));
+    CHECK_INT(memos(db), 1);
+    clarity_service_free(s);
+    clarity_db_close(db);
+}
+
+// A list field's typed item (DESIGN 1.7, U1c): the runtime adds it, or
+// refuses it and says so, so the screen keeps the typed text.
+void the_runtime_adds_a_typed_item_or_refuses_it(void) {
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityService* s = clarity_service_new(&options);
+    CHECK(clarity_service_watches("item_event"));
+    const char* album = "{\"window\":\"Card\",\"instance\":11,\"data\":{\"album\":{\"tags\":[\"jazz\"],\"years\":[1999]}}}";
+    invoked(s, "dispatch_event", clarity_format("{\"state\":%s,\"handler\":\"noop\"}", album), NULL);
+    cJSON* added = invoked(s, "item_event", clarity_format("{\"state\":%s,\"part\":\"tags\",\"path\":\"album.tags\",\"item\":\"text\",\"typed\":\"  live \",\"scope\":\"form\"}", album), NULL);
+    CHECK_JSON(data_of(added), "{\"album\":{\"tags\":[\"jazz\",\"live\"],\"years\":[1999]}}");
+    CHECK(!cJSON_GetObjectItem(cJSON_GetObjectItem(added, "value"), "refused"));
+    cJSON* refused = invoked(s, "item_event", clarity_format("{\"state\":%s,\"part\":\"years\",\"path\":\"album.years\",\"item\":\"integer\",\"typed\":\"soon\",\"scope\":\"form\"}", album), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(refused, "value"), "refused"), "true");
+    CHECK_JSON(data_of(refused), "{\"album\":{\"tags\":[\"jazz\"],\"years\":[1999]}}");
+    // An enum's list takes only its values.
+    cJSON* polka = invoked(s, "item_event", clarity_format("{\"state\":%s,\"part\":\"tags\",\"path\":\"album.tags\",\"item\":\"enum\",\"values\":[\"jazz\",\"rock\"],\"typed\":\"polka\"}", album), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(polka, "value"), "refused"), "true");
+    // The added item is an edit that Ctrl+Z takes back.
+    cJSON* back = invoked(s, "undo_edit", clarity_format("{\"state\":{\"window\":\"Card\",\"instance\":11,\"data\":%s},\"scope\":\"form\",\"back\":true}", cJSON_PrintUnformatted(data_of(added))), NULL);
+    CHECK_JSON(data_of(back), "{\"album\":{\"tags\":[\"jazz\"],\"years\":[1999]}}");
+    clarity_service_free(s);
+    clarity_db_close(db);
+}
+
+// A slider's and a spin box's value (DESIGN 1.7, U1c): after a key, a drag
+// or typed text, the runtime keeps it within its range and steps.
+void the_runtime_moves_a_value_within_its_range(void) {
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityService* s = clarity_service_new(&options);
+    CHECK(clarity_service_watches("range_event"));
+    const char* mixer = "{\"window\":\"Card\",\"instance\":12,\"data\":{\"volume\":5,\"mix\":{\"balance\":\"0.2\"}}}";
+    const char* volume = "\"part\":\"volume\",\"path\":\"volume\",\"min\":\"0\",\"max\":\"10\",\"step\":\"1\",\"whole\":true";
+    CHECK_JSON(data_of(invoked(s, "range_event", clarity_format("{\"state\":%s,%s,\"key\":\"up\"}", mixer, volume), NULL)), "{\"volume\":6,\"mix\":{\"balance\":\"0.2\"}}");
+    CHECK_JSON(data_of(invoked(s, "range_event", clarity_format("{\"state\":%s,%s,\"typed\":\"120\"}", mixer, volume), NULL)), "{\"volume\":10,\"mix\":{\"balance\":\"0.2\"}}");
+    CHECK_JSON(data_of(invoked(s, "range_event", clarity_format("{\"state\":%s,%s,\"at\":3.4}", mixer, volume), NULL)), "{\"volume\":3,\"mix\":{\"balance\":\"0.2\"}}");
+    // A decimal stays text, exact.
+    const char* balance = "\"part\":\"balance\",\"path\":\"mix.balance\",\"min\":\"0\",\"max\":\"1\",\"step\":\"0.1\",\"whole\":false";
+    CHECK_JSON(data_of(invoked(s, "range_event", clarity_format("{\"state\":%s,%s,\"key\":\"up\",\"scope\":\"form\"}", mixer, balance), NULL)), "{\"volume\":5,\"mix\":{\"balance\":\"0.3\"}}");
+    CHECK(cJSON_GetObjectItem(invoked(s, "range_event", clarity_format("{\"state\":%s,%s,\"typed\":\"loud\"}", mixer, volume), NULL), "error"));
+    clarity_service_free(s);
+    clarity_db_close(db);
+}
+
+/// The step a reply's wizard is on.
+static const cJSON* step_of(const cJSON* answer) {
+    return cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(answer, "value"), "state"), "parts"), "wizard"), "step");
+}
+
+// A wizard's buttons (DESIGN 1.7, 5.15): the runtime runs on next and on
+// finish and decides the step.
+void the_runtime_walks_a_wizard(void) {
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    REQUIRE_OK(clarity_db_batch(db, "", "CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"));
+    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityService* s = clarity_service_new(&options);
+    CHECK(clarity_service_watches("step_event"));
+    const char* first = "{\"window\":\"Card\",\"data\":{}}";
+    const char* second = "{\"window\":\"Card\",\"data\":{},\"parts\":{\"wizard\":{\"step\":2}}}";
+    // Without on next, next moves on.
+    CHECK_JSON(step_of(invoked(s, "step_event", clarity_format("{\"state\":%s,\"part\":\"wizard\",\"button\":\"next\",\"steps\":3,\"next\":null}", first), NULL)), "2");
+    CHECK_JSON(step_of(invoked(s, "step_event", clarity_format("{\"state\":%s,\"part\":\"wizard\",\"button\":\"next\",\"steps\":3,\"next\":\"noop\"}", first), NULL)), "2");
+    // A refusal keeps the step: the screen shows it.
+    CHECK(cJSON_GetObjectItem(invoked(s, "step_event", clarity_format("{\"state\":%s,\"part\":\"wizard\",\"button\":\"next\",\"steps\":3,\"next\":\"save\"}", first), NULL), "error"));
+    // A handler that sets the step decides where the wizard goes.
+    CHECK_JSON(step_of(invoked(s, "step_event", clarity_format("{\"state\":%s,\"part\":\"wizard\",\"button\":\"next\",\"steps\":3,\"next\":\"jump\"}", first), NULL)), "3");
+    // Back runs nothing.
+    CHECK_JSON(step_of(invoked(s, "step_event", clarity_format("{\"state\":%s,\"part\":\"wizard\",\"button\":\"back\",\"steps\":3,\"next\":\"remember\"}", second), NULL)), "1");
+    CHECK_INT(memos(db), 0);
+    // Finish runs on finish, as one database step.
+    cJSON* finished = invoked(s, "step_event", clarity_format("{\"state\":%s,\"part\":\"wizard\",\"button\":\"finish\",\"steps\":2,\"finish\":\"remember\"}", second), NULL);
+    CHECK(cJSON_GetObjectItem(cJSON_GetObjectItem(finished, "value"), "step"));
+    CHECK_INT(memos(db), 1);
+    clarity_service_free(s);
+    clarity_db_close(db);
+}
+
+static bool search_options(ClarityDb* db, const char* entity, cJSON** out) {
+    (void)db;
+    (void)entity;
+    *out = cJSON_Parse("[{\"id\":1,\"text\":\"Jansen\",\"fields\":{\"city\":\"Utrecht\"}},{\"id\":2,\"text\":\"de Vries\",\"fields\":{\"city\":\"Gent\"}}]");
+    return true;
+}
+
+static bool city_values(ClarityDb* db, const char* entity, const char* field, cJSON** out) {
+    (void)db;
+    if (strcmp(entity, "Customer") != 0 || strcmp(field, "city") != 0) return clarity_fail(CLARITY_INVALID, "%s has no field %s", entity, field);
+    *out = cJSON_Parse("[\"Utrecht\",\"amsterdam\",\"\",\"Amstelveen\",\"Utrecht\"]");
+    return true;
+}
+
+static const ClarityWindows customers = {open_card, handler_of, dispatch, search_options, picture, redraw, answer, city_values};
+
+// A dropdown's options (DESIGN 1.7, U1c): the runtime picks what it offers for typed text.
+void the_runtime_finds_a_dropdowns_options(void) {
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &customers};
+    ClarityService* s = clarity_service_new(&options);
+    CHECK_JSON(invoked(s, "find_options", "{\"kind\":\"typed\",\"entity\":\"Customer\",\"field\":\"city\",\"typed\":\"amst\"}", NULL), "{\"value\":[\"Amstelveen\",\"amsterdam\"]}");
+    CHECK_JSON(invoked(s, "find_options", "{\"kind\":\"search\",\"entity\":\"Customer\",\"show\":[\"city\"],\"typed\":\"gent\"}", NULL),
+               "{\"value\":[{\"id\":2,\"text\":\"de Vries\",\"fields\":{\"city\":\"Gent\"}}]}");
+    CHECK_JSON(invoked(s, "find_options", "{\"kind\":\"search\",\"entity\":\"Customer\",\"typed\":\"\"}", NULL),
+               "{\"value\":[{\"id\":1,\"text\":\"Jansen\",\"fields\":{\"city\":\"Utrecht\"}},{\"id\":2,\"text\":\"de Vries\",\"fields\":{\"city\":\"Gent\"}}]}");
+    CHECK(cJSON_GetObjectItem(invoked(s, "find_options", "{\"kind\":\"typed\",\"entity\":\"Customer\",\"field\":\"name\",\"typed\":\"\"}", NULL), "error"));
+    clarity_service_free(s);
+    clarity_db_close(db);
+}
+
+/// The view of `part` in a reply.
+static const cJSON* view_of(const cJSON* answer, const char* part) {
+    return cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(answer, "value"), "state"), "views"), part);
+}
+
+static const char* const planner =
+    "{\"window\":\"Card\",\"data\":{\"tasks\":[{\"id\":1,\"title\":\"Milk\",\"up\":null},{\"id\":2,\"title\":\"bread\",\"up\":1},{\"id\":3,\"title\":\"apples\",\"up\":null}],"
+    "\"sales\":[{\"city\":\"Gent\",\"amount\":\"2\"},{\"city\":\"Gent\",\"amount\":3},{\"city\":\"Ams\",\"amount\":1}]},"
+    "\"views\":{\"grid\":{\"kind\":\"table\",\"list\":\"tasks\",\"columns\":[{\"field\":\"title\",\"kind\":\"text\"}],\"order\":{\"field\":\"title\",\"desc\":false},\"page\":2,\"at\":1},"
+    "\"outline\":{\"kind\":\"tree\",\"list\":\"tasks\",\"parent\":\"up\",\"key\":\"id\",\"open\":[]},"
+    "\"chart\":{\"kind\":\"chart\",\"list\":\"sales\",\"by\":\"city\",\"byKind\":\"text\",\"measure\":\"sum\",\"of\":\"amount\"}}}";
+
+// The shown rows (DESIGN 1.7): every reply fills what the window's tables,
+// trees and charts show from its data, so a handler's change shows at once.
+void a_reply_fills_the_shown_rows_of_its_views(void) {
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityService* s = clarity_service_new(&options);
+    cJSON* reply = invoked(s, "dispatch_event", clarity_format("{\"state\":%s,\"handler\":\"noop\"}", planner), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(view_of(reply, "grid"), "shown"), "[2,1]");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(reply, "grid"), "pages"), "{\"page\":1,\"pages\":2,\"from\":1,\"to\":2,\"count\":3}");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(reply, "outline"), "shown"), "[[0,0,true],[2,0,false]]");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(reply, "chart"), "groups"), "[{\"key\":\"Ams\",\"value\":1},{\"key\":\"Gent\",\"value\":5}]");
+    // A row a handler chose shows: the tree opens the rows above it, the table turns to its page.
+    cJSON* chosen = invoked(s, "dispatch_event", clarity_format("{\"state\":%s,\"handler\":\"choose\"}", planner), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(view_of(chosen, "outline"), "open"), "[1]");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(chosen, "outline"), "shown"), "[[0,0,true],[1,1,false],[2,0,false]]");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(chosen, "grid"), "shown"), "[0]");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(chosen, "grid"), "at"), "2");
+    // A handler that adds a row: the table shows it.
+    cJSON* added = invoked(s, "dispatch_event", clarity_format("{\"state\":%s,\"handler\":\"addTask\"}", planner), NULL);
+    CHECK_JSON(cJSON_GetObjectItem(view_of(added, "grid"), "pages"), "{\"page\":1,\"pages\":2,\"from\":1,\"to\":2,\"count\":4}");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(added, "outline"), "shown"), "[[0,0,true],[2,0,false],[3,0,false]]");
+    // A window without views has none in its reply.
+    CHECK(!cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"data\":{}},\"handler\":\"noop\"}", NULL), "value"), "state"), "views"));
+    clarity_service_free(s);
+    clarity_db_close(db);
+}
+
+/// view_event on the state a reply gave.
+static cJSON* viewed(ClarityService* s, const cJSON* reply, const char* part, const char* action) {
+    const char* state = cJSON_PrintUnformatted(cJSON_GetObjectItem(cJSON_GetObjectItem(reply, "value"), "state"));
+    return invoked(s, "view_event", clarity_format("{\"state\":%s,\"part\":\"%s\",\"action\":%s}", state, part, action), NULL);
+}
+
+// The person sorts a table, turns its page, or opens or closes a tree's row:
+// the runtime changes the view and answers the window. No handler, no edit.
+void a_view_event_sorts_pages_opens_and_closes(void) {
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityService* s = clarity_service_new(&options);
+    CHECK(!clarity_service_watches("view_event"));
+    cJSON* first = invoked(s, "dispatch_event", clarity_format("{\"state\":%s,\"handler\":\"choose\"}", planner), NULL);
+    // The chosen row stays chosen, and the person turns away from its page.
+    cJSON* page = viewed(s, first, "grid", "{\"page\":1}");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(page, "grid"), "shown"), "[2,1]");
+    // Sorting by the same field again sorts the other way, from the first page.
+    cJSON* sorted = viewed(s, page, "grid", "{\"sort\":\"title\"}");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(sorted, "grid"), "order"), "{\"field\":\"title\",\"desc\":true}");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(sorted, "grid"), "shown"), "[0,1]");
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetObjectItem(view_of(sorted, "grid"), "pages"), "page"), "1");
+    // A row closed above the chosen row stays closed, and opens again.
+    cJSON* closed = viewed(s, first, "outline", "{\"close\":1}");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(closed, "outline"), "shown"), "[[0,0,true],[2,0,false]]");
+    cJSON* opened = viewed(s, closed, "outline", "{\"open\":1}");
+    CHECK_JSON(cJSON_GetObjectItem(view_of(opened, "outline"), "open"), "[1]");
+    CHECK(cJSON_GetObjectItem(viewed(s, first, "nothing", "{\"page\":1}"), "error"));
+    CHECK(cJSON_GetObjectItem(viewed(s, first, "grid", "{\"jump\":1}"), "error"));
     clarity_service_free(s);
     clarity_db_close(db);
 }

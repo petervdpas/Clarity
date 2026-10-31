@@ -1,5 +1,6 @@
 #include "clarity/text.hpp"
 
+#include <cctype>
 #include <mutex>
 
 #include "clarity/errors.hpp"
@@ -225,5 +226,29 @@ std::optional<std::string> key_value(const std::string& key) {
 }
 
 std::string text_of(const std::string& key_or_text) { return key_value(key_or_text).value_or(key_or_text); }
+
+std::string trimmed(const std::string& text) {
+    auto space = [](char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; };
+    size_t from = 0, to = text.size();
+    while (from < to && space(text[from])) ++from;
+    while (to > from && space(text[to - 1])) --to;
+    return text.substr(from, to - from);
+}
+
+std::string lower_case(const std::string& text) {
+    std::string out = text;
+    for (size_t i = 0; i < out.size(); ++i) {
+        auto c = static_cast<unsigned char>(out[i]);
+        if (c < 0x80) {
+            out[i] = char(std::tolower(c));
+        } else if (c == 0xC3 && i + 1 < out.size()) {
+            // UTF-8 C3 80 to C3 9E are the capitals of Latin-1, but for the times sign.
+            auto next = static_cast<unsigned char>(out[i + 1]);
+            if (next >= 0x80 && next <= 0x9E && next != 0x97) out[i + 1] = char(next + 0x20);
+            ++i;
+        }
+    }
+    return out;
+}
 
 }  // namespace clarity

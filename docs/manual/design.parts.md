@@ -33,12 +33,12 @@ For every part, its own properties, events and binding rules are in [the languag
 - `form`: binds to one record (`bind customer`) and holds the inputs of that record on its own grid. Event: `submit`, when Enter is pressed in one of its inputs.
 - `panel`: parts in a frame with the caption. Tick **The person can fold it by its header** under Folding in its properties (`foldable`), and **Starts folded** to start it folded (`foldable folded`); a form folds the same way. Code reads and sets it as `details.folded`.
 - `tabs`: `tab @key` blocks, each with parts. Event: `change`. Add tab is in the properties.
-- `splitter`: exactly two `pane` blocks, side by side or stacked.
+- `splitter`: exactly two `pane` blocks, side by side or stacked, with a divider the person drags. Select the first pane of a side-by-side splitter to set its **Width** (`pane span 4`): the columns it starts with, the second pane taking the rest. Left empty, the panes start alike.
 
 ## Data
 
 - `table`: binds to a list (`bind orders`) and shows `columns`. Columns named in `edit` are inputs in the cells. A column can have a width, set by dragging its header edge on the canvas or in the properties; `resizable` lets the person resize the columns (remembered for them), `sortable` sorts by a click on a header, and `order by` gives the order the rows show in first. Events: `select` (another row is chosen), `open` (double-click or Enter), `change` (a cell was edited).
-- `list`: binds to a list and shows the fields in `show`. With **Cards** (`cards`) each row is a small card: the first field shown is its title, the others lines below it. Events: `select`, `open`.
+- `list`: binds to a list and shows the fields in `show`. With **Cards** (`cards`) each row is a small card: the first field shown is its title, the others lines below it; the theme's `part card` and `part card_line` say how cards look (see Themes). Events: `select`, `open`.
 - `chart`: bars, a line or a pie of a list's rows grouped by a field; or, bound to a list of numbers (`data readings: list<decimal>`), the numbers as they are, as bars or a line. **Points** shows a list's last numbers and **Top** fixes the top of the axis.
 - `trend`: one number's last values as a line, taken every so many seconds while the window is open: `trend name cpuTrend at 1,1 span 6 rows 4 bind cpu points 60 max 100`. **Points** is how many it keeps (60 without it), **Every (s)** the seconds between them (1 without it), **Top** the top of the axis. The designer shows a still sample line.
 

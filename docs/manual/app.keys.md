@@ -52,9 +52,9 @@ Delete, Backspace and Escape do nothing to the window while the cursor is in a t
 
 | Key | Does |
 |---|---|
-| F5 | Run: build the generated application and start it |
 | Ctrl+Shift+G | Generate the source, without building it |
 | Ctrl+Shift+B | Build a release program |
+| F5 | Run: build the generated application and start it |
 | Shift+F5 | Stop the running application |
 | Alt+Left | Back to the window before |
 | Alt+Home | The main window |

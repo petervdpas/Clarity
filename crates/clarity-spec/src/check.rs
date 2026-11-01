@@ -1201,8 +1201,23 @@ impl<'a> Checker<'a> {
                         }
                         _ => {}
                     }
-                    for inner in &widget.pages {
-                        self.check_widgets(file, page, &inner.children, p.width);
+                    if container == ContainerKind::Splitter {
+                        let side_by_side = p.orientation != Some(crate::model::Orientation::Vertical);
+                        for (i, pane) in widget.pages.iter().enumerate() {
+                            match pane.columns {
+                                None => {}
+                                Some(_) if !side_by_side => self.error(file, "a pane's span is its width side by side; a vertical splitter's panes start alike", pane.span),
+                                Some(_) if i > 0 => self.error(file, "only the first pane has a span; the second has the rest", pane.span),
+                                Some(n) if !(1..p.width).contains(&n) => {
+                                    self.error(file, format!("the first pane spans 1 to {} of the splitter's {} columns", p.width.saturating_sub(1), p.width), pane.span)
+                                }
+                                Some(_) => {}
+                            }
+                        }
+                    }
+                    let columns = if container == ContainerKind::Splitter { widgets::pane_columns(widget) } else { widget.pages.iter().map(|_| p.width).collect() };
+                    for (inner, columns) in widget.pages.iter().zip(columns) {
+                        self.check_widgets(file, page, &inner.children, columns);
                     }
                 }
             }

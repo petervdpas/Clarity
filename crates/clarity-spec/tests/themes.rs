@@ -205,9 +205,16 @@ fn deeper_theme_lines_are_checked() {
         "unknown size 'huge'; a theme sets the sizes text, small and heading",
         "unknown radius 'knob'; a theme sets the radius of input, button and panel, or of all with 'radius n'",
         "unknown shadow 'deep'; a shadow is none, flat or raised",
-        "unknown state 'wobble'; a part looks different on hover, pressed or focus",
-        "a theme sets the look of the parts button, input, header, tab and menu, not 'slider'",
+        "unknown state 'wobble'; a part looks different on hover, pressed, focus or selected",
+        "a theme sets the look of the parts button, input, header, tab, menu, list, card and card_line, not 'slider'",
     ]);
+}
+
+/// Only a part with rows to choose has a `selected` look.
+#[test]
+fn only_a_list_and_its_cards_have_a_selected_look() {
+    let bad = DEEP.replace("part button hover", "part button selected");
+    assert_eq!(errors(&project(&bad, &["Deep"])), ["only list, card and card_line have a row selected, not 'button'"]);
 }
 
 #[test]

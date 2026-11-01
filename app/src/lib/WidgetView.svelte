@@ -49,7 +49,7 @@
   import { languageName, languagesOf } from "./translate";
   import { numberEditing } from "./format";
   import { pageDesigner } from "./pageDesignerStore.svelte";
-  import { GAP, allParts, rowAt, boundField, fieldOf, findPart, helpId, partId, widgetInfo, withProps, type PageData } from "./pages";
+  import { GAP, ROW_HEIGHT, widgetGrows, allParts, rowAt, boundField, fieldOf, findPart, helpId, partId, widgetInfo, withProps, type PageData } from "./pages";
   import type { Event as PartEvent } from "./generated/Event";
   import { useLive } from "./live";
   import { provideForm, useForm } from "./form";
@@ -326,6 +326,48 @@
   }
 
   /** Chooses a row; `select` runs when it is another row than before, as on every stack. */
+  // A splitter's panes: their columns as the backend's `pane_columns` gives
+  // them (`pane span 4` side by side: 4 and the rest), and the share of the
+  // first once the person drags the divider.
+  function paneColumns(): number[] {
+    const first = widget.pages[0]?.columns;
+    const sideBySide = p.orientation !== "vertical";
+    if (first != null && sideBySide && widget.pages.length === 2 && first >= 1 && first < p.width) return [first, p.width - first];
+    return widget.pages.map(() => p.width);
+  }
+
+  let splitShare = $state<number | null>(null);
+  let splitterBox: HTMLDivElement | undefined = $state();
+
+  function paneGrow(index: number, columns: number[]): number {
+    const total = columns.reduce((a, b) => a + b, 0);
+    const first = splitShare ?? columns[0] / total;
+    return index === 0 ? first : 1 - first;
+  }
+
+  function pressDivider(event: PointerEvent) {
+    if (design || !splitterBox) return;
+    const box = splitterBox;
+    const divider = event.currentTarget as HTMLElement;
+    divider.setPointerCapture(event.pointerId);
+    const vertical = p.orientation === "vertical";
+    const move = (e: PointerEvent) => {
+      const r = box.getBoundingClientRect();
+      const at = vertical ? (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width;
+      splitShare = Math.min(0.9, Math.max(0.1, at));
+    };
+    const up = () => {
+      divider.removeEventListener("pointermove", move);
+      divider.removeEventListener("pointerup", up);
+    };
+    divider.addEventListener("pointermove", move);
+    divider.addEventListener("pointerup", up);
+  }
+
+  // A part that does not grow keeps the height of its rows at their least,
+  // at the top, when a part beside it makes them grow (as on every stack).
+  const keepsHeight = $derived(!widgetGrows(preview, widget));
+
   function selectRow(index: number) {
     if (!live || !p.name || design) return;
     const other = selectedRow !== index;
@@ -544,6 +586,8 @@
   title={error ?? (p.tooltip ? tr(preview, p.tooltip) : undefined)}
   style:grid-column="{p.col} / span {p.width}"
   style:grid-row="{p.row} / span {p.height}"
+  style:align-self={keepsHeight ? "start" : undefined}
+  style:height={keepsHeight ? `calc(${p.height} * ${ROW_HEIGHT}px + ${p.height - 1} * var(--grid-gap, ${GAP}px))` : undefined}
   onpointerdown={pressMove}
   ondblclick={(e) => {
     if (!design || p.made) return;
@@ -1032,11 +1076,12 @@
         </div>
       </div>
     {:else if p.kind === "splitter"}
-      <div class="splitter {p.orientation ?? 'horizontal'}">
+      {@const columns = paneColumns()}
+      <div class="splitter {p.orientation ?? 'horizontal'}" bind:this={splitterBox}>
         {#each widget.pages as pane, index (pane.span.start)}
-          {#if index > 0}<div class="divider"></div>{/if}
-          <div class="pane">
-            <GridBox {preview} {page} {data} {design} widgets={pane.children} columns={p.width} container={pane.span.start} {onnavigate} />
+          {#if index > 0}<div class="divider" role="separator" onpointerdown={pressDivider}></div>{/if}
+          <div class="pane" style:flex-grow={paneGrow(index, columns)}>
+            <GridBox {preview} {page} {data} {design} widgets={pane.children} columns={columns[index]} container={pane.span.start} {onnavigate} />
           </div>
         {/each}
       </div>
@@ -1330,10 +1375,6 @@
 
   .widget.disabled {
     opacity: 0.55;
-  }
-
-  li.chosen {
-    background: var(--selection);
   }
 
   .widget {
@@ -1907,8 +1948,9 @@
   }
 
   .pane {
-    flex: 1;
+    flex: 1 1 0;
     min-width: 0;
+    min-height: 0;
     padding: calc(var(--padding) * 2);
     overflow: hidden;
   }
@@ -1917,21 +1959,27 @@
     flex: none;
     background: var(--border-strong);
     width: 4px;
+    cursor: col-resize;
+    touch-action: none;
   }
 
   .splitter.vertical .divider {
     width: auto;
     height: 4px;
+    cursor: row-resize;
   }
 
+  /* A list and its rows, as the theme's part list says (hover, selected). */
   .list {
     flex: 1;
     margin: 0;
     padding: 4px;
     list-style: none;
     overflow: auto;
-    border: var(--border-width) solid var(--border-strong);
-    border-radius: var(--radius-panel);
+    background: var(--list-bg);
+    color: var(--list-text);
+    border: var(--border-width) solid var(--list-border, var(--border-strong));
+    border-radius: var(--list-radius, var(--radius-panel));
     font-size: var(--font-size);
   }
 
@@ -1940,23 +1988,70 @@
     border-bottom: var(--border-width) solid var(--border);
   }
 
-  /* A list of cards: each row a small card, its title above its lines. */
+  .list li:hover {
+    background: var(--list-hover-bg);
+    color: var(--list-hover-text, inherit);
+  }
+
+  .list li.chosen {
+    background: var(--list-selected-bg, var(--selection));
+    color: var(--list-selected-text, inherit);
+  }
+
+  /* A list of cards: no frame of its own; each row a card, as the theme's
+     part card and part card_line say, the one chosen in its selected look. */
+  .list.cards {
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+
   .list.cards li {
-    margin-bottom: 4px;
-    border: var(--border-width) solid var(--border);
-    border-radius: var(--radius);
-    background: var(--raised);
+    margin-bottom: calc(var(--padding) * 1.5);
+    padding: calc(var(--padding) * 2) calc(var(--padding) * 2.5);
+    border: var(--border-width) solid var(--card-border, transparent);
+    border-radius: var(--card-radius, var(--radius-panel));
+    background: var(--card-bg);
+    color: var(--card-text);
+    cursor: default;
+  }
+
+  .list.cards li:hover {
+    background: var(--card-hover-bg, var(--card-bg));
+    border-color: var(--card-hover-border, var(--card-border));
+    color: var(--card-hover-text, var(--card-text));
+  }
+
+  .list.cards li.chosen {
+    background: var(--card-selected-bg, var(--card-bg));
+    border-color: var(--card-selected-border, var(--card-border));
+    color: var(--card-selected-text, var(--card-text));
+  }
+
+  .list .card-title,
+  .list .card-line {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .list .card-title {
-    display: block;
-    font-weight: 600;
+    font-weight: var(--card-weight, 400);
   }
 
   .list .card-line {
-    display: block;
-    font-size: var(--size-small);
-    color: var(--accent);
+    font-size: var(--font-size-small);
+    font-weight: var(--card-line-weight, 400);
+    color: var(--card-line-text, inherit);
+  }
+
+  .list.cards li:hover .card-line {
+    color: var(--card-line-hover-text, var(--card-line-text, inherit));
+  }
+
+  .list.cards li.chosen .card-line {
+    color: var(--card-line-selected-text, var(--card-line-text, inherit));
   }
 
   /* Where a dragged row lands (DESIGN 5.30). */

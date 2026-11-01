@@ -60,8 +60,12 @@ pub const SIZES: [&str; 3] = ["text", "small", "heading"];
 pub const RADII: [&str; 3] = ["input", "button", "panel"];
 
 /// The kinds of part a theme gives a look, and the states they can be in.
-pub const PART_KINDS: [&str; 5] = ["button", "input", "header", "tab", "menu"];
-pub const STATES: [&str; 3] = ["hover", "pressed", "focus"];
+/// A list is its frame and plain rows; a card is a row of a list of cards,
+/// `card_line` the lines under a card's title.
+pub const PART_KINDS: [&str; 8] = ["button", "input", "header", "tab", "menu", "list", "card", "card_line"];
+pub const STATES: [&str; 4] = ["hover", "pressed", "focus", "selected"];
+/// The parts that have rows to choose, so a `selected` look.
+pub const SELECTABLE: [&str; 3] = ["list", "card", "card_line"];
 
 /// What a style or a part look sets.
 const LOOK_WORDS: [&str; 5] = ["background", "text", "border", "radius", "weight"];
@@ -299,6 +303,12 @@ fn parse_line(node: &Node, theme: &mut ThemeDecl) -> ParseResult<()> {
                     if !STATES.contains(&t.text.as_str()) {
                         return Err(Diagnostic::error(
                             format!("unknown state '{}'; a part looks different on {}", t.text, listed_str_or(&STATES)),
+                            t.span,
+                        ));
+                    }
+                    if t.text == "selected" && !SELECTABLE.contains(&kind.name.as_str()) {
+                        return Err(Diagnostic::error(
+                            format!("only {} have a row selected, not '{}'", listed_str(&SELECTABLE), kind.name),
                             t.span,
                         ));
                     }

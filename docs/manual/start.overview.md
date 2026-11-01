@@ -37,7 +37,7 @@ The ribbon at the top has four tabs:
 
 - **Project**: New, Open, Reload and Settings for the project, New window and App, and Check, which reads every file again and checks the whole project. The sidebar shows the project's name, file, app folder, stack and data, and the project tree (App, Windows, Data, Web APIs, Diagrams, Themes, Languages, Resources, Modules).
 - **Design**: the designer. Pick a window or the app in the tree and it opens on the canvas, with Elements, Parts, Window and Settings tabs in the sidebar and the inspector on the right: the properties, code and text of what is picked. Entities, enums, themes and modules open in their own editors.
-- **Preview**: shows a window as it will look, with sample data, and follows buttons that open other windows. Run, Build and Stop are here; see [Run and Build](project.run-build.md).
+- **Preview**: shows a window as it will look, with sample data, and follows buttons that open other windows. Generate, Build, Run and Stop are here, in that order; see [Run and Build](project.run-build.md).
 - **Vault**: secrets and connections that Clarity uses while you work, such as the key of an AI connection. See [The vault](vault.md).
 
 The **Agent** button at the right of the tabs opens the Agent panel on the right side of every tab. It talks to an AI model that reads and changes the open project; see [The agent](ai.agent.md).
@@ -52,7 +52,7 @@ The **Manual** button beside it, or **F1**, opens this manual in a window of its
 
 Below the sidebar is the Problems list: errors and warnings of the whole project, each with its file, line and column.
 
-The **Output** panel docks at the bottom of the main area when you Run or Build. It shows the build tool's output line by line. Close it with the cross in its header.
+The **Output** panel docks at the bottom of the main area when you Generate, Build or Run. It shows the build tool's output line by line. Close it with the cross in its header.
 
 ## Next
 

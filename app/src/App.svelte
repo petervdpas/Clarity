@@ -1390,14 +1390,6 @@
           <div class="group">
             <div class="buttons">
               <RibbonButton
-                icon="play"
-                label={building ? "Building..." : "Run"}
-                title="Build the generated application with its toolchain and start it"
-                keys={keysFor("preview.run")}
-                disabled={!preview || building || running || commandRunning || errorCount > 0}
-                onclick={() => buildApp(false, true)}
-              />
-              <RibbonButton
                 icon="code"
                 label="Generate"
                 title="Generate the application's source, in its stack's language and UI framework, into its output folder"
@@ -1412,6 +1404,14 @@
                 keys={keysFor("preview.build")}
                 disabled={!preview || building || errorCount > 0}
                 onclick={() => buildApp(true, false)}
+              />
+              <RibbonButton
+                icon="play"
+                label={building ? "Building..." : "Run"}
+                title="Build the generated application with its toolchain and start it"
+                keys={keysFor("preview.run")}
+                disabled={!preview || building || running || commandRunning || errorCount > 0}
+                onclick={() => buildApp(false, true)}
               />
               <RibbonButton icon="stop" label="Stop" title="Close the running application" keys={keysFor("preview.stop")} disabled={!running && !commandRunning} onclick={stopApp} />
               <RibbonButton icon="globe" label="Browser" title={address ? `Open the running application in your browser, at ${address}` : "Opens a running web application in your browser"} disabled={!address} onclick={openInBrowser} />

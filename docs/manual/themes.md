@@ -35,7 +35,14 @@ theme Shop
 - `font`, `font heading`, `font mono`: lists of font families.
 - `size`, `size small`, `size heading`: text sizes in pixels.
 - `radius`, and `radius input`, `radius button` or `radius panel` for one kind; `padding`, `border`; `shadow none`, `flat` or `raised`.
-- `part kind [state] look` changes a kind of part: `button`, `input`, `header` (of a table), `tab` or `menu`, optionally in the state `hover`, `pressed` or `focus`.
+- `part kind [state] look` changes a kind of part: `button`, `input`, `header` (of a table), `tab`, `menu`, `list`, `card` or `card_line`, optionally in the state `hover`, `pressed` or `focus`. A list, a card and a card line also have `selected`, the row chosen. A list with **Cards** shows each row as a `card`, its title in the card's text and weight, the lines under it as `card_line`:
+
+```
+    part card background panel, border border, radius 8
+    part card selected background accent, text on_accent
+    part card_line text accent, weight bold
+    part card_line selected text on_accent
+```
 - `style name look` declares a named style.
 
 A look sets `background`, `text` and `border` to a theme color by name or written out (a border can be `none`), `radius n`, and `weight bold` or `weight normal`, separated by commas.

@@ -200,7 +200,8 @@ fn variables(theme: &ThemeDecl) -> Vec<String> {
         lines.push(format!("--shadow: {}", shadow_value(shadow)));
     }
     for part in &theme.parts {
-        let prefix = part.state.as_ref().map_or_else(|| part.kind.clone(), |s| format!("{}-{s}", part.kind));
+        let kind = part.kind.replace('_', "-");
+        let prefix = part.state.as_ref().map_or_else(|| kind.clone(), |s| format!("{kind}-{s}"));
         lines.extend(part_variables(&prefix, &part.look));
     }
     lines

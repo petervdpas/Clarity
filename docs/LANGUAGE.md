@@ -598,7 +598,7 @@ Every part sits on the grid of the window or of the container it is in:
 - `span n` is the number of columns it covers. The default comes from the part's kind.
 - `rows n` is the number of rows it covers. The default also comes from the part's kind.
 
-Rows have a fixed height in the designer. In a running application the columns share the width of the window, and rows that hold something that grows (a table, a list, an image, a canvas, or a container with one of these inside) share the extra height. Everything else keeps its height.
+Rows have a fixed height in the designer. In a running application the columns share the width of the window, and rows that hold something that grows (a table, a list, an image, a canvas, or a container with one of these inside) share the extra height. Everything else keeps its height, also in a row that grows: it stands at the top of its rows, as high as they are at their least.
 
 The checker reports parts that start outside the grid, run past its last column, or overlap another part in the same container.
 
@@ -685,7 +685,7 @@ A color input shows a swatch and the color as `#rrggbb`. The swatch opens a pale
 | `buttons` | buttons and toggles joined in one row, on its own grid | none | none |
 | `accordion` | `section @key` blocks, each with parts; one open at a time | none | `change` |
 | `scroll` | parts, on its own grid; parts below its rows scroll into view | none | none |
-| `splitter` | exactly two `pane` blocks, each with parts | `horizontal` or `vertical` | none |
+| `splitter` | exactly two `pane` blocks, each with parts; `pane span n` starts the first at n columns | `horizontal` or `vertical` | none |
 
 A panel or form with `foldable` has a header the person clicks to fold it to that header and unfold it again; `foldable folded` starts it folded. Code reads and sets whether it is folded as `part.folded`, so a handler can open the section a message is about. In the designer it stays open, to edit what it holds. On Avalonia it is an Expander; on the web stacks the renderer folds it.
 
@@ -694,7 +694,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
 | `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `order by field [desc]`; `reorder by field`; `page 50` | `select`, `open`, `change`, `reorder` |
-| `list` | a list: `bind orders` | `show field, field, ...`; `cards`: each row a small card, the first field of `show` its title and the others lines below it; `reorder by field` | `select`, `open`, `reorder` |
+| `list` | a list: `bind orders` | `show field, field, ...`; `cards`: each row a small card, the first field of `show` its title and the others lines below it, in the theme's `part card` and `part card_line` looks; `reorder by field` | `select`, `open`, `reorder` |
 | `tree` | a list: `bind folders children children` | `children field`; `show field, ...`; `reorder by field` | `select`, `open`, `reorder` |
 | `treetable` | a list: `bind folders children children` | `children field`; `columns field [width], ...`; `resizable`; `reorder by field` | `select`, `open`, `reorder` |
 | `chart` | a list: `chart bar ... bind orders by status count`; or a list of numbers, drawn as they are: `chart line ... bind readings` | `bar`, `line` or `pie` first; `by field`; `count`, `sum field` or `average field`; for a list of numbers `points n` (its last n) and `max n` (the top of the axis) | |
@@ -923,7 +923,7 @@ splitter at 1,1 span 12 rows 10 vertical
             text at 1,1 span 6 bind customer.name
 ```
 
-`tabs` need at least one `tab`, and a `splitter` has exactly two `pane` blocks.
+`tabs` need at least one `tab`, and a `splitter` has exactly two `pane` blocks. The person drags the divider between the panes. Side by side, the first pane can start at a width of its own, `pane span 4`: its grid has 4 of the splitter's columns and the second pane the rest, so a list on the left and a form on the right keep the window's column lines. Without it each pane has the splitter's columns and they start alike.
 
 A form with `labels 3` has a label column: each input in it gets a label in the form's first 3 columns of its row, showing its field's label (the `label` of the field, a key such as `customerNameLabel`), so its inputs start at column 4. The label is a part named after its input, `nameBoxLabel` for `nameBox`, which code hides or disables as any part. A checkbox, a switch and a toggle label themselves, with their own caption or, without one, their field's label; a label written `for` an input the form labels is an error.
 
@@ -1205,7 +1205,7 @@ theme Shop
 | `radius n`, `radius input n`, `radius button n`, `radius panel n` | Corner radii in pixels: of everything, or of one kind. |
 | `padding n`, `border n` | The space inside inputs and buttons, and the width of borders, in pixels. |
 | `shadow none`, `shadow flat`, `shadow raised` | The shadow under menus, popups and messages. |
-| `part kind [state] look` | How a kind of part looks: `button`, `input`, `header` (of a table), `tab` or `menu`; with `hover`, `pressed` or `focus`, in that state. |
+| `part kind [state] look` | How a kind of part looks: `button`, `input`, `header` (of a table), `tab`, `menu`, `list` (its frame and rows), `card` (a row of a list with `cards`) or `card_line` (the lines under a card's title); with `hover`, `pressed` or `focus`, in that state, and a list, card or card line with `selected`, as the row chosen. A card's padding and the gap between cards follow the theme's `padding`. |
 | `style name look` | A named style that parts pick with `style name`. |
 
 A look (of a part or a style) sets `background`, `text` and `border` to a color of the theme by name or written out (a border can be `none`), `radius n`, and `weight bold` or `weight normal`, separated by commas. A style also sets how its text shows: `size n` in pixels (6 to 200), `font` with a font of the theme (`text`, `heading` or `mono`), and `align left`, `align center` or `align right`; aligned text keeps an input's padding from the edge. A calculator's display:

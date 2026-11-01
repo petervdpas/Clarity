@@ -43,6 +43,9 @@ pub enum Edit {
     /// Set the title of a page, app, tab, ribbon tab or group, or the footer
     /// status. An empty title removes a page's or app's title.
     SetTitle { target: u32, title: String },
+    /// Set the columns a splitter's first pane starts with (`pane span 4`),
+    /// or none, so the panes start alike.
+    SetPaneSpan { target: u32, columns: Option<u32> },
     /// Place a new widget on a page, panel, tab or pane.
     PlaceWidget { container: u32, props: WidgetProps },
     /// Place a new widget with the catalog defaults for its kind, optionally
@@ -540,7 +543,7 @@ fn child_kind(parent: Kind, node: &LNode) -> Kind {
             Kind::WidgetTab
         }
         Kind::Widget(Some(ContainerKind::Splitter))
-            if starts_with_keyword(&node.tokens, "pane", None) =>
+            if starts_with_keyword(&node.tokens, "pane", None) || starts_with_keyword(&node.tokens, "pane", Some(TokenKind::Ident)) =>
         {
             Kind::Pane
         }
@@ -816,6 +819,12 @@ impl Doc {
         match edit {
             Edit::Remove { item } => self.remove(*item),
             Edit::SetTitle { target, title } => self.set_title(*target, title),
+            Edit::SetPaneSpan { target, columns } => {
+                let (path, _) = self.find(*target, "a pane", |k| k == Kind::Pane)?;
+                let line = columns.map_or_else(|| "pane".to_string(), |n| format!("pane span {n}"));
+                set_line_keeping_comment(self.node_mut(&path), line);
+                Ok(Some(*target))
+            }
             Edit::PlaceWidget { container, props } => self.place_widget(*container, props),
             Edit::CreateWidget {
                 container,

@@ -1614,6 +1614,17 @@ pub fn dropdown_options(props: &WidgetProps) -> Result<(), String> {
     Ok(())
 }
 
+/// The columns of each pane of a splitter: side by side, a first pane with
+/// `span n` has n and the second the rest; otherwise each has the splitter's.
+pub fn pane_columns(widget: &crate::model::Widget) -> Vec<u32> {
+    let width = widget.props.width;
+    let side_by_side = widget.props.orientation != Some(crate::model::Orientation::Vertical);
+    match widget.pages.first().and_then(|p| p.columns) {
+        Some(first) if side_by_side && widget.pages.len() == 2 && (1..width).contains(&first) => vec![first, width - first],
+        _ => widget.pages.iter().map(|_| width).collect(),
+    }
+}
+
 /// A canvas's grid is 1 to 10000 units, and it snaps only to a grid it has.
 pub fn canvas_options(props: &WidgetProps) -> Result<(), String> {
     if props.grid.is_some_and(|g| !(1..=10000).contains(&g)) {

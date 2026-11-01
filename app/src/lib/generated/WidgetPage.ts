@@ -5,4 +5,10 @@ import type { Widget } from "./Widget";
 /**
  * A `tab "Title"` or `pane` block inside a container widget.
  */
-export type WidgetPage = { title: string | null, children: Array<Widget>, span: Span, };
+export type WidgetPage = { title: string | null, 
+/**
+ * `pane span 4`: the columns a splitter's first pane starts with, so
+ * its grid has them; the second pane has the rest. Without it each pane
+ * has the splitter's columns and they start alike.
+ */
+columns: number | null, children: Array<Widget>, span: Span, };

@@ -272,6 +272,93 @@
     <Style Selector="TextBlock.said.error">
       <Setter Property="Foreground" Value="{DynamicResource ClarityError}" />
     </Style>
+    <!-- A splitter: framed, its panes padded, the divider between them dragged. -->
+    <Style Selector="Border.splitter">
+      <Setter Property="BorderBrush" Value="{DynamicResource ClarityStrongBorder}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource ClarityBorderWidth}" />
+      <Setter Property="CornerRadius" Value="{DynamicResource ClarityRadiusPanel}" />
+      <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.pane">
+      <Setter Property="Padding" Value="{DynamicResource ClarityPanePadding}" />
+    </Style>
+    <Style Selector="Border.splitter GridSplitter">
+      <Setter Property="Background" Value="{DynamicResource ClarityStrongBorder}" />
+    </Style>
+    <!-- A list and its rows, as the theme's part list says (hover, selected). -->
+    <Style Selector="ListBox">
+      <Setter Property="Background" Value="{DynamicResource ClarityListBackground}" />
+      <Setter Property="Foreground" Value="{DynamicResource ClarityListText}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ClarityListBorder}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource ClarityBorderWidth}" />
+      <Setter Property="CornerRadius" Value="{DynamicResource ClarityListRadius}" />
+    </Style>
+    <Style Selector="ListBox ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ClarityListHoverBackground}" />
+      <Setter Property="Foreground" Value="{DynamicResource ClarityListHoverText}" />
+    </Style>
+    <Style Selector="ListBox ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ClarityListSelectedBackground}" />
+      <Setter Property="Foreground" Value="{DynamicResource ClarityListSelectedText}" />
+    </Style>
+    <!-- A list of cards: no frame of its own; each row a card, as the theme's
+         part card and part card_line say, the one chosen in its selected look. -->
+    <Style Selector="ListBox.cards">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="ListBox.cards ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="{DynamicResource ClarityCardGap}" />
+    </Style>
+    <Style Selector="ListBox.cards ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.cards ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.cards ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource ClarityCardBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ClarityCardBorder}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource ClarityBorderWidth}" />
+      <Setter Property="CornerRadius" Value="{DynamicResource ClarityCardRadius}" />
+      <Setter Property="Padding" Value="{DynamicResource ClarityCardPadding}" />
+    </Style>
+    <Style Selector="Border.card TextBlock">
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="Border.card TextBlock.title">
+      <Setter Property="Foreground" Value="{DynamicResource ClarityCardText}" />
+      <Setter Property="FontWeight" Value="{DynamicResource ClarityCardWeight}" />
+    </Style>
+    <Style Selector="Border.card TextBlock.line">
+      <Setter Property="Foreground" Value="{DynamicResource ClarityCardLineText}" />
+      <Setter Property="FontWeight" Value="{DynamicResource ClarityCardLineWeight}" />
+      <Setter Property="FontSize" Value="{DynamicResource ClaritySizeSmall}" />
+    </Style>
+    <Style Selector="ListBoxItem:pointerover Border.card">
+      <Setter Property="Background" Value="{DynamicResource ClarityCardHoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ClarityCardHoverBorder}" />
+    </Style>
+    <Style Selector="ListBoxItem:pointerover Border.card TextBlock.title">
+      <Setter Property="Foreground" Value="{DynamicResource ClarityCardHoverText}" />
+    </Style>
+    <Style Selector="ListBoxItem:pointerover Border.card TextBlock.line">
+      <Setter Property="Foreground" Value="{DynamicResource ClarityCardLineHoverText}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected Border.card">
+      <Setter Property="Background" Value="{DynamicResource ClarityCardSelectedBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ClarityCardSelectedBorder}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected Border.card TextBlock.title">
+      <Setter Property="Foreground" Value="{DynamicResource ClarityCardSelectedText}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected Border.card TextBlock.line">
+      <Setter Property="Foreground" Value="{DynamicResource ClarityCardLineSelectedText}" />
+    </Style>
 
     <!-- {styles} -->
   </Application.Styles>

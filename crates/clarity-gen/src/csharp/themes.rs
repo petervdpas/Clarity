@@ -202,8 +202,7 @@ fn fluent_keys(kind: &str, state: Option<&str>) -> Vec<(&'static str, String)> {
     keys
 }
 
-const PART_KINDS: [&str; 5] = ["button", "input", "header", "tab", "menu"];
-const STATES: [&str; 3] = ["hover", "pressed", "focus"];
+use clarity_spec::themes::{PART_KINDS, SELECTABLE, STATES};
 
 /// The look properties of each style used across the offered themes, so
 /// every theme defines the same keys.
@@ -267,6 +266,18 @@ fn mode(m: &Merged, styles: &StyleProperties) -> String {
                     brush(&mut out, &key, &value);
                 }
             }
+        }
+    }
+    // A list's and a card's colors in each state, which the application's
+    // list styles read: `ClarityCardSelectedBackground`.
+    for kind in SELECTABLE {
+        for state in [None, Some("hover"), Some("selected")] {
+            let look = m.look(kind, state);
+            let key = format!("Clarity{}{}", pascal(kind), state.map(pascal).unwrap_or_default());
+            let text = m.colors.get("text").cloned().unwrap_or("none".into());
+            brush(&mut out, &format!("{key}Background"), look.background.as_deref().unwrap_or("none"));
+            brush(&mut out, &format!("{key}Text"), look.text.as_deref().unwrap_or(&text));
+            brush(&mut out, &format!("{key}Border"), look.border.as_deref().unwrap_or("none"));
         }
     }
     // A style's values; what this theme leaves out is a button's own look.
@@ -374,6 +385,11 @@ fn shared(m: &Merged) -> String {
     let _ = writeln!(out, "  <x:Double x:Key=\"ClarityPadding\">{p}</x:Double>");
     let _ = writeln!(out, "  <Thickness x:Key=\"ButtonPadding\">{},{p}</Thickness>", p * BUTTON_SIDES);
     let _ = writeln!(out, "  <Thickness x:Key=\"TextControlThemePadding\">{},{p}</Thickness>", p * INPUT_SIDES);
+    // A splitter's pane padding, as on the web.
+    let _ = writeln!(out, "  <Thickness x:Key=\"ClarityPanePadding\">{}</Thickness>", p * 2);
+    // A card's padding and the gap between cards, from the theme's padding, as on the web.
+    let _ = writeln!(out, "  <Thickness x:Key=\"ClarityCardPadding\">{},{}</Thickness>", f64::from(p) * 2.5, p * 2);
+    let _ = writeln!(out, "  <Thickness x:Key=\"ClarityCardGap\">0,0,0,{}</Thickness>", f64::from(p) * 1.5);
     let b = m.border;
     for key in ["ClarityBorderWidth", "ButtonBorderThemeThickness", "TextControlBorderThemeThickness"] {
         let _ = writeln!(out, "  <Thickness x:Key=\"{key}\">{b}</Thickness>");

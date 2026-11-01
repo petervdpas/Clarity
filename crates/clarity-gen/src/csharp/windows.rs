@@ -118,6 +118,34 @@ fn icon_xaml(name: &str, size: u32) -> String {
     )
 }
 
+/// A part's first element with its height kept and set at the top of its
+/// cell, unless the part sets them itself.
+fn kept_height(xaml: &str, height: u32) -> String {
+    // Past any comment before the element.
+    let mut from = 0;
+    while let Some(at) = xaml[from..].find("<!--") {
+        if xaml[from..].find('<') != Some(at) {
+            break;
+        }
+        match xaml[from + at..].find("-->") {
+            Some(e) => from += at + e + 3,
+            None => return xaml.to_string(),
+        }
+    }
+    let Some(open) = xaml[from..].find('<').map(|i| from + i) else { return xaml.to_string() };
+    let Some(close) = xaml[open..].find('>').map(|i| open + i) else { return xaml.to_string() };
+    let end = if xaml[..close].ends_with('/') { close - 1 } else { close };
+    let tag = &xaml[open..end];
+    let mut added = String::new();
+    if !tag.contains(" VerticalAlignment=") {
+        added.push_str(" VerticalAlignment=\"Top\"");
+    }
+    if !tag.contains(" Height=") {
+        let _ = write!(added, " Height=\"{height}\"");
+    }
+    format!("{}{added}{}", &xaml[..end].trim_end(), &xaml[end..])
+}
+
 /// Whether a part takes extra height when the window grows (the web
 /// renderer's `widgetGrows`).
 fn grows(widget: &Widget) -> bool {
@@ -716,7 +744,16 @@ impl<'a> Window<'a> {
         }
         let _ = writeln!(out, "{pad}  </Grid.RowDefinitions>");
         for widget in widgets {
-            self.widget(widget, depth + 1, out);
+            let p = &widget.props;
+            if grows(widget) || !(p.row..p.row + p.height).any(|r| growing.contains(&r)) {
+                self.widget(widget, depth + 1, out);
+                continue;
+            }
+            // A part that does not grow keeps the height of its rows at their
+            // least, at the top, when a part beside it makes them grow (as on the web).
+            let mut own = String::new();
+            self.widget(widget, depth + 1, &mut own);
+            out.push_str(&kept_height(&own, p.height * ROW_HEIGHT + (p.height - 1) * GAP));
         }
         let _ = writeln!(out, "{pad}</Grid>");
     }
@@ -1220,20 +1257,23 @@ impl<'a> Window<'a> {
             }
             WidgetKind::Splitter => {
                 let vertical = p.orientation == Some(clarity_spec::model::Orientation::Vertical);
-                let definitions = vec!["*"; widget.pages.len().max(1)].join(",Auto,");
+                // Framed, its panes padded and sized by their columns (`pane span 4`), as on the web.
+                let columns = widgets::pane_columns(widget);
+                let definitions = columns.iter().map(|c| format!("{c}*")).collect::<Vec<_>>().join(",Auto,");
                 let axis = if vertical { "RowDefinitions" } else { "ColumnDefinitions" };
-                let _ = writeln!(out, "{pad}<Grid {at} {axis}=\"{definitions}\"{plain_state}{extra}>");
-                for (i, pane) in widget.pages.iter().enumerate() {
+                let _ = writeln!(out, "{pad}<Border Classes=\"splitter\" {at}{plain_state}{extra}>");
+                let _ = writeln!(out, "{pad}<Grid {axis}=\"{definitions}\">");
+                for (i, (pane, columns)) in widget.pages.iter().zip(columns).enumerate() {
                     let position = if vertical { "Grid.Row" } else { "Grid.Column" };
                     if i > 0 {
-                        let resize = if vertical { "Rows" } else { "Columns" };
-                        let _ = writeln!(out, "{pad}  <GridSplitter {position}=\"{}\" ResizeDirection=\"{resize}\" />", 2 * i - 1);
+                        let (resize, size) = if vertical { ("Rows", "Height") } else { ("Columns", "Width") };
+                        let _ = writeln!(out, "{pad}  <GridSplitter {position}=\"{}\" ResizeDirection=\"{resize}\" {size}=\"4\" />", 2 * i - 1);
                     }
-                    let _ = writeln!(out, "{pad}  <Border {position}=\"{}\">", 2 * i);
-                    self.grid(&pane.children, p.width, None, false, depth + 2, out);
+                    let _ = writeln!(out, "{pad}  <Border Classes=\"pane\" {position}=\"{}\">", 2 * i);
+                    self.grid(&pane.children, columns, None, false, depth + 2, out);
                     let _ = writeln!(out, "{pad}  </Border>");
                 }
-                let _ = writeln!(out, "{pad}</Grid>");
+                let _ = writeln!(out, "{pad}</Grid>\n{pad}</Border>");
             }
             // A tree (U1c) is Clarity's table in tree mode: its rows under their parents.
             WidgetKind::Table | WidgetKind::Tree | WidgetKind::TreeTable => {
@@ -1378,14 +1418,16 @@ impl<'a> Window<'a> {
                     (Some(field), Some(entity)) => format!(" c:RowMoves.By=\"{}\"", property(&entity.name.name, field)),
                     _ => String::new(),
                 };
-                let _ = writeln!(out, "{pad}<ListBox {at}{items}{selected}{reorder}{plain_state}{extra}>");
+                // A list of cards: its look is the theme's (`part card`), in the application's styles.
+                let cards = if p.cards { " Classes=\"cards\"" } else { "" };
+                let _ = writeln!(out, "{pad}<ListBox {at}{items}{selected}{reorder}{cards}{plain_state}{extra}>");
                 if let (Some(entity), true) = (entity, p.cards) {
                     // A card: the first field its title, the others lines below it, in the theme's colors.
                     let _ = writeln!(out, "{pad}  <ListBox.ItemTemplate>\n{pad}    <DataTemplate x:DataType=\"local:{}\">", entity.name.name);
-                    let _ = writeln!(out, "{pad}      <Border Classes=\"card\" Padding=\"8,6\" CornerRadius=\"6\" BorderThickness=\"1\" BorderBrush=\"{{DynamicResource ClarityBorder}}\" Background=\"{{DynamicResource ClarityRaised}}\">");
+                    let _ = writeln!(out, "{pad}      <Border Classes=\"card\">");
                     let _ = writeln!(out, "{pad}        <StackPanel Spacing=\"2\">");
                     for (i, field) in p.show.iter().enumerate() {
-                        let look = if i == 0 { " FontWeight=\"SemiBold\"" } else { " FontSize=\"{DynamicResource ClaritySizeSmall}\" Foreground=\"{DynamicResource ClarityAccent}\"" };
+                        let look = if i == 0 { " Classes=\"title\"" } else { " Classes=\"line\"" };
                         let _ = writeln!(
                             out,
                             "{pad}          <TextBlock Text=\"{{Binding {}, Converter={{x:Static {}}}}}\"{look} />",

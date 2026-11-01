@@ -59,3 +59,13 @@ theme Clarity
     part tab hover text text
     part menu background panel, text text, border border
     part menu hover background accent_soft
+    // A list, its rows, and a list of cards: each row a card, its title
+    // above its lines; the card chosen filled with the accent.
+    part list background input, text text, border strong_border
+    part list hover background accent_soft
+    part list selected background selection
+    part card background raised, text text, border border, weight bold
+    part card hover border accent
+    part card selected background accent, text on_accent, border accent
+    part card_line text accent, weight bold
+    part card_line selected text on_accent

@@ -475,6 +475,10 @@ pub struct Widget {
 #[ts(export)]
 pub struct WidgetPage {
     pub title: Option<String>,
+    /// `pane span 4`: the columns a splitter's first pane starts with, so
+    /// its grid has them; the second pane has the rest. Without it each pane
+    /// has the splitter's columns and they start alike.
+    pub columns: Option<u32>,
     pub children: Vec<Widget>,
     pub span: Span,
 }

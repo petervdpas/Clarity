@@ -7,8 +7,8 @@ How Generate writes the project as source code, and Run, Build and Stop turn tha
 The buttons are in the Application group of the **Preview** tab.
 
 - **Generate** writes the application's source in its stack's language and UI framework into the output folder. The Output panel names the folder; build and run it there with the stack's own tools, or here with **Run** and **Build**.
-- **Run** builds a debug program from the generated source with the stack's own tool, and starts it.
 - **Build** builds a release program from the generated source. It does not start it; the Output panel names the program it made.
+- **Run** builds a debug program from the generated source with the stack's own tool, and starts it.
 - **Stop** closes the program that Run started.
 - **Browser** opens a running web application (the `web` target) in your browser, at its address. The Output panel's header shows the same address as a link.
 

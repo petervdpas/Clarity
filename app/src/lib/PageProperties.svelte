@@ -901,7 +901,27 @@
         <button class="danger" onclick={() => onedit({ op: "remove", item: tab.span.start })}>{step ? "Remove step" : section ? "Remove section" : "Remove tab"}</button>
       </div>
     {:else}
+      {@const splitter = inner.widget.props}
       <div class="kind">Pane</div>
+      {#if inner.index === 0 && splitter.orientation !== "vertical"}
+        <!-- The columns the first pane starts with (`pane span 4`); the second has the rest, and the divider moves them. -->
+        <label class="prop">
+          <span>Width</span>
+          <input
+            type="number"
+            min="1"
+            max={splitter.width - 1}
+            value={tab.columns ?? ""}
+            placeholder="half"
+            title="The columns this pane starts with; the other pane has the rest. Empty: the panes start alike."
+            onchange={(e) => {
+              const typed = (e.currentTarget as HTMLInputElement).value.trim();
+              const n = typed === "" ? 0 : numberOf(e);
+              onedit({ op: "setPaneSpan", target: tab.span.start, columns: n >= 1 && n < splitter.width ? n : null });
+            }}
+          />
+        </label>
+      {/if}
     {/if}
   {:else if frameElement}
     <FrameProperties {preview} element={frameElement} {onedit} {onapplied} {owner} />

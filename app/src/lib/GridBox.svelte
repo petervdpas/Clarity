@@ -88,6 +88,7 @@
   style:grid-template-rows={rowTemplate}
   style:grid-auto-rows="{ROW_HEIGHT}px"
   style:gap={joined ? "0px" : `${GAP}px`}
+  style:--grid-gap={joined ? "0px" : `${GAP}px`}
 >
   {#if design && pageDesigner.showGrid}
     {#each { length: (rows + freeRows) * columns } as _, i (i)}

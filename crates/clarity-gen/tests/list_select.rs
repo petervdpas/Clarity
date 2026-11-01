@@ -70,5 +70,80 @@ fn a_list_of_cards_shows_each_row_as_a_card() {
     let files = generate(&project, &settings).unwrap();
     let view = files.iter().find(|f| f.path.ends_with("MainView.axaml")).map(|f| f.text.as_str()).unwrap_or_default();
     assert!(view.contains("<Border Classes=\"card\""), "{view}");
-    assert!(view.contains("FontWeight=\"SemiBold\" />") && view.contains("Foreground=\"{DynamicResource ClarityAccent}\" />"), "a title and a line: {view}");
+    assert!(view.contains("Classes=\"line\""), "a title and a line: {view}");
+    assert!(view.contains("<ListBox ") && view.contains("Classes=\"cards\""), "{view}");
+    // Its look is the theme's (App.axaml reads the theme's values), not the window's.
+    assert!(!view.contains("ClarityAccent") && !view.contains("CornerRadius="), "{view}");
+    let app = files.iter().find(|f| f.path.ends_with("App.axaml")).map(|f| f.text.as_str()).unwrap_or_default();
+    for key in ["ClarityCardBackground", "ClarityCardSelectedBackground", "ClarityCardLineText", "ClarityListSelectedBackground", "ClarityCardPadding"] {
+        assert!(app.contains(&format!("{{DynamicResource {key}}}")), "{key} in the application's styles");
+    }
+    let theme: String = files.iter().filter(|f| f.path.contains("Themes/")).map(|f| f.text.as_str()).collect();
+    for key in ["ClarityCardBackground", "ClarityCardSelectedBackground", "ClarityCardLineText", "ClarityListSelectedBackground", "ClarityCardPadding", "ClarityCardRadius"] {
+        assert!(theme.contains(&format!("x:Key=\"{key}\"")), "{key} in the themes");
+    }
+}
+
+/// A list's and a card's look come from the theme (`part list`, `part card`,
+/// `part card_line`, with `hover` and `selected`), alike on every stack.
+#[test]
+fn a_list_and_its_cards_look_as_the_theme_says() {
+    let theme = "module m\n\ntheme Shop\n    part card background panel, border accent, radius 10\n    part card selected background success\n    part card_line text warning\n    part list selected background error_soft\n";
+    let (file, diagnostics) = clarity_spec::parser::parse(theme, "m.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    let css = clarity_gen::web::theme_css(&file.themes[0]);
+    for line in ["--card-bg: var(--panel)", "--card-radius: 10px", "--card-selected-bg: var(--success)", "--card-line-text: var(--warning)", "--list-selected-bg: var(--error-soft)"] {
+        assert!(css.contains(line), "{line} in {css}");
+    }
+    let base = clarity_gen::base_css();
+    for line in ["--list-bg:", "--list-selected-bg:", "--card-bg:", "--card-selected-bg:", "--card-line-text:"] {
+        assert!(base.contains(line), "Clarity's own theme sets {line}: {base}");
+    }
+}
+
+/// A splitter (`pane span 4`) starts its first pane at 4 of its 12 columns,
+/// framed, its panes padded and the divider dragged, as on the web.
+#[test]
+fn a_splitter_starts_its_first_pane_at_its_span() {
+    let mut settings = starter("Plan", "plan");
+    settings.stack.backend = Backend::Csharp;
+    settings.stack.ui = Ui::Avalonia;
+    let split = PLAN.replace(
+        "    list name itemList at 1,1 span 4 rows 4 bind items show title on select: itemSelected\n",
+        "    splitter name split at 1,1 span 12 rows 4\n        pane span 4\n            list name itemList at 1,1 span 4 rows 4 bind items show title on select: itemSelected\n        pane\n            text name note at 1,1 span 8\n",
+    );
+    let project = clarity_spec::load_in([("plan.clarity", split.as_str())], [("0001.clarity", FIRST)], &clarity_project::source_refs(&settings));
+    let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
+    assert!(errors.is_empty(), "{errors:#?}");
+    let files = generate(&project, &settings).unwrap();
+    let view = files.iter().find(|f| f.path.ends_with("MainView.axaml")).map(|f| f.text.as_str()).unwrap_or_default();
+    assert!(view.contains("<Border Classes=\"splitter\""), "{view}");
+    assert!(view.contains("ColumnDefinitions=\"4*,Auto,8*\""), "{view}");
+    assert!(view.contains("<Border Classes=\"pane\" Grid.Column=\"0\">"), "{view}");
+    let app = files.iter().find(|f| f.path.ends_with("App.axaml")).map(|f| f.text.as_str()).unwrap_or_default();
+    assert!(app.contains("<Style Selector=\"Border.pane\">"), "the panes are padded");
+}
+
+/// A part that does not grow keeps the height of its rows when a list beside
+/// it makes them grow: a button stays a button's height, at the top.
+#[test]
+fn a_button_beside_a_list_keeps_its_height() {
+    let mut settings = starter("Plan", "plan");
+    settings.stack.backend = Backend::Csharp;
+    settings.stack.ui = Ui::Avalonia;
+    let beside = PLAN.replace(
+        "    list name itemList at 1,1 span 4 rows 4 bind items show title on select: itemSelected\n",
+        "    list name itemList at 1,1 span 4 rows 4 bind items show title on select: itemSelected\n    button \"Add\" name addItem at 5,4 span 2\n    textbox name note at 5,1 span 4 rows 2\n",
+    );
+    let project = clarity_spec::load_in([("plan.clarity", beside.as_str())], [("0001.clarity", FIRST)], &clarity_project::source_refs(&settings));
+    let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
+    assert!(errors.is_empty(), "{errors:#?}");
+    let files = generate(&project, &settings).unwrap();
+    let view = files.iter().find(|f| f.path.ends_with("MainView.axaml")).map(|f| f.text.as_str()).unwrap_or_default();
+    let button = view.lines().find(|l| l.contains("x:Name=\"AddItem\"") || l.contains("Name=\"addItem\"")).unwrap_or_else(|| panic!("{view}"));
+    assert!(button.contains("VerticalAlignment=\"Top\"") && button.contains("Height=\"36\""), "{button}");
+    let note = view.lines().find(|l| l.contains("Name=\"note\"") || l.contains("Name=\"Note\"")).unwrap_or_else(|| panic!("{view}"));
+    assert!(note.contains("Height=\"80\""), "two rows and the gap between: {note}");
+    let list = view.lines().find(|l| l.contains("<ListBox")).unwrap();
+    assert!(!list.contains("VerticalAlignment=\"Top\""), "the list grows: {list}");
 }

@@ -63,7 +63,7 @@ Every part sits on a snap grid of 12 columns, or the number `grid N columns` giv
 
 In the designer, drag a part to move it and drag its corner handle to resize it. The **Grid** button on the Design tab shows or hides the grid cells. The checker reports parts that start outside the grid, run past its last column, or overlap another part.
 
-Rows have a fixed height in the designer. In the running application the columns share the window's width, and rows that hold something that grows (a table, a list, an image, a canvas, or a container with one of these inside) share the extra height. Everything else keeps its height.
+Rows have a fixed height in the designer. In the running application the columns share the window's width, and rows that hold something that grows (a table, a list, an image, a canvas, or a container with one of these inside) share the extra height. Everything else keeps its height, also in a row that grows: a button beside a list stays a button's height, at the top of its rows. To put a form beside a list, with a divider to set the list's width, place both in a `splitter` (see Parts).
 
 ## Opening windows
 

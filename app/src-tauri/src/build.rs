@@ -209,7 +209,11 @@ pub struct Generated {
     pub built: Option<(clarity_gen::Toolchain, bool)>,
 }
 
-pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, String> {
+/// Transpiles the project into its source tree: the code of each of its
+/// programs in its stack's language and UI framework, in the output folder,
+/// built nothing yet. It builds and runs with the stack's own tools, in
+/// Clarity or outside it. Gives the output folder, and what Build needs.
+pub fn generate_source(file: &Path) -> Result<Source, String> {
     let dir = clarity_project::module_dir(file);
     // Each web API's module follows its description and picks (DESIGN 5.23).
     clarity_project::refresh_apis(file)?;
@@ -230,6 +234,20 @@ pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, 
     let programs = clarity_gen::programs(&project, &built).map_err(|errors| errors.join("; "))?;
     let out = clarity_project::out_dir(file, &settings);
     clarity_gen::write_programs(&out, &programs, settings.stack.backend, &settings.keeps).map_err(|err| format!("cannot write {}: {err}", out.display()))?;
+    Ok(Source { out, settings, programs, shown })
+}
+
+/// A project's source tree as it was written: its output folder, its settings and programs.
+pub struct Source {
+    pub out: PathBuf,
+    pub settings: clarity_project::Settings,
+    pub programs: Vec<clarity_gen::Program>,
+    /// The project file's name, as messages name it.
+    shown: String,
+}
+
+pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, String> {
+    let Source { out, settings, programs, shown } = generate_source(file)?;
     // Each program is in its own folder of the output; one without windows has only the command line.
     let cli = cli || !settings.stack.has_ui();
     if cli && !settings.stack.has(clarity_project::Target::Cli) {

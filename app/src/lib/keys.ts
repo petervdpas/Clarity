@@ -42,6 +42,7 @@ export const IDE_COMMANDS: Command[] = [
   { id: "preview.main", name: "Main window", layers: ["preview"], keys: ["Alt+Home"] },
   { id: "preview.back", name: "Back", layers: ["preview"], keys: ["Alt+Left"] },
   { id: "preview.run", name: "Run", layers: ["preview"], keys: ["F5"] },
+  { id: "preview.generate", name: "Generate", layers: ["preview"], keys: ["Ctrl+Shift+G"] },
   { id: "preview.build", name: "Build", layers: ["preview"], keys: ["Ctrl+Shift+B"] },
   { id: "preview.stop", name: "Stop", layers: ["preview"], keys: ["Shift+F5"] },
   { id: "vault.secrets", name: "Secrets", layers: ["vault"], keys: [] },

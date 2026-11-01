@@ -219,6 +219,20 @@
     }
   }
 
+  /** Transpiles the project into its source tree, without building it; says where it went. */
+  async function generateApp() {
+    actionError = null;
+    buildLog = [];
+    buildDone = null;
+    showOutput = true;
+    try {
+      const out = await invoke<string>("generate_app");
+      buildDone = { ok: true, message: `The source is generated in ${out}`, binary: null };
+    } catch (err) {
+      buildDone = { ok: false, message: String(err), binary: null };
+    }
+  }
+
   /** Types a line to the command-line program, as its input. */
   async function typeLine() {
     const line = typed;
@@ -1026,6 +1040,7 @@
     "preview.main": { run: () => preview && (stack = startWindow(preview)), can: () => !!preview },
     "preview.back": { run: () => (stack = stack.slice(0, -1)), can: () => stack.length >= 2 },
     "preview.run": { run: () => buildApp(false, true), can: () => !!preview && !building && !running && !commandRunning && errorCount === 0 },
+    "preview.generate": { run: () => generateApp(), can: () => !!preview && !building && errorCount === 0 },
     "preview.build": { run: () => buildApp(true, false), can: () => !!preview && !building && errorCount === 0 },
     "preview.stop": { run: stopApp, can: () => running || commandRunning },
     "vault.secrets": { run: () => (vault.view = "secrets") },
@@ -1356,6 +1371,14 @@
                 keys={keysFor("preview.run")}
                 disabled={!preview || building || running || commandRunning || errorCount > 0}
                 onclick={() => buildApp(false, true)}
+              />
+              <RibbonButton
+                icon="code"
+                label="Generate"
+                title="Generate the application's source, in its stack's language, into its output folder, without building it"
+                keys={keysFor("preview.generate")}
+                disabled={!preview || building || errorCount > 0}
+                onclick={generateApp}
               />
               <RibbonButton
                 icon="build"

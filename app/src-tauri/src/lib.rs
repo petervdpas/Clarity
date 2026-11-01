@@ -393,6 +393,14 @@ fn build_app(release: bool, run: bool, command_line: Option<String>, app: AppHan
     build::start(app, project_file_of(&state)?, release, run, command_line)
 }
 
+/// Transpiles the open project into its source tree in the output folder,
+/// without building it; gives the folder.
+#[tauri::command]
+fn generate_app(state: State<WatchState>) -> Result<String, String> {
+    let file = project_file_of(&state)?;
+    build::generate_source(&file).map(|source| source.out.display().to_string())
+}
+
 /// Types a line to the command-line program Run started, as its input.
 #[tauri::command]
 fn type_line(line: String, app: AppHandle) -> Result<(), String> {
@@ -835,6 +843,7 @@ pub fn run() {
             try_decl,
             highlight,
             build_app,
+            generate_app,
             type_line,
             stop_app,
             app_state,

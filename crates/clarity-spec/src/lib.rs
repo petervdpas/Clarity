@@ -2,6 +2,7 @@
 
 pub mod check;
 pub mod colors;
+pub mod dates;
 pub mod code;
 pub mod diagnostic;
 pub mod diagrams;

@@ -84,6 +84,10 @@ fn initial(project: &Project, f: &Field) -> Option<String> {
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(decimal(n)),
         (FieldType::Bool, Some(Literal::Bool(b))) => Some(b.to_string()),
         (FieldType::Bool, _) => Some("false".into()),
+        // A date default written out (clarity_spec::dates).
+        (FieldType::Date, Some(Literal::Str(s))) => clarity_spec::dates::date(s).map(|d| format!("clarity::Date{{{}, {}, {}}}", d.year, d.month, d.day)),
+        (FieldType::DateTime, Some(Literal::Str(s))) => clarity_spec::dates::date_time(s)
+            .map(|d| format!("clarity::DateTime{{clarity::Date{{{}, {}, {}}}, {}, {}, {}}}", d.year, d.month, d.day, d.hour, d.minute, d.second)),
         (FieldType::Enum { name }, Some(Literal::Ident(v))) => Some(constant(&name.name, v)),
         // An enum without a default starts with its first value, as on every stack.
         (FieldType::Enum { name }, _) => project.enum_decl(&name.name).and_then(|d| d.variants.first()).map(|v| constant(&name.name, &v.name.name)),
@@ -243,7 +247,14 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     for f in &entity.fields {
         let key = string(&f.name.name);
         let _ = writeln!(to, "    out[{key}] = {};", json_of(f));
-        let _ = writeln!(from, "    if (in.contains({key}) && !in[{key}].is_null()) r.{} = {};", ident(&f.name.name), json_read(f));
+        let _ = match &f.ty {
+            // Null is no date, also where a new record starts with one (its default).
+            FieldType::Date | FieldType::DateTime => {
+                let inner = if f.ty == FieldType::Date { "clarity::Date" } else { "clarity::DateTime" };
+                writeln!(from, "    if (in.contains({key})) r.{} = in[{key}].is_null() ? std::nullopt : std::optional<{inner}>({});", ident(&f.name.name), json_read(f))
+            }
+            _ => writeln!(from, "    if (in.contains({key}) && !in[{key}].is_null()) r.{} = {};", ident(&f.name.name), json_read(f)),
+        };
     }
     let _ = write!(
         source,

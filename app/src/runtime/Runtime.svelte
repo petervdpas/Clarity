@@ -89,6 +89,14 @@
   /** How many of the person's events wait for the handler that runs; what a part tells waits behind them. */
   let personWaiting = 0;
   let options = $state<Record<string, RefOption[]>>({});
+  /**
+   * The reference lists to load again, as data may have changed: each is
+   * shown as it was until the backend answers, and taken only when it
+   * differs. Emptied, a table's choices would change, and the view it
+   * declares with them (DESIGN 1.7) would ask the backend again, which
+   * empties them again.
+   */
+  const staleOptions = new Set<string>();
   /** The values each typed dropdown's field has, by `Entity.field`. */
   let fieldValues = $state<Record<string, string[]>>({});
   let nextMessage = 0;
@@ -397,7 +405,8 @@
         }
         stack = next;
         // Data may have changed: reference lists and values load again when needed.
-        options = {};
+        for (const entity of Object.keys(options)) staleOptions.add(entity);
+        options = { ...options };
         fieldValues = {};
       },
     },
@@ -926,10 +935,13 @@
     },
     refOptions(entity: string) {
       const known = options[entity];
-      if (!known && !loading.has(entity)) {
+      if ((!known || staleOptions.has(entity)) && !loading.has(entity)) {
         loading.add(entity);
+        staleOptions.delete(entity);
         invoke<RefOption[]>("ref_options", { entity })
-          .then((list) => (options[entity] = list))
+          .then((list) => {
+            if (JSON.stringify(list) !== JSON.stringify(options[entity])) options[entity] = list;
+          })
           .catch((err) => say({ level: "error", text: errorText(err) }))
           .finally(() => loading.delete(entity));
       }

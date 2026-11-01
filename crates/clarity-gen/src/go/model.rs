@@ -79,6 +79,11 @@ pub fn decimal_literal(text: &str) -> String {
     }
 }
 
+/// A date default written out (clarity_spec::dates).
+fn go_date(d: &clarity_spec::dates::Moment) -> String {
+    format!("clarity.Date{{Year: {}, Month: {}, Day: {}}}", d.year, d.month, d.day)
+}
+
 /// The value a new record starts with, when it differs from Go's zero value.
 fn initial(project: &Project, f: &Field) -> Option<String> {
     match (&f.ty, f.modifiers.default.as_ref()) {
@@ -88,6 +93,9 @@ fn initial(project: &Project, f: &Field) -> Option<String> {
             Some(decimal_literal(n))
         }
         (FieldType::Bool, Some(Literal::Bool(true))) => Some("true".into()),
+        (FieldType::Date, Some(Literal::Str(s))) => clarity_spec::dates::date(s).map(|d| format!("&{}", go_date(&d))),
+        (FieldType::DateTime, Some(Literal::Str(s))) => clarity_spec::dates::date_time(s)
+            .map(|d| format!("&clarity.DateTime{{Date: {}, Hour: {}, Minute: {}, Second: {}}}", go_date(&d), d.hour, d.minute, d.second)),
         // An empty list, which travels as [] rather than null.
         (FieldType::Values { .. }, _) => Some(format!("{}{{}}", field_type(&f.ty))),
         (FieldType::Enum { name }, Some(Literal::Ident(v))) => Some(constant(&name.name, v)),

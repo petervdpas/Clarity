@@ -1883,7 +1883,19 @@ impl<'a> Checker<'a> {
             (FieldType::Secret, _) => true,
             (t, Literal::Number(_)) if t.is_numeric() => true,
             (t, Literal::Str(_)) if t.is_textual() => true,
-            (FieldType::Date | FieldType::DateTime, Literal::Str(_)) => true,
+            // Written as the backends send it, which every generator writes out (crate::dates).
+            (FieldType::Date, Literal::Str(text)) => {
+                if crate::dates::date(text).is_none() {
+                    self.error(file, format!("'{text}' is no date: a date is written {} ('{name}')", crate::dates::DATE_SHAPE), field.span);
+                }
+                true
+            }
+            (FieldType::DateTime, Literal::Str(text)) => {
+                if crate::dates::date_time(text).is_none() {
+                    self.error(file, format!("'{text}' is no date and time: a date and time is written {} ('{name}')", crate::dates::DATE_TIME_SHAPE), field.span);
+                }
+                true
+            }
             (FieldType::Enum { name: enum_name }, Literal::Ident(variant)) => {
                 if let Some(decl) = self.enum_by_name(file, &enum_name.name)
                     && !decl.variants.iter().any(|v| &v.name.name == variant)

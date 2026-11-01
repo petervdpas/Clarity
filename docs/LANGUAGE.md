@@ -277,7 +277,7 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | `search` | The field is in its record's full-text index, which `where a matches x` looks in. For text (also `email` and `url`) and lists of text; see [Full-text search](#full-text-search). |
 | `min value`, `max value` | The lowest and highest value allowed. |
 | `pattern "regex"` | Text must match the regular expression. |
-| `default value` | The value of a new record: a number, a string, `true`, `false` or an enum value. |
+| `default value` | The value of a new record: a number, a string, `true`, `false` or an enum value. A date is written `"2026-10-17"` and a date and time `"2026-10-17T09:30:00"` (seconds may be left out); the checker refuses any other. |
 | `label @key` | The label people see, by its key. Every field has one. |
 | `help @key` | A help text, by its key, shown next to the field's input in windows. |
 | `format name` | How the value is shown, by name; see [Formats](#formats). |

@@ -1354,13 +1354,14 @@ impl<'a> Emitter<'a> {
                 let items: Vec<String> = items.iter().map(|i| bare(if decimals { self.decimal(i, pre) } else { self.value(i, pre) })).collect();
                 format!("{}{{{}}}", value_type(&ty), items.join(", "))
             }
-            // A record of a list by its position from 1: the record in the list itself, as records are pointers.
+            // A record of a list by its position from 1: the record in the list itself, as records are pointers;
+            // in parentheses, so a field of it (`items[1].done = true`) is the record's field.
             ExprKind::Index { list, index } if matches!(self.types.type_of(list), TypeInfo::List(_)) => {
                 let list = self.list_ref(list, pre);
                 let at = bare(self.value(index, pre));
                 let at = self.held_operand(at, pre);
                 pre.push_str(&format!("if _, err := clarity.At({list}, {at}); err != nil {{\n\t{}\n}}\n", self.fail("err")));
-                format!("&{list}[{at}-1]")
+                format!("(&{list}[{at}-1])")
             }
             ExprKind::Index { list, index } => {
                 let list = self.list_ref(list, pre);

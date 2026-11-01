@@ -77,6 +77,10 @@ fn initial(field: &Field) -> Option<String> {
         (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => Some(format!("{n}L")),
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(format!("{n}m")),
         (FieldType::Bool, Some(Literal::Bool(true))) => Some("true".into()),
+        // A date default written out (clarity_spec::dates).
+        (FieldType::Date, Some(Literal::Str(s))) => clarity_spec::dates::date(s).map(|d| format!("new DateOnly({}, {}, {})", d.year, d.month, d.day)),
+        (FieldType::DateTime, Some(Literal::Str(s))) => clarity_spec::dates::date_time(s)
+            .map(|d| format!("new DateTime({}, {}, {}, {}, {}, {})", d.year, d.month, d.day, d.hour, d.minute, d.second)),
         (FieldType::Enum { name }, Some(Literal::Ident(v))) => Some(format!("{}.{v}", name.name)),
         (FieldType::List { .. } | FieldType::Values { .. }, _) => Some("[]".into()),
         // A record held inside starts as a new one (DESIGN 5.25).

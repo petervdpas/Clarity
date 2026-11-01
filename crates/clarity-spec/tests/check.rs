@@ -166,6 +166,31 @@ entity E
 }
 
 #[test]
+fn a_date_default_is_written_as_the_backends_send_it() {
+    let errs = errors(&[(
+        "a.clarity",
+        "module a
+entity E
+    a: date, default \"2026-10-20\"
+    b: datetime, default \"2026-10-20T14:05:00\"
+    c: datetime, default \"2026-10-20 14:05\"
+    d: date, default \"20-10-2026\"
+    e: date, default \"2026-02-30\"
+    f: datetime, default \"2026-10-20\"
+",
+    )]);
+    let expected = [
+        "'20-10-2026' is no date: a date is written 2026-10-17 ('d')",
+        "'2026-02-30' is no date: a date is written 2026-10-17 ('e')",
+        "'2026-10-20' is no date and time: a date and time is written 2026-10-17T09:30:00 ('f')",
+    ];
+    for needle in expected {
+        assert!(errs.iter().any(|e| e.contains(needle)), "missing '{needle}' in {errs:#?}");
+    }
+    assert_eq!(errs.len(), expected.len(), "{errs:#?}");
+}
+
+#[test]
 fn preview_samples_follow_the_spec() {
     let project = load_sources([(
         "c.clarity",

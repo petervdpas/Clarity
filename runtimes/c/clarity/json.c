@@ -60,6 +60,11 @@ bool clarity_json_get_bool(const cJSON* in, const char* name, bool* out) {
 }
 
 bool clarity_json_get_date(const cJSON* in, const char* name, ClarityDate* out) {
+    // Null is no date, also where a new record starts with one (its default); a missing one keeps it.
+    if (cJSON_IsNull(cJSON_GetObjectItemCaseSensitive(in, name))) {
+        *out = (ClarityDate){0};
+        return true;
+    }
     const cJSON* v = clarity_json_given(in, name);
     if (!v) return true;
     if (!cJSON_IsString(v) || !clarity_date_parse(v->valuestring, out))
@@ -68,6 +73,11 @@ bool clarity_json_get_date(const cJSON* in, const char* name, ClarityDate* out) 
 }
 
 bool clarity_json_get_date_time(const cJSON* in, const char* name, ClarityDateTime* out) {
+    // Null is no date, also where a new record starts with one (its default); a missing one keeps it.
+    if (cJSON_IsNull(cJSON_GetObjectItemCaseSensitive(in, name))) {
+        *out = (ClarityDateTime){0};
+        return true;
+    }
     const cJSON* v = clarity_json_given(in, name);
     if (!v) return true;
     if (!cJSON_IsString(v) || !clarity_date_time_parse(v->valuestring, out))

@@ -78,7 +78,7 @@ void a_window_opens_with_its_data_and_with(void) {
     int64_t count = 0, customer = 5;
     CHECK_OK(clarity_json_get_integer(record, "count", &count));
     CHECK_INT(count, 3);
-    // A missing or null field keeps what the record had.
+    // A missing or null field keeps what the record had (a date: see below).
     CHECK_OK(clarity_json_get_reference(record, "customer", &customer));
     CHECK_INT(customer, 5);
     ClarityDate since = {0};
@@ -86,6 +86,17 @@ void a_window_opens_with_its_data_and_with(void) {
     CHECK_TEXT(clarity_date_text(since), "2026-10-17");
     CHECK_FAILS(CLARITY_INVALID, clarity_json_get_date(record, "bad", &since));
     CHECK_JSON(clarity_json_date((ClarityDate){0}), "null");
+    // A null date is no date, also where a new record starts with one (its default).
+    ClarityDate day = {2026, 10, 20};
+    CHECK_OK(clarity_json_get_date(record, "none", &day));
+    CHECK_INT(day.year, 0);
+    ClarityDateTime due = {2026, 10, 20, 14, 5, 0};
+    CHECK_OK(clarity_json_get_date_time(record, "none", &due));
+    CHECK_INT(due.year, 0);
+    // A missing one keeps it.
+    day = (ClarityDate){2026, 10, 20};
+    CHECK_OK(clarity_json_get_date(record, "missing", &day));
+    CHECK_INT(day.year, 2026);
     CHECK_JSON(clarity_json_reference(0), "null");
 }
 

@@ -399,6 +399,7 @@
       if (!field) return { field: name, label, kind: "text", edit: false };
       const kind = cellKind(field.type.kind);
       const format = fieldFormat(field);
+      const choices = kind === "choice" ? choicesOf(field) : undefined;
       return {
         field: name,
         label,
@@ -406,8 +407,9 @@
         edit: p.edit.includes(name),
         switch: p.switches.includes(name),
         width: p.widths[name],
-        shown: (value) => displayValue(preview, field, value),
-        choices: kind === "choice" ? choicesOf(field) : undefined,
+        // A choice (an enum, a reference) shows its label; a reference holds only its record's id.
+        shown: choices ? (value) => choices.find((c) => c.value === (value ?? null))?.label ?? "" : (value) => displayValue(preview, field, value),
+        choices,
         number: kind === "number" && format ? numberEditing(format, formatsOf(preview)) : undefined,
       };
     });

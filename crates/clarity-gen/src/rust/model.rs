@@ -61,6 +61,15 @@ fn default_value(project: &Project, field: &Field) -> String {
         (FieldType::Decimal { .. } | FieldType::Money, _) => "Decimal::ZERO".into(),
         (FieldType::Bool, Some(Literal::Bool(b))) => b.to_string(),
         (FieldType::Bool, _) => "false".into(),
+        // A date default written out (clarity_spec::dates).
+        (FieldType::Date, Some(Literal::Str(s))) => match clarity_spec::dates::date(s) {
+            Some(d) => format!("NaiveDate::from_ymd_opt({}, {}, {})", d.year, d.month, d.day),
+            None => "None".into(),
+        },
+        (FieldType::DateTime, Some(Literal::Str(s))) => match clarity_spec::dates::date_time(s) {
+            Some(d) => format!("NaiveDate::from_ymd_opt({}, {}, {}).and_then(|d| d.and_hms_opt({}, {}, {}))", d.year, d.month, d.day, d.hour, d.minute, d.second),
+            None => "None".into(),
+        },
         (FieldType::Enum { name }, Some(Literal::Ident(v))) => format!("{}::{v}", name.name),
         (FieldType::Enum { name }, _) => match project.enum_decl(&name.name) {
             Some(_) => format!("{}::default()", name.name),

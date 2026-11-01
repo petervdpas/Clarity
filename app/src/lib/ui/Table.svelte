@@ -293,6 +293,17 @@
     onselect(row);
   }
 
+  /**
+   * A click on the input of an edited cell chooses no row: a taken edit
+   * chooses it (`edit`), after the cell has its new value, so the row is
+   * chosen with it (LANGUAGE.md, Editing in a table). Chosen on the click,
+   * the backend's answer to the choice would come back without the value.
+   */
+  function inCellInput(e: Event): boolean {
+    const target = e.target instanceof Element ? e.target : null;
+    return !!target?.closest("td.edit") && !!target.closest("input, select, textarea, label");
+  }
+
   /** The person changed a cell: only a value that differs is an edit. */
   function edit(row: number, field: string, next: JsonValue) {
     const record = rows[row];
@@ -353,7 +364,7 @@
       {#each shownRows as i (i)}
         {@const row = rows[i]}
         <!-- A right click chooses the row first, so a context menu's handler finds it. -->
-        <tr data-row={i} class:chosen={selected === i} onclick={() => choose(i)} oncontextmenu={() => choose(i)} ondblclick={() => !design && onopen(i)}>
+        <tr data-row={i} class:chosen={selected === i} onclick={(e) => !inCellInput(e) && choose(i)} oncontextmenu={() => choose(i)} ondblclick={() => !design && onopen(i)}>
           {#each columns as column, c (column.field)}
             {@const cell = row[column.field]}
             {#if !column.edit}

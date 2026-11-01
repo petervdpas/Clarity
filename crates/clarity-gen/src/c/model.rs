@@ -83,6 +83,10 @@ fn initial(project: &Project, f: &Field) -> Option<String> {
         (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => Some(n.clone()),
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(decimal(n)),
         (FieldType::Bool, Some(Literal::Bool(true))) => Some("true".into()),
+        // A date default written out (clarity_spec::dates).
+        (FieldType::Date, Some(Literal::Str(s))) => clarity_spec::dates::date(s).map(|d| format!("(ClarityDate){{{}, {}, {}}}", d.year, d.month, d.day)),
+        (FieldType::DateTime, Some(Literal::Str(s))) => clarity_spec::dates::date_time(s)
+            .map(|d| format!("(ClarityDateTime){{{}, {}, {}, {}, {}, {}}}", d.year, d.month, d.day, d.hour, d.minute, d.second)),
         (FieldType::Enum { name }, Some(Literal::Ident(v))) => Some(constant(&name.name, v)),
         // An enum without a default starts with its first value, as on every stack.
         (FieldType::Enum { name }, _) => project.enum_decl(&name.name).and_then(|d| d.variants.first()).map(|v| constant(&name.name, &v.name.name)),

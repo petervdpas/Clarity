@@ -15,3 +15,12 @@ test("errors thrown and promises rejected that nothing caught are shown, until s
   window.dispatchEvent(new ErrorEvent("error", { error: new Error("later") }));
   expect(shown).toHaveLength(2);
 });
+
+test("the browser's own notice that a resize waited is no error and shows nothing", () => {
+  const shown: string[] = [];
+  const stop = catchUncaught((text) => shown.push(text));
+  window.dispatchEvent(new ErrorEvent("error", { message: "ResizeObserver loop completed with undelivered notifications." }));
+  window.dispatchEvent(new ErrorEvent("error", { message: "ResizeObserver loop limit exceeded" }));
+  expect(shown).toEqual([]);
+  stop();
+});

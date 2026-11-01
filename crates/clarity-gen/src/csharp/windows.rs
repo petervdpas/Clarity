@@ -564,15 +564,13 @@ impl<'a> Window<'a> {
             self.grid(&sidebar.widgets, p.columns, None, false, 5, &mut out);
             out.push_str("        </c:SidebarView.Content>\n      </c:SidebarView>\n");
         }
-        // A window smaller than its design scrolls, unless rows grow to fit.
-        let fluid = self.page.widgets.iter().any(grows);
-        if fluid {
-            self.grid(&self.page.widgets, self.page.columns, None, true, 3, &mut out);
-        } else {
-            out.push_str("      <ScrollViewer>\n");
-            self.grid(&self.page.widgets, self.page.columns, None, true, 4, &mut out);
-            out.push_str("      </ScrollViewer>\n");
-        }
+        // The window's grid is as high as the window (the runtime's
+        // WindowClient), so rows that grow share it and a list scrolls in its
+        // rows; a window lower than the rows at their least scrolls.
+        out.push_str("      <ScrollViewer HorizontalScrollBarVisibility=\"Disabled\" VerticalScrollBarVisibility=\"Auto\">\n");
+        out.push_str("        <c:WindowClient>\n");
+        self.grid(&self.page.widgets, self.page.columns, None, true, 5, &mut out);
+        out.push_str("        </c:WindowClient>\n      </ScrollViewer>\n");
         // The parts above sit one level deeper than they end up.
         let body: String = out.lines().map(|l| format!("{}\n", l.strip_prefix("  ").unwrap_or(l))).collect();
         // The .NET parts' adapters, when the window shows one.
@@ -1381,7 +1379,22 @@ impl<'a> Window<'a> {
                     _ => String::new(),
                 };
                 let _ = writeln!(out, "{pad}<ListBox {at}{items}{selected}{reorder}{plain_state}{extra}>");
-                if let Some(entity) = entity {
+                if let (Some(entity), true) = (entity, p.cards) {
+                    // A card: the first field its title, the others lines below it, in the theme's colors.
+                    let _ = writeln!(out, "{pad}  <ListBox.ItemTemplate>\n{pad}    <DataTemplate x:DataType=\"local:{}\">", entity.name.name);
+                    let _ = writeln!(out, "{pad}      <Border Classes=\"card\" Padding=\"8,6\" CornerRadius=\"6\" BorderThickness=\"1\" BorderBrush=\"{{DynamicResource ClarityBorder}}\" Background=\"{{DynamicResource ClarityRaised}}\">");
+                    let _ = writeln!(out, "{pad}        <StackPanel Spacing=\"2\">");
+                    for (i, field) in p.show.iter().enumerate() {
+                        let look = if i == 0 { " FontWeight=\"SemiBold\"" } else { " FontSize=\"{DynamicResource ClaritySizeSmall}\" Foreground=\"{DynamicResource ClarityAccent}\"" };
+                        let _ = writeln!(
+                            out,
+                            "{pad}          <TextBlock Text=\"{{Binding {}, Converter={{x:Static {}}}}}\"{look} />",
+                            property(&entity.name.name, field),
+                            self.shown_converter(entity, field)
+                        );
+                    }
+                    let _ = writeln!(out, "{pad}        </StackPanel>\n{pad}      </Border>\n{pad}    </DataTemplate>\n{pad}  </ListBox.ItemTemplate>");
+                } else if let Some(entity) = entity {
                     let _ = writeln!(out, "{pad}  <ListBox.ItemTemplate>\n{pad}    <DataTemplate x:DataType=\"local:{}\">", entity.name.name);
                     let _ = writeln!(out, "{pad}      <StackPanel Orientation=\"Horizontal\" Spacing=\"8\">");
                     for (i, field) in p.show.iter().enumerate() {
@@ -1637,6 +1650,8 @@ impl<'a> Window<'a> {
                     Event::Change if kind == WidgetKind::Table => format!("{control}.Edited += _ => {run};"),
                     Event::Select if matches!(kind, WidgetKind::Table | WidgetKind::Tree | WidgetKind::TreeTable) => format!("{control}.Selected += (_, _) => {run};"),
                     Event::Open if matches!(kind, WidgetKind::Table | WidgetKind::Tree | WidgetKind::TreeTable) => format!("{control}.Opened += (_, _) => {run};"),
+                    // A list's choice cleared because its rows were read again is no select: only a row chosen is.
+                    Event::Select if kind == WidgetKind::List => format!("{control}.SelectionChanged += (_, e) => {{ if (e.AddedItems.Count > 0) {run}; }};"),
                     Event::Change | Event::Select => format!("{control}.SelectionChanged += (_, _) => {run};"),
                     Event::Open => format!("{control}.DoubleTapped += (_, _) => {run};"),
                     Event::Enter => format!("{control}.GotFocus += (_, _) => {run};"),

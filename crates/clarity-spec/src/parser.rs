@@ -1542,10 +1542,10 @@ fn parse_widget_page(
 }
 
 /// The words a part's line is written with, which a color after `dots 3` is not.
-const LINE_WORDS: [&str; 66] = [
+const LINE_WORDS: [&str; 67] = [
     "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
-    "children", "page", "typed", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
+    "children", "page", "typed", "cards", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
     "foldable", "folded", "taborder", "key", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window",
 ];
 
@@ -1603,6 +1603,7 @@ fn parse_widget_props(
         min: None,
         step: None,
         split: false,
+        cards: false,
         typed: false,
         page: None,
         children: None,
@@ -2027,6 +2028,10 @@ fn parse_widget_props(
             "typed" => {
                 applies(WidgetProperty::Typed)?;
                 props.typed = true;
+            }
+            "cards" => {
+                applies(WidgetProperty::Cards)?;
+                props.cards = true;
             }
             "search" => {
                 applies(WidgetProperty::Search)?;

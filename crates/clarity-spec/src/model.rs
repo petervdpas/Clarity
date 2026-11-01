@@ -614,6 +614,10 @@ pub struct WidgetProps {
     #[serde(default)]
     pub children: Option<String>,
     pub show: Vec<String>,
+    /// `cards`: a list's rows as small cards, the first field of `show` the
+    /// card's title and the others lines below it.
+    #[serde(default)]
+    pub cards: bool,
     /// `typed`: a dropdown of a text field any text may be typed into, the
     /// values the field already has offered as it is typed (U1c).
     #[serde(default)]

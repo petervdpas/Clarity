@@ -348,6 +348,8 @@ pub enum WidgetProperty {
     Labels,
     /// `typed`: a dropdown of text that takes any text, the field's values as suggestions.
     Typed,
+    /// `cards`: a list's rows as small cards, the first field of `show` their title.
+    Cards,
     /// `search`: a dropdown of a reference whose records filter as it is typed.
     Search,
     /// `page 50`: a table's rows shown that many at a time.
@@ -863,7 +865,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Reorder],
-        properties: &[WidgetProperty::Show, WidgetProperty::Reorder, WidgetProperty::NoUndo],
+        properties: &[WidgetProperty::Show, WidgetProperty::Cards, WidgetProperty::Reorder, WidgetProperty::NoUndo],
     },
     Entry {
         kind: WidgetKind::Progress,
@@ -1277,6 +1279,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         min: None,
         step: None,
         split: false,
+        cards: false,
         typed: false,
         page: None,
         children: None,
@@ -1522,6 +1525,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if !props.show.is_empty() {
         parts.push(format!("show {}", props.show.join(", ")));
     }
+    if props.cards {
+        parts.push("cards".to_string());
+    }
     if let Some(surface) = props.surface {
         parts.push(format!("surface {}", surface_keyword(surface)));
     }
@@ -1719,6 +1725,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Split, props.split, "split"),
         (WidgetProperty::Labels, props.labels.is_some(), "labels"),
         (WidgetProperty::Typed, props.typed, "typed"),
+        (WidgetProperty::Cards, props.cards, "cards"),
         (WidgetProperty::Search, props.search, "search"),
         (WidgetProperty::Page, props.page.is_some(), "page"),
         (WidgetProperty::Children, props.children.is_some(), "children"),

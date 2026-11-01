@@ -387,6 +387,12 @@
         </select>
       </label>
     {/if}
+    {#if info.properties.includes("cards")}
+      <label class="prop" title="Each row a small card: the first field shown is its title, the others lines below it">
+        <span>Cards</span>
+        <input type="checkbox" checked={p.cards} onchange={(e) => update({ cards: e.currentTarget.checked })} />
+      </label>
+    {/if}
     {#if info.properties.includes("typed")}
       <label class="prop" title="Any text may be typed; the values the field already has are offered">
         <span>Typed</span>

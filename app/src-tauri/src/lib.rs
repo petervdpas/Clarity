@@ -393,12 +393,20 @@ fn build_app(release: bool, run: bool, command_line: Option<String>, app: AppHan
     build::start(app, project_file_of(&state)?, release, run, command_line)
 }
 
+/// What Generate did: the output folder, and the files it wrote and removed there.
+#[derive(serde::Serialize)]
+struct GeneratedApp {
+    out: String,
+    #[serde(flatten)]
+    written: clarity_gen::Written,
+}
+
 /// Transpiles the open project into its source tree in the output folder,
-/// without building it; gives the folder.
+/// without building it; says what it wrote.
 #[tauri::command]
-fn generate_app(state: State<WatchState>) -> Result<String, String> {
+fn generate_app(state: State<WatchState>) -> Result<GeneratedApp, String> {
     let file = project_file_of(&state)?;
-    build::generate_source(&file).map(|source| source.out.display().to_string())
+    build::generate_source(&file).map(|source| GeneratedApp { out: source.out.display().to_string(), written: source.written })
 }
 
 /// Types a line to the command-line program Run started, as its input.

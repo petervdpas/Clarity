@@ -1152,6 +1152,7 @@
       <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
       <ul
         class="list"
+        class:cards={p.cards}
         tabindex={reorders ? 0 : undefined}
         use:rowDrag={{ enabled: reorders, tree: false, onmove: reordered }}
         onkeydown={(e) => {
@@ -1163,7 +1164,9 @@
         }}
       >
         {#each collection?.rows ?? [] as row, i (i)}
-          <li data-row={i} class:chosen={selectedRow === i} role="presentation" onclick={() => selectRow(i)} oncontextmenu={() => selectRow(i)} ondblclick={() => fire("open")}>{p.show.map((f) => String(row[f] ?? "")).join(" | ")}</li>
+          <li data-row={i} class:chosen={selectedRow === i} role="presentation" onclick={() => selectRow(i)} oncontextmenu={() => selectRow(i)} ondblclick={() => fire("open")}
+            >{#if p.cards}<!-- A card: the first field its title, the others lines below it. -->{#each p.show as f, at (f)}<span class={at === 0 ? "card-title" : "card-line"}>{String(row[f] ?? "")}</span>{/each}{:else}{p.show.map((f) => String(row[f] ?? "")).join(" | ")}{/if}</li
+          >
         {/each}
       </ul>
     {:else if p.kind === "image" && p.bind}
@@ -1935,6 +1938,25 @@
   .list li {
     padding: calc(var(--padding) - 1px) calc(var(--padding) * 1.5);
     border-bottom: var(--border-width) solid var(--border);
+  }
+
+  /* A list of cards: each row a small card, its title above its lines. */
+  .list.cards li {
+    margin-bottom: 4px;
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius);
+    background: var(--raised);
+  }
+
+  .list .card-title {
+    display: block;
+    font-weight: 600;
+  }
+
+  .list .card-line {
+    display: block;
+    font-size: var(--size-small);
+    color: var(--accent);
   }
 
   /* Where a dragged row lands (DESIGN 5.30). */

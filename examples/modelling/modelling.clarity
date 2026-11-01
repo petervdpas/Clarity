@@ -7,6 +7,10 @@ settings
     language
     exportsFolder: folder, default "exports", label @settingsExportsFolderLabel
     codeFolder: folder, default "code", label @settingsCodeFolderLabel
+    // The web API types are imported from: where it is, the path that gives them, and a key when it needs one.
+    apiAddress: url, default "http://localhost:8383", label @settingsApiAddressLabel
+    apiPath: text, default "/api/collections/fcdm-entities/export.ndjson", label @settingsApiPathLabel
+    apiKey: secret, label @settingsApiKeyLabel
     openProject: ref Project, label @settingsOpenProjectLabel
     showGrid: bool, default true, label @settingsShowGridLabel
     snapToGrid: bool, default true, label @settingsSnapToGridLabel
@@ -105,7 +109,7 @@ page Types: window
 
     text name typesProject at 1,1 span 4 bind project.name
     textbox name typeSearch at 1,2 span 4 placeholder @typeSearchPlaceholder on change: showTypes
-    list name typeList at 1,3 span 4 rows 10 bind types show name, namespace on select: typeSelected
+    list name typeList at 1,3 span 4 rows 10 bind types show name, namespace cards on select: typeSelected
     form name typeForm at 5,1 span 8 rows 8 bind current labels 2
         textbox name typeName at 3,1 span 6 bind current.name
         textbox name typeNamespace at 3,2 span 6 bind current.namespace
@@ -122,6 +126,7 @@ page Types: window
     button @newTypeCaption name newType at 5,13 span 2 on click: newTypeClicked
     button @saveTypeCaption name saveType at 7,13 span 2 key "Ctrl+S" default on click: saveTypeClicked
     button @deleteTypeCaption name deleteType at 9,13 span 2 on click: deleteTypeClicked
+    button @importApiCaption name importApi at 11,13 span 2 on click: importApiClicked
 
 // The entities of the ERD, with their columns.
 page Entities: window
@@ -238,7 +243,7 @@ page Versions: window
 page Preferences: dialog
     title @preferencesTitle
 
-    form name settingsForm at 1,1 span 12 rows 8 bind settings labels 3
+    form name settingsForm at 1,1 span 12 rows 11 bind settings labels 3
         dropdown name languageBox at 4,1 span 6 bind settings.language
         folder name exportsFolderBox at 4,2 span 9 bind settings.exportsFolder
         folder name codeFolderBox at 4,3 span 9 bind settings.codeFolder
@@ -247,7 +252,10 @@ page Preferences: dialog
         color name diagramColorBox at 4,6 span 4 bind settings.diagramColor
         spinbox name gridDotSizeBox at 4,7 span 2 bind settings.gridDotSize min 1 max 20
         color name gridDotColorBox at 4,8 span 4 bind settings.gridDotColor
-    button @closePreferencesCaption name closePreferences at 11,10 span 2 cancel on click -> close
+        textbox name apiAddressBox at 4,9 span 6 bind settings.apiAddress
+        textbox name apiPathBox at 4,10 span 9 bind settings.apiPath
+        password name apiKeyBox at 4,11 span 6 bind settings.apiKey
+    button @closePreferencesCaption name closePreferences at 11,13 span 2 cancel on click -> close
 
 code Projects
     handler projectsOpened
@@ -363,6 +371,13 @@ code Types
 
     handler showTypes
         types = find t in ClassType where t.project == project and t matches typeSearch.text order by t.name
+
+    handler importApiClicked
+        if project.id == 0
+            return
+        let read = import_types(project, settings.apiAddress + settings.apiPath, settings.apiKey)
+        showTypes()
+        message @importedCountTypes(count = read)
 
     handler typeSelected
         current = typeList.selected

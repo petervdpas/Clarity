@@ -290,7 +290,7 @@ fn generated_logic_runs() {
 }
 
 #[test]
-fn write_out_keeps_unchanged_files_and_removes_stale_ones() {
+fn write_out_writes_every_file_again_and_removes_stale_ones() {
     let dir = scratch().join(format!("clarity-write-out-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let file = |path: &str, text: &str| clarity_gen::OutFile {
@@ -304,7 +304,7 @@ fn write_out_keeps_unchanged_files_and_removes_stale_ones() {
     std::fs::write(dir.join("target/keep.txt"), "built").unwrap();
 
     let second = [file("a.txt", "a"), file("c.txt", "c")];
-    assert_eq!(clarity_gen::write_out(&dir, &second, &["target"]).unwrap(), 1);
+    assert_eq!(clarity_gen::write_out(&dir, &second, &["target"]).unwrap(), 2, "the same file is written again");
     assert!(!dir.join("src").exists(), "the stale folder is gone");
     assert!(dir.join("target/keep.txt").exists(), "kept folders stay");
     assert_eq!(std::fs::read_to_string(dir.join("c.txt")).unwrap(), "c");

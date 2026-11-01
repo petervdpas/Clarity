@@ -759,6 +759,12 @@ fn holds_other_files(dir: &std::path::Path, mine: &[&str]) -> bool {
 /// tools' folders and data are kept there, its other files go. Returns how
 /// many files changed.
 pub fn write_programs(out: &std::path::Path, programs: &[Program], backend: Backend, keeps: &[String]) -> std::io::Result<usize> {
+    write_programs_listed(out, programs, backend, keeps).map(|done| done.written.len())
+}
+
+/// As `write_programs`, saying what it did: each path under `out`, with
+/// the folder of its program (`desktop/Program.cs`).
+pub fn write_programs_listed(out: &std::path::Path, programs: &[Program], backend: Backend, keeps: &[String]) -> std::io::Result<Written> {
     use clarity_project::{TARGETS, target_dir, target_word};
     let targets: Vec<&str> = TARGETS.iter().map(|t| target_word(*t)).collect();
     // The stack's build tools make their own folders; the project names any others it keeps.
@@ -789,10 +795,15 @@ pub fn write_programs(out: &std::path::Path, programs: &[Program], backend: Back
         }
     }
     std::fs::write(out.join(OUT_MARKER), OUT_MARKER_TEXT)?;
-    let mut written = 0;
+    let mut done = Written::default();
     for program in programs {
         let dir = target_dir(out, program.target);
-        written += write_out(&dir, &program.files, &kept)?;
+        let mut here = Written::default();
+        write_out_listed(&dir, &program.files, &kept, &mut here)?;
+        let folder = clarity_project::slashed(dir.strip_prefix(out).unwrap_or(&dir));
+        let under = |path: String| if folder.is_empty() { path } else { format!("{folder}/{path}") };
+        done.written.extend(here.written.into_iter().map(under));
+        done.removed.extend(here.removed.into_iter().map(under));
         // What Build and Run check they build: these files, as generated.
         std::fs::write(dir.join(GENERATED_STAMP), format!("{}\n", fingerprint(program)))?;
     }
@@ -800,17 +811,32 @@ pub fn write_programs(out: &std::path::Path, programs: &[Program], backend: Back
         let dir = target_dir(out, target);
         if !programs.iter().any(|p| p.target == target) && dir.join(OUT_MARKER).exists() {
             std::fs::remove_dir_all(&dir)?;
+            done.removed.push(format!("{}/", clarity_project::slashed(dir.strip_prefix(out).unwrap_or(&dir))));
         }
     }
-    Ok(written)
+    Ok(done)
 }
 
 /// Writes `files` into `dir`, which then holds exactly these files: files
-/// that changed are rewritten, unchanged ones are left alone (so build
-/// tools see no change), and files no longer generated are removed.
+/// are all written again, each time, and files no longer generated are removed.
 /// `keep` names top-level entries that are not generated, such as the
 /// build tool's `target` folder.
 pub fn write_out(dir: &std::path::Path, files: &[OutFile], keep: &[&str]) -> std::io::Result<usize> {
+    let mut done = Written::default();
+    write_out_listed(dir, files, keep, &mut done)?;
+    Ok(done.written.len())
+}
+
+/// What writing the output did: every file written, and those removed, by
+/// their path in the output folder.
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Written {
+    pub written: Vec<String>,
+    pub removed: Vec<String>,
+}
+
+/// As `write_out`, adding what it did to `done`, its paths under `dir`.
+fn write_out_listed(dir: &std::path::Path, files: &[OutFile], keep: &[&str], done: &mut Written) -> std::io::Result<()> {
     // Removing stale files is only safe in a folder Clarity made: refuse a
     // folder that holds anything without the marker.
     // Output from before the marker is recognized by the runtime Clarity copies in.
@@ -823,24 +849,19 @@ pub fn write_out(dir: &std::path::Path, files: &[OutFile], keep: &[&str]) -> std
     }
     std::fs::create_dir_all(dir)?;
     std::fs::write(dir.join(OUT_MARKER), OUT_MARKER_TEXT)?;
-    let mut written = 0;
     for file in files {
         let path = dir.join(&file.path);
         let contents = file.bytes.as_deref().unwrap_or(file.text.as_bytes());
-        if std::fs::read(&path).ok().as_deref() == Some(contents) {
-            continue;
-        }
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(&path, contents)?;
-        written += 1;
+        done.written.push(file.path.clone());
     }
-    remove_stale(dir, dir, files, keep)?;
-    Ok(written)
+    remove_stale(dir, dir, files, keep, done)
 }
 
-fn remove_stale(root: &std::path::Path, dir: &std::path::Path, files: &[OutFile], keep: &[&str]) -> std::io::Result<()> {
+fn remove_stale(root: &std::path::Path, dir: &std::path::Path, files: &[OutFile], keep: &[&str], done: &mut Written) -> std::io::Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let path = entry?.path();
         let relative = clarity_project::slashed(path.strip_prefix(root).unwrap_or(&path));
@@ -848,12 +869,13 @@ fn remove_stale(root: &std::path::Path, dir: &std::path::Path, files: &[OutFile]
             continue;
         }
         if path.is_dir() {
-            remove_stale(root, &path, files, keep)?;
+            remove_stale(root, &path, files, keep, done)?;
             if std::fs::read_dir(&path)?.next().is_none() {
                 std::fs::remove_dir(&path)?;
             }
         } else if relative != OUT_MARKER && relative != BUILT_STAMP && relative != GENERATED_STAMP && !files.iter().any(|f| f.path == relative) {
             std::fs::remove_file(&path)?;
+            done.removed.push(relative);
         }
     }
     Ok(())

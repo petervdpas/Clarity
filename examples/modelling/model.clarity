@@ -328,46 +328,61 @@ action export_model(project: Project, version: text)
     write markdown(project) to exports project.name + "/model.md"
     write openapi(project, version) to exports project.name + "/openapi.yaml"
 
-// A type as C# code: its namespace, its kind with its constructor's
-// parameters, its base and its interfaces; an interface gets a property per
-// parameter.
+// Writes a type of the model as C# code (engines/translate): a constructor
+// that sets a property per parameter, each property set once.
+engine Translate from "translate.wasm"
+    function csharp(of: ClassType, base: text, parameters: list<Parameter>) -> text
+    // What an export of types holds: one entry a line, as JSON.
+    function types_of(export: text) -> list<ClassType>
+    function base_of(export: text, name: text) -> text
+    function parameters_of(export: text, name: text) -> list<Parameter>
+
+// A type as C# code, with its parameters in their order and the name of its base.
 action csharp_of(t: ClassType) -> text
     effects db.read
-    let out = "// Written from the data model.\n"
-    if t.namespace != ""
-        out = out + "namespace " + t.namespace + ";\n\n"
     let parameters = find p in Parameter where p.owner == t order by p.position
-    let bases = ""
+    let base = ""
     if t.base != none
-        let base = t.base
-        bases = base.name
-    for name in t.interfaces
-        if bases == ""
-            bases = name
-        else
-            bases = bases + ", " + name
-    if bases != ""
-        bases = " : " + bases
-    if t.summary != ""
-        out = out + "/// <summary>" + t.summary + "</summary>\n"
-    if t.kind == Interface
-        out = out + "public interface " + t.name + bases + "\n{{\n"
-        for p in parameters
-            out = out + "    " + p.type + " " + p.name + " {{ get; }}\n"
-        return out + "}}\n"
-    let list = ""
-    for p in parameters
-        if list != ""
-            list = list + ", "
-        list = list + p.type + " " + p.name
-    let word = "class"
-    if t.kind == Record
-        word = "record"
-    if t.kind == Struct
-        word = "struct"
-    if t.kind == Record
-        return out + "public record " + t.name + "(" + list + ")" + bases + ";\n"
-    return out + "public " + word + " " + t.name + "(" + list + ")" + bases + "\n{{\n}}\n"
+        let based_on = t.base
+        base = based_on.name
+    return Translate.csharp(t, base, parameters)
+
+// Reads the types a web API gives at an address (an export, one entry a
+// line) into the project, with the key the API needs, if any: a type of the
+// same name takes what the API has, with its parameters; another is added.
+// Then each takes its base by its name. Gives how many types it read.
+action import_types(project: Project, address: text, key: text) -> integer
+    effects net, db.read, db.write
+    let reply = http get address header "Authorization": "Bearer {key}" when key != ""
+    if not reply.ok
+        refuse @apiNotReached(address = address, status = reply.status)
+    let read = Translate.types_of(reply.text)
+    for t in read
+        let kept = t
+        for found in find c in ClassType where c.project == project and c.name == t.name
+            kept = found
+            kept.namespace = t.namespace
+            kept.kind = t.kind
+            kept.ontology = t.ontology
+            kept.interfaces = t.interfaces
+        if kept.id == 0
+            kept.project = project
+            kept.created = now()
+        kept.updated = now()
+        save kept
+        for old in find p in Parameter where p.owner == kept
+            delete old
+        for p in Translate.parameters_of(reply.text, t.name)
+            p.owner = kept
+            save p
+    for t in read
+        let base = Translate.base_of(reply.text, t.name)
+        if base != ""
+            for kept in find c in ClassType where c.project == project and c.name == t.name
+                for based_on in find b in ClassType where b.project == project and b.name == base
+                    kept.base = based_on
+                    save kept
+    return count(read)
 
 // Writes every type of a project as a C# file into the C# folder, in a folder named after the project; gives how many.
 action write_csharp(project: Project) -> integer

@@ -694,7 +694,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
 | `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `order by field [desc]`; `reorder by field`; `page 50` | `select`, `open`, `change`, `reorder` |
-| `list` | a list: `bind orders` | `show field, field, ...`; `reorder by field` | `select`, `open`, `reorder` |
+| `list` | a list: `bind orders` | `show field, field, ...`; `cards`: each row a small card, the first field of `show` its title and the others lines below it; `reorder by field` | `select`, `open`, `reorder` |
 | `tree` | a list: `bind folders children children` | `children field`; `show field, ...`; `reorder by field` | `select`, `open`, `reorder` |
 | `treetable` | a list: `bind folders children children` | `children field`; `columns field [width], ...`; `resizable`; `reorder by field` | `select`, `open`, `reorder` |
 | `chart` | a list: `chart bar ... bind orders by status count`; or a list of numbers, drawn as they are: `chart line ... bind readings` | `bar`, `line` or `pie` first; `by field`; `count`, `sum field` or `average field`; for a list of numbers `points n` (its last n) and `max n` (the top of the axis) | |

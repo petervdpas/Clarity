@@ -1,5 +1,6 @@
 <script lang="ts">
   import PartGuard from "./lib/ui/PartGuard.svelte";
+  import Toasts, { TOAST_MS } from "./lib/Toasts.svelte";
   import { catchUncaught } from "./lib/uncaught";
   import Guarded from "./lib/ui/Guarded.svelte";
   import { invoke } from "@tauri-apps/api/core";
@@ -120,6 +121,27 @@
   let designSide = $state<DesignSide>("parts");
   let history = $state<HistoryCounts>({ undo: 0, redo: 0 });
   let actionError = $state<string | null>(null);
+  /** The notices that show as toasts: every action error and load error, as it happens. */
+  let toasts = $state<{ id: number; text: string }[]>([]);
+  let nextToast = 0;
+  function toast(text: string) {
+    const id = nextToast++;
+    toasts = [...toasts, { id, text }];
+    setTimeout(() => dismissToast(id), TOAST_MS);
+  }
+  function dismissToast(id: number) {
+    toasts = toasts.filter((t) => t.id !== id);
+  }
+  // A notice set anywhere becomes a toast, and the place is free for the next one.
+  $effect(() => {
+    if (actionError) {
+      toast(actionError);
+      actionError = null;
+    }
+  });
+  $effect(() => {
+    if (loadError) toast(loadError);
+  });
   /** The file a new window goes into, while the New window dialog is open. */
   let newWindowIn = $state<SpecFile | null>(null);
   let newWindowError = $state<string | null>(null);
@@ -226,8 +248,11 @@
     buildDone = null;
     showOutput = true;
     try {
-      const out = await invoke<string>("generate_app");
-      buildDone = { ok: true, message: `The source is generated in ${out}`, binary: null };
+      const done = await invoke<{ out: string; written: string[]; removed: string[] }>("generate_app");
+      // Each file it wrote and removed, by its path in the output folder.
+      buildLog = [...done.written.map((path) => `written ${path}`), ...done.removed.map((path) => `removed ${path}`)];
+      const counts = `${done.written.length} written, ${done.removed.length} removed`;
+      buildDone = { ok: true, message: `The source is generated in ${done.out}: ${counts}`, binary: null };
     } catch (err) {
       buildDone = { ok: false, message: String(err), binary: null };
     }
@@ -1402,12 +1427,6 @@
             </div>
           {/if}
         {/if}
-        {#if actionError || loadError}
-          <p class="ribbon-error" role="alert">
-            {actionError ?? loadError}
-            <button onclick={() => ((actionError = null), (loadError = null))}>Dismiss</button>
-          </p>
-        {/if}
       </div>
     </PartGuard>
   </header>
@@ -1867,6 +1886,8 @@
   </PartGuard>
 {/if}
 
+<Toasts {toasts} ondismiss={dismissToast} />
+
 <style>
   .app {
     display: grid;
@@ -2046,17 +2067,6 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding-top: 2px;
-  }
-
-  .ribbon-error {
-    margin: 0 0 0 auto;
-    align-self: center;
-    max-width: 420px;
-    color: var(--error);
-    font-size: 12px;
-    display: flex;
-    gap: 8px;
-    align-items: center;
   }
 
   /* Sidebar sections */

@@ -220,8 +220,8 @@ pub fn generate_source(file: &Path) -> Result<Source, String> {
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     // Each native part's header follows its declaration, and a new part gets a starter (DESIGN 5.19).
     clarity_gen::parts::write_part_folders(&dir, &project).map_err(|err| format!("cannot write the parts' folders: {err}"))?;
-    let source = transpile(file)?;
-    clarity_gen::write_programs(&source.out, &source.programs, source.settings.stack.backend, &source.settings.keeps).map_err(|err| format!("cannot write {}: {err}", source.out.display()))?;
+    let mut source = transpile(file)?;
+    source.written = clarity_gen::write_programs_listed(&source.out, &source.programs, source.settings.stack.backend, &source.settings.keeps).map_err(|err| format!("cannot write {}: {err}", source.out.display()))?;
     Ok(source)
 }
 
@@ -239,7 +239,7 @@ fn transpile(file: &Path) -> Result<Source, String> {
     let built = clarity_project::build_settings(&dir, &settings);
     let programs = clarity_gen::programs(&project, &built).map_err(|errors| errors.join("; "))?;
     let out = clarity_project::out_dir(file, &settings);
-    Ok(Source { out, settings, programs, shown })
+    Ok(Source { out, settings, programs, shown, written: clarity_gen::Written::default() })
 }
 
 /// A project's source tree as it was written: its output folder, its settings and programs.
@@ -249,12 +249,14 @@ pub struct Source {
     pub programs: Vec<clarity_gen::Program>,
     /// The project file's name, as messages name it.
     shown: String,
+    /// What Generate wrote and removed in the output folder; nothing for a transpile alone.
+    pub written: clarity_gen::Written,
 }
 
 /// What Build and Run build: the source Generate wrote, which must be the
 /// project as it is now; they generate nothing themselves.
 pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, String> {
-    let Source { out, settings, programs, shown } = transpile(file)?;
+    let Source { out, settings, programs, shown, .. } = transpile(file)?;
     // Each program is in its own folder of the output; one without windows has only the command line.
     let cli = cli || !settings.stack.has_ui();
     if cli && !settings.stack.has(clarity_project::Target::Cli) {
@@ -735,7 +737,11 @@ mod tests {
         let file = dir.join("shop.clarity");
         // Build builds only what Generate wrote, and only while it is the project as it is.
         assert!(generate_out(&file, true, false).err().unwrap_or_default().contains("is not generated yet: press Generate first"));
-        generate_source(&file).unwrap();
+        // Generate writes every file again each time, and says each one it wrote.
+        let first = generate_source(&file).unwrap().written;
+        assert!(first.written.contains(&"desktop/Cargo.toml".to_string()) && first.written.contains(&"desktop/src/main.rs".to_string()), "{first:?}");
+        let again = generate_source(&file).unwrap().written;
+        assert!(again.written == first.written && again.removed.is_empty(), "{again:?}");
         let Generated { out, toolchain, .. } = generate_out(&file, true, false).unwrap();
         // The desktop program, in its own folder of the output (DESIGN 5.20).
         assert_eq!(out, dir.join("shop/out/desktop"));

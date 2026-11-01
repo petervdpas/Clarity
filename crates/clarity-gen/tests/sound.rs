@@ -60,7 +60,7 @@ fn avalonia_places_a_sound_and_tells_it() {
 
 #[test]
 fn the_one_file_page_carries_the_sounds() {
-    let page = clarity_gen::web::single_page(&project());
-    assert!(page.contains("window.clarityResources = {"), "the page carries its resources");
-    assert!(page.contains("\"roll.wav\":\"data:audio/wav;base64,"));
+    // Carried for the build, which puts it in the one page (runtimes/web/build/onePage.test.mjs).
+    let files = clarity_gen::web_windows::one_page_project(&project(), "dice");
+    assert!(files.iter().any(|f| f.path == "ui/public/resources/roll.wav"), "the screen carries its sounds");
 }

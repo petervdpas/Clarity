@@ -16,7 +16,10 @@
 
   // The markup has added every part by the time the window is in the page.
   let ready = $state(false);
-  onMount(() => (ready = true));
+  onMount(() => {
+    ready = true;
+    place?.made?.(widgets);
+  });
   const page = $derived(place ? { ...place.page, widgets } : null);
 </script>
 

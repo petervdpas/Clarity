@@ -24,7 +24,8 @@ Clarity writes a CMake project into the output folder (`out` by default):
 - `src/records.h` and `src/records.c`: the enums and records of every module.
 - `src/modules/<module>.c`: one file per Clarity module, with its functions, actions, data events, windows and handlers, all declared in `src/app.h`.
 - `src/schema.c`: the migration steps of every database Clarity owns.
-- `src/page.c`: the web renderer and the windows, built into the program.
+- `src/page.c`: the model (the frame, the data dictionary, the translations) and the screen's page, built into the program.
+- `ui/`: the screen, a Svelte project of its own: each window as a file in `ui/src/windows/`, its parts as elements with their options as in Clarity (`<Button name="saveKey" at="3,5" span={2} caption="@saveCaption" onclick="save" />`); Clarity's screen package in `ui/clarity-ui/`, which the project carries; a CSS file per theme and the project's pictures in `ui/public/`. npm and Vite build it into `ui/dist/`; for the webview, which shows one page, the build puts the script, styles, themes and pictures in `ui/dist/index.html`, which CMake compiles into the program.
 - `src/main.c`: opens and migrates the databases and shows the first window.
 - `clarity-runtime/`: the C runtime and its shell, copied in.
 - `README.md`: what to install to build the project without Clarity.
@@ -40,6 +41,7 @@ A project with an [engine](code.engines.md) also gets the engine host and wasm3,
 ## What to install
 
 - A C compiler: GCC or Clang (on Windows, Visual Studio's Build Tools)
+- Node.js with npm, from https://nodejs.org, which builds the screen
 - A C++ compiler for the webview's one C++ file: GCC (g++) or Clang (clang++)
 - CMake 3.25 or newer, from https://cmake.org/download
 - make or Ninja, to build what CMake writes
@@ -53,9 +55,11 @@ Step by step, with the commands for Windows, Linux and macOS: [Setting up the bu
 
 ## Build and run
 
-**Generate** on the Preview tab writes the source into the output folder; then **Run** builds a debug program from it and starts it, and **Build** makes a release program. Without Clarity, in the output folder, one command configures and builds:
+**Generate** on the Preview tab writes the source into the output folder; then **Run** builds a debug program from it and starts it, and **Build** makes a release program. Without Clarity, in the output folder, build the screen, then one command configures and builds:
 
 ```shell
+npm --prefix ui install
+npm --prefix ui run build
 cmake --workflow --preset debug
 cmake --workflow --preset release
 ```
@@ -68,4 +72,4 @@ The application has one desktop window. `open` shows a window in place, on top o
 
 ## The same on every stack
 
-The web renderer is shared by the Rust, Go, C and C++ stacks, so they cannot differ. The parts of a window behave alike on the web renderer and on Avalonia ([C# with Avalonia](stacks.csharp.md)): the shared cases in `conformance/` say what each part must do, and both renderers run them.
+The screen package is shared by the Rust, Go, C and C++ stacks, so they cannot differ; a window drawn from its markup draws exactly what the same window drawn from the model does, which a test checks for every window of every example. The parts of a window behave alike on the web renderer and on Avalonia ([C# with Avalonia](stacks.csharp.md)): the shared cases in `conformance/` say what each part must do, and both renderers run them.

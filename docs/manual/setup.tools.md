@@ -39,7 +39,7 @@ A Go program needs no C compiler on Windows: Wails draws with WebView2, and Clar
 
 ### Node.js on Windows
 
-A Go application's screen, its windows as Svelte files in `ui/`, builds with npm before Go builds the program. Install Node.js, which brings npm, from [nodejs.org](https://nodejs.org), or in a terminal:
+The screen of an application on Rust, Go, C or C++, its windows as Svelte files in `ui/`, builds with npm before the program does. Install Node.js, which brings npm, from [nodejs.org](https://nodejs.org), or in a terminal:
 
 ```
 winget install OpenJS.NodeJS.LTS
@@ -105,7 +105,7 @@ Install Go from [go.dev/dl](https://go.dev/dl); the distribution's own package i
 
 ### Node.js on Linux
 
-A Go application's screen, its windows as Svelte files in `ui/`, builds with npm before Go builds the program. Install Node.js 20 or later with npm from [nodejs.org](https://nodejs.org), or the distribution's packages where they are recent enough (Debian and Ubuntu: `sudo apt install nodejs npm`).
+The screen of an application on Rust, Go, C or C++, its windows as Svelte files in `ui/`, builds with npm before the program does. Install Node.js 20 or later with npm from [nodejs.org](https://nodejs.org), or the distribution's packages where they are recent enough (Debian and Ubuntu: `sudo apt install nodejs npm`).
 
 ### C and C++ on Linux
 
@@ -139,7 +139,7 @@ Install Go from [go.dev/dl](https://go.dev/dl). Its screen builds with Node.js; 
 
 ### Node.js on macOS
 
-A Go application's screen, its windows as Svelte files in `ui/`, builds with npm before Go builds the program. Install Node.js, which brings npm, from [nodejs.org](https://nodejs.org), or with Homebrew: `brew install node`.
+The screen of an application on Rust, Go, C or C++, its windows as Svelte files in `ui/`, builds with npm before the program does. Install Node.js, which brings npm, from [nodejs.org](https://nodejs.org), or with Homebrew: `brew install node`.
 
 ### C and C++ on macOS
 

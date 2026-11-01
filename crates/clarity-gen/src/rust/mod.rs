@@ -115,7 +115,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             bytes: Some(std::borrow::Cow::Borrowed(ICON_ICO)),
         });
     }
-    files.extend(crate::web::renderer_files(project));
+    // The screen as a project of its own in ui/, its windows as markup, built into ui/dist (DESIGN 7.8).
+    files.extend(crate::web_windows::ui_project(project, &crate_name));
 
     let mut modules = Vec::new();
     let mut owners: Vec<Owner> = Vec::new();
@@ -172,8 +173,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !crate::engines(project).is_empty() {
         files.push(text("src/engines.rs", engines_rs(project)));
     }
-    // The renderer's files, which a web server serves from the program itself.
-    let ui: Vec<String> = files.iter().filter_map(|f| f.path.strip_prefix("ui/").map(String::from)).collect();
+    // The built screen's files, which a web server serves from the program itself.
+    let ui = crate::web_windows::dist_files(project);
     let (main_text, desktop_text) = split_desktop(&main_rs(project, settings, &owners, &databases, &main_window, &ui));
     // Everything of Tauri is in the desktop module; a program served to a browser alone has none.
     if settings.stack.has(clarity_project::Target::Desktop) {
@@ -282,7 +283,7 @@ fn tauri_conf(title: &str, crate_name: &str, (width, height): (u32, u32)) -> Str
         "productName": title,
         "version": "0.1.0",
         "identifier": format!("app.clarity.{}", crate_name.replace('_', "-")),
-        "build": { "frontendDist": "ui" },
+        "build": { "frontendDist": "ui/dist" },
         "app": {
             // No web inspector: the window is the application, not a page.
             "windows": [{ "title": title, "width": width, "height": height, "devtools": false }],
@@ -1488,8 +1489,8 @@ fn served(app: &App{connecting}, command: &str, args: Value) -> Value {{
 /// commands answered by `served`.
 fn serve_main(unconnected: bool, address: &str, ui: &[String]) -> String {
     let (connecting, given) = if unconnected { ("    let connecting = Connecting(Mutex::new(problem));\n", ", &connecting") } else { ("", "") };
-    // The renderer's files, in the program itself.
-    let arms: String = ui.iter().map(|path| format!("            {path:?} => Some(include_bytes!(\"../ui/{path}\").to_vec()),\n")).collect();
+    // The built screen's files, in the program itself.
+    let arms: String = ui.iter().map(|path| format!("            {path:?} => Some(include_bytes!(\"../ui/dist/{path}\").to_vec()),\n")).collect();
     format!(
         "    let app = App(Mutex::new(db));\n{connecting}    let files = |path: &str| -> Option<Vec<u8>> {{\n        match path {{\n{arms}            _ => None,\n        }}\n    }};\n    let args: Vec<String> = std::env::args().collect();\n    if let Err(err) = clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args, {address:?}), &files, &mut |command, args| served(&app{given}, command, args)) {{\n        eprintln!(\"{{PROGRAM}}: {{err}}\");\n        std::process::exit(1);\n    }}\n"
     )

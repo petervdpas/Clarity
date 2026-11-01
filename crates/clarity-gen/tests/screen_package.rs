@@ -16,7 +16,7 @@ fn package_files(dir: &Path, root: &Path, out: &mut Vec<String>) {
         }
         if path.is_dir() {
             package_files(&path, root, out);
-        } else if !name.ends_with(".test.ts") {
+        } else if !name.ends_with(".test.ts") && !name.ends_with(".test.mjs") {
             out.push(path.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/"));
         }
     }

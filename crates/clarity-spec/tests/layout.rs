@@ -4,12 +4,12 @@
 
 use clarity_spec::layout::{BUTTON_SIDES, CONTENT_PADDING, GAP, INPUT_SIDES, MESSAGE_MS, ROW_HEIGHT, WINDOW_HEIGHT, WINDOW_WIDTH};
 
-const GRID_TS: &str = include_str!("../../../app/src/lib/grid.ts");
-const RUNTIME_SVELTE: &str = include_str!("../../../app/src/runtime/Runtime.svelte");
-const SIDEBARS_TS: &str = include_str!("../../../app/src/lib/sidebars.ts");
+const GRID_TS: &str = include_str!("../../../runtimes/web/src/screen/grid.ts");
+const RUNTIME_SVELTE: &str = include_str!("../../../runtimes/web/src/host/Runtime.svelte");
+const SIDEBARS_TS: &str = include_str!("../../../runtimes/web/src/frame/sidebars.ts");
 const SIDEBAR_VIEW: &str = include_str!("../../../runtimes/csharp/Clarity.Avalonia/SidebarView.cs");
-const FRAME_VIEW: &str = include_str!("../../../app/src/lib/FrameView.svelte");
-const RENDER_CSS: &str = include_str!("../../../app/src/render.css");
+const FRAME_VIEW: &str = include_str!("../../../runtimes/web/src/frame/FrameView.svelte");
+const RENDER_CSS: &str = include_str!("../../../runtimes/web/src/screen/render.css");
 const SHOWN_WINDOW: &str = include_str!("../../../app/src/lib/ShownWindow.svelte");
 const PAGE_DESIGNER: &str = include_str!("../../../app/src/lib/PageDesigner.svelte");
 const APP: &str = include_str!("../../../app/src/App.svelte");

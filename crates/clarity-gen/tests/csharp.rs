@@ -250,7 +250,7 @@ fn queries_text_and_loops() {
     // Enums show their label in text.
     has(sales, "var shown = (((\"Order \" + order.Number) + \" is \") + Labels.Of(order.Status));");
     has(sales, "foreach (var other in all)");
-    has(sales, "if ((Texts.Contains(other.Number, \"X\") || ((long)all.Count > 3L)))");
+    has(sales, "if ((Clarity.Runtime.Texts.Contains(other.Number, \"X\") || ((long)all.Count > 3L)))");
     has(sales, "shown = (shown + \"!\");");
     // A field named like a C# keyword is still a property.
     has(sales, "    public string Event { get => _event; set => SetProperty(ref _event, value); }\n    string _event = \"\";");

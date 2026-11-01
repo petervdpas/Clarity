@@ -232,6 +232,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     files.push(text("src/schema.hpp", namespaced(&program, "#pragma once\n\n#include <string>\n#include <vector>\n\n#include \"clarity/db.hpp\"\n", SCHEMA_HPP)));
     files.push(text("src/schema.cpp", schema_cpp(project, &program, &owned)?));
     files.push(text("src/page.cpp", page_cpp(project, &program)));
+    // The screen as a project of its own in ui/, its windows as markup, built into one page (DESIGN 7.8).
+    files.extend(crate::web_windows::one_page_project(project, &program));
     files.push(text("src/main.cpp", main_cpp(project, settings, &program, &databases, &owners, &main_window)));
     Ok(files)
 }
@@ -317,6 +319,17 @@ file(GLOB PROGRAM_SOURCES CONFIGURE_DEPENDS src/*.cpp src/modules/*.cpp)
 add_executable({program} ${{PROGRAM_SOURCES}})
 target_include_directories({program} PRIVATE src)
 target_link_libraries({program} PRIVATE clarity {shell}{engine}{http})
+
+# The screen, built by npm in ui/ into one page (DESIGN 7.8), compiled into the program.
+set(CLARITY_PAGE ${{CMAKE_CURRENT_SOURCE_DIR}}/ui/dist/index.html)
+if(NOT EXISTS ${{CLARITY_PAGE}})
+  message(FATAL_ERROR \"ui/dist/index.html is missing: build the screen first (npm --prefix ui install, then npm --prefix ui run build)\")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${{CLARITY_PAGE}})
+file(READ ${{CLARITY_PAGE}} CLARITY_PAGE_HEX HEX)
+string(REGEX REPLACE \"([0-9a-f][0-9a-f])\" \"0x\\\\1,\" CLARITY_PAGE_BYTES \"${{CLARITY_PAGE_HEX}}\")
+file(WRITE ${{CMAKE_CURRENT_BINARY_DIR}}/page_html.cpp \"/* The screen's page, from ui/dist/index.html. */\\nextern const unsigned char clarity_page_html[] = {{${{CLARITY_PAGE_BYTES}}0x00}};\\n\")
+target_sources({program} PRIVATE ${{CMAKE_CURRENT_BINARY_DIR}}/page_html.cpp)
 {parts}"
     )
 }
@@ -391,11 +404,10 @@ fn long_text(text: &str) -> String {
 
 fn page_cpp(project: &Project, program: &str) -> String {
     let body = format!(
-        "/// The windows, frame and data dictionary the renderer draws from.\nconst std::string& model() {{\n    static const std::string text = [] {{\n{}    }}();\n    return text;\n}}\n\n/// The renderer's page, with its script, styles and pictures in it.\nconst std::string& page() {{\n    static const std::string text = [] {{\n{}    }}();\n    return text;\n}}\n",
-        indent_lines(&long_text(&crate::web::model_json(project)), 1),
-        indent_lines(&long_text(&crate::web::single_page(project)), 1)
+        "/// The windows, frame and data dictionary the renderer draws from.\nconst std::string& model() {{\n    static const std::string text = [] {{\n{}    }}();\n    return text;\n}}\n\n/// The screen's page, built in ui/ and compiled in by CMake (page_html.cpp).\nconst std::string& page() {{\n    static const std::string text(reinterpret_cast<const char*>(clarity_page_html));\n    return text;\n}}\n",
+        indent_lines(&long_text(&crate::web::model_json(project)), 1)
     );
-    namespaced(program, "#include <string>\n", &body)
+    namespaced(program, "#include <string>\n\n// The screen's page, compiled in by CMake (page_html.cpp).\nextern const unsigned char clarity_page_html[];\n", &body)
 }
 
 fn indent_lines(text: &str, depth: usize) -> String {

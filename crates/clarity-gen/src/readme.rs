@@ -79,7 +79,7 @@ pub fn readme(settings: &Settings, calls_out: bool) -> String {
     let (build, run) = commands(settings);
     if !build.is_empty() {
         out.push_str("\n## Build and run\n\n");
-        if backend == Backend::Go {
+        if backend != Backend::Csharp {
             // The screen, its windows as markup (DESIGN 7.8), is built first: the program embeds ui/dist.
             out.push_str("The screen is a Svelte project of its own in `ui/`, its windows in `ui/src/windows/`, on Clarity's screen package in `ui/clarity-ui/`. Build it first, with Node.js and npm:
 

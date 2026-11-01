@@ -12,7 +12,7 @@
   // A window's markup is fixed: the part is made once, as written.
   const widget = untrack(() => partOf(kind, given, holder.next()));
   holder.widgets.push(widget);
-  provideHolder({ widgets: widget.children, pages: widget.pages, next: holder.next });
+  provideHolder({ widgets: widget.children, pages: widget.pages, next: holder.next, setMenu: (menu) => (widget.menu = menu) });
 </script>
 
 {@render children?.()}

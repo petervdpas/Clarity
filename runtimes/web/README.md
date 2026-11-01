@@ -13,4 +13,4 @@ The screen of Clarity's web stacks: what every generated Rust, Go, C and C++ app
 
 The package has no dependencies of its own yet: it uses the IDE's (`app/`), linked by `npm install` in `app/` (`runtimes/web/node_modules`). Its tests run with the IDE's: `npm test` in `app/`.
 
-The IDE imports it as `@clarity/ui/...`; `npm run build:runtime` in `app/` builds the screen every web stack ships (`crates/clarity-gen/ui`).
+The IDE imports it as `@clarity/ui/...`. A generated web project carries it in `ui/clarity-ui/` and builds its own screen with it: its windows as markup (`ui/src/windows/`), started by `host/start.ts`. `build/onePage.mjs` is the build's last step for the C and C++ webview, which shows one page.

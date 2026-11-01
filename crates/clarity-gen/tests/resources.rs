@@ -65,16 +65,17 @@ fn text<'a>(files: &'a [OutFile], path: &str) -> &'a str {
     &files.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("no {path}")).text
 }
 
-/// The web stacks put the resources next to the renderer, which shows
-/// `resources/logo.png` from its own folder; the Markdown travels in the
+/// The web stacks put the resources in the screen's public folder, which
+/// the build copies next to the page, so it shows `resources/logo.png` from
+/// its own folder (DESIGN 7.8); the Markdown travels in the
 /// model, and a key that points at a resource is, in each language, the
 /// Markdown of its file or the name of its picture.
 #[test]
 fn the_web_stacks_carry_the_resources_with_the_renderer() {
     for (backend, model) in [(Backend::Rust, "src/model.json"), (Backend::Go, "model.json")] {
         let files = files(backend, Ui::Web);
-        assert_eq!(bytes(&files, "ui/resources/logo.png"), LOGO, "{backend:?}");
-        assert_eq!(bytes(&files, "ui/resources/rules-nl.md"), b"# Regels", "{backend:?}");
+        assert_eq!(bytes(&files, "ui/public/resources/logo.png"), LOGO, "{backend:?}");
+        assert_eq!(bytes(&files, "ui/public/resources/rules-nl.md"), b"# Regels", "{backend:?}");
         let model = text(&files, model);
         assert!(model.contains("\"license.md\":\"# License\""), "{backend:?}: {model}");
         assert!(model.contains("\"nl\":{\"bannerPicture\":\"banner-nl.png\",\"gameRules\":\"# Regels\"}"), "{backend:?}: {model}");
@@ -133,6 +134,10 @@ fn the_one_file_page_carries_an_svg_as_an_svg() {
     let mut project = clarity_spec::load_sources([("art.clarity", source)]);
     let svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><circle cx=\"5\" cy=\"5\" r=\"4\"/></svg>".to_vec();
     clarity_spec::resources::attach(&mut project, vec![clarity_spec::resources::ResourceFile { name: "logo.svg".into(), bytes: svg }]);
-    let page = clarity_gen::web::single_page(&project);
-    assert!(page.contains("\"logo.svg\":\"data:image/svg+xml;base64,"), "{}", &page[page.find("clarityResources").unwrap_or(0)..][..200]);
+    // The C project's screen carries the picture for its build, which puts it in the page as a data URL
+    // of its own kind (runtimes/web/build/onePage.test.mjs).
+    let files = clarity_gen::web_windows::one_page_project(&project, "art");
+    assert!(files.iter().any(|f| f.path == "ui/public/resources/logo.svg"));
+    let config = &files.iter().find(|f| f.path == "ui/vite.config.ts").unwrap().text;
+    assert!(config.contains("import { onePage } from \"@clarity/ui/build/onePage.mjs\";") && config.contains("plugins: [svelte(), onePage()],"), "{config}");
 }

@@ -48,6 +48,12 @@ fn the_package_reads_the_catalog_s_defaults() {
     }
     let written = std::fs::read_to_string(&path).unwrap_or_default();
     assert!(written == defaults, "{} is not the catalog's defaults; write it with CLARITY_WRITE_DEFAULTS=1", path.display());
+    let path = path.with_file_name("command-defaults.json");
+    let defaults = clarity_gen::web_windows::command_defaults();
+    if std::env::var("CLARITY_WRITE_DEFAULTS").is_ok() {
+        std::fs::write(&path, &defaults).unwrap();
+    }
+    assert!(std::fs::read_to_string(&path).unwrap_or_default() == defaults, "{} is not a new item's defaults; write it with CLARITY_WRITE_DEFAULTS=1", path.display());
 }
 
 /// A generated screen builds with the tools Clarity's own screen is built and tested with.

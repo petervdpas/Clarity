@@ -155,11 +155,17 @@ fn handlers_are_member_functions_of_their_window() {
 /// shows a page and no folder.
 #[test]
 fn the_page_carries_the_renderer() {
+    // The screen is built in ui/ into one page (DESIGN 7.8), which CMake compiles into the program.
     let files = files();
     let page = file(&files, "src/page.cpp");
-    has(page, "<script type=\"module\">");
-    assert!(!page.contains("src=\"./runtime.js\""), "the script is in the page");
+    has(page, "clarity_page_html");
     has(page, "const std::string& page() {");
+    let cmake = file(&files, "CMakeLists.txt");
+    has(cmake, "file(READ ${CLARITY_PAGE} CLARITY_PAGE_HEX HEX)");
+    has(cmake, "target_sources(shop PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/page_html.cpp)");
+    let vite = file(&files, "ui/vite.config.ts");
+    has(vite, "plugins: [svelte(), onePage()],");
+    has(vite, "import { onePage } from \"@clarity/ui/build/onePage.mjs\";");
 }
 
 #[test]
@@ -346,7 +352,7 @@ fn an_engine_brings_its_host_and_wasm3() {
     }
     has(file(&files, "CMakeLists.txt"), "clarity_shell clarity_engine)");
     // Without an engine, neither comes along.
-    assert!(!self::files().iter().any(|f| f.path.contains("engine") || f.path.contains("wasm3")));
+    assert!(!self::files().iter().any(|f| !f.path.starts_with("ui/") && (f.path.contains("engine") || f.path.contains("wasm3"))));
 }
 
 #[test]

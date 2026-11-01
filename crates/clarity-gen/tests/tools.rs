@@ -41,13 +41,14 @@ fn rust_needs_cargo_and_on_linux_webkitgtk() {
 
     let machine = Machine::default()
         .with("cargo", "--version", "cargo 1.91.0 (ea2d97820 2025-10-10)\n")
+        .with("npm", "--version", "10.9.2\n")
         .with("pkg-config", "--exists webkit2gtk-4.1", "");
     let ready = check(Backend::Rust, Ui::Web, &machine);
     assert!(ready.ready(), "{:?}", ready.missing);
-    assert_eq!(ready.found, ["cargo 1.91.0 (ea2d97820 2025-10-10)"]);
+    assert_eq!(ready.found, ["cargo 1.91.0 (ea2d97820 2025-10-10)", "npm 10.9.2"]);
 
     if cfg!(target_os = "linux") {
-        let without = Machine::default().with("cargo", "--version", "cargo 1.91.0\n");
+        let without = Machine::default().with("cargo", "--version", "cargo 1.91.0\n").with("npm", "--version", "10.9.2\n");
         let check = check(Backend::Rust, Ui::Web, &without);
         assert_eq!(check.missing.len(), 1);
         assert!(check.missing[0].contains("libwebkit2gtk-4.1-dev"), "{:?}", check.missing);
@@ -99,15 +100,16 @@ fn c_and_cpp_need_a_compiler_cmake_and_their_libraries() {
                 .with("clang", "--version", "clang version 19.1.7\nTarget: x86_64\n")
                 .with("clang++", "--version", "clang version 19.1.7\nTarget: x86_64\n")
                 .with("cmake", "--version", "cmake version 3.31.6\n\nCMake suite maintained by Kitware\n")
-                .with("make", "--version", "GNU Make 4.4.1\n"),
+                .with("make", "--version", "GNU Make 4.4.1\n")
+                .with("npm", "--version", "10.9.2\n"),
         ),
     );
     assert!(c.generated);
-    assert_eq!(c.found, ["clang version 19.1.7", "clang version 19.1.7", "cmake version 3.31.6", "GNU Make 4.4.1"]);
+    assert_eq!(c.found, ["clang version 19.1.7", "clang version 19.1.7", "cmake version 3.31.6", "GNU Make 4.4.1", "npm 10.9.2"]);
     assert!(c.missing.is_empty(), "{:?}", c.missing);
-    let cpp = check(Backend::Cpp, Ui::Web, &with_libraries(Machine::default().with("g++", "--version", "g++ (Debian 14.2.0-19) 14.2.0\n").with("ninja", "--version", "1.12.1\n")));
+    let cpp = check(Backend::Cpp, Ui::Web, &with_libraries(Machine::default().with("g++", "--version", "g++ (Debian 14.2.0-19) 14.2.0\n").with("ninja", "--version", "1.12.1\n").with("npm", "--version", "10.9.2\n")));
     assert!(cpp.generated);
-    assert_eq!(cpp.found, ["g++ (Debian 14.2.0-19) 14.2.0", "ninja 1.12.1"]);
+    assert_eq!(cpp.found, ["g++ (Debian 14.2.0-19) 14.2.0", "ninja 1.12.1", "npm 10.9.2"]);
     assert_eq!(cpp.missing.len(), 1);
     assert!(cpp.missing[0].contains("CMake") && cpp.missing[0].contains("https://cmake.org/download"), "{:?}", cpp.missing);
     let bare = check(Backend::C, Ui::Web, &Machine::default().with("cc", "--version", "cc (Debian 14.2.0-19) 14.2.0\n").with("cmake", "--version", "cmake version 3.31.6\n"));
@@ -369,4 +371,15 @@ fn the_webassembly_tools_install_asks_the_system_where_it_must() {
     let windows = wasm_tools_install(std::path::Path::new("C:\\Program Files\\dotnet\\dotnet.exe"), false, "windows");
     assert_eq!(windows.program, "powershell");
     assert_eq!(windows.args.last().unwrap(), "Start-Process -FilePath 'C:\\Program Files\\dotnet\\dotnet.exe' -ArgumentList 'workload','install','wasm-tools' -Verb RunAs -Wait");
+}
+
+/// Every web stack builds its screen, its windows as markup, with npm (DESIGN 7.8); C# with Avalonia does not.
+#[test]
+fn the_web_stacks_need_node_for_their_screen() {
+    for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
+        let check = check(backend, Ui::Web, &Machine::default());
+        assert!(check.missing.iter().any(|m| m.contains("Node.js with npm")), "{backend:?}: {:?}", check.missing);
+    }
+    let avalonia = check(Backend::Csharp, Ui::Avalonia, &Machine::default());
+    assert!(!avalonia.missing.iter().any(|m| m.contains("Node.js")), "{:?}", avalonia.missing);
 }

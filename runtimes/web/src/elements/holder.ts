@@ -4,6 +4,8 @@
 // draws the whole of it with the screen's own grid and part modules.
 
 import { getContext, setContext } from "svelte";
+import type { Command } from "../generated/Command.ts";
+import type { Menu } from "../generated/Menu.ts";
 import type { Page } from "../generated/Page.ts";
 import type { Preview } from "../generated/Preview.ts";
 import type { Widget } from "../generated/Widget.ts";
@@ -16,6 +18,8 @@ export type WindowPlace = {
   page: Page;
   data: PageData;
   onnavigate: (target: string, newWindow?: boolean) => void;
+  /** Told the parts the markup made, once it has made them all. */
+  made?: (widgets: Widget[]) => void;
 };
 
 const PLACE = Symbol("clarity.window.place");
@@ -34,6 +38,10 @@ export type Holder = {
   pages?: WidgetPage[];
   /** A place of its own for each element, as a part's place in its file names it in the model. */
   next: () => number;
+  /** A part's menu, which its `<Menu>` gives it. */
+  setMenu?: (menu: Menu) => void;
+  /** The commands of a menu or submenu, which its `<Item>`s add to. */
+  commands?: Command[];
 };
 
 const HOLDER = Symbol("clarity.window.holder");

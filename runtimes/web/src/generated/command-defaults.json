@@ -1,0 +1,11 @@
+{
+  "kind": "item",
+  "caption": null,
+  "name": null,
+  "icon": null,
+  "shortcut": null,
+  "large": false,
+  "onClick": null,
+  "newWindow": false,
+  "handler": null
+}

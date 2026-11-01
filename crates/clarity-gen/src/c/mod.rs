@@ -274,6 +274,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     files.push(text("src/schema.c", schema_c(project, &owned)?));
     files.push(text("src/page.h", format!("{HEADER}\n{PAGE_H}")));
     files.push(text("src/page.c", page_c(project)));
+    // The screen as a project of its own in ui/, its windows as markup, built into one page (DESIGN 7.8).
+    files.extend(crate::web_windows::one_page_project(project, &program));
     files.push(text("src/main.c", main_c(project, settings, &databases, &owners, &main_window)));
     Ok(files)
 }
@@ -414,6 +416,17 @@ file(GLOB PROGRAM_SOURCES CONFIGURE_DEPENDS src/*.c src/modules/*.c)
 add_executable({program} ${{PROGRAM_SOURCES}})
 target_include_directories({program} PRIVATE src)
 target_link_libraries({program} PRIVATE clarity {shell}{engine}{http})
+
+# The screen, built by npm in ui/ into one page (DESIGN 7.8), compiled into the program.
+set(CLARITY_PAGE ${{CMAKE_CURRENT_SOURCE_DIR}}/ui/dist/index.html)
+if(NOT EXISTS ${{CLARITY_PAGE}})
+  message(FATAL_ERROR \"ui/dist/index.html is missing: build the screen first (npm --prefix ui install, then npm --prefix ui run build)\")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${{CLARITY_PAGE}})
+file(READ ${{CLARITY_PAGE}} CLARITY_PAGE_HEX HEX)
+string(REGEX REPLACE \"([0-9a-f][0-9a-f])\" \"0x\\\\1,\" CLARITY_PAGE_BYTES \"${{CLARITY_PAGE_HEX}}\")
+file(WRITE ${{CMAKE_CURRENT_BINARY_DIR}}/page_html.c \"/* The screen's page, from ui/dist/index.html. */\\nconst unsigned char clarity_page_html[] = {{${{CLARITY_PAGE_BYTES}}0x00}};\\n\")
+target_sources({program} PRIVATE ${{CMAKE_CURRENT_BINARY_DIR}}/page_html.c)
 {parts}"
     )
 }
@@ -496,9 +509,9 @@ fn long_text(name: &str, text: &str) -> String {
 
 fn page_c(project: &Project) -> String {
     format!(
-        "{HEADER}\n#include <stdlib.h>\n#include <string.h>\n\n#include \"page.h\"\n\n/// The pieces joined, in memory that lasts as long as the program.\nstatic char* joined(const char* const* parts) {{\n    size_t length = 0;\n    for (const char* const* p = parts; *p; ++p) length += strlen(*p);\n    char* out = malloc(length + 1);\n    if (!out) return \"\";\n    out[0] = '\\0';\n    for (const char* const* p = parts; *p; ++p) strcat(out, *p);\n    return out;\n}}\n\n{}{}const char* page_model(void) {{\n    static char* text;\n    if (!text) text = joined(model_parts);\n    return text;\n}}\n\nconst char* page_html(void) {{\n    static char* text;\n    if (!text) text = joined(html_parts);\n    return text;\n}}\n",
+        "{HEADER}\n#include <stdlib.h>\n#include <string.h>\n\n#include \"page.h\"\n\n/// The pieces joined, in memory that lasts as long as the program.\nstatic char* joined(const char* const* parts) {{\n    size_t length = 0;\n    for (const char* const* p = parts; *p; ++p) length += strlen(*p);\n    char* out = malloc(length + 1);\n    if (!out) return \"\";\n    out[0] = '\\0';\n    for (const char* const* p = parts; *p; ++p) strcat(out, *p);\n    return out;\n}}\n\n{}{}const char* page_model(void) {{\n    static char* text;\n    if (!text) text = joined(model_parts);\n    return text;\n}}\n\n/// The screen's page, built in ui/ and compiled in by CMake (page_html.c).\nextern const unsigned char clarity_page_html[];\n\nconst char* page_html(void) {{\n    return (const char*)clarity_page_html;\n}}\n",
         long_text("model", &crate::web::model_json(project)),
-        long_text("html", &crate::web::single_page(project))
+        ""
     )
 }
 

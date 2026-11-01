@@ -399,11 +399,12 @@ fn compiler_needed(backend: Backend) -> String {
 /// Everything `backend` builds with, on any system: what a README lists.
 pub fn requirements(backend: Backend) -> Vec<String> {
     match backend {
-        Backend::Rust => vec![RUST.to_string(), format!("on Linux, {WEBKIT}")],
+        Backend::Rust => vec![RUST.to_string(), NODE.to_string(), format!("on Linux, {WEBKIT}")],
         Backend::Csharp => vec![dotnet()],
         Backend::Go => vec![GO.to_string(), NODE.to_string(), format!("on Linux, {WEBKIT}")],
         Backend::C => vec![
             compiler_needed(backend),
+            NODE.to_string(),
             WEBVIEW_CXX.to_string(),
             CMAKE.to_string(),
             MAKE.to_string(),
@@ -413,6 +414,7 @@ pub fn requirements(backend: Backend) -> Vec<String> {
         ],
         Backend::Cpp => vec![
             compiler_needed(backend),
+            NODE.to_string(),
             CMAKE.to_string(),
             MAKE.to_string(),
             SQLITE.to_string(),
@@ -468,11 +470,6 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
                 Some(version) => found.push(first_line(&version)),
                 None => missing.push((GO.to_string(), GO_GUIDE)),
             }
-            // Its screen, its windows as markup, builds with npm (DESIGN 7.8).
-            match probe.run("npm", &["--version"]) {
-                Some(version) => found.push(format!("npm {}", first_line(&version))),
-                None => missing.push((NODE.to_string(), NODE_GUIDE)),
-            }
             // Wails draws with WebKitGTK on Linux too, through cgo.
             if cfg!(target_os = "linux") && probe.run("pkg-config", &["--exists", "webkit2gtk-4.1"]).is_none() {
                 missing.push((WEBKIT.to_string(), WEBKIT_GUIDE));
@@ -514,6 +511,13 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
                     }
                 }
             }
+        }
+    }
+    // A web stack's screen, its windows as markup, builds with npm before the program (DESIGN 7.8).
+    if ui == Ui::Web && backend != Backend::Csharp {
+        match probe.run("npm", &["--version"]) {
+            Some(version) => found.push(format!("npm {}", first_line(&version))),
+            None => missing.push((NODE.to_string(), NODE_GUIDE)),
         }
     }
     StackTools {

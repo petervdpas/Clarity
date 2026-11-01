@@ -10,7 +10,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
-use clarity_spec::model::{Page, PageKind, Project, Widget, WidgetPage};
+use clarity_spec::model::{Command, CommandKind, Menu, Page, PageKind, Project, Widget, WidgetPage};
 use clarity_spec::widgets::{self, WidgetKind};
 use serde_json::Value;
 
@@ -34,32 +34,13 @@ const WORDS: [(&str, &str); 4] = [
 /// (`onclick`), and what the project works out itself.
 const OWN_FORM: [&str; 9] = ["kind", "name", "col", "row", "width", "height", "handlers", "made", "undoScope"];
 
-/// Why a window cannot be written as markup yet; it is drawn from the model then.
-pub fn not_markup_yet(page: &Page) -> Option<&'static str> {
-    fn walk(widgets: &[Widget]) -> Option<&'static str> {
-        for w in widgets {
-            if w.props.kind == WidgetKind::Popover {
-                return Some("a popover");
-            }
-            if w.menu.is_some() {
-                return Some("a part's menu");
-            }
-            if let Some(found) = walk(&w.children).or_else(|| w.pages.iter().find_map(|p| walk(&p.children))) {
-                return Some(found);
-            }
-        }
-        None
-    }
-    walk(&page.widgets)
-}
-
 /// The windows and dialogs of the project as markup, one file each.
 pub fn window_files(project: &Project) -> Vec<OutFile> {
     project
         .files
         .iter()
         .flat_map(|f| &f.pages)
-        .filter(|p| p.kind != PageKind::View && not_markup_yet(p).is_none())
+        .filter(|p| p.kind != PageKind::View)
         .map(|page| OutFile { path: format!("{WINDOWS_FOLDER}/{}.svelte", page.name.name), text: window_markup(page), bytes: None })
         .collect()
 }
@@ -102,12 +83,15 @@ fn part(widget: &Widget, depth: usize, used: &mut BTreeSet<String>, out: &mut St
     let element = element_name(p.kind);
     used.insert(element.clone());
     let attributes = attributes(widget);
-    let inner = !widget.children.is_empty() || !widget.pages.is_empty();
+    let inner = !widget.children.is_empty() || !widget.pages.is_empty() || widget.menu.is_some();
     if !inner {
         let _ = writeln!(out, "{pad}<{element}{attributes} />");
         return;
     }
     let _ = writeln!(out, "{pad}<{element}{attributes}>");
+    if let Some(menu) = &widget.menu {
+        menu_element(menu, depth + 1, used, out);
+    }
     for child in drawn(&widget.children) {
         part(child, depth + 1, used, out);
     }
@@ -115,6 +99,48 @@ fn part(widget: &Widget, depth: usize, used: &mut BTreeSet<String>, out: &mut St
         page_element(p.kind, page, depth + 1, used, out);
     }
     let _ = writeln!(out, "{pad}</{element}>");
+}
+
+/// A part's menu (DESIGN 5.16): `<Menu>` with an `<Item>` per command.
+fn menu_element(menu: &Menu, depth: usize, used: &mut BTreeSet<String>, out: &mut String) {
+    let pad = "  ".repeat(depth);
+    used.insert("Menu".to_string());
+    let name = menu.name.as_ref().map(|n| attribute("name", &Value::String(n.clone()))).unwrap_or_default();
+    let _ = writeln!(out, "{pad}<Menu{name}>");
+    for item in &menu.items {
+        command_element(item, depth + 1, used, out);
+    }
+    let _ = writeln!(out, "{pad}</Menu>");
+}
+
+/// A command of a menu: what differs from a new item, in Clarity's words,
+/// and the items of a submenu inside it.
+fn command_element(command: &Command, depth: usize, used: &mut BTreeSet<String>, out: &mut String) {
+    let pad = "  ".repeat(depth);
+    used.insert("Item".to_string());
+    let defaults = serde_json::to_value(clarity_spec::frame::new_command(CommandKind::Item, None)).unwrap_or(Value::Null);
+    let mut attributes = String::new();
+    for (field, value) in in_order(&serde_json::to_string(&command.props).unwrap_or_default()) {
+        if defaults.get(&field) == Some(&value) {
+            continue;
+        }
+        let word = match field.as_str() {
+            "shortcut" => "key",
+            "onClick" => "opens",
+            "handler" => "onclick",
+            other => other,
+        };
+        attributes.push_str(&attribute(word, &value));
+    }
+    if command.items.is_empty() {
+        let _ = writeln!(out, "{pad}<Item{attributes} />");
+        return;
+    }
+    let _ = writeln!(out, "{pad}<Item{attributes}>");
+    for item in &command.items {
+        command_element(item, depth + 1, used, out);
+    }
+    let _ = writeln!(out, "{pad}</Item>");
 }
 
 /// A tab, step, section or pane, with the parts on it.
@@ -202,6 +228,11 @@ fn attribute(word: &str, value: &Value) -> String {
     }
 }
 
+/// A new menu item's defaults as the package's `<Item>` reads them (`command-defaults.json`).
+pub fn command_defaults() -> String {
+    serde_json::to_string_pretty(&clarity_spec::frame::new_command(CommandKind::Item, None)).unwrap_or_default() + "\n"
+}
+
 /// Every kind's defaults as the package's elements read them (`part-defaults.json`).
 pub fn part_defaults() -> String {
     let mut all = serde_json::Map::new();
@@ -221,6 +252,18 @@ pub const SCREEN_TOOLS: [(&str, &str); 4] = [("svelte", "5.57.2"), ("@tauri-apps
 /// Vite (`npm install`, `npm run build`) into `ui/dist/`, which the program
 /// serves.
 pub fn ui_project(project: &Project, name: &str) -> Vec<OutFile> {
+    ui_project_as(project, name, false)
+}
+
+/// The screen's project for a program whose webview shows one page and no
+/// folder (the C and C++ stacks): the build writes `ui/dist/index.html`
+/// with its script, styles, themes and pictures in it, which CMake compiles
+/// into the program.
+pub fn one_page_project(project: &Project, name: &str) -> Vec<OutFile> {
+    ui_project_as(project, name, true)
+}
+
+fn ui_project_as(project: &Project, name: &str, one_page: bool) -> Vec<OutFile> {
     let text = |path: &str, body: String| OutFile { path: path.to_string(), text: body, bytes: None };
     let mut files = Vec::new();
     let package = format!(
@@ -228,7 +271,15 @@ pub fn ui_project(project: &Project, name: &str) -> Vec<OutFile> {
         SCREEN_TOOLS[0].0, SCREEN_TOOLS[0].1, SCREEN_TOOLS[1].0, SCREEN_TOOLS[1].1, SCREEN_TOOLS[2].0, SCREEN_TOOLS[2].1, SCREEN_TOOLS[3].0, SCREEN_TOOLS[3].1
     );
     files.push(text("ui/package.json", package));
-    files.push(text("ui/vite.config.ts", VITE_CONFIG.to_string()));
+    // A webview that shows one page gets the whole screen in index.html (the package's build/onePage.mjs).
+    let config = if one_page {
+        VITE_CONFIG
+            .replace("  plugins: [svelte()],", "  plugins: [svelte(), onePage()],")
+            .replace("import { svelte } from \"@sveltejs/vite-plugin-svelte\";\n", "import { svelte } from \"@sveltejs/vite-plugin-svelte\";\nimport { onePage } from \"@clarity/ui/build/onePage.mjs\";\n")
+    } else {
+        VITE_CONFIG.to_string()
+    };
+    files.push(text("ui/vite.config.ts", config));
     files.push(text("ui/svelte.config.js", SVELTE_CONFIG.to_string()));
     files.push(text("ui/.gitignore", "# What npm install and npm run build make.\nnode_modules/\ndist/\n".to_string()));
     // Each window that is markup, and the start that hands them to the screen.
@@ -243,7 +294,7 @@ pub fn ui_project(project: &Project, name: &str) -> Vec<OutFile> {
     files.extend(windows);
     // The themes and resources the page links, as they are, in public/.
     let mut links = String::new();
-    for file in crate::web::renderer_files(project) {
+    for file in crate::web::screen_assets(project) {
         let Some(rest) = file.path.strip_prefix("ui/") else { continue };
         if rest.starts_with("themes/") {
             let _ = writeln!(links, "    <link rel=\"stylesheet\" href=\"./{rest}\">");
@@ -257,6 +308,15 @@ pub fn ui_project(project: &Project, name: &str) -> Vec<OutFile> {
     files
 }
 
-const VITE_CONFIG: &str = "// Generated by Clarity: builds the application's screen into dist/, which\n// the program serves, with Clarity's screen package (clarity-ui/).\nimport { defineConfig } from \"vite\";\nimport { svelte } from \"@sveltejs/vite-plugin-svelte\";\n\nexport default defineConfig({\n  plugins: [svelte()],\n  base: \"./\",\n  // One copy of each, for the screen package and the windows alike.\n  resolve: { dedupe: [\"svelte\", \"@tauri-apps/api\"] },\n  // The package is Svelte and TypeScript as written, compiled with the windows.\n  optimizeDeps: { exclude: [\"@clarity/ui\"] },\n  build: {\n    outDir: \"dist\",\n    emptyOutDir: true,\n    rollupOptions: {\n      output: { entryFileNames: \"runtime.js\", chunkFileNames: \"runtime-[name].js\", assetFileNames: \"runtime.[ext]\" },\n    },\n  },\n});\n";
+/// The files `npm run build` writes into `ui/dist/`, by their path there:
+/// the page, its one script and style sheet, and what `ui/public/` holds.
+pub fn dist_files(project: &Project) -> Vec<String> {
+    let mut files: Vec<String> = ["index.html", "runtime.js", "runtime.css"].map(String::from).to_vec();
+    files.extend(ui_project(project, "").into_iter().filter_map(|f| f.path.strip_prefix("ui/public/").map(String::from)));
+    files
+}
+
+const VITE_CONFIG: &str = "// Generated by Clarity: builds the application's screen into dist/, which\n// the program serves, with Clarity's screen package (clarity-ui/).\nimport { defineConfig } from \"vite\";\nimport { svelte } from \"@sveltejs/vite-plugin-svelte\";\n\nexport default defineConfig({\n  plugins: [svelte()],\n  base: \"./\",\n  // One copy of each, for the screen package and the windows alike.\n  resolve: { dedupe: [\"svelte\", \"@tauri-apps/api\"] },\n  // The package is Svelte and TypeScript as written, compiled with the windows.\n  optimizeDeps: { exclude: [\"@clarity/ui\"] },\n  build: {\n    outDir: \"dist\",\n    emptyOutDir: true,\n    rollupOptions: {\n      // One script and one style sheet, by the names the program embeds them under.
+      output: { entryFileNames: \"runtime.js\", assetFileNames: \"runtime.[ext]\", inlineDynamicImports: true },\n    },\n  },\n});\n";
 
 const SVELTE_CONFIG: &str = "// Generated by Clarity: the windows and the screen package are Svelte with TypeScript.\nimport { vitePreprocess } from \"@sveltejs/vite-plugin-svelte\";\n\nexport default {\n  preprocess: vitePreprocess(),\n};\n";

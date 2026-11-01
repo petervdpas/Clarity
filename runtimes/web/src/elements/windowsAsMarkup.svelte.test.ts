@@ -22,15 +22,27 @@ globalThis.ResizeObserver ??= class {
 
 const root = join(import.meta.dirname, "../../../..");
 const clarity = join(root, "target/debug/clarity");
-const examples = readdirSync(join(root, "examples"))
-  .filter((name) => name.endsWith(".clarity"))
-  .map((name) => name.slice(0, -".clarity".length))
-  .sort();
+// Every example, and the every-part project, which has popovers and part menus.
+const projects = [
+  ...readdirSync(join(root, "examples"))
+    .filter((name) => name.endsWith(".clarity"))
+    .map((name) => ({ name: name.slice(0, -".clarity".length), file: join(root, "examples", name) }))
+    .sort((a, b) => a.name.localeCompare(b.name)),
+  { name: "everything", file: join(root, "crates/clarity-gen/tests/fixtures/everything") },
+];
 
 function run(args: string[]): Buffer {
   return existsSync(clarity)
     ? execFileSync(clarity, args, { maxBuffer: 1 << 28 })
     : execFileSync("cargo", ["run", "-q", "-p", "clarity-cli", "--", ...args], { cwd: root, maxBuffer: 1 << 28, env: { ...process.env, CARGO_BUILD_JOBS: "2" } });
+}
+
+/** The parts as they are, without their places in their files, what the project works out itself, and the sounds and timers markup leaves out. */
+function parts(widgets: unknown): unknown {
+  return JSON.parse(
+    JSON.stringify(widgets, (key, value) => (["span", "made", "undoScope"].includes(key) ? undefined : value)),
+    (key, value) => (Array.isArray(value) ? value.filter((w) => !["sound", "timer"].includes(w?.props?.kind)) : value),
+  );
 }
 
 /** What a window drew, without the places parts have in their files. */
@@ -48,6 +60,8 @@ function drawn(part: Component<never>, props: Record<string, unknown>): string {
     .replace(/radio-\d+/g, "radio")
     // A type-ahead names its list of offers at random.
     .replace(/offered-[a-z0-9]+/g, "offered")
+    // A canvas names its grid's pattern at random.
+    .replace(/canvas-grid-[a-z0-9]+/g, "canvas-grid")
     // The markup's indentation between elements is no part of the page.
     .replace(/>\s+</g, "><")
     .trim();
@@ -56,9 +70,8 @@ function drawn(part: Component<never>, props: Record<string, unknown>): string {
   return html;
 }
 
-for (const example of examples) {
+for (const { name: example, file: project } of projects) {
   test(`every window of ${example} draws the same from its markup`, async () => {
-    const project = join(root, "examples", `${example}.clarity`);
     const preview: Preview = JSON.parse(run(["spec", "model", "--samples", project]).toString());
     const folder = join(root, "target/window-markup", example);
     rmSync(folder, { recursive: true, force: true });
@@ -70,7 +83,10 @@ for (const example of examples) {
         const window = (await import(/* @vite-ignore */ join(folder, `${page.name.name}.svelte`))).default as Component;
         const data = () => structuredClone(pageData(preview, page));
         const fromModel = drawn(GridBox as Component<never>, { preview, page, data: data(), design: false, widgets: page.widgets, columns: page.columns, container: page.span.start, onnavigate: () => {} });
-        const fromMarkup = drawn(WindowPlace as Component<never>, { window, preview, page, data: data(), onnavigate: () => {} });
+        let made: unknown = null;
+        const fromMarkup = drawn(WindowPlace as Component<never>, { window, preview, page, data: data(), onnavigate: () => {}, made: (widgets: unknown) => (made = widgets) });
+        // The same parts, their menus and the parts of popovers and pages too.
+        expect(parts(made), `${example}: ${page.name.name}`).toEqual(parts(page.widgets));
         if (fromMarkup !== fromModel) {
           // Where they part, enough to see why.
           let at = 0;

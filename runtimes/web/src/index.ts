@@ -2,6 +2,9 @@
 // `Window` and an element per kind of part, with the pages of tabs, steps,
 // accordions and splitters.
 export { default as Window } from "./elements/Window.svelte";
+export { default as Menu } from "./elements/Menu.svelte";
+export { default as Item } from "./elements/Item.svelte";
+export { default as Popover } from "./elements/Popover.svelte";
 export { default as Tab, default as Step, default as Section, default as Pane } from "./elements/Page.svelte";
 export { default as Accordion } from "./elements/Accordion.svelte";
 export { default as Badge } from "./elements/Badge.svelte";

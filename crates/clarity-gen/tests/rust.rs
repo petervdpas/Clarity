@@ -102,7 +102,8 @@ fn file<'a>(files: &'a [OutFile], path: &str) -> &'a str {
 #[test]
 fn writes_a_complete_cargo_project() {
     let files = files();
-    let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+    // The screen's own project in ui/ is its own test's (web_windows.rs); here its parts the program builds on.
+    let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).filter(|p| !p.starts_with("ui/clarity-ui/")).collect();
     assert_eq!(
         paths,
         [
@@ -118,12 +119,17 @@ fn writes_a_complete_cargo_project() {
             "src/modules/sales.rs",
             "src/schema.rs",
             "tauri.conf.json",
+            "ui/.gitignore",
             "ui/index.html",
-            "ui/runtime.css",
-            "ui/runtime.js",
-            "ui/themes/clarity.css",
+            "ui/package.json",
+            "ui/public/themes/clarity.css",
+            "ui/src/main.ts",
+            "ui/src/windows/OrderForm.svelte",
+            "ui/svelte.config.js",
+            "ui/vite.config.ts",
         ]
     );
+    assert!(file(&files, "tauri.conf.json").contains("\"frontendDist\": \"ui/dist\""), "{}", file(&files, "tauri.conf.json"));
     let cargo = file(&files, "Cargo.toml");
     assert!(cargo.contains("name = \"shop\""), "{cargo}");
     // The runtime crate from crates.io, at the version this generator is made
@@ -238,7 +244,7 @@ fn a_desktop_window_takes_the_title_of_its_window() {
     let main = &program(&files);
     assert!(main.contains("fn set_title(window: tauri::WebviewWindow, title: String) {\n    let _ = window.set_title(&title);\n}"), "{main}");
     assert!(main.contains("            set_title,\n"), "{main}");
-    let runtime = include_str!("../../../app/src/runtime/Runtime.svelte");
+    let runtime = include_str!("../../../runtimes/web/src/host/Runtime.svelte");
     assert!(runtime.contains("invoke(\"set_title\", { title })"), "the renderer sets the title");
 }
 
@@ -251,7 +257,7 @@ fn the_backend_translates_in_the_language_the_screen_picked() {
     assert!(main.contains("    clarity_runtime::i18n::load(MODEL);\n"), "{main}");
     assert!(main.contains("fn set_language(language: Option<String>) {\n    clarity_runtime::i18n::set_language(language.as_deref());\n}"), "{main}");
     assert!(main.contains("            set_language,\n"), "{main}");
-    let runtime = include_str!("../../../app/src/runtime/Runtime.svelte");
+    let runtime = include_str!("../../../runtimes/web/src/host/Runtime.svelte");
     assert!(runtime.contains("invoke(\"set_language\", { language })"), "the renderer names the language");
 }
 
@@ -924,7 +930,8 @@ fn the_web_target_serves_the_renderer() {
     has(&web, "        \"open_window\" => given((|| {");
     // Nor does it link the desktop toolkit: no Tauri, no desktop module, the renderer's files in the program.
     assert!(!web.contains("tauri") && !web.contains("mod desktop;"), "{web}");
-    has(&web, "            \"index.html\" => Some(include_bytes!(\"../ui/index.html\").to_vec()),\n");
+    has(&web, "            \"index.html\" => Some(include_bytes!(\"../ui/dist/index.html\").to_vec()),\n");
+    has(&web, "            \"themes/clarity.css\" => Some(include_bytes!(\"../ui/dist/themes/clarity.css\").to_vec()),\n");
     let mut settings = shop();
     settings.stack.targets = vec![Target::Web];
     let files = generate(&project, &settings).unwrap();

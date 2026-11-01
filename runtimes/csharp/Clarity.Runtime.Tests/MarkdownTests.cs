@@ -1,0 +1,44 @@
+// Markdown read into blocks as every renderer reads it (conformance/markdown.json).
+
+using System.Text.Json;
+
+using Xunit;
+
+namespace Clarity.Runtime.Tests;
+
+public class MarkdownTests
+{
+    static readonly JsonElement File = JsonDocument.Parse(System.IO.File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "markdown.json"))).RootElement;
+
+    /// A block as the conformance file writes it: only what holds is listed.
+    static object Written(MarkdownBlock block) => block.Kind switch
+    {
+        "heading" => new Dictionary<string, object?> { ["kind"] = "heading", ["level"] = block.Level, ["spans"] = block.Spans.Select(Written).ToList() },
+        "paragraph" => new Dictionary<string, object?> { ["kind"] = "paragraph", ["spans"] = block.Spans.Select(Written).ToList() },
+        "item" when block.Number is int number => new Dictionary<string, object?> { ["kind"] = "item", ["depth"] = block.Depth, ["ordered"] = true, ["number"] = number, ["spans"] = block.Spans.Select(Written).ToList() },
+        "item" => new Dictionary<string, object?> { ["kind"] = "item", ["depth"] = block.Depth, ["ordered"] = false, ["spans"] = block.Spans.Select(Written).ToList() },
+        _ => new Dictionary<string, object?> { ["kind"] = "code", ["text"] = block.Text },
+    };
+
+    static Dictionary<string, object?> Written(MarkdownSpan span)
+    {
+        var written = new Dictionary<string, object?> { ["text"] = span.Text };
+        if (span.Bold) written["bold"] = true;
+        if (span.Italic) written["italic"] = true;
+        if (span.Code) written["code"] = true;
+        if (span.Link is not null) written["link"] = span.Link;
+        return written;
+    }
+
+    static string Canonical(JsonElement element) => JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(element.GetRawText()));
+
+    [Fact]
+    public void MarkdownReadsAsEveryRendererReadsIt()
+    {
+        foreach (var c in File.GetProperty("cases").EnumerateArray())
+        {
+            var blocks = MarkdownBlocks.Read(c.GetProperty("markdown").GetString()!).Select(Written).ToList();
+            Assert.True(Canonical(c.GetProperty("blocks")) == JsonSerializer.Serialize(blocks), $"{c.GetProperty("name").GetString()}: {JsonSerializer.Serialize(blocks)}");
+        }
+    }
+}

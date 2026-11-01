@@ -142,7 +142,7 @@ public static class Secrets
         }
 
         static Task<ObjectPath> OpenSession() =>
-            Connection.CallMethodAsync(OpenSessionMessage(), (Message m, object? _) =>
+            Connection.CallMethodAsync(OpenSessionMessage(), (Tmds.DBus.Protocol.Message m, object? _) =>
             {
                 var reader = m.GetBodyReader();
                 reader.ReadVariantValue();
@@ -151,7 +151,7 @@ public static class Secrets
 
         /// <summary>The unlocked items of the entry; a locked keyring holds none it can read.</summary>
         static Task<ObjectPath[]> Items(string program, string name) =>
-            Connection.CallMethodAsync(SearchMessage(program, name), (Message m, object? _) => m.GetBodyReader().ReadArrayOfObjectPath(), null);
+            Connection.CallMethodAsync(SearchMessage(program, name), (Tmds.DBus.Protocol.Message m, object? _) => m.GetBodyReader().ReadArrayOfObjectPath(), null);
 
         public static async Task<string?> Get(string program, string name)
         {
@@ -159,7 +159,7 @@ public static class Secrets
             if (items.Length == 0)
                 return null;
             var session = await OpenSession();
-            return await Connection.CallMethodAsync(GetSecretMessage(items[0], session), (Message m, object? _) =>
+            return await Connection.CallMethodAsync(GetSecretMessage(items[0], session), (Tmds.DBus.Protocol.Message m, object? _) =>
             {
                 var reader = m.GetBodyReader();
                 reader.AlignStruct();
@@ -178,7 +178,7 @@ public static class Secrets
                 return;
             }
             var session = await OpenSession();
-            var prompt = await Connection.CallMethodAsync(CreateMessage(program, name, value, session), (Message m, object? _) =>
+            var prompt = await Connection.CallMethodAsync(CreateMessage(program, name, value, session), (Tmds.DBus.Protocol.Message m, object? _) =>
             {
                 var reader = m.GetBodyReader();
                 reader.ReadObjectPath();

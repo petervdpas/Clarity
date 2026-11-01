@@ -2,7 +2,7 @@
 // it through OpenGL when it changed, at the window's own scale, and what the
 // person does with the mouse and keys goes to the screen.
 
-using Clarity.Ui.Drawing;
+using Clarity.Ui;
 using Silk.NET.Input;
 using Silk.NET.Maths;
 using Silk.NET.Windowing;
@@ -113,26 +113,26 @@ public static class DesktopWindow
         return held;
     }
 
-    static Drawing.Key KeyOf(SilkKey key) => key switch
+    static Clarity.Ui.Key KeyOf(SilkKey key) => key switch
     {
-        SilkKey.Tab => Drawing.Key.Tab,
-        SilkKey.Enter or SilkKey.KeypadEnter => Drawing.Key.Enter,
-        SilkKey.Escape => Drawing.Key.Escape,
-        SilkKey.Space => Drawing.Key.Space,
-        SilkKey.Backspace => Drawing.Key.Backspace,
-        SilkKey.Delete => Drawing.Key.Delete,
-        SilkKey.Insert => Drawing.Key.Insert,
-        SilkKey.Left => Drawing.Key.Left,
-        SilkKey.Right => Drawing.Key.Right,
-        SilkKey.Up => Drawing.Key.Up,
-        SilkKey.Down => Drawing.Key.Down,
-        SilkKey.Home => Drawing.Key.Home,
-        SilkKey.End => Drawing.Key.End,
-        SilkKey.PageUp => Drawing.Key.PageUp,
-        SilkKey.PageDown => Drawing.Key.PageDown,
-        >= SilkKey.F1 and <= SilkKey.F12 => Drawing.Key.F1 + (key - SilkKey.F1),
-        >= SilkKey.A and <= SilkKey.Z => Drawing.Key.A + (key - SilkKey.A),
-        >= SilkKey.Number0 and <= SilkKey.Number9 => Drawing.Key.D0 + (key - SilkKey.Number0),
-        _ => Drawing.Key.Other,
+        SilkKey.Tab => Clarity.Ui.Key.Tab,
+        SilkKey.Enter or SilkKey.KeypadEnter => Clarity.Ui.Key.Enter,
+        SilkKey.Escape => Clarity.Ui.Key.Escape,
+        SilkKey.Space => Clarity.Ui.Key.Space,
+        SilkKey.Backspace => Clarity.Ui.Key.Backspace,
+        SilkKey.Delete => Clarity.Ui.Key.Delete,
+        SilkKey.Insert => Clarity.Ui.Key.Insert,
+        SilkKey.Left => Clarity.Ui.Key.Left,
+        SilkKey.Right => Clarity.Ui.Key.Right,
+        SilkKey.Up => Clarity.Ui.Key.Up,
+        SilkKey.Down => Clarity.Ui.Key.Down,
+        SilkKey.Home => Clarity.Ui.Key.Home,
+        SilkKey.End => Clarity.Ui.Key.End,
+        SilkKey.PageUp => Clarity.Ui.Key.PageUp,
+        SilkKey.PageDown => Clarity.Ui.Key.PageDown,
+        >= SilkKey.F1 and <= SilkKey.F12 => Clarity.Ui.Key.F1 + (key - SilkKey.F1),
+        >= SilkKey.A and <= SilkKey.Z => Clarity.Ui.Key.A + (key - SilkKey.A),
+        >= SilkKey.Number0 and <= SilkKey.Number9 => Clarity.Ui.Key.D0 + (key - SilkKey.Number0),
+        _ => Clarity.Ui.Key.Other,
     };
 }

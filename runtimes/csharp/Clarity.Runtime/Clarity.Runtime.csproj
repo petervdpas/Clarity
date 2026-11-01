@@ -22,6 +22,8 @@
   <ItemGroup>
     <!-- The Secret Service over D-Bus for secret settings (DESIGN 5.27), at the version Avalonia takes too. -->
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.94.1" />
+    <!-- The window model's view models (DESIGN 7.9). -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
   <ItemGroup>
     <!-- The server drivers, each a package of its own, build on the runtime's storage. -->
@@ -29,6 +31,10 @@
     <InternalsVisibleTo Include="Clarity.Runtime.PostgreSql" />
     <InternalsVisibleTo Include="Clarity.Runtime.MySql" />
     <InternalsVisibleTo Include="Clarity.Runtime.SqlServer" />
+    <InternalsVisibleTo Include="Clarity.Runtime.Tests" />
+    <InternalsVisibleTo Include="Clarity.Ui" />
+    <InternalsVisibleTo Include="Clarity.Ui.Desktop" />
+    <InternalsVisibleTo Include="Clarity.Ui.Browser" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="" />

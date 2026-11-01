@@ -5,7 +5,7 @@
 
 using System.Runtime.InteropServices.JavaScript;
 using System.Runtime.Versioning;
-using Clarity.Ui.Drawing;
+using Clarity.Ui;
 using SkiaSharp;
 
 namespace Clarity.Ui.Browser;

@@ -1,6 +1,6 @@
 // The sample's screen, the same on the desktop and in a browser page.
 
-using Clarity.Ui.Drawing;
+using Clarity.Ui;
 
 namespace Clarity.Ui.Samples;
 

@@ -7,11 +7,11 @@
 
   import { invoke } from "@tauri-apps/api/core";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
-  import type { Preview } from "./generated/Preview";
-  import MarkdownView from "./ui/MarkdownView.svelte";
-  import { openLink } from "./backend";
-  import { loadPicturesWith, pictureUrl } from "./pictures.svelte";
-  import { resourceKind, resourceUses } from "./resources";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import MarkdownView from "@clarity/ui/parts/MarkdownView.svelte";
+  import { openLink } from "@clarity/ui/host/backend.ts";
+  import { loadPicturesWith, pictureUrl } from "@clarity/ui/screen/pictures.svelte.ts";
+  import { resourceKind, resourceUses } from "@clarity/ui/screen/resources.ts";
   import { resourceKinds } from "./resourceKinds.svelte";
 
   let { preview, name, onapplied }: { preview: Preview; name: string; onapplied: (preview: Preview) => void } = $props();

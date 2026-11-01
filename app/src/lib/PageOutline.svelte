@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { tr } from "./model";
-  import type { Command } from "./generated/Command";
-  import type { Edit } from "./generated/Edit";
-  import type { Page } from "./generated/Page";
-  import type { Preview } from "./generated/Preview";
-  import type { Widget } from "./generated/Widget";
+  import { tr } from "@clarity/ui/screen/model.ts";
+  import type { Command } from "@clarity/ui/generated/Command.ts";
+  import type { Edit } from "@clarity/ui/generated/Edit.ts";
+  import type { Page } from "@clarity/ui/generated/Page.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { Widget } from "@clarity/ui/generated/Widget.ts";
   import { pageDesigner } from "./pageDesignerStore.svelte";
-  import type { ShownFrame } from "./frame";
-  import { widgetInfo } from "./pages";
+  import type { ShownFrame } from "@clarity/ui/screen/frame.ts";
+  import { widgetInfo } from "@clarity/ui/screen/pages.ts";
 
   let {
     preview,

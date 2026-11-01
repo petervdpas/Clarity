@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { pagingFields, withKind } from "./paging.ts";
-import type { Paging } from "./generated/Paging";
+import type { Paging } from "@clarity/ui/generated/Paging.ts";
 
 test("each kind starts as the project file's example writes it", () => {
   assert.deepEqual(withKind(null, "page"), { kind: "page", param: "page", size_param: "per_page", size: 100, next: "", items: "" });

@@ -10,8 +10,14 @@
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
-    "types": ["svelte", "vite/client"]
+    "types": ["svelte", "vite/client"],
+    // The screen package (runtimes/web) uses this folder's packages.
+    "paths": {
+      "svelte": ["./node_modules/svelte"],
+      "svelte/*": ["./node_modules/svelte/*"],
+      "@tauri-apps/api/*": ["./node_modules/@tauri-apps/api/*"]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte"],
-  "exclude": ["src/**/*.test.ts"]
+  "include": ["src/**/*.ts", "src/**/*.svelte", "../runtimes/web/src/**/*.ts", "../runtimes/web/src/**/*.svelte"],
+  "exclude": ["src/**/*.test.ts", "../runtimes/web/src/**/*.test.ts"]
 }

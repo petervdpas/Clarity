@@ -5,8 +5,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { commandAction, commandHandler, eventHandler, fixOf, freePartName, focusOf, handlerName, handlersOf, mergeFocus, wireCommand, wireEvent } from "./codeParts.ts";
-import type { CommandProps } from "./generated/CommandProps";
-import type { WidgetProps } from "./generated/WidgetProps";
+import type { CommandProps } from "@clarity/ui/generated/CommandProps.ts";
+import type { WidgetProps } from "@clarity/ui/generated/WidgetProps.ts";
 
 const CODE = `// A click on a square plays it.
 handler board_clicked

@@ -1,5 +1,5 @@
 // Which language an application shows its texts in (DESIGN section 1.5,
-// I1c), by the same rules as the web renderer (app/src/lib/translate.ts):
+// I1c), by the same rules as the web renderer (runtimes/web/src/screen/translate.ts):
 // the person's locale picks among the languages the project has
 // translations for; the language chosen with the `language` click target
 // wins, and is kept for the next start.

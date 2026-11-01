@@ -7,7 +7,7 @@
   // `onresize`, as the designer does, its right edge, bottom edge and corner
   // drag to size it; the size shows while it is dragged.
   import type { Snippet } from "svelte";
-  import { WINDOW_WIDTH, resized, type WindowEdge } from "./grid";
+  import { WINDOW_WIDTH, resized, type WindowEdge } from "@clarity/ui/screen/grid.ts";
 
   let {
     area,

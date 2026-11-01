@@ -1,8 +1,8 @@
 <script lang="ts">
-  import GridBox from "./GridBox.svelte";
-  import type { Page } from "./generated/Page";
-  import type { Preview } from "./generated/Preview";
-  import { pageData, type PageData } from "./pages";
+  import GridBox from "@clarity/ui/grid/GridBox.svelte";
+  import type { Page } from "@clarity/ui/generated/Page.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import { pageData, type PageData } from "@clarity/ui/screen/pages.ts";
 
   let {
     preview,

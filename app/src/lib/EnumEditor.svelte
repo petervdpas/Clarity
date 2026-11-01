@@ -1,12 +1,12 @@
 <script lang="ts">
   // An enum of the data dictionary: its variants and their labels.
 
-  import { resizableColumns } from "./columnWidths";
+  import { resizableColumns } from "@clarity/ui/screen/columnWidths.ts";
   import TextField from "./TextField.svelte";
-  import type { Preview } from "./generated/Preview";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
   import RenameField from "./RenameField.svelte";
-  import type { Edit } from "./generated/Edit";
-  import type { EnumDecl } from "./generated/EnumDecl";
+  import type { Edit } from "@clarity/ui/generated/Edit.ts";
+  import type { EnumDecl } from "@clarity/ui/generated/EnumDecl.ts";
 
   let {
     preview,

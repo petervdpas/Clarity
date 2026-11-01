@@ -7,21 +7,21 @@
   // or all of it. Both are checked by the backend while they are typed, and
   // a save is one designer edit, so Undo takes it back.
 
-  import { tr } from "./model";
+  import { tr } from "@clarity/ui/screen/model.ts";
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy } from "svelte";
   import SourceEditor from "./SourceEditor.svelte";
   import { applyEdit } from "./applyEdit";
-  import type { CodeView } from "./generated/CodeView";
-  import type { DeclTrial } from "./generated/DeclTrial";
-  import type { Diagnostic } from "./generated/Diagnostic";
-  import type { Preview } from "./generated/Preview";
-  import type { SpecFile } from "./generated/SpecFile";
+  import type { CodeView } from "@clarity/ui/generated/CodeView.ts";
+  import type { DeclTrial } from "@clarity/ui/generated/DeclTrial.ts";
+  import type { Diagnostic } from "@clarity/ui/generated/Diagnostic.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
   import { pageDesigner } from "./pageDesignerStore.svelte";
   import { commandAction, focusOf, handlerName, mergeFocus } from "./codeParts";
-  import { findFrameElement } from "./frame";
-  import { locateWidget } from "./pages";
-  import type { Page } from "./generated/Page";
+  import { findFrameElement } from "@clarity/ui/screen/frame.ts";
+  import { locateWidget } from "@clarity/ui/screen/pages.ts";
+  import type { Page } from "@clarity/ui/generated/Page.ts";
 
   let {
     preview,

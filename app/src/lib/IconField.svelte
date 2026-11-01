@@ -2,8 +2,8 @@
   // The icon a part or command shows: its name, typed or picked from
   // Clarity's icons (Lucide's), with the icon itself beside it. Empty takes
   // the icon away.
-  import type { Preview } from "./generated/Preview";
-  import Icon from "./ui/Icon.svelte";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import Icon from "@clarity/ui/parts/Icon.svelte";
 
   let { preview, icon, onwrite }: { preview: Preview; icon: string | null; onwrite: (icon: string | null) => void } = $props();
   const list = `icons-${Math.random().toString(36).slice(2)}`;

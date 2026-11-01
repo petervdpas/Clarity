@@ -4,9 +4,9 @@
   // lets the developer pick what to import.
 
   import { invoke } from "@tauri-apps/api/core";
-  import type { Imported } from "./generated/Imported";
-  import type { Preview } from "./generated/Preview";
-  import type { SourceTable } from "./generated/SourceTable";
+  import type { Imported } from "@clarity/ui/generated/Imported.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { SourceTable } from "@clarity/ui/generated/SourceTable.ts";
 
   let {
     source,

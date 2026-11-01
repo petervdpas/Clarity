@@ -4,7 +4,7 @@
 // design's, kept in the settings file as `keys`, only what differs.
 
 import type { Command, KeyChoices } from "./keys";
-import type { KeyLayer } from "./generated/KeyLayer";
+import type { KeyLayer } from "@clarity/ui/generated/KeyLayer.ts";
 
 /** The catalog as commands, each named by its caption as the person reads it, or else its part name. */
 export function appCommands(layers: KeyLayer[], caption: (text: string | null, name: string) => string): Command[] {

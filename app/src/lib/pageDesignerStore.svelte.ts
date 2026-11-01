@@ -3,24 +3,18 @@
 // list, a widget being moved, or a widget being resized. While dragging, the
 // pointer is translated into a cell of the innermost grid under it.
 
-import type { Edit } from "./generated/Edit";
-import type { Dock } from "./generated/Dock";
-import type { Preview } from "./generated/Preview";
-import type { RegionKind } from "./generated/RegionKind";
-import type { WidgetKind } from "./generated/WidgetKind";
-import type { WidgetProps } from "./generated/WidgetProps";
-import { GAP, rowAt } from "./pages";
+import type { Edit } from "@clarity/ui/generated/Edit.ts";
+import type { Dock } from "@clarity/ui/generated/Dock.ts";
+import type { Preview } from "@clarity/ui/generated/Preview.ts";
+import type { RegionKind } from "@clarity/ui/generated/RegionKind.ts";
+import type { WidgetKind } from "@clarity/ui/generated/WidgetKind.ts";
+import type { WidgetProps } from "@clarity/ui/generated/WidgetProps.ts";
+import { GAP, rowAt } from "@clarity/ui/screen/pages.ts";
 
 
-export type PageDragSource =
-  | { kind: "new"; widget: WidgetKind; width: number; height: number; label: string; part?: string }
-  | { kind: "field"; widget: WidgetKind; bind: string; caption: string; width: number; height: number; label: string }
-  | { kind: "move"; item: number; from: number; props: WidgetProps; grab: { dc: number; dr: number }; label: string }
-  | { kind: "resize"; item: number; props: WidgetProps; label: string }
-  | { kind: "region"; region: RegionKind; docks: Dock[]; label: string };
-
-/** Where a drop would land: a container and the rectangle in its grid. */
-export type Placement = { container: number; columns: number; col: number; row: number; width: number; height: number };
+// The drag and drop shapes are the screen package's, which the grid reads.
+export type { PageDragSource, Placement } from "@clarity/ui/screen/designer.svelte.ts";
+import type { Designer, PageDragSource, Placement } from "@clarity/ui/screen/designer.svelte.ts";
 
 /** What the text panel shows of a window: its design or its code behind. */
 export type PanelView = "design" | "code";
@@ -29,7 +23,7 @@ const DRAG_THRESHOLD = 4;
 
 type Pending = { source: PageDragSource; x: number; y: number; onclick: () => void };
 
-class PageDesigner {
+class PageDesigner implements Designer {
   selected = $state<number | null>(null);
   activeTabs = $state<Record<number, number>>({});
   error = $state<string | null>(null);

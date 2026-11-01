@@ -12,7 +12,11 @@ test("errors thrown and promises rejected that nothing caught are shown, until s
   window.dispatchEvent(rejected);
   expect(shown).toEqual(["a click went wrong", "the backend did not answer"]);
   stop();
-  window.dispatchEvent(new ErrorEvent("error", { error: new Error("later") }));
+  // The test catches its own last error, so it shows nothing and escapes nowhere.
+  const own = (e: Event) => e.preventDefault();
+  window.addEventListener("error", own);
+  window.dispatchEvent(new ErrorEvent("error", { error: new Error("later"), cancelable: true }));
+  window.removeEventListener("error", own);
   expect(shown).toHaveLength(2);
 });
 

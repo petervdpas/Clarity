@@ -2,17 +2,17 @@
   // The data dictionary for one entity: a row per field with its name, type
   // and modifiers. Every change is one edit, checked by the Rust backend.
 
-  import { resizableColumns } from "./columnWidths";
-  import { tr } from "./model";
+  import { resizableColumns } from "@clarity/ui/screen/columnWidths.ts";
+  import { tr } from "@clarity/ui/screen/model.ts";
   import TextField from "./TextField.svelte";
   import RenameField from "./RenameField.svelte";
-  import type { Edit } from "./generated/Edit";
-  import type { Entity } from "./generated/Entity";
-  import type { Field } from "./generated/Field";
-  import type { FieldSpec } from "./generated/FieldSpec";
-  import type { Literal } from "./generated/Literal";
-  import type { Modifiers } from "./generated/Modifiers";
-  import type { Preview } from "./generated/Preview";
+  import type { Edit } from "@clarity/ui/generated/Edit.ts";
+  import type { Entity } from "@clarity/ui/generated/Entity.ts";
+  import type { Field } from "@clarity/ui/generated/Field.ts";
+  import type { FieldSpec } from "@clarity/ui/generated/FieldSpec.ts";
+  import type { Literal } from "@clarity/ui/generated/Literal.ts";
+  import type { Modifiers } from "@clarity/ui/generated/Modifiers.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
 
   let {
     preview,

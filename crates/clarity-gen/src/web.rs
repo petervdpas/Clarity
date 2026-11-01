@@ -386,10 +386,10 @@ pub fn single_page(project: &Project) -> String {
 #[cfg(test)]
 mod color_roles {
     /// A canvas's drawing names colors as the theme CSS does: the web
-    /// renderer keeps the same table (app/src/lib/drawing.ts).
+    /// renderer keeps the same table (runtimes/web/src/screen/drawing.ts).
     #[test]
     fn the_renderer_names_the_color_roles_as_the_theme_css_does() {
-        let renderer = include_str!("../../../app/src/lib/drawing.ts");
+        let renderer = include_str!("../../../runtimes/web/src/screen/drawing.ts");
         for (role, variable) in super::COLOR_VARIABLES {
             assert!(renderer.contains(&format!("  {role}: \"{variable}\",")), "drawing.ts lacks {role}: {variable}");
         }

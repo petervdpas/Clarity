@@ -2,19 +2,19 @@
   import IconField from "./IconField.svelte";
   import TextField from "./TextField.svelte";
   import { NARROWEST, WIDEST } from "./sidebars";
-  import type { SidebarProps } from "./generated/SidebarProps";
+  import type { SidebarProps } from "@clarity/ui/generated/SidebarProps.ts";
   import { commandHandler, wireCommand } from "./codeParts";
   // Properties of a picked frame element: a region, a ribbon tab or group,
   // a menu item, a button, a separator or the footer status.
 
-  import type { CommandProps } from "./generated/CommandProps";
-  import type { Edit } from "./generated/Edit";
-  import type { FrameItem } from "./generated/FrameItem";
-  import type { Preview } from "./generated/Preview";
-  import type { Side } from "./generated/Side";
-  import type { FrameElement } from "./frame";
+  import type { CommandProps } from "@clarity/ui/generated/CommandProps.ts";
+  import type { Edit } from "@clarity/ui/generated/Edit.ts";
+  import type { FrameItem } from "@clarity/ui/generated/FrameItem.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { Side } from "@clarity/ui/generated/Side.ts";
+  import type { FrameElement } from "@clarity/ui/screen/frame.ts";
   import { pageDesigner } from "./pageDesignerStore.svelte";
-  import { allPages } from "./pages";
+  import { allPages } from "@clarity/ui/screen/pages.ts";
 
   let {
     preview,

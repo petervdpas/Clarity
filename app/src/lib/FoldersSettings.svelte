@@ -4,8 +4,8 @@
   // a folder per project. A folder is chosen with Browse only; the field shows it.
 
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
-  import { invoke } from "./backend";
-  import type { FoldersView } from "./generated/FoldersView";
+  import { invoke } from "@clarity/ui/host/backend.ts";
+  import type { FoldersView } from "@clarity/ui/generated/FoldersView.ts";
 
   type Which = "projects" | "output";
 

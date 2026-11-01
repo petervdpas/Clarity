@@ -4,7 +4,7 @@
 // once and the canvas's frame loop is the desktop's. An engine that runs
 // away holds the page up, since nothing can stop a call on its own thread.
 
-import { loadEngineNow, type Engine, type Input } from "./engineHost.ts";
+import { loadEngineNow, type Engine, type Input } from "@clarity/ui/host/engineHost.ts";
 
 const engines = new Map<number, Engine>();
 let next = 0;

@@ -5,10 +5,10 @@
   // only while it is open (watchSystem); the status bar's meters need less.
 
   import { onDestroy, onMount } from "svelte";
-  import { invoke } from "./backend";
+  import { invoke } from "@clarity/ui/host/backend.ts";
   import LoadChart from "./LoadChart.svelte";
-  import type { MachineFacts } from "./generated/MachineFacts";
-  import type { DiskSpace } from "./generated/DiskSpace";
+  import type { MachineFacts } from "@clarity/ui/generated/MachineFacts.ts";
+  import type { DiskSpace } from "@clarity/ui/generated/DiskSpace.ts";
   import { bytes, percent } from "./systemLoad";
   import { systemLoad, watchSystem } from "./systemLoad.svelte";
 

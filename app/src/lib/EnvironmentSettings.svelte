@@ -6,9 +6,9 @@
   // first one found). Paths are never typed, so none is mistyped.
 
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
-  import { invoke } from "./backend";
-  import type { EnvironmentView } from "./generated/EnvironmentView";
-  import type { ToolView } from "./generated/ToolView";
+  import { invoke } from "@clarity/ui/host/backend.ts";
+  import type { EnvironmentView } from "@clarity/ui/generated/EnvironmentView.ts";
+  import type { ToolView } from "@clarity/ui/generated/ToolView.ts";
   import { checkTools, openSetupGuide } from "./tools.svelte";
 
   let view = $state<EnvironmentView | null>(null);

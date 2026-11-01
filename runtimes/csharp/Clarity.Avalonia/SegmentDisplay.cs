@@ -1,7 +1,7 @@
 // The display part: a number in seven-segment digits, as on a calculator.
 // The text a value becomes and the cells it fills follow the cases every
 // renderer shares (conformance/display.json); the segments are drawn with
-// the same shapes as the web renderer's (app/src/lib/display.ts). Lit
+// the same shapes as the web renderer's (runtimes/web/src/screen/display.ts). Lit
 // segments take the foreground; dark ones show faintly, as on an LCD.
 
 using System.Globalization;

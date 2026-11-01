@@ -6,14 +6,14 @@
   // the default's text next to its own. The backend collects the keys and
   // writes the language files.
 
-  import { resizableColumns } from "./columnWidths";
+  import { resizableColumns } from "@clarity/ui/screen/columnWidths.ts";
   import { invoke } from "@tauri-apps/api/core";
-  import type { Preview } from "./generated/Preview";
-  import type { TranslationTable } from "./generated/TranslationTable";
-  import { languageName } from "./translate";
-  import { resourceChoices } from "./resources";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { TranslationTable } from "@clarity/ui/generated/TranslationTable.ts";
+  import { languageName } from "@clarity/ui/screen/translate.ts";
+  import { resourceChoices } from "@clarity/ui/screen/resources.ts";
   import { resourceKinds } from "./resourceKinds.svelte";
-  import type { TranslationRow } from "./generated/TranslationRow";
+  import type { TranslationRow } from "@clarity/ui/generated/TranslationRow.ts";
 
   let {
     preview,

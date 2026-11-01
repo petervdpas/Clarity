@@ -4,7 +4,7 @@
 // kind (ERD, class diagram) turns its model into shapes and links and
 // takes the canvas's edits back (erdDesign.ts, classDesign.ts).
 
-import type { Cardinality } from "./generated/Cardinality";
+import type { Cardinality } from "@clarity/ui/generated/Cardinality.ts";
 
 /** The height of a box's title, of its stereotype line, of a row, and the room below the last row. */
 export const TITLE = 32;

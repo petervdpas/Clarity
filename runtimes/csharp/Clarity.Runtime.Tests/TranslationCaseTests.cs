@@ -1,6 +1,6 @@
 // Which translation an application shows, against the cases every renderer
 // shares (conformance/translations.json); the web renderer runs the same
-// cases in app/src/lib/translate.test.ts.
+// cases in runtimes/web/src/screen/translate.test.ts.
 
 using System.Text.Json;
 using Clarity.Runtime;

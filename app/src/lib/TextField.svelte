@@ -6,7 +6,7 @@
   // makes it a key, its text the default language's value.
 
   import { invoke } from "@tauri-apps/api/core";
-  import type { Preview } from "./generated/Preview";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
 
   let {
     preview,

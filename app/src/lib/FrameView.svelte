@@ -1,7 +1,7 @@
 <script lang="ts">
-  import PartGuard from "./ui/PartGuard.svelte";
+  import PartGuard from "@clarity/ui/parts/PartGuard.svelte";
   import { shownTab } from "./ribbons";
-  import Icon from "./ui/Icon.svelte";
+  import Icon from "@clarity/ui/parts/Icon.svelte";
   import { STRIP_WIDTH, sidebarNow, sidebarWidth, type SidebarHere } from "./sidebars";
   // The frame around a window: menu, toolbar and ribbon at the top, sidebars
   // at the sides, the footer at the bottom, and the window body in between.
@@ -9,22 +9,22 @@
   // from the app are shown dimmed.
 
   import type { Snippet } from "svelte";
-  import GridBox from "./GridBox.svelte";
-  import type { Command } from "./generated/Command";
-  import type { Dock } from "./generated/Dock";
-  import type { Page } from "./generated/Page";
-  import type { Preview } from "./generated/Preview";
-  import type { Sidebar } from "./generated/Sidebar";
-  import type { Ribbon } from "./generated/Ribbon";
-  import type { ShownFrame } from "./frame";
+  import GridBox from "@clarity/ui/grid/GridBox.svelte";
+  import type { Command } from "@clarity/ui/generated/Command.ts";
+  import type { Dock } from "@clarity/ui/generated/Dock.ts";
+  import type { Page } from "@clarity/ui/generated/Page.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { Sidebar } from "@clarity/ui/generated/Sidebar.ts";
+  import type { Ribbon } from "@clarity/ui/generated/Ribbon.ts";
+  import type { ShownFrame } from "@clarity/ui/screen/frame.ts";
   import { pageDesigner } from "./pageDesignerStore.svelte";
-  import type { PageData } from "./pages";
-  import { tr } from "./model";
-  import { useLive } from "./live";
+  import type { PageData } from "@clarity/ui/screen/pages.ts";
+  import { tr } from "@clarity/ui/screen/model.ts";
+  import { useLive } from "@clarity/ui/screen/live.ts";
   import { keyedCommands } from "./frameKeys";
-  import { matchesShortcut } from "./shortcut";
+  import { matchesShortcut } from "@clarity/ui/screen/shortcut.ts";
   import Splitter from "./Splitter.svelte";
-  import type { Side } from "./generated/Side";
+  import type { Side } from "@clarity/ui/generated/Side.ts";
 
   let {
     preview,

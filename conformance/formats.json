@@ -1,5 +1,5 @@
 {
-  "about": "How values are shown and read in a locale (DESIGN section 1.5, I1a). Every renderer must give these results: the web renderer tests them in app/src/lib/format.test.ts, and each native toolkit must test them too. shows: a stored value as people read it. durations are whole seconds, shown as m:ss or h:mm:ss in every locale. reads: typed text as the value to store, or null when it is not one. fills: text with slots (DESIGN 1.5, I1b) as shown, each slot in its type and format; {{ and }} are braces, and labels gives the label of each enum value.",
+  "about": "How values are shown and read in a locale (DESIGN section 1.5, I1a). Every renderer must give these results: the web renderer tests them in runtimes/web/src/screen/format.test.ts, and each native toolkit must test them too. shows: a stored value as people read it. durations are whole seconds, shown as m:ss or h:mm:ss in every locale. reads: typed text as the value to store, or null when it is not one. fills: text with slots (DESIGN 1.5, I1b) as shown, each slot in its type and format; {{ and }} are braces, and labels gives the label of each enum value.",
   "shows": [
     {
       "what": "integer",

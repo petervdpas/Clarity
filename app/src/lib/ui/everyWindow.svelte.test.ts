@@ -8,10 +8,10 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { flushSync, mount, unmount, type Component } from "svelte";
 import { expect, test, vi } from "vitest";
-import { findApp } from "../frame";
-import type { Preview } from "../generated/Preview";
+import { findApp } from "@clarity/ui/screen/frame.ts";
+import type { Preview } from "@clarity/ui/generated/Preview.ts";
 import PageDesigner from "../PageDesigner.svelte";
-import { appAsPage } from "../pages";
+import { appAsPage } from "@clarity/ui/screen/pages.ts";
 import PageView from "../PageView.svelte";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: async () => null }));

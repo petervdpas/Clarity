@@ -2,11 +2,11 @@
 // connections, which Clarity uses while you design. The ribbon, the sidebar
 // and the main area all work on this one store.
 
-import type { ConnectionRow } from "./generated/ConnectionRow";
-import type { FieldValue } from "./generated/FieldValue";
-import type { SecretName } from "./generated/SecretName";
-import type { SecretRow } from "./generated/SecretRow";
-import type { VaultInfo } from "./generated/VaultInfo";
+import type { ConnectionRow } from "@clarity/ui/generated/ConnectionRow.ts";
+import type { FieldValue } from "@clarity/ui/generated/FieldValue.ts";
+import type { SecretName } from "@clarity/ui/generated/SecretName.ts";
+import type { SecretRow } from "@clarity/ui/generated/SecretRow.ts";
+import type { VaultInfo } from "@clarity/ui/generated/VaultInfo.ts";
 import { LOCKED } from "./unlock";
 import { unlock } from "./unlockStore.svelte";
 import { CategoryEditor, type CategoryRename, connectionProblems, freshName, shownSecrets } from "./vault";

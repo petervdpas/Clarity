@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { toolsNote } from "./stackTools.ts";
-import type { StackTools } from "./generated/StackTools";
+import type { StackTools } from "@clarity/ui/generated/StackTools.ts";
 
 const all: StackTools[] = [
   { backend: "rust", ui: "web", generated: true, ready: true, found: ["cargo 1.96.0"], missing: [], guide: null, web_found: [], web_missing: [], web_installable: false, web_elevated: false },

@@ -5,8 +5,8 @@
   // roadmap (DESIGN 5.13).
 
   import Modal from "./Modal.svelte";
-  import type { DiagramKind } from "./generated/DiagramKind";
-  import type { DiagramKindInfo } from "./generated/DiagramKindInfo";
+  import type { DiagramKind } from "@clarity/ui/generated/DiagramKind.ts";
+  import type { DiagramKindInfo } from "@clarity/ui/generated/DiagramKindInfo.ts";
 
   let {
     kinds,

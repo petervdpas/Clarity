@@ -1,5 +1,5 @@
 // The language and formats the application shows (DESIGN section 1.5), by
-// the rules of the web renderer (app/src/lib/model.ts): the system's locale
+// the rules of the web renderer (runtimes/web/src/screen/model.ts): the system's locale
 // picks the translations and formats values; a language chosen with the
 // `language` click target shows its texts and its formats, and is kept for
 // the next start. Texts are looked up by their keys, through the

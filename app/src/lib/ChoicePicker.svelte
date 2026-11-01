@@ -2,7 +2,7 @@
   // A small dialog to pick one of a few choices, such as the application's
   // language or theme, in Clarity's dialog frame. Escape or a click beside
   // it closes it unchanged.
-  import Dialog from "./ui/Dialog.svelte";
+  import Dialog from "@clarity/ui/parts/Dialog.svelte";
 
   type Choice = { value: string; label: string; lang?: string };
 

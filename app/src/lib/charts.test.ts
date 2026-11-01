@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { groupsOf, scaleOf, sliceColors } from "./ui/charts.ts";
+import { groupsOf, scaleOf, sliceColors } from "@clarity/ui/parts/charts.ts";
 
 const cases = JSON.parse(readFileSync(new URL("../../../conformance/charts.json", import.meta.url), "utf8"));
 

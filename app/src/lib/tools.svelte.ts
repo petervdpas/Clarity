@@ -2,7 +2,7 @@
 // on request ("Check again" after installing something).
 
 import { invoke } from "@tauri-apps/api/core";
-import type { StackTools } from "./generated/StackTools";
+import type { StackTools } from "@clarity/ui/generated/StackTools.ts";
 
 export const stackTools = $state<{ all: StackTools[] | null; checking: boolean }>({ all: null, checking: false });
 

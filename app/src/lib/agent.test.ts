@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { addUsage, agentConnections, applyAnswer, applyAsk, applyEvent, isRuns, NO_USAGE, RUNS_CHOICES, tokens, toolLine, usageLine, type Item } from "./agent.ts";
-import type { ConnectionRow } from "./generated/ConnectionRow";
+import type { ConnectionRow } from "@clarity/ui/generated/ConnectionRow.ts";
 
 test("text pieces join the answer, and tools show with their results", () => {
   let items: Item[] = [{ kind: "user", text: "Make a todo app" }];

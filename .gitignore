@@ -1,5 +1,7 @@
 /target
 node_modules/
+# The screen package's link to the IDE's packages (app/scripts/link-ui.mjs).
+runtimes/web/node_modules
 /app/dist
 
 # Build output of the C# runtime and its tests.

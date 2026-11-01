@@ -4,11 +4,11 @@
 // canvas makes to the design. The backend reads and writes the Mermaid
 // text (read_classes, write_classes); the drawing is designCanvas.ts.
 
-import type { Cardinality } from "./generated/Cardinality";
-import type { ClassBox } from "./generated/ClassBox";
-import type { ClassBoxKind } from "./generated/ClassBoxKind";
-import type { ClassDesign } from "./generated/ClassDesign";
-import type { ClassLink } from "./generated/ClassLink";
+import type { Cardinality } from "@clarity/ui/generated/Cardinality.ts";
+import type { ClassBox } from "@clarity/ui/generated/ClassBox.ts";
+import type { ClassBoxKind } from "@clarity/ui/generated/ClassBoxKind.ts";
+import type { ClassDesign } from "@clarity/ui/generated/ClassDesign.ts";
+import type { ClassLink } from "@clarity/ui/generated/ClassLink.ts";
 import { freeName, pinned, type Box, type CanvasEdit, type CanvasPick, type Link, type PaletteItem, type Shape, wholePoints } from "./designCanvas.ts";
 
 /** What the palette offers on a class diagram: four kinds of box and three kinds of line. */

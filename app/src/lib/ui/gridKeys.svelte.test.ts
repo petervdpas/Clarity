@@ -3,8 +3,8 @@
 // place in the file, so the key tells the made label from its input.
 
 import { expect, test } from "vitest";
-import type { Widget } from "../generated/Widget";
-import { partKey } from "../pages";
+import type { Widget } from "@clarity/ui/generated/Widget.ts";
+import { partKey } from "@clarity/ui/screen/pages.ts";
 
 const part = (start: number, made: boolean): Widget =>
   ({ props: { made }, span: { start, end: start + 10, line: 1, col: 1 }, children: [], pages: [], menu: null }) as unknown as Widget;

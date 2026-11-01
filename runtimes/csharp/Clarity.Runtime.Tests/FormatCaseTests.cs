@@ -1,6 +1,6 @@
 // How values are shown, read and filled into text in a locale, against the
 // cases every renderer shares (conformance/formats.json); the web renderer
-// runs the same cases in app/src/lib/format.test.ts.
+// runs the same cases in runtimes/web/src/screen/format.test.ts.
 
 using System.Globalization;
 using System.Text.Json;

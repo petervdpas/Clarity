@@ -5,12 +5,12 @@
   import { invoke } from "@tauri-apps/api/core";
   import SourceEditor from "./SourceEditor.svelte";
   import { projectEngines } from "./engines";
-  import type { CodeView } from "./generated/CodeView";
-  import type { DeclTrial } from "./generated/DeclTrial";
-  import type { Edit } from "./generated/Edit";
-  import type { DataEvent } from "./generated/DataEvent";
-  import type { Preview } from "./generated/Preview";
-  import type { SpecFile } from "./generated/SpecFile";
+  import type { CodeView } from "@clarity/ui/generated/CodeView.ts";
+  import type { DeclTrial } from "@clarity/ui/generated/DeclTrial.ts";
+  import type { Edit } from "@clarity/ui/generated/Edit.ts";
+  import type { DataEvent } from "@clarity/ui/generated/DataEvent.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
 
   let {
     preview,

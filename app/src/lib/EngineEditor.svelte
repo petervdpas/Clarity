@@ -8,19 +8,19 @@
   // fixes it. An engine written in Clarity is its code: the tab holds the
   // whole engine, and the inspector sets its state and services above it.
 
-  import { resizableColumns } from "./columnWidths";
+  import { resizableColumns } from "@clarity/ui/screen/columnWidths.ts";
   import { untrack } from "svelte";
-  import { invoke } from "./backend";
+  import { invoke } from "@clarity/ui/host/backend.ts";
   import SourceEditor, { OPENS_BRACED_BLOCK } from "./SourceEditor.svelte";
   import { asDiagnostic, engineBuilds } from "./engineBuilds.svelte";
   import { engineText, formOf, freeName, paramsOf, paramsText, projectEngines, SERVICES, withEngineLine, type EngineForm, type EngineLine } from "./engines";
-  import type { CodeView } from "./generated/CodeView";
-  import type { DeclTrial } from "./generated/DeclTrial";
-  import type { Edit } from "./generated/Edit";
-  import type { EngineDecl } from "./generated/EngineDecl";
-  import type { EngineInfo } from "./generated/EngineInfo";
-  import type { Preview } from "./generated/Preview";
-  import type { SpecFile } from "./generated/SpecFile";
+  import type { CodeView } from "@clarity/ui/generated/CodeView.ts";
+  import type { DeclTrial } from "@clarity/ui/generated/DeclTrial.ts";
+  import type { Edit } from "@clarity/ui/generated/Edit.ts";
+  import type { EngineDecl } from "@clarity/ui/generated/EngineDecl.ts";
+  import type { EngineInfo } from "@clarity/ui/generated/EngineInfo.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
 
   let {
     preview,

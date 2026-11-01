@@ -1,12 +1,12 @@
 // The agent panel's list of what was said and done, built from the events
 // of a turn, and the line each tool use shows as.
 
-import type { AgentAnswered } from "./generated/AgentAnswered";
-import type { AgentAsk } from "./generated/AgentAsk";
-import type { AgentEvent } from "./generated/AgentEvent";
-import type { ConnectionRow } from "./generated/ConnectionRow";
-import type { Runs } from "./generated/Runs";
-import type { Usage } from "./generated/Usage";
+import type { AgentAnswered } from "@clarity/ui/generated/AgentAnswered.ts";
+import type { AgentAsk } from "@clarity/ui/generated/AgentAsk.ts";
+import type { AgentEvent } from "@clarity/ui/generated/AgentEvent.ts";
+import type { ConnectionRow } from "@clarity/ui/generated/ConnectionRow.ts";
+import type { Runs } from "@clarity/ui/generated/Runs.ts";
+import type { Usage } from "@clarity/ui/generated/Usage.ts";
 
 export type Item =
   | { kind: "user"; text: string }

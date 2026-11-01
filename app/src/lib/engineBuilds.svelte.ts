@@ -2,9 +2,9 @@
 // compiler's messages at their lines. The engine's editor marks them in its
 // code, and the Problems list shows them with the project's own.
 
-import type { Diagnostic } from "./generated/Diagnostic";
-import type { EngineBuilt } from "./generated/EngineBuilt";
-import type { EngineProblem } from "./generated/EngineProblem";
+import type { Diagnostic } from "@clarity/ui/generated/Diagnostic.ts";
+import type { EngineBuilt } from "@clarity/ui/generated/EngineBuilt.ts";
+import type { EngineProblem } from "@clarity/ui/generated/EngineProblem.ts";
 
 export const engineBuilds = $state<{ byEngine: Record<string, EngineBuilt>; revision: number }>({ byEngine: {}, revision: 0 });
 

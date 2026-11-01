@@ -3,8 +3,8 @@
 // makes to the ERD. The backend reads and writes the Mermaid text
 // (read_erd, write_erd); the drawing is designCanvas.ts.
 
-import type { Erd } from "./generated/Erd";
-import type { ErdEntity } from "./generated/ErdEntity";
+import type { Erd } from "@clarity/ui/generated/Erd.ts";
+import type { ErdEntity } from "@clarity/ui/generated/ErdEntity.ts";
 import { freeName, pinned, type Box, type CanvasEdit, type CanvasPick, type Link, type PaletteItem, type Shape, wholePoints } from "./designCanvas.ts";
 
 /** What the palette offers on an ERD. */

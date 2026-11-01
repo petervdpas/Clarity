@@ -3,10 +3,10 @@
 // handlers they call, shown and edited on their own, and merged back into
 // the window's code in place of what they were.
 
-import type { Edit } from "./generated/Edit";
-import type { Event as PartEvent } from "./generated/Event";
-import type { CommandProps } from "./generated/CommandProps";
-import type { WidgetProps } from "./generated/WidgetProps";
+import type { Edit } from "@clarity/ui/generated/Edit.ts";
+import type { Event as PartEvent } from "@clarity/ui/generated/Event.ts";
+import type { CommandProps } from "@clarity/ui/generated/CommandProps.ts";
+import type { WidgetProps } from "@clarity/ui/generated/WidgetProps.ts";
 
 /** A handler of the code behind, with the comment lines above it. */
 export type HandlerCode = {

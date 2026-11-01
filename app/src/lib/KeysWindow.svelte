@@ -5,12 +5,12 @@
   // then press the new key; a key another command has in the same place
   // offers a swap; Reset puts the design's key back. In Clarity's words.
 
-  import Dialog from "./ui/Dialog.svelte";
+  import Dialog from "@clarity/ui/parts/Dialog.svelte";
   import { alsoHas, assign, eventKey, keysOf, refused, reset, type Command, type KeyChoices } from "./keys";
   import { appCommands } from "./appKeys";
-  import { ownWord, shownText, tr } from "./model";
-  import type { Preview } from "./generated/Preview";
-  import type { Slot } from "./format";
+  import { ownWord, shownText, tr } from "@clarity/ui/screen/model.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { Slot } from "@clarity/ui/screen/format.ts";
 
   let {
     preview,

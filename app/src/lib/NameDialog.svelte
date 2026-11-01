@@ -2,8 +2,8 @@
   // Asks for a name and the module a new declaration goes into.
 
   import Modal from "./Modal.svelte";
-  import type { Preview } from "./generated/Preview";
-  import type { SpecFile } from "./generated/SpecFile";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
 
   let {
     preview,

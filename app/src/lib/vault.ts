@@ -1,8 +1,8 @@
 // The rules of the Vault tab that need no vault: which secrets show, and
 // what is wrong with a connection before it is saved.
 
-import type { ConnectionRow } from "./generated/ConnectionRow";
-import type { SecretRow } from "./generated/SecretRow";
+import type { ConnectionRow } from "@clarity/ui/generated/ConnectionRow.ts";
+import type { SecretRow } from "@clarity/ui/generated/SecretRow.ts";
 
 /** The secrets of `category` (null: all) holding `filter` in a column, ignoring case. */
 export function shownSecrets(rows: SecretRow[], category: string | null, filter: string): SecretRow[] {

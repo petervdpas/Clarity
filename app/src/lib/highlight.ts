@@ -3,8 +3,8 @@
 // engine has a small tokenizer here. The editor paints each line by its
 // text, so a line typed since the last answer shows plain until the next.
 
-import type { Piece } from "./generated/Piece";
-import type { PieceKind } from "./generated/PieceKind";
+import type { Piece } from "@clarity/ui/generated/Piece.ts";
+import type { PieceKind } from "@clarity/ui/generated/PieceKind.ts";
 
 /** A run of a line, colored by its kind, or plain. */
 export type Segment = { text: string; kind: PieceKind | null };

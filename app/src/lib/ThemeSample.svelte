@@ -3,8 +3,8 @@
   // judged while the theme is written. It holds the same classes the
   // application does; the CSS is the generator's (ThemeStyles).
 
-  import type { ThemeDecl } from "./generated/ThemeDecl";
-  import { themeArea } from "./model";
+  import type { ThemeDecl } from "@clarity/ui/generated/ThemeDecl.ts";
+  import { themeArea } from "@clarity/ui/screen/model.ts";
 
   let { theme }: { theme: ThemeDecl } = $props();
 

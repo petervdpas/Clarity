@@ -2,16 +2,16 @@
   // The project as one tree: the app, its windows, its data, its themes, its languages and resources,
   // its engines and the modules its files form.
 
-  import type { Page } from "./generated/Page";
-  import type { Preview } from "./generated/Preview";
-  import type { DataSource } from "./generated/DataSource";
+  import type { Page } from "@clarity/ui/generated/Page.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { DataSource } from "@clarity/ui/generated/DataSource.ts";
   import { projectEngines, engineNote } from "./engines";
   import { commandLine } from "./commandLine";
-  import { findApp } from "./frame";
-  import { languageName } from "./translate";
-  import { resourceKind, resourceUses } from "./resources";
+  import { findApp } from "@clarity/ui/screen/frame.ts";
+  import { languageName } from "@clarity/ui/screen/translate.ts";
+  import { resourceKind, resourceUses } from "@clarity/ui/screen/resources.ts";
   import { resourceKinds } from "./resourceKinds.svelte";
-  import { tr } from "./model";
+  import { tr } from "@clarity/ui/screen/model.ts";
   import type { Selected } from "./selection";
 
   let {

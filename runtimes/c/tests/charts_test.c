@@ -19,7 +19,7 @@ void a_chart_groups_its_rows_as_every_runtime_does(void) {
 }
 
 // The numbers of a list a chart draws, as every renderer takes them
-// (app/src/lib/ui/trend.ts; the cases have none of their own).
+// (runtimes/web/src/parts/trend.ts; the cases have none of their own).
 void a_chart_of_numbers_takes_its_last_points(void) {
     cJSON* list = cJSON_Parse("[1, \"2.5\", \" 3 \", \"\", null, \"many\", true, 4]");
     CHECK_JSON(clarity_numbers_of(list, NULL), "[1,2.5,3,4]");

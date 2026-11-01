@@ -5,11 +5,11 @@
   // many stand at each end, and its label. Every change is written at
   // once; text is taken when a box is left or Enter is pressed.
 
-  import type { Cardinality } from "./generated/Cardinality";
-  import type { ClassBox } from "./generated/ClassBox";
-  import type { ClassDesign } from "./generated/ClassDesign";
-  import type { ClassLink } from "./generated/ClassLink";
-  import type { ClassRelation } from "./generated/ClassRelation";
+  import type { Cardinality } from "@clarity/ui/generated/Cardinality.ts";
+  import type { ClassBox } from "@clarity/ui/generated/ClassBox.ts";
+  import type { ClassDesign } from "@clarity/ui/generated/ClassDesign.ts";
+  import type { ClassLink } from "@clarity/ui/generated/ClassLink.ts";
+  import type { ClassRelation } from "@clarity/ui/generated/ClassRelation.ts";
   import type { CanvasPick } from "./designCanvas";
   import { MULTIPLICITY, removeBox, renameBox } from "./classDesign";
   import FieldList from "./FieldList.svelte";

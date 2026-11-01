@@ -7,10 +7,10 @@
 
   import { invoke } from "@tauri-apps/api/core";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
-  import type { ApiListing } from "./generated/ApiListing";
-  import type { DataSource } from "./generated/DataSource";
-  import type { Paging } from "./generated/Paging";
-  import type { PagingKind } from "./generated/PagingKind";
+  import type { ApiListing } from "@clarity/ui/generated/ApiListing.ts";
+  import type { DataSource } from "@clarity/ui/generated/DataSource.ts";
+  import type { Paging } from "@clarity/ui/generated/Paging.ts";
+  import type { PagingKind } from "@clarity/ui/generated/PagingKind.ts";
   import { PAGING_KINDS, pagingFields, withKind } from "./paging";
 
   let {

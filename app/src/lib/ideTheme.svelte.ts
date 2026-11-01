@@ -2,7 +2,7 @@
 // remembered for the next start (ideTheme.ts says what each one is).
 
 import { isIdeTheme, schemeOf, type IdeTheme } from "./ideTheme";
-import { scheme } from "./scheme.svelte";
+import { scheme } from "@clarity/ui/screen/scheme.svelte.ts";
 
 const KEY = "clarity-ide-theme";
 

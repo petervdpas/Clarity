@@ -4,7 +4,7 @@
   // Clarity writes them. Text is taken when a box is left or Enter is
   // pressed.
 
-  import type { ErdField } from "./generated/ErdField";
+  import type { ErdField } from "@clarity/ui/generated/ErdField.ts";
 
   let {
     fields,

@@ -2,10 +2,10 @@
 // ready with the tools found, or what to install. Designing, previewing and
 // generating need no tools; only Build and Run do.
 
-import type { Backend } from "./generated/Backend";
-import type { StackTools } from "./generated/StackTools";
-import type { Target } from "./generated/Target";
-import type { Ui } from "./generated/Ui";
+import type { Backend } from "@clarity/ui/generated/Backend.ts";
+import type { StackTools } from "@clarity/ui/generated/StackTools.ts";
+import type { Target } from "@clarity/ui/generated/Target.ts";
+import type { Ui } from "@clarity/ui/generated/Ui.ts";
 
 /**
  * What the row says; the heading of the manual's setup page that tells how

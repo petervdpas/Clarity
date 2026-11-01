@@ -79,7 +79,7 @@ Generate the application into the project's output folder (`examples/shop/out`),
 cargo run -p clarity-cli -- gen examples/shop.clarity
 ```
 
-Run the tests. This also regenerates the TypeScript bindings in `app/src/lib/generated/`:
+Run the tests. This also regenerates the TypeScript bindings in `runtimes/web/src/generated/`:
 
 ```sh
 cargo test

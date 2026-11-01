@@ -1,4 +1,4 @@
-//#region src/lib/engineHost.ts
+//#region ../runtimes/web/src/host/engineHost.ts
 var e = class extends Error {}, t = [
 	"clock",
 	"random",

@@ -2,7 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { numbersOf, sampled, TREND_POINTS } from "./ui/trend.ts";
+import { numbersOf, sampled, TREND_POINTS } from "@clarity/ui/parts/trend.ts";
 
 test("a trend keeps the last points it took", () => {
   let history: number[] = [];

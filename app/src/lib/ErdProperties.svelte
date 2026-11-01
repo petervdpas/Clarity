@@ -4,9 +4,9 @@
   // one end owns the many, and its label. Every change is written at once;
   // text is taken when the field is left or Enter is pressed.
 
-  import type { Cardinality } from "./generated/Cardinality";
-  import type { Erd } from "./generated/Erd";
-  import type { ErdField } from "./generated/ErdField";
+  import type { Cardinality } from "@clarity/ui/generated/Cardinality.ts";
+  import type { Erd } from "@clarity/ui/generated/Erd.ts";
+  import type { ErdField } from "@clarity/ui/generated/ErdField.ts";
   import type { CanvasPick } from "./designCanvas";
   import { removeEntity, renameEntity } from "./erdDesign";
   import FieldList from "./FieldList.svelte";

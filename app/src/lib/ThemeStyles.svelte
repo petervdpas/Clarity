@@ -4,7 +4,7 @@
   // changes, so the canvas and theme samples look as the application will.
 
   import { invoke } from "@tauri-apps/api/core";
-  import type { Preview } from "./generated/Preview";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
 
   let { preview }: { preview: Preview } = $props();
 

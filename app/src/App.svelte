@@ -1,15 +1,15 @@
 <script lang="ts">
-  import PartGuard from "./lib/ui/PartGuard.svelte";
+  import PartGuard from "@clarity/ui/parts/PartGuard.svelte";
   import Toasts, { TOAST_MS } from "./lib/Toasts.svelte";
   import { catchUncaught } from "./lib/uncaught";
-  import Guarded from "./lib/ui/Guarded.svelte";
+  import Guarded from "@clarity/ui/parts/Guarded.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { onMount, tick, untrack } from "svelte";
   // The installers' icon, from the same drawing.
   import logo from "../src-tauri/icons/icon.svg";
-  import { loadPicturesWith } from "./lib/pictures.svelte";
+  import { loadPicturesWith } from "@clarity/ui/screen/pictures.svelte.ts";
   import { topicForTab } from "./lib/manual";
   import FrameView from "./lib/FrameView.svelte";
   import NewWindowDialog from "./lib/NewWindowDialog.svelte";
@@ -20,10 +20,10 @@
   import NewResourceDialog from "./lib/NewResourceDialog.svelte";
   import DiagramView from "./lib/DiagramView.svelte";
   import NewDiagramDialog from "./lib/NewDiagramDialog.svelte";
-  import type { DiagramKind } from "./lib/generated/DiagramKind";
-  import type { DiagramKindInfo } from "./lib/generated/DiagramKindInfo";
+  import type { DiagramKind } from "@clarity/ui/generated/DiagramKind.ts";
+  import type { DiagramKindInfo } from "@clarity/ui/generated/DiagramKindInfo.ts";
   import { resourceKinds } from "./lib/resourceKinds.svelte";
-  import type { ResourceKind } from "./lib/generated/ResourceKind";
+  import type { ResourceKind } from "@clarity/ui/generated/ResourceKind.ts";
   import RibbonButton from "./lib/RibbonButton.svelte";
   import { IDE_COMMANDS, commandFor, eventKey, fieldKeeps, shownKey, type Layer } from "./lib/keys";
   import { ideKeys, ideKeysOf, mac } from "./lib/keys.svelte";
@@ -36,11 +36,11 @@
   import LibraryView from "./lib/LibraryView.svelte";
   import TranslationsPanel from "./lib/TranslationsPanel.svelte";
   import NewLanguageDialog from "./lib/NewLanguageDialog.svelte";
-  import { languageChoice } from "./lib/i18n.svelte";
-  import { languageName } from "./lib/translate";
+  import { languageChoice } from "@clarity/ui/screen/i18n.svelte.ts";
+  import { languageName } from "@clarity/ui/screen/translate.ts";
   import { fixOf } from "./lib/codeParts";
   import { engineProblems, recordBuilt } from "./lib/engineBuilds.svelte";
-  import type { EngineBuilt } from "./lib/generated/EngineBuilt";
+  import type { EngineBuilt } from "@clarity/ui/generated/EngineBuilt.ts";
   import ModuleView from "./lib/ModuleView.svelte";
   import ThemeView from "./lib/ThemeView.svelte";
   import NameDialog from "./lib/NameDialog.svelte";
@@ -49,26 +49,27 @@
   import ApiView from "./lib/ApiView.svelte";
   import { listenToLoad } from "./lib/systemLoad.svelte";
   import ProjectSettings from "./lib/ProjectSettings.svelte";
-  import type { Catalog } from "./lib/generated/Catalog";
-  import type { ProjectFile } from "./lib/generated/ProjectFile";
-  import type { FoldersView } from "./lib/generated/FoldersView";
-  import type { Settings } from "./lib/generated/Settings";
-  import type { Stack } from "./lib/generated/Stack";
-  import type { BuildDone } from "./lib/generated/BuildDone";
-  import type { AppRunning } from "./lib/generated/AppRunning";
+  import type { Catalog } from "@clarity/ui/generated/Catalog.ts";
+  import type { ProjectFile } from "@clarity/ui/generated/ProjectFile.ts";
+  import type { FoldersView } from "@clarity/ui/generated/FoldersView.ts";
+  import type { Settings } from "@clarity/ui/generated/Settings.ts";
+  import type { Stack } from "@clarity/ui/generated/Stack.ts";
+  import type { BuildDone } from "@clarity/ui/generated/BuildDone.ts";
+  import type { AppRunning } from "@clarity/ui/generated/AppRunning.ts";
   import type { Selected } from "./lib/selection";
-  import type { Edit } from "./lib/generated/Edit";
-  import type { RenameKind } from "./lib/generated/RenameKind";
+  import type { Edit } from "@clarity/ui/generated/Edit.ts";
+  import type { RenameKind } from "@clarity/ui/generated/RenameKind.ts";
   import { applyEdit } from "./lib/applyEdit";
-  import type { Diagnostic } from "./lib/generated/Diagnostic";
-  import type { HistoryCounts } from "./lib/generated/HistoryCounts";
-  import type { Page } from "./lib/generated/Page";
-  import type { PageTemplate } from "./lib/generated/PageTemplate";
-  import type { Preview } from "./lib/generated/Preview";
-  import type { SpecFile } from "./lib/generated/SpecFile";
+  import type { Diagnostic } from "@clarity/ui/generated/Diagnostic.ts";
+  import type { HistoryCounts } from "@clarity/ui/generated/HistoryCounts.ts";
+  import type { Page } from "@clarity/ui/generated/Page.ts";
+  import type { PageTemplate } from "@clarity/ui/generated/PageTemplate.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
   import { pageDesigner } from "./lib/pageDesignerStore.svelte";
-  import { findApp, frameForPage } from "./lib/frame";
-  import { CONTENT_PADDING, appAsPage, findPage, pageData, windowSize } from "./lib/pages";
+  import { provideDesigner } from "@clarity/ui/screen/designer.svelte.ts";
+  import { findApp, frameForPage } from "@clarity/ui/screen/frame.ts";
+  import { CONTENT_PADDING, appAsPage, findPage, pageData, windowSize } from "@clarity/ui/screen/pages.ts";
   import ShownWindow from "./lib/ShownWindow.svelte";
   import VaultSide from "./lib/VaultSide.svelte";
   import VaultView from "./lib/VaultView.svelte";
@@ -82,9 +83,12 @@
   import AppSettingsView from "./lib/AppSettingsView.svelte";
   import { appSettings, closeAppSettings, openAppSettings } from "./lib/appSettings.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
-  import type { CodeView } from "./lib/generated/CodeView";
-  import { themeArea, themeOf, tr } from "./lib/model";
+  import type { CodeView } from "@clarity/ui/generated/CodeView.ts";
+  import { themeArea, themeOf, tr } from "@clarity/ui/screen/model.ts";
   import ThemeStyles from "./lib/ThemeStyles.svelte";
+
+  // Every window the IDE shows, designed or previewed, works with the page designer.
+  provideDesigner(pageDesigner);
 
   const LAST_PROJECT_KEY = "clarity.lastProject";
 

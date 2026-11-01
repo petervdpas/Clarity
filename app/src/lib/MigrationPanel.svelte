@@ -4,9 +4,9 @@
   // the next step. The backend decides what is pending; this only shows it.
 
   import { invoke } from "@tauri-apps/api/core";
-  import type { PendingMigration } from "./generated/PendingMigration";
-  import type { Preview } from "./generated/Preview";
-  import type { Rename } from "./generated/Rename";
+  import type { PendingMigration } from "@clarity/ui/generated/PendingMigration.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { Rename } from "@clarity/ui/generated/Rename.ts";
 
   let {
     source,

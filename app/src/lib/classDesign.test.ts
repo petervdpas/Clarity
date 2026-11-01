@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { ClassDesign } from "./generated/ClassDesign.ts";
+import type { ClassDesign } from "@clarity/ui/generated/ClassDesign.ts";
 import { addBox, classEdit, classLinks, classShapes, connectBoxes, removeBox, renameBox } from "./classDesign.ts";
 
 const design = (): ClassDesign => ({

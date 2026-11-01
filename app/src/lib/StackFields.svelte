@@ -3,11 +3,11 @@
   // catalog offers, as rows of a .form-grid. Used by the New project dialog
   // and the settings.
 
-  import type { Backend } from "./generated/Backend";
-  import type { Catalog } from "./generated/Catalog";
-  import type { Stack } from "./generated/Stack";
-  import type { Target } from "./generated/Target";
-  import type { Ui } from "./generated/Ui";
+  import type { Backend } from "@clarity/ui/generated/Backend.ts";
+  import type { Catalog } from "@clarity/ui/generated/Catalog.ts";
+  import type { Stack } from "@clarity/ui/generated/Stack.ts";
+  import type { Target } from "@clarity/ui/generated/Target.ts";
+  import type { Ui } from "@clarity/ui/generated/Ui.ts";
   import { programs } from "./commandLine";
   import { toolsNote } from "./stackTools";
   import { checkTools, openSetupGuide, stackTools } from "./tools.svelte";

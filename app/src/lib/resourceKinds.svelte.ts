@@ -3,7 +3,7 @@
 // tree, the resource view, the New resource dialog and the file pickers.
 
 import { invoke } from "@tauri-apps/api/core";
-import type { ResourceKindInfo } from "./generated/ResourceKindInfo";
+import type { ResourceKindInfo } from "@clarity/ui/generated/ResourceKindInfo.ts";
 
 export const resourceKinds = $state<{ list: ResourceKindInfo[] }>({ list: [] });
 

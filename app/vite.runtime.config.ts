@@ -2,15 +2,17 @@ import { defineConfig, type Plugin } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import { shared } from "./vite.shared";
 
 /**
- * Records the source files the bundle is built from and a hash of them
- * (runtime.sources.json), so crates/clarity-gen/tests/web_bundle.rs fails
+ * Records the source files the bundle is built from, by their path in the
+ * repository (the IDE's in app/, the screen package's in runtimes/web/), and
+ * a hash of them (runtime.sources.json), so crates/clarity-gen/tests/web_bundle.rs fails
  * when the screen changed and the bundle was not built again. The hash is
  * FNV-1a, 64 bits, over each file's path, a newline, its bytes, a newline.
  */
 function sourcesRecorded(): Plugin {
-  const here = resolve(".");
+  const here = resolve("..");
   return {
     name: "clarity-runtime-sources",
     generateBundle() {
@@ -47,6 +49,7 @@ function sourcesRecorded(): Plugin {
 // the Rust generator copies into every application's `ui/` folder.
 export default defineConfig({
   plugins: [svelte(), sourcesRecorded()],
+  resolve: shared.resolve,
   base: "./",
   build: {
     outDir: "../crates/clarity-gen/ui",

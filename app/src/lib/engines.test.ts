@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { besideEngines, canvasEvents, engineText, formOf, freeName, functionLine, paramsOf, paramsText, projectEngines, runEngine, signature } from "./engines.ts";
-import type { Project } from "./generated/Project";
+import type { Project } from "@clarity/ui/generated/Project.ts";
 
 const span = (start: number, end: number) => ({ start, end, line: 1, col: 1 });
 const ident = (name: string) => ({ name, span: span(0, 0) });

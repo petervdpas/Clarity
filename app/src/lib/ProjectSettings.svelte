@@ -4,21 +4,21 @@
   // settings with problems, with the reason.
 
   import { openAppSettings } from "./appSettings.svelte";
-  import { resizableColumns } from "./columnWidths";
+  import { resizableColumns } from "@clarity/ui/screen/columnWidths.ts";
   import { invoke } from "@tauri-apps/api/core";
   import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
   import ImportPanel from "./ImportPanel.svelte";
   import ApiPanel from "./ApiPanel.svelte";
   import MigrationPanel from "./MigrationPanel.svelte";
-  import { themeChoice } from "./scheme.svelte";
+  import { themeChoice } from "@clarity/ui/screen/scheme.svelte.ts";
   import StackFields from "./StackFields.svelte";
-  import type { Preview } from "./generated/Preview";
-  import type { AuthKind } from "./generated/AuthKind";
-  import type { DataSource } from "./generated/DataSource";
-  import type { FileStore } from "./generated/FileStore";
-  import type { ProjectFile } from "./generated/ProjectFile";
-  import type { Settings } from "./generated/Settings";
-  import type { SourceKind } from "./generated/SourceKind";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { AuthKind } from "@clarity/ui/generated/AuthKind.ts";
+  import type { DataSource } from "@clarity/ui/generated/DataSource.ts";
+  import type { FileStore } from "@clarity/ui/generated/FileStore.ts";
+  import type { ProjectFile } from "@clarity/ui/generated/ProjectFile.ts";
+  import type { Settings } from "@clarity/ui/generated/Settings.ts";
+  import type { SourceKind } from "@clarity/ui/generated/SourceKind.ts";
 
   let {
     project,

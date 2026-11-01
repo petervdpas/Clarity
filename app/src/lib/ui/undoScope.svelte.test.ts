@@ -3,8 +3,8 @@
 // outside one is its own; a part with `no undo` has none.
 
 import { expect, test } from "vitest";
-import type { Page } from "../generated/Page";
-import { undoScope } from "../pages";
+import type { Page } from "@clarity/ui/generated/Page.ts";
+import { undoScope } from "@clarity/ui/screen/pages.ts";
 
 // As the project works them out (clarity_spec::widgets::undo_scope).
 const part = (kind: string, name: string, undoScope: string | null, children: unknown[] = []) => ({ props: { kind, name, undoScope }, children, pages: [], span: { start: 0, end: 0, line: 0, col: 0 }, menu: null });

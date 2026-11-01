@@ -5,10 +5,10 @@
   // project settings, shown where a developer looks for it.
 
   import ApiPanel from "./ApiPanel.svelte";
-  import type { AuthKind } from "./generated/AuthKind";
-  import type { DataSource } from "./generated/DataSource";
-  import type { ProjectFile } from "./generated/ProjectFile";
-  import type { Settings } from "./generated/Settings";
+  import type { AuthKind } from "@clarity/ui/generated/AuthKind.ts";
+  import type { DataSource } from "@clarity/ui/generated/DataSource.ts";
+  import type { ProjectFile } from "@clarity/ui/generated/ProjectFile.ts";
+  import type { Settings } from "@clarity/ui/generated/Settings.ts";
 
   let {
     project,

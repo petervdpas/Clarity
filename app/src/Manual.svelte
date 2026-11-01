@@ -5,14 +5,14 @@
   // page you were on. F1 and the Manual button in Clarity open it on the page
   // about what you are doing.
   import { invoke } from "@tauri-apps/api/core";
-  import { openLink } from "./lib/backend";
+  import { openLink } from "@clarity/ui/host/backend.ts";
   import { listen } from "@tauri-apps/api/event";
   import { onMount, tick } from "svelte";
   import Splitter from "./lib/Splitter.svelte";
   import { layout } from "./lib/layout.svelte";
   import { linkTarget } from "./lib/manual";
   import { markdown } from "./lib/markdown";
-  import type { ManualEntry } from "./lib/generated/ManualEntry";
+  import type { ManualEntry } from "@clarity/ui/generated/ManualEntry.ts";
 
   const REMEMBERED = "clarity.manual.topic";
 

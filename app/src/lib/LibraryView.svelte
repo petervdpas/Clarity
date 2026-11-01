@@ -4,14 +4,14 @@
   // Clarity, edited as text; the file of the adapter that types its functions
   // is Clarity's, written from the declaration, and shown to read.
 
-  import { invoke } from "./backend";
+  import { invoke } from "@clarity/ui/host/backend.ts";
   import FolderEditor from "./FolderEditor.svelte";
-  import { paramsText } from "./customParts";
-  import type { CodeView } from "./generated/CodeView";
-  import type { DeclTrial } from "./generated/DeclTrial";
-  import type { Edit } from "./generated/Edit";
-  import type { LibraryDecl } from "./generated/LibraryDecl";
-  import type { SpecFile } from "./generated/SpecFile";
+  import { paramsText } from "@clarity/ui/screen/customParts.ts";
+  import type { CodeView } from "@clarity/ui/generated/CodeView.ts";
+  import type { DeclTrial } from "@clarity/ui/generated/DeclTrial.ts";
+  import type { Edit } from "@clarity/ui/generated/Edit.ts";
+  import type { LibraryDecl } from "@clarity/ui/generated/LibraryDecl.ts";
+  import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
 
   let {
     decl,

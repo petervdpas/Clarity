@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { pageOf, pageWith } from "./ui/tableView.ts";
+import { pageOf, pageWith } from "@clarity/ui/parts/tableView.ts";
 
 const cases = JSON.parse(readFileSync(new URL("../../../conformance/table-pages.json", import.meta.url), "utf8"));
 

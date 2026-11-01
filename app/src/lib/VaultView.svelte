@@ -4,7 +4,7 @@
   // own; an application keeps its own secrets, only when its design adds them.
   import Modal from "./Modal.svelte";
   import SecretField from "./SecretField.svelte";
-  import { resizableColumns } from "./columnWidths";
+  import { resizableColumns } from "@clarity/ui/screen/columnWidths.ts";
   import { CategoryEditor } from "./vault";
   import { vault } from "./vaultStore.svelte";
 

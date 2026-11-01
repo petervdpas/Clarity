@@ -1,7 +1,7 @@
 <script lang="ts">
   // A password or secret in Clarity's own forms (the vault): typed into
   // directly, with the eye and the copy button every secret input has.
-  import SecretButtons from "./ui/SecretButtons.svelte";
+  import SecretButtons from "@clarity/ui/parts/SecretButtons.svelte";
 
   let {
     id,

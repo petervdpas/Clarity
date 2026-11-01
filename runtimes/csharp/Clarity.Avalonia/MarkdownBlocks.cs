@@ -1,7 +1,7 @@
 // The Markdown of the markdown part, read into blocks (headings, paragraphs,
 // list items, code) and their spans of text, the way every renderer reads
 // it: conformance/markdown.json says what each case gives, and the web
-// renderer's app/src/lib/markdownBlocks.ts reads it the same way.
+// renderer's runtimes/web/src/screen/markdownBlocks.ts reads it the same way.
 
 using System.Text;
 using System.Text.RegularExpressions;

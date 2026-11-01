@@ -7,8 +7,8 @@
 
   import Modal from "./Modal.svelte";
   import StackFields from "./StackFields.svelte";
-  import type { Catalog } from "./generated/Catalog";
-  import type { Stack } from "./generated/Stack";
+  import type { Catalog } from "@clarity/ui/generated/Catalog.ts";
+  import type { Stack } from "@clarity/ui/generated/Stack.ts";
 
   let {
     catalog,

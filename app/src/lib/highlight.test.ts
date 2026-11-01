@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { linesOf, rustPieces, segmentsOf } from "./highlight.ts";
-import type { Piece } from "./generated/Piece";
+import type { Piece } from "@clarity/ui/generated/Piece.ts";
 
 test("a line is cut into its pieces, the rest of it plain", () => {
   const pieces: Piece[] = [

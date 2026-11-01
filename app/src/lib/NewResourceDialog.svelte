@@ -6,8 +6,8 @@
 
   import Modal from "./Modal.svelte";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
-  import type { ResourceKind } from "./generated/ResourceKind";
-  import type { ResourceKindInfo } from "./generated/ResourceKindInfo";
+  import type { ResourceKind } from "@clarity/ui/generated/ResourceKind.ts";
+  import type { ResourceKindInfo } from "@clarity/ui/generated/ResourceKindInfo.ts";
 
   let {
     kinds,

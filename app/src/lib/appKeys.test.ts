@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { appCommands, keysOfCommand, personKeys } from "./appKeys.ts";
 import { assign, alsoHas, commandFor } from "./keys.ts";
-import type { KeyLayer } from "./generated/KeyLayer";
+import type { KeyLayer } from "@clarity/ui/generated/KeyLayer.ts";
 
 const catalog: KeyLayer[] = [
   { id: "", title: null, commands: [{ id: "newItem", name: "newItem", caption: "@newCaption", keys: ["Ctrl+N"] }, { id: "quitItem", name: "quitItem", caption: "@quitCaption", keys: ["Ctrl+Q"] }] },

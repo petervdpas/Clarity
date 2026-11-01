@@ -1,44 +1,44 @@
 <script lang="ts">
-  import type { Move } from "../lib/ui/rowDrag";
-  import type { RangeMove } from "../lib/ranges";
-  import type { RefOption } from "../lib/dropdownOptions";
+  import type { Move } from "@clarity/ui/parts/rowDrag.ts";
+  import type { RangeMove } from "@clarity/ui/screen/ranges.ts";
+  import type { RefOption } from "@clarity/ui/screen/dropdownOptions.ts";
   // A running application: the windows the backend opens, drawn by the
   // renderer, with every event sent to the backend. The backend owns the
   // behavior; this page only shows state and reports what the user does.
 
-  import { invoke, transport } from "../lib/backend";
+  import { invoke, transport } from "@clarity/ui/host/backend.ts";
   import FrameView from "../lib/FrameView.svelte";
-  import GridBox from "../lib/GridBox.svelte";
-  import { frameForPage } from "../lib/frame";
-  import type { Event as PartEvent } from "../lib/generated/Event";
-  import type { Preview } from "../lib/generated/Preview";
-  import { provideLive, type CanvasParams, type PartState, type Pointer } from "../lib/live";
-  import { languageOf, offeredThemes, ownWord, shownText, themeArea, themeOf, tr, type Row } from "../lib/model";
+  import GridBox from "@clarity/ui/grid/GridBox.svelte";
+  import { frameForPage } from "@clarity/ui/screen/frame.ts";
+  import type { Event as PartEvent } from "@clarity/ui/generated/Event.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import { provideLive, type CanvasParams, type PartState, type Pointer } from "@clarity/ui/screen/live.ts";
+  import { languageOf, offeredThemes, ownWord, shownText, themeArea, themeOf, tr, type Row } from "@clarity/ui/screen/model.ts";
   import ChoicePicker from "../lib/ChoicePicker.svelte";
   import KeysWindow from "../lib/KeysWindow.svelte";
   import { keysOfCommand, personKeys } from "../lib/appKeys";
   import type { KeyChoices } from "../lib/keys";
-  import { themeChoice } from "../lib/scheme.svelte";
-  import { languageChoice } from "../lib/i18n.svelte";
-  import { languageName, languagesOf, rememberedChoice } from "../lib/translate";
-  import { errorText, type ShownText } from "../lib/format";
+  import { themeChoice } from "@clarity/ui/screen/scheme.svelte.ts";
+  import { languageChoice } from "@clarity/ui/screen/i18n.svelte.ts";
+  import { languageName, languagesOf, rememberedChoice } from "@clarity/ui/screen/translate.ts";
+  import { errorText, type ShownText } from "@clarity/ui/screen/format.ts";
   import { copyText } from "../lib/clipboard";
   import { catchUncaught } from "../lib/uncaught";
-  import { allParts, findPage, undoScope, valueEntry, windowSize, type PageData } from "../lib/pages";
-  import { handlerCall } from "../lib/calls";
-  import type { Place } from "../lib/customParts";
+  import { allParts, findPage, undoScope, valueEntry, windowSize, type PageData } from "@clarity/ui/screen/pages.ts";
+  import { handlerCall } from "@clarity/ui/screen/calls.ts";
+  import type { Place } from "@clarity/ui/screen/customParts.ts";
   import { SoundPart } from "../lib/sound";
-  import { bundled } from "../lib/pictures";
-  import { dataEntity, isList, translatedDefaults } from "../lib/windowData";
-  import { findApp } from "../lib/frame";
+  import { bundled } from "@clarity/ui/screen/pictures.ts";
+  import { dataEntity, isList, translatedDefaults } from "@clarity/ui/screen/windowData.ts";
+  import { findApp } from "@clarity/ui/screen/frame.ts";
   import { Navigator } from "../lib/navigator";
-  import AskDialog from "../lib/ui/AskDialog.svelte";
-  import Dialog from "../lib/ui/Dialog.svelte";
-  import ProgressBar from "../lib/ui/ProgressBar.svelte";
-  import { answerValues, type Ask } from "../lib/asks";
-  import { CanvasHears } from "../lib/screenEngine";
+  import AskDialog from "@clarity/ui/parts/AskDialog.svelte";
+  import Dialog from "@clarity/ui/parts/Dialog.svelte";
+  import ProgressBar from "@clarity/ui/parts/ProgressBar.svelte";
+  import { answerValues, type Ask } from "@clarity/ui/screen/asks.ts";
+  import { CanvasHears } from "@clarity/ui/host/screenEngine.ts";
   import { keptSettings, sameSettings, secretSettings, settingsDefaults, settingsEntity, settingsOf } from "../lib/settings";
-  import type { JsonValue } from "../lib/generated/serde_json/JsonValue";
+  import type { JsonValue } from "@clarity/ui/generated/serde_json/JsonValue.ts";
 
   /** One open window, as the backend sends it. */
   type WindowState = {

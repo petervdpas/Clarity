@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Erd } from "./generated/Erd.ts";
+import type { Erd } from "@clarity/ui/generated/Erd.ts";
 import { addEntity, connect, erdEdit, erdLinks, erdShapes, moveEntity, removeEntity, renameEntity, rowsOf } from "./erdDesign.ts";
 
 const erd = (): Erd => ({

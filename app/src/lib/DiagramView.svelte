@@ -9,7 +9,7 @@
   // the project, keeping where its boxes stand. Each is one undo step.
 
   import { dialogs } from "./dialogStore.svelte";
-  import { invoke } from "./backend";
+  import { invoke } from "@clarity/ui/host/backend.ts";
   import ContextMenu from "./ContextMenu.svelte";
   import ClassProperties from "./ClassProperties.svelte";
   import DesignCanvas from "./DesignCanvas.svelte";
@@ -21,13 +21,13 @@
   import RenameField from "./RenameField.svelte";
   import SourceEditor from "./SourceEditor.svelte";
   import { DIAGRAM_EXTENSION, marksOf } from "./diagramCanvas";
-  import type { ClassDesign } from "./generated/ClassDesign";
-  import type { ClassRead } from "./generated/ClassRead";
-  import type { Diagnostic } from "./generated/Diagnostic";
-  import type { Erd } from "./generated/Erd";
-  import type { ErdRead } from "./generated/ErdRead";
-  import type { Preview } from "./generated/Preview";
-  import type { Proposal } from "./generated/Proposal";
+  import type { ClassDesign } from "@clarity/ui/generated/ClassDesign.ts";
+  import type { ClassRead } from "@clarity/ui/generated/ClassRead.ts";
+  import type { Diagnostic } from "@clarity/ui/generated/Diagnostic.ts";
+  import type { Erd } from "@clarity/ui/generated/Erd.ts";
+  import type { ErdRead } from "@clarity/ui/generated/ErdRead.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { Proposal } from "@clarity/ui/generated/Proposal.ts";
 
   let {
     preview,

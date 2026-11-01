@@ -2,13 +2,13 @@
 // module view: each with its module and the errors found in its declaration,
 // such as a file that is missing or lacks a declared function.
 
-import type { EngineDecl } from "./generated/EngineDecl";
-import type { EngineFunction } from "./generated/EngineFunction";
-import type { Event as PartEvent } from "./generated/Event";
-import type { Handler } from "./generated/Handler";
-import type { Project } from "./generated/Project";
-import type { TellHandler } from "./generated/TellHandler";
-import { typeText } from "./windowData.ts";
+import type { EngineDecl } from "@clarity/ui/generated/EngineDecl.ts";
+import type { EngineFunction } from "@clarity/ui/generated/EngineFunction.ts";
+import type { Event as PartEvent } from "@clarity/ui/generated/Event.ts";
+import type { Handler } from "@clarity/ui/generated/Handler.ts";
+import type { Project } from "@clarity/ui/generated/Project.ts";
+import type { TellHandler } from "@clarity/ui/generated/TellHandler.ts";
+import { typeText } from "@clarity/ui/screen/windowData.ts";
 
 export type ProjectEngine = {
   engine: EngineDecl;

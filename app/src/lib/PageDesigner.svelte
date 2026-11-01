@@ -2,7 +2,7 @@
   import { onMount, untrack } from "svelte";
   import { commandAction, commandHandler, eventHandler, freePartName, handlerName, wireCommand, wireEvent } from "./codeParts";
   import FrameView from "./FrameView.svelte";
-  import GridBox from "./GridBox.svelte";
+  import GridBox from "@clarity/ui/grid/GridBox.svelte";
   import ShownWindow from "./ShownWindow.svelte";
   import PageOutline from "./PageOutline.svelte";
   import PageProperties from "./PageProperties.svelte";
@@ -12,22 +12,23 @@
   import PartTile from "./PartTile.svelte";
   import { portal } from "./portal";
   import { applyEdit } from "./applyEdit";
-  import type { Category } from "./generated/Category";
-  import type { PartDecl } from "./generated/PartDecl";
-  import type { App } from "./generated/App";
-  import type { Dock } from "./generated/Dock";
-  import type { Edit } from "./generated/Edit";
-  import type { RegionInfo } from "./generated/RegionInfo";
-  import type { RegionKind } from "./generated/RegionKind";
-  import type { Page } from "./generated/Page";
-  import type { Preview } from "./generated/Preview";
-  import type { SpecFile } from "./generated/SpecFile";
-  import type { WidgetInfo } from "./generated/WidgetInfo";
-  import { NO_FRAME, findApp, findFrameElement, shownFrame } from "./frame";
-  import { describeType, themeArea, themeOf, tr } from "./model";
-  import { dataEntity, dataType, isList, valueField } from "./windowData";
-  import type { WidgetKind } from "./generated/WidgetKind";
+  import type { Category } from "@clarity/ui/generated/Category.ts";
+  import type { PartDecl } from "@clarity/ui/generated/PartDecl.ts";
+  import type { App } from "@clarity/ui/generated/App.ts";
+  import type { Dock } from "@clarity/ui/generated/Dock.ts";
+  import type { Edit } from "@clarity/ui/generated/Edit.ts";
+  import type { RegionInfo } from "@clarity/ui/generated/RegionInfo.ts";
+  import type { RegionKind } from "@clarity/ui/generated/RegionKind.ts";
+  import type { Page } from "@clarity/ui/generated/Page.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
+  import type { WidgetInfo } from "@clarity/ui/generated/WidgetInfo.ts";
+  import { NO_FRAME, findApp, findFrameElement, shownFrame } from "@clarity/ui/screen/frame.ts";
+  import { describeType, themeArea, themeOf, tr } from "@clarity/ui/screen/model.ts";
+  import { dataEntity, dataType, isList, valueField } from "@clarity/ui/screen/windowData.ts";
+  import type { WidgetKind } from "@clarity/ui/generated/WidgetKind.ts";
   import { pageDesigner, type PageDragSource, type Placement } from "./pageDesignerStore.svelte";
+  import { provideDesigner } from "@clarity/ui/screen/designer.svelte.ts";
   import {
     CONTENT_PADDING,
     windowSize,
@@ -41,7 +42,7 @@
     widgetForField,
     widgetInfo,
     withProps,
-  } from "./pages";
+  } from "@clarity/ui/screen/pages.ts";
 
   let {
     preview: savedPreview,
@@ -73,6 +74,8 @@
 
   // While the Design text is being typed, the designer shows the project as
   // that text would make it.
+  // The grids and parts below are designed with this designer, not the idle one of a running application.
+  provideDesigner(pageDesigner);
   const preview = $derived(pageDesigner.draft ?? savedPreview);
   // The canvas shows the project's theme, as the application will.
   const area = $derived(themeArea(themeOf(preview)));

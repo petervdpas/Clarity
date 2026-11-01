@@ -3,8 +3,8 @@
 // fits its setting; one that does not is dropped, and the setting keeps the
 // default the backend gives it.
 
-import type { Entity } from "./generated/Entity";
-import type { Preview } from "./generated/Preview";
+import type { Entity } from "@clarity/ui/generated/Entity.ts";
+import type { Preview } from "@clarity/ui/generated/Preview.ts";
 
 /** A setting as the cases describe it: its type, and what it allows. */
 export type Setting = {

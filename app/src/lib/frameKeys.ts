@@ -3,8 +3,8 @@
 // ribbon's keys work whichever tab is open; what code hid or disabled, and
 // what is inside it, does not answer.
 
-import type { ShownFrame } from "./frame";
-import type { Command } from "./generated/Command";
+import type { ShownFrame } from "@clarity/ui/screen/frame.ts";
+import type { Command } from "@clarity/ui/generated/Command.ts";
 
 /** The keys a command answers: the design's, or the person's (DESIGN 5.28); `appFrame` for one of the app's frame. */
 export type KeysOf = (command: Command, appFrame: boolean) => string[];

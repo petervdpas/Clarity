@@ -19,11 +19,11 @@
   import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
   import { lintGutter, setDiagnostics, type Diagnostic as Marked } from "@codemirror/lint";
   import { rust } from "@codemirror/lang-rust";
-  import { invoke } from "./backend";
+  import { invoke } from "@clarity/ui/host/backend.ts";
   import { ideLook } from "./codeMirrorLook";
-  import type { Diagnostic } from "./generated/Diagnostic";
-  import type { Piece } from "./generated/Piece";
-  import type { PieceKind } from "./generated/PieceKind";
+  import type { Diagnostic } from "@clarity/ui/generated/Diagnostic.ts";
+  import type { Piece } from "@clarity/ui/generated/Piece.ts";
+  import type { PieceKind } from "@clarity/ui/generated/PieceKind.ts";
 
   let {
     load,

@@ -2,9 +2,9 @@
   // Asks for the name of a new window, where it goes and what it starts from.
 
   import Modal from "./Modal.svelte";
-  import type { PageTemplate } from "./generated/PageTemplate";
-  import type { Preview } from "./generated/Preview";
-  import type { SpecFile } from "./generated/SpecFile";
+  import type { PageTemplate } from "@clarity/ui/generated/PageTemplate.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
 
   let {
     preview,

@@ -1,6 +1,6 @@
 // Showing and reading values in the locale of the person using the
 // application (DESIGN section 1.5, I1a), the way the web renderer does it
-// (app/src/lib/format.ts). .NET and the browser take their locale data from
+// (runtimes/web/src/screen/format.ts). .NET and the browser take their locale data from
 // different places, so where they differ this file pins the shared answer of
 // conformance/formats.json: dates with two-digit days and months, a 24-hour
 // clock with two-digit hours, no weekday in a long date, no-break spaces

@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { above, shownTree } from "./ui/trees.ts";
+import { above, shownTree } from "@clarity/ui/parts/trees.ts";
 
 const cases = JSON.parse(readFileSync(new URL("../../../conformance/trees.json", import.meta.url), "utf8"));
 

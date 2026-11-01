@@ -8,12 +8,12 @@
   // deleted. A build's output goes to the Output panel.
 
   import type { Snippet } from "svelte";
-  import { invoke } from "./backend";
+  import { invoke } from "@clarity/ui/host/backend.ts";
   import CodeEditor from "./CodeEditor.svelte";
   import SourceEditor from "./SourceEditor.svelte";
   import { languageOfFile } from "./codeLanguages";
   import { dialogs } from "./dialogStore.svelte";
-  import type { Diagnostic } from "./generated/Diagnostic";
+  import type { Diagnostic } from "@clarity/ui/generated/Diagnostic.ts";
 
   let {
     name,

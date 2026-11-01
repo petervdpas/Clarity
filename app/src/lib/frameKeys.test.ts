@@ -5,8 +5,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { keyedCommands } from "./frameKeys.ts";
-import type { ShownFrame } from "./frame.ts";
-import type { Command } from "./generated/Command";
+import type { ShownFrame } from "@clarity/ui/screen/frame.ts";
+import type { Command } from "@clarity/ui/generated/Command.ts";
 
 let at = 0;
 function command(name: string, shortcut: string | null, items: Command[] = []): Command {

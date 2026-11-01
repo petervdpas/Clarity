@@ -7,12 +7,12 @@
   import RenameField from "./RenameField.svelte";
   import SourceEditor from "./SourceEditor.svelte";
   import ThemeSample from "./ThemeSample.svelte";
-  import type { CodeView } from "./generated/CodeView";
-  import type { DeclTrial } from "./generated/DeclTrial";
-  import type { Edit } from "./generated/Edit";
-  import type { Preview } from "./generated/Preview";
-  import type { SpecFile } from "./generated/SpecFile";
-  import type { ThemeDecl } from "./generated/ThemeDecl";
+  import type { CodeView } from "@clarity/ui/generated/CodeView.ts";
+  import type { DeclTrial } from "@clarity/ui/generated/DeclTrial.ts";
+  import type { Edit } from "@clarity/ui/generated/Edit.ts";
+  import type { Preview } from "@clarity/ui/generated/Preview.ts";
+  import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
+  import type { ThemeDecl } from "@clarity/ui/generated/ThemeDecl.ts";
 
   let {
     preview,

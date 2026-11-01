@@ -1,8 +1,8 @@
 // The paging form of a web API (DESIGN 5.23, paging): how its lists are
 // read a page at a time, as the project file's `paging` line writes it.
 
-import type { Paging } from "./generated/Paging";
-import type { PagingKind } from "./generated/PagingKind";
+import type { Paging } from "@clarity/ui/generated/Paging.ts";
+import type { PagingKind } from "@clarity/ui/generated/PagingKind.ts";
 
 /** The kinds in the order the form offers them, with their labels. */
 export const PAGING_KINDS: { id: PagingKind; label: string }[] = [

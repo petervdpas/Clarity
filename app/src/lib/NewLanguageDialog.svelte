@@ -3,7 +3,7 @@
   // by. Adding it writes its translation file, translations/<tag>.clarity.
 
   import Modal from "./Modal.svelte";
-  import { languageName } from "./translate";
+  import { languageName } from "@clarity/ui/screen/translate.ts";
 
   let {
     taken,

@@ -4,8 +4,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { connectionProblems, freshName, shownSecrets } from "./vault.ts";
-import type { ConnectionRow } from "./generated/ConnectionRow.ts";
-import type { SecretRow } from "./generated/SecretRow.ts";
+import type { ConnectionRow } from "@clarity/ui/generated/ConnectionRow.ts";
+import type { SecretRow } from "@clarity/ui/generated/SecretRow.ts";
 
 const rows: SecretRow[] = [
   { category: "Anthropic", key: "apikey", description: "anthropic-version: 2023-06-01", created: "2026-04-27T12:15:00Z", updated: "2026-04-27T12:15:00Z" },

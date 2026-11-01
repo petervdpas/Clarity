@@ -3,7 +3,7 @@
 import { mount } from "svelte";
 import Runtime from "./Runtime.svelte";
 import "../render.css";
-import { followSystemScheme } from "../lib/scheme.svelte";
+import { followSystemScheme } from "@clarity/ui/screen/scheme.svelte.ts";
 import { pageMenuOff } from "../lib/pageMenu";
 
 followSystemScheme();

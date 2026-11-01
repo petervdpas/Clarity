@@ -3,8 +3,8 @@
 // minute of full readings its graphs show. Nothing more is kept.
 
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "./backend";
-import type { LoadReading } from "./generated/LoadReading";
+import { invoke } from "@clarity/ui/host/backend.ts";
+import type { LoadReading } from "@clarity/ui/generated/LoadReading.ts";
 import { kept } from "./systemLoad";
 
 export const systemLoad = $state<{ last: LoadReading | null; history: LoadReading[] }>({ last: null, history: [] });

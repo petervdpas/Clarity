@@ -1062,7 +1062,7 @@ impl<'a> Emitter<'a> {
         match op {
             // Whether a list holds an item.
             BinaryOp::Contains if matches!(self.types.type_of(left), TypeInfo::Values(_)) => format!("{}.Contains({})", self.value(left), self.value(right)),
-            BinaryOp::Contains => format!("Texts.Contains({}, {})", self.value(left), self.value(right)),
+            BinaryOp::Contains => format!("Clarity.Runtime.Texts.Contains({}, {})", self.value(left), self.value(right)),
             BinaryOp::Add if *result == TypeInfo::Text => {
                 let (lt, rt) = (self.types.type_of(left), self.types.type_of(right));
                 let l = self.value(left);
@@ -1107,7 +1107,7 @@ impl<'a> Emitter<'a> {
         }
         if name == clarity_spec::code::check::LENGTH && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
             let text = args.first().map(|a| self.value(a)).unwrap_or_default();
-            return format!("Texts.Length({text})");
+            return format!("Clarity.Runtime.Texts.Length({text})");
         }
         if name == clarity_spec::code::check::JOIN && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
             let list = args.first().map(|a| self.value(a)).unwrap_or_default();

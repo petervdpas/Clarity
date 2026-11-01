@@ -41,7 +41,7 @@ fn every_backend_counts_the_characters_of_a_text() {
         (Backend::Go, Ui::Web, "int64(len([]rune("),
         (Backend::C, Ui::Web, "clarity_length("),
         (Backend::Cpp, Ui::Web, "clarity::length("),
-        (Backend::Csharp, Ui::Avalonia, "Texts.Length("),
+        (Backend::Csharp, Ui::Avalonia, "Clarity.Runtime.Texts.Length("),
     ];
     for (backend, ui, code_of) in wanted {
         let mut settings = starter("Sheet", "sheet");

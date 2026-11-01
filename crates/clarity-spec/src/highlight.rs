@@ -179,7 +179,8 @@ fn word_kind(tokens: &[Token], i: usize) -> PieceKind {
     if word.starts_with(|c: char| c.is_ascii_uppercase()) && word != "MB" {
         return PieceKind::Type;
     }
-    if KEYWORDS.contains(&word) || crate::widgets::by_keyword(word).is_some() || crate::widgets::Event::by_keyword(word).is_some() {
+    // A part's line has words of its own (`cards`, `typed`), which the parser names.
+    if KEYWORDS.contains(&word) || crate::parser::LINE_WORDS.contains(&word) || crate::widgets::by_keyword(word).is_some() || crate::widgets::Event::by_keyword(word).is_some() {
         return PieceKind::Keyword;
     }
     PieceKind::Name
@@ -216,9 +217,10 @@ fn text_pieces(written: &str, from: usize, column: &dyn Fn(usize) -> u32, line: 
 }
 
 /// Every word the highlighter colors as a keyword somewhere: the language's
-/// own, the parts of the catalog and their events, sorted, each once.
+/// own, the words of a part's line, the parts of the catalog and their
+/// events, sorted, each once.
 pub fn keywords() -> Vec<String> {
-    let mut words: Vec<String> = KEYWORDS.iter().map(|w| w.to_string()).collect();
+    let mut words: Vec<String> = KEYWORDS.iter().chain(crate::parser::LINE_WORDS.iter()).map(|w| w.to_string()).collect();
     // A custom part is written by its own name, never by the catalog's word for its kind.
     words.extend(crate::widgets::catalog().into_iter().filter(|w| w.kind != crate::widgets::WidgetKind::Custom).map(|w| w.keyword));
     words.extend(crate::widgets::ALL_EVENTS.iter().map(|e| e.keyword().to_string()));

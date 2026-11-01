@@ -1542,7 +1542,8 @@ fn parse_widget_page(
 }
 
 /// The words a part's line is written with, which a color after `dots 3` is not.
-const LINE_WORDS: [&str; 67] = [
+/// The words of a part's line, which every editor colors as Clarity's own (the VS Code grammar too).
+pub const LINE_WORDS: [&str; 67] = [
     "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
     "children", "page", "typed", "cards", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",

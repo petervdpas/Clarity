@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.26
+
+- Colors `cards`, the list option that shows each row as a small card, and the part words it lacked: `typed`, `children`, `count`, `sum`, `average`, `points`, `digits`, `volume`, `repeat`, `runs`, `renderer`, `zoom`, `snap`, `dots`, `value` and `values`.
+
 ## 0.1.25
 
 - Colors the canvas modes: `mode` with `objects`, `paint` and `vector`, and `tools`, `brush` and `ink`.

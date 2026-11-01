@@ -1421,6 +1421,9 @@ impl<'a> Checker<'a> {
                     );
                     return;
                 }
+                if p.cards && p.show.is_empty() {
+                    self.error(file, format!("{at}: 'cards' shows the fields of 'show': write 'show title, kind cards'"), widget.span);
+                }
                 for field in p.columns.iter().chain(&p.show) {
                     match entity.field(field) {
                         None => self.error(

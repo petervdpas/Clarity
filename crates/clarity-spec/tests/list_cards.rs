@@ -33,6 +33,13 @@ fn a_list_of_cards_reads_and_writes_back() {
 }
 
 #[test]
+fn cards_show_the_fields_of_show() {
+    let page = PLAN.replace("show title, kind cards", "cards");
+    let found = errors(&page);
+    assert!(found.iter().any(|m| m.contains("'cards' shows the fields of 'show'")), "{found:#?}");
+}
+
+#[test]
 fn only_a_list_has_cards() {
     let page = PLAN.replace("    list name itemList at 1,1 span 4 rows 6 bind items show title, kind cards\n", "    table name itemList at 1,1 span 4 rows 6 bind items columns title cards\n");
     let found = errors(&page);

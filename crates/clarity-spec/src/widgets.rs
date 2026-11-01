@@ -1744,6 +1744,9 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
     if props.folded && !props.foldable {
         return Err("'folded' needs 'foldable': write 'foldable folded'".to_string());
     }
+    if props.cards && props.show.is_empty() {
+        return Err("'cards' shows the fields of 'show': write 'show title, kind cards'".to_string());
+    }
     if props.digits.is_some_and(|d| !(1..=MAX_DIGITS).contains(&d)) {
         return Err(format!("a display has 1 to {MAX_DIGITS} digits"));
     }

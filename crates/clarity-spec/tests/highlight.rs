@@ -181,3 +181,11 @@ fn web_api_calls_and_their_paging() {
         has(&format!("        paging {word}\n"), word, PieceKind::Keyword);
     }
 }
+
+/// The words of a part's line are keywords: a list of cards, a typed dropdown.
+#[test]
+fn the_words_of_a_part_line_are_keywords() {
+    let source = "module m\n\npage P: window\n    data items: list<Item>\n    list name l at 1,1 span 4 bind items show title cards\n";
+    has(source, "cards", PieceKind::Keyword);
+    has(source, "show", PieceKind::Keyword);
+}

@@ -215,6 +215,8 @@ translation nl
     settingsApiAddressLabel "API-adres"
     settingsApiPathLabel "API-pad"
     settingsApiKeyLabel "API-sleutel"
+    arrangeCaption "Schikken"
+    arrangeTooltip "Alle vakken opnieuw in rijen op naam zetten"
     importApiCaption "Importeren uit API"
     importedCountTypes "{count} typen uit de API gelezen"
     apiNotReached "De API antwoordde niet op {address} ({status})"

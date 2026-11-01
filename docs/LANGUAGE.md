@@ -1368,7 +1368,7 @@ code Main
 | `canvas.rect(x, y, width, height, color)` | | A filled rectangle. |
 | `canvas.circle(x, y, r, color)` | | A filled circle around x, y. |
 | `canvas.ring(x, y, r, color, width)` | width 1 when left out | A circle's outline. |
-| `canvas.text(x, y, text, color, size)` | color `"text"` and size 10 when left out | Text centered on x, y; slots are filled in the person's format, like a message. |
+| `canvas.text(x, y, text, color, size, align)` | color `"text"`, size 10 and align `"center"` when left out | Text centered on x, y, or with `"left"` starting at x and with `"right"` ending there; slots are filled in the person's format, like a message. |
 | `canvas.link(name, x1, y1, x2, y2, via, color, width)` | width 1 when left out | A line people bend, from x1, y1 through its bend points to x2, y2. `via` is a `list<integer>` of the points, x, y, x, y, ... (`[]` for straight); `name` is plain text the code knows it by, as `"a{association.id}"`. See `on bend` below. |
 | `canvas.image(x, y, width, height, picture)` | | A picture of the resources folder by its name (`"pill.svg"`, or a picture constant), stretched to fill the box whose top left corner is x, y. |
 | `canvas.ellipse(x, y, rx, ry, color)` | | A filled ellipse around x, y, rx across and ry high from its center. |
@@ -1808,7 +1808,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `squares[3]` | an item of a list, counted from 1; a position outside the list is an error |
 | `Business`, `CustomerKind.Business` | enum values |
 | `none` | the empty value of a date, a date and time or a reference field: `loan.returned_on == none`, `order.customer = none`. Nothing else is ever none; empty text is `""` |
-| `name(arg, ...)` | a call to a function or action; `count(list)` gives the number of items, `join(texts, separator)` the texts of a `list<text>` in order with the separator between each two (`join(names, ", ")`), `round(value, places)` a decimal or money with at most `places` decimals, rounded half away from zero (`round(2.345, 2)` is 2.35), `snapped(value, step)` the multiple of a whole number `step` nearest to `value`, a half rounding up (`snapped(29, 20)` is 20; a step of 0 gives the value), as a canvas's grid snaps, `sin(degrees)` and `cos(degrees)` a decimal rounded to 10 decimals, `today()` the date and `now()` the date and time where the application runs |
+| `name(arg, ...)` | a call to a function or action; `count(list)` gives the number of items, `join(texts, separator)` the texts of a `list<text>` in order with the separator between each two (`join(names, ", ")`), `round(value, places)` a decimal or money with at most `places` decimals, rounded half away from zero (`round(2.345, 2)` is 2.35), `length(text)` how many characters a text has (`length("Größe")` is 5), so code can size what it draws to its text, `snapped(value, step)` the multiple of a whole number `step` nearest to `value`, a half rounding up (`snapped(29, 20)` is 20; a step of 0 gives the value), as a canvas's grid snaps, `sin(degrees)` and `cos(degrees)` a decimal rounded to 10 decimals, `today()` the date and `now()` the date and time where the application runs |
 | `(expr)` | grouping |
 | `-x` | negation |
 | `a * b`, `a / b` | multiplication and division |

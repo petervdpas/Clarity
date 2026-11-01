@@ -40,7 +40,7 @@ test("each shape the backend sends is an SVG element", () => {
   assert.deepEqual(ring.attrs, { cx: 50, cy: 50, r: 40, fill: "none", stroke: "var(--border)", "stroke-width": 2 });
   const text = svgOf(cases.shapes[7].sends, { width: 200, height: 100 }, (t) => `shown ${t}`);
   assert.equal(text.text, "shown km/h");
-  assert.deepEqual(text.attrs, { x: 50, y: 90, fill: "var(--text-muted)", "font-size": 8, "text-anchor": "middle", "dominant-baseline": "central" });
+  assert.deepEqual(text.attrs, { x: 50, y: 90, fill: "var(--text-muted)", "font-size": 8, "text-anchor": "start", "dominant-baseline": "central" });
 });
 
 test("a click on a canvas is where in its units, as every renderer finds it", () => {

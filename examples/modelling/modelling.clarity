@@ -202,11 +202,12 @@ page Diagrams: window
     on open: diagramsOpened
     on return: gridFromSettings
 
-    tabs name diagramTabs at 1,1 span 12 rows 12
+    tabs name diagramTabs at 1,1 span 12 rows 11
         tab @diagramsClassDiagramTab
-            canvas name classCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawClasses on drag: classDragged on drop: classDropped on bend: classBent
+            canvas name classCanvas at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawClasses on drag: classDragged on drop: classDropped on bend: classBent
         tab @diagramsEntityRelationshipDiagramTab
-            canvas name erdCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawEntities on drag: entityDragged on drop: entityDropped on bend: entityBent
+            canvas name erdCanvas at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawEntities on drag: entityDragged on drop: entityDropped on bend: entityBent
+    button @arrangeCaption name arrange at 11,12 span 2 tooltip @arrangeTooltip on click: arrangeClicked
 
 // The model as Mermaid and as an OpenAPI description, as they are now.
 page Output: window
@@ -585,31 +586,47 @@ code Diagrams
         placeTypes()
         placeEntities()
 
-    // Types without a place get one below the rest, eight to a row, on the grid; dragging a box moves it by whole steps of it.
+    // Types without a place get one below the rest, in rows as wide as the canvas, on the grid; dragging a box moves it by whole steps of it.
+    // Arrange lays every box out again, in rows by name, each as wide as its text.
+    handler arrangeClicked
+        for t in types
+            t.x = 0
+            t.y = 0
+            save t
+        for e in entities
+            e.x = 0
+            e.y = 0
+            save e
+        placeTypes()
+        placeEntities()
+
     handler placeTypes
         let top = 20
         for t in types
             if t.x != 0 or t.y != 0
-                let bottom = grid_up(t.y + box_height(count(find p in Parameter where p.owner == t)) + 40)
+                let bottom = grid_up(t.y + box_height(count(class_lines(t))) + 40)
                 if bottom > top
                     top = bottom
-        let column = 0
+        let left = 20
         let tallest = 0
         let placed = false
         for t in types
             if t.x == 0 and t.y == 0
-                let height = box_height(count(find p in Parameter where p.owner == t))
-                if column == 8
-                    column = 0
+                let lines = class_lines(t)
+                let height = box_height(count(lines))
+                let width = box_width(t.name, lines)
+                // A row is as wide as its boxes with 40 between them, until the canvas's 4000 units.
+                if left + width > 3980
+                    left = 20
                     top = grid_up(top + tallest + 40)
                     tallest = 0
-                t.x = 20 + column * 300
+                t.x = left
                 t.y = top
+                left = left + width + 40
                 save t
                 placed = true
                 if height > tallest
                     tallest = height
-                column = column + 1
         if placed
             types = find t in ClassType where t.project == project order by t.name
 
@@ -617,26 +634,29 @@ code Diagrams
         let top = 20
         for e in entities
             if e.x != 0 or e.y != 0
-                let bottom = grid_up(e.y + box_height(count(find c in Column where c.owner == e)) + 40)
+                let bottom = grid_up(e.y + box_height(count(entity_lines(e))) + 40)
                 if bottom > top
                     top = bottom
-        let column = 0
+        let left = 20
         let tallest = 0
         let placed = false
         for e in entities
             if e.x == 0 and e.y == 0
-                let height = box_height(count(find c in Column where c.owner == e))
-                if column == 8
-                    column = 0
+                let lines = entity_lines(e)
+                let height = box_height(count(lines))
+                let width = box_width(e.name, lines)
+                // A row is as wide as its boxes with 40 between them, until the canvas's 4000 units.
+                if left + width > 3980
+                    left = 20
                     top = grid_up(top + tallest + 40)
                     tallest = 0
-                e.x = 20 + column * 300
+                e.x = left
                 e.y = top
+                left = left + width + 40
                 save e
                 placed = true
                 if height > tallest
                     tallest = height
-                column = column + 1
         if placed
             entities = find e in DataEntity where e.project == project order by e.name
 
@@ -665,6 +685,7 @@ code Diagrams
         let xs: list<integer> = []
         let ys: list<integer> = []
         let heights: list<integer> = []
+        let widths: list<integer> = []
         for t in types
             names = names + [t.name]
             if t.id == movingId
@@ -673,7 +694,9 @@ code Diagrams
             else
                 xs = xs + [t.x]
                 ys = ys + [t.y]
-            heights = heights + [box_height(count(find p in Parameter where p.owner == t))]
+            let lines = class_lines(t)
+            heights = heights + [box_height(count(lines))]
+            widths = widths + [box_width(t.name, lines)]
         // The lines first, so the boxes cover their ends.
         for t in types
             let from = place_of(names, t.name)
@@ -681,7 +704,7 @@ code Diagrams
                 let base = t.base
                 let to = place_of(names, base.name)
                 // The line to its base bends too, named after the type: its own points keep where.
-                classCanvas.link("b{t.id}", xs[from] + 130, ys[from], xs[to] + 130, ys[to] + heights[to], t.base_via, "accent", 3)
+                classCanvas.link("b{t.id}", xs[from] + widths[from] / 2, ys[from], xs[to] + widths[to] / 2, ys[to] + heights[to], t.base_via, "accent", 3)
         let associations = find a in Association where a.project == project
         for a in associations
             let source = a.source
@@ -689,12 +712,12 @@ code Diagrams
             let from = place_of(names, source.name)
             let to = place_of(names, target.name)
             // A line people bend, named after its association, so a bend says which.
-            classCanvas.link("a{a.id}", xs[from] + 130, ys[from] + heights[from] / 2, xs[to] + 130, ys[to] + heights[to] / 2, a.via, "border", 2)
+            classCanvas.link("a{a.id}", xs[from] + widths[from] / 2, ys[from] + heights[from] / 2, xs[to] + widths[to] / 2, ys[to] + heights[to] / 2, a.via, "border", 2)
             if a.label != ""
                 if count(a.via) >= 2
                     classCanvas.text(a.via[1], a.via[2] - 8, a.label, "text", 11)
                 else
-                    classCanvas.text((xs[from] + xs[to]) / 2 + 130, (ys[from] + ys[to] + heights[from] / 2 + heights[to] / 2) / 2 - 8, a.label, "text", 11)
+                    classCanvas.text((xs[from] + widths[from] / 2 + xs[to] + widths[to] / 2) / 2, (ys[from] + ys[to] + heights[from] / 2 + heights[to] / 2) / 2 - 8, a.label, "text", 11)
         let i = 1
         for t in types
             let x = xs[i]
@@ -706,14 +729,15 @@ code Diagrams
                 let domain = t.domain
                 edge = domain.color
                 head = domain.color
-            classCanvas.rect(x - 2, y - 2, 264, heights[i] + 4, edge)
-            classCanvas.rect(x, y, 260, heights[i], "raised")
-            classCanvas.rect(x, y, 260, 28, head)
-            classCanvas.text(x + 130, y + 14, t.name, "#ffffff", 13)
-            let parameters = find p in Parameter where p.owner == t order by p.position
+            let w = widths[i]
+            classCanvas.rect(x - 2, y - 2, w + 4, heights[i] + 4, edge)
+            classCanvas.rect(x, y, w, heights[i], "raised")
+            classCanvas.rect(x, y, w, 28, head)
+            classCanvas.text(x + w / 2, y + 14, t.name, "#ffffff", 13)
+            // Its members as a class box shows them: from the left, one a line.
             let line = 0
-            for p in parameters
-                classCanvas.text(x + 130, y + 44 + line * 18, "{p.type} {p.name}", "text", 11)
+            for text in class_lines(t)
+                classCanvas.text(x + 12, y + 44 + line * 18, text, "text", 11, "left")
                 line = line + 1
             i = i + 1
 
@@ -721,8 +745,9 @@ code Diagrams
     handler classDragged
         if movingId == 0
             for t in types
-                let height = box_height(count(find p in Parameter where p.owner == t))
-                if classCanvas.fromX >= t.x and classCanvas.fromX <= t.x + 260 and classCanvas.fromY >= t.y and classCanvas.fromY <= t.y + height
+                let lines = class_lines(t)
+                let height = box_height(count(lines))
+                if classCanvas.fromX >= t.x and classCanvas.fromX <= t.x + box_width(t.name, lines) and classCanvas.fromY >= t.y and classCanvas.fromY <= t.y + height
                     movingId = t.id
                     grabX = classCanvas.fromX - t.x
                     grabY = classCanvas.fromY - t.y
@@ -750,6 +775,7 @@ code Diagrams
         let xs: list<integer> = []
         let ys: list<integer> = []
         let heights: list<integer> = []
+        let widths: list<integer> = []
         for e in entities
             names = names + [e.name]
             if e.id == movingId
@@ -758,19 +784,21 @@ code Diagrams
             else
                 xs = xs + [e.x]
                 ys = ys + [e.y]
-            heights = heights + [box_height(count(find c in Column where c.owner == e))]
+            let lines = entity_lines(e)
+            heights = heights + [box_height(count(lines))]
+            widths = widths + [box_width(e.name, lines)]
         let relationships = find r in Relationship where r.project == project
         for r in relationships
             let source = r.source
             let target = r.target
             let from = place_of(names, source.name)
             let to = place_of(names, target.name)
-            erdCanvas.link("r{r.id}", xs[from] + 130, ys[from] + heights[from] / 2, xs[to] + 130, ys[to] + heights[to] / 2, r.via, "border", 2)
+            erdCanvas.link("r{r.id}", xs[from] + widths[from] / 2, ys[from] + heights[from] / 2, xs[to] + widths[to] / 2, ys[to] + heights[to] / 2, r.via, "border", 2)
             let ends = left_end(r.source_side) + "--" + right_end(r.target_side)
             if count(r.via) >= 2
                 erdCanvas.text(r.via[1], r.via[2] - 8, "{ends} {r.label}", "text", 11)
             else
-                erdCanvas.text((xs[from] + xs[to]) / 2 + 130, (ys[from] + ys[to] + heights[from] / 2 + heights[to] / 2) / 2 - 8, "{ends} {r.label}", "text", 11)
+                erdCanvas.text((xs[from] + widths[from] / 2 + xs[to] + widths[to] / 2) / 2, (ys[from] + ys[to] + heights[from] / 2 + heights[to] / 2) / 2 - 8, "{ends} {r.label}", "text", 11)
         let i = 1
         for e in entities
             let x = xs[i]
@@ -788,15 +816,15 @@ code Diagrams
                     let domain = type.domain
                     edge = domain.color
                     head = domain.color
-            erdCanvas.rect(x - 2, y - 2, 264, heights[i] + 4, edge)
-            erdCanvas.rect(x, y, 260, heights[i], "raised")
-            erdCanvas.rect(x, y, 260, 28, head)
-            erdCanvas.text(x + 130, y + 14, e.name, "#ffffff", 13)
-            let columns = find c in Column where c.owner == e order by c.position
+            let w = widths[i]
+            erdCanvas.rect(x - 2, y - 2, w + 4, heights[i] + 4, edge)
+            erdCanvas.rect(x, y, w, heights[i], "raised")
+            erdCanvas.rect(x, y, w, 28, head)
+            erdCanvas.text(x + w / 2, y + 14, e.name, "#ffffff", 13)
+            // Its columns from the left, one a line, the keys marked.
             let line = 0
-            for c in columns
-                let mark = key_mark(c.key)
-                erdCanvas.text(x + 130, y + 44 + line * 18, "{c.type} {c.name}{mark}", "text", 11)
+            for text in entity_lines(e)
+                erdCanvas.text(x + 12, y + 44 + line * 18, text, "text", 11, "left")
                 line = line + 1
             i = i + 1
 
@@ -821,8 +849,9 @@ code Diagrams
     handler entityDragged
         if movingId == 0
             for e in entities
-                let height = box_height(count(find c in Column where c.owner == e))
-                if erdCanvas.fromX >= e.x and erdCanvas.fromX <= e.x + 260 and erdCanvas.fromY >= e.y and erdCanvas.fromY <= e.y + height
+                let lines = entity_lines(e)
+                let height = box_height(count(lines))
+                if erdCanvas.fromX >= e.x and erdCanvas.fromX <= e.x + box_width(e.name, lines) and erdCanvas.fromY >= e.y and erdCanvas.fromY <= e.y + height
                     movingId = e.id
                     grabX = erdCanvas.fromX - e.x
                     grabY = erdCanvas.fromY - e.y
@@ -898,6 +927,36 @@ code Versions
 // How tall a box is on a diagram, for its lines (parameters or columns).
 function box_height(lines: integer) -> integer
     return 34 + 18 * lines
+
+// How wide a box is on a diagram: room for its widest text (a character of a
+// line takes about 7 units, of the bold title 8) and a margin each side, on
+// the grid of 20, never narrower than 200.
+function box_width(title: text, lines: list<text>) -> integer
+    let widest = length(title) * 8
+    for line in lines
+        if length(line) * 7 > widest
+            widest = length(line) * 7
+    let width = grid_up(widest + 28)
+    if width < 200
+        width = 200
+    return width
+
+// The lines of a class's box: its constructor's parameters, in order.
+action class_lines(t: ClassType) -> list<text>
+    effects db.read
+    let lines: list<text> = []
+    for p in find p in Parameter where p.owner == t order by p.position
+        lines = lines + ["{p.type} {p.name}"]
+    return lines
+
+// The lines of an entity's box: its columns, in order, the keys marked.
+action entity_lines(e: DataEntity) -> list<text>
+    effects db.read
+    let lines: list<text> = []
+    for c in find c in Column where c.owner == e order by c.position
+        let mark = key_mark(c.key)
+        lines = lines + ["{c.type} {c.name}{mark}"]
+    return lines
 
 // A place on a diagram rounded up to its grid of 20.
 function grid_up(n: integer) -> integer

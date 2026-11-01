@@ -485,7 +485,7 @@ public partial class CanvasView : Control, global::Avalonia.Rendering.ICustomHit
     public static bool SameDrawing(IReadOnlyList<Shape> a, IReadOnlyList<Shape> b) =>
         a.Count == b.Count && a.Zip(b).All(p => p switch
         {
-            (Shape.Words x, Shape.Words y) => (x.X, x.Y, x.Color, x.Size, Locale.Show(x.Text)) == (y.X, y.Y, y.Color, y.Size, Locale.Show(y.Text)),
+            (Shape.Words x, Shape.Words y) => (x.X, x.Y, x.Color, x.Size, x.Align, Locale.Show(x.Text)) == (y.X, y.Y, y.Color, y.Size, y.Align, Locale.Show(y.Text)),
             (Shape.Path x, Shape.Path y) => (x.Color, x.Width) == (y.Color, y.Width) && x.Points.SequenceEqual(y.Points),
             (Shape.Link x, Shape.Link y) => (x.Name, x.X1, x.Y1, x.X2, x.Y2, x.Color, x.Width) == (y.Name, y.X1, y.Y1, y.X2, y.Y2, y.Color, y.Width) && x.Via.SequenceEqual(y.Via),
             var (x, y) => Equals(x, y),
@@ -856,7 +856,7 @@ public partial class CanvasView : Control, global::Avalonia.Rendering.ICustomHit
             case Shape.Words words:
                 var font = this.TryFindResource("ClarityFont", ActualThemeVariant, out var family) && family is FontFamily f ? f : FontFamily.Default;
                 var text = new FormattedText(Locale.Show(words.Text), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, new Typeface(font), words.Size * scale, BrushOf(words.Color));
-                context.DrawText(text, at(words.X, words.Y) - new Point(text.Width / 2, text.Height / 2));
+                context.DrawText(text, at(words.X, words.Y) - new Point(TextLeft(words.Align, text.Width), text.Height / 2));
                 break;
             case Shape.Ellipse ellipse:
                 context.DrawEllipse(BrushOf(ellipse.Color), null, at(ellipse.X, ellipse.Y), ellipse.Rx * scale, ellipse.Ry * scale);
@@ -897,6 +897,14 @@ public partial class CanvasView : Control, global::Avalonia.Rendering.ICustomHit
         "zoomOut" => Locale.Translate("zoomOut", "Zoom out"),
         "zoomWhole" => Locale.Translate("zoomWhole", "Show it whole"),
         _ => Locale.Translate("zoomIn", "Zoom in"),
+    };
+
+    /// <summary>How far left of its x a text starts: half its width centered (the default), none from its left end, all of it from its right (conformance/drawing.json).</summary>
+    public static double TextLeft(string align, double width) => align switch
+    {
+        "left" => 0,
+        "right" => width,
+        _ => width / 2,
     };
 }
 

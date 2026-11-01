@@ -83,6 +83,8 @@ int64_t clarity_snapped(int64_t value, int64_t step);
 /// `join(texts, separator)` in code: the texts in order with the separator
 /// between each two, in the scratch arena (conformance/lists.json, `joins`).
 const char* clarity_joined(ClarityTexts texts, const char* separator);
+/* `length(text)`: how many characters a text has, each counted once however many bytes it takes in UTF-8. */
+int64_t clarity_length(const char* text);
 
 /// `xs + ys` in code (DESIGN 5.26): a new list of the items of both, in order.
 ClarityIntegers clarity_integers_join(ClarityIntegers a, ClarityIntegers b);

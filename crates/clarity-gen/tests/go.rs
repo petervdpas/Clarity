@@ -647,7 +647,7 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     has(code, "clarity.Cos(w.Angle)");
     has(code, "\"width\": float64(3)})");
     // Left out: the text's color and size.
-    has(code, "\"color\": \"text\", \"size\": 10.0})");
+    has(code, "\"color\": \"text\", \"size\": 10.0, \"align\": \"center\"})");
     let main = file(&files, "main.go");
     has(main, "func (windows) Redraw(db *clarity.Db, reply clarity.Reply) (clarity.Reply, error) {");
     has(main, "\t\tui.BeginDrawing(\"dial\")\n\t\tif err := w.drawDial(db, ui); err != nil {");

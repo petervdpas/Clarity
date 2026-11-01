@@ -38,6 +38,9 @@ const ROLES: Record<string, string> = {
 
 /** A color as CSS: written out as is, a role or a color of the project's
  *  theme by its variable; a name the theme does not have is its text color. */
+/** Where a text's x is, as SVG anchors it: its center (the default), or its left or right end. */
+const TEXT_ANCHORS: Record<string, string> = { left: "start", center: "middle", right: "end" };
+
 export function colorOf(color: unknown): string {
   const name = typeof color === "string" ? color : "text";
   if (name.startsWith("#")) return name;
@@ -72,7 +75,7 @@ export function svgOf(
     case "text":
       return {
         tag: "text",
-        attrs: { x: n(shape.x), y: n(shape.y), fill: color, "font-size": n(shape.size ?? 10), "text-anchor": "middle", "dominant-baseline": "central" },
+        attrs: { x: n(shape.x), y: n(shape.y), fill: color, "font-size": n(shape.size ?? 10), "text-anchor": TEXT_ANCHORS[shape.align as string] ?? "middle", "dominant-baseline": "central" },
         text: shown(shape.text as ShownText),
       };
     // A line people bend: from its start through its bend points to its end, named for the canvas to tell it apart.

@@ -42,5 +42,7 @@ public class ListTests
             Assert.Equal(c.GetProperty("gives").EnumerateArray().Select(n => n.GetInt64()), Lists.Range(c.GetProperty("from").GetInt64(), c.GetProperty("to").GetInt64()));
         foreach (var c in Cases().GetProperty("joins").EnumerateArray())
             Assert.Equal(c.GetProperty("gives").GetString(), string.Join(c.GetProperty("separator").GetString(), c.GetProperty("texts").EnumerateArray().Select(t => t.GetString())));
+        foreach (var c in Cases().GetProperty("lengths").EnumerateArray())
+            Assert.Equal(c.GetProperty("gives").GetInt64(), Texts.Length(c.GetProperty("text").GetString()!));
     }
 }

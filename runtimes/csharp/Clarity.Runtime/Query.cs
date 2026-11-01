@@ -277,4 +277,12 @@ public static class Texts
     /// <summary>Text contains a part, ignoring case: Clarity's <c>contains</c> outside a query.</summary>
     public static bool Contains(string text, string part) =>
         text.Contains(part, StringComparison.CurrentCultureIgnoreCase);
+
+    /// <summary>How many characters a text has: Clarity's <c>length(text)</c>, counting each character once, as every runtime does.</summary>
+    public static long Length(string text)
+    {
+        long count = 0;
+        foreach (var _ in text.EnumerateRunes()) count++;
+        return count;
+    }
 }

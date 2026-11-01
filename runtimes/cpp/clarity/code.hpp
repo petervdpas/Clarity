@@ -87,6 +87,15 @@ inline std::vector<int64_t> range(int64_t from, int64_t to) {
     return list;
 }
 
+/// `length(text)` in code: how many characters a text has, each counted
+/// once however many bytes it takes in UTF-8.
+inline int64_t length(const std::string& text) {
+    int64_t count = 0;
+    for (unsigned char c : text)
+        if ((c & 0xC0) != 0x80) ++count;
+    return count;
+}
+
 /// `join(texts, separator)` in code: the texts in order with the separator
 /// between each two (conformance/lists.json, `joins`).
 inline std::string joined(const std::vector<std::string>& texts, const std::string& separator) {

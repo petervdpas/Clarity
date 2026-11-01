@@ -28,3 +28,12 @@ fn an_item_is_set_by_its_position_from_1() {
     assert_eq!(list, [10, 99, 30]);
     assert_eq!(at_mut(&mut list, 4).unwrap_err().to_string(), "there is no item 4 in a list of 3");
 }
+
+/// `length(text)` as the Rust generator writes it: characters, not bytes.
+#[test]
+fn a_text_s_length_counts_its_characters() {
+    for case in file()["lengths"].as_array().unwrap() {
+        let text = case["text"].as_str().unwrap();
+        assert_eq!((text.chars().count() as i64), case["gives"].as_i64().unwrap(), "{text}");
+    }
+}

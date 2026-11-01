@@ -335,7 +335,7 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     has(code, "clarity_decimal_cos(w->angle)");
     has(code, "cJSON_AddNumberToObject(shape2, \"width\", (double)(3));");
     // Left out: the text's color and size.
-    has(code, "cJSON_AddStringToObject(shape3, \"color\", \"text\");\n    cJSON_AddNumberToObject(shape3, \"size\", 10);");
+    has(code, "cJSON_AddStringToObject(shape3, \"color\", \"text\");\n    cJSON_AddNumberToObject(shape3, \"size\", 10);\n    cJSON_AddStringToObject(shape3, \"align\", \"center\");");
     let main = file(&files, "src/main.c");
     has(main, "static bool windows_redraw(ClarityDb* db, ClarityReply* reply) {");
     has(main, "        clarity_ui_begin_drawing(ui, \"dial\");\n        if (!dial_window_draw_dial(db, ui, &w)) return false;");

@@ -419,6 +419,9 @@ void ranges_and_joins_are_as_every_runtime_gives_them(void) {
         for (size_t i = 0; i < count; ++i) items[i] = cJSON_GetArrayItem(texts, (int)i)->valuestring;
         CHECK_TEXT(clarity_joined(clarity_texts(count, items), cJSON_GetObjectItem(c, "separator")->valuestring), cJSON_GetObjectItem(c, "gives")->valuestring);
     }
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "lengths")) {
+        CHECK(clarity_length(cJSON_GetObjectItem(c, "text")->valuestring) == (int64_t)cJSON_GetObjectItem(c, "gives")->valuedouble);
+    }
 }
 
 // `snapped(value, step)`: the multiple of step nearest to value, as a canvas's grid snaps (conformance/drawing.json, grids).

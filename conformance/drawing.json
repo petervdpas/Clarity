@@ -76,14 +76,15 @@
       }
     },
     {
-      "code": "dial.text(50, 90, \"km/h\", \"muted\", 8)",
+      "code": "dial.text(50, 90, \"km/h\", \"muted\", 8, \"left\")",
       "sends": {
         "op": "text",
         "x": 50,
         "y": 90,
         "text": "km/h",
         "color": "muted",
-        "size": 8
+        "size": 8,
+        "align": "left"
       }
     },
     {

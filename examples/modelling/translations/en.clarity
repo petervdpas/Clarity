@@ -214,6 +214,8 @@ translation en
     settingsApiAddressLabel "API address"
     settingsApiPathLabel "API path"
     settingsApiKeyLabel "API key"
+    arrangeCaption "Arrange"
+    arrangeTooltip "Lay out every box again, in rows by name"
     importApiCaption "Import from API"
     importedCountTypes "Read {count} types from the API"
     apiNotReached "The API did not answer at {address} ({status})"

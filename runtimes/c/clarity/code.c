@@ -150,6 +150,13 @@ ClarityIntegers clarity_range(int64_t from, int64_t to) {
     return list;
 }
 
+int64_t clarity_length(const char* text) {
+    int64_t count = 0;
+    for (const unsigned char* at = (const unsigned char*)text; at && *at; ++at)
+        if ((*at & 0xC0) != 0x80) ++count;
+    return count;
+}
+
 const char* clarity_joined(ClarityTexts texts, const char* separator) {
     size_t gap = strlen(separator), size = 1;
     for (size_t i = 0; i < texts.count; ++i) size += strlen(texts.items[i]) + (i ? gap : 0);

@@ -660,7 +660,7 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     has(vm, "Dial.Draw(new Shape.Line((double)(50L), (double)(50L), Numbers.Units((50L + (35L * Numbers.Cos(Angle))))");
     has(vm, "\"text\", (double)(3L)));");
     // Left out: the text's color and size.
-    has(vm, ", \"text\", 10));");
+    has(vm, ", \"text\", 10, \"center\"));");
     has(vm, "    protected override void Redraw()\n    {\n        Dial.BeginDrawing();\n        OnDrawDial();\n        Dial.EndDrawing();\n    }");
     has(file(&files, "Windows/DialView.axaml"), "<c:CanvasView x:Name=\"dial\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"6\" Drawing=\"{Binding Dial.Drawing}\" UnitsWidth=\"200\" UnitsHeight=\"100\"");
 }

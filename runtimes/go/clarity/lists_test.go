@@ -69,6 +69,10 @@ func TestRangesAndJoinsAreAsEveryRuntimeGivesThem(t *testing.T) {
 			Separator string   `json:"separator"`
 			Gives     string   `json:"gives"`
 		} `json:"joins"`
+		Lengths []struct {
+			Text  string `json:"text"`
+			Gives int64  `json:"gives"`
+		} `json:"lengths"`
 	}
 	if err := json.Unmarshal(text, &cases); err != nil {
 		t.Fatal(err)
@@ -81,6 +85,12 @@ func TestRangesAndJoinsAreAsEveryRuntimeGivesThem(t *testing.T) {
 	for _, c := range cases.Joins {
 		if got := Join(c.Texts, c.Separator); got != c.Gives {
 			t.Errorf("%v: %q", c.Texts, got)
+		}
+	}
+	// length(text) as the Go generator writes it.
+	for _, c := range cases.Lengths {
+		if got := int64(len([]rune(c.Text))); got != c.Gives {
+			t.Errorf("length(%q): %d", c.Text, got)
 		}
 	}
 }

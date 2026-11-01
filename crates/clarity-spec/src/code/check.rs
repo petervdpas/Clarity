@@ -1672,6 +1672,8 @@ pub const RANDOM: &str = "random";
 pub const JOIN: &str = "join";
 /// `snapped(value, step)`: the multiple of step nearest to value, as a canvas's grid snaps.
 pub const SNAPPED: &str = "snapped";
+/// `length(text)`: how many characters a text has.
+pub const LENGTH: &str = "length";
 /// The service a long engine call says how far it is with (DESIGN 5.12).
 pub const PROGRESS: &str = "progress";
 
@@ -1760,6 +1762,8 @@ pub const SHAPES: [Shape; 11] = [
             ("text", ShapeValue::Text, None),
             ("color", ShapeValue::Color, Some("text")),
             ("size", ShapeValue::Number, Some("10")),
+            // Where x is: the text's "center", or its "left" or "right" end.
+            ("align", ShapeValue::Name, Some("center")),
         ],
     },
     // A line people bend, from one point to another through its points; named, so `on bend` says which.
@@ -3416,7 +3420,7 @@ impl<'a> BodyChecker<'_, 'a> {
             return Some(self.expr(expr, None));
         };
         // Only functions and actions take values by name.
-        let built_in = ["count", JOIN, SNAPPED, SIN, COS, ROUND, TODAY, NOW].contains(&function.name.as_str()) || (function.name == RANDOM && self.env.function(RANDOM).is_none());
+        let built_in = ["count", JOIN, SNAPPED, LENGTH, SIN, COS, ROUND, TODAY, NOW].contains(&function.name.as_str()) || (function.name == RANDOM && self.env.function(RANDOM).is_none());
         let handler = self.decl.is_none() && self.handlers.iter().any(|h| h.name.name == function.name);
         if !named.is_empty() && (built_in || handler) {
             for n in named {
@@ -3440,6 +3444,13 @@ impl<'a> BodyChecker<'_, 'a> {
                 self.error("'join' takes a list of texts and the text between them, as in join(names, \", \")", expr.span);
             }
             return Some(Ty::Text);
+        }
+        if function.name == LENGTH && self.env.function(LENGTH).is_none() {
+            let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();
+            if !matches!(tys.as_slice(), [Ty::Text | Ty::Unknown]) {
+                self.error("'length' takes one text, as in length(name)", expr.span);
+            }
+            return Some(Ty::Integer);
         }
         if function.name == SNAPPED && self.env.function(SNAPPED).is_none() {
             let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();

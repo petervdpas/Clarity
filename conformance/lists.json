@@ -19,5 +19,12 @@
     { "texts": ["one"], "separator": "-", "gives": "one" },
     { "texts": [], "separator": ", ", "gives": "" },
     { "texts": ["x", "y"], "separator": "", "gives": "xy" }
+  ],
+  "lengths": [
+    { "text": "Order", "gives": 5 },
+    { "text": "", "gives": 0 },
+    { "text": "Gr\u00f6\u00dfe", "gives": 5 },
+    { "text": "\u20ac 12", "gives": 4 },
+    { "text": "\ud83d\ude00!", "gives": 2 }
   ]
 }

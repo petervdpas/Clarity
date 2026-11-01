@@ -1105,6 +1105,10 @@ impl<'a> Emitter<'a> {
             let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
             return format!("Numbers.Round({})", values.join(", "));
         }
+        if name == clarity_spec::code::check::LENGTH && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
+            let text = args.first().map(|a| self.value(a)).unwrap_or_default();
+            return format!("Texts.Length({text})");
+        }
         if name == clarity_spec::code::check::JOIN && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
             let list = args.first().map(|a| self.value(a)).unwrap_or_default();
             let separator = args.get(1).map(|a| self.value(a)).unwrap_or_default();

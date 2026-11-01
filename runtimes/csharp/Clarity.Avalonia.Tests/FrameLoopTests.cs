@@ -249,7 +249,8 @@ public sealed class FrameLoopTests
         Assert.Equal([50L, 60L], link.Via);
         // A number may come as its text, as an engine gives a decimal.
         Assert.Equal(new Shape.Circle(1.5, 2, 3, "text"), Shape.Of(JsonNode.Parse("""{"op": "circle", "x": "1.5", "y": 2, "r": 3}""")!));
-        Assert.Equal((50.0, 90.0, "km/h", "muted", 8.0), (words.X, words.Y, words.Text.Show(), words.Color, words.Size));
+        Assert.Equal((50.0, 90.0, "km/h", "muted", 8.0, "left"), (words.X, words.Y, words.Text.Show(), words.Color, words.Size, words.Align));
+        Assert.Equal((0.0, 40.0, 20.0), (CanvasView.TextLeft("left", 40), CanvasView.TextLeft("right", 40), CanvasView.TextLeft("center", 40)));
         Assert.Throws<EngineException>(() => Shape.Of(new JsonObject { ["op"] = "star" }));
     }
 }

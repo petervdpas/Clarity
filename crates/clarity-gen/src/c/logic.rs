@@ -2002,6 +2002,10 @@ impl<'a> Emitter<'a> {
             let places = args.get(1).map(|a| bare(self.value(a, pre))).unwrap_or_default();
             return format!("clarity_decimal_round({value}, (int){places})");
         }
+        if name == clarity_spec::code::check::LENGTH && self.callee(name).is_none() {
+            let text = args.first().map(|a| bare(self.value(a, pre))).unwrap_or_default();
+            return format!("clarity_length({text})");
+        }
         if name == clarity_spec::code::check::JOIN && self.callee(name).is_none() {
             let list = args.first().map(|a| self.list_ref(a, pre)).unwrap_or_default();
             let separator = args.get(1).map(|a| bare(self.value(a, pre))).unwrap_or_default();

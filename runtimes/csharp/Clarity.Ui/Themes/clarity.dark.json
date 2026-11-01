@@ -1,0 +1,227 @@
+{
+  "dark": true,
+  "colors": {
+    "accent": "#6fa3f2",
+    "accent_soft": "#233552",
+    "background": "#15181e",
+    "border": "#2f3542",
+    "error": "#f0736c",
+    "error_soft": "#3a1f1f",
+    "focus": "#6fa3f2",
+    "frame": "#1d2129",
+    "frame_text": "#e6e9ef",
+    "input": "#1d2129",
+    "muted": "#9aa3b5",
+    "on_accent": "#0d1525",
+    "panel": "#1d2129",
+    "raised": "#232832",
+    "selection": "#2b4166",
+    "strong_border": "#434b5c",
+    "success": "#3fb950",
+    "success_soft": "#1f3326",
+    "text": "#e6e9ef",
+    "warning": "#e3b341",
+    "warning_soft": "#3a3020"
+  },
+  "fonts": {
+    "heading": "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+    "mono": "ui-monospace, JetBrains Mono, Cascadia Code, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, monospace",
+    "text": "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+  },
+  "sizes": {
+    "heading": 18,
+    "small": 12,
+    "text": 14
+  },
+  "radii": {
+    "button": 6,
+    "input": 6,
+    "panel": 6
+  },
+  "padding": 4,
+  "border": 1,
+  "shadow": "raised",
+  "parts": {
+    "button": {
+      "background": "#232832",
+      "text": "#e6e9ef",
+      "border": "#434b5c",
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "button:hover": {
+      "background": null,
+      "text": null,
+      "border": "#6fa3f2",
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "button:pressed": {
+      "background": "#233552",
+      "text": null,
+      "border": null,
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "card": {
+      "background": "#232832",
+      "text": "#e6e9ef",
+      "border": "#2f3542",
+      "radius": null,
+      "weight": "bold",
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "card:hover": {
+      "background": null,
+      "text": null,
+      "border": "#6fa3f2",
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "card:selected": {
+      "background": "#6fa3f2",
+      "text": "#0d1525",
+      "border": "#6fa3f2",
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "card_line": {
+      "background": null,
+      "text": "#6fa3f2",
+      "border": null,
+      "radius": null,
+      "weight": "bold",
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "card_line:selected": {
+      "background": null,
+      "text": "#0d1525",
+      "border": null,
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "header": {
+      "background": "#232832",
+      "text": "#9aa3b5",
+      "border": null,
+      "radius": null,
+      "weight": "bold",
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "input": {
+      "background": "#1d2129",
+      "text": "#e6e9ef",
+      "border": "#434b5c",
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "input:focus": {
+      "background": null,
+      "text": null,
+      "border": "#6fa3f2",
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "list": {
+      "background": "#1d2129",
+      "text": "#e6e9ef",
+      "border": "#434b5c",
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "list:hover": {
+      "background": "#233552",
+      "text": null,
+      "border": null,
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "list:selected": {
+      "background": "#2b4166",
+      "text": null,
+      "border": null,
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "menu": {
+      "background": "#1d2129",
+      "text": "#e6e9ef",
+      "border": "#2f3542",
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "menu:hover": {
+      "background": "#233552",
+      "text": null,
+      "border": null,
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "tab": {
+      "background": "#232832",
+      "text": "#9aa3b5",
+      "border": "#2f3542",
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "tab:hover": {
+      "background": null,
+      "text": "#e6e9ef",
+      "border": null,
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    }
+  },
+  "styles": {}
+}

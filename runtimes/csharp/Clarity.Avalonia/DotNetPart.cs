@@ -15,7 +15,7 @@ namespace Clarity.Avalonia;
 public abstract class DotNetPart : UserControl
 {
     /// <summary>How values cross to a part and back: numbers written as text read too.</summary>
-    public static readonly JsonSerializerOptions Options = new() { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString };
+    public static JsonSerializerOptions Options => PartValues.Json;
 
 
     /// <summary>What code sets and tells the part.</summary>
@@ -83,20 +83,7 @@ public abstract class DotNetPart : UserControl
             Set("enabled", IsEnabled);
     }
 
-    /// <summary>A told value at <paramref name="at"/> as the handler's type; its empty value when missing.</summary>
-    public static T Read<T>(JsonElement[] values, int at) =>
-        at < values.Length ? values[at].Deserialize<T>(Options)! : default!;
+    public static T Read<T>(JsonElement[] values, int at) => PartValues.Read<T>(values, at);
 
-    /// <summary>A value as a tell gives it: a whole number or a bool as JSON's own, a decimal,
-    /// a date or a moment as text in its plain form.</summary>
-    public static string Json(object? value) => value switch
-    {
-        null => "null",
-        decimal d => JsonSerializer.Serialize(d.ToString(CultureInfo.InvariantCulture)),
-        DateOnly d => JsonSerializer.Serialize(d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-        DateTime t => JsonSerializer.Serialize(t.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture)),
-        object?[] list => "[" + string.Join(",", list.Select(Json)) + "]",
-        Enum e => JsonSerializer.Serialize(e.ToString()),
-        _ => JsonSerializer.Serialize(value),
-    };
+    public static string Json(object? value) => PartValues.Write(value);
 }

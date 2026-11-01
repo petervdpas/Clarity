@@ -69,7 +69,7 @@ public class ColorInput : UserControl, IInput
                 Height = 22,
                 Margin = new Thickness(1.5),
                 Padding = new Thickness(0),
-                Background = Palette.Brush(color),
+                Background = PaletteBrushes.Brush(color),
                 [ToolTip.TipProperty] = color,
                 Tag = color,
             };
@@ -110,7 +110,7 @@ public class ColorInput : UserControl, IInput
     {
         Box.Text = Value ?? "";
         Box.Classes.Remove("error");
-        shown.Background = Palette.Brush(Value) ?? Brushes.Transparent;
+        shown.Background = PaletteBrushes.Brush(Value) ?? Brushes.Transparent;
         foreach (var choice in choices)
             choice.Classes.Set("chosen", Equals(choice.Tag, Value));
     }

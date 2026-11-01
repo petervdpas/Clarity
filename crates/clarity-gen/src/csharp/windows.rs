@@ -614,7 +614,8 @@ impl<'a> Window<'a> {
 <UserControl xmlns=\"https://github.com/avaloniaui\"
              xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"
              xmlns:local=\"using:{namespace}\"
-             xmlns:c=\"using:Clarity.Avalonia\"{parts}
+             xmlns:c=\"using:Clarity.Avalonia\"
+             xmlns:ui=\"using:Clarity.Ui\"{parts}
              x:Class=\"{namespace}.{name}View\"
              x:DataType=\"local:{name}ViewModel\"{width}>
   <DockPanel{root}>
@@ -1111,8 +1112,8 @@ impl<'a> Window<'a> {
                     None if let Some(e) = p.bind.as_deref().and_then(|b| self.value_enum(b)) => format!(" Choices=\"{{x:Static local:Choices.{e}}}\""),
                     Some(FieldType::Ref { entity }) => format!(" Choices=\"{{Binding {}Choices}}\"", entity.name),
                     // The settings' own: the project's languages, the offered themes.
-                    Some(FieldType::Language) => " Choices=\"{x:Static c:Choice.LanguagesOffered}\"".to_string(),
-                    Some(FieldType::Theme) => " Choices=\"{x:Static c:Choice.ThemesOffered}\"".to_string(),
+                    Some(FieldType::Language) => " Choices=\"{x:Static ui:Choice.LanguagesOffered}\"".to_string(),
+                    Some(FieldType::Theme) => " Choices=\"{x:Static ui:Choice.ThemesOffered}\"".to_string(),
                     _ => String::new(),
                 };
                 let value = bound.as_deref().map(|b| format!(" Value=\"{{Binding {b}}}\"")).unwrap_or_default();
@@ -2220,7 +2221,7 @@ public partial class {name}View : UserControl
             identity.push_str("\n    public override bool IsDialog => true;\n");
         }
         if let Some(size) = self.page.size {
-            identity.push_str(&format!("\n    public override global::Avalonia.Size? WindowSize => new({}, {});\n", size.width, size.height));
+            identity.push_str(&format!("\n    public override Extent? WindowSize => new({}, {});\n", size.width, size.height));
         }
         let body = format!("{identity}\n{properties}{parts}\n{events}{clicks}{handlers}");
         // A mirror of the window, in a browser, loads nothing: the server sends its state (DESIGN 7.6).

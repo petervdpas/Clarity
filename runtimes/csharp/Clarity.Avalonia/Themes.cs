@@ -38,6 +38,7 @@ public static class Themes
     public static void Start(Theme[] themes)
     {
         offered = themes;
+        OfferedThemes.All = [.. themes.Select(t => (t.Name, t.Label))];
         var kept = Remembered.Get(Key);
         Show(themes.FirstOrDefault(t => t.Name == kept) ?? themes.FirstOrDefault());
     }

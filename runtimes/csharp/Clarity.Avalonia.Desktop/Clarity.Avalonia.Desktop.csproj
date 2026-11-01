@@ -34,4 +34,7 @@
     <None Include="../assets/icon.png" Pack="true" PackagePath="assets/" />
     <None Include="../assets/LICENSE.txt" Pack="true" PackagePath="assets/" />
   </ItemGroup>
+  <ItemGroup>
+    <Using Include="Clarity.Ui" />
+  </ItemGroup>
 </Project>

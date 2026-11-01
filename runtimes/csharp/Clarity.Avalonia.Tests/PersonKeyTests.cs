@@ -19,15 +19,15 @@ public sealed class PersonKeyTests
     [Fact]
     public void A_pressed_key_reads_as_clarity_writes_keys_and_back()
     {
-        Assert.Equal("Ctrl+Shift+N", KeyRules.Written(Key.N, KeyModifiers.Control | KeyModifiers.Shift));
-        Assert.Equal("Ctrl+1", KeyRules.Written(Key.D1, KeyModifiers.Control));
-        Assert.Equal("Alt+Left", KeyRules.Written(Key.Left, KeyModifiers.Alt));
-        Assert.Equal("Backspace", KeyRules.Written(Key.Back, KeyModifiers.None));
-        Assert.Equal("Ctrl++", KeyRules.Written(Key.OemPlus, KeyModifiers.Control));
-        Assert.Null(KeyRules.Written(Key.LeftCtrl, KeyModifiers.Control));
-        Assert.Equal(KeyGesture.Parse("Ctrl+D1"), KeyRules.Gesture("Ctrl+1"));
-        Assert.Equal(KeyGesture.Parse("Ctrl+OemPlus"), KeyRules.Gesture("Ctrl++"));
-        Assert.Equal(KeyGesture.Parse("Shift+F5"), KeyRules.Gesture("Shift+F5"));
+        Assert.Equal("Ctrl+Shift+N", AvaloniaKeys.Written(Key.N, KeyModifiers.Control | KeyModifiers.Shift));
+        Assert.Equal("Ctrl+1", AvaloniaKeys.Written(Key.D1, KeyModifiers.Control));
+        Assert.Equal("Alt+Left", AvaloniaKeys.Written(Key.Left, KeyModifiers.Alt));
+        Assert.Equal("Backspace", AvaloniaKeys.Written(Key.Back, KeyModifiers.None));
+        Assert.Equal("Ctrl++", AvaloniaKeys.Written(Key.OemPlus, KeyModifiers.Control));
+        Assert.Null(AvaloniaKeys.Written(Key.LeftCtrl, KeyModifiers.Control));
+        Assert.Equal(KeyGesture.Parse("Ctrl+D1"), AvaloniaKeys.Gesture("Ctrl+1"));
+        Assert.Equal(KeyGesture.Parse("Ctrl+OemPlus"), AvaloniaKeys.Gesture("Ctrl++"));
+        Assert.Equal(KeyGesture.Parse("Shift+F5"), AvaloniaKeys.Gesture("Shift+F5"));
     }
 
     // On the UI thread: setting keys walks the buttons other tests showed there.

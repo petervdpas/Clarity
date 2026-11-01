@@ -31,11 +31,11 @@ public class TestApp : Application
 }
 
 /// A window as Clarity generates one: data, parts and handlers.
-sealed class CardViewModel(Db db, string title = "Card", bool dialog = false, global::Avalonia.Size? size = null) : WindowViewModel(db)
+sealed class CardViewModel(Db db, string title = "Card", bool dialog = false, Extent? size = null) : WindowViewModel(db)
 {
     public override string Title => title;
     public override bool IsDialog => dialog;
-    public override global::Avalonia.Size? WindowSize => size;
+    public override Extent? WindowSize => size;
     public List<string> Rows { get; set; } = ["a", "b"];
     public PartState Grid { get; } = new("grid");
     public PartState Save { get; } = new("save", caption: "Save");

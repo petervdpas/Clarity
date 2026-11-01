@@ -14,6 +14,7 @@ using Clarity.Avalonia;
 using Clarity.Runtime;
 using CommunityToolkit.Mvvm.Input;
 using Xunit;
+using Pointer = Clarity.Ui.Pointer;
 
 namespace Clarity.Avalonia.Tests;
 

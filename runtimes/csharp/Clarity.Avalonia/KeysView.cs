@@ -88,7 +88,7 @@ public sealed class KeysView : UserControl
             Render();
             return;
         }
-        if (KeyRules.Written(e.Key, e.KeyModifiers) is not { } key) return;
+        if (AvaloniaKeys.Written(e.Key, e.KeyModifiers) is not { } key) return;
         if (KeyRules.Refused(key) is { } why)
         {
             var (word, english) = Refusals[why];

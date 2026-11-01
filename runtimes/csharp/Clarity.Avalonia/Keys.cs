@@ -60,14 +60,14 @@ public static class Keys
             designed = new Designed(button.HotKey);
             DesignedKeys.Add(button, designed);
         }
-        button.HotKey = PersonKeys.Choices.TryGetValue(id, out var keys) ? keys.Select(KeyRules.Gesture).FirstOrDefault(g => g is not null) : designed.HotKey;
+        button.HotKey = PersonKeys.Choices.TryGetValue(id, out var keys) ? keys.Select(AvaloniaKeys.Gesture).FirstOrDefault(g => g is not null) : designed.HotKey;
     }
 
     /// <summary>The keys a frame command answers now: the person's, or its design's.</summary>
     static IEnumerable<KeyGesture> FrameGestures(Control command)
     {
         if (GetId(command) is { } id && PersonKeys.Choices.TryGetValue(id, out var keys))
-            return keys.Select(KeyRules.Gesture).OfType<KeyGesture>();
+            return keys.Select(AvaloniaKeys.Gesture).OfType<KeyGesture>();
         return GetFrame(command) is { } designed ? [designed] : [];
     }
 

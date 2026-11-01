@@ -21,4 +21,12 @@
     <!-- The cases every stack shares. -->
     <None Include="../../../conformance/*.json" LinkBase="conformance" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The windows Clarity.Ui's tests open, which the mirror shell's tests open too. -->
+    <Compile Include="../Clarity.Ui.Tests/TestWindows.cs" Link="TestWindows.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Clarity.Ui" />
+    <Using Include="Clarity.Ui.Tests" />
+  </ItemGroup>
 </Project>

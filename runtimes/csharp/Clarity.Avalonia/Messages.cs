@@ -12,19 +12,6 @@ using Clarity.Runtime;
 
 namespace Clarity.Avalonia;
 
-public enum Level
-{
-    Info,
-    Warning,
-    Error,
-}
-
-public sealed record Message(Level Level, Text Text)
-{
-    /// <summary>The text translated, its slots filled in the person's format.</summary>
-    public string Shown => Locale.Show(Text);
-}
-
 /// <summary>The info messages of a window, as notes with a small x that dismisses them.</summary>
 public sealed class MessageList : StackPanel
 {

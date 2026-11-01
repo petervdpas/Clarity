@@ -491,7 +491,7 @@ fn a_window_opens_at_its_size() {
     let project = load_keyed([("shop.clarity", sized.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
-    has(file(&files, "Windows/OrderFormViewModel.cs"), "    public override global::Avalonia.Size? WindowSize => new(640, 480);\n");
+    has(file(&files, "Windows/OrderFormViewModel.cs"), "    public override Extent? WindowSize => new(640, 480);\n");
 }
 
 /// A click can pass values to its handler: each written call is a command of

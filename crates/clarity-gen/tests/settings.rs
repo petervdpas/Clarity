@@ -70,7 +70,9 @@ fn avalonia_shares_one_settings_started_with_the_application() {
     has(&code, "[\"language\"] = new(\"language\", null, null, Locale.Offered),");
     has(&code, "public Settings Settings => Settings.Current;");
     has(&code, "            Themes.Start(AppThemes.Offered);\n            Settings.Start();\n");
-    has(&code, "Choices=\"{x:Static c:Choice.LanguagesOffered}\"");
+    // Choice is the window model's (Clarity.Ui), not Avalonia's.
+    has(&code, "xmlns:ui=\"using:Clarity.Ui\"");
+    has(&code, "Choices=\"{x:Static ui:Choice.LanguagesOffered}\"");
 }
 
 /// Ctrl+Z, or a browser, may send a setting that can be none back as none:

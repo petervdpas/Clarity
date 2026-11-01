@@ -49,15 +49,7 @@ public sealed class Unconnected
     /// Why the databases did not open, as the person reads it (conformance/unconnected.json):
     /// in Clarity's own words, which the project translates, with this runtime's message in the slot.
     /// </summary>
-    public static Text Reason(Exception e) => e switch
-    {
-        NotKeptException => new Text("The database connection is not set yet") { Key = "unconnectedNotKept" },
-        StorageException storage => Failed().With("problem", Slot.OfText(storage.What)),
-        _ => Failed().With("problem", Slot.OfText(e.Message)),
-    };
-
-    /// <summary>Clarity's words, written in English as they read until the project gives them a value.</summary>
-    static Text Failed() => new("The database did not open: {problem}") { Key = "unconnectedFailed" };
+    public static Text Reason(Exception e) => Unconnecting.Why(e);
 
     /// <summary>Shows what keeps the connection, saying <paramref name="problem"/>.</summary>
     public void Start(Text problem)

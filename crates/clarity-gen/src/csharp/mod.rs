@@ -273,6 +273,10 @@ fn csproj(name: &str, ui: &str, drivers: &[&Driver], carried: bool, engines: boo
          variable CLARITY_RUNTIME. Empty: the packages. -->
     <ClarityRuntime Condition=\"'$(ClarityRuntime)' == ''\">$(CLARITY_RUNTIME)</ClarityRuntime>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- The window model every window's view model builds on (DESIGN 7.9). -->
+    <Using Include=\"Clarity.Ui\" />
+  </ItemGroup>
   <ItemGroup Condition=\"'$(ClarityRuntime)' == ''\">
 {references}  </ItemGroup>
   <ItemGroup Condition=\"'$(ClarityRuntime)' != ''\">

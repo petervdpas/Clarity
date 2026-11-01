@@ -1,0 +1,39 @@
+<!-- Clarity.UI in a browser page (DESIGN 7.9): the same screen, compiled to
+     WebAssembly, drawn by Skia's WebAssembly build onto the page's canvas. -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>Clarity.Ui.Browser</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>true</IsPackable>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageOutputPath>bin/$(Configuration)</PackageOutputPath>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageId>Clarity.Ui.Browser</PackageId>
+    <Description>Clarity.UI in a browser page: a screen of Clarity's UI framework compiled to WebAssembly and drawn by Skia onto the page's canvas, as on the desktop.</Description>
+    <PackageTags>clarity;ui;skia;webassembly;browser</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Skia for WebAssembly, linked into the page's program. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.WebAssembly" Version="4.148.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Clarity.Ui/Clarity.Ui.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- What the page runs beside the program: the canvas, and what the person does on it. -->
+    <EmbeddedResource Include="clarity-ui.js" LogicalName="Clarity.Ui.Browser.clarity-ui.js" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="" />
+    <None Include="../assets/icon.png" Pack="true" PackagePath="assets/" />
+    <None Include="../assets/LICENSE.txt" Pack="true" PackagePath="assets/" />
+  </ItemGroup>
+</Project>

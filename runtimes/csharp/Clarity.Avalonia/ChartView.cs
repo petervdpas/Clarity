@@ -241,7 +241,7 @@ public class ChartView : UserControl
                         },
                     ],
                 };
-            Add(new global::Avalonia.Controls.Shapes.Path { Data = geometry, Fill = Palette.Brush(color), Classes = { "slice" } }, $"{g.Label}: {g.Text}");
+            Add(new global::Avalonia.Controls.Shapes.Path { Data = geometry, Fill = PaletteBrushes.Brush(color), Classes = { "slice" } }, $"{g.Label}: {g.Text}");
             start = end;
         }
         // The legend beside the pie.
@@ -250,7 +250,7 @@ public class ChartView : UserControl
         {
             if (colors[i] is not { } color)
                 continue;
-            var swatch = new Rectangle { Width = 10, Height = 10, Fill = Palette.Brush(color) };
+            var swatch = new Rectangle { Width = 10, Height = 10, Fill = PaletteBrushes.Brush(color) };
             Canvas.SetLeft(swatch, radius * 2 + 28);
             Canvas.SetTop(swatch, Top + 16 * row + 2);
             Drawing.Children.Add(swatch);

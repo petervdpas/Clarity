@@ -59,7 +59,7 @@ public class SliderInput : UserControl, IInput
         Bar.AddHandler(PointerReleasedEvent, (_, _) => Take(), RoutingStrategies.Tunnel, handledEventsToo: true);
         Bar.AddHandler(KeyDownEvent, (_, e) =>
         {
-            if (NumberRange.KeyOf(e.Key) is { } key)
+            if (RangeKeys.Of(e.Key) is { } key)
             {
                 e.Handled = true;
                 Press(key);

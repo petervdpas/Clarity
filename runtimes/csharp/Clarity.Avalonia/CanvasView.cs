@@ -32,6 +32,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Clarity.Runtime;
+using Pointer = Clarity.Ui.Pointer;
 
 namespace Clarity.Avalonia;
 

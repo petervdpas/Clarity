@@ -60,7 +60,7 @@ public class NumberInput : TextBox, IInput
             if (e.Key == Key.Enter)
                 Take();
             // Left and right move the caret; home and end too.
-            else if (Range is not null && e.Key is Key.Up or Key.Down or Key.PageUp or Key.PageDown && NumberRange.KeyOf(e.Key) is { } key)
+            else if (Range is not null && e.Key is Key.Up or Key.Down or Key.PageUp or Key.PageDown && RangeKeys.Of(e.Key) is { } key)
             {
                 e.Handled = true;
                 Spin(key);

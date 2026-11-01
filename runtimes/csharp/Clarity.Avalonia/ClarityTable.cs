@@ -571,7 +571,7 @@ public sealed class ClarityTable : UserControl
     }
 
     /// <summary>A kept color as the brush of its swatch.</summary>
-    static readonly IValueConverter ColorBrush = new global::Avalonia.Data.Converters.FuncValueConverter<string?, global::Avalonia.Media.IBrush?>(Palette.Brush);
+    static readonly IValueConverter ColorBrush = new global::Avalonia.Data.Converters.FuncValueConverter<string?, global::Avalonia.Media.IBrush?>(PaletteBrushes.Brush);
 
     static Binding Bound(TableColumn column, IValueConverter? converter = null) => new(column.Field) { Mode = BindingMode.TwoWay, Converter = converter };
 

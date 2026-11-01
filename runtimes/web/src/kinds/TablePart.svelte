@@ -24,6 +24,7 @@
 </script>
 
 <Table
+    frame={!ctx.inside || ctx.p.frame}
   columns={tableColumns}
   rows={ctx.collection?.rows ?? []}
   selected={ctx.selectedRow ?? null}

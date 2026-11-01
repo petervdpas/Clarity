@@ -186,7 +186,7 @@ fn vswhere_installations() -> Vec<PathBuf> {
 }
 
 /// The file of `program` in the folders of `path` (a PATH value), with
-/// Windows' `.exe`, or its `.cmd`, as npm is installed there.
+/// Windows' `.exe`, or its `.cmd`, as some tools are installed there.
 pub fn find_on_path(program: &str, path: &OsStr) -> Option<PathBuf> {
     let names: Vec<String> = if cfg!(windows) { vec![format!("{program}.exe"), format!("{program}.cmd")] } else { vec![program.to_string()] };
     std::env::split_paths(path).flat_map(|dir| names.iter().map(move |n| dir.join(n))).find(|file| is_program(file))
@@ -354,7 +354,6 @@ impl Guide {
 const RUST_GUIDE: Guide = Guide { windows: "rust-on-windows", linux: "rust-on-linux", macos: "rust-on-macos" };
 const DOTNET_GUIDE: Guide = Guide { windows: "net-on-windows", linux: "net-on-linux", macos: "net-on-macos" };
 const GO_GUIDE: Guide = Guide { windows: "go-on-windows", linux: "go-on-linux", macos: "go-on-macos" };
-const NODE_GUIDE: Guide = Guide { windows: "nodejs-on-windows", linux: "nodejs-on-linux", macos: "nodejs-on-macos" };
 /// The compilers, CMake, make or Ninja, and the C and C++ libraries.
 const NATIVE_GUIDE: Guide = Guide { windows: "c-and-c-on-windows", linux: "c-and-c-on-linux", macos: "c-and-c-on-macos" };
 /// WebKitGTK is Linux's alone.
@@ -362,7 +361,7 @@ const WEBKIT_GUIDE: Guide = Guide { windows: "webview2-on-windows", linux: "webk
 
 /// Every heading of the setup page the check can point at, on any system.
 pub fn guide_headings() -> Vec<&'static str> {
-    [RUST_GUIDE, DOTNET_GUIDE, GO_GUIDE, NODE_GUIDE, NATIVE_GUIDE, WEBKIT_GUIDE].iter().flat_map(|g| [g.windows, g.linux, g.macos]).collect()
+    [RUST_GUIDE, DOTNET_GUIDE, GO_GUIDE, NATIVE_GUIDE, WEBKIT_GUIDE].iter().flat_map(|g| [g.windows, g.linux, g.macos]).collect()
 }
 
 /// What to install for each tool, with where to get it: the words of
@@ -370,8 +369,6 @@ pub fn guide_headings() -> Vec<&'static str> {
 const RUST: &str = "Rust with cargo, from https://rustup.rs";
 const WEBKIT: &str = "the WebKitGTK development files and pkg-config (Debian and Ubuntu: libwebkit2gtk-4.1-dev; see https://tauri.app/start/prerequisites/)";
 const GO: &str = "Go, from https://go.dev/dl";
-/// What builds the screen of a web stack that has its windows as markup (DESIGN 7.8).
-const NODE: &str = "Node.js with npm, from https://nodejs.org";
 const CMAKE: &str = "CMake, from https://cmake.org/download (Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-cmake)";
 const MAKE: &str = "make or Ninja, to build what CMake writes (Ninja: https://ninja-build.org; Windows: pacman -S mingw-w64-ucrt-x86_64-ninja)";
 const SQLITE: &str = "the SQLite development files (Debian and Ubuntu: libsqlite3-dev; Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-sqlite3; elsewhere https://sqlite.org/download.html)";
@@ -399,12 +396,11 @@ fn compiler_needed(backend: Backend) -> String {
 /// Everything `backend` builds with, on any system: what a README lists.
 pub fn requirements(backend: Backend) -> Vec<String> {
     match backend {
-        Backend::Rust => vec![RUST.to_string(), NODE.to_string(), format!("on Linux, {WEBKIT}")],
+        Backend::Rust => vec![RUST.to_string(), format!("on Linux, {WEBKIT}")],
         Backend::Csharp => vec![dotnet()],
-        Backend::Go => vec![GO.to_string(), NODE.to_string(), format!("on Linux, {WEBKIT}")],
+        Backend::Go => vec![GO.to_string(), format!("on Linux, {WEBKIT}")],
         Backend::C => vec![
             compiler_needed(backend),
-            NODE.to_string(),
             WEBVIEW_CXX.to_string(),
             CMAKE.to_string(),
             MAKE.to_string(),
@@ -414,7 +410,6 @@ pub fn requirements(backend: Backend) -> Vec<String> {
         ],
         Backend::Cpp => vec![
             compiler_needed(backend),
-            NODE.to_string(),
             CMAKE.to_string(),
             MAKE.to_string(),
             SQLITE.to_string(),
@@ -511,13 +506,6 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
                     }
                 }
             }
-        }
-    }
-    // A web stack's screen, its windows as markup, builds with npm before the program (DESIGN 7.8).
-    if ui == Ui::Web && backend != Backend::Csharp {
-        match probe.run("npm", &["--version"]) {
-            Some(version) => found.push(format!("npm {}", first_line(&version))),
-            None => missing.push((NODE.to_string(), NODE_GUIDE)),
         }
     }
     StackTools {

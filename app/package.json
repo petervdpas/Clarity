@@ -7,9 +7,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:engine": "vite build --config vite.engine.config.ts",
+    "build:runtime": "vite build --config vite.runtime.config.ts && vite build --config vite.engine.config.ts",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "test": "node --experimental-strip-types --no-warnings --test src/lib/*.test.ts ../runtimes/web/src/screen/*.test.ts ../runtimes/web/src/host/*.test.ts ../runtimes/web/src/frame/*.test.ts ../runtimes/web/build/*.test.mjs && vitest run --config vitest.parts.config.ts",
+    "test": "node --experimental-strip-types --no-warnings --test src/lib/*.test.ts ../runtimes/web/src/screen/*.test.ts ../runtimes/web/src/host/*.test.ts ../runtimes/web/src/frame/*.test.ts && vitest run --config vitest.parts.config.ts",
     "postinstall": "node scripts/link-ui.mjs",
     "tauri": "tauri"
   },

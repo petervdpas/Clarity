@@ -155,17 +155,20 @@ fn handlers_are_member_functions_of_their_window() {
 /// shows a page and no folder.
 #[test]
 fn the_page_carries_the_renderer() {
-    // The screen is built in ui/ into one page (DESIGN 7.8), which CMake compiles into the program.
+    // Clarity's screen is one page in ui/, which CMake compiles into the program with the windows' markup (DESIGN 7.8).
     let files = files();
     let page = file(&files, "src/page.cpp");
     has(page, "clarity_page_html");
     has(page, "const std::string& page() {");
     let cmake = file(&files, "CMakeLists.txt");
-    has(cmake, "file(READ ${CLARITY_PAGE} CLARITY_PAGE_HEX HEX)");
+    has(cmake, "file(GLOB CLARITY_WINDOWS ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/*.xml)");
+    has(cmake, "string(REPLACE \"<!--clarity-windows-->\" \"${CLARITY_MARKUP}\" CLARITY_PAGE \"${CLARITY_PAGE}\")");
     has(cmake, "target_sources(shop PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/page_html.cpp)");
-    let vite = file(&files, "ui/vite.config.ts");
-    has(vite, "plugins: [svelte(), onePage()],");
-    has(vite, "import { onePage } from \"@clarity/ui/build/onePage.mjs\";");
+    // Clarity's screen as one page, with the place for the windows, and the windows' markup beside it.
+    let page = file(&files, "ui/index.html");
+    has(page, "<script type=\"module\">");
+    has(page, "<!--clarity-windows-->");
+    assert!(files.iter().any(|f| f.path.starts_with("ui/windows/") && f.path.ends_with(".xml")));
 }
 
 #[test]

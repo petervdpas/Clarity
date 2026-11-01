@@ -393,6 +393,12 @@
         <input type="checkbox" checked={p.cards} onchange={(e) => update({ cards: e.currentTarget.checked })} />
       </label>
     {/if}
+    {#if info.properties.includes("frame")}
+      <label class="prop" title="Its own border inside a tab page, pane or panel, which otherwise frames it alone">
+        <span>Frame</span>
+        <input type="checkbox" checked={p.frame} onchange={(e) => update({ frame: e.currentTarget.checked })} />
+      </label>
+    {/if}
     {#if info.properties.includes("typed")}
       <label class="prop" title="Any text may be typed; the values the field already has are offered">
         <span>Typed</span>

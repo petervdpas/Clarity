@@ -21,7 +21,8 @@ Clarity writes a Cargo project into the output folder (`out` by default):
 - `src/schema.rs`: the migration steps of every database Clarity owns.
 - `src/main.rs`: opens and migrates the databases and starts the Tauri application.
 - `src/model.json`: the frame, the data dictionary and the translations, for the screen.
-- `ui/`: the screen, a Svelte project of its own: each window as a file in `ui/src/windows/`, its parts as elements with their options as in Clarity (`<Button name="saveKey" at="3,5" span={2} caption="@saveCaption" onclick="save" />`); Clarity's screen package in `ui/clarity-ui/`, which the project carries; a CSS file per theme and the project's pictures in `ui/public/`. npm and Vite build it into `ui/dist/`, which the program embeds.
+- `ui/`: Clarity's screen (`index.html`, `runtime.js`, `runtime.css`), a CSS file per theme, and the project's pictures in `ui/resources`. Nothing in it is built.
+- `ui/windows/`: each window as markup, read by the screen when the application starts: its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`). Change a window in Clarity; Generate writes these files again.
 - `icons/icon.png` and a `README.md` that says how to build the project without Clarity.
 
 Do not edit these files. Change the project in Clarity; it writes the folder again. See [Run and Build](project.run-build.md).
@@ -44,7 +45,6 @@ A project with an [engine](code.engines.md) also turns on the crate's `engines` 
 ## What to install
 
 - Rust with cargo, from https://rustup.rs
-- Node.js with npm, from https://nodejs.org, which builds the screen
 - On Linux, the WebKitGTK development files and pkg-config (Debian and Ubuntu: `libwebkit2gtk-4.1-dev`; see https://tauri.app/start/prerequisites/)
 
 Clarity checks for these itself: run `clarity tools`, or look at Build tools on the Project tab.
@@ -53,11 +53,9 @@ Step by step, with the commands for Windows, Linux and macOS: [Setting up the bu
 
 ## Build and run
 
-**Generate** on the Preview tab writes the source into the output folder; then **Run** builds a debug program from it and starts it, and **Build** makes a release program. Both build the screen first. Without Clarity, in the output folder:
+**Generate** on the Preview tab writes the source into the output folder; then **Run** builds a debug program from it and starts it, and **Build** makes a release program. Without Clarity, in the output folder:
 
 ```shell
-npm --prefix ui install
-npm --prefix ui run build
 cargo build --release
 cargo run
 ```
@@ -70,4 +68,4 @@ The application has one desktop window. `open` shows a window in place, on top o
 
 ## The same on every stack
 
-The screen package is shared by the Rust, Go, C and C++ stacks, so they cannot differ; a window drawn from its markup draws exactly what the same window drawn from the model does, which a test checks for every window of every example. The parts of a window behave alike on the web renderer and on Avalonia ([C# with Avalonia](stacks.csharp.md)): the shared cases in `conformance/` say what each part must do, and both renderers run them.
+The screen is shared by the Rust, Go, C and C++ stacks, so they cannot differ; a window drawn from its markup draws exactly what the same window drawn from the model does, which a test checks for every window of every example. The parts of a window behave alike on the web renderer and on Avalonia ([C# with Avalonia](stacks.csharp.md)): the shared cases in `conformance/` say what each part must do, and both renderers run them.

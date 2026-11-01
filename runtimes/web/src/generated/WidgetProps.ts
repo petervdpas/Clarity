@@ -127,6 +127,11 @@ children: string | null, show: Array<string>,
  */
 cards: boolean, 
 /**
+ * `frame`: a list, table or tree shows its own border inside a
+ * container (a tab page, a pane, a panel), which otherwise frames it alone.
+ */
+frame: boolean, 
+/**
  * `typed`: a dropdown of a text field any text may be typed into, the
  * values the field already has offered as it is typed (U1c).
  */

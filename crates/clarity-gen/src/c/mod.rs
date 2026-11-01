@@ -274,8 +274,9 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     files.push(text("src/schema.c", schema_c(project, &owned)?));
     files.push(text("src/page.h", format!("{HEADER}\n{PAGE_H}")));
     files.push(text("src/page.c", page_c(project)));
-    // The screen as a project of its own in ui/, its windows as markup, built into one page (DESIGN 7.8).
-    files.extend(crate::web_windows::one_page_project(project, &program));
+    // Clarity's screen as one page, and the windows as markup beside it, which CMake puts into the page (DESIGN 7.8).
+    files.push(text("ui/index.html", crate::web::single_page(project)));
+    files.extend(crate::web_windows::window_files(project));
     files.push(text("src/main.c", main_c(project, settings, &databases, &owners, &main_window)));
     Ok(files)
 }
@@ -417,15 +418,24 @@ add_executable({program} ${{PROGRAM_SOURCES}})
 target_include_directories({program} PRIVATE src)
 target_link_libraries({program} PRIVATE clarity {shell}{engine}{http})
 
-# The screen, built by npm in ui/ into one page (DESIGN 7.8), compiled into the program.
-set(CLARITY_PAGE ${{CMAKE_CURRENT_SOURCE_DIR}}/ui/dist/index.html)
-if(NOT EXISTS ${{CLARITY_PAGE}})
-  message(FATAL_ERROR \"ui/dist/index.html is missing: build the screen first (npm --prefix ui install, then npm --prefix ui run build)\")
-endif()
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${{CLARITY_PAGE}})
-file(READ ${{CLARITY_PAGE}} CLARITY_PAGE_HEX HEX)
+# The screen's page (ui/index.html) with the windows as markup (ui/windows/*.xml)
+# put into it, which the screen reads when it starts (DESIGN 7.8), compiled
+# into the program.
+set(CLARITY_PAGE_FILE ${{CMAKE_CURRENT_SOURCE_DIR}}/ui/index.html)
+file(GLOB CLARITY_WINDOWS ${{CMAKE_CURRENT_SOURCE_DIR}}/ui/windows/*.xml)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${{CLARITY_PAGE_FILE}} ${{CLARITY_WINDOWS}} ${{CMAKE_CURRENT_SOURCE_DIR}}/ui/windows)
+file(READ ${{CLARITY_PAGE_FILE}} CLARITY_PAGE)
+set(CLARITY_MARKUP \"\")
+foreach(window IN LISTS CLARITY_WINDOWS)
+  get_filename_component(name ${{window}} NAME_WE)
+  file(READ ${{window}} text)
+  string(APPEND CLARITY_MARKUP \"<script type=\\\"text/xml\\\" data-window=\\\"${{name}}\\\">${{text}}</script>\\n\")
+endforeach()
+string(REPLACE \"<!--clarity-windows-->\" \"${{CLARITY_MARKUP}}\" CLARITY_PAGE \"${{CLARITY_PAGE}}\")
+file(WRITE ${{CMAKE_CURRENT_BINARY_DIR}}/page.html \"${{CLARITY_PAGE}}\")
+file(READ ${{CMAKE_CURRENT_BINARY_DIR}}/page.html CLARITY_PAGE_HEX HEX)
 string(REGEX REPLACE \"([0-9a-f][0-9a-f])\" \"0x\\\\1,\" CLARITY_PAGE_BYTES \"${{CLARITY_PAGE_HEX}}\")
-file(WRITE ${{CMAKE_CURRENT_BINARY_DIR}}/page_html.c \"/* The screen's page, from ui/dist/index.html. */\\nconst unsigned char clarity_page_html[] = {{${{CLARITY_PAGE_BYTES}}0x00}};\\n\")
+file(WRITE ${{CMAKE_CURRENT_BINARY_DIR}}/page_html.c \"/* The screen's page, from ui/index.html and ui/windows. */\\nconst unsigned char clarity_page_html[] = {{${{CLARITY_PAGE_BYTES}}0x00}};\\n\")
 target_sources({program} PRIVATE ${{CMAKE_CURRENT_BINARY_DIR}}/page_html.c)
 {parts}"
     )

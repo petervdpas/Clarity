@@ -197,6 +197,9 @@ struct Window<'a> {
     /// The calls with values its parts wire, each with the command that
     /// makes it: `digit(7)` with `Digit7`.
     calls: Vec<(&'a Handler, String)>,
+    /// Drawing a container's grid (a tab page, a pane, a panel): a list,
+    /// table or tree in it shows no border of its own unless it has `frame`.
+    inside: std::cell::Cell<bool>,
 }
 
 /// A shortcut as Avalonia names its keys: `Backspace` as `Back`, `Ctrl++`
@@ -311,6 +314,7 @@ impl<'a> Window<'a> {
             texts,
             pickers,
             calls,
+            inside: std::cell::Cell::new(false),
         }
     }
 
@@ -719,6 +723,19 @@ impl<'a> Window<'a> {
         let _ = writeln!(out, "{pad}  </StackPanel>\n{pad}</Button>");
     }
 
+    /// The grid of a container (a tab page, a pane, a panel), whose parts it frames.
+    fn container_grid(&self, widgets: &[Widget], columns: u32, fixed_rows: Option<u32>, window: bool, depth: usize, out: &mut String) {
+        let outer = self.inside.replace(true);
+        self.grid(widgets, columns, fixed_rows, window, depth, out);
+        self.inside.set(outer);
+    }
+
+    /// Whether a list, table or tree shows its own border: outside a
+    /// container, or with `frame` (DESIGN 7.8), as on the web.
+    fn framed(&self, p: &clarity_spec::model::WidgetProps) -> bool {
+        !self.inside.get() || p.frame
+    }
+
     /// A grid of parts: `columns` shared columns; rows of the shared height,
     /// or, for the window's own grid, `*` rows where a part grows.
     fn grid(&self, widgets: &[Widget], columns: u32, fixed_rows: Option<u32>, window: bool, depth: usize, out: &mut String) {
@@ -919,7 +936,7 @@ impl<'a> Window<'a> {
             WidgetKind::Buttons => {
                 let _ = writeln!(out, "{pad}<Border {at} Classes=\"buttons\"{plain_state}{extra}>");
                 let mut inner = String::new();
-                self.grid(&widget.children, p.width, Some(1), false, depth + 1, &mut inner);
+                self.container_grid(&widget.children, p.width, Some(1), false, depth + 1, &mut inner);
                 out.push_str(&inner.replacen(&format!("ColumnSpacing=\"{GAP}\""), "ColumnSpacing=\"0\"", 1));
                 let _ = writeln!(out, "{pad}</Border>");
             }
@@ -1193,7 +1210,7 @@ impl<'a> Window<'a> {
                 let header = p.caption.as_ref().map(|t| format!(" Header=\"{}\"", self.text(t))).unwrap_or_default();
                 let part = member(named.unwrap_or_default());
                 let _ = writeln!(out, "{pad}<Expander {at}{header} IsExpanded=\"{{Binding {part}.IsOpen}}\" Classes=\"{class}\"{plain_state}{extra}>");
-                self.grid(&widget.children, p.width, None, false, depth + 1, out);
+                self.container_grid(&widget.children, p.width, None, false, depth + 1, out);
                 let _ = writeln!(out, "{pad}</Expander>");
             }
             WidgetKind::Form | WidgetKind::Panel => {
@@ -1202,14 +1219,14 @@ impl<'a> Window<'a> {
                 if let Some(title) = &p.caption {
                     let _ = writeln!(out, "{pad}    <TextBlock DockPanel.Dock=\"Top\" Classes=\"legend\" Text=\"{}\" />", self.text(title));
                 }
-                self.grid(&widget.children, p.width, None, false, depth + 2, out);
+                self.container_grid(&widget.children, p.width, None, false, depth + 2, out);
                 let _ = writeln!(out, "{pad}  </DockPanel>\n{pad}</Border>");
             }
             WidgetKind::Tabs => {
                 let _ = writeln!(out, "{pad}<TabControl {at} Classes=\"tabs\"{plain_state}{extra}>");
                 for tab in &widget.pages {
                     let _ = writeln!(out, "{pad}  <TabItem Header=\"{}\">", self.text(tab.title.as_deref().unwrap_or_default()));
-                    self.grid(&tab.children, p.width, None, false, depth + 2, out);
+                    self.container_grid(&tab.children, p.width, None, false, depth + 2, out);
                     let _ = writeln!(out, "{pad}  </TabItem>");
                 }
                 let _ = writeln!(out, "{pad}</TabControl>");
@@ -1224,7 +1241,7 @@ impl<'a> Window<'a> {
                 let width = POPOVER_COLUMN * p.width + GAP * (p.width - 1) + 2 * 8 + 2;
                 let _ = writeln!(out, "{pad}<Popup{name}{open}{target} Placement=\"BottomEdgeAlignedLeft\" IsLightDismissEnabled=\"True\">");
                 let _ = writeln!(out, "{pad}  <Border Classes=\"popover\" Width=\"{width}\">");
-                self.grid(&widget.children, p.width, Some(p.height), false, depth + 2, out);
+                self.container_grid(&widget.children, p.width, Some(p.height), false, depth + 2, out);
                 let _ = writeln!(out, "{pad}  </Border>\n{pad}</Popup>");
             }
             // An accordion is the runtime's AccordionView: its open section follows the part's state.
@@ -1233,7 +1250,7 @@ impl<'a> Window<'a> {
                 let _ = writeln!(out, "{pad}<c:AccordionView {at}{open}{plain_state}{extra}>");
                 for page in &widget.pages {
                     let _ = writeln!(out, "{pad}  <c:SectionItem Header=\"{}\">", self.text(page.title.as_deref().unwrap_or_default()));
-                    self.grid(&page.children, p.width, None, false, depth + 2, out);
+                    self.container_grid(&page.children, p.width, None, false, depth + 2, out);
                     let _ = writeln!(out, "{pad}  </c:SectionItem>");
                 }
                 let _ = writeln!(out, "{pad}</c:AccordionView>");
@@ -1241,7 +1258,7 @@ impl<'a> Window<'a> {
             // A scroll box: its own grid in a ScrollViewer, so parts below its rows scroll into view.
             WidgetKind::Scroll => {
                 let _ = writeln!(out, "{pad}<ScrollViewer {at} Classes=\"scroll\" HorizontalScrollBarVisibility=\"Disabled\" VerticalScrollBarVisibility=\"Auto\"{plain_state}{extra}>");
-                self.grid(&widget.children, p.width, None, false, depth + 1, out);
+                self.container_grid(&widget.children, p.width, None, false, depth + 1, out);
                 let _ = writeln!(out, "{pad}</ScrollViewer>");
             }
             // A wizard is the runtime's StepsView: its step follows the part's state.
@@ -1250,7 +1267,7 @@ impl<'a> Window<'a> {
                 let _ = writeln!(out, "{pad}<c:StepsView {at}{step}{plain_state}{extra}>");
                 for page in &widget.pages {
                     let _ = writeln!(out, "{pad}  <c:StepItem Header=\"{}\">", self.text(page.title.as_deref().unwrap_or_default()));
-                    self.grid(&page.children, p.width, None, false, depth + 2, out);
+                    self.container_grid(&page.children, p.width, None, false, depth + 2, out);
                     let _ = writeln!(out, "{pad}  </c:StepItem>");
                 }
                 let _ = writeln!(out, "{pad}</c:StepsView>");
@@ -1270,7 +1287,7 @@ impl<'a> Window<'a> {
                         let _ = writeln!(out, "{pad}  <GridSplitter {position}=\"{}\" ResizeDirection=\"{resize}\" {size}=\"4\" />", 2 * i - 1);
                     }
                     let _ = writeln!(out, "{pad}  <Border Classes=\"pane\" {position}=\"{}\">", 2 * i);
-                    self.grid(&pane.children, columns, None, false, depth + 2, out);
+                    self.container_grid(&pane.children, columns, None, false, depth + 2, out);
                     let _ = writeln!(out, "{pad}  </Border>");
                 }
                 let _ = writeln!(out, "{pad}</Grid>\n{pad}</Border>");
@@ -1333,7 +1350,8 @@ impl<'a> Window<'a> {
                     (WidgetKind::Tree, _) => p.show.clone(),
                     _ => p.columns.clone(),
                 };
-                let _ = writeln!(out, "{pad}<c:ClarityTable {at}{items}{selected}{options}{plain_state}{extra}>");
+                let border = if self.framed(p) { " BorderBrush=\"{DynamicResource ClarityStrongBorder}\" BorderThickness=\"{DynamicResource ClarityBorderWidth}\" CornerRadius=\"{DynamicResource ClarityRadiusPanel}\"" } else { "" };
+                let _ = writeln!(out, "{pad}<c:ClarityTable {at}{items}{selected}{options}{border}{plain_state}{extra}>");
                 let _ = writeln!(out, "{pad}  <c:ClarityTable.Columns>");
                 if let Some(entity) = entity {
                     for column in &columns {
@@ -1420,7 +1438,8 @@ impl<'a> Window<'a> {
                 };
                 // A list of cards: its look is the theme's (`part card`), in the application's styles.
                 let cards = if p.cards { " Classes=\"cards\"" } else { "" };
-                let _ = writeln!(out, "{pad}<ListBox {at}{items}{selected}{reorder}{cards}{plain_state}{extra}>");
+                let border = if self.framed(p) { "" } else { " BorderThickness=\"0\"" };
+                let _ = writeln!(out, "{pad}<ListBox {at}{items}{selected}{reorder}{cards}{border}{plain_state}{extra}>");
                 if let (Some(entity), true) = (entity, p.cards) {
                     // A card: the first field its title, the others lines below it, in the theme's colors.
                     let _ = writeln!(out, "{pad}  <ListBox.ItemTemplate>\n{pad}    <DataTemplate x:DataType=\"local:{}\">", entity.name.name);

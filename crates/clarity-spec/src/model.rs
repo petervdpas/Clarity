@@ -622,6 +622,10 @@ pub struct WidgetProps {
     /// card's title and the others lines below it.
     #[serde(default)]
     pub cards: bool,
+    /// `frame`: a list, table or tree shows its own border inside a
+    /// container (a tab page, a pane, a panel), which otherwise frames it alone.
+    #[serde(default)]
+    pub frame: bool,
     /// `typed`: a dropdown of a text field any text may be typed into, the
     /// values the field already has offered as it is typed (U1c).
     #[serde(default)]

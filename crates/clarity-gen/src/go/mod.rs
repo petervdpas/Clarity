@@ -99,8 +99,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let desktop = has_desktop(settings);
     let groups = groups(project, &servers, desktop);
     let mut files = vec![text("model.json", crate::web::model_json(project))];
-    // The screen as a project of its own in ui/, its windows as markup, built into ui/dist (DESIGN 7.8).
-    files.extend(crate::web_windows::ui_project(project, &module));
+    // Clarity's screen, the themes, the resources and the windows as markup (DESIGN 7.8), in ui/.
+    files.extend(crate::web::renderer_files(project));
     let mut owners = Vec::new();
     for file in &project.files {
         let Some(m) = &file.module else { continue };
@@ -698,10 +698,10 @@ import (
 
 {imports})
 
-// renderer is the application's screen, built from ui/ into ui/dist by
-// npm run build (DESIGN 7.8), with its themes and resources.
+// renderer is Clarity's screen with the themes, the resources and the
+// windows as markup (DESIGN 7.8), which the screen reads when it starts.
 //
-//go:embed all:ui/dist
+//go:embed ui
 var renderer embed.FS
 
 // model is the windows, frame and data dictionary the renderer draws from.
@@ -818,7 +818,7 @@ func main() {{
 \t\tfmt.Println({ready})
 \t\treturn
 \t}}
-\tassets, err := fs.Sub(renderer, \"ui/dist\")
+\tassets, err := fs.Sub(renderer, \"ui\")
 \tif err != nil {{
 \t\tfmt.Fprintln(os.Stderr, err)
 \t\tos.Exit(1)

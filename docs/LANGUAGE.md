@@ -693,9 +693,9 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
-| `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `order by field [desc]`; `reorder by field`; `page 50` | `select`, `open`, `change`, `reorder` |
-| `list` | a list: `bind orders` | `show field, field, ...`; `cards`: each row a small card, the first field of `show` its title and the others lines below it, in the theme's `part card` and `part card_line` looks; `reorder by field` | `select`, `open`, `reorder` |
-| `tree` | a list: `bind folders children children` | `children field`; `show field, ...`; `reorder by field` | `select`, `open`, `reorder` |
+| `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `order by field [desc]`; `reorder by field`; `page 50`; `frame` | `select`, `open`, `change`, `reorder` |
+| `list` | a list: `bind orders` | `show field, field, ...`; `cards`: each row a small card, the first field of `show` its title and the others lines below it, in the theme's `part card` and `part card_line` looks; `reorder by field`; `frame` | `select`, `open`, `reorder` |
+| `tree` | a list: `bind folders children children` | `children field`; `show field, ...`; `reorder by field`; `frame` | `select`, `open`, `reorder` |
 | `treetable` | a list: `bind folders children children` | `children field`; `columns field [width], ...`; `resizable`; `reorder by field` | `select`, `open`, `reorder` |
 | `chart` | a list: `chart bar ... bind orders by status count`; or a list of numbers, drawn as they are: `chart line ... bind readings` | `bar`, `line` or `pie` first; `by field`; `count`, `sum field` or `average field`; for a list of numbers `points n` (its last n) and `max n` (the top of the axis) | |
 | `trend` | an integer, decimal, money or duration: `bind cpu` | `points n`, the values it keeps, 60 without it; `max n`, the top of the axis; `every n`, seconds between values, 1 without it; see [Live graphs](#live-graphs) | none |
@@ -892,6 +892,7 @@ form name details at 1,1 span 12 rows 3 bind customer
 | `default` | buttons | Enter clicks this button. One per window. |
 | `cancel` | buttons | Escape clicks this button. One per window. |
 | `horizontal`, `vertical` | radio, splitter | Side by side or stacked. |
+| `frame` | list, table, tree, tree table | Its own border in a container (a tab page, a pane, a panel, a form, a section, a step, a scroll box), which otherwise frames it alone. On the window it always has one. |
 
 A key is written as modifiers, then one key, joined by `+`: `"Ctrl+S"`, `"Ctrl+Shift+F2"`, `"Alt+Delete"`. The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta`. The key is a letter, a digit, one of `+ - * / . , =`, `F1` to `F12`, or one of `Enter`, `Escape`, `Tab`, `Space`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`; `"Ctrl++"` is Ctrl and `+`. A key without Ctrl, Alt or Meta that is a character (`"7"`, `"+"`) is what is typed, from the keyboard or the number pad, on any keyboard layout; while the person types in a text input it is their typing and presses nothing.
 

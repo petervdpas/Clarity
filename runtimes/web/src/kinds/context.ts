@@ -41,6 +41,8 @@ export interface PartContext {
   readonly offset: number;
   /** Shown in the designer: nothing runs, and what code fills in shows the part's name. */
   readonly design: boolean;
+  /** In a container (a tab page, a pane, a panel, a section, a step, a scroll box), which frames it: a list, table or tree then shows no border of its own unless it has `frame` (DESIGN 7.8). */
+  readonly inside: boolean;
 
   // What it shows.
   /** The record and field it binds, if it binds one. */

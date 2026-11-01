@@ -147,3 +147,30 @@ fn a_button_beside_a_list_keeps_its_height() {
     let list = view.lines().find(|l| l.contains("<ListBox")).unwrap();
     assert!(!list.contains("VerticalAlignment=\"Top\""), "the list grows: {list}");
 }
+
+/// A list or table in a container (a tab page, a pane, a panel) shows no
+/// border of its own, its container framing it, unless it has `frame`; one
+/// on the window keeps its border (DESIGN 7.8), as on the web.
+#[test]
+fn a_list_in_a_container_has_no_border_of_its_own_unless_framed() {
+    let mut settings = starter("Plan", "plan");
+    settings.stack.backend = Backend::Csharp;
+    settings.stack.ui = Ui::Avalonia;
+    let view_of = |source: &str| {
+        let project = clarity_spec::load_in([("plan.clarity", source)], [("0001.clarity", FIRST)], &clarity_project::source_refs(&settings));
+        let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
+        assert!(errors.is_empty(), "{errors:#?}");
+        let files = generate(&project, &settings).unwrap();
+        files.iter().find(|f| f.path.ends_with("MainView.axaml")).map(|f| f.text.clone()).unwrap_or_default()
+    };
+    let list_line = |view: &str| view.lines().find(|l| l.contains("<ListBox")).unwrap_or_default().to_string();
+    let on_window = view_of(PLAN);
+    assert!(!list_line(&on_window).contains("BorderThickness=\"0\""), "{}", list_line(&on_window));
+    let in_panel = PLAN.replace(
+        "    list name itemList at 1,1 span 4 rows 4 bind items show title on select: itemSelected\n",
+        "    panel \"Items\" name itemPanel at 1,1 span 4 rows 5\n        list name itemList at 1,1 span 4 rows 4 bind items show title on select: itemSelected\n",
+    );
+    assert!(list_line(&view_of(&in_panel)).contains("BorderThickness=\"0\""), "{}", list_line(&view_of(&in_panel)));
+    let framed = in_panel.replace("show title on select", "show title frame on select");
+    assert!(!list_line(&view_of(&framed)).contains("BorderThickness=\"0\""), "{}", list_line(&view_of(&framed)));
+}

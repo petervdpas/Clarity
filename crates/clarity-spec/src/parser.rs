@@ -1549,10 +1549,10 @@ fn parse_widget_page(
 }
 
 /// The words of a part's line, which every editor colors as Clarity's own (the VS Code grammar too).
-pub const LINE_WORDS: [&str; 67] = [
+pub const LINE_WORDS: [&str; 68] = [
     "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
-    "children", "page", "typed", "cards", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
+    "children", "page", "typed", "cards", "frame", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
     "foldable", "folded", "taborder", "key", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window",
 ];
 
@@ -1611,6 +1611,7 @@ fn parse_widget_props(
         step: None,
         split: false,
         cards: false,
+        frame: false,
         typed: false,
         page: None,
         children: None,
@@ -2039,6 +2040,10 @@ fn parse_widget_props(
             "cards" => {
                 applies(WidgetProperty::Cards)?;
                 props.cards = true;
+            }
+            "frame" => {
+                applies(WidgetProperty::Frame)?;
+                props.frame = true;
             }
             "search" => {
                 applies(WidgetProperty::Search)?;

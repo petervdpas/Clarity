@@ -54,6 +54,7 @@
   let {
     columns,
     rows,
+    frame = true,
     selected = null,
     disabled = false,
     readonly = false,
@@ -124,6 +125,8 @@
      * order, the open rows. Without one (the designer, or before the first
      * answer) the table arranges its rows itself.
      */
+    /** Its own border; none where its container frames it (DESIGN 7.8). */
+    frame?: boolean;
     view?: { shown?: unknown[]; pages?: { page: number; pages: number; from: number; to: number; count: number }; order?: Order; open?: unknown[] } | null;
     /** The person sorted, turned a page or opened a tree row: for the runtime to decide. */
     onview?: (action: Record<string, unknown>) => void;
@@ -321,6 +324,7 @@
 <div
   class="table-wrap"
   class:paged={paged !== null}
+  class:frameless={!frame}
   tabindex={reorder && !inert ? 0 : undefined}
   onkeydown={(e) => {
     const move = reorder && !inert ? keyMove(e, selected) : null;
@@ -431,7 +435,7 @@
 </div>
 {#if paged}
   <!-- The page bar: to the first, previous, next and last page, and which rows show. -->
-  <div class="pager">
+  <div class="pager" class:frameless={!frame}>
     <button type="button" title={pageWords.first} aria-label={pageWords.first} disabled={design || paged.page === 1} onclick={() => turn(1)}
       ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M 17 18 l -6 -6 l 6 -6 M 7 6 v 12" /></svg></button
     >
@@ -535,6 +539,12 @@
     vertical-align: -1px;
     border: 1px solid rgb(0 0 0 / 0.2);
     border-radius: 2px;
+  }
+
+  /* In a container that frames it: no border of its own (DESIGN 7.8). */
+  .table-wrap.frameless,
+  .pager.frameless {
+    border: 0;
   }
 
   .table-wrap {

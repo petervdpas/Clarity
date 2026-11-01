@@ -102,8 +102,7 @@ fn file<'a>(files: &'a [OutFile], path: &str) -> &'a str {
 #[test]
 fn writes_a_complete_cargo_project() {
     let files = files();
-    // The screen's own project in ui/ is its own test's (web_windows.rs); here its parts the program builds on.
-    let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).filter(|p| !p.starts_with("ui/clarity-ui/")).collect();
+    let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
     assert_eq!(
         paths,
         [
@@ -119,17 +118,14 @@ fn writes_a_complete_cargo_project() {
             "src/modules/sales.rs",
             "src/schema.rs",
             "tauri.conf.json",
-            "ui/.gitignore",
             "ui/index.html",
-            "ui/package.json",
-            "ui/public/themes/clarity.css",
-            "ui/src/main.ts",
-            "ui/src/windows/OrderForm.svelte",
-            "ui/svelte.config.js",
-            "ui/vite.config.ts",
+            "ui/runtime.css",
+            "ui/runtime.js",
+            "ui/themes/clarity.css",
+            "ui/windows/OrderForm.xml",
         ]
     );
-    assert!(file(&files, "tauri.conf.json").contains("\"frontendDist\": \"ui/dist\""), "{}", file(&files, "tauri.conf.json"));
+    assert!(file(&files, "tauri.conf.json").contains("\"frontendDist\": \"ui\""), "{}", file(&files, "tauri.conf.json"));
     let cargo = file(&files, "Cargo.toml");
     assert!(cargo.contains("name = \"shop\""), "{cargo}");
     // The runtime crate from crates.io, at the version this generator is made
@@ -930,8 +926,8 @@ fn the_web_target_serves_the_renderer() {
     has(&web, "        \"open_window\" => given((|| {");
     // Nor does it link the desktop toolkit: no Tauri, no desktop module, the renderer's files in the program.
     assert!(!web.contains("tauri") && !web.contains("mod desktop;"), "{web}");
-    has(&web, "            \"index.html\" => Some(include_bytes!(\"../ui/dist/index.html\").to_vec()),\n");
-    has(&web, "            \"themes/clarity.css\" => Some(include_bytes!(\"../ui/dist/themes/clarity.css\").to_vec()),\n");
+    has(&web, "            \"index.html\" => Some(include_bytes!(\"../ui/index.html\").to_vec()),\n");
+    has(&web, "            \"windows/OrderForm.xml\" => Some(include_bytes!(\"../ui/windows/OrderForm.xml\").to_vec()),\n");
     let mut settings = shop();
     settings.stack.targets = vec![Target::Web];
     let files = generate(&project, &settings).unwrap();

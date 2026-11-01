@@ -30,6 +30,7 @@
     data,
     design,
     widget,
+    inside = false,
     onnavigate,
   }: {
     preview: Preview;
@@ -37,6 +38,8 @@
     data: PageData;
     design: boolean;
     widget: Widget;
+    /** In a container's grid (a tab page, a pane, a panel), which frames it. */
+    inside?: boolean;
     onnavigate: (target: string, newWindow?: boolean) => void;
   } = $props();
 
@@ -217,6 +220,7 @@
     get info() { return info; },
     get offset() { return offset; },
     get design() { return design; },
+    get inside() { return inside; },
     get bound() { return bound; },
     get value() { return value; },
     get shown() { return shown; },
@@ -253,7 +257,7 @@
 </script>
 
 {#snippet grid(args: GridArgs)}
-  <GridBox {preview} {page} {data} {design} widgets={args.widgets} columns={args.columns} fixedRows={args.fixedRows} joined={args.joined} container={args.container} {onnavigate} />
+  <GridBox {preview} {page} {data} {design} widgets={args.widgets} columns={args.columns} fixedRows={args.fixedRows} joined={args.joined} container={args.container} inside {onnavigate} />
 {/snippet}
 
 <div

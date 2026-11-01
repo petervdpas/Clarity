@@ -11,6 +11,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <ul
   class="list"
+  class:frameless={ctx.inside && !ctx.p.frame}
   class:cards={p.cards}
   tabindex={moves ? 0 : undefined}
   use:rowDrag={{ enabled: moves, tree: false, onmove: (move) => reordered(ctx, move) }}
@@ -30,6 +31,11 @@
 </ul>
 
 <style>
+  /* In a container that frames it: no border of its own (DESIGN 7.8). */
+  .list.frameless {
+    border: none;
+  }
+
   /* A list and its rows, as the theme's part list says (hover, selected). */
   .list {
     flex: 1;

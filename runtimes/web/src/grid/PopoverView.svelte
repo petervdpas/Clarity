@@ -123,7 +123,7 @@
       if (e.target === e.currentTarget) pageDesigner.selected = widget.span.start;
     }}
   >
-    <GridBox {preview} {page} {data} {design} widgets={widget.children} columns={p.width} fixedRows={p.height} container={widget.span.start} {onnavigate} />
+    <GridBox {preview} {page} {data} {design} widgets={widget.children} columns={p.width} fixedRows={p.height} container={widget.span.start} inside {onnavigate} />
   </div>
 {/if}
 

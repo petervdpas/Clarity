@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { Component } from "svelte";
-  import WindowPlace from "../elements/WindowPlace.svelte";
+  import type { Widget } from "../generated/Widget.ts";
+  import { windowsOf } from "./windows.ts";
   import type { Move } from "../parts/rowDrag.ts";
   import type { RangeMove } from "../screen/ranges.ts";
   import type { RefOption } from "../screen/dropdownOptions.ts";
@@ -81,9 +81,10 @@
   /** How long an information message stays. */
   const MESSAGE_MS = 5000;
 
-  // The windows Generate wrote as markup (DESIGN 7.8), by name; a window
-  // without one is drawn from the model.
-  let { windows = {} }: { windows?: Record<string, Component> } = $props();
+  // The parts of the windows Generate wrote as markup (DESIGN 7.8), by
+  // name, read when the application starts; a window without markup is
+  // drawn from the model.
+  let windows = $state<Record<string, Widget[]>>({});
 
   let model = $state<Preview | null>(null);
   let stack = $state<WindowState[]>([]);
@@ -1064,6 +1065,7 @@
   // come on top of the main window.
   invoke<{ model: Preview; main: string; unconnected?: Unconnected }>("start").then(async (start) => {
     mainWindow = start.main;
+    windows = await windowsOf(start.model);
     model = start.model;
     remember(start.model);
     await startSettings(start.model);
@@ -1102,9 +1104,11 @@
   {#if model && page && current}
     {#key stack.length}
       <FrameView preview={model} {page} frame={frameForPage(model, page)} {data} design={false} onnavigate={navigate}>
-        <div class="client">
+        <!-- Where the window was drawn from: its markup (DESIGN 7.8), or the model where it has none. -->
+        <div class="client" data-drawn={windows[page.name.name] ? "markup" : "model"}>
           {#if windows[page.name.name]}
-            <WindowPlace window={windows[page.name.name]} preview={model} {page} {data} onnavigate={navigate} />
+            {@const widgets = windows[page.name.name]}
+            <GridBox preview={model} page={{ ...page, widgets }} {data} design={false} {widgets} columns={page.columns} container={page.span.start} onnavigate={navigate} />
           {:else}
             <GridBox
               preview={model}

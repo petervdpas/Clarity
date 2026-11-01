@@ -20,13 +20,9 @@ Clarity writes a Go module into the output folder (`out` by default), all in pac
 - `<module>_module.go`: one file per Clarity module, with its enums, records, functions, actions, data events, windows and handlers.
 - `schema.go`: the migration steps of every database Clarity owns.
 - `main.go`: opens and migrates the databases and starts the Wails application.
-- `ui/`: the screen, a Svelte project of its own:
-  - `ui/src/windows/`: each window as a file, its parts as elements with their options, as in Clarity: `<Button name="clearKey" at="1,3" span={1} caption="@clearKeyCaption" key="Escape" onclick="clear" />`. A window with a popover or a part's menu is still drawn from `model.json` for now.
-  - `ui/src/main.ts`: starts the screen with those windows.
-  - `ui/clarity-ui/`: Clarity's screen package, `@clarity/ui`, which the windows are built on; the project carries it, so it builds without fetching it.
-  - `ui/public/`: a CSS file per theme and the project's pictures.
-  - `ui/package.json`, `ui/vite.config.ts`: built with npm and Vite into `ui/dist/`, which the program embeds.
-- `model.json`: the frame, the data dictionary, the translations and the windows not yet written as markup, for the screen.
+- `ui/`: Clarity's screen (`index.html`, `runtime.js`, `runtime.css`), a CSS file per theme and the project's pictures. The program embeds it; nothing in it is built.
+- `ui/windows/`: each window as markup, read by the screen when the application starts: its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`). Change a window in Clarity; Generate writes these files again.
+- `model.json`: the frame (menus, toolbars, ribbons, sidebars, footer), the data dictionary and the translations, for the screen.
 - `README.md`: how to build the module without Clarity.
 
 Do not edit these files. Change the project in Clarity; it writes the folder again.
@@ -52,7 +48,6 @@ Clarity keeps `go.work` when it writes the module again. Remove it to build on t
 ## What to install
 
 - Go, from https://go.dev/dl
-- Node.js with npm, from https://nodejs.org, which builds the screen
 - On Linux, the WebKitGTK development files and pkg-config (Debian and Ubuntu: `libwebkit2gtk-4.1-dev`)
 
 Clarity checks for these itself: run `clarity tools`, or look at Build tools on the Project tab. A first build compiles WebKit's bindings and can take several minutes.
@@ -61,11 +56,9 @@ Step by step, with the commands for Windows, Linux and macOS: [Setting up the bu
 
 ## Build and run
 
-**Generate** on the Preview tab writes the source into the output folder; then **Run** builds a debug program from it and starts it, and **Build** makes a release program. Both build the screen first. Without Clarity, in the output folder:
+**Generate** on the Preview tab writes the source into the output folder; then **Run** builds a debug program from it and starts it, and **Build** makes a release program. Without Clarity, in the output folder:
 
 ```shell
-npm --prefix ui install
-npm --prefix ui run build
 go build -tags production -trimpath -ldflags="-s -w" -o bin/<name> .
 go run .
 ```
@@ -78,4 +71,4 @@ The application has one desktop window. `open` shows a window in place, on top o
 
 ## The same on every stack
 
-The screen package is shared by the Rust, Go, C and C++ stacks, so they cannot differ; a window drawn from its markup draws exactly what the same window drawn from the model does, which a test checks for every window of every example. The parts of a window behave alike on the web renderer and on Avalonia ([C# with Avalonia](stacks.csharp.md)): the shared cases in `conformance/` say what each part must do, and both renderers run them.
+The screen is shared by the Rust, Go, C and C++ stacks, so they cannot differ; a window drawn from its markup draws exactly what the same window drawn from the model does, which a test checks for every window of every example. The parts of a window behave alike on the web renderer and on Avalonia ([C# with Avalonia](stacks.csharp.md)): the shared cases in `conformance/` say what each part must do, and both renderers run them.

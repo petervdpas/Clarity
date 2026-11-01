@@ -19,6 +19,7 @@
     onnavigate,
     fixedRows = null,
     joined = false,
+    inside = false,
   }: {
     preview: Preview;
     page: Page;
@@ -33,6 +34,8 @@
     fixedRows?: number | null;
     /** Parts that touch, without the space between columns: a button group. */
     joined?: boolean;
+    /** The grid of a container (a tab page, a pane, a panel): its parts are framed by it. */
+    inside?: boolean;
   } = $props();
 
   // The page designer around the grid in the IDE; the idle one in a running application.
@@ -106,7 +109,7 @@
         <!-- A popover has no place in the grid: it opens next to its part. -->
         <PopoverView {preview} {page} {data} {design} {widget} {onnavigate} />
       {:else}
-        <WidgetView {preview} {page} {data} {design} {widget} {onnavigate} />
+        <WidgetView {preview} {page} {data} {design} {widget} {inside} {onnavigate} />
       {/if}
     </PartGuard>
   {/each}

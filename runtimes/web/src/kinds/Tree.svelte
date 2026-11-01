@@ -23,6 +23,7 @@
 
 <!-- A tree (U1c): the rows under their parents, by the one reference to their own kind. -->
 <Table
+    frame={!ctx.inside || ctx.p.frame}
   columns={tableColumns}
   rows={ctx.collection?.rows ?? []}
   selected={ctx.selectedRow ?? null}

@@ -350,6 +350,8 @@ pub enum WidgetProperty {
     Typed,
     /// `cards`: a list's rows as small cards, the first field of `show` their title.
     Cards,
+    /// `frame`: a list, table or tree shows its own border inside a container.
+    Frame,
     /// `search`: a dropdown of a reference whose records filter as it is typed.
     Search,
     /// `page 50`: a table's rows shown that many at a time.
@@ -787,7 +789,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Change, Event::Reorder],
-        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::NoUndo, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::OrderBy, WidgetProperty::Reorder, WidgetProperty::Page],
+        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::NoUndo, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::OrderBy, WidgetProperty::Reorder, WidgetProperty::Page, WidgetProperty::Frame],
     },
     // A list the window holds as a tree, arranged by `children` (U1c).
     Entry {
@@ -803,7 +805,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Reorder],
-        properties: &[WidgetProperty::Children, WidgetProperty::Show, WidgetProperty::Reorder, WidgetProperty::NoUndo],
+        properties: &[WidgetProperty::Children, WidgetProperty::Show, WidgetProperty::Reorder, WidgetProperty::NoUndo, WidgetProperty::Frame],
     },
     Entry {
         kind: WidgetKind::TreeTable,
@@ -818,7 +820,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Reorder],
-        properties: &[WidgetProperty::Children, WidgetProperty::Columns, WidgetProperty::Resizable, WidgetProperty::Reorder, WidgetProperty::NoUndo],
+        properties: &[WidgetProperty::Children, WidgetProperty::Columns, WidgetProperty::Resizable, WidgetProperty::Reorder, WidgetProperty::NoUndo, WidgetProperty::Frame],
     },
     // A list the window holds as a chart: `chart bar ... by status count` (U1c).
     Entry {
@@ -865,7 +867,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Reorder],
-        properties: &[WidgetProperty::Show, WidgetProperty::Cards, WidgetProperty::Reorder, WidgetProperty::NoUndo],
+        properties: &[WidgetProperty::Show, WidgetProperty::Cards, WidgetProperty::Reorder, WidgetProperty::NoUndo, WidgetProperty::Frame],
     },
     Entry {
         kind: WidgetKind::Progress,
@@ -1280,6 +1282,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         step: None,
         split: false,
         cards: false,
+        frame: false,
         typed: false,
         page: None,
         children: None,
@@ -1552,6 +1555,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if props.no_undo {
         parts.push("no undo".to_string());
     }
+    if props.frame {
+        parts.push("frame".to_string());
+    }
     if props.foldable {
         parts.push(if props.folded { "foldable folded" } else { "foldable" }.to_string());
     }
@@ -1737,6 +1743,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Labels, props.labels.is_some(), "labels"),
         (WidgetProperty::Typed, props.typed, "typed"),
         (WidgetProperty::Cards, props.cards, "cards"),
+        (WidgetProperty::Frame, props.frame, "frame"),
         (WidgetProperty::Search, props.search, "search"),
         (WidgetProperty::Page, props.page.is_some(), "page"),
         (WidgetProperty::Children, props.children.is_some(), "children"),

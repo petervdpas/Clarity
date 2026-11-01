@@ -35,15 +35,7 @@ Install Go from [go.dev/dl](https://go.dev/dl), or in a terminal:
 winget install GoLang.Go
 ```
 
-A Go program needs no C compiler on Windows: Wails draws with WebView2, and Clarity's runtime calls Windows without cgo. Its screen builds with Node.js; see [Node.js on Windows](#nodejs-on-windows).
-
-### Node.js on Windows
-
-The screen of an application on Rust, Go, C or C++, its windows as Svelte files in `ui/`, builds with npm before the program does. Install Node.js, which brings npm, from [nodejs.org](https://nodejs.org), or in a terminal:
-
-```
-winget install OpenJS.NodeJS.LTS
-```
+A Go program needs no C compiler on Windows: Wails draws with WebView2, and Clarity's runtime calls Windows without cgo.
 
 ### C and C++ on Windows
 
@@ -101,11 +93,7 @@ sudo dotnet workload install wasm-tools
 
 ### Go on Linux
 
-Install Go from [go.dev/dl](https://go.dev/dl); the distribution's own package is often older than a project needs. A Go program also needs WebKitGTK; see [WebKitGTK on Linux](#webkitgtk-on-linux), and Node.js for its screen; see [Node.js on Linux](#nodejs-on-linux).
-
-### Node.js on Linux
-
-The screen of an application on Rust, Go, C or C++, its windows as Svelte files in `ui/`, builds with npm before the program does. Install Node.js 20 or later with npm from [nodejs.org](https://nodejs.org), or the distribution's packages where they are recent enough (Debian and Ubuntu: `sudo apt install nodejs npm`).
+Install Go from [go.dev/dl](https://go.dev/dl); the distribution's own package is often older than a project needs. A Go program also needs WebKitGTK; see [WebKitGTK on Linux](#webkitgtk-on-linux).
 
 ### C and C++ on Linux
 
@@ -135,11 +123,7 @@ sudo dotnet workload install wasm-tools
 
 ### Go on macOS
 
-Install Go from [go.dev/dl](https://go.dev/dl). Its screen builds with Node.js; see [Node.js on macOS](#nodejs-on-macos).
-
-### Node.js on macOS
-
-The screen of an application on Rust, Go, C or C++, its windows as Svelte files in `ui/`, builds with npm before the program does. Install Node.js, which brings npm, from [nodejs.org](https://nodejs.org), or with Homebrew: `brew install node`.
+Install Go from [go.dev/dl](https://go.dev/dl).
 
 ### C and C++ on macOS
 

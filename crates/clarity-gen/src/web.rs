@@ -5,6 +5,7 @@
 //! out keeps the base's value. A part holds the class of its style. The
 //! designer gets the same CSS for its canvas.
 
+use base64::Engine as _;
 use clarity_spec::model::{Align, Look, Shadow, ThemeDecl, ThemeValue, Weight};
 use clarity_spec::{Preview, Project};
 
@@ -275,22 +276,42 @@ pub fn theme_file(theme: &ThemeDecl) -> String {
     format!("themes/{}.css", theme.class.trim_start_matches("theme-"))
 }
 
-/// What a web stack's screen carries besides its code (DESIGN 7.8): a CSS
-/// file per theme the application offers, Clarity's own first, which its
-/// page links so the application can hold the class of the theme it shows
-/// (`ui/themes/`), and the project's resources (`ui/resources/`).
-pub fn screen_assets(project: &Project) -> Vec<OutFile> {
+/// The screen Clarity builds once and every web stack ships, built from the
+/// screen package (`npm run build:runtime` in app/, DESIGN 7.8).
+const UI_FILES: [(&str, &str); 3] = [
+    ("ui/index.html", include_str!("../ui/runtime.html")),
+    ("ui/runtime.js", include_str!("../ui/runtime.js")),
+    ("ui/runtime.css", include_str!("../ui/runtime.css")),
+];
+
+/// The screen of an application on a web stack, in `ui/`: its page, script
+/// and styles, a CSS file per theme the application offers, linked from the
+/// page so the application can hold the class of the theme it shows, the
+/// project's resources, and its windows as markup (`ui/windows/`), which the
+/// screen reads when the application starts. Every web stack ships the same
+/// screen.
+pub fn renderer_files(project: &Project) -> Vec<OutFile> {
+    let mut files: Vec<OutFile> = UI_FILES.iter().map(|(path, body)| OutFile { path: (*path).into(), text: (*body).into(), bytes: None }).collect();
     let themes: Vec<&ThemeDecl> = project
         .themes
         .iter()
         .filter_map(|name| project.files.iter().flat_map(|f| &f.themes).find(|t| t.name.name == *name))
         .collect();
+    // Clarity's own theme first: the base the project's themes change.
     let base = built_in();
-    let mut files = vec![OutFile { path: format!("ui/{}", theme_file(&base)), text: base_css(), bytes: None }];
+    let links: String = std::iter::once(&base)
+        .chain(themes.iter().copied())
+        .map(|t| format!("    <link rel=\"stylesheet\" href=\"./{}\">\n", theme_file(t)))
+        .collect();
+    files.push(OutFile { path: format!("ui/{}", theme_file(&base)), text: base_css(), bytes: None });
     for theme in &themes {
         files.push(OutFile { path: format!("ui/{}", theme_file(theme)), text: theme_css(theme), bytes: None });
     }
+    if let Some(index) = files.iter_mut().find(|f| f.path == "ui/index.html") {
+        index.text = index.text.replace("  </head>", &format!("{links}  </head>"));
+    }
     files.extend(resource_files(project, "ui/resources"));
+    files.extend(crate::web_windows::window_files(project));
     files
 }
 
@@ -336,4 +357,53 @@ mod color_roles {
         let listed = renderer.lines().filter(|l| l.trim_start().contains(": \"--")).count();
         assert_eq!(listed, super::COLOR_VARIABLES.len(), "drawing.ts lists a role the theme CSS does not have");
     }
+}
+
+/// Where in the one page of the C and C++ stacks their build puts the windows' markup.
+pub const WINDOWS_MARK: &str = "<!--clarity-windows-->";
+
+/// The screen's page with everything in it, for the C and C++ stacks,
+/// whose webview shows a page and no folder: its script, styles, theme
+/// styles and fixed pictures. Their CMake build puts the windows' markup
+/// (`ui/windows/`) into it when it builds the program.
+pub fn single_page(project: &Project) -> String {
+    let files = renderer_files(project);
+    let find = |path: &str| files.iter().find(|f| f.path == path).map(|f| f.text.clone()).unwrap_or_default();
+    let safe = |code: String, tag: &str| code.replace(&format!("</{tag}"), &format!("<\\/{tag}"));
+    // Where the C and C++ build puts the windows' markup, marked before anything is inlined.
+    let mut html = find("ui/index.html").replacen("  </head>", &format!("    {WINDOWS_MARK}\n  </head>"), 1);
+    let script = safe(find("ui/runtime.js"), "script");
+    html = html.replace("<script type=\"module\" crossorigin src=\"./runtime.js\"></script>", &format!("<script type=\"module\">{script}</script>"));
+    html = html.replace("<link rel=\"stylesheet\" crossorigin href=\"./runtime.css\">", &format!("<style>{}</style>", safe(find("ui/runtime.css"), "style")));
+    for file in files.iter().filter(|f| f.path.starts_with("ui/themes/")) {
+        let link = format!("<link rel=\"stylesheet\" href=\"./{}\">", file.path.trim_start_matches("ui/"));
+        html = html.replace(&link, &format!("<style>{}</style>", safe(file.text.clone(), "style")));
+    }
+    // The pictures and sounds the renderer finds by name, as data URLs.
+    let carried: serde_json::Map<String, serde_json::Value> = files
+        .iter()
+        .filter_map(|f| {
+            let name = f.path.strip_prefix("ui/resources/").filter(|n| clarity_spec::resources::is_picture(n) || clarity_spec::resources::is_sound(n))?;
+            let bytes = f.bytes.as_deref()?;
+            let kind = match name.rsplit('.').next().unwrap_or_default().to_lowercase().as_str() {
+                "png" => "image/png",
+                "jpg" | "jpeg" => "image/jpeg",
+                "gif" => "image/gif",
+                "bmp" => "image/bmp",
+                "webp" => "image/webp",
+                "svg" => "image/svg+xml",
+                "wav" => "audio/wav",
+                "mp3" => "audio/mpeg",
+                "flac" => "audio/flac",
+                _ => "application/octet-stream",
+            };
+            let url = format!("data:{kind};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes));
+            Some((name.to_string(), serde_json::Value::String(url)))
+        })
+        .collect();
+    if !carried.is_empty() {
+        let map = safe(serde_json::Value::Object(carried).to_string(), "script");
+        html = html.replace("  </head>", &format!("    <script>window.clarityResources = {map};</script>\n  </head>"));
+    }
+    html
 }

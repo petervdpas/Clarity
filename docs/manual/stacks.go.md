@@ -54,7 +54,7 @@ Step by step, with the commands for Windows, Linux and macOS: [Setting up the bu
 
 ## Build and run
 
-**Run** on the Preview tab builds a debug program and starts it; **Build** makes a release program. Without Clarity, in the output folder:
+**Generate** on the Preview tab writes the source into the output folder; then **Run** builds a debug program from it and starts it, and **Build** makes a release program. Without Clarity, in the output folder:
 
 ```shell
 go build -tags production -trimpath -ldflags="-s -w" -o bin/<name> .

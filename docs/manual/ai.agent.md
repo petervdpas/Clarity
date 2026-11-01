@@ -30,7 +30,7 @@ Hover over an answer for **Copy**, which puts the answer on the clipboard as Mar
 
 ## Running and building
 
-The agent executes nothing by itself. It can only run or build the application the way **Run** and **Build** do, and **Clarity settings**, section **Agent**, says when:
+The agent executes nothing by itself. It can only run or build the application the way **Run** and **Build** do, from the source **Generate** wrote, and **Clarity settings**, section **Agent**, says when:
 
 - **Ask every time** (the default): the panel asks "The agent asks to: Run the application" with **Allow** and **Deny**. Nothing runs until you allow it; **Stop** denies it. After a deny the agent does not ask again in that turn.
 - **Allow without asking**: the agent runs and builds when its task needs it.

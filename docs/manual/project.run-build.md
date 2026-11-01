@@ -1,6 +1,6 @@
 # Run and Build
 
-How Run, Build and Stop turn the project into a program, where the generated code goes, what each stack needs installed, and the Output panel.
+How Generate writes the project as source code, and Run, Build and Stop turn that into a program; where the generated code goes, what each stack needs installed, and the Output panel.
 
 ## Run, Build, Stop and Browser
 
@@ -28,11 +28,11 @@ The tool each stack builds with:
 
 ## The output folder
 
-Clarity writes the generated project into the output folder, `out` in the project's folder unless the `output` setting names another. With an Apps folder set in **Clarity settings**, **Folders**, a project left at `out` is written to a folder named after its project file in the Apps folder instead: `shop.clarity` goes to `<Apps>/shop`. The project settings show the folder builds write to. It is a complete project for the stack, such as a `Cargo.toml` or a `.csproj`, which the stack's tools build without Clarity.
+Clarity writes the generated project into the output folder, `out` in the project's folder unless the `output` setting names another. With an Apps folder set in **Clarity settings**, **Folders**, a project left at `out` is written to a folder named after its project file in the Apps folder instead: `shop.clarity` goes to `<Apps>/shop`. The project settings show the folder Generate writes to. It is a complete project for the stack, such as a `Cargo.toml` or a `.csproj`, which the stack's tools build without Clarity.
 
-Clarity writes it on Run and Build only. Each time, the folder ends up holding exactly what the project generates: changed files are written, unchanged ones are left alone so the build tool sees no change, and files that are no longer generated are removed. The build tool's own folders (such as `target`, `bin`, `obj` or `build`) and `data` are kept.
+Clarity writes it on Generate only. Each time, the folder ends up holding exactly what the project generates: changed files are written, unchanged ones are left alone so the build tool sees no change, and files that are no longer generated are removed. The build tool's own folders (such as `target`, `bin`, `obj` or `build`) and `data` are kept.
 
-Because it removes files, Clarity marks the folder as its own with a file `.clarity-out`. It refuses to write into a folder that holds files but has no marker, and asks for an empty or new folder. Do not edit files in the output folder: the next Run replaces them.
+Because it removes files, Clarity marks the folder as its own with a file `.clarity-out`. It refuses to write into a folder that holds files but has no marker, and asks for an empty or new folder. Do not edit files in the output folder: the next Generate replaces them. The folder is a project of its own, which can be committed and pushed like any other.
 
 ## Build tools
 
@@ -61,4 +61,4 @@ Every generated project has a `README.md` with what the stack needs, the command
 
 Run and Build open the Output panel at the bottom of the main area. Its first line is the command and the folder it runs in; then come the tool's own lines, the newest at the bottom (the panel keeps the last 400). The header says Building..., Running, the program that was built, or Failed with the reason.
 
-Drag the line above the panel to make it taller or lower. The cross in its header hides it; the next Run or Build opens it again.
+Drag the line above the panel to make it taller or lower. The cross in its header hides it; the next Generate, Run or Build opens it again.

@@ -10,7 +10,7 @@ How to make applications with Clarity, one topic per page. Start with [What Clar
 ## Projects
 
 - [The project file](project.file.md): The settings in the project file (stack, output, language, currency, themes, data sources and file stores) and the Project settings view that edits them.
-- [Run and Build](project.run-build.md): How Run, Build and Stop turn the project into a program, where the generated code goes, what each stack needs installed, and the Output panel.
+- [Run and Build](project.run-build.md): How Generate writes the project as source code, and Run, Build and Stop turn that into a program; where the generated code goes, what each stack needs installed, and the Output panel.
 - [Setting up the build tools](setup.tools.md): What to install for each stack on Windows, Linux and macOS, where to get it, and how Clarity finds it afterwards.
 
 ## Designing windows

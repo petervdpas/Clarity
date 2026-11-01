@@ -31,12 +31,16 @@ export interface Designer {
   /** What is being dragged, and where it would land. */
   readonly drag: PageDragSource | null;
   readonly hover: Placement | null;
+  /** The window edge a dragged region would dock to. */
+  readonly dock: Dock | null;
   /** A press on a part: a drag once the pointer moves, else a click. */
   press(e: PointerEvent, source: PageDragSource, onclick?: () => void): void;
   /** An edit of the design. */
   edit(edit: Edit): void;
   /** Opens the code behind a part. */
   openPartCode(item: number): void;
+  /** Opens a frame element (a menu, a ribbon) in the app it belongs to. */
+  openInApp(item: number): void;
 }
 
 /** The designer of a running application: nothing to design, only the tabs shown. */
@@ -46,11 +50,13 @@ class Idle implements Designer {
   readonly showGrid = false;
   readonly drag = null;
   readonly hover = null;
+  readonly dock = null;
   press(_e: PointerEvent, _source: PageDragSource, onclick?: () => void) {
     onclick?.();
   }
   edit() {}
   openPartCode() {}
+  openInApp() {}
 }
 
 const idle = new Idle();

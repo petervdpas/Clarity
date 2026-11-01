@@ -1,7 +1,7 @@
 <script lang="ts">
   import PartGuard from "@clarity/ui/parts/PartGuard.svelte";
   import Toasts, { TOAST_MS } from "./lib/Toasts.svelte";
-  import { catchUncaught } from "./lib/uncaught";
+  import { catchUncaught } from "@clarity/ui/host/uncaught.ts";
   import Guarded from "@clarity/ui/parts/Guarded.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
@@ -11,7 +11,7 @@
   import logo from "../src-tauri/icons/icon.svg";
   import { loadPicturesWith } from "@clarity/ui/screen/pictures.svelte.ts";
   import { topicForTab } from "./lib/manual";
-  import FrameView from "./lib/FrameView.svelte";
+  import FrameView from "@clarity/ui/frame/FrameView.svelte";
   import NewWindowDialog from "./lib/NewWindowDialog.svelte";
   import PageDesigner from "./lib/PageDesigner.svelte";
   import PageView from "./lib/PageView.svelte";
@@ -25,9 +25,9 @@
   import { resourceKinds } from "./lib/resourceKinds.svelte";
   import type { ResourceKind } from "@clarity/ui/generated/ResourceKind.ts";
   import RibbonButton from "./lib/RibbonButton.svelte";
-  import { IDE_COMMANDS, commandFor, eventKey, fieldKeeps, shownKey, type Layer } from "./lib/keys";
+  import { IDE_COMMANDS, commandFor, eventKey, fieldKeeps, shownKey, type Layer } from "@clarity/ui/host/keys.ts";
   import { ideKeys, ideKeysOf, mac } from "./lib/keys.svelte";
-  import Splitter from "./lib/Splitter.svelte";
+  import Splitter from "@clarity/ui/parts/Splitter.svelte";
   import { layout } from "./lib/layout.svelte";
   import EntityEditor from "./lib/EntityEditor.svelte";
   import EnumEditor from "./lib/EnumEditor.svelte";

@@ -403,7 +403,7 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
             Some(why) => Err(why),
             None if tools_missing => Err(format!("the project is generated in {}; its custom parts need CMake and a C++ compiler", out.display())),
             // The native parts are built first, where the stack's own build does not build them.
-            None => Ok((clarity_gen::parts::steps_before(&out, stack.backend), generated, serves)),
+            None => Ok((clarity_gen::steps_before(&out, stack.backend), generated, serves)),
         }
     });
     let (before, generated, serves) = match found {

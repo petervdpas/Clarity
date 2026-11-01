@@ -8,7 +8,7 @@
   import { openLink } from "@clarity/ui/host/backend.ts";
   import { listen } from "@tauri-apps/api/event";
   import { onMount, tick } from "svelte";
-  import Splitter from "./lib/Splitter.svelte";
+  import Splitter from "@clarity/ui/parts/Splitter.svelte";
   import { layout } from "./lib/layout.svelte";
   import { linkTarget } from "./lib/manual";
   import { markdown } from "./lib/markdown";

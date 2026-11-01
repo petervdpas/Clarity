@@ -108,7 +108,7 @@ pub fn build_for_run(file: &Path, project: &clarity_spec::Project, settings: &cl
     clarity_gen::write_programs(&out, &programs, settings.stack.backend, &settings.keeps).unwrap();
     let program = programs.iter().find(|p| p.target == target).unwrap_or_else(|| panic!("{} has no {target:?} program", file.display()));
     let folder = clarity_project::target_dir(&out, program.target);
-    for step in clarity_gen::parts::steps_before(&folder, settings.stack.backend) {
+    for step in clarity_gen::steps_before(&folder, settings.stack.backend) {
         let (tool, args) = step.split_first().unwrap();
         let ran = Command::new(tool).args(args).current_dir(&folder).output().unwrap();
         assert!(ran.status.success(), "{tool} {args:?}:\n{}", String::from_utf8_lossy(&ran.stderr));
@@ -142,7 +142,7 @@ pub fn builds_without_warnings(file: &Path, project: &clarity_spec::Project, set
     for program in &programs {
         let target = clarity_project::target_dir(&out, program.target);
         // Native parts are built first, where the stack's own build does not build them.
-        for step in clarity_gen::parts::steps_before(&target, settings.stack.backend) {
+        for step in clarity_gen::steps_before(&target, settings.stack.backend) {
             let (tool, args) = step.split_first().unwrap();
             let ran = Command::new(tool).args(args).current_dir(&target).output().unwrap();
             let said = format!("{}{}", String::from_utf8_lossy(&ran.stdout), String::from_utf8_lossy(&ran.stderr));

@@ -1,10 +1,10 @@
 import { mount } from "svelte";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./app.css";
-import "./render.css";
+import "@clarity/ui/screen/render.css";
 import { startIdeKeys } from "./lib/keys.svelte";
 import { startIdeTheme } from "./lib/ideTheme.svelte";
-import { pageMenuOff } from "./lib/pageMenu";
+import { pageMenuOff } from "@clarity/ui/frame/pageMenu.ts";
 
 // Clarity in the theme chosen in its app settings.
 startIdeTheme();

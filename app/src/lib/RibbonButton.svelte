@@ -1,6 +1,6 @@
 <script lang="ts">
   // A large ribbon button: an icon above its label, its keys in its tooltip.
-  import { shownKey } from "./keys";
+  import { shownKey } from "@clarity/ui/host/keys.ts";
   import { mac } from "./keys.svelte";
 
   let {

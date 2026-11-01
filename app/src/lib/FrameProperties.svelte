@@ -1,7 +1,7 @@
 <script lang="ts">
   import IconField from "./IconField.svelte";
   import TextField from "./TextField.svelte";
-  import { NARROWEST, WIDEST } from "./sidebars";
+  import { NARROWEST, WIDEST } from "@clarity/ui/frame/sidebars.ts";
   import type { SidebarProps } from "@clarity/ui/generated/SidebarProps.ts";
   import { commandHandler, wireCommand } from "./codeParts";
   // Properties of a picked frame element: a region, a ribbon tab or group,

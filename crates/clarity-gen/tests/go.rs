@@ -376,19 +376,21 @@ fn windows() -> Vec<OutFile> {
     generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"))
 }
 
-/// The renderer is the one every web stack ships; the Go shell serves it
-/// with Wails (G3b).
+/// The screen is a project of its own in ui/, its windows as markup on
+/// Clarity's screen package (DESIGN 7.8), built into ui/dist, which the Go
+/// shell serves with Wails (G3b).
 #[test]
 fn a_wails_application_with_the_web_renderer() {
     let files = windows();
-    for path in ["ui/index.html", "ui/runtime.js", "ui/runtime.css", "ui/themes/clarity.css", "model.json"] {
+    for path in ["ui/index.html", "ui/package.json", "ui/src/main.ts", "ui/public/themes/clarity.css", "ui/clarity-ui/package.json", "model.json"] {
         assert!(files.iter().any(|f| f.path == path), "no {path}");
     }
+    assert!(!files.iter().any(|f| f.path == "ui/runtime.js"), "the screen is built, not carried built");
     has(file(&files, "go.mod"), "github.com/wailsapp/wails/v3 v3.0.0-alpha.84");
     let main = file(&files, "main.go");
-    has(main, "//go:embed ui\nvar renderer embed.FS");
+    has(main, "//go:embed all:ui/dist\nvar renderer embed.FS");
     has(main, "//go:embed model.json\nvar model []byte");
-    has(main, "\tassets, err := fs.Sub(renderer, \"ui\")");
+    has(main, "\tassets, err := fs.Sub(renderer, \"ui/dist\")");
     // The renderer calls the service the program binds: main.Clarity.Invoke.
     has(main, "type Clarity struct {\n\t*shell.Service\n}");
     has(main, "options := shell.Options{Name: \"shop\", Title: \"Shop\", Main: \"OrderForm\", Width: 1100, Height: 760, Model: model, Assets: assets, Db: db, Windows: windows{}}\n");

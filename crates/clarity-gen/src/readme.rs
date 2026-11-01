@@ -78,7 +78,17 @@ pub fn readme(settings: &Settings, calls_out: bool) -> String {
 
     let (build, run) = commands(settings);
     if !build.is_empty() {
-        out.push_str(&format!("\n## Build and run\n\nIn this folder, build the program with\n\n    {build}\n\n"));
+        out.push_str("\n## Build and run\n\n");
+        if backend == Backend::Go {
+            // The screen, its windows as markup (DESIGN 7.8), is built first: the program embeds ui/dist.
+            out.push_str("The screen is a Svelte project of its own in `ui/`, its windows in `ui/src/windows/`, on Clarity's screen package in `ui/clarity-ui/`. Build it first, with Node.js and npm:
+
+    npm --prefix ui install
+    npm --prefix ui run build
+
+");
+        }
+        out.push_str(&format!("In this folder, build the program with\n\n    {build}\n\n"));
         if let Some(toolchain) = crate::toolchain(settings, true) {
             out.push_str(&format!("which writes `{}`. ", toolchain.program.display()));
         }

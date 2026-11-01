@@ -1,7 +1,7 @@
 // The person's own shortcut keys for the IDE (DESIGN 5.28), kept with
 // Clarity's other own choices and remembered for the next start.
 
-import { IDE_COMMANDS, assign, keysOf, reset, type KeyChoices } from "./keys";
+import { IDE_COMMANDS, assign, keysOf, reset, type KeyChoices } from "@clarity/ui/host/keys.ts";
 
 const KEY = "clarity-ide-keys";
 

@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { alsoHas, assign, refused, reset, type Command, type KeyChoices } from "./keys.ts";
+import { alsoHas, assign, refused, reset, type Command, type KeyChoices } from "@clarity/ui/host/keys.ts";
 
 type Cases = {
   commands: { id: string; layers: string[]; keys: string[] }[];

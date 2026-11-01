@@ -21,6 +21,8 @@ mod readme;
 mod rust;
 mod schema;
 pub mod web;
+pub mod web_windows;
+pub mod screen_package;
 
 pub use csharp::{avalonia_theme, runtime_version as csharp_runtime_version};
 pub use go::runtime_version as go_runtime_version;
@@ -924,6 +926,20 @@ pub fn last_build(dir: &std::path::Path, fingerprint: &str) -> Option<bool> {
         ("debug", made) if made == fingerprint => Some(false),
         _ => None,
     }
+}
+
+/// The commands that run in a generated project's folder before its build:
+/// its screen's (`ui/`, DESIGN 7.8), with npm, into `ui/dist`, then the
+/// native parts' (`parts::steps_before`).
+pub fn steps_before(out: &std::path::Path, backend: Backend) -> Vec<Vec<String>> {
+    let mut steps = Vec::new();
+    if out.join("ui/package.json").exists() {
+        let npm = |args: &[&str]| std::iter::once("npm").chain(["--prefix", "ui"]).chain(args.iter().copied()).map(String::from).collect::<Vec<_>>();
+        steps.push(npm(&["install", "--no-audit", "--no-fund"]));
+        steps.push(npm(&["run", "build"]));
+    }
+    steps.extend(parts::steps_before(out, backend));
+    steps
 }
 
 /// How the build tools of a stack build its generated project in `out/`.

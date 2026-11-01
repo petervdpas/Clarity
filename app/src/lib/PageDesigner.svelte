@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import { commandAction, commandHandler, eventHandler, freePartName, handlerName, wireCommand, wireEvent } from "./codeParts";
-  import FrameView from "./FrameView.svelte";
+  import FrameView from "@clarity/ui/frame/FrameView.svelte";
   import GridBox from "@clarity/ui/grid/GridBox.svelte";
   import ShownWindow from "./ShownWindow.svelte";
   import PageOutline from "./PageOutline.svelte";
   import PageProperties from "./PageProperties.svelte";
   import CodePanel from "./CodePanel.svelte";
-  import Splitter from "./Splitter.svelte";
+  import Splitter from "@clarity/ui/parts/Splitter.svelte";
   import { layout } from "./layout.svelte";
   import PartTile from "./PartTile.svelte";
   import { portal } from "./portal";

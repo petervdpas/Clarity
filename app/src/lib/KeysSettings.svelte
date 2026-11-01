@@ -3,7 +3,7 @@
   // with its keys. Change, then press the new key; a key another command has
   // in the same layer offers a swap; Reset puts the design's key back.
 
-  import { IDE_COMMANDS, LAYERS, alsoHas, assign, eventKey, keysOf, refused, shownKey, type Command } from "./keys";
+  import { IDE_COMMANDS, LAYERS, alsoHas, assign, eventKey, keysOf, refused, shownKey, type Command } from "@clarity/ui/host/keys.ts";
   import { ideKeys, mac, resetIdeKeys, setIdeKey } from "./keys.svelte";
 
   /** Why a key cannot be a command's, by what `refused` says. */

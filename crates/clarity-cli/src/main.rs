@@ -115,6 +115,14 @@ enum SpecCommand {
         #[arg(long)]
         samples: bool,
     },
+    /// Write each window of a project as markup for the web stacks' screen
+    /// (DESIGN 7.8): one Svelte file per window, into a folder.
+    Windows {
+        /// The project file, or the folder with its modules.
+        dir: PathBuf,
+        /// The folder the window files go into.
+        out: PathBuf,
+    },
 }
 
 fn main() -> ExitCode {
@@ -123,6 +131,7 @@ fn main() -> ExitCode {
         Command::Spec { command } => match command {
             SpecCommand::Check { dir } => check(&dir),
             SpecCommand::Model { dir, samples } => model(&dir, samples),
+            SpecCommand::Windows { dir, out } => windows(&dir, &out),
             SpecCommand::Names { dir } => names(&dir),
             SpecCommand::Texts { dir } => texts(&dir),
             SpecCommand::Keys { dir } => keys(&dir),
@@ -378,6 +387,21 @@ fn texts(dir: &std::path::Path) -> ExitCode {
         println!("// {} keys, and no language file yet; add translations/{default}.clarity", used.len());
         for u in &used {
             println!("    {} \"\"  // {}", u.key, u.places.join(", "));
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+fn windows(dir: &std::path::Path, out: &std::path::Path) -> ExitCode {
+    let project = match load(dir) {
+        Ok(project) => project,
+        Err(code) => return code,
+    };
+    for file in clarity_gen::web_windows::window_files(&project) {
+        let name = std::path::Path::new(&file.path).file_name().unwrap_or_default();
+        if let Err(err) = std::fs::create_dir_all(out).and_then(|()| std::fs::write(out.join(name), &file.text)) {
+            eprintln!("clarity: cannot write {}: {err}", out.display());
+            return ExitCode::FAILURE;
         }
     }
     ExitCode::SUCCESS

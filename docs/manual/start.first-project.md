@@ -64,4 +64,4 @@ page Main: window
 
 The **Preview** tab shows the window as it will look, filled with sample data. Handlers do not run there.
 
-Click **Run**. Clarity generates the application into `tasks/out`, builds it and starts it; the Output panel shows the build. Type a task, press Enter, and it appears in the table. See [Run and Build](project.run-build.md).
+Click **Generate**: Clarity writes the application's source into `tasks/out`. Then click **Run**: it builds that source and starts it; the Output panel shows the build. Type a task, press Enter, and it appears in the table. See [Run and Build](project.run-build.md).

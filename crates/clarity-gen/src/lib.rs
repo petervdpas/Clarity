@@ -791,7 +791,10 @@ pub fn write_programs(out: &std::path::Path, programs: &[Program], backend: Back
     std::fs::write(out.join(OUT_MARKER), OUT_MARKER_TEXT)?;
     let mut written = 0;
     for program in programs {
-        written += write_out(&target_dir(out, program.target), &program.files, &kept)?;
+        let dir = target_dir(out, program.target);
+        written += write_out(&dir, &program.files, &kept)?;
+        // What Build and Run check they build: these files, as generated.
+        std::fs::write(dir.join(GENERATED_STAMP), format!("{}\n", fingerprint(program)))?;
     }
     for target in TARGETS {
         let dir = target_dir(out, target);
@@ -849,7 +852,7 @@ fn remove_stale(root: &std::path::Path, dir: &std::path::Path, files: &[OutFile]
             if std::fs::read_dir(&path)?.next().is_none() {
                 std::fs::remove_dir(&path)?;
             }
-        } else if relative != OUT_MARKER && relative != BUILT_STAMP && !files.iter().any(|f| f.path == relative) {
+        } else if relative != OUT_MARKER && relative != BUILT_STAMP && relative != GENERATED_STAMP && !files.iter().any(|f| f.path == relative) {
             std::fs::remove_file(&path)?;
         }
     }
@@ -859,6 +862,14 @@ fn remove_stale(root: &std::path::Path, dir: &std::path::Path, files: &[OutFile]
 /// What a program's build was made from, written beside it, so Run starts
 /// the program as built while nothing changed (every stack).
 pub const BUILT_STAMP: &str = ".clarity-built";
+
+/// The file in a program's folder that names the files Generate wrote there (their `fingerprint`).
+pub const GENERATED_STAMP: &str = ".clarity-generated";
+
+/// The fingerprint of the files Generate last wrote in `dir`; none when it wrote none there.
+pub fn last_generated(dir: &std::path::Path) -> Option<String> {
+    std::fs::read_to_string(dir.join(GENERATED_STAMP)).ok().map(|s| s.trim().to_string())
+}
 
 /// A mark of a program's generated files, their paths and contents: the
 /// same files give the same mark.

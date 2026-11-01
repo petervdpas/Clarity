@@ -209,20 +209,26 @@ pub struct Generated {
     pub built: Option<(clarity_gen::Toolchain, bool)>,
 }
 
-/// Transpiles the project into its source tree: the code of each of its
-/// programs in its stack's language and UI framework, in the output folder,
-/// built nothing yet. It builds and runs with the stack's own tools, in
-/// Clarity or outside it. Gives the output folder, and what Build needs.
+/// Generates the project (the Generate button): transpiles it into its
+/// source tree, the code of each of its programs in its stack's language and
+/// UI framework, written into the output folder; built nothing yet. It builds
+/// and runs with the stack's own tools, in Clarity or outside it.
 pub fn generate_source(file: &Path) -> Result<Source, String> {
     let dir = clarity_project::module_dir(file);
     // Each web API's module follows its description and picks (DESIGN 5.23).
     clarity_project::refresh_apis(file)?;
-    let mut project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     // Each native part's header follows its declaration, and a new part gets a starter (DESIGN 5.19).
-    let written = clarity_gen::parts::write_part_folders(&dir, &project).map_err(|err| format!("cannot write the parts' folders: {err}"))?;
-    if !written.is_empty() {
-        project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    }
+    clarity_gen::parts::write_part_folders(&dir, &project).map_err(|err| format!("cannot write the parts' folders: {err}"))?;
+    let source = transpile(file)?;
+    clarity_gen::write_programs(&source.out, &source.programs, source.settings.stack.backend, &source.settings.keeps).map_err(|err| format!("cannot write {}: {err}", source.out.display()))?;
+    Ok(source)
+}
+
+/// The project transpiled in memory, nothing written: its output folder, settings and programs.
+fn transpile(file: &Path) -> Result<Source, String> {
+    let dir = clarity_project::module_dir(file);
+    let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     let loaded = clarity_project::load(file);
     let shown = file.file_name().unwrap_or_default().to_string_lossy().to_string();
     let settings = match (loaded.settings, loaded.problems.first()) {
@@ -233,7 +239,6 @@ pub fn generate_source(file: &Path) -> Result<Source, String> {
     let built = clarity_project::build_settings(&dir, &settings);
     let programs = clarity_gen::programs(&project, &built).map_err(|errors| errors.join("; "))?;
     let out = clarity_project::out_dir(file, &settings);
-    clarity_gen::write_programs(&out, &programs, settings.stack.backend, &settings.keeps).map_err(|err| format!("cannot write {}: {err}", out.display()))?;
     Ok(Source { out, settings, programs, shown })
 }
 
@@ -246,8 +251,10 @@ pub struct Source {
     shown: String,
 }
 
+/// What Build and Run build: the source Generate wrote, which must be the
+/// project as it is now; they generate nothing themselves.
 pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, String> {
-    let Source { out, settings, programs, shown } = generate_source(file)?;
+    let Source { out, settings, programs, shown } = transpile(file)?;
     // Each program is in its own folder of the output; one without windows has only the command line.
     let cli = cli || !settings.stack.has_ui();
     if cli && !settings.stack.has(clarity_project::Target::Cli) {
@@ -258,6 +265,11 @@ pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, 
     let toolchain = toolchain_of(release).ok_or_else(|| format!("{shown}: Clarity cannot build this stack yet"))?;
     let out = clarity_project::target_dir(&out, target);
     let fingerprint = programs.iter().find(|p| p.target == target).map(clarity_gen::fingerprint).unwrap_or_default();
+    match clarity_gen::last_generated(&out) {
+        None => return Err(format!("{shown} is not generated yet: press Generate first")),
+        Some(generated) if generated != fingerprint => return Err(format!("{shown} changed since it was generated: press Generate first")),
+        Some(_) => {}
+    }
     let built = clarity_gen::last_build(&out, &fingerprint)
         .and_then(|release| toolchain_of(release).map(|t| (t, release)))
         .filter(|(t, _)| out.join(&t.program).exists());
@@ -720,13 +732,20 @@ mod tests {
     #[test]
     fn generates_the_example_into_out() {
         let dir = example("shop");
-        let Generated { out, toolchain, .. } = generate_out(&dir.join("shop.clarity"), true, false).unwrap();
+        let file = dir.join("shop.clarity");
+        // Build builds only what Generate wrote, and only while it is the project as it is.
+        assert!(generate_out(&file, true, false).err().unwrap_or_default().contains("is not generated yet: press Generate first"));
+        generate_source(&file).unwrap();
+        let Generated { out, toolchain, .. } = generate_out(&file, true, false).unwrap();
         // The desktop program, in its own folder of the output (DESIGN 5.20).
         assert_eq!(out, dir.join("shop/out/desktop"));
         assert!(out.join("Cargo.toml").exists());
         assert!(out.join("src/main.rs").exists());
         assert_eq!(toolchain.tool, "cargo");
         assert_eq!(out.join(&toolchain.program), out.join(if cfg!(windows) { "target/release/shop.exe" } else { "target/release/shop" }));
+        let text = std::fs::read_to_string(&file).unwrap();
+        std::fs::write(&file, text.replacen("currency EUR", "currency USD", 1)).unwrap();
+        assert!(generate_out(&file, true, false).err().unwrap_or_default().contains("changed since it was generated: press Generate first"));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -794,6 +813,7 @@ mod tests {
     #[test]
     fn a_csharp_project_is_generated_for_dotnet() {
         let dir = example("todo");
+        generate_source(&dir.join("todo.clarity")).unwrap();
         let Generated { out, toolchain, .. } = generate_out(&dir.join("todo.clarity"), false, false).unwrap();
         assert!(out.join("Todo.csproj").exists());
         assert!(!out.join("Cargo.toml").exists());

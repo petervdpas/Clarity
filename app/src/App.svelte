@@ -1367,7 +1367,7 @@
               <RibbonButton
                 icon="play"
                 label={building ? "Building..." : "Run"}
-                title="Generate the application, build it with its toolchain and start it"
+                title="Build the generated application with its toolchain and start it"
                 keys={keysFor("preview.run")}
                 disabled={!preview || building || running || commandRunning || errorCount > 0}
                 onclick={() => buildApp(false, true)}
@@ -1375,7 +1375,7 @@
               <RibbonButton
                 icon="code"
                 label="Generate"
-                title="Generate the application's source, in its stack's language, into its output folder, without building it"
+                title="Generate the application's source, in its stack's language and UI framework, into its output folder"
                 keys={keysFor("preview.generate")}
                 disabled={!preview || building || errorCount > 0}
                 onclick={generateApp}

@@ -1,6 +1,6 @@
 // A window's markup as the parts the screen draws (DESIGN 7.8): the file
-// Generate writes for each window (`ui/windows/Main.xml`), read when the
-// application starts. Each element is a part with what differs from its
+// Generate writes for each window (`ui/windows/Main.cxaml`), and for each app
+// its frame (`ui/apps/Shop.cxaml`), read when the application starts. Each element is a part with what differs from its
 // kind's defaults (Rust's catalog, generated/part-defaults.json), written in
 // Clarity's own words, as crates/clarity-gen/src/web_windows.rs writes it;
 // each value is read by its field's type (generated/part-fields.json).
@@ -9,6 +9,14 @@ import partDefaults from "../generated/part-defaults.json";
 import partFields from "../generated/part-fields.json";
 import commandDefaults from "../generated/command-defaults.json";
 import commandFields from "../generated/command-fields.json";
+import sidebarDefaults from "../generated/sidebar-defaults.json";
+import sidebarFields from "../generated/sidebar-fields.json";
+import type { Footer } from "../generated/Footer.ts";
+import type { Frame } from "../generated/Frame.ts";
+import type { Ribbon } from "../generated/Ribbon.ts";
+import type { Sidebar } from "../generated/Sidebar.ts";
+import type { SidebarProps } from "../generated/SidebarProps.ts";
+import type { Toolbar } from "../generated/Toolbar.ts";
 import type { Command } from "../generated/Command.ts";
 import type { CommandProps } from "../generated/CommandProps.ts";
 import type { Event } from "../generated/Event.ts";
@@ -30,17 +38,90 @@ const EVENTS: readonly Event[] = ["click", "change", "enter", "leave", "select",
 
 type Kinds = Record<string, string>;
 
-/** The parts of a window as its markup writes them; `first` is where their places start. */
-export function windowFromMarkup(markup: string, first = 0): Widget[] {
+/** The regions of a frame, which stand before a window's parts and make up an app's file. */
+const REGIONS = ["Menu", "Toolbar", "Ribbon", "Sidebar", "Footer"];
+
+/** The root element of a file of markup, read; a file that is no well-formed XML is refused. */
+function rootOf(markup: string, what: string): Element {
   const document = new DOMParser().parseFromString(markup, "application/xml");
   const problem = document.getElementsByTagName("parsererror")[0];
-  if (problem) throw new Error(`the window's markup is not well formed: ${problem.textContent ?? ""}`);
+  if (problem) throw new Error(`the ${what}'s markup is not well formed: ${problem.textContent ?? ""}`);
+  return document.documentElement;
+}
+
+/** A place of its own for each element, counted from `first`. */
+function places(first: number): () => Span {
   let count = first;
-  const place = (): Span => {
+  return () => {
     const at = ++count;
     return { start: at, end: at, line: 0, col: 0 };
   };
-  return [...document.documentElement.children].map((e) => partOf(e, place));
+}
+
+/** A window as its markup writes it: its own frame, and its parts; `first` is where their places start. */
+export function readWindow(markup: string, first = 0): { frame: Frame; widgets: Widget[] } {
+  const root = rootOf(markup, "window");
+  const place = places(first);
+  const elements = [...root.children];
+  const frame = frameOf(elements.filter((e) => REGIONS.includes(e.tagName)), place);
+  return { frame, widgets: elements.filter((e) => !REGIONS.includes(e.tagName)).map((e) => partOf(e, place)) };
+}
+
+/** An app's frame as its markup writes it. */
+export function readApp(markup: string, first = 0): Frame {
+  return frameOf([...rootOf(markup, "app").children], places(first));
+}
+
+/** The parts of a window as its markup writes them. */
+export function windowFromMarkup(markup: string, first = 0): Widget[] {
+  return readWindow(markup, first).widgets;
+}
+
+function frameOf(elements: Element[], place: () => Span): Frame {
+  const frame: Frame = { menu: null, toolbar: null, ribbon: null, sidebars: [], footer: null };
+  for (const element of elements) {
+    if (element.tagName === "Menu") frame.menu = menuOf(element, place);
+    else if (element.tagName === "Toolbar") frame.toolbar = toolbarOf(element, place);
+    else if (element.tagName === "Ribbon") frame.ribbon = ribbonOf(element, place);
+    else if (element.tagName === "Sidebar") frame.sidebars.push(sidebarOf(element, place));
+    else if (element.tagName === "Footer") frame.footer = footerOf(element, place);
+  }
+  return frame;
+}
+
+function toolbarOf(element: Element, place: () => Span): Toolbar {
+  const span = place();
+  return { name: element.getAttribute("name"), items: [...element.children].map((e) => commandOf(e, place)), span };
+}
+
+/** A ribbon: its tabs, each with its groups of items. */
+function ribbonOf(element: Element, place: () => Span): Ribbon {
+  const span = place();
+  const tabs = [...element.children].map((tab) => {
+    const tabSpan = place();
+    const groups = [...tab.children].map((group) => {
+      const groupSpan = place();
+      return { title: group.getAttribute("title") ?? "", name: group.getAttribute("name"), items: [...group.children].map((e) => commandOf(e, place)), span: groupSpan };
+    });
+    return { title: tab.getAttribute("title") ?? "", name: tab.getAttribute("name"), groups, span: tabSpan };
+  });
+  return { name: element.getAttribute("name"), collapsible: element.getAttribute("collapsible") === "true", collapsed: element.getAttribute("collapsed") === "true", tabs, span };
+}
+
+/** A sidebar: a new sidebar on its side, what its attributes change, and its parts. */
+function sidebarOf(element: Element, place: () => Span): Sidebar {
+  const side = element.getAttribute("side") ?? "left";
+  const props = structuredClone((sidebarDefaults as Record<string, SidebarProps>)[side]) as SidebarProps & Record<string, unknown>;
+  for (const { name, value } of [...element.attributes]) props[name] = valueOf((sidebarFields as Kinds)[name], value);
+  const span = place();
+  return { props, widgets: [...element.children].map((e) => partOf(e, place)), span };
+}
+
+/** The footer: its status, its columns and its parts. */
+function footerOf(element: Element, place: () => Span): Footer {
+  const span = place();
+  const status = element.getAttribute("status");
+  return { status, statusSpan: status === null ? null : place(), columns: Number(element.getAttribute("columns") ?? 0), widgets: [...element.children].map((e) => partOf(e, place)), span };
 }
 
 /** A value of a field, by its type: text as it is, a number, true or false, or JSON (a list, a record, or a name of the model's). */
@@ -48,6 +129,7 @@ function valueOf(kind: string | undefined, text: string): unknown {
   if (kind === "text") return text;
   if (kind === "number") return Number(text);
   if (kind === "bool") return text === "true";
+  if (kind === "texts") return text.split(",").map((t) => t.trim()).filter(Boolean);
   try {
     return JSON.parse(text);
   } catch {

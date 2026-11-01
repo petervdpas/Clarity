@@ -161,14 +161,14 @@ fn the_page_carries_the_renderer() {
     has(page, "clarity_page_html");
     has(page, "const std::string& page() {");
     let cmake = file(&files, "CMakeLists.txt");
-    has(cmake, "file(GLOB CLARITY_WINDOWS ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/*.xml)");
+    has(cmake, "file(GLOB CLARITY_WINDOWS ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/*.cxaml)");
     has(cmake, "string(REPLACE \"<!--clarity-windows-->\" \"${CLARITY_MARKUP}\" CLARITY_PAGE \"${CLARITY_PAGE}\")");
     has(cmake, "target_sources(shop PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/page_html.cpp)");
     // Clarity's screen as one page, with the place for the windows, and the windows' markup beside it.
     let page = file(&files, "ui/index.html");
     has(page, "<script type=\"module\">");
     has(page, "<!--clarity-windows-->");
-    assert!(files.iter().any(|f| f.path.starts_with("ui/windows/") && f.path.ends_with(".xml")));
+    assert!(files.iter().any(|f| f.path.starts_with("ui/windows/") && f.path.ends_with(".cxaml")));
 }
 
 #[test]

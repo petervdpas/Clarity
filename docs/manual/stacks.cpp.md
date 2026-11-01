@@ -24,9 +24,9 @@ Clarity writes a CMake project into the output folder (`out` by default). All ge
 - `src/records.hpp` and `src/records.cpp`: the enums and records of every module.
 - `src/modules/<module>.cpp`: one file per Clarity module, with its functions, actions, data events, windows and handlers, all declared in `src/app.hpp`.
 - `src/schema.hpp` and `src/schema.cpp`: the migration steps of every database Clarity owns.
-- `src/page.cpp`: the model (the frame, the data dictionary, the translations), built into the program.
+- `src/page.cpp`: the model (the data dictionary, the translations, what each window is besides its look), built into the program.
 - `ui/index.html`: Clarity's screen as one page, with its styles, themes and pictures in it.
-- `ui/windows/`: each window as markup, read by the screen when the application starts: its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`). Change a window in Clarity; Generate writes these files again. CMake puts them into the page when it builds the program, so a changed window file takes effect on the next build.
+- `ui/windows/` and `ui/apps/`: each window, and each app's frame (menu bar, toolbar, ribbon, sidebars, footer), as markup (`.cxaml`, Clarity's own dialect), read by the screen when the application starts: its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`). Change a window in Clarity; Generate writes these files again. CMake puts them into the page when it builds the program, so a changed window file takes effect on the next build.
 - `src/main.cpp`: opens and migrates the databases and shows the first window.
 - `clarity-runtime/`: the C++ runtime and its shell, copied in.
 - `README.md`: what to install to build the project without Clarity.

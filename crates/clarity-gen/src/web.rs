@@ -312,6 +312,7 @@ pub fn renderer_files(project: &Project) -> Vec<OutFile> {
     }
     files.extend(resource_files(project, "ui/resources"));
     files.extend(crate::web_windows::window_files(project));
+    files.extend(crate::web_windows::app_files(project));
     files
 }
 

@@ -1,6 +1,7 @@
-// A window's markup is the window the model has (DESIGN 7.8): every window of
-// every example, written as markup by `clarity spec windows`, reads as the
-// same parts, menus and popovers included, and draws the same page. The
+// A window's markup is the window the model has (DESIGN 7.8): every window and
+// app of every example, written as markup by `clarity spec windows`, reads as
+// the same parts and frames, menus, popovers, ribbons, sidebars and footers
+// included, and a window draws the same page. The
 // places parts have in their files are left out: markup has none.
 
 import { execFileSync } from "node:child_process";
@@ -9,7 +10,7 @@ import { join } from "node:path";
 import { flushSync, mount, unmount, type Component } from "svelte";
 import { expect, test, vi } from "vitest";
 import GridBox from "./GridBox.svelte";
-import { windowFromMarkup } from "../screen/windowMarkup.ts";
+import { readApp, readWindow } from "../screen/windowMarkup.ts";
 import type { Preview } from "../generated/Preview.ts";
 import { pageData } from "../screen/pages.ts";
 
@@ -40,7 +41,7 @@ function run(args: string[]): Buffer {
 /** The parts as they are, without their places in their files, what the project works out itself, and the sounds and timers markup leaves out. */
 function parts(widgets: unknown): unknown {
   return JSON.parse(
-    JSON.stringify(widgets, (key, value) => (["span", "made", "undoScope"].includes(key) ? undefined : value)),
+    JSON.stringify(widgets, (key, value) => (["span", "statusSpan", "made", "undoScope"].includes(key) ? undefined : value)),
     (key, value) => (Array.isArray(value) ? value.filter((w) => !["sound", "timer"].includes(w?.props?.kind)) : value),
   );
 }
@@ -76,13 +77,20 @@ for (const { name: example, file: project } of projects) {
     const folder = join(root, "target/window-markup", example);
     rmSync(folder, { recursive: true, force: true });
     run(["spec", "windows", project, folder]);
-    const written = existsSync(folder) ? readdirSync(folder) : [];
+    const written = existsSync(join(folder, "windows")) ? readdirSync(join(folder, "windows")) : [];
+    // Each app's frame: its menu bar, toolbar, ribbon, sidebars and footer, with their parts.
+    for (const app of preview.project.files.flatMap((f) => f.apps)) {
+      const frame = readApp(readFileSync(join(folder, "apps", `${app.name.name}.cxaml`), "utf8"), app.span.start);
+      expect(parts(frame), `${example}: the app ${app.name.name}`).toEqual(parts(app.frame));
+    }
     for (const file of preview.project.files) {
       for (const page of file.pages) {
-        if (!written.includes(`${page.name.name}.xml`)) continue;
-        const widgets = windowFromMarkup(readFileSync(join(folder, `${page.name.name}.xml`), "utf8"), page.span.start);
-        // The same parts, their menus and the parts of popovers and pages too.
+        if (!written.includes(`${page.name.name}.cxaml`)) continue;
+        const read = readWindow(readFileSync(join(folder, "windows", `${page.name.name}.cxaml`), "utf8"), page.span.start);
+        const widgets = read.widgets;
+        // The same parts, their menus and the parts of popovers and pages too, and the window's own frame.
         expect(parts(widgets), `${example}: ${page.name.name}`).toEqual(parts(page.widgets));
+        expect(parts(read.frame), `${example}: ${page.name.name}'s frame`).toEqual(parts(page.frame));
         const data = () => structuredClone(pageData(preview, page));
         const fromModel = drawn(GridBox as Component<never>, { preview, page, data: data(), design: false, widgets: page.widgets, columns: page.columns, container: page.span.start, onnavigate: () => {} });
         const fromMarkup = drawn(GridBox as Component<never>, { preview, page: { ...page, widgets }, data: data(), design: false, widgets, columns: page.columns, container: page.span.start, onnavigate: () => {} });

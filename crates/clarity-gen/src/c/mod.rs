@@ -277,6 +277,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     // Clarity's screen as one page, and the windows as markup beside it, which CMake puts into the page (DESIGN 7.8).
     files.push(text("ui/index.html", crate::web::single_page(project)));
     files.extend(crate::web_windows::window_files(project));
+    files.extend(crate::web_windows::app_files(project));
     files.push(text("src/main.c", main_c(project, settings, &databases, &owners, &main_window)));
     Ok(files)
 }
@@ -418,11 +419,11 @@ add_executable({program} ${{PROGRAM_SOURCES}})
 target_include_directories({program} PRIVATE src)
 target_link_libraries({program} PRIVATE clarity {shell}{engine}{http})
 
-# The screen's page (ui/index.html) with the windows as markup (ui/windows/*.xml)
+# The screen's page (ui/index.html) with the windows as markup (ui/windows/*.cxaml)
 # put into it, which the screen reads when it starts (DESIGN 7.8), compiled
 # into the program.
 set(CLARITY_PAGE_FILE ${{CMAKE_CURRENT_SOURCE_DIR}}/ui/index.html)
-file(GLOB CLARITY_WINDOWS ${{CMAKE_CURRENT_SOURCE_DIR}}/ui/windows/*.xml)
+file(GLOB CLARITY_WINDOWS ${{CMAKE_CURRENT_SOURCE_DIR}}/ui/windows/*.cxaml)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${{CLARITY_PAGE_FILE}} ${{CLARITY_WINDOWS}} ${{CMAKE_CURRENT_SOURCE_DIR}}/ui/windows)
 file(READ ${{CLARITY_PAGE_FILE}} CLARITY_PAGE)
 set(CLARITY_MARKUP \"\")
@@ -430,6 +431,14 @@ foreach(window IN LISTS CLARITY_WINDOWS)
   get_filename_component(name ${{window}} NAME_WE)
   file(READ ${{window}} text)
   string(APPEND CLARITY_MARKUP \"<script type=\\\"text/xml\\\" data-window=\\\"${{name}}\\\">${{text}}</script>\\n\")
+endforeach()
+# Each app's frame (ui/apps/*.cxaml), the same way.
+file(GLOB CLARITY_APPS ${{CMAKE_CURRENT_SOURCE_DIR}}/ui/apps/*.cxaml)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${{CLARITY_APPS}} ${{CMAKE_CURRENT_SOURCE_DIR}}/ui/apps)
+foreach(app IN LISTS CLARITY_APPS)
+  get_filename_component(name ${{app}} NAME_WE)
+  file(READ ${{app}} text)
+  string(APPEND CLARITY_MARKUP \"<script type=\\\"text/xml\\\" data-app=\\\"${{name}}\\\">${{text}}</script>\\n\")
 endforeach()
 string(REPLACE \"<!--clarity-windows-->\" \"${{CLARITY_MARKUP}}\" CLARITY_PAGE \"${{CLARITY_PAGE}}\")
 file(WRITE ${{CMAKE_CURRENT_BINARY_DIR}}/page.html \"${{CLARITY_PAGE}}\")

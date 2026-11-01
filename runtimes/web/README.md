@@ -13,4 +13,4 @@ The screen of Clarity's web stacks: what every generated Rust, Go, C and C++ app
 
 The package has no dependencies of its own yet: it uses the IDE's (`app/`), linked by `npm install` in `app/` (`runtimes/web/node_modules`). Its tests run with the IDE's: `npm test` in `app/`.
 
-The IDE imports it as `@clarity/ui/...`. `npm run build:runtime` in `app/` builds the screen every web stack ships (`crates/clarity-gen/ui`), started by `host/start.ts`. A generated application carries that built screen and its windows as markup (`ui/windows/Main.xml`), which `screen/windowMarkup.ts` reads when it starts; nothing of the screen is built in the application.
+The IDE imports it as `@clarity/ui/...`. `npm run build:runtime` in `app/` builds the screen every web stack ships (`crates/clarity-gen/ui`), started by `host/start.ts`. A generated application carries that built screen, its windows and each app's frame as markup (`ui/windows/Main.cxaml`, `ui/apps/Shop.cxaml`), which `screen/windowMarkup.ts` reads when it starts (`host/windows.ts`); nothing of the screen is built in the application.

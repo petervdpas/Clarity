@@ -85,6 +85,8 @@
   // name, read when the application starts; a window without markup is
   // drawn from the model.
   let windows = $state<Record<string, Widget[]>>({});
+  /** The apps whose frame came from their markup, by name. */
+  let appsFromMarkup = $state<string[]>([]);
 
   let model = $state<Preview | null>(null);
   let stack = $state<WindowState[]>([]);
@@ -1065,7 +1067,9 @@
   // come on top of the main window.
   invoke<{ model: Preview; main: string; unconnected?: Unconnected }>("start").then(async (start) => {
     mainWindow = start.main;
-    windows = await windowsOf(start.model);
+    const markup = await windowsOf(start.model);
+    windows = markup.windows;
+    appsFromMarkup = markup.apps;
     model = start.model;
     remember(start.model);
     await startSettings(start.model);
@@ -1105,7 +1109,7 @@
     {#key stack.length}
       <FrameView preview={model} {page} frame={frameForPage(model, page)} {data} design={false} onnavigate={navigate}>
         <!-- Where the window was drawn from: its markup (DESIGN 7.8), or the model where it has none. -->
-        <div class="client" data-drawn={windows[page.name.name] ? "markup" : "model"}>
+        <div class="client" data-drawn={windows[page.name.name] ? "markup" : "model"} data-frame={appsFromMarkup.length ? "markup" : "model"}>
           {#if windows[page.name.name]}
             {@const widgets = windows[page.name.name]}
             <GridBox preview={model} page={{ ...page, widgets }} {data} design={false} {widgets} columns={page.columns} container={page.span.start} onnavigate={navigate} />

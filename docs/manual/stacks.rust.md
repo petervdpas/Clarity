@@ -20,9 +20,9 @@ Clarity writes a Cargo project into the output folder (`out` by default):
 - `src/modules/<module>.rs`: one Rust module per Clarity module, with its records, enums, functions, actions, windows and handlers. `src/modules.rs` declares them.
 - `src/schema.rs`: the migration steps of every database Clarity owns.
 - `src/main.rs`: opens and migrates the databases and starts the Tauri application.
-- `src/model.json`: the frame, the data dictionary and the translations, for the screen.
+- `src/model.json`: the data dictionary, the translations, and what each window is besides its look, for the screen.
 - `ui/`: Clarity's screen (`index.html`, `runtime.js`, `runtime.css`), a CSS file per theme, and the project's pictures in `ui/resources`. Nothing in it is built.
-- `ui/windows/`: each window as markup, read by the screen when the application starts: its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`). Change a window in Clarity; Generate writes these files again.
+- `ui/windows/` and `ui/apps/`: each window, and each app's frame (menu bar, toolbar, ribbon, sidebars, footer), as markup (`.cxaml`, Clarity's own dialect), read by the screen when the application starts: its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`). Change a window in Clarity; Generate writes these files again.
 - `icons/icon.png` and a `README.md` that says how to build the project without Clarity.
 
 Do not edit these files. Change the project in Clarity; it writes the folder again. See [Run and Build](project.run-build.md).

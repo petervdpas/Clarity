@@ -31,7 +31,7 @@ fn the_calculator_s_window_is_markup_in_clarity_s_words() {
 fn every_window_of_the_calculator_is_written() {
     let files = clarity_gen::web_windows::window_files(&calculator());
     let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
-    assert_eq!(paths, ["ui/windows/Main.xml", "ui/windows/Preferences.xml"]);
+    assert_eq!(paths, ["ui/windows/Main.cxaml", "ui/windows/Preferences.cxaml"]);
 }
 
 /// Text that XML gives a meaning, and line ends, survive in an attribute.
@@ -69,6 +69,8 @@ fn the_screen_reads_the_catalog_s_defaults_and_the_fields_types() {
         ("command-defaults.json", clarity_gen::web_windows::command_defaults()),
         ("part-fields.json", clarity_gen::web_windows::field_kinds(&read("WidgetProps.ts"))),
         ("command-fields.json", clarity_gen::web_windows::field_kinds(&read("CommandProps.ts"))),
+        ("sidebar-defaults.json", clarity_gen::web_windows::sidebar_defaults()),
+        ("sidebar-fields.json", clarity_gen::web_windows::field_kinds(&read("SidebarProps.ts"))),
     ];
     for (name, text) in &wanted {
         if std::env::var("CLARITY_WRITE_DEFAULTS").is_ok() {

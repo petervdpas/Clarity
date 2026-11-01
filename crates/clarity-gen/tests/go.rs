@@ -385,7 +385,7 @@ fn a_wails_application_with_the_web_renderer() {
     for path in ["ui/index.html", "ui/runtime.js", "ui/runtime.css", "ui/themes/clarity.css", "model.json"] {
         assert!(files.iter().any(|f| f.path == path), "no {path}");
     }
-    assert!(files.iter().any(|f| f.path.starts_with("ui/windows/") && f.path.ends_with(".xml")), "the windows as markup");
+    assert!(files.iter().any(|f| f.path.starts_with("ui/windows/") && f.path.ends_with(".cxaml")), "the windows as markup");
     assert!(!files.iter().any(|f| f.path.ends_with("package.json")), "nothing for npm");
     has(file(&files, "go.mod"), "github.com/wailsapp/wails/v3 v3.0.0-alpha.84");
     let main = file(&files, "main.go");

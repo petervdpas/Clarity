@@ -118,6 +118,8 @@ try {
   // The window is drawn from its markup, which the program carries (DESIGN 7.8), not from the model.
   const drawnFrom = await b.eval(`document.querySelector(".client")?.dataset.drawn`);
   if (drawnFrom !== "markup") throw new Error(`the first window was drawn from ${drawnFrom ?? "nothing"}, not from its markup`);
+  const frameFrom = await b.eval(`document.querySelector(".client")?.dataset.frame`);
+  if (frameFrom !== "markup") throw new Error(`the app's frame came from ${frameFrom ?? "nothing"}, not from its markup`);
 
   // Records to work with, as a person would have them.
   sql(`INSERT INTO album (title, position, copies) VALUES ('Alpha', 1, 1), ('Beta', 2, 2), ('Gamma', 3, 3);

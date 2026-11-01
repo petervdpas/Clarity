@@ -115,8 +115,8 @@ enum SpecCommand {
         #[arg(long)]
         samples: bool,
     },
-    /// Write each window of a project as markup for the web stacks' screen
-    /// (DESIGN 7.8): one Svelte file per window, into a folder.
+    /// Write each window and app of a project as markup for the web stacks'
+    /// screen (DESIGN 7.8): `windows/Main.cxaml` and `apps/Shop.cxaml` in a folder.
     Windows {
         /// The project file, or the folder with its modules.
         dir: PathBuf,
@@ -397,9 +397,9 @@ fn windows(dir: &std::path::Path, out: &std::path::Path) -> ExitCode {
         Ok(project) => project,
         Err(code) => return code,
     };
-    for file in clarity_gen::web_windows::window_files(&project) {
-        let name = std::path::Path::new(&file.path).file_name().unwrap_or_default();
-        if let Err(err) = std::fs::create_dir_all(out).and_then(|()| std::fs::write(out.join(name), &file.text)) {
+    for file in clarity_gen::web_windows::window_files(&project).into_iter().chain(clarity_gen::web_windows::app_files(&project)) {
+        let path = out.join(file.path.trim_start_matches("ui/"));
+        if let Err(err) = std::fs::create_dir_all(path.parent().unwrap_or(out)).and_then(|()| std::fs::write(&path, &file.text)) {
             eprintln!("clarity: cannot write {}: {err}", out.display());
             return ExitCode::FAILURE;
         }

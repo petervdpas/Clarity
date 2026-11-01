@@ -21,8 +21,8 @@ Clarity writes a Go module into the output folder (`out` by default), all in pac
 - `schema.go`: the migration steps of every database Clarity owns.
 - `main.go`: opens and migrates the databases and starts the Wails application.
 - `ui/`: Clarity's screen (`index.html`, `runtime.js`, `runtime.css`), a CSS file per theme and the project's pictures. The program embeds it; nothing in it is built.
-- `ui/windows/`: each window as markup, read by the screen when the application starts: its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`). Change a window in Clarity; Generate writes these files again.
-- `model.json`: the frame (menus, toolbars, ribbons, sidebars, footer), the data dictionary and the translations, for the screen.
+- `ui/windows/` and `ui/apps/`: each window, and each app's frame (menu bar, toolbar, ribbon, sidebars, footer), as markup (`.cxaml`, Clarity's own dialect), read by the screen when the application starts: its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`). Change a window in Clarity; Generate writes these files again.
+- `model.json`: the data dictionary, the translations, and what each window is besides its look (its data, events and title), for the screen.
 - `README.md`: how to build the module without Clarity.
 
 Do not edit these files. Change the project in Clarity; it writes the folder again.

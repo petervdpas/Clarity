@@ -122,7 +122,7 @@ fn writes_a_complete_cargo_project() {
             "ui/runtime.css",
             "ui/runtime.js",
             "ui/themes/clarity.css",
-            "ui/windows/OrderForm.xml",
+            "ui/windows/OrderForm.cxaml",
         ]
     );
     assert!(file(&files, "tauri.conf.json").contains("\"frontendDist\": \"ui\""), "{}", file(&files, "tauri.conf.json"));
@@ -927,7 +927,7 @@ fn the_web_target_serves_the_renderer() {
     // Nor does it link the desktop toolkit: no Tauri, no desktop module, the renderer's files in the program.
     assert!(!web.contains("tauri") && !web.contains("mod desktop;"), "{web}");
     has(&web, "            \"index.html\" => Some(include_bytes!(\"../ui/index.html\").to_vec()),\n");
-    has(&web, "            \"windows/OrderForm.xml\" => Some(include_bytes!(\"../ui/windows/OrderForm.xml\").to_vec()),\n");
+    has(&web, "            \"windows/OrderForm.cxaml\" => Some(include_bytes!(\"../ui/windows/OrderForm.cxaml\").to_vec()),\n");
     let mut settings = shop();
     settings.stack.targets = vec![Target::Web];
     let files = generate(&project, &settings).unwrap();

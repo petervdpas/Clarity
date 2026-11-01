@@ -11,6 +11,8 @@
   "runtimes/web/src/generated/command-fields.json",
   "runtimes/web/src/generated/part-defaults.json",
   "runtimes/web/src/generated/part-fields.json",
+  "runtimes/web/src/generated/sidebar-defaults.json",
+  "runtimes/web/src/generated/sidebar-fields.json",
   "runtimes/web/src/grid/GridBox.svelte",
   "runtimes/web/src/grid/PopoverView.svelte",
   "runtimes/web/src/grid/WidgetView.svelte",
@@ -154,5 +156,5 @@
   "runtimes/web/src/screen/windowData.ts",
   "runtimes/web/src/screen/windowMarkup.ts"
  ],
- "fnv1a64": "18c30d948bdd9893"
+ "fnv1a64": "24dfa5d0c77f07b4"
 }

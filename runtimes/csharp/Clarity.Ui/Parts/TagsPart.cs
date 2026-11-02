@@ -15,7 +15,7 @@ using SkiaSharp;
 namespace Clarity.Ui;
 
 [PartKind("tags")]
-public sealed class TagsPart : Part
+public sealed class TagsPart : Part, ITakesTyped
 {
     const double ChipHeight = 24;
     const double Space = 4;
@@ -207,6 +207,9 @@ public sealed class TagsPart : Part
     }
 
     /// <summary>Takes what is typed: an item the list has not, of its kind.</summary>
+    public void TakeTyped() => Take();
+
+    /// <summary>Takes what is typed; see <see cref="TakeTyped"/>.</summary>
     public void Take()
     {
         if (editor is null || !Usable)
@@ -317,17 +320,20 @@ public sealed class TagsPart : Part
         var fonts = FontsNow;
         var look = LookNow;
         var size = look.Size("text");
+        // Each line is as high as an input box, as the place to add is; the chips sit in its middle.
+        var line = Math.Max(ChipHeight, Math.Min(box.Height, GridLayout.RowHeight));
+        var chipTop = (line - ChipHeight) / 2;
         var x = box.X;
-        var y = box.Y + Math.Max(0, (Math.Min(box.Height, ChipHeight + 8) - ChipHeight) / 2);
+        var y = box.Y;
         foreach (var chip in chips)
         {
             var width = chip.WidthFor(fonts, size);
             if (x > box.X && x + width > box.Right)
             {
                 x = box.X;
-                y += ChipHeight + Space;
+                y += line + Space;
             }
-            chip.Arrange(new Box(x, y, width, ChipHeight));
+            chip.Arrange(new Box(x, y + chipTop, width, ChipHeight));
             x += width + Space;
         }
         Element? place = (Element?)editor ?? adder;
@@ -336,9 +342,9 @@ public sealed class TagsPart : Part
             if (x > box.X && x + EditorWidth > box.Right)
             {
                 x = box.X;
-                y += ChipHeight + Space;
+                y += line + Space;
             }
-            place.Arrange(new Box(x, y, Math.Max(EditorWidth, box.Right - x), ChipHeight));
+            place.Arrange(new Box(x, y, Math.Max(EditorWidth, box.Right - x), line));
         }
     }
 

@@ -21,8 +21,8 @@ public class TabsPartTests
         var (_, _, parts) = Made.Window(Tabs, host, width: 808);
         var tabs = Assert.IsType<TabsPart>(parts[0]);
         Assert.Equal(1, tabs.Open);
-        Assert.Contains(tabs.Pages[0], tabs.Children);
-        Assert.DoesNotContain(tabs.Pages[1], tabs.Children);
+        Assert.Contains(tabs.Views[0], tabs.Children);
+        Assert.DoesNotContain(tabs.Views[1], tabs.Children);
         // The page is under the strip.
         Assert.True(tabs.Pages[0].Bounds.Y > TabsPart.StripHeight);
     }
@@ -38,13 +38,13 @@ public class TabsPartTests
         screen.PointerReleased(second.X + 5, second.Y + 5, PointerButton.Left);
         Assert.Equal(2, host.State("pages")!.Tab);
         screen.Resize(808, 400, 1);
-        Assert.Contains(tabs.Pages[1], tabs.Children);
-        Assert.DoesNotContain(tabs.Pages[0], tabs.Children);
+        Assert.Contains(tabs.Views[1], tabs.Children);
+        Assert.DoesNotContain(tabs.Views[0], tabs.Children);
         // A handler opens another by its state.
         host.State("pages")!.Tab = 3;
         screen.Resize(808, 400, 1);
         Assert.Equal(3, tabs.Open);
-        Assert.Contains(tabs.Pages[2], tabs.Children);
+        Assert.Contains(tabs.Views[2], tabs.Children);
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public class TabsPartTests
         screen.Resize(808, 400, 1);
         Assert.Equal(1, tabs.Open);
         Assert.False(tabs.Tabs[1].IsShown);
-        Assert.Contains(tabs.Pages[0], tabs.Children);
+        Assert.Contains(tabs.Views[0], tabs.Children);
     }
 
     [Fact]
@@ -94,5 +94,31 @@ public class TabsPartTests
         screen.KeyPressed(new KeyInput(Key.Right, Modifiers.None));
         Assert.Equal(2, host.State("pages")!.Tab);
         Assert.Same(tabs.Tabs[1], screen.Focused);
+    }
+
+    [Fact]
+    public void A_page_whose_parts_go_further_than_its_room_scrolls()
+    {
+        var rows = string.Concat(Enumerable.Range(1, 8).Select(r => $"""<Label at="1,{r}" span="4" />"""));
+        var (screen, _, parts) = Made.Window($"""<Tabs name="pages" at="1,1" span="12" rows="3"><Tab title="One">{rows}</Tab></Tabs>""", new TestHost(), width: 808);
+        var tabs = (TabsPart)parts[0];
+        // A place lower than the tabs ask for, as in a window too low for them.
+        tabs.Arrange(new Box(0, 0, 808, 124));
+        var view = tabs.Views[0];
+        Assert.True(view.MaxScrollY > 0);
+        var last = tabs.Pages[0].Children[^1];
+        screen.Wheel(view.Bounds.X + 20, view.Bounds.Y + 20, 0, 1000);
+        Assert.Equal(view.MaxScrollY, view.ScrollY);
+        Assert.True(last.Bounds.Bottom <= view.Bounds.Bottom + 0.5);
+    }
+
+    [Fact]
+    public void Tabs_ask_room_for_their_strip_so_a_page_of_their_own_rows_needs_no_scrolling()
+    {
+        var rows = string.Concat(Enumerable.Range(1, 3).Select(r => $"""<Label at="1,{r}" span="4" />"""));
+        var (_, _, parts) = Made.Window($"""<Tabs name="pages" at="1,1" span="12" rows="3"><Tab title="One">{rows}</Tab></Tabs>""", new TestHost(), width: 808);
+        var tabs = (TabsPart)parts[0];
+        Assert.True(tabs.Around >= TabsPart.StripHeight);
+        Assert.Equal(0, tabs.Views[0].MaxScrollY);
     }
 }

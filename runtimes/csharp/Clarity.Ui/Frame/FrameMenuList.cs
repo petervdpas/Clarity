@@ -184,7 +184,7 @@ public sealed class FrameMenuList(FrameMenus menus, IReadOnlyList<MenuEntry> ent
         {
             captions = Math.Max(captions, fonts.Measure(entry.Caption, "text", size, false) + (entry.Icon is null ? 0 : 24));
             if (entry.Key is { } key)
-                keys = Math.Max(keys, fonts.Measure(key, "mono", size - 2, false));
+                keys = Math.Max(keys, fonts.Measure(key, "text", size - 2, false));
             arrow |= entry.Items.Count > 0;
         }
         var width = CheckWidth + captions + (keys > 0 ? KeyGap + keys : 0) + (arrow ? ArrowWidth : 0) + 16 + 2 * Inner;
@@ -328,7 +328,7 @@ public sealed class FrameMenuList(FrameMenus menus, IReadOnlyList<MenuEntry> ent
                 right -= ArrowWidth;
             }
             if (entry.Key is { } key)
-                painter.Text(key, new Box(row.X, row.Y, right - row.X, row.Height), look.Color("muted"), size - 2, "mono", align: TextAlign.Right);
+                painter.Text(key, new Box(row.X, row.Y, right - row.X, row.Height), look.Color("muted"), size - 2, "text", align: TextAlign.Right);
         }
     }
 

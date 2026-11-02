@@ -513,6 +513,25 @@ public class TableScrollTests
         Assert.Null(table.OpenChoices);
         Assert.Equal("P11", task.Priority);
     }
+
+    [Fact]
+    public void A_choice_cell_opens_at_its_value_marked()
+    {
+        var host = new DataHost();
+        var task = new CaseTask { Title = "Write", Priority = "P10" };
+        host.Lists["tasks"] = [task];
+        host.Offered["tasks.priority"] = [.. Enumerable.Range(0, 12).Select(i => new Choice($"P{i}", $"Priority {i}"))];
+        var (screen, _, parts) = Made.Window("""<Table name="tasks" at="1,1" span="12" rows="8" bind="tasks" columns="title, priority" edit="priority" />""", host, height: 600);
+        var table = (TablePart)parts[0];
+        Cases.Click(screen, table.CellBox(0, "priority")!.Value);
+        var list = table.OpenChoices!;
+        // The value's choice is in view when the list opens, without scrolling to it.
+        Assert.True(list.View.ScrollY > 0);
+        Assert.Equal(10, list.Marked);
+        var shown = list.View.Bounds;
+        var at = 10 * (list.Bounds.Height - 2) / CellChoices.MostShown - list.View.ScrollY + shown.Y;
+        Assert.InRange(at, shown.Y - 0.5, shown.Bottom);
+    }
 }
 
 public class TableCalendarTests

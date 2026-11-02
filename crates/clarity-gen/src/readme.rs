@@ -97,10 +97,17 @@ pub fn readme(settings: &Settings, calls_out: bool) -> String {
                 kind_label(kind),
                 example(kind)
             )),
-            (SourceKind::Sqlite, None) => out.push_str(&format!(
-                "- `{}`: the SQLite file `{}`, {owner}; a relative path is taken from the folder the program starts in.\n",
-                source.name, source.url
-            )),
+            (SourceKind::Sqlite, None) => {
+                out.push_str(&format!(
+                    "- `{}`: the SQLite file `{}`, {owner}; a relative path is taken from the folder the program starts in.",
+                    source.name, source.url
+                ));
+                // The C# runtime opens every SQLite file in the folder CLARITY_DATA names, when it is set.
+                if backend == Backend::Csharp {
+                    out.push_str(" Set the environment variable `CLARITY_DATA` to a folder to open it there instead, under its own file name.");
+                }
+                out.push('\n');
+            }
             (kind, None) => out.push_str(&format!("- `{}`: a {} database at `{}`, {owner}.\n", source.name, kind_label(kind), source.url)),
         }
     }

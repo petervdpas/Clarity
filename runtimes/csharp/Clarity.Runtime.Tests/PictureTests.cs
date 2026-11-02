@@ -1,6 +1,6 @@
 // Pictures in records (X2), against the cases every runtime shares
 // (conformance/pictures.json), and kept in SQLite or in a file store. The
-// wire cases are the web renderer's; Avalonia shows pictures without JSON.
+// wire cases are the web renderer's; Clarity.UI on C# shows pictures without JSON.
 
 using System.Text.Json;
 using Clarity.Runtime;

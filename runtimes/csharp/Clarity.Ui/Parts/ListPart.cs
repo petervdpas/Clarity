@@ -4,7 +4,8 @@
 // and the others lines below it in the card_line look. The person chooses a
 // row with the pointer or Up and Down; a double click opens it. Its rows
 // scroll in the shared scroll view (RowsPart.Scroller), and it moves rows by
-// hand with `reorder by` (DESIGN 5.30).
+// hand with `reorder by` (DESIGN 5.30). A text longer than its row ends in
+// dots, and the rows leave room for the bar while they scroll.
 
 using Clarity.Runtime;
 
@@ -56,8 +57,11 @@ public sealed class ListPart : RowsPart
     public Box? RowBox(int place)
     {
         var (height, gap) = RowSize(LookNow);
-        return place < 0 || place >= Records.Count ? null : RowInSight(place, height + gap, height);
+        return place < 0 || place >= Records.Count ? null : RowInSight(place, height + gap, height) is { } row ? Beside(row) : null;
     }
+
+    /// <summary>A row narrowed by the bar while the rows scroll, so the bar covers none of it.</summary>
+    Box Beside(Box row) => Scroller.MaxScrollY > 0 ? row with { Width = Math.Max(0, row.Width - ScrollView.BarThickness) } : row;
 
     protected override (int Place, Box Row)? RowAt(double screenY)
     {
@@ -160,7 +164,7 @@ public sealed class ListPart : RowsPart
         var (first, end) = InSight(height + gap, Records.Count);
         for (var place = first; place < end; place++)
         {
-            var row = RowOnScreen(place, height + gap, height);
+            var row = Beside(RowOnScreen(place, height + gap, height));
             var state = place == chosen ? "selected" : place == hover ? "hover" : null;
             if (Cards)
                 DrawCard(painter, Records[place], row, state);
@@ -177,7 +181,7 @@ public sealed class ListPart : RowsPart
         var shown = DrawRowBack(painter, row, state);
         var pad = look.Padding;
         var text = row with { X = row.X + pad * 1.5, Width = Math.Max(0, row.Width - pad * 3), Height = row.Height - look.Border };
-        painter.Text(TextOf(record), text, shown.Text ?? look.Color("text"), shown.Size ?? look.Size("text"), shown.Font is null ? "text" : shown.Font, shown.Bold);
+        painter.Text(PartTexts.Fit(painter, TextOf(record), text.Width, shown.Size ?? look.Size("text"), shown.Font ?? "text", shown.Bold), text, shown.Text ?? look.Color("text"), shown.Size ?? look.Size("text"), shown.Font is null ? "text" : shown.Font, shown.Bold);
     }
 
     void DrawCard(Painter painter, object record, Box card, string? state)
@@ -199,13 +203,14 @@ public sealed class ListPart : RowsPart
             if (at == 0)
             {
                 var height = LineHeight(look, "text");
-                painter.Text(text, new Box(x, y, width, height), shown.Text ?? look.Color("text"), shown.Size ?? look.Size("text"), "text", shown.Bold);
+                var size = shown.Size ?? look.Size("text");
+                painter.Text(PartTexts.Fit(painter, text, width, size, "text", shown.Bold), new Box(x, y, width, height), shown.Text ?? look.Color("text"), size, "text", shown.Bold);
                 y += height;
             }
             else
             {
                 var height = LineHeight(look, "small");
-                painter.Text(text, new Box(x, y, width, height), line.Text ?? shown.Text ?? look.Color("text"), look.Size("small"), "text", line.Bold);
+                painter.Text(PartTexts.Fit(painter, text, width, look.Size("small"), "text", line.Bold), new Box(x, y, width, height), line.Text ?? shown.Text ?? look.Color("text"), look.Size("small"), "text", line.Bold);
                 y += height;
             }
             at++;

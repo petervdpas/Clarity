@@ -12,7 +12,7 @@ using SkiaSharp;
 namespace Clarity.Ui;
 
 [PartKind("color")]
-public sealed class ColorPart : Part
+public sealed class ColorPart : Part, ITakesTyped
 {
     const double Gap = 4;
 
@@ -84,6 +84,9 @@ public sealed class ColorPart : Part
     }
 
     /// <summary>Takes what is typed: a change when it is a color that differs from the value; text that is no color is marked.</summary>
+    public void TakeTyped() => Take();
+
+    /// <summary>Takes what is typed; see <see cref="TakeTyped"/>.</summary>
     public void Take()
     {
         Sync();

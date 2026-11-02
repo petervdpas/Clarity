@@ -50,7 +50,7 @@ public sealed partial class ViewModelHost : IPartHost, IDisposable
                     parts.TryAdd(name, part);
             NameCalls(spec.Parts);
         }
-        Locale.Changed += Shout;
+        Locale.Changed += Relanguaged;
     }
 
     /// <summary>The view model the window shows.</summary>
@@ -68,13 +68,20 @@ public sealed partial class ViewModelHost : IPartHost, IDisposable
 
     void Shout() => Changed?.Invoke();
 
+    /// <summary>The language changed: what was said into the window's text values shows in it, and every part shows again.</summary>
+    void Relanguaged()
+    {
+        Model.Reshow();
+        Shout();
+    }
+
     /// <summary>The window is gone: it hears its view model no more.</summary>
     public void Dispose()
     {
         foreach (var source in heard)
             source.PropertyChanged -= Heard;
         heard.Clear();
-        Locale.Changed -= Shout;
+        Locale.Changed -= Relanguaged;
     }
 
     static IEnumerable<PartSpec> All(IEnumerable<PartSpec> specs)

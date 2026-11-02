@@ -353,15 +353,17 @@ impl<'a> Emitter<'a> {
                     return;
                 }
                 let place = self.place(target);
-                // A text value shows its text in the person's language and format, as a label does.
-                let value = if matches!(target.kind, ExprKind::Name { .. })
+                // A text value shows its text in the person's language and format, as a label does,
+                // and shows it again when the person picks another language.
+                if matches!(target.kind, ExprKind::Name { .. })
                     && matches!(self.types.name_of(target), Some(NameKind::Data))
                     && self.types.type_of(target) == TypeInfo::Text
                 {
-                    format!("Locale.Show({})", self.shown(value))
-                } else {
-                    self.value(value)
-                };
+                    let shown = self.shown(value);
+                    out.push_str(&format!("{pad}ShowText(nameof({place}), {shown}, shown => {place} = shown);\n"));
+                    return;
+                }
+                let value = self.value(value);
                 out.push_str(&format!("{pad}{place} = {value};\n"));
             }
             StmtKind::Write { text, store, path } => {
@@ -683,6 +685,12 @@ impl<'a> Emitter<'a> {
                     }
                 }
                 code
+            }
+            // An engine's text is a key of the project's texts or a text as it is: kept as said, it follows the language.
+            ExprKind::EngineCall { engine, .. } if crate::libraries::library(self.project, &engine.name).is_none() && self.types.type_of(expr) == TypeInfo::Text => {
+                let value = self.value(expr);
+                let called = value.strip_prefix("Locale.Translate(").and_then(|v| v.strip_suffix(')')).unwrap_or(&value);
+                format!("Text.Of({called})")
             }
             _ => {
                 let value = self.value(expr);

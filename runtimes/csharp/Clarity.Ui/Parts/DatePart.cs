@@ -19,7 +19,7 @@ using SkiaSharp;
 namespace Clarity.Ui;
 
 [PartKind("date")]
-public sealed partial class DatePart : Part
+public sealed partial class DatePart : Part, ITakesTyped
 {
     const double ButtonWidth = 26;
     const double TimeWidth = 64;
@@ -158,6 +158,13 @@ public sealed partial class DatePart : Part
             BadTime = null;
             time.Text = clock;
         }
+    }
+
+    /// <summary>A key that runs a command has it take the typed day and time first.</summary>
+    public void TakeTyped()
+    {
+        Take();
+        TakeTime();
     }
 
     /// <summary>Takes the typed day: a change when it is a day that differs; cleared, the value is emptied.</summary>

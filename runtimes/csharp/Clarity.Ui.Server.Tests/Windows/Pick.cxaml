@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window name="Pick">
+  <Label name="pickLabel" at="1,1" span="6" caption="Pick a colour" />
+</Window>

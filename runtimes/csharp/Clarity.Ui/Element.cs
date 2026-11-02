@@ -89,6 +89,9 @@ public abstract class Element
     /// <summary>Whether it shows: one hidden takes no focus, no pointer and draws nothing, and neither does anything in it.</summary>
     public virtual bool IsShown => true;
 
+    /// <summary>The room it needs beyond the rows it spans in a grid: a part that holds a grid of its own gives its padding and strip, so the grid inside fits.</summary>
+    public virtual double Around => 0;
+
     /// <summary>Whether it shows on its screen: it and every element it is in show.</summary>
     public bool ShowsInTree
     {
@@ -246,7 +249,9 @@ public sealed class GridPanel(int columns, double gap = GridLayout.Gap) : Elemen
     public override void Arrange(Box box)
     {
         Bounds = box;
-        var placed = GridLayout.Place(places, Columns, box.Width, box.Height, gap);
+        // Each part says the room it needs around its rows now, as its look may have changed.
+        var asked = places.Select((p, i) => p with { Around = Math.Max(p.Around, Children[i].Around) }).ToList();
+        var placed = GridLayout.Place(asked, Columns, box.Width, box.Height, gap);
         Content = placed.Content;
         for (var i = 0; i < Children.Count; i++)
             Children[i].Arrange(placed.Boxes[i].Offset(box.X, box.Y));

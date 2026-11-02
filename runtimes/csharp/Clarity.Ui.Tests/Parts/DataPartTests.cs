@@ -83,4 +83,20 @@ public class DataPartRowFieldTests
         Assert.Equal("Oat milk", row["title"]);
         Assert.Equal("tasks[2].done", RowFields.Path("tasks", 2, "done"));
     }
+
+    [Fact]
+    public void A_field_of_two_words_is_the_property_a_generated_record_names_without_its_underscore()
+    {
+        var task = new Errand { FinishedBy = 1 };
+        Assert.Equal(1L, RowFields.Read(task, "finished_by"));
+        Assert.Equal(typeof(long), RowFields.TypeOf(task, "finished_by"));
+        RowFields.Set(task, "finished_by", 2);
+        Assert.Equal(2L, task.FinishedBy);
+    }
+}
+
+/// <summary>A record as the generator writes it: the field finished_by is the property FinishedBy.</summary>
+public class Errand
+{
+    public long? FinishedBy { get; set; }
 }

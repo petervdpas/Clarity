@@ -43,3 +43,32 @@ public readonly record struct KeyInput(Key Key, Modifiers Modifiers)
     public bool Shift => Modifiers.HasFlag(Modifiers.Shift);
     public bool Control => Modifiers.HasFlag(Modifiers.Control);
 }
+
+/// <summary>
+/// Counts clicks for a host that gives only presses: a press of the same
+/// button within the double-click time and a few pixels of the last one is
+/// its next click (2 for a double click, 3 for a triple), else a first one.
+/// </summary>
+public sealed class PressCounter
+{
+    /// <summary>How long after a press the next one still counts, in milliseconds.</summary>
+    public const long Time = 500;
+
+    /// <summary>How far from the last press the next one may be, in pixels.</summary>
+    public const double Distance = 4;
+
+    double lastX, lastY;
+    long lastAt = long.MinValue;
+    PointerButton lastButton;
+    int count;
+
+    /// <summary>The click count of a press of <paramref name="button"/> at x, y at <paramref name="milliseconds"/>.</summary>
+    public int Press(double x, double y, PointerButton button, long milliseconds)
+    {
+        var next = count > 0 && button == lastButton && milliseconds - lastAt <= Time
+            && Math.Abs(x - lastX) <= Distance && Math.Abs(y - lastY) <= Distance;
+        count = next ? count + 1 : 1;
+        (lastX, lastY, lastAt, lastButton) = (x, y, milliseconds, button);
+        return count;
+    }
+}

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window name="Shelf">
+  <Textbox name="name" at="1,1" span="6" />
+  <Button name="greetButton" at="7,1" span="3" caption="Greet" onclick="greet" />
+  <Timer name="clock" at="1,1" span="1" every="0.1" ontick="stepped" />
+</Window>

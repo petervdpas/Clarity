@@ -52,6 +52,11 @@ impl Texts {
         key_of(text).and_then(|key| self.names.get(key)).map(|name| format!("Texts.{name}"))
     }
 
+    /// The key of a text the project translates, `saveCaption` for `@saveCaption`.
+    pub fn key(&self, text: &str) -> Option<String> {
+        key_of(text).filter(|key| self.names.contains_key(*key)).map(str::to_string)
+    }
+
     /// A text as a C# expression that follows the language.
     pub fn code(&self, text: &str) -> String {
         self.property(text).unwrap_or_else(|| string(text))

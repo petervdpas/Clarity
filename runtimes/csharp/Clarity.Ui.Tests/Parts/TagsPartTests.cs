@@ -146,4 +146,17 @@ public class TagsPartTests
         Assert.True(tags.Chips[1].Bounds.X > tags.Chips[0].Bounds.Right);
         Assert.True(tags.Editor.Bounds.X > tags.Chips[1].Bounds.Right);
     }
+
+    [Fact]
+    public void The_place_to_add_is_as_high_as_an_input_box_and_the_chips_sit_in_its_middle()
+    {
+        var (_, tags, _) = Make(new List<string> { "jazz" });
+        var box = tags.Editor!.Bounds;
+        Assert.Equal(GridLayout.RowHeight, box.Height);
+        Assert.Equal(tags.Bounds.Y, box.Y);
+        var chip = tags.Chips[0].Bounds;
+        Assert.Equal(box.Y + box.Height / 2, chip.Y + chip.Height / 2, 3);
+        var (_, picked, _) = Make(new List<TagsPartGenre> { TagsPartGenre.Jazz });
+        Assert.Equal(GridLayout.RowHeight, picked.Adder.Bounds.Height);
+    }
 }

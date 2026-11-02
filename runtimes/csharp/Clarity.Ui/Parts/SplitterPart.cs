@@ -3,6 +3,8 @@
 // `pane span 4` gives the first of two side by side panes 4 of the part's
 // columns and the second the rest (clarity_spec::widgets::pane_columns);
 // otherwise each pane has all the part's columns and they share the room.
+// A pane whose parts go further down than its room scrolls, so none of them
+// is out of reach in a low window.
 
 namespace Clarity.Ui;
 
@@ -10,6 +12,7 @@ namespace Clarity.Ui;
 public sealed class SplitterPart : ContainerPart
 {
     readonly List<GridPanel> panes = [];
+    readonly List<ScrollView> views = [];
     readonly List<Divider> dividers = [];
     double[] shares = [];
 
@@ -21,6 +24,9 @@ public sealed class SplitterPart : ContainerPart
     public IReadOnlyList<GridPanel> Panes => panes;
 
     public IReadOnlyList<Element> Dividers => dividers;
+
+    /// <summary>The place of each pane, which scrolls its grid when the grid is higher.</summary>
+    public IReadOnlyList<ScrollView> Views => views;
 
     /// <summary>How much of the room each pane has, from 0 to 1, as designed or as the person dragged it.</summary>
     public IReadOnlyList<double> Shares => shares;
@@ -47,10 +53,25 @@ public sealed class SplitterPart : ContainerPart
             }
             var grid = Grid(Spec.Pages[i].Children, columns[i]);
             panes.Add(grid);
-            AddChild(grid);
+            var view = new ScrollView(grid) { KeepsBarRoom = true };
+            views.Add(view);
+            AddChild(view);
         }
         var total = columns.Sum();
         shares = [.. columns.Select(c => total == 0 ? 0 : (double)c / total)];
+    }
+
+    /// <summary>The room it needs beyond its rows: each pane's padding and grid, side by side the highest, one above the other all of them with the dividers.</summary>
+    public override double Around
+    {
+        get
+        {
+            var pad = 4 * LookNow.Padding;
+            var needs = panes.Select((g, i) => pad + LeastOf(g, Spec.Pages[i].Children)).ToList();
+            if (needs.Count == 0)
+                return 0;
+            return AroundFor(0, Vertical ? needs.Sum() + dividers.Count * DividerThickness : needs.Max());
+        }
     }
 
     double Room => (Vertical ? Bounds.Height : Bounds.Width) - DividerThickness * dividers.Count;
@@ -70,7 +91,7 @@ public sealed class SplitterPart : ContainerPart
             }
             var length = Math.Max(0, Room * shares[i]);
             var pane = Vertical ? new Box(box.X, at, box.Width, length) : new Box(at, box.Y, length, box.Height);
-            panes[i].Arrange(pane.Inset(pad));
+            views[i].Arrange(pane.Inset(pad));
             at += length;
         }
     }

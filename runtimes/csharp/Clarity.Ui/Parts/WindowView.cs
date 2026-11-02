@@ -96,6 +96,9 @@ public sealed class WindowView : Element, IDisposable
     /// <summary>The frame around the window's parts: its regions and the menus open over it.</summary>
     public WindowFrame Frame => frame;
 
+    /// <summary>How wide its sidebars are now: each shown one's width, a folded one its strip; none while one fills the window.</summary>
+    public double SidebarsWidth => frame.Filling is not null ? 0 : new[] { frame.Left, frame.Right }.Sum(s => s is { Shows: true } ? s.Wanted : 0);
+
     /// <summary>Why the window shows nothing: its markup could not be read.</summary>
     public string? Problem { get; init; }
 
@@ -207,18 +210,22 @@ public sealed class WindowView : Element, IDisposable
         foreach (var part in ShownParts())
             if (Answers(KeysOf(part.Spec.Name, app: false, part.Spec.Text("shortcut")), key, typing))
             {
+                // What is typed in the input with the focus is taken first, as a click on the button does.
+                TakesTyped.From(focused);
                 Press(part);
                 return true;
             }
         foreach (var (item, app) in FrameRules.Keyed(frame.Shown, Host))
             if (Answers(KeysOf(item.Text("name"), app, item.Text("shortcut")), key, typing))
             {
+                TakesTyped.From(focused);
                 frame.RunByKey(item, screen);
                 return true;
             }
         foreach (var (part, item) in PartMenuItems())
             if (item.Text("shortcut") is { Length: > 0 } shortcut && Shortcuts.Matches(shortcut, key, typing))
             {
+                TakesTyped.From(focused);
                 PartKinds.Pick(Host, part.Spec.Name, item);
                 return true;
             }
@@ -231,7 +238,10 @@ public sealed class WindowView : Element, IDisposable
             return true;
         var flag = key.Key == Key.Enter ? "default" : "cancel";
         if (ShownParts().FirstOrDefault(p => p is ButtonPart && p.Spec.Flag(flag)) is { } pressed)
+        {
+            TakesTyped.From(focused);
             Press(pressed);
+        }
         return true;
     }
 
@@ -384,7 +394,7 @@ public sealed class WindowView : Element, IDisposable
     }
 }
 
-/// <summary>A warning or an error in Clarity's own dialog: its kind, its text and OK, over a dimmed window.</summary>
+/// <summary>A warning or an error in Clarity's own dialog: its text and OK over a dimmed window, its level in the color of its top edge, as the web screen's.</summary>
 public sealed class SaidDialog : Element
 {
     const double Width = 420;
@@ -406,14 +416,12 @@ public sealed class SaidDialog : Element
     /// <summary>Where the dialog itself is, in the middle of the window.</summary>
     public Box Panel { get; private set; }
 
-    string Heading => Message.Level == Level.Error ? Locale.Translate("error", "Error") : Locale.Translate("warning", "Warning");
-
     public override void Arrange(Box box)
     {
         Bounds = box;
         var width = Math.Min(Width, Math.Max(160, box.Width - 32));
         var lines = Screen is { } screen ? Wrap(Message.Shown, width - 40, screen.Fonts, screen.Look.Size("text")).Count : 1;
-        var height = 20 + 28 + lines * Line + 20 + GridLayout.RowHeight + 20;
+        var height = 20 + lines * Line + 20 + GridLayout.RowHeight + 20;
         Panel = new Box(box.X + (box.Width - width) / 2, box.Y + Math.Max(16, (box.Height - height) / 2), width, height);
         Ok.Arrange(new Box(Panel.Right - 20 - 96, Panel.Bottom - 20 - GridLayout.RowHeight, 96, GridLayout.RowHeight));
     }
@@ -429,11 +437,10 @@ public sealed class SaidDialog : Element
         var tone = look.Color(Message.Level == Level.Error ? "error" : "warning");
         painter.Fill(new Box(Panel.X, Panel.Y, Panel.Width, 4), tone, radius);
         var inner = Panel.Width - 40;
-        painter.Text(Heading, new Box(Panel.X + 20, Panel.Y + 20, inner, 28), tone, look.Size("heading"), bold: true);
         var size = look.Size("text");
         var lines = Wrap(Message.Shown, inner, painter.Fonts, size);
         for (var i = 0; i < lines.Count; i++)
-            painter.Text(lines[i], new Box(Panel.X + 20, Panel.Y + 48 + i * Line, inner, Line), look.Color("text"), size);
+            painter.Text(lines[i], new Box(Panel.X + 20, Panel.Y + 20 + i * Line, inner, Line), look.Color("text"), size);
         base.Draw(painter);
     }
 

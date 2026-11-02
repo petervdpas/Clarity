@@ -52,6 +52,28 @@ public abstract class ContainerPart : Part, IFramesParts
         return grid;
     }
 
+    /// <summary>How high a grid of <paramref name="parts"/> is at the least: its rows at 36, and the room its own containers ask around theirs.</summary>
+    protected static double LeastOf(GridPanel grid, IReadOnlyList<PartSpec> parts)
+    {
+        if (parts.Count == 0)
+            return 0;
+        var items = parts.Select((p, i) => p.Place(false) with { Around = i < grid.Children.Count ? grid.Children[i].Around : 0 }).ToList();
+        return GridLayout.Place(items, grid.Columns, 1000, 0).Content;
+    }
+
+    /// <summary>How high its own rows are at the least.</summary>
+    protected double OwnLeast
+    {
+        get
+        {
+            var rows = Math.Max(1, Spec.Place(false).Height);
+            return rows * GridLayout.RowHeight + (rows - 1) * GridLayout.Gap;
+        }
+    }
+
+    /// <summary>The room it asks beyond its rows: what it puts around its grid plus what the grid needs more than the rows give, never less than nothing.</summary>
+    protected double AroundFor(double frame, double needed) => Math.Max(0, frame + needed - OwnLeast);
+
     /// <summary>Shows one of its grids or takes it away: one that is away draws nothing and takes no pointer.</summary>
     protected void Show(Element grid, bool shown)
     {
@@ -227,6 +249,9 @@ public sealed class PanelPart : ContainerPart
     }
 
     double Header => Bare ? 0 : HeaderHeight(LookNow);
+
+    /// <summary>The room it needs beyond its rows: its header and padding, when its grid needs more than its rows give.</summary>
+    public override double Around => AroundFor(Bare ? 0 : Header + 2 * LookNow.Padding, LeastOf(grid, Spec.Children));
 
     public override void Arrange(Box box)
     {

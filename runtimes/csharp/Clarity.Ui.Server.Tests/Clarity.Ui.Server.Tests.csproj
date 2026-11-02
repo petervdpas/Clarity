@@ -1,0 +1,27 @@
+<!-- The tests of a program served to browsers (DESIGN 7.6, 7.9): the server
+     (Clarity.Ui.Server) and the browser's mirror of its windows
+     (Clarity.Ui.Browser), talking through the session protocol in one process. -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <!-- Skia's native library, to lay out and draw the mirrors' windows as the browser does. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.148.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Clarity.Ui.Server/Clarity.Ui.Server.csproj" />
+    <ProjectReference Include="../Clarity.Ui.Browser/Clarity.Ui.Browser.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The test windows' markup, carried as a generated application carries it. -->
+    <EmbeddedResource Include="Windows/*.cxaml" LogicalName="Windows/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

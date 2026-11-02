@@ -1,4 +1,4 @@
-// The sessions of a server that shows Avalonia windows in browsers
+// The sessions of a server that shows Clarity.UI windows in browsers
 // (DESIGN 7.6): each tab's windows live on the server, where their handlers
 // run, as the desktop shell runs them; the browser sends what the person
 // did and gets the windows' state back.

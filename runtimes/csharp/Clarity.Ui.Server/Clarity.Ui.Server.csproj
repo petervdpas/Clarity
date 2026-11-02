@@ -1,0 +1,28 @@
+<!-- The server of a Clarity.UI program shown in browsers (DESIGN 7.6, 7.9):
+     the sessions of the windows over HTTP, the browser program's files and
+     the windows' markup. It draws nothing, so it takes the runtime alone. -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Clarity.Ui.Server</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>true</IsPackable>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageOutputPath>bin/$(Configuration)</PackageOutputPath>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageId>Clarity.Ui.Server</PackageId>
+    <Description>The server of a Clarity.UI program shown in browsers: a session of the windows per browser tab, where their handlers run against the server's databases, the browser program's files and the windows' markup, over HTTP.</Description>
+    <PackageTags>clarity;ui;server;webassembly;browser</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Clarity.Runtime/Clarity.Runtime.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="" />
+    <None Include="../assets/icon.png" Pack="true" PackagePath="assets/" />
+    <None Include="../assets/LICENSE.txt" Pack="true" PackagePath="assets/" />
+  </ItemGroup>
+</Project>

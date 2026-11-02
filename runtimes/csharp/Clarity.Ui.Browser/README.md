@@ -18,4 +18,11 @@ A dialog and the keys window show over the window; web addresses open in a new t
 
 The page is the program's `BrowserPage`: its title, downloads, files shown in a tab of their own, what the person keeps in the browser's storage, and sounds through Web Audio (a browser lets a page sound once the person pressed or typed on it). A file is opened through the page's file input and saved as a download; a page chooses no folder, so a folder is typed. Timers and playing sounds tick on the page's frames.
 
-A program that reads what the browser keeps before it runs (its language, its theme) calls `BrowserCanvas.Prepare()` first.
+A program that reads what the browser keeps before it runs (its language, its theme) awaits `BrowserCanvas.Ready()` first.
+
+A program served to the browser runs its windows on the server (Clarity.Ui.Server), in a session of the tab, and draws a mirror of each from the markup the server sends; what the person does goes to the server as the window's commands:
+
+```csharp
+await BrowserCanvas.Ready();
+await BrowserCanvas.Serve(typeof(Texts).Assembly);
+```

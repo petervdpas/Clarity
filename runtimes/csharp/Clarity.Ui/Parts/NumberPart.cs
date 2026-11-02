@@ -14,7 +14,7 @@ using Clarity.Runtime;
 namespace Clarity.Ui;
 
 [PartKind("number", "spinbox")]
-public sealed class NumberPart : Part
+public sealed class NumberPart : Part, ITakesTyped
 {
     const double ArrowWidth = 22;
 
@@ -107,6 +107,9 @@ public sealed class NumberPart : Part
     }
 
     /// <summary>Takes what is typed: a change when it is a number that differs from the value.</summary>
+    public void TakeTyped() => Take();
+
+    /// <summary>Takes what is typed; see <see cref="TakeTyped"/>.</summary>
     public void Take()
     {
         Sync();

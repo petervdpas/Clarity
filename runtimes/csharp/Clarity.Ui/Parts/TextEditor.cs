@@ -97,6 +97,11 @@ public sealed class TextEditor(bool multiline = false) : Element
     /// <summary>A key, before it does what it does here: true when the holder took it (a spin box's Up and Down).</summary>
     public Func<KeyInput, bool>? KeyFirst { get; set; }
 
+    /// <summary>Whether Tab and Shift+Tab come to <see cref="KeyFirst"/> instead of moving the focus (a table's cell editor goes on to the next cell).</summary>
+    public bool TakesTab { get; set; }
+
+    public override bool WantsTab => TakesTab;
+
     /// <summary>It got (true) or lost (false) the focus.</summary>
     public event Action<bool>? FocusMoved;
 

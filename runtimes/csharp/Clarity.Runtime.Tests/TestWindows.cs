@@ -1,6 +1,5 @@
 // Windows the tests open: a shelf of books, a book, a pick and a window that
-// keeps a setting. Clarity.Ui's tests and Clarity.Avalonia's (the mirror
-// shell) both use them.
+// keeps a setting. Clarity.Runtime's and Clarity.Ui's tests both use them.
 
 using System.Text.Json.Nodes;
 using Clarity.Runtime;

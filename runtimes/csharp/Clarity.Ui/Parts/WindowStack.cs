@@ -322,6 +322,8 @@ public sealed class WindowStack : Element, IDisposable
         {
             var was = stack[i];
             var top = i == stack.Count - 1;
+            // What was said into its text values shows in the new language before it is drawn again.
+            was.Model.Reshow();
             if (top)
                 Forget(was);
             else
@@ -335,6 +337,7 @@ public sealed class WindowStack : Element, IDisposable
         }
         foreach (var dialog in dialogs)
         {
+            dialog.Model.Reshow();
             dialog.Content.View.Dispose();
             dialog.Host.Dispose();
             var (host, view) = MakeDialogView(dialog.Model);

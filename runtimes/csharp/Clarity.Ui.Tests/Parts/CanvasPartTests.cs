@@ -401,4 +401,40 @@ public class CanvasPartTests
         Assert.Equal(ThemeLook.Clarity(dark: false).Color("accent"), Pixel(screen, 280, 80));
         Assert.Null(canvas.Failed);
     }
+
+    [Fact]
+    public void A_canvas_text_keeps_its_spaces_and_width_at_every_zoom()
+    {
+        var fonts = new Fonts(ThemeLook.Clarity(dark: true));
+        using var whole = CanvasPart.WordsFont(fonts, 11);
+        using var small = CanvasPart.WordsFont(fonts, 11 * 0.52);
+        const string text = "string? medewerkerBk and DateTimeOffset? begindatum";
+        Assert.Equal(whole.MeasureText(text) * 0.52, small.MeasureText(text), 0.5);
+        Assert.True(small.MeasureText(" ") > 1);
+    }
+
+    [Fact]
+    public void A_canvas_whose_drags_and_bends_are_edits_takes_the_focus_so_its_undo_key_reaches_it()
+    {
+        var (_, screen, canvas) = Canvas("""units="{&quot;width&quot;:100,&quot;height&quot;:100}" undoScope="pad" ondrag="moved" ondrop="dropped" onbend="bent" """);
+        Assert.True(canvas.Focusable);
+        screen.PointerPressed(240, 40, PointerButton.Left);
+        screen.PointerReleased(240, 40, PointerButton.Left);
+        Assert.Same(canvas, screen.Focused);
+        // Without undo, or with nothing the person changes on it, it takes no focus.
+        var (_, _, plain) = Canvas("""units="{&quot;width&quot;:100,&quot;height&quot;:100}" noUndo="true" ondrop="dropped" """);
+        Assert.False(plain.Focusable);
+        var (_, _, drawn) = Canvas("""units="{&quot;width&quot;:100,&quot;height&quot;:100}" ondraw="drawn" """);
+        Assert.False(drawn.Focusable);
+    }
+
+    [Fact]
+    public void A_canvas_grows_as_every_stack_grows_it_and_so_do_tabs_that_hold_one()
+    {
+        var (_, _, canvas) = Canvas("""units="{&quot;width&quot;:100,&quot;height&quot;:100}" ondraw="drawn" """);
+        Assert.True(canvas.Grows);
+        var (_, _, parts) = Made.Window("""<Tabs at="1,1" span="12" rows="3"><Tab title="One"><Canvas name="pad" at="1,1" span="12" rows="2" /></Tab></Tabs><Button at="1,4" span="2" />""", new CanvasPartHost(), width: 808, height: 800);
+        Assert.True(parts[0].Grows);
+        Assert.True(parts[0].Bounds.Height > 600);
+    }
 }

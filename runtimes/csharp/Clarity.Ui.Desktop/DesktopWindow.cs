@@ -33,8 +33,38 @@ public static class DesktopWindow
     // OpenGL's RGBA8, the window's own framebuffer's format.
     const uint Rgba8 = 0x8058;
 
+    // What a grown window leaves of the screen's height, for the system's own bars.
+    const double ScreenMargin = 64;
+
     /// <summary>The size a window that names none opens at, on every stack (clarity_spec::layout).</summary>
     public static readonly Extent StandardSize = new(1100, 760);
+
+    /// <summary>
+    /// The size of a desktop window at <paramref name="now"/> when a window
+    /// that asks for <paramref name="wanted"/> opens in it: as large as it
+    /// asks, never smaller than it is, and no larger than <paramref name="room"/>
+    /// (the screen's) where that is known.
+    /// </summary>
+    public static Extent Grown(Extent now, Extent? wanted, Extent? room)
+    {
+        if (wanted is not { } want)
+            return now;
+        var width = Math.Max(now.Width, want.Width);
+        var height = Math.Max(now.Height, want.Height);
+        if (room is { } r)
+            (width, height) = (Math.Max(now.Width, Math.Min(width, r.Width)), Math.Max(now.Height, Math.Min(height, r.Height)));
+        return new Extent(width, height);
+    }
+
+    /// <summary>
+    /// The size of a desktop window <paramref name="now"/> when its sidebars
+    /// went from <paramref name="was"/> wide to <paramref name="width"/>: a
+    /// sidebar that opens grows it by the room it takes, so the window's own
+    /// parts keep theirs, as far as the screen has <paramref name="room"/>;
+    /// one that folds leaves it as it is.
+    /// </summary>
+    public static Extent SidebarGrown(Extent now, double was, double width, Extent? room) =>
+        width <= was ? now : Grown(now, now with { Width = now.Width + width - was }, room);
 
     /// <summary>
     /// Shows a generated application from its main window until the person
@@ -120,6 +150,10 @@ public static class DesktopWindow
         /// <summary>It is gone.</summary>
         public Action? Gone { get; set; }
 
+        /// <summary>The window view whose sidebars were last seen, and how wide they were: one that opens grows the desktop window.</summary>
+        public WindowView? SidebarsOf { get; set; }
+        public double Sidebars { get; set; }
+
         /// <summary>A dialog of its own is open over it: it takes no input.</summary>
         public bool Blocked => Children.Any(c => c.Modal);
     }
@@ -156,7 +190,8 @@ public static class DesktopWindow
             {
                 while (!call.IsCompleted && windows.Count > 0)
                     Pump();
-                call.Wait();
+                // Only waits: the engine reads the call's refusal or failure itself.
+                ((IAsyncResult)call).AsyncWaitHandle.WaitOne();
             };
             Themes.Changed += Relook;
         }
@@ -199,8 +234,18 @@ public static class DesktopWindow
             shown.App = screen;
             screen.Stack.TitleChanged += () =>
             {
-                if (screen.Stack.Current is { } top)
-                    shown.Window.Title = top.Title;
+                if (screen.Stack.Current is not { } top)
+                    return;
+                shown.Window.Title = top.Title;
+                // A window that names its size grows the desktop window to it, as far as the screen has room.
+                if (!dialog && top.WindowSize is { } wanted)
+                {
+                    var now = new Extent(shown.Window.Size.X, shown.Window.Size.Y);
+                    var room = shown.Window.Monitor?.VideoMode.Resolution is { } r ? new Extent(r.X, r.Y - ScreenMargin) : (Extent?)null;
+                    var grown = Grown(now, wanted, room);
+                    if (grown != now)
+                        shown.Window.Size = new Vector2D<int>((int)grown.Width, (int)grown.Height);
+                }
             };
             screen.Stack.Ended += () =>
             {
@@ -262,10 +307,13 @@ public static class DesktopWindow
             foreach (var mouse in input.Mice)
             {
                 mouse.MouseMove += (_, at) => queue.Enqueue(() => screen.PointerMoved(at.X, at.Y));
+                // The window gives only presses: a double or triple click is counted here.
+                var presses = new PressCounter();
                 mouse.MouseDown += (m, button) =>
                 {
                     var at = m.Position;
-                    queue.Enqueue(() => screen.PointerPressed(at.X, at.Y, Button(button)));
+                    var clicks = presses.Press(at.X, at.Y, Button(button), Environment.TickCount64);
+                    queue.Enqueue(() => screen.PointerPressed(at.X, at.Y, Button(button), clicks));
                 };
                 mouse.MouseUp += (m, button) =>
                 {
@@ -359,6 +407,8 @@ public static class DesktopWindow
                 }
             while (later.TryDequeue(out var action))
                 Safely(active, action);
+            foreach (var shown in windows.ToList())
+                Widen(shown);
             // The parts' clock: timers and playing sounds whose time has come.
             ticks.Advance(Stopwatch.GetElapsedTime(this.started));
             foreach (var shown in windows.ToList())
@@ -382,6 +432,24 @@ public static class DesktopWindow
             var frame = TimeSpan.FromMilliseconds(drew ? 16 : 8);
             if (spent < frame)
                 Thread.Sleep(frame - spent);
+        }
+
+        /// <summary>A sidebar of the window shown opened: the desktop window grows by the room it takes (a dialog keeps its size).</summary>
+        static void Widen(Shown shown)
+        {
+            if (shown.Modal || shown.Window.IsClosing || shown.App?.Stack.View is not { } view)
+                return;
+            var width = view.SidebarsWidth;
+            if (shown.SidebarsOf == view && width > shown.Sidebars)
+            {
+                var now = new Extent(shown.Window.Size.X, shown.Window.Size.Y);
+                var room = shown.Window.Monitor?.VideoMode.Resolution is { } r ? new Extent(r.X, r.Y - ScreenMargin) : (Extent?)null;
+                var grown = SidebarGrown(now, shown.Sidebars, width, room);
+                if (grown != now)
+                    shown.Window.Size = new Vector2D<int>((int)grown.Width, (int)grown.Height);
+            }
+            shown.SidebarsOf = view;
+            shown.Sidebars = width;
         }
 
         static bool Draw(Shown shown)

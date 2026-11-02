@@ -113,6 +113,16 @@ public class ListPartTests
     }
 
     [Fact]
+    public void A_long_lists_rows_leave_room_for_its_bar()
+    {
+        var (_, list, _) = Made("cards=\"true\"", count: 40);
+        Assert.True(list.Scroller.MaxScrollY > 0);
+        Assert.Equal(list.Scroller.Bounds.Width - ScrollView.BarThickness, list.RowBox(0)!.Value.Width, 3);
+        var (_, few, _) = Made("cards=\"true\"", count: 1);
+        Assert.Equal(few.Scroller.Bounds.Width, few.RowBox(0)!.Value.Width, 3);
+    }
+
+    [Fact]
     public void A_long_list_scrolls_in_its_own_place()
     {
         var (screen, list, _) = Made(count: 40);

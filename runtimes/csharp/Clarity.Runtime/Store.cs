@@ -69,7 +69,7 @@ internal static class Store
     /// <summary>Connects to the database of a data source.</summary>
     internal static IDriver Open(Dialect dialect, string at) => dialect switch
     {
-        _ when drivers.TryGetValue(dialect, out var open) => open(Location(at)),
+        _ when drivers.TryGetValue(dialect, out var open) => open(Location(dialect == Dialect.Sqlite ? DataFolder.Sqlite(at) : at)),
         _ => throw new StorageException($"this application was built without {dialect.Label()}"),
     };
 
@@ -85,5 +85,26 @@ internal static class Store
             conn.Dispose();
             throw new StorageException($"cannot connect to {dialect.Label()}: {e.Message}", e);
         }
+    }
+}
+
+/// <summary>
+/// Where a program's SQLite databases are: as the project put them, or, when
+/// the environment variable CLARITY_DATA names a folder, in that folder under
+/// their own file names, so a run in the IDE or by hand chooses its data
+/// without editing the generated program.
+/// </summary>
+public static class DataFolder
+{
+    /// <summary>The environment variable that names the folder.</summary>
+    public const string Variable = "CLARITY_DATA";
+
+    /// <summary>The file of an SQLite database at <paramref name="location"/>; <paramref name="env"/> reads the environment (the process's when none).</summary>
+    public static string Sqlite(string location, Func<string, string?>? env = null)
+    {
+        if (location.StartsWith("env:", StringComparison.Ordinal) || location.StartsWith("setting:", StringComparison.Ordinal))
+            return location;
+        var folder = (env ?? Environment.GetEnvironmentVariable)(Variable);
+        return string.IsNullOrEmpty(folder) ? location : Path.Combine(folder, Path.GetFileName(location));
     }
 }

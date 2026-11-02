@@ -15,8 +15,10 @@ namespace Clarity.Ui;
 /// <summary>A field of a record as the data parts read and write it: a record's property (in any case), or a dictionary's entry.</summary>
 public static class RowFields
 {
+    // A field of two words (finished_by) is the property the generator names without its underscore (FinishedBy).
     static PropertyInfo? Property(object row, string field) =>
-        row.GetType().GetProperty(field, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+        row.GetType().GetProperty(field, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase)
+        ?? (field.Contains('_') ? row.GetType().GetProperty(field.Replace("_", ""), BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase) : null);
 
     static string? Key(IDictionary<string, object?> row, string field) =>
         row.ContainsKey(field) ? field : row.Keys.FirstOrDefault(k => string.Equals(k, field, StringComparison.OrdinalIgnoreCase));

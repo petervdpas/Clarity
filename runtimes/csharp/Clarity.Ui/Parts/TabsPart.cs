@@ -2,14 +2,15 @@
 // tab's page, a grid of its parts as wide as the part spans. The open tab is
 // its part's state's Tab, counted from 1, so code reads and sets it; a tab
 // whose parts code has all hidden gives way to the first one that shows, as
-// a ribbon's tab does (conformance/ribbons.json `shown`).
+// a ribbon's tab does (conformance/ribbons.json `shown`). A page whose parts
+// go further down than its room scrolls, so none is out of reach.
 
 namespace Clarity.Ui;
 
 [PartKind("tabs")]
 public sealed class TabsPart : ContainerPart
 {
-    readonly List<(PageSpec Page, GridPanel Grid, TabButton Tab)> pages = [];
+    readonly List<(PageSpec Page, GridPanel Grid, ScrollView View, TabButton Tab)> pages = [];
     long tabHere = 1;
 
     /// <summary>How high the strip of tabs is.</summary>
@@ -19,6 +20,9 @@ public sealed class TabsPart : ContainerPart
     public IReadOnlyList<Element> Tabs => [.. pages.Select(p => (Element)p.Tab)];
 
     public IReadOnlyList<GridPanel> Pages => [.. pages.Select(p => p.Grid)];
+
+    /// <summary>The place of each page, which scrolls its grid when the grid is higher; only the open one is shown.</summary>
+    public IReadOnlyList<ScrollView> Views => [.. pages.Select(p => p.View)];
 
     /// <summary>The tab shown, from 1, of tabs that show or not, when <paramref name="asked"/> is wanted: it, when it is there and shows, else the first that shows; null when none does.</summary>
     public static long? ShownTab(IReadOnlyList<bool> visible, long asked)
@@ -60,16 +64,19 @@ public sealed class TabsPart : ContainerPart
             var grid = Grid(page.Children, Columns);
             var tab = new TabButton(this, number, () => Shown(page.Title));
             AddChild(tab);
-            pages.Add((page, grid, tab));
+            pages.Add((page, grid, new ScrollView(grid) { KeepsBarRoom = true }, tab));
         }
     }
+
+    /// <summary>The room it needs beyond its rows: the strip of tabs and the page's padding over its highest page.</summary>
+    public override double Around => AroundFor(StripHeight + 4 * LookNow.Padding, pages.Count == 0 ? 0 : pages.Max(p => LeastOf(p.Grid, p.Page.Children)));
 
     public override void Arrange(Box box)
     {
         Bounds = box;
         var look = LookNow;
         var x = box.X;
-        foreach (var (_, _, tab) in pages)
+        foreach (var (_, _, _, tab) in pages)
         {
             var width = tab.WidthFor(Screen?.Fonts, look);
             tab.Arrange(new Box(x, box.Y, width, StripHeight));
@@ -79,9 +86,9 @@ public sealed class TabsPart : ContainerPart
         for (var i = 0; i < pages.Count; i++)
         {
             var shown = open == i + 1;
-            Show(pages[i].Grid, shown);
+            Show(pages[i].View, shown);
             if (shown)
-                pages[i].Grid.Arrange(new Box(box.X, box.Y + StripHeight + 2 * look.Padding, box.Width, Math.Max(0, box.Height - StripHeight - 4 * look.Padding)));
+                pages[i].View.Arrange(new Box(box.X, box.Y + StripHeight + 2 * look.Padding, box.Width, Math.Max(0, box.Height - StripHeight - 4 * look.Padding)));
         }
     }
 

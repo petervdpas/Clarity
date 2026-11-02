@@ -384,7 +384,19 @@ public sealed partial class CanvasPart : Part
     bool movesView;
     bool decided;
 
-    public override bool Focusable => Mode == "vector" && Acts;
+    /// <summary>
+    /// Whether it takes the focus: a vector canvas for its keys, and a canvas
+    /// whose drags, drops and bends are edits with undo, so Ctrl+Z takes back
+    /// its own (DESIGN 5.29), as a press on it gives it the focus.
+    /// </summary>
+    /// <summary>A canvas grows into the height its window has left, on every stack (clarity_spec widgets `grows`).</summary>
+    public override bool Grows => true;
+
+    public override bool Focusable => Mode == "vector" ? Acts : KeepsEdits;
+
+    bool KeepsEdits =>
+        Enabled && !ReadOnly && Engine is null && Spec.Name is not null && !Spec.Flag("noUndo")
+        && (Mode is "objects" or "paint" || Handles("drag") || Handles("drop") || Handles("bend"));
 
     public override void OnPointerPressed(PointerInput at)
     {
@@ -622,6 +634,15 @@ public sealed partial class CanvasPart : Part
         }
     }
 
+    /// <summary>The font of a canvas's text at a size on the screen: unhinted, so its letters and spaces scale with the zoom and keep their widths.</summary>
+    public static SKFont WordsFont(Fonts fonts, double size)
+    {
+        var font = fonts.Font("text", size, false);
+        font.Hinting = SKFontHinting.None;
+        font.LinearMetrics = true;
+        return font;
+    }
+
     /// <summary>A line through <paramref name="points"/> in <paramref name="paint"/>; one point is a dot of its round cap.</summary>
     static void Polyline(SKCanvas canvas, SKPoint[] points, SKPaint paint) =>
         canvas.DrawPoints(points.Length == 1 ? SKPointMode.Points : SKPointMode.Polygon, points, paint);
@@ -708,7 +729,7 @@ public sealed partial class CanvasPart : Part
                     var size = words.Size * scale;
                     if (text.Length == 0 || !(size > 0))
                         break;
-                    using var font = painter.Fonts.Font("text", size, false);
+                    using var font = WordsFont(painter.Fonts, size);
                     using var paint = Fill(words.Color);
                     var width = font.MeasureText(text);
                     var metrics = font.Metrics;

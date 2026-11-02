@@ -58,6 +58,8 @@ fn a_csharp_project_says_what_it_needs_and_how_to_build_it() {
     // The runtime comes from nuget.org, or from its own projects while working on it.
     has(&text, &format!("Clarity's runtime comes as NuGet packages (Clarity.Ui.Desktop {},", clarity_gen::csharp_runtime_version()));
     has(&text, "    dotnet build -p:ClarityRuntime=<Clarity>/runtimes/csharp\n");
+    // A run by hand or in the IDE chooses its data without editing the program.
+    has(&text, "Set the environment variable `CLARITY_DATA` to a folder to open it there instead, under its own file name.");
 }
 
 #[test]

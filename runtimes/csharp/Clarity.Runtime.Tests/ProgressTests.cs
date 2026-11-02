@@ -93,7 +93,7 @@ public class ProgressTests
     }
 
     /// <summary>
-    /// A screen that must keep painting (Avalonia) waits for the call its own way: the engine
+    /// A screen that must keep painting (Clarity.UI's desktop window) waits for the call its own way: the engine
     /// runs on another thread, and the watch's Wait gets the call to wait for.
     /// </summary>
     [Fact]

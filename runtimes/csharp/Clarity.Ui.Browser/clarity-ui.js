@@ -72,6 +72,11 @@ export async function start(id) {
   canvas.focus();
 }
 
+// Where the page came from: the server whose sessions a served program's windows are.
+export function origin() {
+  return location.origin;
+}
+
 export function prefersDark() {
   return matchMedia("(prefers-color-scheme: dark)").matches;
 }

@@ -37,6 +37,9 @@ public sealed class ScrollView : Element
     /// </summary>
     public Func<double, double, (double Width, double Height)>? Measure { get; init; }
 
+    /// <summary>Whether the content is made narrower by the bar while the bar down shows, so the bar covers none of it.</summary>
+    public bool KeepsBarRoom { get; init; }
+
     /// <summary>How wide and high the content was when it was last placed.</summary>
     public double ContentWidth { get; private set; }
     public double ContentHeight { get; private set; }
@@ -106,7 +109,13 @@ public sealed class ScrollView : Element
     {
         Bounds = box;
         var (width, height) = Measured(box.Width, box.Height);
-        ContentWidth = Math.Max(width, box.Width);
+        var room = box.Width;
+        if (KeepsBarRoom && height > box.Height)
+        {
+            room = Math.Max(0, box.Width - BarThickness);
+            (width, height) = Measured(room, box.Height);
+        }
+        ContentWidth = Math.Max(width, room);
         ContentHeight = Math.Max(height, box.Height);
         scrollX = Math.Clamp(scrollX, 0, MaxScrollX);
         scrollY = Math.Clamp(scrollY, 0, MaxScrollY);

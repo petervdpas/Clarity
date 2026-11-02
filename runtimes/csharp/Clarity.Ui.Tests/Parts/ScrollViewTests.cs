@@ -74,6 +74,26 @@ public class ScrollViewTests
     }
 
     [Fact]
+    public void Keeping_room_for_the_bar_narrows_the_content_while_the_bar_shows()
+    {
+        var content = new Plate("accent");
+        var view = new ScrollView(content) { Measure = (w, _) => (w, 1000), KeepsBarRoom = true };
+        var grid = new GridPanel(columns: 1);
+        grid.Add(view, new GridItem(1, 1, 1, 1, true));
+        var screen = new Screen(grid, ThemeLook.Clarity(dark: false));
+        screen.Resize(200, 200, 1);
+        Assert.Equal(200 - ScrollView.BarThickness, content.Bounds.Width);
+        Assert.Equal(0, view.MaxScrollX);
+        // Content that fits keeps the whole width.
+        var low = new Plate("accent");
+        var fits = new ScrollView(low) { Measure = (w, _) => (w, 100), KeepsBarRoom = true };
+        var other = new GridPanel(columns: 1);
+        other.Add(fits, new GridItem(1, 1, 1, 1, true));
+        new Screen(other, ThemeLook.Clarity(dark: false)).Resize(200, 200, 1);
+        Assert.Equal(200, low.Bounds.Width);
+    }
+
+    [Fact]
     public void It_shows_its_content_only_inside_its_place()
     {
         var content = new Plate("accent");

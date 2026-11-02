@@ -6,7 +6,9 @@
 // keys going down and up and typed text, to the same screen methods the desktop sends them to
 // (a dialog's keys and the window's own included, which are asked first).
 // A generated application runs its windows here as on the desktop, through
-// the same stack (AppScreen); a page opens no window of its own, so dialogs
+// the same stack (AppScreen). A program served to the browser runs its
+// windows on the server instead and draws mirrors of them (MirrorStack),
+// from the markup the server sends. A page opens no window of its own, so dialogs
 // and the keys window show over the window, and the theme follows the
 // page's prefers-color-scheme. The page is the program's BrowserPage: its
 // title, downloads, files shown in a tab, the browser's storage and sound
@@ -74,6 +76,38 @@ public static partial class BrowserCanvas
         await Run(shown.Screen, canvas);
     }
 
+    static MirrorStack? mirror;
+    static bool mirrorDark;
+
+    /// <summary>
+    /// Shows the windows of the server the page came from on the canvas
+    /// <paramref name="canvas"/> while the page is open (DESIGN 7.6): their
+    /// handlers run there, in a session of this tab, and each is drawn here
+    /// from the markup the server sends, over a mirror of its state.
+    /// <paramref name="app"/> is the application the program carries, whose
+    /// view models the mirrors are; the person's <paramref name="settings"/>,
+    /// which the browser keeps, go with each request.
+    /// </summary>
+    public static async Task Serve(System.Reflection.Assembly app, (Func<System.Text.Json.Nodes.JsonObject> Of, Action<System.Text.Json.Nodes.JsonObject> Apply)? settings = null, string canvas = "clarity")
+    {
+        Prepare();
+        await Import();
+        Later.Poster = action =>
+        {
+            later.Enqueue(action);
+            Want();
+        };
+        var http = new HttpClient { BaseAddress = new Uri(Origin()) };
+        var shown = await MirrorStack.Start(new HttpSessionLink(http), settings, AppScreen.CarriedBy(app), OpenAddress, files);
+        mirror = shown;
+        mirrorDark = PrefersDark();
+        var served = new Screen(shown, AppLook.Of(shown.Carried, Themes.Current, mirrorDark)) { Keys = shown.KeyPressed };
+        Themes.Changed += () => served.Show(AppLook.Of(shown.Carried, Themes.Current, mirrorDark));
+        shown.TitleChanged += () => SetTitle(shown.Current?.Title ?? "");
+        SetTitle(shown.Current?.Title ?? "");
+        await Run(served, canvas);
+    }
+
     /// <summary>An address a link or a handler opens: a web page in a new tab, mail and phone in the page; nothing else.</summary>
     static void OpenAddress(string address)
     {
@@ -121,6 +155,17 @@ public static partial class BrowserCanvas
         files = new PagePicker(page, OpenFile);
         Ticks.Source = ticks;
         ticks.Started += WantTick;
+    }
+
+    /// <summary>
+    /// Prepares the page and brings in its script, so what the browser keeps
+    /// can be read: a program that reads its language, theme or settings
+    /// before its windows show awaits it first.
+    /// </summary>
+    public static async Task Ready()
+    {
+        Prepare();
+        await Import();
     }
 
     /// <summary>The page's own: its title, files, storage and audio, through clarity-ui.js.</summary>
@@ -190,6 +235,9 @@ public static partial class BrowserCanvas
     [JSImport("requestFrame", Module)]
     private static partial void RequestFrame();
 
+    [JSImport("origin", Module)]
+    private static partial string Origin();
+
     [JSImport("prefersDark", Module)]
     private static partial bool PrefersDark();
 
@@ -245,11 +293,20 @@ public static partial class BrowserCanvas
     {
         if (app is not null)
             app.SystemDark = dark;
+        if (mirror is { } shown && screen is { } served && dark != mirrorDark)
+        {
+            mirrorDark = dark;
+            served.Show(AppLook.Of(shown.Carried, Themes.Current, dark));
+        }
     }
 
     /// <summary>Time went on (four times a second): info messages go when their time is up.</summary>
     [JSExport]
-    internal static void Tick() => app?.Stack.Tick();
+    internal static void Tick()
+    {
+        app?.Stack.Tick();
+        mirror?.Tick();
+    }
 
     /// <summary>The page waits for the screen's next wake; none when none waits.</summary>
     static void WaitForWake()

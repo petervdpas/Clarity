@@ -17,6 +17,32 @@ public sealed class PartKindAttribute(params string[] kinds) : Attribute
 }
 
 /// <summary>
+/// An input that takes what is typed in it only on leaving or Enter (a text
+/// box, a number, a table's cell editor): a key that runs a command has it
+/// take it first, as a click does by moving the focus.
+/// </summary>
+public interface ITakesTyped
+{
+    /// <summary>Takes what is typed: a change when it differs from the value.</summary>
+    void TakeTyped();
+}
+
+/// <summary>Has the input the focus is in take what is typed in it.</summary>
+public static class TakesTyped
+{
+    /// <summary>Walks up from <paramref name="focused"/> to the first input that takes typed text, and has it take it.</summary>
+    public static void From(Element? focused)
+    {
+        for (var e = focused; e is not null; e = e.Parent)
+            if (e is ITakesTyped input)
+            {
+                input.TakeTyped();
+                return;
+            }
+    }
+}
+
+/// <summary>
 /// What a part reads and changes: the window's view model, as the host makes
 /// it reachable. A value is named by its path in the window's data, as the
 /// markup binds it: <c>order.status</c>, <c>shown</c>.

@@ -233,7 +233,7 @@ fn handlers_work_on_the_window_and_the_screen() {
 }
 
 /// Every desktop window carries the title of the Clarity window it shows,
-/// as on Avalonia; the renderer sets it when the window changes.
+/// as on C#; the renderer sets it when the window changes.
 #[test]
 fn a_desktop_window_takes_the_title_of_its_window() {
     let files = files();

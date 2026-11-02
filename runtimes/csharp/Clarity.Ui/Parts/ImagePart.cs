@@ -24,19 +24,42 @@ public sealed class ImagePart : Part
 
     protected internal override void Made() => Host.Changed += Invalidate;
 
-    /// <summary>The picture of <paramref name="bytes"/>; null when there are none, or they are no bitmap. An SVG picture is not drawn yet.</summary>
+    /// <summary>The picture of <paramref name="bytes"/>; null when there are none, or they are no picture. An SVG picture is drawn from its shapes.</summary>
     public static SKBitmap? Picture(string? name, byte[]? bytes)
     {
-        if (string.IsNullOrEmpty(name) || bytes is null || name.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(name) || bytes is null)
             return null;
         try
         {
-            return SKBitmap.Decode(bytes);
+            return name.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) ? Drawn(bytes) : SKBitmap.Decode(bytes);
         }
-        catch (Exception e) when (e is IOException or ArgumentException or InvalidOperationException)
+        catch (Exception e) when (e is IOException or ArgumentException or InvalidOperationException or System.Xml.XmlException or FormatException or NullReferenceException)
         {
             return null;
         }
+    }
+
+    // The longer side an SVG picture is drawn at, at least, so it stays sharp when shown larger than it names.
+    const float SvgSide = 512;
+
+    /// <summary>An SVG picture drawn into a bitmap of its own proportions, its longer side at least <see cref="SvgSide"/>; null when it is no SVG.</summary>
+    static SKBitmap? Drawn(byte[] bytes)
+    {
+        using var svg = new Svg.Skia.SKSvg();
+        using var stream = new MemoryStream(bytes);
+        if (svg.Load(stream) is not { } picture)
+            return null;
+        var size = picture.CullRect;
+        if (size.Width <= 0 || size.Height <= 0)
+            return null;
+        var scale = Math.Clamp(SvgSide / Math.Max(size.Width, size.Height), 1, 8);
+        var bitmap = new SKBitmap(new SKImageInfo((int)Math.Ceiling(size.Width * scale), (int)Math.Ceiling(size.Height * scale), SKColorType.Rgba8888, SKAlphaType.Premul));
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.Transparent);
+        canvas.Scale(scale);
+        canvas.Translate(-size.Left, -size.Top);
+        canvas.DrawPicture(picture);
+        return bitmap;
     }
 
     /// <summary>The picture it shows, as the host gives its bytes, loaded once per name.</summary>

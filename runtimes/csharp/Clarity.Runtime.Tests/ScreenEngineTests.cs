@@ -1,4 +1,4 @@
-// Engines beside the screen on Avalonia (DESIGN 5.12): Wasmtime in the
+// Engines beside the screen on C# (DESIGN 5.12): Wasmtime in the
 // application's process, one instance per canvas, its frames stopped by the
 // epoch when they run past the limit (conformance/screen-engines.json).
 

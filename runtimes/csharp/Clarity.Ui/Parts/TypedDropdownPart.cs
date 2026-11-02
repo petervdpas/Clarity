@@ -13,7 +13,7 @@ using Clarity.Runtime;
 namespace Clarity.Ui;
 
 /// <summary>What the typed and the search dropdown share: the box, the list below it, the keys.</summary>
-public abstract class TypeAheadPart : Part
+public abstract class TypeAheadPart : Part, ITakesTyped
 {
     TextEditor editor = null!;
     Overlay? open;
@@ -158,6 +158,9 @@ public abstract class TypeAheadPart : Part
     }
 
     /// <summary>Takes what is typed, as when the box is left.</summary>
+    public void TakeTyped() => Take();
+
+    /// <summary>Takes what is typed; see <see cref="TakeTyped"/>.</summary>
     public void Take()
     {
         Close();

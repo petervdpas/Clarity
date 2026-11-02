@@ -1,4 +1,4 @@
-// Engines beside the screen (DESIGN 5.12) on Avalonia: Wasmtime in the
+// Engines beside the screen (DESIGN 5.12) on C#: Wasmtime in the
 // application's process, one instance per canvas, which keeps its memory
 // from frame to frame. Each frame calls clarity_tick with the milliseconds
 // since the last, then clarity_draw for the canvas's shapes, each call

@@ -73,7 +73,11 @@ public static class LongCall
             if (Waiter is { } waiter)
                 waiter(call);
             else
-                call.Wait();
+                ((IAsyncResult)call).AsyncWaitHandle.WaitOne();
+        }
+        catch (AggregateException) when (call.IsCompleted)
+        {
+            // Waiting only waits: the caller reads the call's own refusal or failure from it after.
         }
         finally
         {

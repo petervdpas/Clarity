@@ -283,6 +283,8 @@ impl<'a> Window<'a> {
 
         // The constructor loads every list and the records of references.
         let mut constructor = String::new();
+        // A text value that starts at a key shows again when the language changes.
+        let mut said = String::new();
         let mut properties = String::new();
         for (data, entity, list) in &self.data {
             let prop = member(data);
@@ -320,6 +322,11 @@ impl<'a> Window<'a> {
                 (None, _) => "default".into(),
             };
             let (prop, field) = (member(&d.name.name), backing(&d.name.name));
+            if let Some(Literal::Str(text)) = default
+                && let Some(key) = self.texts.key(text)
+            {
+                let _ = writeln!(said, "        ShowText(nameof({prop}), Text.Of({}), shown => {prop} = shown);", string(&key));
+            }
             let _ = write!(properties, "    public {ty_name} {prop} {{ get => {field}; set => SetProperty(ref {field}, value); }}\n    {ty_name} {field} = {start};\n\n");
         }
         // The picture each picture field shows when the record has one stored.
@@ -737,7 +744,7 @@ public sealed partial class {name}ViewModel : WindowViewModel
 {{
     public {name}ViewModel(Db? db) : base(db)
     {{
-{mirror}{constructor}    }}
+{said}{mirror}{constructor}    }}
 
 {}
 }}

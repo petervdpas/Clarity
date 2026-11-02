@@ -12,7 +12,7 @@ using Clarity.Runtime;
 namespace Clarity.Ui;
 
 [PartKind("folder")]
-public sealed class FolderPart : Part
+public sealed class FolderPart : Part, ITakesTyped
 {
     const double Gap = 4;
 
@@ -77,6 +77,9 @@ public sealed class FolderPart : Part
     }
 
     /// <summary>Takes what is typed: a change when it differs from the value.</summary>
+    public void TakeTyped() => Take();
+
+    /// <summary>Takes what is typed; see <see cref="TakeTyped"/>.</summary>
     public void Take()
     {
         Sync();

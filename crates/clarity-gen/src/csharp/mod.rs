@@ -16,6 +16,7 @@ mod names;
 pub(crate) use names::value_type as value_type_of;
 mod texts;
 mod themes;
+mod web;
 mod windows;
 
 use clarity_project::Settings;
@@ -76,10 +77,12 @@ pub use cli::generate as generate_cli;
 /// The program of the project: the desktop program, or with the web target
 /// alone the web application (DESIGN 7.6).
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    if settings.stack.has(clarity_project::Target::Web) {
-        return Err(vec!["C#'s web target on Clarity.UI is not generated yet (DESIGN 7.9, G7d); use the desktop target".to_string()]);
+    if settings.stack.has(clarity_project::Target::Desktop) || !settings.stack.has(clarity_project::Target::Web) {
+        return generate_desktop(project, settings, DESKTOP_PACKAGE);
     }
-    generate_desktop(project, settings, DESKTOP_PACKAGE)
+    // The windows as the desktop program has them, on Clarity.UI without the desktop's own.
+    let windows = generate_desktop(project, settings, web::APP_PACKAGE)?;
+    web::generate(&crate::with_secret_settings(project, &crate::settings_program(settings)), settings, windows)
 }
 
 /// The desktop program, its windows drawn by the package `ui`.
@@ -594,8 +597,10 @@ fn fields_cs(project: &Project, name: &str) -> String {
                 FieldType::Ref { entity } => string(&entity.name),
                 _ => "null".to_string(),
             };
+            // A color field says so, for the parts that show a swatch beside its value.
+            let color = if matches!(field.ty, FieldType::Color) { ", Color: true" } else { "" };
             lines.push_str(&format!(
-                "        [{key}] = new({label}, {format}, Required: {required}, Min: {min}, Max: {max}, Refers: {refers}, Parent: {parent}),\n",
+                "        [{key}] = new({label}, {format}, Required: {required}, Min: {min}, Max: {max}, Refers: {refers}, Parent: {parent}{color}),\n",
                 key = string(&format!("{}.{}", entity.name.name, field.name.name)),
                 label = string(&field.label),
                 format = field_format(field).unwrap_or_else(|| "null".to_string()),
@@ -611,7 +616,7 @@ using Clarity.Runtime;
 
 namespace {name};
 
-/// <summary>The facts of every field of every entity, keyed \"Entity.field\": its label, format, whether it is required, its range, what it refers to and, for records that make a tree, the field naming a record's parent.</summary>
+/// <summary>The facts of every field of every entity, keyed \"Entity.field\": its label, format, whether it is required, its range, what it refers to, for records that make a tree the field naming a record's parent, and whether it holds a color.</summary>
 public static class Fields
 {{
     public static readonly IReadOnlyDictionary<string, FieldFacts> All = new Dictionary<string, FieldFacts>

@@ -25,6 +25,8 @@ public enum CellKind
     Choice,
     Date,
     Moment,
+    /// <summary>A color, "#rrggbb": a swatch of it beside its text, typed as text.</summary>
+    Color,
 }
 
 /// <summary>A column of a table: the field it shows, how, and whether its cells are edited.</summary>
@@ -40,7 +42,7 @@ public enum PageButton
 }
 
 [PartKind("table", "tree", "treeTable")]
-public sealed class TablePart : RowsPart
+public sealed class TablePart : RowsPart, ITakesTyped
 {
     List<TableColumn> columns = [];
     (string Field, bool Desc)? order;
@@ -126,7 +128,10 @@ public sealed class TablePart : RowsPart
         var choices = ChoicesOf(field);
         var type = Records.Select(r => RowFields.TypeOf(r, field)).FirstOrDefault(t => t is not null)
             ?? (Bound is { } b ? Host.TypeOf(RowFields.ColumnPath(b, field)) is { } t ? Nullable.GetUnderlyingType(t) ?? t : null : null);
-        var kind = choices.Count > 0 || type is { IsEnum: true } ? CellKind.Choice
+        // The field's facts as the application gives them: its label, its format, whether it holds a color.
+        var facts = Bound is { } list ? Host.Field(RowFields.ColumnPath(list, field)) : null;
+        var kind = facts?.Color == true ? CellKind.Color
+            : choices.Count > 0 || type is { IsEnum: true } ? CellKind.Choice
             : type == typeof(bool) ? CellKind.Bool
             : type == typeof(long) || type == typeof(int) || type == typeof(short) ? CellKind.Number
             : type == typeof(decimal) || type == typeof(double) || type == typeof(float) ? CellKind.Number
@@ -136,7 +141,6 @@ public sealed class TablePart : RowsPart
         FieldFormat? number = kind != CellKind.Number ? null
             : type == typeof(long) || type == typeof(int) || type == typeof(short) ? new FieldFormat(FormatKind.Integer) : new FieldFormat(FormatKind.Decimal);
         // Its header: the field's label as the application gives it, else its name.
-        var facts = Bound is { } list ? Host.Field(RowFields.ColumnPath(list, field)) : null;
         if (kind == CellKind.Number && facts?.Format is { } format)
             number = format;
         return new TableColumn(field, Host.Text(facts?.Label ?? field), kind, edit, Spec.Names("switches").Contains(field), width, choices, number);
@@ -385,6 +389,35 @@ public sealed class TablePart : RowsPart
         return new Box(x, row.Y, width, row.Height);
     }
 
+    /// <summary>The swatch of the color in a cell of a color column, while it is in sight; none for a cell without a color.</summary>
+    public Box? SwatchBox(int place, string field)
+    {
+        if (columns.FirstOrDefault(c => c.Field == field) is not { Kind: CellKind.Color } column || place < 0 || place >= Records.Count
+            || ColorOf(RowFields.Read(Records[place], field)) is null || CellBox(place, field) is not { } cell)
+            return null;
+        var look = LookNow;
+        var left = column.Edit ? cell.X + 3 + look.Padding * 1.5 : cell.X + look.Padding * 2;
+        return new Box(left, cell.Y + (cell.Height - SwatchSide) / 2, SwatchSide, SwatchSide);
+    }
+
+    const double SwatchSide = 12;
+
+    /// <summary>The color a cell holds ("#rrggbb", or a name the palette knows), or none.</summary>
+    static SKColor? ColorOf(object? value) =>
+        value is string text && Clarity.Runtime.Palette.Read(text) is { Length: 7 } color && SKColor.TryParse(color, out var parsed) ? parsed : null;
+
+    /// <summary>Draws the swatch of a color cell, and gives the room its text keeps beside it.</summary>
+    double DrawSwatch(Painter painter, int place, TableColumn column)
+    {
+        if (column.Kind != CellKind.Color || SwatchBox(place, column.Field) is not { } swatch)
+            return 0;
+        var look = painter.Look;
+        var radius = Math.Min(2, look.Radius("input"));
+        painter.Fill(swatch, ColorOf(RowFields.Read(Records[place], column.Field))!.Value, radius);
+        painter.Stroke(swatch, look.Color("strong_border"), look.Border, radius);
+        return SwatchSide + look.Padding * 1.5;
+    }
+
     /// <summary>The box of the header of <paramref name="field"/>; none without a header.</summary>
     public Box? HeaderBox(string field)
     {
@@ -538,6 +571,7 @@ public sealed class TablePart : RowsPart
                 _ => TextAlign.Left,
             },
             Marked = () => Marked(place, field),
+            TakesTab = true,
             Entered = () =>
             {
                 Take();
@@ -545,6 +579,13 @@ public sealed class TablePart : RowsPart
             },
             KeyFirst = key =>
             {
+                if (key.Key == Key.Tab && key.Modifiers is Modifiers.None or Modifiers.Shift)
+                {
+                    // Past the last cell the table, which has the focus again, lets Tab move it on.
+                    if (!TypeOn(place, field, key.Shift))
+                        Screen?.KeyPressed(key);
+                    return true;
+                }
                 if (key.Key != Key.Escape)
                     return false;
                 Stop();
@@ -563,6 +604,25 @@ public sealed class TablePart : RowsPart
         editor.SelectAll();
         Screen?.Focus(editor);
         Invalidate();
+    }
+
+    /// <summary>
+    /// Tab in a cell's editor: takes its text and types on in the next typed
+    /// cell of the shown rows (the one before with Shift). False past the last,
+    /// so the focus leaves the table as Tab moves it.
+    /// </summary>
+    bool TypeOn(int place, string field, bool back)
+    {
+        var typed = columns.Where(c => c.Edit && c.Kind is CellKind.Text or CellKind.Number or CellKind.Color or CellKind.Moment).ToList();
+        var cells = ShownPlaces.SelectMany(p => typed.Select(c => (Place: p, Column: c))).ToList();
+        var at = cells.FindIndex(c => c.Place == place && c.Column.Field == field);
+        var next = at < 0 ? -1 : back ? at - 1 : at + 1;
+        Take();
+        if (next < 0 || next >= cells.Count || Locked)
+            return false;
+        var (to, column) = cells[next];
+        BeginTyping(to, column);
+        return true;
     }
 
     /// <summary>Places the cell's editor over its input (a moment's time at its right); out of sight it has no place.</summary>
@@ -597,6 +657,9 @@ public sealed class TablePart : RowsPart
         Invalidate();
         return e;
     }
+
+    /// <summary>A key that runs a command has the cell being typed into take its text first.</summary>
+    public void TakeTyped() => Take();
 
     /// <summary>Takes what was typed into the cell being typed into: a value is an edit, text that is no value is marked.</summary>
     void Take()
@@ -746,7 +809,8 @@ public sealed class TablePart : RowsPart
         }
         var column = hit.Column;
         // A press on an edited cell's input chooses no row: a taken edit chooses it.
-        if (column.Edit && !Locked)
+        // A press beside the input, in the cell's margin, chooses the row.
+        if (column.Edit && !Locked && InputOf(column, hit.Cell).Contains(x, y))
         {
             switch (column.Kind)
             {
@@ -756,7 +820,7 @@ public sealed class TablePart : RowsPart
                 case CellKind.Choice:
                     OpenChoicesOf(hit.Place, column, hit.Cell);
                     return;
-                case CellKind.Text or CellKind.Number:
+                case CellKind.Text or CellKind.Number or CellKind.Color:
                     if (editing is null)
                         BeginTyping(hit.Place, column);
                     return;
@@ -949,7 +1013,8 @@ public sealed class TablePart : RowsPart
         if (!column.Edit)
         {
             var align = column.Kind == CellKind.Number ? TextAlign.Right : TextAlign.Left;
-            painter.Text(Shown(place, column.Field), cell with { X = cell.X + pad, Width = Math.Max(0, cell.Width - 2 * pad) }, text, size, "text", false, align);
+            var lead = DrawSwatch(painter, place, column);
+            painter.Text(Shown(place, column.Field), cell with { X = cell.X + pad + lead, Width = Math.Max(0, cell.Width - 2 * pad - lead) }, text, size, "text", false, align);
             return;
         }
         switch (column.Kind)
@@ -970,6 +1035,9 @@ public sealed class TablePart : RowsPart
                 DrawInput(painter, cell, Shown(place, column.Field), place, column.Field, false, TextAlign.Left);
                 Chevron(painter, cell.Right - 14, cell.Y + cell.Height / 2, "down", look.Color("muted"));
                 return;
+            case CellKind.Color:
+                DrawInput(painter, cell, Shown(place, column.Field), place, column.Field, true, TextAlign.Left, () => DrawSwatch(painter, place, column));
+                return;
             default:
                 DrawInput(painter, cell, Shown(place, column.Field), place, column.Field, true, column.Kind == CellKind.Number ? TextAlign.Right : TextAlign.Left);
                 return;
@@ -980,7 +1048,7 @@ public sealed class TablePart : RowsPart
     /// An input in a cell, in the theme's input look, marked when it holds text
     /// that is no value; the cell typed into shows its text editor there instead.
     /// </summary>
-    void DrawInput(Painter painter, Box cell, string text, int place, string field, bool typed, TextAlign align)
+    void DrawInput(Painter painter, Box cell, string text, int place, string field, bool typed, TextAlign align, Func<double>? leading = null)
     {
         var look = painter.Look;
         var box = cell.Inset(3);
@@ -995,8 +1063,20 @@ public sealed class TablePart : RowsPart
         painter.Fill(box, input.Background ?? look.Color("input"), radius);
         var border = typed && Marked(place, field) ? look.Color("error") : input.Border ?? look.Color("strong_border");
         painter.Stroke(box, border, look.Border, radius);
-        var inside = box with { X = box.X + look.Padding * 1.5, Width = Math.Max(0, box.Width - look.Padding * 3 - (align == TextAlign.Left ? 12 : 0)) };
+        // What goes before the text (a color's swatch) and the room it takes.
+        var lead = leading?.Invoke() ?? 0;
+        var inside = box with { X = box.X + look.Padding * 1.5 + lead, Width = Math.Max(0, box.Width - look.Padding * 3 - lead - (align == TextAlign.Left ? 12 : 0)) };
         painter.Text(text, inside, input.Text ?? look.Color("text"), look.Size("text"), "text", false, align);
+    }
+
+    /// <summary>Where an edited cell's input takes a press: a switch or a check with a little room around it, else the input inside the cell's margin.</summary>
+    static Box InputOf(TableColumn column, Box cell)
+    {
+        if (column.Kind != CellKind.Bool)
+            return cell.Inset(3);
+        var (width, height) = column.Switch ? (32.0, 18.0) : (16.0, 16.0);
+        const double room = 4;
+        return new Box(cell.X + (cell.Width - width) / 2 - room, cell.Y + (cell.Height - height) / 2 - room, width + 2 * room, height + 2 * room);
     }
 
     void DrawCheck(Painter painter, Box cell, bool on, bool inert)
@@ -1129,10 +1209,30 @@ public sealed class CellChoices : Element
         return rows.Item(index);
     }
 
+    /// <summary>Where its value is among its choices; -1 when it is none of them.</summary>
+    public int Marked
+    {
+        get
+        {
+            for (var i = 0; i < Choices.Count; i++)
+                if (RowsPart.Same(Choices[i].Value, value))
+                    return i;
+            return -1;
+        }
+    }
+
+    bool revealed;
+
     public override void Arrange(Box box)
     {
         Bounds = box;
         View.Arrange(box.Inset(1));
+        // It opens with its value's choice in view, as a dropdown's list does.
+        if (!revealed && box.Height > 0 && Marked is var marked and >= 0)
+        {
+            revealed = true;
+            View.ScrollInto(new Box(0, marked * itemHeight, 1, itemHeight));
+        }
     }
 
     public override void Draw(Painter painter)

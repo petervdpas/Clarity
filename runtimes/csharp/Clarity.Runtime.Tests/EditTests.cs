@@ -1,4 +1,4 @@
-// Undo per part on Avalonia (DESIGN 5.29): each edit goes on the window's
+// Undo per part on C# (DESIGN 5.29): each edit goes on the window's
 // bus with what it changed in the window's data and the database step its
 // handler made; Ctrl+Z takes back the last edit of the focused scope, so in
 // a form it walks back field by field.

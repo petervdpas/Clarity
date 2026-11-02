@@ -13,4 +13,5 @@ namespace Clarity.Runtime;
 /// <param name="Max">Its greatest value; none without.</param>
 /// <param name="Refers">The entity a reference points at (<c>Person</c>); none for any other field.</param>
 /// <param name="Parent">For an entity whose records make a tree: the field that names a record's parent; none otherwise.</param>
-public sealed record FieldFacts(string Label, FieldFormat? Format = null, bool Required = false, string? Min = null, string? Max = null, string? Refers = null, string? Parent = null);
+/// <param name="Color">Whether it holds a color (<c>#3b82f6</c>), which a table or list shows with a swatch beside it.</param>
+public sealed record FieldFacts(string Label, FieldFormat? Format = null, bool Required = false, string? Min = null, string? Max = null, string? Refers = null, string? Parent = null, bool Color = false);

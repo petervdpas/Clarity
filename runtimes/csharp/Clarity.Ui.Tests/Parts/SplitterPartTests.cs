@@ -57,6 +57,30 @@ public class SplitterPartTests
     }
 
     [Fact]
+    public void A_pane_whose_parts_go_further_than_its_room_scrolls_so_none_is_out_of_reach()
+    {
+        var rows = string.Concat(Enumerable.Range(1, 8).Select(r => $"""<Label at="1,{r}" span="8" />"""));
+        var markup = $"""
+            <Splitter name="split" at="1,1" span="12" rows="3">
+              <Pane span="4"><Label at="1,1" span="4" /></Pane>
+              <Pane>{rows}</Pane>
+            </Splitter>
+            """;
+        var (screen, _, parts) = Made.Window(markup, new TestHost(), width: 808);
+        var splitter = (SplitterPart)parts[0];
+        // A place lower than the splitter asks for, as in a window too low for it.
+        splitter.Arrange(new Box(0, 0, 808, 124));
+        var view = splitter.Views[1];
+        Assert.True(view.MaxScrollY > 0);
+        Assert.Equal(0, splitter.Views[0].MaxScrollY);
+        var last = splitter.Panes[1].Children[^1];
+        Assert.True(last.Bounds.Bottom > view.Bounds.Bottom);
+        screen.Wheel(view.Bounds.X + 20, view.Bounds.Y + 20, 0, 1000);
+        Assert.Equal(view.MaxScrollY, view.ScrollY);
+        Assert.True(last.Bounds.Bottom <= view.Bounds.Bottom + 0.5);
+    }
+
+    [Fact]
     public void A_scroll_boxs_grid_scrolls_when_its_parts_go_further_than_its_rows()
     {
         var rows = string.Concat(Enumerable.Range(1, 10).Select(r => $"""<Label at="1,{r}" span="3" />"""));
@@ -67,5 +91,16 @@ public class SplitterPartTests
         screen.Wheel(20, 20, 0, 50);
         Assert.Equal(-50, first.Bounds.Y);
         Assert.True(ContainerPart.IsInside(first));
+    }
+
+    [Fact]
+    public void A_splitter_asks_room_for_its_padding_so_a_pane_of_its_own_rows_needs_no_scrolling()
+    {
+        var rows = string.Concat(Enumerable.Range(1, 3).Select(r => $"""<Label at="1,{r}" span="8" />"""));
+        var (_, grid, parts) = Made.Window($"""<Splitter at="1,1" span="12" rows="3"><Pane span="4"><Label at="1,1" span="4" /></Pane><Pane>{rows}</Pane></Splitter>""", new TestHost(), width: 808);
+        var splitter = (SplitterPart)parts[0];
+        Assert.True(splitter.Around > 0);
+        Assert.Equal(0, splitter.Views[1].MaxScrollY);
+        Assert.True(grid.Content >= 3 * 36 + 2 * 8 + splitter.Around);
     }
 }

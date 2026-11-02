@@ -76,7 +76,7 @@ public sealed class InputSideButton(InputIcon icon, Action clicked) : Element
 }
 
 [PartKind("textbox", "memo", "password")]
-public sealed class TextBoxPart : Part
+public sealed class TextBoxPart : Part, ITakesTyped
 {
     const double ButtonWidth = 28;
 
@@ -183,6 +183,9 @@ public sealed class TextBoxPart : Part
             own = typed;
         Fire("change");
     }
+
+    /// <summary>A key that runs a command has it take what is typed first.</summary>
+    public void TakeTyped() => Take();
 
     /// <summary>Enter in one line: the text is taken, then the form it is in submits.</summary>
     bool Enter()

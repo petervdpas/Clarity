@@ -51,6 +51,38 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
 
     public void Say(Level level, Text text) => Messages.Add(new Message(level, text));
 
+    /// <summary>The texts said into text values (a status line), by the value's property: what was said, what it showed and how it is set.</summary>
+    readonly Dictionary<string, (Text Said, string Shown, Action<string> Set)> said = [];
+
+    /// <summary>
+    /// Sets a text value (<paramref name="property"/>) to <paramref name="text"/>
+    /// in the language shown, and keeps the text, so a change of language shows
+    /// it again in the new one.
+    /// </summary>
+    protected void ShowText(string property, Text text, Action<string> set)
+    {
+        var shown = Locale.Show(text);
+        said[property] = (text, shown, set);
+        set(shown);
+    }
+
+    /// <summary>
+    /// The language changed: every text said into a value shows in the new
+    /// language, unless the value changed since (the person typed into it).
+    /// </summary>
+    public void Reshow()
+    {
+        foreach (var (property, (text, shown, set)) in said.ToList())
+        {
+            if (!Equals(GetType().GetProperty(property)?.GetValue(this), shown))
+            {
+                said.Remove(property);
+                continue;
+            }
+            ShowText(property, text, set);
+        }
+    }
+
     /// <summary>The edits of this window (DESIGN 5.29), which Ctrl+Z takes back.</summary>
     public EditBus Edits { get; } = new();
 
@@ -408,10 +440,18 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         try
         {
             // The outermost handler is watched: its engine calls show how far they are.
-            if (running == 1)
-                Watching.Run(LongCall.Start(), handler);
-            else
-                handler();
+            // A failure that comes wrapped (a task's) is caught as itself.
+            try
+            {
+                if (running == 1)
+                    Watching.Run(LongCall.Start(), handler);
+                else
+                    handler();
+            }
+            catch (AggregateException wrapped) when (wrapped.InnerExceptions.Count == 1)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(wrapped.InnerExceptions[0]);
+            }
             ran = true;
             // The canvases show what the handler left, drawn anew.
             if (running == 1)

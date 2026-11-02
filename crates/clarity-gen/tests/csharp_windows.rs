@@ -439,10 +439,12 @@ fn a_window_holds_plain_values() {
     }
     has(vm, "        Fresh = false;\n");
     has(vm, "        Pending = OrderStatus.Approved;\n");
-    // A text value shows its text in the person's language.
+    // A text value shows its text in the person's language, and shows it
+    // again when the language changes (its default too, a key).
     // A text that code only keeps or returns is no key: the checker asks one
     // only for a text shown as written (a message, a caption).
-    has(vm, "        Word = Locale.Show(Text.Plain(\"x\"));\n");
+    has(vm, "        ShowText(nameof(Word), Text.Plain(\"x\"), shown => Word = shown);\n");
+    has(vm, "        ShowText(nameof(Word), Text.Of(\"calcWord\"), shown => Word = shown);\n");
     // A slot is still filled in.
     let code: String = files.iter().filter(|f| f.path.ends_with(".cs")).map(|f| f.text.as_str()).collect();
     has(&code, "return \"Draw\";");
@@ -527,6 +529,7 @@ entity Genre
     children: list<Genre>
     rank: integer, min 1, max 10
     share: decimal(5, 2), format percent
+    shade: color
 
 page Genres: window
     data genres: list<Genre>
@@ -555,4 +558,24 @@ fn every_field_s_facts_are_in_fields() {
     has(fields, "[\"Genre.parent\"] = new(\"@genreParentLabel\", null, Required: false, Min: null, Max: null, Refers: \"Genre\", Parent: \"parent\"),");
     has(fields, "[\"Genre.rank\"] = new(\"@genreRankLabel\", new FieldFormat(FormatKind.Integer), Required: false, Min: \"1\", Max: \"10\", Refers: null, Parent: \"parent\"),");
     has(fields, "[\"Genre.share\"] = new(\"@genreShareLabel\", new FieldFormat(FormatKind.Decimal, 2, \"percent\"), Required: false,");
+    // A color field says so: a table or list shows a swatch beside its value.
+    has(fields, "[\"Genre.shade\"] = new(\"@genreShadeLabel\", null, Required: false, Min: null, Max: null, Refers: null, Parent: \"parent\", Color: true),");
+}
+
+/// What an engine says into a text value (noughts' status line) is kept as
+/// said, a key of the project's texts, so it shows again when the person
+/// picks another language; its default, a key, too.
+#[test]
+fn a_said_text_follows_the_language() {
+    let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/noughts.clarity");
+    let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
+    let settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let vm = file_of(&files, "GameViewModel.cs");
+    has(vm, "        ShowText(nameof(Status), Text.Of(Engines.Board.CallIn<string>(Instance, \"play\", square)), shown => Status = shown);\n");
+    has(vm, "        ShowText(nameof(Status), Text.Of(\"gameStatus\"), shown => Status = shown);\n");
+}
+
+fn file_of<'a>(files: &'a [OutFile], name: &str) -> &'a str {
+    &files.iter().find(|f| f.path.ends_with(name)).unwrap_or_else(|| panic!("no {name}")).text
 }

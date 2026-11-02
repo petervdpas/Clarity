@@ -131,4 +131,15 @@ public class PanelPartTests
         using var pixels = Shot.Of(screen, 808, 400);
         Assert.Equal(screen.Look.Color("background"), pixels.GetPixel(800, 6));
     }
+
+    [Fact]
+    public void A_panel_with_a_header_asks_room_for_it_and_a_bare_form_asks_none()
+    {
+        var rows = string.Concat(Enumerable.Range(1, 3).Select(r => $"""<Label at="1,{r}" span="4" />"""));
+        var (_, _, parts) = Made.Window($"""<Panel at="1,1" span="12" rows="3" caption="Box">{rows}</Panel><Form at="1,5" span="12" rows="3">{rows}</Form>""", new TestHost(), width: 808);
+        var panel = (PanelPart)parts[0];
+        Assert.True(panel.Around > 0);
+        Assert.True(panel.Inner.Bounds.Height >= panel.Inner.Content - 0.5);
+        Assert.Equal(0, ((PanelPart)parts[1]).Around);
+    }
 }

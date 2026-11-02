@@ -125,6 +125,12 @@ public sealed class Screen : IDisposable
         if (tipDue is { } due && due <= now && tipWaiting is { } text)
         {
             tipDue = null;
+            // Only for what is under the pointer now: another window may show there since.
+            if (TipOf(At(tipPoint.X, tipPoint.Y), tipPoint.X, tipPoint.Y) != text)
+            {
+                tipWaiting = null;
+                return;
+            }
             Tip = new Tooltip(text, TipPlace(text));
             Invalidate();
         }
@@ -317,6 +323,8 @@ public sealed class Screen : IDisposable
             return;
         }
         PointerMoved(x, y);
+        // A press starts no new pause: the tip of what was pressed shows again only once the pointer went elsewhere.
+        tipDue = null;
         if (button != PointerButton.Left || At(x, y) is not { } at)
             return;
         Focus(Taker(at));

@@ -328,8 +328,8 @@ fn every_missing_tool_points_at_the_manual() {
     assert_eq!(rust.guides[0], expected);
 }
 
-/// The web target of C# with Avalonia (DESIGN 7.6) also needs .NET's
-/// WebAssembly tools, which link Avalonia's drawing into the browser program;
+/// The web target of C# (DESIGN 7.6) also needs .NET's WebAssembly tools,
+/// which link Skia's drawing into the browser program;
 /// a desktop project builds without them.
 #[test]
 fn the_web_target_of_csharp_needs_the_webassembly_tools() {

@@ -28,6 +28,7 @@ fn library(backend: &str) -> &'static str {
     match backend {
         "rust" => "    crate \"parts/Gauge\"\n",
         "go" => "    go \"parts/gauge\"\n",
+        "csharp" => "    nuget \"Newtonsoft.Json\" 13.0.1\n",
         _ => PART_LINE,
     }
 }
@@ -47,12 +48,11 @@ pub fn prepare(name: &str, stack: &str) -> (PathBuf, clarity_spec::Project, clar
     let module = root.join("everything/everything.clarity");
     let mut text = std::fs::read_to_string(&module).unwrap();
     assert!(text.contains(PART_LINE), "the every-part project declares its part with {PART_LINE}");
-    // C#'s custom part comes with Clarity.UI's custom controls (DESIGN 7.9).
     let backend = stack.split_whitespace().next().unwrap_or_default();
-    if settings.stack.has(clarity_project::Target::Desktop) && backend != "csharp" {
+    if settings.stack.has(clarity_project::Target::Desktop) {
         text = text.replace(PART_LINE, library(backend));
     } else {
-        // In a browser alone, and on C# for now: no custom part, nor the code that speaks to it.
+        // In a browser alone: no custom part, nor the code that speaks to it.
         let start = text.find("part Gauge\n").unwrap();
         let end = start + text[start..].find("\n\n").unwrap() + 2;
         text.replace_range(start..end, "");

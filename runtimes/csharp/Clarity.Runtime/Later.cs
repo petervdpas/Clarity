@@ -1,7 +1,7 @@
 // What runs once the work at hand is done: a change handler's edit is joined
 // to the edit its value made until then (DESIGN 5.29). The screen that shows
-// the windows says how; Clarity.Avalonia posts it to Avalonia's UI thread,
-// and elsewhere it goes to the current synchronization context, or runs at once.
+// the windows says how; Clarity.UI's desktop and browser hosts run it on
+// their next frame, and elsewhere it goes to the current synchronization context, or runs at once.
 
 namespace Clarity.Runtime;
 

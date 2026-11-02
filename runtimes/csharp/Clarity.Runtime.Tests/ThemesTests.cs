@@ -3,6 +3,7 @@
 // person's choice is kept for the next start, and the screen hears of it.
 // Kept in memory here: Remembered has no folder.
 
+using System.Globalization;
 using Clarity.Runtime;
 using Xunit;
 
@@ -42,5 +43,21 @@ public class ThemesTests
     {
         Themes.Start([new("Day", "Daylight")]);
         Assert.Equal([("Day", "Daylight")], Choice.ThemesOffered.Select(c => ((string)c.Value!, c.Label)));
+    }
+
+    [Fact]
+    public void A_theme_titled_by_a_key_shows_the_key_s_value()
+    {
+        Locale.Start(null, [], null, (key, _) => key == "darkTheme" ? "Dark" : null, (_, value) => value, CultureInfo.CurrentCulture);
+        try
+        {
+            Themes.Start([new("Night", "@darkTheme"), new("Day", "@dayTheme"), new("Sepia", "Sepia")]);
+            // A key the project gives no value shows as the key, never with its @.
+            Assert.Equal(["Dark", "dayTheme", "Sepia"], Choice.ThemesOffered.Select(c => c.Label));
+        }
+        finally
+        {
+            Locale.Start(null, [], null, (_, _) => null, (_, value) => value, CultureInfo.CurrentCulture);
+        }
     }
 }

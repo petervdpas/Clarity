@@ -287,6 +287,16 @@ public class TextBoxPartTests
     // -- A password (the old SecretInputTests) --------------------------------
 
     [Fact]
+    public void The_eye_and_copy_say_what_they_do_when_the_pointer_rests()
+    {
+        var host = new TextFactsHost();
+        var (_, _, parts) = Made.Window("""<Password at="1,1" span="4" name="secret" />""", host);
+        var box = (TextBoxPart)parts[0];
+        Assert.Equal(Locale.Translate("showSecret", "Show"), box.Eye!.TooltipAt(0, 0));
+        Assert.Equal(Locale.Translate("copySecret", "Copy"), box.Copy!.TooltipAt(0, 0));
+    }
+
+    [Fact]
     public void The_eye_shows_what_is_typed_and_hides_it_again()
     {
         var host = new TextFactsHost { Values = { ["token"] = "s3cr3t" } };

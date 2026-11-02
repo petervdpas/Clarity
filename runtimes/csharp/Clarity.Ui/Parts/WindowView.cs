@@ -4,9 +4,10 @@
 // smaller than its rows. What its handlers say shows here too: an info
 // message as a note at the top right that goes away by itself, a warning
 // or an error in Clarity's own dialog over the window, read and closed with
-// OK, never the system's. The window's own keys are here too: a part's or a
-// menu item's shortcut, Enter for its default button and Escape for its
-// cancel button.
+// OK, never the system's. Around the parts is the window's frame (its menu
+// bar, toolbar, ribbon, sidebars and footer, its own or its app's). The
+// window's own keys are here too: a part's or a frame command's shortcut,
+// Enter for its default button and Escape for its cancel button.
 
 using System.Collections.Specialized;
 using System.Xml.Linq;
@@ -26,7 +27,10 @@ public sealed class WindowView : Element, IDisposable
     public const int StandardColumns = 12;
 
     readonly GridPanel grid;
+    readonly Showing body;
     readonly NoteList notes;
+    WindowFrame frame;
+    IReadOnlyList<XElement>? appFrame;
     readonly WindowViewModel? model;
     readonly Dictionary<Message, DateTime> since = new(ReferenceEqualityComparer.Instance);
     readonly List<Part> parts = [];
@@ -46,7 +50,13 @@ public sealed class WindowView : Element, IDisposable
             parts.Add(made);
             grid.Add(made, part.Place(made.Grows));
         }
-        AddChild(grid);
+        frame = new WindowFrame(host, ShownFrame.Of(null, FrameSpec.Read(spec.Frame))) { WindowName = spec.Name };
+        // While a sidebar fills the window, its own parts make room.
+        body = new Showing(() => frame.Filling is null);
+        body.Add(grid);
+        AddChild(body);
+        foreach (var region in frame.Regions)
+            AddChild(region);
         notes = new NoteList(this);
         AddChild(notes);
         host.Changed += Invalidate;
@@ -60,6 +70,32 @@ public sealed class WindowView : Element, IDisposable
     /// <summary>The window's own parts, in the order of its markup.</summary>
     public IReadOnlyList<Part> Parts => parts;
 
+    /// <summary>
+    /// The regions of the app's frame (<c>WindowMarkup.ReadApp</c> of
+    /// <c>Apps/Shop.cxaml</c>), which the window shows where it has none of
+    /// its own; none for a dialog or a window without an app.
+    /// </summary>
+    public IReadOnlyList<XElement>? AppFrame
+    {
+        get => appFrame;
+        set
+        {
+            appFrame = value;
+            frame.Menus.CloseAll();
+            foreach (var region in frame.Regions)
+                RemoveChild(region);
+            RemoveChild(notes);
+            frame = new WindowFrame(Host, ShownFrame.Of(value is null ? null : FrameSpec.Read(value), FrameSpec.Read(Spec.Frame))) { WindowName = Spec.Name };
+            foreach (var region in frame.Regions)
+                AddChild(region);
+            AddChild(notes);
+            Invalidate();
+        }
+    }
+
+    /// <summary>The frame around the window's parts: its regions and the menus open over it.</summary>
+    public WindowFrame Frame => frame;
+
     /// <summary>Why the window shows nothing: its markup could not be read.</summary>
     public string? Problem { get; init; }
 
@@ -70,8 +106,8 @@ public sealed class WindowView : Element, IDisposable
     public double ScrollY { get; private set; }
     public double MaxScrollY { get; private set; }
 
-    /// <summary>The place of the grid inside the padding.</summary>
-    Box Inside => Bounds.Inset(ContentPadding);
+    /// <summary>The place of the grid: inside the frame, inside the padding.</summary>
+    Box Inside => frame.Body.Inset(ContentPadding);
 
     /// <summary>The columns a window's markup gives its grid (<c>span</c> on the window), else the standard 12.</summary>
     public static int ColumnsOf(string markup)
@@ -84,8 +120,9 @@ public sealed class WindowView : Element, IDisposable
     public override void Arrange(Box box)
     {
         Bounds = box;
+        frame.Arrange(box);
         var inside = Inside;
-        grid.Arrange(inside);
+        body.Arrange(inside);
         MaxScrollY = Math.Max(0, grid.Content - inside.Height);
         ScrollY = Math.Clamp(ScrollY, 0, MaxScrollY);
         if (MaxScrollY > 0)
@@ -99,9 +136,10 @@ public sealed class WindowView : Element, IDisposable
     public override void Draw(Painter painter)
     {
         var inside = Inside;
-        using (painter.Clip(inside))
-            grid.Draw(painter);
-        if (MaxScrollY > 0)
+        if (body.IsShown)
+            using (painter.Clip(inside))
+                grid.Draw(painter);
+        if (MaxScrollY > 0 && body.IsShown)
         {
             // A thin bar at the right says how much of the content shows, and where.
             var shown = inside.Height / grid.Content;
@@ -110,6 +148,9 @@ public sealed class WindowView : Element, IDisposable
         }
         if (Problem is not null)
             painter.Text(Problem, new Box(inside.X, inside.Y, inside.Width, GridLayout.RowHeight), painter.Look.Color("error"), painter.Look.Size("text"));
+        foreach (var region in frame.Regions)
+            if (region.IsShown)
+                region.Draw(painter);
         notes.Draw(painter);
     }
 
@@ -125,21 +166,19 @@ public sealed class WindowView : Element, IDisposable
 
     // -- Keys --------------------------------------------------------------------
 
-    /// <summary>The menus of the window's frame and its parts' own menus, as their items' shortcuts reach them.</summary>
-    IEnumerable<(Part? Part, CommandSpec Item)> MenuItems()
+    /// <summary>The parts' own menus, as their items' shortcuts reach them.</summary>
+    IEnumerable<(Part Part, CommandSpec Item)> PartMenuItems()
     {
         static IEnumerable<CommandSpec> All(IEnumerable<CommandSpec> items) =>
             items.SelectMany(i => All(i.Items).Prepend(i));
-        foreach (var menu in Spec.Frame.Where(e => e.Name.LocalName == "Menu"))
-            foreach (var item in All(WindowMarkup.MenuOf(menu).Items))
-                yield return (null, item);
         foreach (var part in ShownParts())
             if (part.Spec.Menu is { } own)
                 foreach (var item in All(own.Items))
                     yield return (part, item);
     }
 
-    IEnumerable<Part> ShownParts() => grid.InOrder().OfType<Part>().Where(p => p.ShowsInTree && p.Enabled);
+    /// <summary>The parts that show and take clicks: the window's own, and those of its sidebars and footer.</summary>
+    IEnumerable<Part> ShownParts() => grid.InOrder().Concat(frame.Parts).OfType<Part>().Where(p => p.ShowsInTree && p.Enabled);
 
     /// <summary>A part pressed by a key: a button clicks, any other part as a click on it does.</summary>
     static void Press(Part part)
@@ -152,7 +191,9 @@ public sealed class WindowView : Element, IDisposable
 
     /// <summary>
     /// A key, before the part with the focus has it (Screen.Keys): a shortcut
-    /// of a shown, enabled part or of a menu item runs it; Enter presses the
+    /// of a shown, enabled part runs it, then one of the frame's commands
+    /// (its menu, toolbar and ribbon, while they show and take clicks), then
+    /// one of a part's menu items; Enter presses the
     /// default button and Escape the cancel button, once the part with the
     /// focus did not take them (a memo's new line, a list that closes). True
     /// when the window took the key, or asked the part with the focus for it.
@@ -164,15 +205,21 @@ public sealed class WindowView : Element, IDisposable
         var focused = screen.Focused;
         var typing = focused is TextEditor;
         foreach (var part in ShownParts())
-            if (part.Spec.Text("shortcut") is { Length: > 0 } shortcut && Shortcuts.Matches(shortcut, key, typing))
+            if (Answers(KeysOf(part.Spec.Name, app: false, part.Spec.Text("shortcut")), key, typing))
             {
                 Press(part);
                 return true;
             }
-        foreach (var (part, item) in MenuItems())
+        foreach (var (item, app) in FrameRules.Keyed(frame.Shown, Host))
+            if (Answers(KeysOf(item.Text("name"), app, item.Text("shortcut")), key, typing))
+            {
+                frame.RunByKey(item, screen);
+                return true;
+            }
+        foreach (var (part, item) in PartMenuItems())
             if (item.Text("shortcut") is { Length: > 0 } shortcut && Shortcuts.Matches(shortcut, key, typing))
             {
-                PartKinds.Pick(Host, part?.Spec.Name, item);
+                PartKinds.Pick(Host, part.Spec.Name, item);
                 return true;
             }
         if (key.Modifiers != Modifiers.None || key.Key is not (Key.Enter or Key.Escape))
@@ -187,6 +234,15 @@ public sealed class WindowView : Element, IDisposable
             Press(pressed);
         return true;
     }
+
+    /// <summary>
+    /// The keys a command answers: the person's where they set their own
+    /// (a command of the app's frame by its name, the window's own by
+    /// <c>Window.name</c>), else its designed one.
+    /// </summary>
+    IReadOnlyList<string> KeysOf(string? name, bool app, string? designed) => FrameRules.KeysOf(Host, Spec.Name, name, app, designed);
+
+    static bool Answers(IReadOnlyList<string> keys, KeyInput key, bool typing) => keys.Any(k => Shortcuts.Matches(k, key, typing));
 
     // -- Messages ----------------------------------------------------------------
 
@@ -261,6 +317,7 @@ public sealed class WindowView : Element, IDisposable
         if (disposed)
             return;
         disposed = true;
+        frame.Menus.CloseAll();
         Host.Changed -= Invalidate;
         if (model is not null)
             model.Messages.CollectionChanged -= MessagesChanged;

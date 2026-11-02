@@ -1,6 +1,6 @@
 // Moving a row of a list, table or tree (DESIGN 5.x, reordering): the rows
 // in their new order, and where a drop lands on a row. What draws the rows
-// (Clarity.Avalonia's RowMoves, Clarity.UI's parts) calls these.
+// (Clarity.UI's parts) calls these.
 
 using System.Collections;
 

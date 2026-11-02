@@ -23,5 +23,8 @@ public sealed record Choice(object? Value, string Label, IReadOnlyList<string>? 
     public static Choice[] LanguagesOffered => [.. Locale.Offered.Select(l => new Choice(l, Languages.Name(l)))];
 
     /// <summary>The offered themes by their titles in the language shown: the choices of the setting <c>theme</c>.</summary>
-    public static Choice[] ThemesOffered => [.. OfferedThemes.All.Select(t => new Choice(t.Name, Locale.Translate(t.Label)))];
+    public static Choice[] ThemesOffered => [.. OfferedThemes.All.Select(t => new Choice(t.Name, Shown(t.Label)))];
+
+    /// <summary>A label as shown: a key (<c>@darkTheme</c>) by its value in the language shown, else the key without its @; any other text as it is.</summary>
+    static string Shown(string label) => label.StartsWith('@') ? Locale.Translate(label[1..]) : Locale.Translate(label);
 }

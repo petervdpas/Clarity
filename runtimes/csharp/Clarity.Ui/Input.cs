@@ -27,6 +27,8 @@ public enum Key
     Tab, Enter, Escape, Space, Backspace, Delete, Insert,
     Left, Right, Up, Down, Home, End, PageUp, PageDown,
     F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
+    // The modifier keys themselves, going down and up (an engine's held keys); Shift is either Shift key.
+    Shift, Control, Alt,
     A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
     D0, D1, D2, D3, D4, D5, D6, D7, D8, D9,
     // The symbols, from the keyboard or the number pad alike: the pad's + is Plus too.

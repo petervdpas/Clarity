@@ -409,12 +409,128 @@ fn notes_settings() -> clarity_project::Settings {
     clarity_project::parse("project Notes\n    stack csharp desktop\n    datasource main sqlite \"data/notes.db\"\n").unwrap()
 }
 
-/// A .NET custom part comes with Clarity.UI's custom controls (DESIGN 7.9);
-/// until then generating it says so.
+/// A .NET custom part is a control of Clarity.UI (DESIGN 7.9): its package
+/// in the project file, its adapter, and the half generated from its
+/// declaration, which names it for the window that places it.
 #[test]
-fn a_dotnet_part_waits_for_clarity_ui_s_custom_controls() {
-    let refused = clarity_gen::generate(&notes_project(), &notes_settings()).unwrap_err();
-    assert_eq!(refused, ["custom part Notes is not generated yet: custom parts on C# come with Clarity.UI's custom controls (DESIGN 7.9)"]);
+fn a_dotnet_part_is_a_clarity_ui_control_with_its_package_its_adapter_and_its_generated_half() {
+    let files = clarity_gen::generate(&notes_project(), &notes_settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let half = text(&files, "parts/Notes/Notes.g.cs");
+    for line in [
+        "using Clarity.Ui;",
+        "namespace ClarityParts;",
+        "[PartKind(\"Notes\")]",
+        "public partial class Notes : CustomPart",
+        "private partial void ShowValue(string value);",
+        "private partial void ShowWrap(bool wrap);",
+        "private partial void OnClear();",
+        "private partial void OnJump(long line);",
+        "protected void Edited(long words) => Tell(\"edited\", words);",
+        "protected void Changed(string value) => ChangeValue(value);",
+        "case \"wrap\":\n                ShowWrap(As<bool>(value));",
+        "case \"jump\":\n                OnJump(As<long>(values.ElementAtOrDefault(0)));",
+    ] {
+        assert!(half.contains(line), "{line}\n{half}");
+    }
+    assert_eq!(text(&files, "parts/Notes/Notes.cs"), "", "the adapter is copied as it is");
+    assert!(files.iter().any(|f| f.path == "parts/Notes/Notes.cs" && f.bytes.as_deref() == Some(b"// The adapter.\n".as_slice())));
+    assert!(text(&files, "Notes.csproj").contains("<PackageReference Include=\"Newtonsoft.Json\" Version=\"13.0.1\" />"));
+    // The window places it by its name, with its binding, its handlers and its wired tells.
+    let window = text(&files, "Windows/Writing.cxaml");
+    assert!(window.contains("<Custom name=\"notes\""), "{window}");
+    assert!(window.contains("part=\"Notes\""), "{window}");
+    assert!(window.contains("&quot;tell&quot;:&quot;edited&quot;"), "{window}");
+    // The view model holds its values and runs its tells.
+    let model = files.iter().find(|f| f.path.ends_with("WritingViewModel.cs")).map(|f| f.text.as_str()).unwrap_or_default();
+    assert!(model.contains("public void Told_Notes(string tell, System.Text.Json.JsonElement[] values)"), "{model}");
+}
+
+/// A part from a DLL is referenced beside its adapter, where the generated
+/// project carries the assembly.
+#[test]
+fn a_dll_part_is_referenced_beside_its_adapter() {
+    let text_ = NOTES.replace("nuget \"Newtonsoft.Json\" 13.0.1", "dll \"libs/Notes.Editor.dll\"");
+    let mut p = load_keyed([("notes.clarity", text_.as_str())], &[], "en");
+    clarity_spec::native::attach(
+        &mut p,
+        vec![
+            PartFile { part: "Notes".into(), path: "Notes.cs".into(), bytes: b"// The adapter.\n".to_vec() },
+            PartFile { part: "Notes".into(), path: "Notes.Editor.dll".into(), bytes: vec![0, 1, 2] },
+        ],
+    );
+    assert!(!p.has_errors(), "{:?}", p.diagnostics);
+    let files = clarity_gen::generate(&p, &notes_settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    assert!(text(&files, "Notes.csproj").contains("<Reference Include=\"Notes.Editor\" HintPath=\"parts/Notes/Notes.Editor.dll\" />"));
+    assert!(files.iter().any(|f| f.path == "parts/Notes/Notes.Editor.dll"));
+}
+
+/// A part without a value, properties or hears gets methods without a
+/// switch, which C# would warn of when empty.
+#[test]
+fn a_dotnet_part_with_nothing_to_set_has_no_empty_switch() {
+    let bare = "module bare\n\npart Lamp\n    nuget \"Newtonsoft.Json\" 13.0.1\n    size 2 x 2\n";
+    let p = load_keyed([("bare.clarity", bare)], &[], "en");
+    let part = &p.files[0].parts[0];
+    let half = clarity_gen::parts::dotnet_half(&p, part);
+    assert!(!half.contains("switch"), "{half}");
+    assert!(half.contains("protected override void Set(string name, object? value)\n    {\n    }"), "{half}");
+}
+
+/// Declaring a .NET part writes a starter adapter: a control of Clarity.UI
+/// that draws its value in a frame and writes every method the generated
+/// half asks for, whatever the value's type.
+#[test]
+fn a_dotnet_parts_starter_is_a_clarity_ui_control() {
+    let starter = clarity_gen::parts::dotnet_adapter(&notes_project(), "Notes").expect("the part is declared");
+    for line in [
+        "using Clarity.Ui;",
+        "public partial class Notes",
+        "public override void Draw(Painter painter)",
+        "private partial void ShowValue(string value)\n    {\n        shown = $\"{value}\";",
+        "private partial void ShowWrap(bool wrap)",
+        "private partial void OnJump(long line)",
+        "Edited(...)",
+    ] {
+        assert!(starter.contains(line), "{line}\n{starter}");
+    }
+    let gauge = NOTES.replace("binds text", "binds integer");
+    let p = load_keyed([("notes.clarity", gauge.as_str())], &[], "en");
+    let starter = clarity_gen::parts::dotnet_adapter(&p, "Notes").unwrap();
+    assert!(starter.contains("private partial void ShowValue(long value)"), "{starter}");
+    // Declaring it in a project folder writes it there once, and never over the developer's.
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/generated/dotnet-starter");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let written = parts::write_part_folders(&dir, &p).unwrap();
+    assert!(written.iter().any(|w| w.ends_with("parts/Notes/Notes.cs")), "{written:?}");
+    std::fs::write(dir.join("parts/Notes/Notes.cs"), "// mine\n").unwrap();
+    parts::write_part_folders(&dir, &p).unwrap();
+    assert_eq!(std::fs::read_to_string(dir.join("parts/Notes/Notes.cs")).unwrap(), "// mine\n");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+#[ignore = "builds a C# program with a .NET part; run with --ignored"]
+fn a_csharp_program_with_a_dotnet_part_builds() {
+    let mut p = load_keyed([("notes.clarity", NOTES)], &[], "en");
+    let adapter = clarity_gen::parts::dotnet_adapter(&p, "Notes").expect("the part is declared");
+    clarity_spec::native::attach(&mut p, vec![PartFile { part: "Notes".into(), path: "Notes.cs".into(), bytes: adapter.into_bytes() }]);
+    let files = clarity_gen::generate(&p, &notes_settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/generated/dotnet-part");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    clarity_gen::write_out(&dir, &files, &["bin", "obj"]).unwrap();
+    let runtime = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/csharp");
+    let out = std::process::Command::new("dotnet")
+        .args(["build", "--nologo", "-v", "quiet", "-warnaserror", "-p:UseSharedCompilation=false", "-nodeReuse:false"])
+        .current_dir(&dir)
+        .env("CLARITY_RUNTIME", runtime)
+        .env("MSBUILDDISABLENODEREUSE", "1")
+        .output()
+        .unwrap();
+    let _ = std::fs::remove_dir_all(dir.join("bin"));
+    let _ = std::fs::remove_dir_all(dir.join("obj"));
+    assert!(out.status.success(), "{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
 }
 
 /// A Rust part's starter uses every value a hear brings without a warning:

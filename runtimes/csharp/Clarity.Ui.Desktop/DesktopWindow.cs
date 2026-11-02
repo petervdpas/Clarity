@@ -1,10 +1,22 @@
-// A screen of Clarity.UI in the system's own window (DESIGN 7.9): Skia draws
-// it through OpenGL when it changed, at the window's own scale, and what the
-// person does with the mouse, the wheel and keys goes to the screen. A
-// generated application runs its windows here, from the markup and themes
-// its assembly carries.
+// Clarity.UI on the desktop (DESIGN 7.9): each screen in a window of the
+// system's own, drawn by Skia through OpenGL when it changed, at the window's
+// own scale; what the person does with the mouse, the wheel and keys goes to
+// its screen. A generated application runs its windows here, from the markup
+// and themes its assembly carries: windows open in place in their desktop
+// window, while a dialog, the keys window and a target marked `in new window`
+// get a desktop window of their own, each its own screen and GL surface. A
+// dialog's window is sized to the dialog, and the window under it takes no
+// input while it is open. The theme follows the system's light or dark, at
+// start and when it changes. One loop runs every window: what the person did
+// (keys going down and up, the wheel with the keys held) is queued as it
+// comes and done between frames, so a handler never runs
+// inside the system's callbacks, and a long engine call keeps every window
+// drawing (LongCall.Waiter) with its bar and Stop. The loop is the parts'
+// clock too: timers and playing sounds tick from it (FrameTicks), sounds play
+// through SoundFlow, and the file dialogs are the system's own.
 
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Reflection;
 using Clarity.Runtime;
 using Clarity.Ui;
@@ -28,206 +40,481 @@ public static class DesktopWindow
     /// Shows a generated application from its main window until the person
     /// closes it: each window drawn from its markup (<c>Windows/Main.cxaml</c>,
     /// carried in the application's assembly) over its view model, in the
-    /// theme shown laid over Clarity's own (<c>Themes/*.json</c>). Windows open
-    /// in place over the one before and close back to it.
+    /// theme shown laid over Clarity's own (<c>Themes/*.json</c>).
     /// </summary>
     public static void Run(WindowViewModel main)
     {
-        var app = main.GetType().Assembly;
-        var stack = new WindowStack(model => Carried(app, $"Windows/{WindowStack.NameOf(model)}.cxaml")) { OpenAddress = SystemAddress.Open };
-        // The window's own keys (shortcuts, default and cancel buttons, undo) come before the part with the focus.
-        var screen = new Screen(stack, LookOf(app)) { Keys = stack.KeyPressed };
-        // What runs once the work at hand is done (a change handler joining its edit) runs on the next frame.
-        var later = new ConcurrentQueue<Action>();
-        Later.Poster = later.Enqueue;
-        Themes.Changed += () => screen.Show(LookOf(app));
-        var size = main.WindowSize ?? StandardSize;
-        IWindow? shown = null;
-        var ended = false;
-        stack.TitleChanged += () =>
-        {
-            if (shown is not null && stack.Current is { } top)
-                shown.Title = top.Title;
-        };
-        stack.Ended += () =>
-        {
-            ended = true;
-            shown?.Close();
-        };
-        DesktopProgram.Current = new Program(() => shown?.Close());
-        stack.Push(main);
-        Run(screen, main.Title, (int)size.Width, (int)size.Height, new Hooks
-        {
-            Loaded = window => shown = window,
-            Frame = () =>
-            {
-                while (later.TryDequeue(out var action))
-                    action();
-                stack.Tick();
-            },
-            Closing = () =>
-            {
-                if (!ended)
-                    stack.Closing();
-            },
-        });
-    }
-
-    /// <summary>What a generated application gives the desktop window: quitting; the keys window comes with the frame.</summary>
-    sealed class Program(Action quit) : IDesktop
-    {
-        public void Quit() => quit();
-
-        public void ShowKeys() => Console.Error.WriteLine("Clarity.UI's keys window comes with the frame (G7d)");
-    }
-
-    /// <summary>A text the application carries as a resource, by its logical name; none when it carries none.</summary>
-    static string? Carried(Assembly app, string name)
-    {
-        using var stream = app.GetManifestResourceStream(name);
-        if (stream is null)
-            return null;
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
+        var desk = new Desk(main.GetType().Assembly);
+        desk.OpenApp(main, [], null);
+        desk.Loop();
     }
 
     /// <summary>
-    /// The theme shown (Themes.Current) as the application carries it,
-    /// resolved for light mode, laid over Clarity's own; Clarity's own when
-    /// the application offers none.
+    /// The databases did not open (DESIGN 5.27): says why, then shows what
+    /// keeps the connection, or what the app's <c>on unconnected</c> opens;
+    /// once the databases open the main window shows on them, until the person
+    /// closes it.
     /// </summary>
-    static ThemeLook LookOf(Assembly app)
+    public static void Run(Unconnected unconnected, Text problem)
     {
-        if (Themes.Current is not { } name || Carried(app, $"Themes/{ClassOf(name)}.light.json") is not { } resolved)
-            return ThemeLook.Clarity(dark: false);
+        Console.Error.WriteLine(Locale.Show(problem));
+        var app = Assembly.GetEntryAssembly() ?? typeof(DesktopWindow).Assembly;
+        var desk = new Desk(app);
+        unconnected.Start(problem, desk);
         try
         {
-            var look = ThemeLook.Over(resolved, ThemeLook.Clarity(dark: false));
-            return look.Dark ? ThemeLook.Over(resolved, ThemeLook.Clarity(dark: true)) : look;
+            desk.Loop();
         }
-        catch (System.Text.Json.JsonException e)
+        finally
         {
-            // Fail safe: a theme that cannot be read leaves Clarity's own.
-            Console.Error.WriteLine($"the theme {name} cannot be read: {e.Message}");
-            return ThemeLook.Clarity(dark: false);
+            desk.Connected?.Dispose();
         }
-    }
-
-    /// <summary>The file name a theme's resolved look goes by, as clarity_spec's class_name: <c>NightOwl</c> is <c>night-owl</c>.</summary>
-    internal static string ClassOf(string name)
-    {
-        var kebab = new System.Text.StringBuilder();
-        for (var i = 0; i < name.Length; i++)
-        {
-            var c = name[i];
-            if (char.IsAsciiLetterUpper(c))
-            {
-                if (i > 0 && kebab.Length > 0 && kebab[^1] != '-')
-                    kebab.Append('-');
-                kebab.Append(char.ToLowerInvariant(c));
-            }
-            else if (char.IsAsciiLetterOrDigit(c))
-                kebab.Append(c);
-            else if (kebab.Length > 0 && kebab[^1] != '-')
-                kebab.Append('-');
-        }
-        return kebab.ToString().TrimEnd('-');
-    }
-
-    /// <summary>What a program does beside drawing its screen: when its window is made, every frame, and as it closes.</summary>
-    sealed class Hooks
-    {
-        public Action<IWindow>? Loaded { get; init; }
-        public Action? Frame { get; init; }
-        public Action? Closing { get; init; }
     }
 
     /// <summary>Shows <paramref name="screen"/> in a window until the person closes it.</summary>
-    public static void Run(Screen screen, string title, int width, int height) => Run(screen, title, width, height, new Hooks());
-
-    static void Run(Screen screen, string title, int width, int height, Hooks hooks)
+    public static void Run(Screen screen, string title, int width, int height)
     {
-        var options = WindowOptions.Default with
-        {
-            Title = title,
-            Size = new Vector2D<int>(width, height),
-            API = new GraphicsAPI(ContextAPI.OpenGL, ContextProfile.Core, ContextFlags.ForwardCompatible, new APIVersion(3, 3)),
-            PreferredStencilBufferBits = 8,
-            VSync = true,
-            ShouldSwapAutomatically = false,
-            FramesPerSecond = 60,
-            UpdatesPerSecond = 60,
-        };
-        using var window = Window.Create(options);
-        GRContext? skia = null;
-        SKSurface? surface = null;
-        IInputContext? input = null;
-        var changed = true;
-        screen.Invalidated += () => changed = true;
+        var desk = new Desk(typeof(DesktopWindow).Assembly);
+        desk.Open(screen, title, new Extent(width, height), null, modal: false, resizable: true);
+        desk.Loop();
+    }
 
-        void Fit()
+    /// <summary>
+    /// What the desktop gives the parts before its first window: sound through
+    /// SoundFlow (a device opened when a sound first plays), the clock of its
+    /// frame loop. The clock is the loop's to advance; the system's file
+    /// dialogs (<see cref="Files"/>) go to every window it opens.
+    /// </summary>
+    internal static FrameTicks Prepare()
+    {
+        SoundPart.Output = new SoundFlowOutput();
+        var ticks = new FrameTicks();
+        Ticks.Source = ticks;
+        return ticks;
+    }
+
+    /// <summary>The system's file dialogs, which the parts of every desktop window use.</summary>
+    internal static readonly IFilePicker Files = new SystemFilePicker();
+
+    /// <summary>A desktop window: its system window, its screen and GL surface, and what the person did on it, waiting to be done.</summary>
+    sealed class Shown(IWindow window, Screen screen)
+    {
+        public IWindow Window { get; } = window;
+        public Screen Screen { get; } = screen;
+        public AppScreen? App { get; set; }
+        public Shown? Owner { get; set; }
+        public bool Modal { get; set; }
+        public List<Shown> Children { get; } = [];
+        public Queue<Action> Input { get; } = new();
+        public GRContext? Skia { get; set; }
+        public SKSurface? Surface { get; set; }
+        public IInputContext? Inputs { get; set; }
+        public bool Changed { get; set; } = true;
+
+        /// <summary>It closes by what it shows (its last window closed): it hears no on close again.</summary>
+        public bool Ending { get; set; }
+
+        /// <summary>The person or the application closes it: what it shows hears its on close.</summary>
+        public Action? Closing { get; set; }
+
+        /// <summary>It is gone.</summary>
+        public Action? Gone { get; set; }
+
+        /// <summary>A dialog of its own is open over it: it takes no input.</summary>
+        public bool Blocked => Children.Any(c => c.Modal);
+    }
+
+    /// <summary>The application's desktop windows, and the loop that runs them.</summary>
+    sealed class Desk : IUnconnectedScreen, IDesktop
+    {
+        readonly Func<string, string?> carried;
+        readonly IReadOnlyList<System.Xml.Linq.XElement>? appFrame;
+        readonly List<Shown> windows = [];
+        readonly ConcurrentQueue<Action> later = new();
+        readonly FrameTicks ticks;
+        readonly long started = Stopwatch.GetTimestamp();
+        bool systemDark;
+        Shown? active;
+
+        public Desk(Assembly app)
         {
-            if (skia is null)
-                return;
-            surface?.Dispose();
-            var pixels = window.FramebufferSize;
-            var target = new GRBackendRenderTarget(Math.Max(1, pixels.X), Math.Max(1, pixels.Y), 0, 8, new GRGlFramebufferInfo(0, Rgba8));
-            surface = SKSurface.Create(skia, target, GRSurfaceOrigin.BottomLeft, SKColorType.Rgba8888);
-            var scale = window.Size.X > 0 ? (float)pixels.X / window.Size.X : 1;
-            screen.Resize(window.Size.X, window.Size.Y, scale);
-            changed = true;
+            carried = AppScreen.CarriedBy(app);
+            appFrame = AppScreen.AppFrameOf(app);
+            systemDark = SystemTheme.Here.Dark();
+            ticks = Prepare();
+            // A tick that fails says why in the window the person works in.
+            ticks.Failed = e =>
+            {
+                Console.Error.WriteLine($"Unhandled: {e}");
+                active?.App?.Stack.Messages.Add(new Message(Level.Error, Text.Plain(e.Message)));
+            };
+            // What runs once the work at hand is done (a change handler joining its edit) runs between frames.
+            Later.Poster = later.Enqueue;
+            DesktopProgram.Current = this;
+            // A long engine call: every window goes on drawing until it ended.
+            LongCall.Waiter = call =>
+            {
+                while (!call.IsCompleted && windows.Count > 0)
+                    Pump();
+                call.Wait();
+            };
+            Themes.Changed += Relook;
         }
 
-        window.Load += () =>
+        /// <summary>The databases opened after the application started unconnected: closed as it ends.</summary>
+        public Db? Connected { get; private set; }
+
+        // -- Opening -----------------------------------------------------------------
+
+        /// <summary>Opens <paramref name="first"/> in a desktop window of the application's own, saying <paramref name="said"/>.</summary>
+        public Shown OpenApp(WindowViewModel first, IReadOnlyList<Message> said, Action? gone)
         {
+            var shown = OpenStack(first, null, null);
+            foreach (var message in said)
+                shown.App!.Stack.Messages.Add(message);
+            shown.Gone = () =>
+            {
+                gone?.Invoke();
+                // The application's last own window closed: the application ends.
+                if (!windows.Any(w => w.Owner is null))
+                    Quit();
+            };
+            return shown;
+        }
+
+        /// <summary>A dialog or a target marked <c>in new window</c>: a desktop window of its own over the one it was opened from.</summary>
+        void Apart(WindowViewModel other, WindowViewModel opener)
+        {
+            var owner = windows.LastOrDefault(w => w.App?.Stack.Windows.Contains(opener) == true) ?? windows.FirstOrDefault();
+            OpenStack(other, owner, opener);
+        }
+
+        Shown OpenStack(WindowViewModel first, Shown? owner, WindowViewModel? opener)
+        {
+            var screen = new AppScreen(carried, systemDark, SystemAddress.Open, Apart, opener, appFrame, Files);
+            screen.Stack.Push(first);
+            var dialog = owner is not null && first.IsDialog;
+            var size = dialog && screen.Stack.View is { } view ? WindowStack.DialogSize(view, first) : first.WindowSize ?? StandardSize;
+            var shown = Open(screen.Screen, first.Title, size, owner, modal: dialog, resizable: !dialog);
+            shown.App = screen;
+            screen.Stack.TitleChanged += () =>
+            {
+                if (screen.Stack.Current is { } top)
+                    shown.Window.Title = top.Title;
+            };
+            screen.Stack.Ended += () =>
+            {
+                shown.Ending = true;
+                Close(shown);
+            };
+            shown.Closing = screen.Stack.Closing;
+            return shown;
+        }
+
+        /// <summary>Shows <paramref name="screen"/> in a desktop window of its own; over <paramref name="owner"/>, in its middle.</summary>
+        public Shown Open(Screen screen, string title, Extent size, Shown? owner, bool modal, bool resizable)
+        {
+            var width = (int)Math.Max(120, size.Width);
+            var height = (int)Math.Max(80, size.Height);
+            var options = WindowOptions.Default with
+            {
+                Title = title,
+                Size = new Vector2D<int>(width, height),
+                API = new GraphicsAPI(ContextAPI.OpenGL, ContextProfile.Core, ContextFlags.ForwardCompatible, new APIVersion(3, 3)),
+                PreferredStencilBufferBits = 8,
+                // Every window swaps in the one loop, which keeps its own pace.
+                VSync = false,
+                ShouldSwapAutomatically = false,
+                WindowBorder = resizable ? WindowBorder.Resizable : WindowBorder.Fixed,
+            };
+            if (owner is not null)
+                options = options with { Position = owner.Window.Position + (owner.Window.Size - new Vector2D<int>(width, height)) / 2 };
+            var window = Window.Create(options);
+            var shown = new Shown(window, screen) { Owner = owner, Modal = modal };
+            screen.Invalidated += () => shown.Changed = true;
+            window.Load += () => Loaded(shown);
+            window.FramebufferResize += _ => Fit(shown);
+            window.FocusChanged += focused =>
+            {
+                if (focused)
+                    active = shown;
+            };
+            window.Initialize();
+            windows.Add(shown);
+            owner?.Children.Add(shown);
+            active = shown;
+            return shown;
+        }
+
+        void Loaded(Shown shown)
+        {
+            var (window, screen) = (shown.Window, shown.Screen);
             // Skia finds OpenGL's functions itself (GLX or EGL, WGL, CGL) in the window's current context.
             window.MakeCurrent();
-            skia = GRContext.CreateGl(GRGlInterface.Create());
-            Fit();
-            input = window.CreateInput();
+            shown.Skia = GRContext.CreateGl(GRGlInterface.Create());
+            Fit(shown);
+            var input = window.CreateInput();
+            shown.Inputs = input;
+            var queue = shown.Input;
+            var keyboards = input.Keyboards;
+            // The keys held as the wheel turns: Ctrl with the wheel zooms where a part does.
+            Modifiers Held() => keyboards.FirstOrDefault() is { } k ? ModifiersOf(k) : Modifiers.None;
             foreach (var mouse in input.Mice)
             {
-                mouse.MouseMove += (_, at) => screen.PointerMoved(at.X, at.Y);
-                mouse.MouseDown += (m, button) => screen.PointerPressed(m.Position.X, m.Position.Y, Button(button));
-                mouse.MouseUp += (m, button) => screen.PointerReleased(m.Position.X, m.Position.Y, Button(button));
+                mouse.MouseMove += (_, at) => queue.Enqueue(() => screen.PointerMoved(at.X, at.Y));
+                mouse.MouseDown += (m, button) =>
+                {
+                    var at = m.Position;
+                    queue.Enqueue(() => screen.PointerPressed(at.X, at.Y, Button(button)));
+                };
+                mouse.MouseUp += (m, button) =>
+                {
+                    var at = m.Position;
+                    queue.Enqueue(() => screen.PointerReleased(at.X, at.Y, Button(button)));
+                };
                 // A turn of the wheel scrolls three lines of 40; up is toward the top.
-                mouse.Scroll += (m, wheel) => screen.Wheel(m.Position.X, m.Position.Y, -wheel.X * 40, -wheel.Y * 40);
+                mouse.Scroll += (m, wheel) =>
+                {
+                    var at = m.Position;
+                    var held = Held();
+                    queue.Enqueue(() => screen.Wheel(at.X, at.Y, -wheel.X * 40, -wheel.Y * 40, held));
+                };
             }
             foreach (var keyboard in input.Keyboards)
             {
                 keyboard.KeyDown += (k, key, _) =>
                 {
                     var held = ModifiersOf(k);
-                    screen.KeyPressed(new KeyInput(KeyOf(key, held.HasFlag(Modifiers.Shift)), held));
+                    var pressed = new KeyInput(KeyOf(key, held.HasFlag(Modifiers.Shift)), held);
+                    queue.Enqueue(() => screen.KeyPressed(pressed));
+                };
+                keyboard.KeyUp += (k, key, _) =>
+                {
+                    var held = ModifiersOf(k);
+                    var released = new KeyInput(KeyOf(key, held.HasFlag(Modifiers.Shift)), held);
+                    queue.Enqueue(() => screen.KeyReleased(released));
                 };
                 keyboard.KeyChar += (_, typed) =>
                 {
                     if (!char.IsControl(typed))
-                        screen.TextTyped(typed.ToString());
+                        queue.Enqueue(() => screen.TextTyped(typed.ToString()));
                 };
             }
-            hooks.Loaded?.Invoke(window);
-        };
-        window.FramebufferResize += _ => Fit();
-        window.Update += _ => hooks.Frame?.Invoke();
-        window.Render += _ =>
+            // Copying and pasting go through the system's clipboard.
+            if (input.Keyboards.FirstOrDefault() is { } first)
+                screen.Clipboard = new SystemClipboard(first);
+        }
+
+        void Fit(Shown shown)
+        {
+            if (shown.Skia is null)
+                return;
+            shown.Window.MakeCurrent();
+            shown.Surface?.Dispose();
+            var pixels = shown.Window.FramebufferSize;
+            var target = new GRBackendRenderTarget(Math.Max(1, pixels.X), Math.Max(1, pixels.Y), 0, 8, new GRGlFramebufferInfo(0, Rgba8));
+            shown.Surface = SKSurface.Create(shown.Skia, target, GRSurfaceOrigin.BottomLeft, SKColorType.Rgba8888);
+            var size = shown.Window.Size;
+            var scale = size.X > 0 ? (float)pixels.X / size.X : 1;
+            shown.Screen.Resize(size.X, size.Y, scale);
+            shown.Changed = true;
+        }
+
+        // -- Running -------------------------------------------------------------------
+
+        /// <summary>Runs every window until the last one closed.</summary>
+        public void Loop()
+        {
+            using var watch = SystemTheme.Here.Watch(systemDark, TimeSpan.FromSeconds(3), dark => later.Enqueue(() => SetDark(dark)));
+            try
+            {
+                while (windows.Count > 0)
+                    Pump();
+            }
+            finally
+            {
+                Themes.Changed -= Relook;
+                LongCall.Waiter = null;
+                if (DesktopProgram.Current == this)
+                    DesktopProgram.Current = null;
+                // The sound device goes with the last window.
+                if (SoundPart.Output is SoundFlowOutput sound)
+                    sound.Dispose();
+            }
+        }
+
+        /// <summary>One frame of every window: what the system says, what the person did, time, closing, drawing.</summary>
+        void Pump()
+        {
+            var started = Stopwatch.GetTimestamp();
+            foreach (var shown in windows.ToList())
+                if (!shown.Window.IsClosing)
+                    shown.Window.DoEvents();
+            foreach (var shown in windows.ToList())
+                while (shown.Input.TryDequeue(out var action))
+                {
+                    // The window under a dialog of its own takes nothing while it is open.
+                    if (!shown.Blocked && windows.Contains(shown))
+                        Safely(shown, action);
+                }
+            while (later.TryDequeue(out var action))
+                Safely(active, action);
+            // The parts' clock: timers and playing sounds whose time has come.
+            ticks.Advance(Stopwatch.GetElapsedTime(this.started));
+            foreach (var shown in windows.ToList())
+            {
+                // An element whose time came wakes (a trend moves on, a tooltip shows).
+                if (shown.Screen.NextWake is { } wake && wake <= shown.Screen.Now())
+                    Safely(shown, () => shown.Screen.WakeDue(shown.Screen.Now()));
+                if (!shown.Window.IsClosing)
+                    shown.App?.Stack.Tick();
+                else if (shown.Blocked)
+                    // A window with a dialog of its own open over it stays, as the system's own dialogs keep theirs.
+                    shown.Window.IsClosing = false;
+                else
+                    Close(shown);
+            }
+            var drew = false;
+            foreach (var shown in windows)
+                drew |= Draw(shown);
+            // About sixty frames a second, and resting while nothing changes.
+            var spent = Stopwatch.GetElapsedTime(started);
+            var frame = TimeSpan.FromMilliseconds(drew ? 16 : 8);
+            if (spent < frame)
+                Thread.Sleep(frame - spent);
+        }
+
+        static bool Draw(Shown shown)
         {
             // While something animates, every frame is drawn.
-            if ((!changed && screen.Animating == 0) || surface is null || skia is null)
-                return;
-            changed = false;
-            screen.Draw(surface.Canvas);
-            skia.Flush();
-            window.SwapBuffers();
-        };
-        window.Closing += () =>
+            if ((!shown.Changed && shown.Screen.Animating == 0) || shown.Surface is null || shown.Skia is null)
+                return false;
+            shown.Changed = false;
+            shown.Window.MakeCurrent();
+            shown.Screen.Draw(shown.Surface.Canvas);
+            shown.Skia.Flush();
+            shown.Window.SwapBuffers();
+            return true;
+        }
+
+        /// <summary>Fail safe: what goes wrong in what the person did says why in the window, and the application keeps working.</summary>
+        static void Safely(Shown? shown, Action action)
         {
-            hooks.Closing?.Invoke();
-            input?.Dispose();
-            surface?.Dispose();
-            skia?.Dispose();
-        };
-        window.Run();
+            try
+            {
+                action();
+            }
+            catch (Exception e) when (e is not OutOfMemoryException)
+            {
+                Console.Error.WriteLine($"Unhandled: {e}");
+                shown?.App?.Stack.Messages.Add(new Message(Level.Error, Text.Plain(e.Message)));
+            }
+        }
+
+        /// <summary>Closes a desktop window, the windows of its own it opened first; what it shows hears its on close unless it ended itself.</summary>
+        void Close(Shown shown)
+        {
+            if (!windows.Remove(shown))
+                return;
+            foreach (var child in shown.Children.ToList())
+                Close(child);
+            if (!shown.Ending)
+            {
+                shown.Ending = true;
+                Safely(shown, () => shown.Closing?.Invoke());
+            }
+            shown.Owner?.Children.Remove(shown);
+            if (active == shown)
+                active = shown.Owner ?? windows.LastOrDefault();
+            try
+            {
+                shown.Window.MakeCurrent();
+                shown.Surface?.Dispose();
+                shown.Skia?.Dispose();
+                shown.Inputs?.Dispose();
+                shown.Window.Reset();
+                shown.Window.Dispose();
+            }
+            catch (Exception e) when (e is not OutOfMemoryException)
+            {
+                Console.Error.WriteLine($"a window did not close cleanly: {e.Message}");
+            }
+            shown.App?.Dispose();
+            // What its elements started (timers, sounds, engines) stops as they leave the screen.
+            Safely(null, shown.Screen.Dispose);
+            shown.Gone?.Invoke();
+        }
+
+        // -- The theme -----------------------------------------------------------------
+
+        void SetDark(bool dark)
+        {
+            systemDark = dark;
+            foreach (var shown in windows)
+            {
+                if (shown.App is { } screen)
+                    screen.SystemDark = dark;
+                else
+                    shown.Screen.Show(Look);
+            }
+        }
+
+        ThemeLook Look => AppLook.Of(carried, Themes.Current, systemDark);
+
+        /// <summary>The person chose another theme: the windows that are no application's (the keys window) show it too.</summary>
+        void Relook()
+        {
+            foreach (var shown in windows.Where(w => w.App is null))
+                shown.Screen.Show(Look);
+        }
+
+        // -- What a generated application asks of the desktop ------------------------
+
+        /// <summary>Ends the application: every window closes, hearing its on close.</summary>
+        public void Quit()
+        {
+            foreach (var shown in windows.Where(w => w.Owner is null).ToList())
+                Close(shown);
+            foreach (var shown in windows.ToList())
+                Close(shown);
+        }
+
+        /// <summary>Clarity's keys window, in a desktop window of its own over the window the person works in.</summary>
+        public void ShowKeys()
+        {
+            if (windows.Any(w => w.Screen.Root is KeysWindow))
+                return;
+            var keys = new KeysWindow(KeysWindow.Catalog);
+            var screen = new Screen(keys, Look) { Keys = keys.KeyPressed };
+            Shown? shown = null;
+            keys.Done = () =>
+            {
+                if (shown is not null)
+                    Close(shown);
+            };
+            shown = Open(screen, KeysWindow.Title, keys.Wanted, active ?? windows.FirstOrDefault(), modal: true, resizable: true);
+            screen.Focus(keys);
+        }
+
+        // -- The unconnected flow ------------------------------------------------------
+
+        void IUnconnectedScreen.Show(WindowViewModel first, IReadOnlyList<Message> said, Action whenClosed) => OpenApp(first, said, whenClosed);
+
+        void IUnconnectedScreen.Connected(Db db, WindowViewModel main)
+        {
+            Connected = db;
+            OpenApp(main, [], null);
+        }
+
+        void IUnconnectedScreen.Ended() => Quit();
+    }
+
+    /// <summary>The system's clipboard, through the keyboard's window.</summary>
+    sealed class SystemClipboard(IKeyboard keyboard) : IClipboard
+    {
+        public string? GetText() => keyboard.ClipboardText;
+
+        public void SetText(string text) => keyboard.ClipboardText = text;
     }
 
     static PointerButton Button(MouseButton button) => button switch
@@ -288,6 +575,9 @@ public static class DesktopWindow
         SilkKey.End => Clarity.Ui.Key.End,
         SilkKey.PageUp => Clarity.Ui.Key.PageUp,
         SilkKey.PageDown => Clarity.Ui.Key.PageDown,
+        SilkKey.ShiftLeft or SilkKey.ShiftRight => Clarity.Ui.Key.Shift,
+        SilkKey.ControlLeft or SilkKey.ControlRight => Clarity.Ui.Key.Control,
+        SilkKey.AltLeft or SilkKey.AltRight => Clarity.Ui.Key.Alt,
         >= SilkKey.F1 and <= SilkKey.F12 => Clarity.Ui.Key.F1 + (key - SilkKey.F1),
         >= SilkKey.A and <= SilkKey.Z => Clarity.Ui.Key.A + (key - SilkKey.A),
         >= SilkKey.Number0 and <= SilkKey.Number9 => Clarity.Ui.Key.D0 + (key - SilkKey.Number0),

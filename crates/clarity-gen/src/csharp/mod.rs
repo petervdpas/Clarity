@@ -98,11 +98,12 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     let engines = !crate::engines(project).is_empty();
     // Engines beside the screen run in the application's process too, through the same package.
     let screen_engines = !crate::screen_engines(project).is_empty();
-    // Custom parts become Clarity.UI's custom controls, in C# (DESIGN 7.9).
-    if let Some(part) = parts::dotnet_parts(project).first() {
-        return Err(vec![format!("custom part {} is not generated yet: custom parts on C# come with Clarity.UI's custom controls (DESIGN 7.9)", part.name.name)]);
+    // The empty database in memory the windows work on while the databases do not open is SQLite's (DESIGN 5.27).
+    let mut packaged = drivers.clone();
+    if crate::unconnected(project).is_some() && !packaged.iter().any(|d| d.sql == Sql::Sqlite) {
+        packaged.push(&DRIVERS[0]);
     }
-    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, ui, &drivers, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, library_references(project)))];
+    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, ui, &packaged, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, parts::references(project) + &library_references(project)))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
@@ -148,6 +149,9 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     }
     files.push(text("Schema.cs", schema_cs(project, &name, &owned)?));
     files.push(text("Program.cs", program_cs(project, &name, &databases, &drivers, settings, engines)));
+    if project.keys_editable {
+        files.push(text("KeysCatalog.cs", keys_catalog(project, &name)));
+    }
     if engines {
         files.extend(crate::engine_files(project, "Engines"));
         files.push(text("Engines.cs", engines_cs(project, &name)));
@@ -156,6 +160,8 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
         files.extend(crate::screen_engine_files(project, "Engines"));
         files.push(text("ScreenEngines.cs", screen_engines_cs(project, &name)));
     }
+    // The custom parts, Clarity.UI's custom controls: each adapter, and the half generated from its declaration (DESIGN 7.9).
+    files.extend(parts::files(project));
     // The libraries: each adapter, and the half generated from its declaration (DESIGN 5.21).
     for library in crate::libraries::libraries(project) {
         let n = &library.name.name;
@@ -424,12 +430,18 @@ fn program_cs(project: &Project, name: &str, databases: &[(String, Sql, String)]
     let currency = project.locale.currency.as_deref().map_or_else(|| "null".to_string(), string);
     // The person's settings, after the language and theme they may name (DESIGN 5.17).
     let settings_start = if project.entities().any(|e| e.settings) { "        Settings.Start();\n" } else { "" };
-    // The person's keys (DESIGN 5.28).
-    let keys_start = if project.keys_editable { format!("        PersonKeys.Start({});\n", string(&crate::settings_program(settings))) } else { String::new() };
+    // The person's keys and the keys window's commands (DESIGN 5.28).
+    let keys_start = if project.keys_editable {
+        format!("        PersonKeys.Start({});\n        KeysWindow.Catalog = KeysCatalog.Layers;\n", string(&crate::settings_program(settings)))
+    } else {
+        String::new()
+    };
+    let unconnected = unconnected_start(project, &main_window);
+    let ui_using = if project.keys_editable || crate::unconnected(project).is_some() { "using Clarity.Ui;\n" } else { "" };
     format!(
         "{HEADER}
 using Clarity.Runtime;
-using Clarity.Ui.Desktop;
+{ui_using}using Clarity.Ui.Desktop;
 
 namespace {name};
 
@@ -457,10 +469,7 @@ public static class Program
         }}
         catch (Exception e)
         {{
-            // The databases did not open (DESIGN 5.27): Clarity.UI's window for it comes with G7d.
-            Console.Error.WriteLine(Locale.Show(Unconnecting.Why(e)));
-            return 1;
-        }}
+{unconnected}        }}
         using var databases = opened;
         DesktopWindow.Run(new {main_window}ViewModel(databases));
         return 0;
@@ -469,6 +478,56 @@ public static class Program
 ",
         application = string(name),
         ready = string(&format!("{name}: the databases are ready."))
+    )
+}
+
+/// What Program.cs does when the databases did not open (DESIGN 5.27): with a
+/// window that keeps the connection or the app's `on unconnected`, Clarity.UI's
+/// unconnected flow shows what keeps the connection first, on an empty
+/// database in memory; without either, the program says why and stops.
+fn unconnected_start(project: &Project, main_window: &str) -> String {
+    let Some(unconnected) = crate::unconnected(project) else {
+        return "            // The databases did not open and nothing keeps the connection: the program says why.\n            Console.Error.WriteLine(Locale.Show(Unconnecting.Why(e)));\n            return 1;\n".to_string();
+    };
+    let window = unconnected.window.map(|w| format!("                Window = db => new {w}ViewModel(db),\n")).unwrap_or_default();
+    let handler = if unconnected.handler.is_some() {
+        format!("                Handler = (db, unconnecting) => new {}ViewModel(db).Unconnected(unconnecting),\n", unconnected_host(project).name.name)
+    } else {
+        String::new()
+    };
+    let settings = if project.entities().any(|e| e.settings) { "                Settings = Settings.Current,\n" } else { "" };
+    format!(
+        "            // The databases did not open (DESIGN 5.27): what keeps the connection shows first.\n            DesktopWindow.Run(new Unconnected\n            {{\n                Connect = OpenDatabases,\n                Empty = Sqlite.Memory,\n                Main = db => new {main_window}ViewModel(db),\n{window}{handler}{settings}            }}, Unconnected.Reason(e));\n            return 0;\n"
+    )
+}
+
+/// The commands the keys window lists, by place (DESIGN 5.28).
+fn keys_catalog(project: &Project, name: &str) -> String {
+    let text = |written: &Option<String>, name: &str| match written.as_deref() {
+        Some(t) => match t.strip_prefix('@') {
+            Some(key) => format!("Text.Of({})", string(key)),
+            None => format!("Text.Plain({})", string(t)),
+        },
+        None => format!("Text.Plain({})", string(name)),
+    };
+    let layers: Vec<String> = clarity_spec::shortcuts::catalog(project)
+        .iter()
+        .map(|layer| {
+            let commands: Vec<String> = layer
+                .commands
+                .iter()
+                .map(|c| {
+                    let keys: Vec<String> = c.keys.iter().map(|k| string(k)).collect();
+                    format!("new KeyCommandInfo({}, {}, [{}])", string(&c.id), text(&c.caption, &c.name), keys.join(", "))
+                })
+                .collect();
+            let title = if layer.id.is_empty() { "null".to_string() } else { text(&layer.title, &layer.id) };
+            format!("        new KeyLayerInfo({}, {title}, [{}]),\n", string(&layer.id), commands.join(", "))
+        })
+        .collect();
+    format!(
+        "{HEADER}\nusing Clarity.Runtime;\nusing Clarity.Ui;\n\nnamespace {name};\n\n/// <summary>The commands a person gives keys in the keys window, by place (DESIGN 5.28).</summary>\npublic static class KeysCatalog\n{{\n    public static readonly KeyLayerInfo[] Layers =\n    [\n{}    ];\n}}\n",
+        layers.concat()
     )
 }
 

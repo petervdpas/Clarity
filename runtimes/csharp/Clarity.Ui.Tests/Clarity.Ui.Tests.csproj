@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="../Clarity.Ui/Clarity.Ui.csproj" />
     <ProjectReference Include="../Clarity.Ui.Browser/Clarity.Ui.Browser.csproj" />
+    <ProjectReference Include="../Clarity.Ui.Desktop/Clarity.Ui.Desktop.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- The cases every stack shares. -->

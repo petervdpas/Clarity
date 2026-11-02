@@ -77,6 +77,34 @@ public class TestHost : IPartHost
 
     /// <summary>The view model changed, as a handler changes it.</summary>
     public void Change() => Changed?.Invoke();
+
+    /// <summary>A picker that picks nothing; a test that picks gives one of its own.</summary>
+    public virtual IFilePicker Files { get; set; } = new NoFilePicker();
+
+    /// <summary>How a stored file is fetched, by its field and its store path (none for the one the record keeps); none fetches nothing.</summary>
+    public Func<string, string?, Task<byte[]?>>? Fetcher { get; set; }
+
+    public virtual Task<byte[]?> Fetch(string bind, string? storePath) =>
+        Fetcher?.Invoke(bind, storePath) ?? Task.FromResult<byte[]?>(null);
+
+    /// <summary>What the parts said to the person, as level and text.</summary>
+    public readonly List<string> Said = [];
+
+    public virtual void Say(Level level, Text text) => Said.Add($"{level} {Locale.Show(text)}");
+
+    public virtual bool? Pointed(string part, string @event, Pointer at) => null;
+
+    public virtual bool? Acted(string part, System.Text.Json.Nodes.JsonObject action) => null;
+
+    public virtual Func<IFrames>? Engine(string name) => null;
+
+    public virtual void Told(string part, string tell, System.Text.Json.JsonElement[] values) { }
+
+    /// <summary>The keys the person set, by command.</summary>
+    public readonly Dictionary<string, IReadOnlyList<string>> PersonKeys = [];
+
+    public virtual IReadOnlyList<string> KeysOf(string command, string? designed) =>
+        PersonKeys.TryGetValue(command, out var keys) ? keys : designed is null ? [] : [designed];
 }
 
 /// <summary>Parts made from markup, on a screen of their own.</summary>

@@ -7,8 +7,8 @@ namespace Clarity.Ui.Tests.Containers;
 public class PopoverPartTests
 {
     const string Window = """
-        <Trend name="save" at="1,2" span="3" />
-        <Popover name="tip" for="save" at="7,6" span="4" rows="2"><Trend name="inside" at="1,1" span="4" /></Popover>
+        <Label name="save" at="1,2" span="3" />
+        <Popover name="tip" for="save" at="7,6" span="4" rows="2"><Label name="inside" at="1,1" span="4" /></Popover>
         """;
 
     static (Screen Screen, PopoverPart Popover, TestHost Host) Made_(bool visible = false)

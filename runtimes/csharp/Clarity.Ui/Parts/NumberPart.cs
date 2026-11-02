@@ -32,7 +32,6 @@ public sealed class NumberPart : Part
     /// <summary>What was typed while it is no number; null when the input shows its value.</summary>
     public string? Bad { get; private set; }
 
-    public bool ReadOnly => State?.IsReadOnly ?? Spec.Flag("readonly");
 
     /// <summary>How its value shows and reads: the bound field's format; null keeps the text.</summary>
     public FieldFormat? Format => Bound is { } path ? this.FormatOf(path) : null;

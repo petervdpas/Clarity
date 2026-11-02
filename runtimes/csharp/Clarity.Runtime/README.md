@@ -5,7 +5,7 @@
 
 **Clarity.Runtime** is the runtime of the C# applications that [Clarity](https://github.com/petervdpas/Clarity) generates. Clarity is a designer-first IDE with its own small language: you design the windows, data and logic, and it writes readable source code for Rust, Go, C#, C or C++. In a C# application, the generated code stands on this library.
 
-It holds no user interface. The Avalonia half is [Clarity.Avalonia](https://www.nuget.org/packages/Clarity.Avalonia/).
+It holds no user interface: the windows are drawn by Clarity.UI ([Clarity.Ui](https://www.nuget.org/packages/Clarity.Ui/), with [Clarity.Ui.Desktop](https://www.nuget.org/packages/Clarity.Ui.Desktop/) and [Clarity.Ui.Browser](https://www.nuget.org/packages/Clarity.Ui.Browser/)).
 
 ## What it does
 
@@ -13,6 +13,8 @@ It holds no user interface. The Avalonia half is [Clarity.Avalonia](https://www.
 - **Queries.** `Query` and `Cond` are the `find ... where ...` of the Clarity language, written as SQL for each database (`Dialect`).
 - **Values in the person's format.** `Formats` shows and reads numbers, money, dates and durations in the person's locale, and fills texts with slots (`Text`, `Slot`).
 - **Rules.** `Contracts` checks what an action requires and ensures; a refusal (`RefusedException`) carries its text and slots to the screen.
+- **An empty database.** `Db.Empty()` keeps nothing: reads find no records and saves are dropped. It is what a test, or a screen without storage, works on.
+- **Melodies.** `Melodies.Read` reads a sound's melody (`C4 E4*2 -`) as every stack reads it, and `Melodies.Wav` makes notes and tones into WAV data that every sound output plays.
 - **Pictures and files.** `Picture` and `Pictures` keep images in the database or in a file store; `Locations` names where an application keeps its files.
 
 ## How it is used

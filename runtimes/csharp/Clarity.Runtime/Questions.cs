@@ -1,6 +1,6 @@
 // A question a handler asks: ask ... then handler(values) (DESIGN 5.14):
 // what it asks for, and what its answer runs. The screen that shows the
-// window asks it in Clarity's own dialog (Clarity.Avalonia's AskDialog, the
+// window asks it in Clarity's own dialog (Clarity.UI's AskDialog, the
 // shared screen's), never a dialog of the system.
 
 using Clarity.Runtime;

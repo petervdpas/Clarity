@@ -447,6 +447,30 @@ public sealed partial class ViewModelHost : IPartHost, IDisposable
     }
 
     /// <summary>
+    /// What a dropdown offers: a typed one the view model's
+    /// <c>&lt;Entity&gt;&lt;Field&gt;Values</c> (<c>FriendCityValues</c>), a search
+    /// one with fields to show its <c>&lt;Target&gt;&lt;Shown&gt;Choices</c>
+    /// (<c>FriendNameCityChoices</c>), as the generator writes them; else its choices.
+    /// </summary>
+    public IReadOnlyList<Choice> Offered(PartSpec part, string path)
+    {
+        var dot = path.LastIndexOf('.');
+        var field = path[(dot + 1)..];
+        if (part.Flag("typed") && dot > 0 && TypeOf(path[..dot]) is { } owner)
+        {
+            owner = Shape.RowType(owner) ?? owner;
+            owner = Nullable.GetUnderlyingType(owner) ?? owner;
+            // The entity is an open set of the application's, so the member's name is made here.
+            if (Model.GetType().GetProperty($"{owner.Name}{Pascal(field)}Values", BindingFlags.Public | BindingFlags.Instance)?.GetValue(Model) is IEnumerable<string> values)
+                return [.. values.Select(v => new Choice(v, v))];
+        }
+        if (part.Flag("search") && part.Names("show") is { Count: > 0 } show && Field(path)?.Refers is { } target
+            && Named(shape.Choices, target + string.Concat(show.Select(Pascal))) is { } records)
+            return records;
+        return Choices(path);
+    }
+
+    /// <summary>
     /// The records a reference picks from: the view model's <c>&lt;Entity&gt;Choices</c>.
     /// The markup does not say which entity a field refers to, so it is the
     /// one named after the field, else the only entity with choices.

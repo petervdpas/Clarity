@@ -76,6 +76,25 @@ namespace Clarity.Ui.Tests.Generated
 
         public Choice[] HelperChoices { get; } = [new(null, ""), new(7L, "Cy")];
 
+        // A typed dropdown's values of its field, and a search dropdown's records with the fields it shows.
+        public List<string> OrderNoteValues { get; } = ["first", "second", "first"];
+
+        public Choice[] HelperNameRoleChoices { get; } = [new(7L, "Cy", ["Cy", "lead"])];
+
+        // A canvas's commands as the generator writes them: ClickAt_Pad, CanvasAt_Pad.
+        public readonly List<string> Canvased = [];
+
+        RelayCommand<Pointer>? clickAtPad;
+        public IRelayCommand<Pointer> ClickAt_PadCommand => clickAtPad ??= new RelayCommand<Pointer>(at => Canvased.Add($"click {at!.X},{at.Y}"));
+
+        RelayCommand<System.Text.Json.Nodes.JsonObject>? canvasAtPad;
+        public IRelayCommand<System.Text.Json.Nodes.JsonObject> CanvasAt_PadCommand => canvasAtPad ??= new RelayCommand<System.Text.Json.Nodes.JsonObject>(a => Canvased.Add($"act {a!.ToJsonString()}"));
+
+        // The fetchers of a stored file the generator writes for a file field.
+        public Func<Task<byte[]?>> OrderNotePicture => () => Task.FromResult<byte[]?>([1]);
+
+        public Func<string, Task<byte[]?>> OrderNoteFile => path => Task.FromResult<byte[]?>(path == "a/b.pdf" ? [2] : null);
+
         public PartState Note { get; } = new("note");
         public PartState ApproveButton { get; } = new("approveButton", caption: "approveCaption");
         public PartState Grid { get; } = new("grid");
@@ -174,6 +193,7 @@ namespace Clarity.Ui.Tests.Generated
 
 namespace Clarity.Ui.Tests
 {
+    [Collection("PersonKeys")]
     public class ViewModelHostTests
     {
         static (OrdersViewModel Model, ViewModelHost Host) Made(string markup = "")
@@ -381,6 +401,76 @@ namespace Clarity.Ui.Tests
             Assert.Same(model.HelperChoices, host.Choices("order.finished_by"));
             Assert.Same(model.HelperChoices, host.Choices("orders.finished_by"));
             Assert.Empty(host.Choices("order.note"));
+        }
+
+        [Fact]
+        public void A_typed_dropdown_offers_its_fields_values_and_a_search_one_its_records_with_their_cells()
+        {
+            var (model, host) = Made();
+            var typed = WindowMarkup.Read("""<Window name="Orders"><Dropdown at="1,1" bind="order.note" typed="true" /></Window>""").Parts[0];
+            Assert.Equal(["first", "second", "first"], host.Offered(typed, "order.note").Select(c => c.Label));
+            var search = WindowMarkup.Read("""<Window name="Orders"><Dropdown at="1,1" bind="order.finished_by" search="true" show="name, role" /></Window>""").Parts[0];
+            Assert.Same(model.HelperNameRoleChoices, host.Offered(search, "order.finished_by"));
+            // A search without fields to show picks from the reference's own choices; a plain dropdown too.
+            var plain = WindowMarkup.Read("""<Window name="Orders"><Dropdown at="1,1" bind="order.finished_by" search="true" /></Window>""").Parts[0];
+            Assert.Same(model.HelperChoices, host.Offered(plain, "order.finished_by"));
+        }
+
+        [Fact]
+        public void A_window_of_a_view_model_makes_its_search_dropdown()
+        {
+            var model = new OrdersViewModel();
+            var spec = WindowMarkup.Read("""<Window name="Orders"><Dropdown at="1,1" span="4" bind="order.finished_by" search="true" show="name, role" /></Window>""");
+            var host = new ViewModelHost(model, spec);
+            var part = Assert.IsType<SearchDropdownPart>(PartKinds.Make(spec.Parts[0], host));
+            Assert.Equal(["Cy, lead"], part.Offered.Select(SearchDropdownPart.Line));
+        }
+
+        [Fact]
+        public async Task A_stored_file_is_fetched_through_the_generated_fetchers()
+        {
+            var (_, host) = Made();
+            Assert.Equal([1], await host.Fetch("order.note", null));
+            Assert.Equal([2], await host.Fetch("order.note", "a/b.pdf"));
+            Assert.Null(await host.Fetch("order.total", null));
+            Assert.Null(await host.Fetch("order", null));
+        }
+
+        [Fact]
+        public void A_canvas_runs_its_generated_commands_and_a_command_it_has_not_is_none()
+        {
+            var (model, host) = Made();
+            Assert.True(host.Pointed("pad", "click", new Pointer(3, 4)));
+            Assert.Null(host.Pointed("pad", "drag", new Pointer(3, 4)));
+            Assert.True(host.Acted("pad", new System.Text.Json.Nodes.JsonObject { ["kind"] = "move" }));
+            Assert.Null(host.Acted("other", []));
+            Assert.Equal(["click 3,4", "act {\"kind\":\"move\"}"], model.Canvased);
+            Assert.Null(host.Engine("nothing"));
+        }
+
+        [Fact]
+        public void A_commands_keys_are_the_persons_else_its_designed_one()
+        {
+            var (_, host) = Made();
+            try
+            {
+                PersonKeys.Set(new Dictionary<string, IReadOnlyList<string>> { ["Orders.saveButton"] = ["Ctrl+K"] });
+                Assert.Equal(["Ctrl+K"], host.KeysOf("Orders.saveButton", "Ctrl+S"));
+                Assert.Equal(["Ctrl+P"], host.KeysOf("print", "Ctrl+P"));
+                Assert.Empty(host.KeysOf("print", null));
+            }
+            finally
+            {
+                PersonKeys.Stop();
+            }
+        }
+
+        [Fact]
+        public void What_a_part_says_is_among_the_windows_messages()
+        {
+            var (model, host) = Made();
+            host.Say(Level.Info, Text.Plain("saved"));
+            Assert.Equal("saved", Locale.Show(Assert.Single(model.Messages).Text));
         }
 
         [Fact]

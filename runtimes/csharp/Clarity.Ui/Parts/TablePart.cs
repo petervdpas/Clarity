@@ -83,7 +83,8 @@ public sealed class TablePart : RowsPart
 
     int? PageSize => Spec.Number("page") is { } size && size >= 1 && !IsTree ? (int)size : null;
 
-    bool ReadOnly => Spec.Flag("readonly") || (State?.IsReadOnly ?? false) || !Enabled;
+    /// <summary>Whether its cells take no edits: read-only, or not enabled.</summary>
+    bool Locked => ReadOnly || !Enabled;
 
     public IReadOnlyList<TableColumn> Columns => columns;
 
@@ -491,7 +492,7 @@ public sealed class TablePart : RowsPart
     /// </summary>
     void Edit(int place, string field, object? value)
     {
-        if (ReadOnly || Bound is not { } bound || place < 0 || place >= Records.Count)
+        if (Locked || Bound is not { } bound || place < 0 || place >= Records.Count)
             return;
         var record = Records[place];
         if (Same(RowFields.Read(record, field), value))
@@ -524,7 +525,7 @@ public sealed class TablePart : RowsPart
     void BeginTyping(int place, TableColumn column)
     {
         Take();
-        if (ReadOnly)
+        if (Locked)
             return;
         var field = column.Field;
         var editor = new TextEditor
@@ -645,7 +646,7 @@ public sealed class TablePart : RowsPart
     /// <summary>Opens the choices of a choice cell under it.</summary>
     void OpenChoicesOf(int place, TableColumn column, Box cell)
     {
-        if (Screen is not { } screen || ReadOnly)
+        if (Screen is not { } screen || Locked)
             return;
         var height = RowHeight(screen.Look) - 4;
         var list = new CellChoices(column.Choices, RowFields.Read(Records[place], column.Field), height);
@@ -663,6 +664,25 @@ public sealed class TablePart : RowsPart
         overlay = new Overlay(list, below) { Closed = () => OpenChoices = null };
         OpenChoices = list;
         screen.Open(overlay);
+    }
+
+    /// <summary>The calendar of a date or moment cell, while it is open.</summary>
+    public DayCalendar? OpenCalendar { get; private set; }
+
+    /// <summary>Opens the calendar under a date or moment cell: the day picked is its edit (PickDay).</summary>
+    void OpenCalendarOf(int place, TableColumn column, Box cell)
+    {
+        if (Screen is not { } screen || Locked)
+            return;
+        var day = RowFields.Read(Records[place], column.Field) switch
+        {
+            DateOnly d => d,
+            DateTime t => DateOnly.FromDateTime(t),
+            _ => (DateOnly?)null,
+        };
+        var field = column.Field;
+        var overlay = DayCalendar.Open(screen, cell, day, picked => PickDay(place, field, picked), closed: () => OpenCalendar = null);
+        OpenCalendar = (DayCalendar)overlay.Content;
     }
 
     // -- What the person does -------------------------------------------------
@@ -726,7 +746,7 @@ public sealed class TablePart : RowsPart
         }
         var column = hit.Column;
         // A press on an edited cell's input chooses no row: a taken edit chooses it.
-        if (column.Edit && !ReadOnly)
+        if (column.Edit && !Locked)
         {
             switch (column.Kind)
             {
@@ -745,7 +765,7 @@ public sealed class TablePart : RowsPart
                         BeginTyping(hit.Place, column);
                     return;
                 case CellKind.Moment or CellKind.Date:
-                    // The day is picked from a calendar (PickDay).
+                    OpenCalendarOf(hit.Place, column, hit.Cell);
                     return;
             }
         }
@@ -925,7 +945,7 @@ public sealed class TablePart : RowsPart
             cell = cell with { X = cell.X + indent + 20 - pad + look.Padding, Width = Math.Max(0, cell.Width - indent - 20 + pad - look.Padding) };
         }
         var value = RowFields.Read(Records[place], column.Field);
-        var inert = ReadOnly;
+        var inert = Locked;
         if (!column.Edit)
         {
             var align = column.Kind == CellKind.Number ? TextAlign.Right : TextAlign.Left;

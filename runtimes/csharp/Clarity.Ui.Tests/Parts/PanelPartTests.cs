@@ -17,7 +17,7 @@ public class PanelPartTests
 {
     const string Panel = """
         <Panel name="box" at="7,1" span="6" rows="4" caption="Customer">
-          <Trend name="inner" at="4,1" span="3" />
+          <Label name="inner" at="4,1" span="3" />
         </Panel>
         """;
 
@@ -49,7 +49,7 @@ public class PanelPartTests
     [Fact]
     public void A_form_without_a_caption_has_no_frame_and_its_grid_lines_up_with_the_windows()
     {
-        var (_, _, parts) = Made.Window("""<Form at="1,2" span="12" rows="3"><Trend at="1,1" span="2" /></Form>""", new TestHost(), width: 808);
+        var (_, _, parts) = Made.Window("""<Form at="1,2" span="12" rows="3"><Label at="1,1" span="2" /></Form>""", new TestHost(), width: 808);
         var form = Assert.IsType<PanelPart>(parts[0]);
         Assert.True(form.Bare);
         Assert.Equal(form.Bounds.Y, form.Inner.Children[0].Bounds.Y);
@@ -61,7 +61,7 @@ public class PanelPartTests
     {
         var (_, _, parts) = Made.Window("""
             <Panel at="1,1" span="6" rows="3"><Image at="1,1" span="3" rows="2" /></Panel>
-            <Panel at="7,1" span="6" rows="3"><Trend at="1,1" span="3" /></Panel>
+            <Panel at="7,1" span="6" rows="3"><Label at="1,1" span="3" /></Panel>
             <Tabs at="1,4" span="6" rows="3"><Tab title="A" /><Tab title="B"><Image at="1,1" /></Tab></Tabs>
             """, new TestHost());
         Assert.True(parts[0].Grows);
@@ -72,7 +72,7 @@ public class PanelPartTests
     [Fact]
     public void A_part_in_a_container_is_inside_it_and_one_on_the_window_is_not()
     {
-        var (_, _, parts) = Made.Window(Panel + """<Trend at="1,6" span="3" />""", new TestHost(), width: 808);
+        var (_, _, parts) = Made.Window(Panel + """<Label at="1,6" span="3" />""", new TestHost(), width: 808);
         var panel = (PanelPart)parts[0];
         Assert.True(ContainerPart.IsInside(panel.Inner.Children[0]));
         Assert.False(ContainerPart.IsInside(parts[1]));

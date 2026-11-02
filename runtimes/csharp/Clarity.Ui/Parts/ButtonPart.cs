@@ -22,8 +22,6 @@ public abstract class PressPart : Part
     /// <summary>Its caption as shown: what code set, else as the design wrote it, translated.</summary>
     public string Caption => State?.Caption is { Length: > 0 } set ? set : Host.Text(Spec.Text("caption"));
 
-    /// <summary>Shown, but not used by the person.</summary>
-    public bool ReadOnly => Spec.Flag("readonly") || (State?.IsReadOnly ?? false);
 
     /// <summary>Drawn pressed while it is not held: a toggle that is on.</summary>
     protected virtual bool On => false;

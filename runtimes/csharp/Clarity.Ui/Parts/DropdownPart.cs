@@ -19,7 +19,6 @@ public sealed class DropdownPart : Part
 
     public override bool Focusable => Enabled;
 
-    public bool ReadOnly => Spec.Flag("readonly") || (State?.IsReadOnly ?? false);
 
     protected internal override void Made() => PressLooks.Watch(this, Host, State);
 
@@ -217,6 +216,34 @@ public sealed class DropdownList : Element
     /// <summary>The part it belongs to, which keeps the focus while the person picks.</summary>
     public Element? Holder { get; init; }
 
+    /// <summary>Each line's cells, shown in columns as wide as their widest cell (a search's records with their fields); none: each line is its label.</summary>
+    public IReadOnlyList<IReadOnlyList<string>>? Cells { get; init; }
+
+    const double ColumnGap = 16;
+
+    /// <summary>Where each cell of line <paramref name="line"/> is drawn, on the screen; none without cells.</summary>
+    public IReadOnlyList<Box> CellBoxes(int line)
+    {
+        if (Cells is not { } cells || line < 0 || line >= cells.Count)
+            return [];
+        var look = LookNow;
+        var fonts = FontsNow;
+        var size = look.Part("list", null).Size ?? look.Size("text");
+        var pad = look.Padding * 2;
+        var count = cells.Max(c => c.Count);
+        var widths = Enumerable.Range(0, count).Select(i => cells.Max(c => i < c.Count ? fonts.Measure(c[i], "text", size, false) : 0)).ToList();
+        var y = Bounds.Y + 1 + line * Line - top;
+        var x = Bounds.X + 1 + pad;
+        var boxes = new List<Box>();
+        for (var i = 0; i < cells[line].Count; i++)
+        {
+            var right = i == count - 1 ? Bounds.Right - 1 - pad : x + widths[i];
+            boxes.Add(new Box(x, y, Math.Max(0, Math.Min(right, Bounds.Right - 1 - pad) - x), Line));
+            x += widths[i] + ColumnGap;
+        }
+        return boxes;
+    }
+
     public int Count => labels.Count;
 
     public int Highlighted => highlighted;
@@ -311,7 +338,16 @@ public sealed class DropdownList : Element
                 if (i == highlighted)
                     painter.Fill(line, values.Background ?? look.Color("selection"));
                 var pad = look.Padding * 2;
-                painter.Text(labels[i], line with { X = line.X + pad, Width = Math.Max(0, line.Width - 2 * pad) }, values.Text ?? look.Color("text"), values.Size ?? look.Size("text"), values.Font ?? "text", values.Bold);
+                var color = values.Text ?? look.Color("text");
+                if (Cells is { } cells && i < cells.Count)
+                {
+                    // The first cell in the text's color, the fields after it muted.
+                    var boxes = CellBoxes(i);
+                    for (var c = 0; c < boxes.Count; c++)
+                        painter.Text(cells[i][c], boxes[c], c == 0 ? color : look.Color("muted"), values.Size ?? look.Size("text"), values.Font ?? "text", values.Bold);
+                }
+                else
+                    painter.Text(labels[i], line with { X = line.X + pad, Width = Math.Max(0, line.Width - 2 * pad) }, color, values.Size ?? look.Size("text"), values.Font ?? "text", values.Bold);
             }
         }
         painter.Stroke(Bounds, plain.Border ?? look.Color("border"), look.Border, radius);

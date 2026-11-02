@@ -401,7 +401,18 @@ pub(crate) fn told_handlers(page: Option<&clarity_spec::model::Page>) -> Vec<Str
 /// folder that has no build file yet. Gives the files written.
 pub fn write_part_folders(dir: &std::path::Path, project: &Project) -> std::io::Result<Vec<std::path::PathBuf>> {
     let mut written = Vec::new();
-    // A .NET part gets its starter with Clarity.UI's custom controls (DESIGN 7.9).
+    // A .NET part's adapter, a control of Clarity.UI (DESIGN 7.9), written once.
+    for part in crate::csharp::parts::dotnet_parts(project) {
+        let n = &part.name.name;
+        let adapter = dir.join(native::adapter_folder(n)).join(format!("{n}.cs"));
+        if !adapter.exists() {
+            if let Some(parent) = adapter.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&adapter, crate::csharp::parts::adapter_starter(project, part))?;
+            written.push(adapter);
+        }
+    }
     // A native, Rust or Go part: its starter where the folder has none, and
     // the file of Clarity's (the header, `src/clarity.rs`, `clarity.go`) always.
     for part in project.files.iter().flat_map(|f| &f.parts) {
@@ -471,6 +482,18 @@ pub fn write_part_folders(dir: &std::path::Path, project: &Project) -> std::io::
 fn project_is_cpp(dir: &std::path::Path) -> bool {
     let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
     clarity_project::load(&file).settings.is_some_and(|s| s.stack.backend == clarity_project::Backend::Cpp)
+}
+
+/// The starter adapter of .NET part `name`, as declaring it writes it: a
+/// control of Clarity.UI (DESIGN 7.9).
+pub fn dotnet_adapter(project: &Project, name: &str) -> Option<String> {
+    let part = crate::csharp::parts::dotnet_parts(project).into_iter().find(|p| p.name.name == name)?;
+    Some(crate::csharp::parts::adapter_starter(project, part))
+}
+
+/// The generated half of .NET part `part` (`parts/<Name>/<Name>.g.cs`), as the C# project carries it.
+pub fn dotnet_half(project: &Project, part: &PartDecl) -> String {
+    crate::csharp::parts::generated_half(project, part)
 }
 
 /// What declaring a part writes into its folder, by its library: C or C++

@@ -24,6 +24,11 @@
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.148.0" />
     <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="4.148.0" />
     <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="4.148.0" />
+    <!-- The sound part's output (DESIGN 5.22): miniaudio on Windows, macOS and Linux, MIT. -->
+    <PackageReference Include="SoundFlow" Version="1.4.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Clarity.Ui.Tests" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Clarity.Ui/Clarity.Ui.csproj" />

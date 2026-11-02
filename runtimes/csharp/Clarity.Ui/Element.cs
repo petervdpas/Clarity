@@ -20,12 +20,61 @@ public abstract class Element
     {
         child.Parent = this;
         children.Add(child);
+        if (Attached)
+            child.Attach();
     }
 
     protected void RemoveChild(Element child)
     {
-        if (children.Remove(child))
-            child.Parent = null;
+        if (!children.Remove(child))
+            return;
+        child.Detach();
+        child.Parent = null;
+    }
+
+    /// <summary>Whether it is on a screen: its tree is the screen's, or an overlay's on it.</summary>
+    public bool Attached { get; private set; }
+
+    /// <summary>It joined a screen (its tree was shown, or it was added to one shown): it may start what runs while it is there.</summary>
+    protected virtual void OnAttached() { }
+
+    /// <summary>It left its screen (removed, its overlay closed, its window gone): it stops what it started.</summary>
+    protected virtual void OnDetached() { }
+
+    /// <summary>It and everything in it join the screen, each told once, a parent first.</summary>
+    internal void Attach()
+    {
+        if (!Attached)
+        {
+            Attached = true;
+            Guard(OnAttached);
+        }
+        foreach (var child in children.ToList())
+            child.Attach();
+    }
+
+    /// <summary>It and everything in it leave the screen, each told once, its children first.</summary>
+    internal void Detach()
+    {
+        foreach (var child in children.ToList())
+            child.Detach();
+        if (!Attached)
+            return;
+        Attached = false;
+        Guard(OnDetached);
+    }
+
+    /// <summary>One element failing as it joins or leaves does not stop the others (fail-safe); it says why.</summary>
+    void Guard(Action hook)
+    {
+        try
+        {
+            hook();
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            Console.Error.WriteLine($"{GetType().Name} failed as it joined or left its screen: {e.Message}");
+        }
     }
 
     /// <summary>The screen it is on; none before it is shown.</summary>
@@ -93,14 +142,26 @@ public abstract class Element
     /// <summary>The wheel turned over it: true when it took the turn (it scrolls); else its parent may.</summary>
     public virtual bool OnWheel(double dx, double dy) => false;
 
+    /// <summary>The wheel turned over it with keys <paramref name="held"/> (Ctrl+wheel zooms a canvas); without its own use of them, as <see cref="OnWheel(double, double)"/>.</summary>
+    public virtual bool OnWheel(double dx, double dy, Modifiers held) => OnWheel(dx, dy);
+
     /// <summary>It got or lost the focus.</summary>
     public virtual void OnFocusChanged(bool focused) { }
 
     /// <summary>A key, while it has the focus; true when it took the key.</summary>
     public virtual bool OnKey(KeyInput key) => false;
 
+    /// <summary>A key let go, while it has the focus (an engine's held keys).</summary>
+    public virtual void OnKeyUp(KeyInput key) { }
+
     /// <summary>Text typed while it has the focus.</summary>
     public virtual void OnText(string text) { }
+
+    /// <summary>The time it asked for came (Screen.Wake): a trend moves on, a tooltip shows.</summary>
+    public virtual void OnWake() { }
+
+    /// <summary>What it says about the place at a point on the screen when the pointer rests there (a button's name and key); none for nothing.</summary>
+    public virtual string? TooltipAt(double x, double y) => null;
 
     /// <summary>The deepest element at a point: the last drawn first. A part may say a point within its place is not its own.</summary>
     internal Element? At(double x, double y)

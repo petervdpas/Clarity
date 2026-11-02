@@ -20,7 +20,6 @@ public sealed class CheckPart : Part
 
     public bool IsSwitch => Spec.Kind == "switch";
 
-    public bool ReadOnly => Spec.Flag("readonly") || (State?.IsReadOnly ?? false);
 
     public string Caption => State?.Caption is { Length: > 0 } set ? set : Host.Text(Spec.Text("caption"));
 

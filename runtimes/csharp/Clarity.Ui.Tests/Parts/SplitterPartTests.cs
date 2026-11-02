@@ -8,8 +8,8 @@ public class SplitterPartTests
 {
     const string Splitter = """
         <Splitter name="split" at="1,1" span="12" rows="6">
-          <Pane span="4"><Trend at="1,1" span="4" /></Pane>
-          <Pane><Trend at="1,1" span="8" /></Pane>
+          <Pane span="4"><Label at="1,1" span="4" /></Pane>
+          <Pane><Label at="1,1" span="8" /></Pane>
         </Splitter>
         """;
 
@@ -59,7 +59,7 @@ public class SplitterPartTests
     [Fact]
     public void A_scroll_boxs_grid_scrolls_when_its_parts_go_further_than_its_rows()
     {
-        var rows = string.Concat(Enumerable.Range(1, 10).Select(r => $"""<Trend at="1,{r}" span="3" />"""));
+        var rows = string.Concat(Enumerable.Range(1, 10).Select(r => $"""<Label at="1,{r}" span="3" />"""));
         var (screen, _, parts) = Made.Window($"""<Scroll at="1,1" span="6" rows="3">{rows}</Scroll>""", new TestHost(), width: 808);
         var scroll = Assert.IsType<ScrollPart>(parts[0]);
         Assert.Equal(10 * 36 + 9 * 8 - 124, scroll.View.MaxScrollY);

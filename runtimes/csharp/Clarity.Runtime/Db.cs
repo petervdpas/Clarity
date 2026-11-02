@@ -34,6 +34,15 @@ public sealed partial class Db : IDisposable
     internal static Db Of(IDriver driver) => new([new SourceDb("", driver)]);
 
     /// <summary>
+    /// A database that keeps nothing: reads find no records and saves are
+    /// dropped. What a test, or a screen that has no storage, works on.
+    /// </summary>
+    public static Db Empty() => Of(new EmptyDriver());
+
+    /// <summary>Whether it was let go (disposed): its connections are closed.</summary>
+    public bool Disposed { get; private set; }
+
+    /// <summary>
     /// A database per data source: its name, its kind and where it is (a file
     /// for SQLite, a connection for the others). <c>env:NAME</c> takes the
     /// location from that environment variable.
@@ -470,6 +479,7 @@ public sealed partial class Db : IDisposable
 
     public void Dispose()
     {
+        Disposed = true;
         foreach (var source in sources)
             source.Driver.Dispose();
     }

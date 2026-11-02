@@ -514,3 +514,29 @@ public class TableScrollTests
         Assert.Equal("P11", task.Priority);
     }
 }
+
+public class TableCalendarTests
+{
+    [Fact]
+    public void A_date_cell_opens_the_calendar_and_a_picked_day_is_its_edit()
+    {
+        var host = new DataHost();
+        var task = new CaseTask { Title = "Write", Day = new DateOnly(2026, 10, 5), Due = new DateTime(2026, 10, 5, 9, 30, 0) };
+        host.Lists["tasks"] = [task];
+        var (screen, _, parts) = Made.Window("""<Table name="tasks" at="1,1" span="12" rows="8" bind="tasks" columns="title, day, due" edit="day, due" />""", host, height: 600);
+        var table = (TablePart)parts[0];
+        var cell = table.CellBox(0, "day")!.Value;
+        Cases.Click(screen, cell);
+        var calendar = Assert.IsType<DayCalendar>(Assert.Single(screen.Overlays).Content);
+        Assert.Equal(new DateOnly(2026, 10, 5), calendar.Chosen);
+        Cases.Click(screen, calendar.CellOf(new DateOnly(2026, 10, 20))!.Value);
+        Assert.Empty(screen.Overlays);
+        Assert.Equal(new DateOnly(2026, 10, 20), task.Day);
+        // A moment's day is picked the same way, and keeps its time.
+        var due = table.CellBox(0, "due")!.Value;
+        Cases.ClickAt(screen, due.X + 8, due.Y + due.Height / 2);
+        calendar = Assert.IsType<DayCalendar>(Assert.Single(screen.Overlays).Content);
+        Cases.Click(screen, calendar.CellOf(new DateOnly(2026, 10, 21))!.Value);
+        Assert.Equal(new DateTime(2026, 10, 21, 9, 30, 0), task.Due);
+    }
+}

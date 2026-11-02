@@ -30,6 +30,9 @@ public sealed class InputSideButton(InputIcon icon, Action clicked) : Element
 
     public Func<bool> Enabled { get; set; } = () => true;
 
+    /// <summary>It says what it does when the pointer rests on it.</summary>
+    public override string? TooltipAt(double x, double y) => Name.Length > 0 ? Name : null;
+
     public override void OnClick()
     {
         if (Enabled())
@@ -90,7 +93,6 @@ public sealed class TextBoxPart : Part
     /// <summary>A password's copy button.</summary>
     public InputSideButton? Copy { get; private set; }
 
-    public bool ReadOnly => State?.IsReadOnly ?? Spec.Flag("readonly");
 
     /// <summary>The value it shows: its field, or the text it keeps unbound.</summary>
     public string Value => Bound is { } path ? ValueText(Host.Read(path)) : State?.Text ?? own;

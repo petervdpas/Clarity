@@ -178,7 +178,7 @@ public abstract class RowsPart : Part
     public string? ReorderBy => Spec.Text("reorder");
 
     /// <summary>Whether the person moves rows now.</summary>
-    protected bool Moves => ReorderBy is not null && Bound is not null && Enabled && !(State?.IsReadOnly ?? false);
+    protected bool Moves => ReorderBy is not null && Bound is not null && Enabled && !ReadOnly;
 
     /// <summary>Whether the rows are a tree, under their parents.</summary>
     public virtual bool IsTree => false;

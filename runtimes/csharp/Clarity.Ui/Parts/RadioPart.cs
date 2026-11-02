@@ -19,7 +19,6 @@ public sealed class RadioPart : Part
 
     public override bool Focusable => Enabled && Choices.Count > 0;
 
-    public bool ReadOnly => Spec.Flag("readonly") || (State?.IsReadOnly ?? false);
 
     public bool Vertical => Spec.Text("orientation") == "vertical";
 

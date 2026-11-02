@@ -73,9 +73,13 @@ public class MarkupTests
     public void A_kind_not_drawn_yet_says_so_in_its_place()
     {
         var host = new TestHost();
-        var (screen, _, parts) = Made.Window("""<Trend at="1,1" span="4" name="cpu" />""", host);
-        var missing = Assert.IsType<MissingPart>(parts[0]);
+        // A kind no class draws: made from its spec, as the markup would give it.
+        var spec = new PartSpec("notDrawnYet", new System.Text.Json.Nodes.JsonObject { ["col"] = 1, ["row"] = 1, ["width"] = 4, ["height"] = 1 }, [], [], [], null);
+        var missing = Assert.IsType<MissingPart>(PartKinds.Make(spec, host));
         Assert.Null(missing.Why);
+        var grid = new GridPanel(columns: 12);
+        grid.Add(missing, spec.Place(false));
+        var screen = new Screen(grid, ThemeLook.Clarity(dark: false));
         using var pixels = Shot.Of(screen, 800, 400);
         Assert.NotEqual(screen.Look.Color("background"), pixels.GetPixel(0, 18));
     }
@@ -84,7 +88,7 @@ public class MarkupTests
     public void A_part_that_code_hides_takes_no_pointer()
     {
         var host = new TestHost();
-        var (screen, _, parts) = Made.Window("""<Trend at="1,1" span="12" name="cpu" />""", host);
+        var (screen, _, parts) = Made.Window("""<Label at="1,1" span="12" name="cpu" caption="CPU" />""", host);
         Assert.Same(parts[0], screen.At(20, 10));
         host.State("cpu")!.IsVisible = false;
         Assert.NotSame(parts[0], screen.At(20, 10));

@@ -10,8 +10,8 @@ using System.Xml.Linq;
 
 namespace Clarity.Ui;
 
-/// <summary>A window's own frame (its regions as written, for the frame's parts to read) and its parts.</summary>
-public sealed record WindowSpec(IReadOnlyList<XElement> Frame, IReadOnlyList<PartSpec> Parts);
+/// <summary>A window's own frame (its regions as written, for the frame's parts to read), its parts, and its name (<c>Main</c>) by which the person's keys know its commands.</summary>
+public sealed record WindowSpec(IReadOnlyList<XElement> Frame, IReadOnlyList<PartSpec> Parts, string? Name = null);
 
 public static class WindowMarkup
 {
@@ -30,6 +30,27 @@ public static class WindowMarkup
     static readonly Lazy<JsonObject> PartFields = new(() => Carried("part-fields.json"));
     static readonly Lazy<JsonObject> CommandDefaults = new(() => Carried("command-defaults.json"));
     static readonly Lazy<JsonObject> CommandFields = new(() => Carried("command-fields.json"));
+    static readonly Lazy<JsonObject> SidebarDefaultsBySide = new(() => Carried("sidebar-defaults.json"));
+    static readonly Lazy<JsonObject> SidebarFields = new(() => Carried("sidebar-fields.json"));
+
+    /// <summary>A new sidebar's fields on <paramref name="side"/> (<c>left</c>, <c>right</c>), as the catalog gives them.</summary>
+    public static JsonObject SidebarDefaults(string side) =>
+        (SidebarDefaultsBySide.Value[side] ?? SidebarDefaultsBySide.Value["left"])!.DeepClone().AsObject();
+
+    /// <summary>A sidebar's fields: the catalog's for its side, with what its element writes, each read as the catalog says.</summary>
+    public static JsonObject SidebarOf(XElement sidebar)
+    {
+        var props = SidebarDefaults((string?)sidebar.Attribute("side") ?? "left");
+        foreach (var attribute in sidebar.Attributes())
+        {
+            var name = attribute.Name.LocalName;
+            if (attribute.Value == "null")
+                props[name] = null;
+            else if (SidebarFields.Value[name] is JsonValue kind && ValueOf(kind.GetValue<string>(), attribute.Value) is { } value)
+                props[name] = value;
+        }
+        return props;
+    }
 
     static JsonObject Carried(string name)
     {
@@ -46,7 +67,7 @@ public static class WindowMarkup
     {
         var root = XDocument.Parse(markup).Root ?? throw new FormatException("the window's markup is empty");
         var elements = root.Elements().ToList();
-        return new WindowSpec([.. elements.Where(e => Regions.Contains(e.Name.LocalName))], [.. elements.Where(e => !Regions.Contains(e.Name.LocalName)).Select(PartOf)]);
+        return new WindowSpec([.. elements.Where(e => Regions.Contains(e.Name.LocalName))], [.. elements.Where(e => !Regions.Contains(e.Name.LocalName)).Select(PartOf)], (string?)root.Attribute("name"));
     }
 
     /// <summary>An app's frame as its markup writes it: its regions.</summary>

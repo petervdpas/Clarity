@@ -22,7 +22,6 @@ public sealed class SliderPart : Part
 
     public override bool Focusable => Enabled;
 
-    public bool ReadOnly => Spec.Flag("readonly") || (State?.IsReadOnly ?? false);
 
     /// <summary>Its range: as the part writes it, else its bound field's own, 0 to 100 without ends.</summary>
     public NumberRange Range

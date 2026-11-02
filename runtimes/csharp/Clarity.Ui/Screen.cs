@@ -2,14 +2,15 @@
 // gives (the desktop's window, a browser page's canvas, a picture in a
 // test), and what the person does sent to the element it is for. The host
 // draws again when the screen says it changed (Invalidated), and on every
-// frame while an element animates (Animating). Every host sends the pointer,
-// the wheel, keys and typed text through the same methods here.
+// frame while an element animates (Animating), and at the time an element
+// asked to wake (NextWake, then WakeDue). Every host sends the pointer, the
+// wheel, keys going down and up and typed text through the same methods here.
 
 using SkiaSharp;
 
 namespace Clarity.Ui;
 
-public sealed class Screen
+public sealed class Screen : IDisposable
 {
     Element? hovered;
     Element? pressed;
@@ -20,7 +21,11 @@ public sealed class Screen
         root.Owner = this;
         Look = look;
         Fonts = new Fonts(look);
+        root.Attach();
     }
+
+    /// <summary>The time now, as the screen's clock tells it; a test sets its own.</summary>
+    public Func<DateTime> Now { get; set; } = Clarity.Runtime.Clock.Now;
 
     public Element Root { get; }
     public ThemeLook Look { get; private set; }
@@ -44,8 +49,13 @@ public sealed class Screen
         Height = height;
         Scale = scale <= 0 ? 1 : scale;
         Root.Arrange(new Box(0, 0, width, height));
+        foreach (var overlay in overlays.Where(o => o.Covers))
+            overlay.Place = Whole;
         Invalidate();
     }
+
+    /// <summary>The whole screen, where an overlay that covers it lies.</summary>
+    public Box Whole => new(0, 0, Width, Height);
 
     /// <summary>Another theme: the light or dark of the system changed, or the person chose one.</summary>
     public void Show(ThemeLook look)
@@ -72,8 +82,57 @@ public sealed class Screen
             animating.Remove(element);
     }
 
+    readonly Dictionary<Element, DateTime> wakes = [];
+
+    /// <summary>
+    /// <paramref name="element"/> wakes at <paramref name="at"/> (its
+    /// OnWake runs then), once: a trend that moves on every second instead of
+    /// every frame. Asking again moves its time; one that left the screen is not woken.
+    /// </summary>
+    public void Wake(Element element, DateTime at)
+    {
+        wakes[element] = at;
+        WakesChanged?.Invoke();
+    }
+
+    /// <summary>When the next element or tooltip wakes; none when none waits. The host calls <see cref="WakeDue"/> then.</summary>
+    public DateTime? NextWake
+    {
+        get
+        {
+            DateTime? next = tipDue;
+            foreach (var at in wakes.Values)
+                if (next is null || at < next)
+                    next = at;
+            return next;
+        }
+    }
+
+    /// <summary>The time of <see cref="NextWake"/> changed: a host that waits for it waits anew.</summary>
+    public event Action? WakesChanged;
+
+    /// <summary>Wakes every element whose time came by <paramref name="now"/>, and shows the tooltip whose pause is over; drawing does it too.</summary>
+    public void WakeDue(DateTime now)
+    {
+        foreach (var (element, at) in wakes.ToList())
+        {
+            if (at > now)
+                continue;
+            wakes.Remove(element);
+            if (element.Attached && element.Screen == this)
+                element.OnWake();
+        }
+        if (tipDue is { } due && due <= now && tipWaiting is { } text)
+        {
+            tipDue = null;
+            Tip = new Tooltip(text, TipPlace(text));
+            Invalidate();
+        }
+    }
+
     public void Draw(SKCanvas canvas)
     {
+        WakeDue(Now());
         animating.RemoveWhere(e => e.Screen != this || !e.ShowsInTree);
         canvas.Save();
         canvas.Scale(Scale);
@@ -87,7 +146,82 @@ public sealed class Screen
             if (overlay.Content.IsShown)
                 overlay.Content.Draw(painter);
         }
+        if (Tip is { } tip)
+            DrawTip(painter, tip);
         canvas.Restore();
+    }
+
+    // -- Tooltips ------------------------------------------------------------
+
+    /// <summary>How long the pointer rests before a tooltip shows.</summary>
+    public static readonly TimeSpan TipPause = TimeSpan.FromMilliseconds(600);
+
+    const double TipPad = 6;
+
+    string? tipWaiting;
+    DateTime? tipDue;
+    (double X, double Y) tipPoint;
+
+    /// <summary>A tooltip as it shows: its text and its place.</summary>
+    public sealed record Tooltip(string Text, Box Place);
+
+    /// <summary>The tooltip shown now; none while none shows.</summary>
+    public Tooltip? Tip { get; private set; }
+
+    /// <summary>What the element at a point, or one it is in, says about that place.</summary>
+    static string? TipOf(Element? at, double x, double y)
+    {
+        for (var e = at; e is not null; e = e.Parent)
+            if (e.TooltipAt(x, y) is { Length: > 0 } text)
+                return text;
+        return null;
+    }
+
+    /// <summary>The pointer rests on <paramref name="text"/> from now (none: on nothing that says something).</summary>
+    void Rest(string? text, double x, double y)
+    {
+        if (text == tipWaiting)
+            return;
+        HideTip();
+        tipWaiting = text;
+        tipPoint = (x, y);
+        if (text is not null)
+        {
+            tipDue = Now() + TipPause;
+            WakesChanged?.Invoke();
+        }
+    }
+
+    /// <summary>The tooltip goes, and none waits: the pointer left, pressed, the wheel turned or a key was pressed.</summary>
+    void HideTip()
+    {
+        tipWaiting = null;
+        tipDue = null;
+        if (Tip is null)
+            return;
+        Tip = null;
+        Invalidate();
+    }
+
+    /// <summary>Where a tooltip shows: under the pointer, inside the screen.</summary>
+    Box TipPlace(string text)
+    {
+        var size = Look.Size("small");
+        var width = Fonts.Measure(text, "text", size, false) + 2 * TipPad;
+        var height = size + 2 * TipPad + 2;
+        var x = Math.Max(0, Math.Min(tipPoint.X, Width - width));
+        var y = tipPoint.Y + 20 + height > Height ? tipPoint.Y - 8 - height : tipPoint.Y + 20;
+        return new Box(x, Math.Max(0, y), width, height);
+    }
+
+    /// <summary>A tooltip in Clarity's look: the tooltip part's colors, else a panel with a strong border.</summary>
+    void DrawTip(Painter painter, Tooltip tip)
+    {
+        var look = Look.Part("tooltip", null);
+        var radius = look.Radius ?? Look.Radius("input");
+        painter.Fill(tip.Place, look.Background ?? Look.Color("panel"), radius);
+        painter.Stroke(tip.Place, look.Border ?? Look.Color("strong_border"), Look.Border, radius);
+        painter.Text(tip.Text, tip.Place.Inset(TipPad), look.Text ?? Look.Color("text"), Look.Size("small"));
     }
 
     readonly List<Overlay> overlays = [];
@@ -100,9 +234,13 @@ public sealed class Screen
 
     public void Open(Overlay overlay)
     {
+        HideTip();
+        if (overlay.Covers)
+            overlay.Place = Whole;
         overlay.Content.Owner = this;
         overlay.Content.Arrange(overlay.Place);
         overlays.Add(overlay);
+        overlay.Content.Attach();
         Invalidate();
     }
 
@@ -110,6 +248,7 @@ public sealed class Screen
     {
         if (!overlays.Remove(overlay))
             return;
+        overlay.Content.Detach();
         overlay.Content.Owner = null;
         if (Focused is { } focused && Within(focused, overlay.Content))
             Focus(null);
@@ -147,6 +286,7 @@ public sealed class Screen
         var at = At(x, y);
         if (at is not null && at != pressed)
             at.OnPointerMoved(Input(at, x, y));
+        Rest(pressed is null ? TipOf(at, x, y) : null, x, y);
         if (at == hovered)
             return;
         if (hovered is not null)
@@ -159,6 +299,7 @@ public sealed class Screen
 
     public void PointerLeft()
     {
+        HideTip();
         if (hovered is null)
             return;
         hovered.Hovered = false;
@@ -168,6 +309,7 @@ public sealed class Screen
 
     public void PointerPressed(double x, double y, PointerButton button, int clicks = 1)
     {
+        HideTip();
         // A press outside the overlays closes them, top first, and goes no further.
         if (overlays.Count > 0 && overlays[^1] is { Modal: false } top && !top.Content.Bounds.Contains(x, y) && !top.Place.Contains(x, y) && top.Anchor?.Invoke().Contains(x, y) != true)
         {
@@ -201,12 +343,14 @@ public sealed class Screen
     /// takes it. In the screen's units: a positive <paramref name="dy"/> shows
     /// what is further down (the content moves up), a positive
     /// <paramref name="dx"/> what is further right, as a browser's wheel event
-    /// gives it; every host turns its wheel into this.
+    /// gives it; every host turns its wheel into this, with the keys
+    /// <paramref name="held"/> (Ctrl+wheel zooms a canvas).
     /// </summary>
-    public void Wheel(double x, double y, double dx, double dy)
+    public void Wheel(double x, double y, double dx, double dy, Modifiers held = Modifiers.None)
     {
+        HideTip();
         for (var e = At(x, y); e is not null; e = e.Parent)
-            if (e.OnWheel(dx, dy))
+            if (e.OnWheel(dx, dy, held))
             {
                 Invalidate();
                 return;
@@ -246,6 +390,13 @@ public sealed class Screen
 
     public void KeyPressed(KeyInput key)
     {
+        HideTip();
+        // A dialog on top (a modal overlay) hears its keys before the part with the focus.
+        if (overlays.Count > 0 && overlays[^1] is { Modal: true, Content: IDialogKeys dialog } && dialog.KeyPressed(key))
+        {
+            Invalidate();
+            return;
+        }
         // Escape closes the overlay on top, unless the part with the focus takes it (a list that closes itself).
         if (key.Key == Key.Escape && overlays.Count > 0 && !overlays[^1].Modal)
         {
@@ -271,6 +422,20 @@ public sealed class Screen
         }
         Focused?.OnKey(key);
     }
+
+    /// <summary>The screen is no longer shown (its window closed): its overlays close and every element leaves it, so what they started stops.</summary>
+    public void Dispose()
+    {
+        foreach (var overlay in overlays.ToList())
+            Close(overlay);
+        wakes.Clear();
+        HideTip();
+        animating.Clear();
+        Root.Detach();
+    }
+
+    /// <summary>A key let go: the part with the focus hears it (an engine's held keys). Every host sends it.</summary>
+    public void KeyReleased(KeyInput key) => Focused?.OnKeyUp(key);
 
     public void TextTyped(string text) => Focused?.OnText(text);
 }

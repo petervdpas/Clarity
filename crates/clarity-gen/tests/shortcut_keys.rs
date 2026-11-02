@@ -40,7 +40,11 @@ fn file<'a>(files: &'a [OutFile], path: &str) -> &'a str {
 fn csharp_starts_the_persons_keys() {
     let files = files(Backend::Csharp, Ui::Clarity, true);
     let program = file(&files, "Program.cs");
-    assert!(program.contains("PersonKeys.Start(\"shop\");"), "{program}");
+    assert!(program.contains("PersonKeys.Start(\"shop\");\n        KeysWindow.Catalog = KeysCatalog.Layers;\n"), "{program}");
+    let catalog = file(&files, "KeysCatalog.cs");
+    assert!(catalog.contains("using Clarity.Ui;\n"), "{catalog}");
+    assert!(catalog.contains("new KeyLayerInfo(\"\", null, [new KeyCommandInfo(\"keysItem\", Text.Of(\"keysItem\"), []), new KeyCommandInfo(\"quitItem\", Text.Of(\"quitItem\"), [\"Ctrl+Q\"])])"), "{catalog}");
+    assert!(catalog.contains("new KeyLayerInfo(\"Card\", Text.Of(\"cardTitle\"), [new KeyCommandInfo(\"Card.saveButton\", Text.Of(\"saveCaption\"), [\"Ctrl+S\"])])"), "{catalog}");
     let model = file(&files, "Windows/CardViewModel.cs");
     assert!(model.contains("void Keys_() => ShowKeys();"), "{model}");
 }
@@ -58,6 +62,7 @@ fn without_keys_editable_the_design_keys_stay() {
     let project = clarity_spec::load_in([("shop.clarity", plain.as_str())], [], &clarity_project::source_refs(&settings));
     let files = generate(&project, &settings).unwrap();
     assert!(!file(&files, "Program.cs").contains("PersonKeys"));
+    assert!(!files.iter().any(|f| f.path == "KeysCatalog.cs"));
 }
 
 #[test]

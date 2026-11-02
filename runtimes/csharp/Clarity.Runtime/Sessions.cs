@@ -1,4 +1,4 @@
-// The sessions of a server that shows Avalonia windows in browsers
+// The sessions of a server that shows its windows in browsers
 // (DESIGN 7.6). Each browser tab has one: its windows live here, where their
 // handlers run against the server's database, opened, closed and returned to
 // as the desktop shell does it in its one window (a window marked `in new

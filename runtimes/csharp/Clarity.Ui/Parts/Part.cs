@@ -3,6 +3,8 @@
 // its host. Each kind of part is a class of its own with [PartKind], in
 // Parts/; PartKinds finds it by its kind's name.
 
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Clarity.Runtime;
 
 namespace Clarity.Ui;
@@ -57,6 +59,14 @@ public interface IPartHost
     IReadOnlyList<Choice> Choices(string path);
 
     /// <summary>
+    /// What the dropdown <paramref name="part"/> bound to <paramref name="path"/>
+    /// offers: a typed one (<c>typed</c>) the values its field already has, a
+    /// search one (<c>search</c> with <c>show</c>) the records it points at
+    /// with the fields it shows; any other what <see cref="Choices"/> offers.
+    /// </summary>
+    IReadOnlyList<Choice> Offered(PartSpec part, string path) => Choices(path);
+
+    /// <summary>
     /// What the application knows of the field at <paramref name="path"/>
     /// (<c>order.total</c>, <c>tasks[0].done</c>, <c>tasks.done</c>): its label,
     /// format, whether it is required, its range, what it refers to; none
@@ -78,6 +88,51 @@ public interface IPartHost
 
     /// <summary>The view model changed: parts read their values again.</summary>
     event Action? Changed;
+
+    // -- Files ---------------------------------------------------------------
+
+    /// <summary>The system's file dialogs and the program that opens a file, as the window's host gives them; one that picks nothing where it has none.</summary>
+    IFilePicker Files { get; }
+
+    /// <summary>
+    /// The stored file of the record's field <paramref name="bind"/>
+    /// (<c>task.attachment</c>): the one the record keeps when
+    /// <paramref name="storePath"/> is none, else the file of the field's
+    /// store at that path; none when there is none.
+    /// </summary>
+    Task<byte[]?> Fetch(string bind, string? storePath);
+
+    /// <summary>Says something to the person among the window's messages: an info note that goes by itself, a warning or an error in its dialog.</summary>
+    void Say(Level level, Clarity.Runtime.Text text);
+
+    // -- Canvases and custom parts ---------------------------------------------
+
+    /// <summary>
+    /// Runs the handler of <paramref name="event"/> (click, drag, drop, bend)
+    /// of canvas <paramref name="part"/> with where it was, as an edit Ctrl+Z
+    /// takes back; null when the window has no command for it, and the
+    /// canvas runs its handler itself.
+    /// </summary>
+    bool? Pointed(string part, string @event, Clarity.Runtime.Pointer at);
+
+    /// <summary>Applies what the person did on a canvas with a mode (DESIGN 5.31) as one edit; null when the window has no command for it.</summary>
+    bool? Acted(string part, JsonObject action);
+
+    /// <summary>The engine beside the screen named <paramref name="name"/>, a new instance each call; none when the window has none.</summary>
+    Func<IFrames>? Engine(string name);
+
+    /// <summary>The engine of a canvas, or a custom part, <paramref name="part"/> told the window <paramref name="tell"/>: the handler wired to it runs with the values.</summary>
+    void Told(string part, string tell, JsonElement[] values);
+
+    // -- Keys ----------------------------------------------------------------
+
+    /// <summary>
+    /// The keys command <paramref name="command"/> answers (DESIGN 5.28): the
+    /// person's, where they set their own, else <paramref name="designed"/>.
+    /// A command of the app's frame is known by its name, a window's own by
+    /// <c>Window.name</c>.
+    /// </summary>
+    IReadOnlyList<string> KeysOf(string command, string? designed);
 }
 
 public abstract class Part : Element
@@ -92,6 +147,10 @@ public abstract class Part : Element
     public PartState? State => Host.State(Spec.Name);
 
     public override bool IsShown => State?.IsVisible ?? true;
+
+
+    /// <summary>Whether the person may only look: marked read-only in its markup, or made read-only by code through its state.</summary>
+    public bool ReadOnly => Spec.Flag("readonly") || (State?.IsReadOnly ?? false);
 
     /// <summary>Whether the person may use it: enabled, and its window not waiting.</summary>
     public bool Enabled => State?.IsEnabled ?? true;
@@ -153,13 +212,18 @@ public static class PartKinds
             host.Run(part, new HandlerCall("click", target, []));
     }
 
-    /// <summary>The part of <paramref name="spec"/>; a kind not drawn yet, or one that fails as it is made, shows that in its place.</summary>
+    /// <summary>
+    /// The part of <paramref name="spec"/>: the variant that fits it (a typed
+    /// or search dropdown, a picture field), else its kind's own part; a kind
+    /// not drawn yet, or one that fails as it is made, shows that in its place.
+    /// </summary>
     public static Part Make(PartSpec spec, IPartHost host)
     {
         Part part;
         try
         {
-            part = classes.Value.TryGetValue(spec.Kind, out var type) ? (Part)Activator.CreateInstance(type)! : new MissingPart();
+            var type = PartVariants.For(spec, host) ?? classes.Value.GetValueOrDefault(spec.Kind);
+            part = type is null ? new MissingPart() : (Part)Activator.CreateInstance(type)!;
             part.Spec = spec;
             part.Host = host;
             part.Made();

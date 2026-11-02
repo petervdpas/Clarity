@@ -107,8 +107,9 @@ fn the_app_handles_its_databases_not_opening() {
     assert!(go.contains("reason, err := clarity.Answer[string](values[0])"));
     let csharp = handled(Backend::Csharp, Ui::Clarity);
     assert!(csharp.contains("RunUnconnected(unconnecting, reason => OnNotConnected(reason));"));
-    // Until Clarity.UI shows the window for it, the program says why (DESIGN 7.9).
-    assert!(csharp.contains("Console.Error.WriteLine(Locale.Show(Unconnecting.Why(e)));"));
+    // Clarity.UI shows what the handler opens first, or the window that keeps the connection (DESIGN 7.9).
+    assert!(csharp.contains("Handler = (db, unconnecting) => new AppUnconnectedViewModel(db).Unconnected(unconnecting),"));
+    assert!(csharp.contains("}, Unconnected.Reason(e));"));
 }
 
 /// C and C++ keep their records in SQLite: a file that does not open runs

@@ -10,6 +10,7 @@
 //! screen. Both end when the window closes, or when the program's last
 //! window closed.
 
+mod clipboard;
 pub mod input;
 
 use std::ffi::CString;
@@ -92,7 +93,10 @@ pub fn run(program: impl Program, files: AppFiles) -> ExitCode {
 
 /// Shows a screen in a desktop window until the window closes (or, for a
 /// program's `WindowStack`, until its last window closed).
-pub fn show(screen: Screen, options: ShowOptions) -> ExitCode {
+pub fn show(mut screen: Screen, options: ShowOptions) -> ExitCode {
+    if let Some(system) = clipboard::SystemClipboard::open() {
+        screen.set_clipboard(Box::new(system));
+    }
     let event_loop = match EventLoop::new() {
         Ok(event_loop) => event_loop,
         Err(why) => return failed(&why.to_string()),

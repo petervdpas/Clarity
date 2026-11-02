@@ -40,7 +40,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn code_reads_and_sets_a_sidebar_on_every_stack() {
-    let rust = files(Backend::Rust, Ui::Webview);
+    let rust = files(Backend::Rust, Ui::Clarity);
     has(text(&rust, "src/modules/shop.rs"), "if ui.collapsed(\"nav\", true) {");
     has(text(&rust, "src/modules/shop.rs"), "ui.set_maximized(\"nav\", !ui.maximized(\"nav\"));");
     let go = files(Backend::Go, Ui::Webview);

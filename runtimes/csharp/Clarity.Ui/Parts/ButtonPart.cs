@@ -31,21 +31,21 @@ public abstract class PressPart : Part
     /// <summary>How a push looks now: the theme's button look, its style over it, and the hover or pressed look over both.</summary>
     protected LookValues PushLook(Painter painter, bool hover, bool pressed)
     {
-        var look = painter.Look;
-        var plain = look.Part("button", null);
-        var styled = Spec.Text("style") is { Length: > 0 } style ? look.Style(style).Over(plain) : plain;
-        if (!Enabled || !(hover || pressed))
-            return styled;
-        // What the state's look sets itself, over the styled look.
-        return look.PartOwn("button", pressed ? "pressed" : "hover").Over(styled);
+        // A toggle that is on whose style fills it shows its style pressed.
+        pressed |= On && StyleFills(painter);
+        var state = !Enabled || !(hover || pressed) ? null : pressed ? "pressed" : "hover";
+        return painter.Look.Pressable("button", Spec.Text("style"), state);
     }
+
+    /// <summary>Whether its style fills it: such a toggle that is on shows its style pressed, not the soft accent.</summary>
+    bool StyleFills(Painter painter) => Spec.Text("style") is { Length: > 0 } style && painter.Look.Style(style).Background is not null;
 
     /// <summary>A push at <paramref name="box"/>: its plate, the ring of a default button or a toggle that is on, and its focus ring.</summary>
     protected void DrawPush(Painter painter, Box box, LookValues values, RoundCorners corners)
     {
         var look = painter.Look;
         var radius = values.Radius ?? look.Radius("button");
-        var fill = On ? look.Color("accent_soft") : values.Background ?? look.Color("raised");
+        var fill = On && !StyleFills(painter) ? look.Color("accent_soft") : values.Background ?? look.Color("raised");
         var line = On || Spec.Flag("default") ? look.Color("accent") : values.Border ?? look.Color("border");
         PressLooks.Plate(painter, box, fill, line, look.Border, radius, corners);
         if (Focused)

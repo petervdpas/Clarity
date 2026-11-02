@@ -22,6 +22,9 @@ use crate::theme::ThemeLook;
 
 /// How big a button's circle is.
 pub const CIRCLE: f64 = 16.0;
+
+/// How far a label may draw past its measured width.
+const LABEL_SLACK: f64 = 4.0;
 /// How high a line of choices is.
 pub const LINE: f64 = 24.0;
 /// The room between choices side by side, and between lines.
@@ -182,7 +185,9 @@ impl Element for RadioPart {
             if focused && Some(i) == self.focus_at.or(chosen).or(Some(0)) {
                 p.focus_ring(circle.inset(-3.0), CIRCLE / 2.0 + 3.0);
             }
-            let text = Rect { x: circle.right() + 6.0, width: (place.right() - circle.right() - 6.0).max(0.0), ..place };
+            // The label's place reaches a little past its measured width: a
+            // glyph may draw past its advance (k, f); the part's own clip stays.
+            let text = Rect { x: circle.right() + 6.0, width: (place.right() - circle.right() - 6.0).max(0.0) + LABEL_SLACK, ..place };
             p.text(&choice.label, text, look.color("text"), look.size("text"), "text", false, TextAlign::Left);
         }
     }

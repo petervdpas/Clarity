@@ -1,5 +1,5 @@
 {
-  "about": "The edit bus every runtime keeps per open window (DESIGN 5.29): a record of the person's edits, each a message with the part, its scope (its form or panel, or itself), what it changed (each name of the window's data, or `#parts.<name>` for a part's own text or tick, with its value before and after) and the database steps its handler made. A case starts with the window's data as `start` and runs `steps` in order. `edit`: the person ended an edit of `part` in `scope`, and the window's data is now `data` (with what the edit's handler changed); `steps` are the database steps that handler made. `drag`: a part's edit goes on (a canvas's drag before its drop): the window's data is now `data`, with the handler's `steps`, and the edit is not ended. `reply`: a handler that is no edit replied with `data`; the edits start from there. `undo` and `redo` take back or do again the last edit of that scope: `data` is the window's data after it, `steps` the database steps taken back (last first) or done again (first first), `refused` when the database refused it (the edit stays where it was), and `nothing` when the scope has no edit to take back or do again. An edit that changed nothing and made no step is no message; a new edit ends what could be done again in its scope, and only there.",
+  "about": "The edit bus every runtime keeps per open window (DESIGN 5.29): a record of the person's edits, each a message with the part, its scope (its form or panel, or itself), what it changed (each name of the window's data, or `#parts.<name>` for a part's own text or tick, with its value before and after) and the database steps its handler made. A case starts with the window's data as `start` and runs `steps` in order. `edit`: the person ended an edit of `part` in `scope`, and the window's data is now `data` (with what the edit's handler changed); `steps` are the database steps that handler made. `drag`: a part's edit goes on (a canvas's drag before its drop): the window's data is now `data`, with the handler's `steps`, and the edit is not ended. `reply`: a handler that is no edit replied with `data`; the edits start from there. `undo` and `redo` take back or do again the last edit of that scope: `data` is the window's data after it, `steps` the database steps taken back (last first) or done again (first first), `refused` when the database refused it (the edit stays where it was), and `nothing` when the scope has no edit to take back or do again. An edit that changed nothing and made no step is no message; a new edit ends what could be done again in its scope, and only there. The `states` cases run the same steps on whole window states (`data` and `parts`, each part as the reply carries it), as the runtime compares them: besides the data, an edit compares each part's own text and tick (`#parts.<part>`, an object with `text` and `checked`), what code set on the part (`#parts.<part>.caption`, `.visible`, `.enabled`, `.readonly`, `.error`, each only when set) and each value code set on a custom part (`#parts.<part>.values.<name>`). So an undo puts back what the edit's handler set on parts, value by value, as it puts back data, and keeps what changed since elsewhere. In an expected state, a part field that is null is not set (the part shows its design), and a part or field the case leaves out is not compared.",
   "cases": [
     {
       "name": "a form walks back field by field, the last first, and does them again",
@@ -88,6 +88,27 @@
         { "edit": { "part": "nameBox", "scope": "nameBox", "data": { "name": "Ann", "load": 0 } } },
         { "reply": { "data": { "name": "Ann", "load": 7 } } },
         { "undo": "nameBox", "data": { "name": "Ada", "load": 7 }, "steps": [] }
+      ]
+    }
+  ],
+  "states": [
+    {
+      "name": "values code set on a custom part in an edit are taken back with it, value by value",
+      "start": { "data": { "count": 2 }, "parts": { "board": { "values": { "count": 2, "faces": [3, 4] } } } },
+      "steps": [
+        { "edit": { "part": "countSlider", "scope": "countSlider", "state": { "data": { "count": 3 }, "parts": { "board": { "values": { "count": 3, "faces": [3, 4] } } } } } },
+        { "reply": { "state": { "data": { "count": 3 }, "parts": { "board": { "values": { "count": 3, "faces": [6, 1, 2] } } } } } },
+        { "undo": "countSlider", "state": { "data": { "count": 2 }, "parts": { "board": { "values": { "count": 2, "faces": [6, 1, 2] } } } } },
+        { "redo": "countSlider", "state": { "data": { "count": 3 }, "parts": { "board": { "values": { "count": 3, "faces": [6, 1, 2] } } } } }
+      ]
+    },
+    {
+      "name": "a caption, visible, enabled, readonly and error code set in an edit are taken back with it",
+      "start": { "data": { "name": "" }, "parts": { "nameBox": { "text": "" }, "saveButton": { "enabled": false }, "hint": { "caption": "Type a name" } } },
+      "steps": [
+        { "edit": { "part": "nameBox", "scope": "nameBox", "state": { "data": { "name": "" }, "parts": { "nameBox": { "text": "Al", "error": "Too short" }, "saveButton": { "enabled": true, "visible": false }, "hint": { "caption": "Almost", "readonly": true } } } } },
+        { "undo": "nameBox", "state": { "data": { "name": "" }, "parts": { "nameBox": { "text": "", "error": null }, "saveButton": { "enabled": false, "visible": null }, "hint": { "caption": "Type a name", "readonly": null } } } },
+        { "redo": "nameBox", "state": { "data": { "name": "" }, "parts": { "nameBox": { "text": "Al", "error": "Too short" }, "saveButton": { "enabled": true, "visible": false }, "hint": { "caption": "Almost", "readonly": true } } } }
       ]
     }
   ]

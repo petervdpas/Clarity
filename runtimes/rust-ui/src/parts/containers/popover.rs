@@ -83,8 +83,9 @@ impl PopoverPart {
             return;
         }
         let Some(name) = self.base.name().map(str::to_string) else { return };
-        // The part its `for` names is not reachable from here yet (g8-shared.md popover-anchor): it lies at its own place.
-        let place = Self::place(None, self.base.node.bounds, self.size(cx.look()), cx.whole());
+        // It lies under the part its `for` names, as the screen last laid that part out; else at its own place.
+        let anchor = self.base.spec.text("for").filter(|f| !f.is_empty()).and_then(|f| cx.part_place(f));
+        let place = Self::place(anchor.map(|(_, at)| at), self.base.node.bounds, self.size(cx.look()), cx.whole());
         self.place.set(place);
         if self.opened.get().is_some() {
             return;
@@ -93,6 +94,8 @@ impl PopoverPart {
         let mut frame = PopoverFrame { node: Node::new(), place: self.place.clone() };
         frame.node.add(Box::new(grid));
         let mut overlay = Overlay::new(Box::new(frame), place);
+        // A press on the part it is for is no press outside it.
+        overlay.anchor = anchor.map(|(id, _)| id);
         let (opened, host) = (self.opened.clone(), self.base.host.clone());
         overlay.closed = Some(Box::new(move || {
             // Closed by a press outside or Escape: its state hears it is no longer visible.

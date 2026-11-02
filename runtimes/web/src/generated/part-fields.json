@@ -21,6 +21,7 @@
   "for": "text",
   "frame": "bool",
   "grid": "number",
+  "grows": "bool",
   "handlers": "json",
   "height": "number",
   "icon": "text",

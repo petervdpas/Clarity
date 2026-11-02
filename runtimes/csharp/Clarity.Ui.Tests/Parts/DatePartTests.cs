@@ -350,6 +350,35 @@ public class DatePartTests
     }
 
     [Fact]
+    public void The_month_arrows_point_the_way_they_turn()
+    {
+        var host = new DatePartHost();
+        var (screen, _, _) = Made.Window("", host);
+        var calendar = (DayCalendar)DayCalendar.Open(screen, new Box(10, 10, 100, 24), null, _ => { }, host.Formats.Culture).Content;
+        using var shot = Shot.Of(screen, 800, 400);
+        // The point of an arrow is its ink nearest the side it turns to, and lies on its middle row.
+        Assert.True(PointOf(shot, calendar.Previous, left: true), "the previous month's arrow points left");
+        Assert.True(PointOf(shot, calendar.Next, left: false), "the next month's arrow points right");
+    }
+
+    /// <summary>Whether the arrow's ink farthest to the left (or right) in <paramref name="box"/> lies near the box's middle row.</summary>
+    static bool PointOf(SKBitmap shot, Box box, bool left)
+    {
+        var ground = shot.GetPixel((int)box.X + 1, (int)box.Y + 1);
+        var middle = box.Y + box.Height / 2;
+        var columns = Enumerable.Range((int)box.X, (int)box.Width);
+        foreach (var x in left ? columns : columns.Reverse())
+        {
+            var ink = Enumerable.Range((int)box.Y, (int)box.Height).Where(y => Far(shot.GetPixel(x, y), ground)).ToList();
+            if (ink.Count > 0)
+                return ink.All(y => Math.Abs(y + 0.5 - middle) < 2.5);
+        }
+        return false;
+    }
+
+    static bool Far(SKColor a, SKColor b) => Math.Abs(a.Red - b.Red) + Math.Abs(a.Green - b.Green) + Math.Abs(a.Blue - b.Blue) > 90;
+
+    [Fact]
     public void It_draws_closed_and_open_without_failing()
     {
         var (screen, part, _) = Moment(new DateTime(2026, 10, 20, 14, 5, 0));

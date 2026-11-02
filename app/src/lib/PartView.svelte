@@ -71,6 +71,12 @@
           <dd>{decl.tells.map((t) => `${t.name.name}(${paramsText(t.params)})`).join(", ") || "none"}</dd>
           <dt>Hears</dt>
           <dd>{decl.hears.map((h) => `${h.name.name}(${paramsText(h.params)})`).join(", ") || "none"}</dd>
+          <dt>Layout</dt>
+          <dd>
+            <label title="It takes the height the window has left, as a table or a canvas does; the declaration's grows line"
+              ><input type="checkbox" checked={decl.grows} onchange={(e) => onapply({ op: "setPartGrows", item, grows: e.currentTarget.checked })} /> Grows with the window</label
+            >
+          </dd>
         </dl>
       </section>
     {/snippet}

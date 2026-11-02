@@ -37,7 +37,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn every_stack_deletes_what_cascades_first() {
-    let rust = generated(Backend::Rust, Ui::Webview);
+    let rust = generated(Backend::Rust, Ui::Clarity);
     has(&rust, "const CASCADES: bool = true;");
     has(&rust, "Cond::compare(\"project\", clarity_runtime::query::Op::Eq, SqlValue::Integer(id))");
     let go = generated(Backend::Go, Ui::Webview);

@@ -85,11 +85,13 @@ std::shared_ptr<EditBus> edits_of(uint64_t instance);
 /// Forgets the edits of a window that closed.
 void edits_closed(uint64_t instance);
 
-/// What an edit of a window compares: its data, and each part's own text
-/// and tick as #parts.<name>.
+/// What an edit of a window compares: its data, each part's own text and
+/// tick as #parts.<name>, and what code set on each part as
+/// #parts.<name>.caption, .visible, .enabled, .readonly, .error and
+/// #parts.<name>.values.<value>, each only when set.
 nlohmann::json edit_data(const WindowState& state);
-/// `state` with `data` as an edit put it back: the window's data, and each
-/// part's own text and tick.
+/// `state` with `data` as an edit put it back: the window's data, each
+/// part's own text and tick, and what code set on each part.
 WindowState with_edit_data(WindowState state, const nlohmann::json& data);
 
 }  // namespace clarity

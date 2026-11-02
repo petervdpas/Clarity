@@ -107,4 +107,53 @@ public sealed class ThemeLook
 
     /// <summary>A style of the theme: <c>style primary background accent</c>.</summary>
     public LookValues Style(string name) => Look("styles", name);
+
+    /// <summary>
+    /// How a part that is pressed (a button, a toggle) of <paramref name="kind"/> looks with its style in a state:
+    /// the part's look, the style over it, and the state's own look over both. A style that fills the part keeps
+    /// its colors in a state, so its text stays readable: the state shades the style's fill away from its text (a
+    /// little on hover, more pressed) and takes only its border from the state's look.
+    /// </summary>
+    public LookValues Pressable(string kind, string? style, string? state)
+    {
+        var plain = Part(kind, null);
+        var own = style is { Length: > 0 } ? Style(style) : LookValues.None;
+        var styled = own.Over(plain);
+        if (state is null)
+            return styled;
+        var stateLook = PartOwn(kind, state);
+        if (own.Background is not { } fill)
+            return stateLook.Over(styled);
+        var text = styled.Text ?? Color("text");
+        return (LookValues.None with { Background = Shade(fill, text, state), Text = text, Border = stateLook.Border }).Over(styled);
+    }
+
+    /// <summary>A fill shaded for a state, toward whichever of the theme's text and background colors is farther from <paramref name="text"/>, so the text only gains contrast: a little on hover, more for any other state.</summary>
+    SKColor Shade(SKColor fill, SKColor text, string state)
+    {
+        var amount = state == "hover" ? 0.12 : 0.24;
+        var (dark, light) = (Color("text"), Color("background"));
+        double Far(SKColor c) => Math.Abs(Luminance(c) - Luminance(text));
+        var toward = Far(dark) >= Far(light) ? dark : light;
+        byte Mix(byte a, byte b) => (byte)Math.Round(a + (b - a) * amount, MidpointRounding.AwayFromZero);
+        return new SKColor(Mix(fill.Red, toward.Red), Mix(fill.Green, toward.Green), Mix(fill.Blue, toward.Blue), fill.Alpha);
+    }
+
+    /// <summary>A color's relative luminance, as WCAG measures it.</summary>
+    public static double Luminance(SKColor color)
+    {
+        static double Channel(byte c)
+        {
+            var v = c / 255.0;
+            return v <= 0.03928 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
+        }
+        return 0.2126 * Channel(color.Red) + 0.7152 * Channel(color.Green) + 0.0722 * Channel(color.Blue);
+    }
+
+    /// <summary>The contrast between two colors, from 1 (none) to 21 (black on white), as WCAG measures it.</summary>
+    public static double Contrast(SKColor a, SKColor b)
+    {
+        var (la, lb) = (Luminance(a), Luminance(b));
+        return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
+    }
 }

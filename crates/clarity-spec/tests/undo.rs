@@ -131,3 +131,15 @@ page Main: window
     let side = &project.files[0].pages[0].frame.sidebars[0].widgets[0];
     assert_eq!(side.props.undo_scope.as_deref(), Some("noteBox"));
 }
+
+/// Why a save was refused for an empty `required` field is a Clarity word,
+/// which every project with such a field translates (conformance/required.json).
+#[test]
+fn why_a_save_was_refused_for_a_required_field_is_a_clarity_word() {
+    assert_eq!(clarity_spec::translations::REQUIRED_KEYS, [("fieldRequired", "{field} is required")]);
+    let keys_of = |source: &str| -> Vec<String> { clarity_spec::translations::keys(&load_sources([("m.clarity", source)])).into_iter().map(|k| k.key).collect() };
+    let with = keys_of("module m\n\nentity Customer\n    name: text, required, label \"Name\"\n");
+    assert!(with.contains(&"fieldRequired".to_string()), "{with:?}");
+    let without = keys_of("module m\n\nentity Customer\n    name: text, label \"Name\"\n");
+    assert!(!without.contains(&"fieldRequired".to_string()), "{without:?}");
+}

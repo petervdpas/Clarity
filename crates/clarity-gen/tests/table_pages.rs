@@ -20,6 +20,6 @@ fn generated(backend: Backend, ui: Ui) -> String {
 
 #[test]
 fn the_web_stacks_carry_the_page_in_their_model() {
-    let rust = generated(Backend::Rust, Ui::Webview);
+    let rust = generated(Backend::Rust, Ui::Clarity);
     assert!(rust.contains("\"page\":20"), "no page in the model");
 }

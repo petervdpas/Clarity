@@ -296,4 +296,10 @@ values: { [key in string]: Literal },
 /**
  * A custom part's tells wired to handlers: `on scored: arenaScored`.
  */
-tells: Array<TellHandler>, };
+tells: Array<TellHandler>, 
+/**
+ * A custom part whose declaration says `grows`: it takes the height
+ * its window has left. Worked out when the project loads, for every
+ * screen and the designer; it is never written back.
+ */
+grows: boolean, };

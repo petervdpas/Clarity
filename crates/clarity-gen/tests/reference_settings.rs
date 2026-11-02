@@ -47,6 +47,6 @@ fn csharp_reads_the_id_and_offers_the_records() {
 #[test]
 fn every_stack_generates_it() {
     for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
-        generated(backend, Ui::Webview);
+        generated(backend, clarity_project::usual_ui(backend));
     }
 }

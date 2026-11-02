@@ -28,13 +28,13 @@ fn every_part_builds_without_warnings_in_csharp() {
 #[test]
 #[ignore = "builds a Rust program with every part; run with --ignored, one at a time"]
 fn every_part_builds_without_warnings_in_rust() {
-    builds_without_warnings("rust webview desktop cli");
+    builds_without_warnings("rust desktop cli");
 }
 
 #[test]
 #[ignore = "builds a Rust web program with every part; run with --ignored, one at a time"]
 fn every_part_builds_without_warnings_in_rust_on_the_web() {
-    builds_without_warnings("rust webview web cli");
+    builds_without_warnings("rust web cli");
 }
 
 #[test]

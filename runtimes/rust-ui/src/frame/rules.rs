@@ -173,3 +173,28 @@ impl FramePicker {
         )
     }
 }
+
+/// The access letter of each top item of a menu bar, by its caption as
+/// shown: the place (in characters) of its first letter or digit that no
+/// item before it took, case aside; none for an item without one free.
+/// Alt with that letter opens the item's menu, as on desktop programs.
+pub fn access_keys(captions: &[String]) -> Vec<Option<usize>> {
+    let mut taken: Vec<char> = Vec::new();
+    captions
+        .iter()
+        .map(|caption| {
+            let (at, c) = caption.chars().enumerate().find(|(_, c)| c.is_ascii_alphanumeric() && !taken.contains(&c.to_ascii_lowercase()))?;
+            taken.push(c.to_ascii_lowercase());
+            Some(at)
+        })
+        .collect()
+}
+
+/// The letter or digit a key writes, for an access letter; none for any other key.
+pub fn access_char(key: crate::input::Key) -> Option<char> {
+    use crate::input::Key;
+    if let Some(i) = Key::LETTERS.iter().position(|k| *k == key) {
+        return Some((b'a' + i as u8) as char);
+    }
+    Key::DIGITS.iter().position(|k| *k == key).map(|i| (b'0' + i as u8) as char)
+}

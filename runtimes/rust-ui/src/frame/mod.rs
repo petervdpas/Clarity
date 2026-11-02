@@ -64,6 +64,17 @@ pub struct WindowFrame {
     /// Whether an unnamed sidebar is folded and fills the window, left then right.
     own_sides: [Cell<(bool, bool)>; 2],
     body: Cell<Rect>,
+    access: Cell<Access>,
+}
+
+/// Whether the menu bar's access letters show: off, while Alt is held
+/// (`used` once a key went with it), or kept after Alt went alone, when
+/// the letter alone opens its menu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Access {
+    Off,
+    Held { used: bool },
+    Kept,
 }
 
 impl WindowFrame {
@@ -79,6 +90,7 @@ impl WindowFrame {
             theme: RefCell::new(FramePicker::theme()),
             own_sides,
             body: Cell::new(Rect::default()),
+            access: Cell::new(Access::Off),
             shown,
         })
     }
@@ -99,6 +111,15 @@ impl WindowFrame {
     /// The menus open over the window: a menu bar's, a picker's.
     pub fn menus(&self) -> &FrameMenus {
         &self.menus
+    }
+
+    /// Whether the menu bar's access letters show, and how.
+    pub fn access(&self) -> Access {
+        self.access.get()
+    }
+
+    pub fn set_access(&self, access: Access) {
+        self.access.set(access);
     }
 
     /// Where the window's own parts are, inside the regions, as last placed.

@@ -68,7 +68,7 @@ fn without_keys_editable_the_design_keys_stay() {
 #[test]
 fn the_web_stacks_carry_the_catalog_in_their_model() {
     for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
-        let code: String = files(backend, Ui::Webview, true).iter().map(|f| f.text.clone()).collect();
+        let code: String = files(backend, clarity_project::usual_ui(backend), true).iter().map(|f| f.text.clone()).collect();
         assert!(code.contains("Card.saveButton"), "{backend:?} carries the catalog");
     }
 }

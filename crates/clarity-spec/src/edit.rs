@@ -192,6 +192,9 @@ pub enum Edit {
     ReplaceDecl { item: u32, text: String },
     /// Add `text`, one declaration, at the end of the file.
     AppendDecl { text: String },
+    /// Whether the custom part declared at `item` grows with its window:
+    /// its `grows` line is added or taken away, the rest as written.
+    SetPartGrows { item: u32, grows: bool },
 }
 
 /// What `AddFrameItem` adds.
@@ -267,7 +270,7 @@ pub fn apply_in(project: &Project, source: &str, edit: &Edit) -> EditResult<Edit
 fn is_text_edit(edit: &Edit) -> bool {
     matches!(
         edit,
-        Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::AddHandlerWith { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::CamelNames
+        Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::AddHandlerWith { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::SetPartGrows { .. } | Edit::CamelNames
     )
 }
 
@@ -296,6 +299,10 @@ fn apply_with(source: &str, edit: &Edit, project: Option<&Project>) -> EditResul
             Edit::ReplaceDecl { item, text: decl } => {
                 focus = Some(*item);
                 crate::source::replace_decl(&text, *item, decl)?
+            }
+            Edit::SetPartGrows { item, grows } => {
+                focus = Some(*item);
+                crate::source::set_part_grows(&text, *item, *grows)?
             }
             Edit::CamelNames => crate::names::camel_names(&text),
             Edit::AppendDecl { text: decl } => {
@@ -904,7 +911,7 @@ impl Doc {
             } => self.add_frame_item(*parent, *item, caption.clone()),
             Edit::UpdateCommand { item, props } => self.update_command(*item, props),
             Edit::MoveSibling { item, delta } => self.move_sibling(*item, *delta),
-            Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::AddHandlerWith { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::CamelNames => {
+            Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::AddHandlerWith { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::SetPartGrows { .. } | Edit::CamelNames => {
                 fail("text edits cannot be nested in a batch inside a batch")
             }
         }

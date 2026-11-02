@@ -68,6 +68,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
     give_settings(&mut files);
     make_form_labels(&mut files);
     make_undo_scopes(&mut files);
+    make_custom_grows(&mut files);
     make_hears(&mut files);
     diagnostics.extend(check::check(&files));
     diagnostics.extend(files.iter().flat_map(themes::check_decls));
@@ -178,6 +179,40 @@ fn make_undo_scopes(files: &mut [model::SpecFile]) {
         }
         for app in &mut file.apps {
             frame(&mut app.frame);
+        }
+    }
+}
+
+/// Each placed custom part grows when its declaration says `grows`
+/// (DESIGN 5.19), worked out once for every screen and the designer.
+fn make_custom_grows(files: &mut [model::SpecFile]) {
+    let growing: Vec<String> = files.iter().flat_map(|f| &f.parts).filter(|p| p.grows).map(|p| p.name.name.clone()).collect();
+    fn set(widgets: &mut [model::Widget], growing: &[String]) {
+        for w in widgets.iter_mut() {
+            if w.props.kind == widgets::WidgetKind::Custom {
+                w.props.grows = w.props.part.as_ref().is_some_and(|p| growing.contains(p));
+            }
+            set(&mut w.children, growing);
+            for inner in &mut w.pages {
+                set(&mut inner.children, growing);
+            }
+        }
+    }
+    fn frame(frame: &mut model::Frame, growing: &[String]) {
+        for sidebar in &mut frame.sidebars {
+            set(&mut sidebar.widgets, growing);
+        }
+        if let Some(footer) = &mut frame.footer {
+            set(&mut footer.widgets, growing);
+        }
+    }
+    for file in files.iter_mut() {
+        for page in &mut file.pages {
+            set(&mut page.widgets, &growing);
+            frame(&mut page.frame, &growing);
+        }
+        for app in &mut file.apps {
+            frame(&mut app.frame, &growing);
         }
     }
 }

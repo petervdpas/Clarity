@@ -27,7 +27,7 @@ public sealed class AppScreen : IDisposable
         this.systemDark = systemDark;
         Stack = new WindowStack(model => carried(MarkupName(model))) { OpenAddress = openAddress, Apart = apart, Opener = opener, AppFrame = appFrame, Files = files };
         // The window's own keys (shortcuts, default and cancel buttons, undo) come before the part with the focus.
-        Screen = new Screen(Stack, Look) { Keys = Stack.KeyPressed };
+        Screen = new Screen(Stack, Look) { Keys = Stack.KeyPressed, KeysUp = Stack.KeyReleased };
         Themes.Changed += Relook;
     }
 

@@ -4,7 +4,7 @@
 //! ```text
 //! project Shop
 //!     title "The shop"
-//!     stack rust webview desktop
+//!     stack rust desktop
 //!     output "out"
 //!     output keeps "vendor"
 //!     datasource main sqlite "data/shop.db"
@@ -329,7 +329,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                 once(stack.is_some())?;
                 let words: Vec<&str> = a.iter().map(|t| word(t).unwrap_or("")).collect();
                 // A backend that draws with Clarity.UI takes it unnamed: `stack csharp desktop`,
-                // `stack rust desktop`. A UI it also offers is still named: `stack rust webview desktop`.
+                // `stack rust desktop`. A UI it also offers is still named.
                 let unnamed = match words.first().map(|b| pick(line, "backend", "backends", &BACKENDS, backend_word, b)).transpose()? {
                     Some(backend) => {
                         let uis = backend_uis(backend);
@@ -339,6 +339,19 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     None => None,
                 };
                 if let Some(backend) = unnamed {
+                    // A UI named where the language draws with Clarity.UI only, as Rust's webview desktop once was.
+                    if words.len() > 1 && UIS.iter().any(|ui| ui_word(*ui) == words[1]) {
+                        if words.len() == 2 {
+                            return Err(format!("line {line}: the stack needs at least one target, like: stack {} desktop", backend_word(backend)));
+                        }
+                        let targets = Stack { backend, ui: Ui::Clarity, targets: Vec::new() };
+                        return Err(format!(
+                            "line {line}: {} draws its windows with Clarity.UI and names no UI; write {} {}",
+                            crate::backend_info(backend).label,
+                            crate::stack_line(&targets),
+                            words[2..].join(" ")
+                        ));
+                    }
                     // Clarity.UI is not named: the targets follow the language.
                     let targets = words[1..]
                         .iter()
@@ -367,12 +380,12 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     let (Some(backend), Some(ui), targets) = (words.first(), words.get(1), words.get(2..).unwrap_or(&[]))
                     else {
                         return Err(format!(
-                            "line {line}: write the backend, the UI and at least one target, like: stack rust webview desktop"
+                            "line {line}: write the backend, the UI and at least one target, like: stack go webview desktop"
                         ));
                     };
                     if targets.is_empty() {
                         return Err(format!(
-                            "line {line}: the stack needs at least one target, like: stack rust webview desktop"
+                            "line {line}: the stack needs at least one target, like: stack go webview desktop"
                         ));
                     }
                     stack = Some(Stack {
@@ -443,7 +456,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         }
     }
     let Some(stack) = stack else {
-        return Err("the project needs a 'stack' line, like: stack rust webview desktop".to_string());
+        return Err("the project needs a 'stack' line, like: stack rust desktop".to_string());
     };
     Ok(Settings {
         name,

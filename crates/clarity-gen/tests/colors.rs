@@ -26,11 +26,11 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn every_backend_keeps_a_color_as_text_with_its_default() {
-    has(&generated(Backend::Rust, Ui::Webview), "String::from(\"#3b82f6\")");
+    has(&generated(Backend::Rust, Ui::Clarity), "String::from(\"#3b82f6\")");
     has(&generated(Backend::Go, Ui::Webview), "\"#3b82f6\"");
     has(&generated(Backend::C, Ui::Webview), "\"#3b82f6\"");
     has(&generated(Backend::Cpp, Ui::Webview), "\"#3b82f6\"");
     has(&generated(Backend::Csharp, Ui::Clarity), "\"#3b82f6\"");
-    has(&generated(Backend::Rust, Ui::Webview), "\"kind\":\"color\"");
+    has(&generated(Backend::Rust, Ui::Clarity), "\"kind\":\"color\"");
 }
 

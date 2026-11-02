@@ -72,7 +72,7 @@ fn a_store_must_be_in_the_project_settings() {
 
 #[test]
 fn rust_records_hold_their_pictures() {
-    let files = files(Backend::Rust, Ui::Webview, SourceKind::Sqlite);
+    let files = files(Backend::Rust, Ui::Clarity, SourceKind::Sqlite);
     let music = text(&files, "src/modules/music.rs");
     has(music, "    pub cover: Option<Picture>,
 ");
@@ -83,8 +83,8 @@ fn rust_records_hold_their_pictures() {
     has(main, "const STORES: &[(&str, &str)] = &[(\"photos\", \"env:PHOTO_FOLDER\")];");
     has(main, "db.add_store(name, at)?;");
     has(main, "        (\"Album\", \"cover\") => db.picture::<modules::music::Album>(id, \"cover\"),\n");
-    // The shell's commands are in the desktop module.
-    has(text(&files, "src/desktop.rs"), "fn picture(app: tauri::State<App>, entity: String, id: i64, field: String) -> Answer<Option<String>> {");
+    // The program gives a picture's bytes to Clarity.UI.
+    has(main, "    fn field_bytes(&self, entity: &str, id: i64, field: &str) -> Answer<Option<Vec<u8>>> {");
 }
 
 #[test]
@@ -124,11 +124,9 @@ fn csharp_fetches_a_picture_through_the_view_model() {
 /// A picture linked from a file before its record is saved shows from its store.
 #[test]
 fn a_linked_picture_shows_from_its_store_before_it_is_saved() {
-    let rust = files(Backend::Rust, Ui::Webview, SourceKind::Sqlite);
-    // The shell's commands are in the desktop module.
-    let main = text(&rust, "src/desktop.rs");
-    has(main, "fn store_file(app: tauri::State<App>, store: String, path: String) -> Answer<String> {");
-    has(main, "            store_file,\n");
+    let rust = files(Backend::Rust, Ui::Clarity, SourceKind::Sqlite);
+    // The program reads a file of the store for Clarity.UI.
+    has(text(&rust, "src/main.rs"), "    fn store_file(&self, store: &str, path: &str) -> Answer<Vec<u8>> {");
     let csharp = files(Backend::Csharp, Ui::Clarity, SourceKind::Sqlite);
     let model = text(&csharp, "Windows/AlbumFormViewModel.cs");
     has(model, "    public Func<string, Task<byte[]?>> AlbumPhotoFile => path => Fetched(nameof(AlbumPhotoFile), () => Db.StoreFile(\"photos\", path), path);\n");
@@ -174,7 +172,7 @@ fn all(files: &[OutFile]) -> String {
 /// stored one's bytes, so it needs the record, the column and both stores.
 #[test]
 fn code_copies_a_picture_and_a_file_from_another_record() {
-    let rust = all(&copies(Backend::Rust, Ui::Webview));
+    let rust = all(&copies(Backend::Rust, Ui::Clarity));
     has(&rust, "db.copied_picture::<Album>(&other.cover, other.id, \"cover\", None, Some(\"photos\"))?");
     has(&rust, "db.copied_file::<Album>(&other.booklet, other.id, \"booklet\", None, None)?");
     let go = all(&copies(Backend::Go, Ui::Webview));

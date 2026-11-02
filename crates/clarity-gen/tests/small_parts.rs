@@ -26,7 +26,7 @@ fn has(text: &str, expected: &str) {
 #[test]
 fn the_web_stacks_carry_the_small_parts_in_their_model() {
     for backend in [Backend::Rust, Backend::Go] {
-        let code = generated(backend, Ui::Webview);
+        let code = generated(backend, clarity_project::usual_ui(backend));
         for kind in ["separator", "link", "badge", "progress", "busy"] {
             has(&code, &format!("\"kind\":\"{kind}\""));
         }

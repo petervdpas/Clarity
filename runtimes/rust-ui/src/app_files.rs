@@ -1,6 +1,6 @@
 //! What a generated program carries for Clarity.UI to show it: its windows'
-//! and apps' markup (`.cxaml`), its resolved themes and its texts, each by
-//! name, built into the program.
+//! and apps' markup (`.cxaml`), its resolved themes, its texts and its
+//! resources, each by name, built into the program.
 
 /// A program's files, by name.
 #[derive(Debug, Clone, Copy, Default)]
@@ -14,6 +14,8 @@ pub struct AppFiles {
     pub themes: &'static [(&'static str, &'static str)],
     /// The model the program is made with, as JSON: its translations and its language.
     pub model: &'static str,
+    /// The files of the project's resources folder by their names: `("logo.png", <bytes>)`.
+    pub resources: &'static [(&'static str, &'static [u8])],
     /// The title of the desktop window.
     pub title: &'static str,
     /// The size the main window opens at, in the screen's units; 0 for the host's own.
@@ -30,6 +32,11 @@ impl AppFiles {
     /// The frame of an app by its name.
     pub fn app(&self, name: &str) -> Option<&'static str> {
         self.apps.iter().find(|(n, _)| *n == name).map(|(_, m)| *m)
+    }
+
+    /// A resource by its name (`logo.png`); none for a file the program does not carry.
+    pub fn resource(&self, name: &str) -> Option<&'static [u8]> {
+        self.resources.iter().find(|(n, _)| *n == name).map(|(_, b)| *b)
     }
 
     /// The first app's frame, which every window but a dialog shows; none for a program without an app.

@@ -1,115 +1,214 @@
-//! Custom part Dice (DESIGN 5.19): the trait the crate's `Dice` implements, the
-//! window it draws in and the tells it calls. Written by Clarity from the
-//! part's declaration, and written again when the declaration changes; the
-//! rest of the crate is yours.
+//! Custom part Dice (DESIGN 5.19, 7.9): a control of Clarity.UI. The trait
+//! the crate's `Dice` implements, what it says to its window, and the wrapper
+//! that makes it a part of clarity-ui. Written by Clarity from the part's
+//! declaration, and written again when the declaration changes; the rest of
+//! the crate is yours.
 //!
-//! Every method is called on the part host's thread, one at a time; the part
-//! is made there and lives there.
+//! Every method is called on the screen's thread, one at a time; the part
+//! is made when its window opens and lives as long as its window.
 
 #![allow(dead_code)]
 
-use std::ffi::c_void;
+pub use clarity_ui::parts::custom::{CustomCx, CustomPart};
+pub use clarity_ui::{KeyInput, Modifiers, Painter, PointerInput, Rect};
+/// Skia, for drawing on the whole canvas (`painter.canvas`), at the version Clarity.UI is built on.
+pub use clarity_ui::skia_safe;
+use serde_json::Value;
 
-/// The native window the part draws in: on Linux an X11 window, on the
-/// part host's own X11 connection; on Windows a Win32 child window of the
-/// webview's. Its raw handle is what wgpu, Bevy and softbuffer take.
-#[cfg(not(windows))]
-#[derive(Debug, Clone, Copy)]
-pub struct Window {
-    pub xid: u64,
-    pub display: *mut c_void,
-    pub screen: i32,
-}
+/// What part Dice does: it draws itself in its place and shows what the
+/// window gives it; the input methods it does not write do nothing.
+pub trait DicePart: Default + 'static {
+    /// Draws itself in `area`, its place in the window, with the theme's look (`painter.look`).
+    fn draw(&self, painter: &Painter, area: Rect);
 
-#[cfg(windows)]
-#[derive(Debug, Clone, Copy)]
-pub struct Window {
-    /// The child window (an HWND).
-    pub hwnd: *mut c_void,
-    /// The module its window class belongs to (an HINSTANCE).
-    pub hinstance: *mut c_void,
-}
-
-#[cfg(not(windows))]
-impl raw_window_handle::HasWindowHandle for Window {
-    fn window_handle(&self) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
-        let handle = raw_window_handle::XlibWindowHandle::new(self.xid as std::ffi::c_ulong);
-        // The window lives as long as the part: the host ends the part first.
-        Ok(unsafe { raw_window_handle::WindowHandle::borrow_raw(handle.into()) })
-    }
-}
-
-#[cfg(not(windows))]
-impl raw_window_handle::HasDisplayHandle for Window {
-    fn display_handle(&self) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
-        let handle = raw_window_handle::XlibDisplayHandle::new(std::ptr::NonNull::new(self.display), self.screen);
-        Ok(unsafe { raw_window_handle::DisplayHandle::borrow_raw(handle.into()) })
-    }
-}
-
-#[cfg(windows)]
-impl raw_window_handle::HasWindowHandle for Window {
-    fn window_handle(&self) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
-        let window = std::num::NonZeroIsize::new(self.hwnd as isize).ok_or(raw_window_handle::HandleError::Unavailable)?;
-        let mut handle = raw_window_handle::Win32WindowHandle::new(window);
-        handle.hinstance = std::num::NonZeroIsize::new(self.hinstance as isize);
-        // The window lives as long as the part: the host ends the part first.
-        Ok(unsafe { raw_window_handle::WindowHandle::borrow_raw(handle.into()) })
-    }
-}
-
-#[cfg(windows)]
-impl raw_window_handle::HasDisplayHandle for Window {
-    fn display_handle(&self) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
-        let handle = raw_window_handle::WindowsDisplayHandle::new();
-        Ok(unsafe { raw_window_handle::DisplayHandle::borrow_raw(handle.into()) })
-    }
-}
-
-/// A value a tell gives.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Told {
-    Integer(i64),
-    Bool(bool),
-    Text(String),
-    Empty,
-}
-
-/// What part Dice does.
-pub trait DicePart {
-    /// Makes the part in `window`, `width` by `height` pixels.
-    fn create(window: Window, width: u32, height: u32, host: DiceHost) -> Self
-    where
-        Self: Sized;
-    /// The window changed size.
-    fn resize(&mut self, width: u32, height: u32) {
-        let _ = (width, height);
-    }
-    /// About 60 times a second while the part shows: draw, and read input.
-    fn frame(&mut self) {}
-    /// Whether the person can use it, as code sets `enabled`.
-    fn set_enabled(&mut self, enabled: bool) {
-        let _ = enabled;
-    }
     /// Property count, as the window or code sets it.
-    fn set_count(&mut self, count: i64);
+    fn show_count(&mut self, count: i64, cx: &mut CustomCx);
+
     /// What code tells it: roll.
-    fn roll(&mut self);
-}
+    fn on_roll(&mut self, cx: &mut CustomCx);
 
-/// Where part Dice tells what happened.
-pub struct DiceHost {
-    tell: Box<dyn Fn(&str, Vec<Told>)>,
-}
-
-impl DiceHost {
-    /// Made by the program for each part it shows.
-    pub fn new(tell: Box<dyn Fn(&str, Vec<Told>)>) -> Self {
-        DiceHost { tell }
+    /// Whether it takes the focus: pressed, or reached with Tab.
+    fn focusable(&self) -> bool {
+        false
     }
 
-    /// Tells landed: its handler runs with these values.
-    pub fn landed(&self, total: i64, faces: &str) {
-        (self.tell)("landed", vec![Told::Integer(total), Told::Text(faces.to_string())]);
+    /// The main button went down on it.
+    fn pointer_pressed(&mut self, at: PointerInput, cx: &mut CustomCx) {
+        let _ = (at, cx);
+    }
+
+    /// The pointer moved over it, or anywhere while it holds the pointer.
+    fn pointer_moved(&mut self, at: PointerInput, cx: &mut CustomCx) {
+        let _ = (at, cx);
+    }
+
+    /// The main button went up after it was pressed on it.
+    fn pointer_released(&mut self, at: PointerInput, cx: &mut CustomCx) {
+        let _ = (at, cx);
+    }
+
+    /// Pressed and released with the main button.
+    fn click(&mut self, cx: &mut CustomCx) {
+        let _ = cx;
+    }
+
+    /// The wheel turned over it with keys `held`: true when it took the turn.
+    fn wheel(&mut self, dx: f64, dy: f64, held: Modifiers, cx: &mut CustomCx) -> bool {
+        let _ = (dx, dy, held, cx);
+        false
+    }
+
+    /// A key while it has the focus: true when it took the key.
+    fn key(&mut self, key: KeyInput, cx: &mut CustomCx) -> bool {
+        let _ = (key, cx);
+        false
+    }
+
+    /// Text typed while it has the focus.
+    fn text(&mut self, text: &str, cx: &mut CustomCx) {
+        let _ = (text, cx);
+    }
+
+    /// It got or lost the focus.
+    fn focus_changed(&mut self, focused: bool, cx: &mut CustomCx) {
+        let _ = (focused, cx);
+    }
+
+    /// The time it asked for came (`cx.wake(at)`).
+    fn wake(&mut self, cx: &mut CustomCx) {
+        let _ = cx;
+    }
+
+    /// Its window opened: called once, after the values of its line, what
+    /// code set and what it binds; it may start a timer or an animation here.
+    fn start(&mut self, cx: &mut CustomCx) {
+        let _ = cx;
+    }
+
+    /// Its window left the screen: it stops what it started.
+    fn stop(&mut self) {}
+
+    /// What it says about the place at a point when the pointer rests there.
+    fn tooltip_at(&self, x: f64, y: f64) -> Option<String> {
+        let _ = (x, y);
+        None
+    }
+}
+
+/// What part Dice says to its window, from any of its methods: `cx.changed(..)` and one per tell.
+pub trait DiceTells {
+    /// Tells landed: the handler wired to it runs with these values.
+    fn landed(&mut self, total: i64, faces: &str);
+}
+
+impl DiceTells for CustomCx<'_> {
+    fn landed(&mut self, total: i64, faces: &str) {
+        self.tell("landed", vec![Value::from(total), Value::from(faces)]);
+    }
+}
+
+/// Part Dice as Clarity.UI holds it: the window's words in, typed.
+struct Held<P>(P);
+
+impl<P: DicePart> CustomPart for Held<P> {
+    fn set(&mut self, name: &str, value: &Value, cx: &mut CustomCx) {
+        if name == "enabled" {
+            // The window draws it again; `cx.enabled()` says which it is.
+            cx.invalidate();
+            return;
+        }
+        match name {
+            "count" => self.0.show_count(integer(value), cx),
+            _ => {}
+        }
+    }
+
+    fn hear(&mut self, hear: &str, values: &[Value], cx: &mut CustomCx) {
+        // What it hears may take no values.
+        let _ = values;
+        match hear {
+            "roll" => self.0.on_roll(cx),
+            _ => {}
+        }
+    }
+
+    fn draw(&self, painter: &Painter, area: Rect) {
+        self.0.draw(painter, area);
+    }
+
+    fn focusable(&self) -> bool {
+        self.0.focusable()
+    }
+
+    fn pointer_pressed(&mut self, at: PointerInput, cx: &mut CustomCx) {
+        self.0.pointer_pressed(at, cx);
+    }
+
+    fn pointer_moved(&mut self, at: PointerInput, cx: &mut CustomCx) {
+        self.0.pointer_moved(at, cx);
+    }
+
+    fn pointer_released(&mut self, at: PointerInput, cx: &mut CustomCx) {
+        self.0.pointer_released(at, cx);
+    }
+
+    fn click(&mut self, cx: &mut CustomCx) {
+        self.0.click(cx);
+    }
+
+    fn wheel(&mut self, dx: f64, dy: f64, held: Modifiers, cx: &mut CustomCx) -> bool {
+        self.0.wheel(dx, dy, held, cx)
+    }
+
+    fn key(&mut self, key: KeyInput, cx: &mut CustomCx) -> bool {
+        self.0.key(key, cx)
+    }
+
+    fn text(&mut self, text: &str, cx: &mut CustomCx) {
+        self.0.text(text, cx);
+    }
+
+    fn focus_changed(&mut self, focused: bool, cx: &mut CustomCx) {
+        self.0.focus_changed(focused, cx);
+    }
+
+    fn wake(&mut self, cx: &mut CustomCx) {
+        self.0.wake(cx);
+    }
+
+    fn start(&mut self, cx: &mut CustomCx) {
+        self.0.start(cx);
+    }
+
+    fn stop(&mut self) {
+        self.0.stop();
+    }
+
+    fn tooltip_at(&self, x: f64, y: f64) -> Option<String> {
+        self.0.tooltip_at(x, y)
+    }
+}
+
+/// A new part Dice, as the program registers it with Clarity.UI.
+pub fn make() -> Box<dyn CustomPart> {
+    Box::new(Held(crate::Dice::default()))
+}
+
+/// A whole number, from a number or the text of one.
+fn integer(value: &Value) -> i64 {
+    value.as_i64().or_else(|| value.as_f64().map(|v| v as i64)).or_else(|| value.as_str().and_then(|v| v.trim().parse().ok())).unwrap_or_default()
+}
+
+/// True or false; anything else is false.
+fn boolean(value: &Value) -> bool {
+    value.as_bool().unwrap_or(false)
+}
+
+/// Text: a number or a truth as written; nothing is empty.
+fn text(value: &Value) -> String {
+    match value {
+        Value::String(v) => v.clone(),
+        Value::Null => String::new(),
+        other => other.to_string(),
     }
 }

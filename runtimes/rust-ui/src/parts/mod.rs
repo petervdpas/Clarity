@@ -48,6 +48,8 @@ pub struct FieldFacts {
     pub refers: Option<String>,
     pub parent: Option<String>,
     pub color: bool,
+    /// The help it declares (`help @customerVatNumberHelp`), a key or the text itself; none for none.
+    pub help: Option<String>,
 }
 
 /// The person's formats for numbers and dates: their language and currency.
@@ -274,7 +276,7 @@ impl PartBase {
         }
         if event == "click" {
             if let Some(target) = self.spec.text("onClick").filter(|t| !t.is_empty()) {
-                ran &= self.host.run(self.spec.name(), &HandlerCall::new("click", target, Vec::new()));
+                ran &= self.host.run(self.spec.name(), &HandlerCall::new(route_event(self.spec.flag("newWindow")), target, Vec::new()));
             }
         }
         ran
@@ -292,8 +294,17 @@ pub fn pick(host: &dyn PartHost, part: Option<&str>, item: &CommandSpec) {
         host.run(part, &crate::markup::handler_of("click", handler));
     }
     if let Some(target) = item.text("onClick").filter(|t| !t.is_empty()) {
-        host.run(part, &HandlerCall::new("click", target, Vec::new()));
+        host.run(part, &HandlerCall::new(route_event(item.flag("newWindow")), target, Vec::new()));
     }
+}
+
+/// The event a click route runs with: a route marked `in new window` opens
+/// its window in a desktop window of its own (where the host gives them),
+/// any other in place, whatever other routes to the same window say.
+pub const NEW_WINDOW_CLICK: &str = "clickNewWindow";
+
+fn route_event(new_window: bool) -> &'static str {
+    if new_window { NEW_WINDOW_CLICK } else { "click" }
 }
 
 /// A part: an element with its spec and host.

@@ -23,7 +23,7 @@ fn has(files: &[OutFile], path: &str, expected: &str) {
 
 #[test]
 fn every_stack_loads_an_engine_with_its_services_and_limits() {
-    has(&files(Backend::Rust, Ui::Webview), "src/engines.rs", "uses: &[\"clock\", \"random\", \"log\", \"language\"], limits: Limits { seconds: 2, megabytes: 64 }, state: State::None, opens: false }");
+    has(&files(Backend::Rust, Ui::Clarity), "src/engines.rs", "uses: &[\"clock\", \"random\", \"log\", \"language\"], limits: Limits { seconds: 2, megabytes: 64 }, state: State::None, opens: false }");
     has(&files(Backend::Go, Ui::Webview), "engines.go", "Uses: []string{\"clock\", \"random\", \"log\", \"language\"}, Limits: engine.Limits{Seconds: 2, Megabytes: 64}, State: engine.NoState, Opens: false}");
     has(&files(Backend::Csharp, Ui::Clarity), "Engines.cs", "[\"clock\", \"random\", \"log\", \"language\"], new EngineLimits(2, 64), EngineState.None, false)");
     has(&files(Backend::C, Ui::Webview), "src/engines.c", "4, pricing_uses, (ClarityEngineLimits){2, 64}, CLARITY_ENGINE_NO_STATE, false}");
@@ -33,7 +33,7 @@ fn every_stack_loads_an_engine_with_its_services_and_limits() {
 
 #[test]
 fn every_stack_loads_an_engine_with_its_state_and_on_open() {
-    has(&files(Backend::Rust, Ui::Webview), "src/engines.rs", "Declaration { functions: &[\"count\"], uses: &[\"clock\", \"random\", \"log\", \"language\"], limits: Limits { seconds: 5, megabytes: 256 }, state: State::App, opens: true }");
+    has(&files(Backend::Rust, Ui::Clarity), "src/engines.rs", "Declaration { functions: &[\"count\"], uses: &[\"clock\", \"random\", \"log\", \"language\"], limits: Limits { seconds: 5, megabytes: 256 }, state: State::App, opens: true }");
     has(&files(Backend::Go, Ui::Webview), "engines.go", "engine.Declaration{Functions: []string{\"count\"}, Uses: []string{\"clock\", \"random\", \"log\", \"language\"}, Limits: engine.Limits{Seconds: 5, Megabytes: 256}, State: engine.PerApp, Opens: true}");
     has(&files(Backend::Csharp, Ui::Clarity), "Engines.cs", "new EngineDeclaration([\"count\"], [\"clock\", \"random\", \"log\", \"language\"], new EngineLimits(5, 256), EngineState.PerApp, true)");
     has(&files(Backend::C, Ui::Webview), "src/engines.c", "(ClarityEngineDeclaration){1, counter_functions, 4, counter_uses, (ClarityEngineLimits){5, 256}, CLARITY_ENGINE_PER_APP, true}");
@@ -44,7 +44,7 @@ fn every_stack_loads_an_engine_with_its_state_and_on_open() {
 /// and drops a window's instance when the window closes.
 #[test]
 fn rust_calls_an_engine_with_state_per_window_in_its_window() {
-    let files = files(Backend::Rust, Ui::Webview);
+    let files = files(Backend::Rust, Ui::Clarity);
     has(&files, "src/modules/shop.rs", ".call_in(ui.instance(), \"count\", vec![])");
     has(&files, "src/engines.rs", "pub fn close_window(instance: u64)");
     has(&files, "src/engines.rs", "if let Some(Ok(engine)) = BOARD.get() {\n        engine.close_window(instance);\n    }");

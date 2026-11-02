@@ -144,6 +144,10 @@ pub const SCREEN_ENGINE_KEYS: [(&str, &str); 1] = [("screenEngineFailed", "The e
 /// changed since. Every application with windows has undo.
 pub const UNDO_KEYS: [(&str, &str); 1] = [("undoChangedSince", "This was changed since, so it cannot be taken back")];
 
+/// Why a save was refused: a `required` field of the record is empty
+/// (conformance/required.json). The runtimes fill the slot with its label.
+pub const REQUIRED_KEYS: [(&str, &str); 1] = [("fieldRequired", "{field} is required")];
+
 /// Every list of Clarity's own words, with their English.
 pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
     RENDERER_KEYS
@@ -166,6 +170,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&KEYS_WINDOW_KEYS)
         .chain(&SCREEN_ENGINE_KEYS)
         .chain(&UNDO_KEYS)
+        .chain(&REQUIRED_KEYS)
 }
 
 /// The key a text names, without its `@`; none for a text written as it is.
@@ -552,6 +557,7 @@ fn shown(project: &Project) -> Shown {
     let screen_engines = project.files.iter().flat_map(|f| &f.engines).any(|e| e.beside);
     let passwords = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Password));
     let windows = project.files.iter().any(|f| !f.pages.is_empty());
+    let required = project.entities().any(|e| !e.settings && e.fields.iter().any(|f| f.modifiers.required));
     let own = RENDERER_KEYS
         .iter()
         .chain(if windows { UNDO_KEYS.as_slice() } else { &[] })
@@ -571,7 +577,8 @@ fn shown(project: &Project) -> Shown {
         .chain(if unconnected { UNCONNECTED_KEYS.as_slice() } else { &[] })
         .chain(if passwords { SECRET_KEYS.as_slice() } else { &[] })
         .chain(if keys_window { KEYS_WINDOW_KEYS.as_slice() } else { &[] })
-        .chain(if screen_engines { SCREEN_ENGINE_KEYS.as_slice() } else { &[] });
+        .chain(if screen_engines { SCREEN_ENGINE_KEYS.as_slice() } else { &[] })
+        .chain(if required { REQUIRED_KEYS.as_slice() } else { &[] });
     // The runtimes fill the slots of Clarity's own words, the ones its English has.
     for (key, english) in own {
         shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: Some(slots(english)) });

@@ -56,6 +56,18 @@ fn files(backend: Backend, ui: Ui) -> Vec<OutFile> {
     generate(&project(), &settings).unwrap_or_else(|e| panic!("{e:#?}"))
 }
 
+/// The program of `backend` on the shared web screen: Rust's is its web
+/// program, until Clarity.UI draws in the browser (G8d).
+fn web_files(backend: Backend) -> Vec<OutFile> {
+    let mut settings = starter("Shop", "shop");
+    settings.stack.backend = backend;
+    settings.stack.ui = clarity_project::usual_ui(backend);
+    if backend == Backend::Rust {
+        settings.stack.targets = vec![clarity_project::Target::Web];
+    }
+    generate(&project(), &settings).unwrap_or_else(|e| panic!("{e:#?}"))
+}
+
 fn bytes<'a>(files: &'a [OutFile], path: &str) -> &'a [u8] {
     let file = files.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("no {path}"));
     file.bytes.as_deref().unwrap_or_else(|| panic!("{path} is not binary"))
@@ -72,7 +84,7 @@ fn text<'a>(files: &'a [OutFile], path: &str) -> &'a str {
 #[test]
 fn the_web_stacks_carry_the_resources_with_the_renderer() {
     for (backend, model) in [(Backend::Rust, "src/model.json"), (Backend::Go, "model.json")] {
-        let files = files(backend, Ui::Webview);
+        let files = web_files(backend);
         assert_eq!(bytes(&files, "ui/resources/logo.png"), LOGO, "{backend:?}");
         assert_eq!(bytes(&files, "ui/resources/rules-nl.md"), b"# Regels", "{backend:?}");
         let model = text(&files, model);
@@ -92,6 +104,18 @@ fn csharp_embeds_the_resources() {
     assert!(text(&files, "Texts.nl.resx").contains("<data name=\"GameRules\" xml:space=\"preserve\">\n    <value># Regels</value>"), "{}", text(&files, "Texts.nl.resx"));
 }
 
+/// A Rust program on Clarity.UI carries each resource in the program, by
+/// its name, for its parts to show (`image source`, `markdown source`, sounds).
+#[test]
+fn rust_on_clarity_ui_embeds_the_resources() {
+    let files = files(Backend::Rust, Ui::Clarity);
+    assert_eq!(bytes(&files, "resources/logo.png"), LOGO);
+    let main = text(&files, "src/main.rs");
+    assert!(main.contains("    resources: &[(\"banner-en.png\", include_bytes!(\"../resources/banner-en.png\")), "), "{main}");
+    assert!(main.contains("(\"logo.png\", include_bytes!(\"../resources/logo.png\"))"), "{main}");
+    assert!(main.contains("(\"rules-nl.md\", include_bytes!(\"../resources/rules-nl.md\"))"), "{main}");
+}
+
 /// A project without resources carries no folder for them.
 #[test]
 fn no_resources_no_folder() {
@@ -101,18 +125,6 @@ fn no_resources_no_folder() {
     settings.stack.ui = Ui::Clarity;
     let files = generate(&project, &settings).unwrap();
     assert!(!text(&files, "Shop.csproj").contains("Include=\"resources/**\""));
-}
-
-/// A link of a markdown part opens in the browser through the shell; the
-/// Rust stack's shell is generated, and opens only web and mail addresses.
-#[test]
-fn the_rust_shell_opens_links() {
-    let files = files(Backend::Rust, Ui::Webview);
-    // The shell's commands are in the desktop module.
-    let main = text(&files, "src/desktop.rs");
-    assert!(main.contains("fn open_link(address: String) -> std::result::Result<(), String> {"), "{main}");
-    assert!(main.contains("[\"http://\", \"https://\", \"mailto:\"]"), "{main}");
-    assert!(main.contains("            open_link,\n"), "{main}");
 }
 
 /// The one-file page of the C and C++ webview carries its pictures as data

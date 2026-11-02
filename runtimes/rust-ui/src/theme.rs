@@ -227,4 +227,49 @@ impl ThemeLook {
     pub fn style(&self, name: &str) -> LookValues {
         self.look("styles", name)
     }
+
+    /// How a part that is pressed (a button, a toggle) of `kind` looks with
+    /// its style in a state: the part's look, the style over it, and the
+    /// state's own look over both. A style that fills the part keeps its
+    /// colors in a state, so its text stays readable: the state shades the
+    /// style's fill away from its text (a little on hover, more pressed)
+    /// and takes only its border from the state's look.
+    pub fn pressable(&self, kind: &str, style: Option<&str>, state: Option<&str>) -> LookValues {
+        let plain = self.part(kind, None);
+        let style = style.filter(|s| !s.is_empty()).map(|s| self.style(s)).unwrap_or_default();
+        let styled = style.over(&plain);
+        let Some(state) = state else { return styled };
+        let own = self.part_own(kind, Some(state));
+        let Some(fill) = style.background else { return own.over(&styled) };
+        let text = styled.text.unwrap_or_else(|| self.color("text"));
+        let shaded = LookValues { background: Some(self.shade(fill, text, state)), text: Some(text), border: own.border, ..LookValues::default() };
+        shaded.over(&styled)
+    }
+
+    /// `fill` shaded for a state, toward whichever of the theme's text and
+    /// background colors is farther from `text`, so the text only gains
+    /// contrast: a little on hover, more for any other state.
+    fn shade(&self, fill: Color, text: Color, state: &str) -> Color {
+        let amount = if state == "hover" { 0.12 } else { 0.24 };
+        let (dark, light) = (self.color("text"), self.color("background"));
+        let far = |c: Color| (luminance(c) - luminance(text)).abs();
+        let toward = if far(dark) >= far(light) { dark } else { light };
+        let mix = |a: u8, b: u8| (a as f64 + (b as f64 - a as f64) * amount).round() as u8;
+        Color::from_argb(fill.a(), mix(fill.r(), toward.r()), mix(fill.g(), toward.g()), mix(fill.b(), toward.b()))
+    }
+}
+
+/// A color's relative luminance, as WCAG measures it.
+pub fn luminance(color: Color) -> f64 {
+    let channel = |c: u8| {
+        let c = c as f64 / 255.0;
+        if c <= 0.03928 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+    };
+    0.2126 * channel(color.r()) + 0.7152 * channel(color.g()) + 0.0722 * channel(color.b())
+}
+
+/// The contrast between two colors, from 1 (none) to 21 (black on white), as WCAG measures it.
+pub fn contrast(a: Color, b: Color) -> f64 {
+    let (a, b) = (luminance(a), luminance(b));
+    (a.max(b) + 0.05) / (a.min(b) + 0.05)
 }

@@ -191,7 +191,8 @@ pub struct TabButton {
 }
 
 impl TabButton {
-    fn title(&self) -> String {
+    /// What the tab says: its title in the language shown.
+    pub fn title(&self) -> String {
         match &self.title {
             Some(t) if !t.is_empty() => self.shared.part.host.text(Some(t)),
             _ => String::new(),

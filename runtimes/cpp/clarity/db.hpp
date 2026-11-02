@@ -4,7 +4,7 @@
 //
 // A record is a plain struct with its `id`, the `table`, `columns()`,
 // `values()` and `from_values()` of its entity, and, when the entity has
-// them, its `source`, `key`, `pictures()` and data events (`before_save`,
+// them, its `source`, `key`, `pictures()`, `required()` and data events (`before_save`,
 // `after_save`, `before_delete`, `after_delete`), and `cascade` when records
 // refer to it with `cascade`: they are removed first, in the same transaction.
 
@@ -62,7 +62,26 @@ struct FileEntry {
     std::optional<DateTime> modified;
 };
 
+/// A stored field a record needs a value in: its column (a file's content
+/// column) and its label as written, a key as @key or the text itself.
+struct Required {
+    std::string column;
+    std::string label;
+};
+
+/// Refuses a record with these columns and values whose required field is
+/// empty (no value, or empty text; 0 and false are values): the first such
+/// field in the entity's order, with fieldRequired and its slot `field` the
+/// field's label in the person's language (conformance/required.json).
+void check_required(const std::vector<Required>& required, const std::vector<std::string>& columns, const std::vector<SqlValue>& values);
+
 namespace detail {
+
+/// Refuses a record whose required field is empty.
+template <typename R>
+void check_required_of(const R& record) {
+    if constexpr (requires { R::required(); }) check_required(R::required(), R::columns(), record.values());
+}
 
 template <typename R>
 std::string source_of() {
@@ -115,12 +134,15 @@ public:
     template <Record R>
     void save(R& record) {
         if constexpr (!detail::has_events<R>) {
+            detail::check_required_of(record);
             write(record);
         } else {
             int64_t id = record.id;
             try {
                 atomic(detail::source_of<R>(), [&] {
                     if constexpr (requires { record.before_save(*this); }) record.before_save(*this);
+                    // A required field is checked after before save, which may fill it.
+                    detail::check_required_of(record);
                     write(record);
                     if constexpr (requires { record.after_save(*this); }) record.after_save(*this);
                 });

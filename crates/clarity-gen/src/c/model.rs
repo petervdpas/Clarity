@@ -268,6 +268,12 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     if !pictures.is_empty() {
         let _ = write!(source, "static const ClarityPictureColumn {p}_pictures[] = {{{}}};\n\n", pictures.join(", "));
     }
+    // The required fields a save checks, each by its column and its label as written.
+    let required: Vec<String> =
+        crate::required_fields(project, entity).iter().map(|(column, label)| format!("{{{}, {}}}", string(column), string(label))).collect();
+    if !required.is_empty() {
+        let _ = write!(source, "static const ClarityRequired {p}_required[] = {{{}}};\n\n", required.join(", "));
+    }
     let mut values = String::new();
     let mut reads = String::new();
     let mut i = 0;
@@ -327,6 +333,9 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     }
     if !pictures.is_empty() {
         let _ = writeln!(descriptor, "    .pictures = {p}_pictures,\n    .picture_count = {},", pictures.len());
+    }
+    if !required.is_empty() {
+        let _ = writeln!(descriptor, "    .required = {p}_required,\n    .required_count = {},", required.len());
     }
     let _ = writeln!(descriptor, "    .size = sizeof({name}),\n    .id_at = offsetof({name}, id),\n    .values = {p}_values,\n    .from_values = {p}_from_values,");
     for event in &events {

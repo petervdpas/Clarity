@@ -58,7 +58,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn rust_calls_through_the_runtime() {
-    let files = files(API, Backend::Rust, Ui::Webview);
+    let files = files(API, Backend::Rust, Ui::Clarity);
     let code = text(&files, "src/modules/api.rs");
     has(code, "clarity_runtime::http::call(clarity_runtime::http::Method::Post, ");
     has(code, "&String::from(\"https://api.example.com/orders\"), Some((order.summary.clone()).as_str()), &[(\"Authorization\", ");
@@ -68,7 +68,7 @@ fn rust_calls_through_the_runtime() {
     has(code, "reply.status");
     has(text(&files, "src/modules/api.rs"), "clarity_runtime::http::call(clarity_runtime::http::Method::Get, ");
     has(text(&files, "Cargo.toml"), "\"http\"");
-    assert!(!text(&self::files(PLAIN, Backend::Rust, Ui::Webview), "Cargo.toml").contains("\"http\""));
+    assert!(!text(&self::files(PLAIN, Backend::Rust, Ui::Clarity), "Cargo.toml").contains("\"http\""));
 }
 
 #[test]
@@ -125,5 +125,5 @@ fn a_readme_names_libcurl_where_the_build_needs_it() {
         assert!(text(&files(API, backend, Ui::Webview), "README.md").contains("libcurl"), "{backend:?}");
         assert!(!text(&files(PLAIN, backend, Ui::Webview), "README.md").contains("libcurl"), "{backend:?}");
     }
-    assert!(!text(&files(API, Backend::Rust, Ui::Webview), "README.md").contains("libcurl"));
+    assert!(!text(&files(API, Backend::Rust, Ui::Clarity), "README.md").contains("libcurl"));
 }

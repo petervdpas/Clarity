@@ -26,14 +26,14 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn a_list_is_one_text_column_that_starts_empty() {
-    let code = generated(Backend::Rust, Ui::Webview);
+    let code = generated(Backend::Rust, Ui::Clarity);
     has(&code, "\"tags\" TEXT NOT NULL DEFAULT '[]'");
     has(&code, "\"formats\" TEXT NOT NULL DEFAULT '[]'");
 }
 
 #[test]
 fn every_stack_reads_and_saves_a_list_with_its_record() {
-    let rust = generated(Backend::Rust, Ui::Webview);
+    let rust = generated(Backend::Rust, Ui::Clarity);
     has(&rust, "pub tags: Vec<String>,");
     has(&rust, "pub formats: Vec<Format>,");
     has(&rust, "pub plays: Vec<Option<NaiveDate>>,");

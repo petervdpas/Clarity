@@ -3,7 +3,7 @@
 //! dimmed, the dialog's title, and its window in a panel sized to the
 //! dialog, as its own desktop window would be. Its keys are its own: its
 //! shortcuts, Enter for its default button and Escape for its cancel
-//! button; Ctrl+Z and Ctrl+Y take back and do again the dialog's own
+//! button (without one, Escape closes it as its close does); Ctrl+Z and Ctrl+Y take back and do again the dialog's own
 //! edits. In another language its window is made again.
 
 use std::rc::Rc;
@@ -117,6 +117,14 @@ impl Element for DialogOverlay {
             return true;
         }
         let host = self.host.clone();
-        crate::window::undo_key(self, host.as_ref(), key, cx)
+        if crate::window::undo_key(self, host.as_ref(), key, cx) {
+            return true;
+        }
+        // Escape that nothing in it took closes it, as its close does (DESIGN 5.14).
+        if key.key == crate::input::Key::Escape && key.modifiers == crate::input::Modifiers::NONE {
+            cx.close(self.node.id());
+            return true;
+        }
+        false
     }
 }

@@ -23,7 +23,6 @@ pub mod paths;
 pub mod view;
 
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeSet;
 use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -61,34 +60,12 @@ pub struct Running {
     keys: RefCell<Option<PersonKeys>>,
     calling: Cell<bool>,
     apart: Cell<bool>,
-    new_windows: BTreeSet<String>,
-}
-
-/// The targets a click opens in a desktop window of their own (`in new window`), as the model marks them.
-fn new_windows_of(model: &str) -> BTreeSet<String> {
-    fn walk(value: &Value, out: &mut BTreeSet<String>) {
-        match value {
-            Value::Object(map) => {
-                let marked = map.get("newWindow").and_then(Value::as_bool).unwrap_or(false);
-                if let Some(target) = map.get("onClick").and_then(Value::as_str).filter(|_| marked) {
-                    out.insert(target.to_string());
-                }
-                map.values().for_each(|v| walk(v, out));
-            }
-            Value::Array(items) => items.iter().for_each(|v| walk(v, out)),
-            _ => {}
-        }
-    }
-    let mut out = BTreeSet::new();
-    walk(&serde_json::from_str::<Value>(model).unwrap_or_default()["project"], &mut out);
-    out
 }
 
 impl Running {
     pub fn new(program: Arc<dyn Program>, files: AppFiles) -> Rc<Running> {
         Rc::new(Running {
             facts: ModelFacts::of(files.model),
-            new_windows: new_windows_of(files.model),
             program,
             files,
             keys: RefCell::new(None),
@@ -105,11 +82,6 @@ impl Running {
     /// The host opens dialogs, the keys window and new windows in desktop windows of their own.
     pub fn set_apart(&self, apart: bool) {
         self.apart.set(apart);
-    }
-
-    /// Whether a click on `target` opens it in a desktop window of its own.
-    pub fn opens_apart(&self, target: &str) -> bool {
-        self.new_windows.contains(target)
     }
 
     /// The person's keys, as the settings keep them (read once).
@@ -530,12 +502,13 @@ impl WindowStack {
         self.stack.push(Shown { host, parked: None });
     }
 
-    /// Opens a window a window asked for: in a desktop window of its own
-    /// where the host gives them, a dialog over the window, else in place.
-    fn open(&mut self, name: &str, with: Map<String, Value>, from: Option<&Rc<ProgramHost>>, asked: Option<Asked>, cx: &mut Cx) {
+    /// Opens a window a window asked for: a dialog, or one a route marked
+    /// `in new window` opens (`new_window`), in a desktop window of its own
+    /// where the host gives them; a dialog over the window, else in place.
+    fn open(&mut self, name: &str, with: Map<String, Value>, from: Option<&Rc<ProgramHost>>, asked: Option<Asked>, new_window: bool, cx: &mut Cx) {
         let dialog = self.running.facts.is_dialog(name) || asked.is_some();
         let opener = from.or(self.current()).map(|h| h.instance());
-        if self.running.apart.get() && (dialog || self.running.opens_apart(name)) {
+        if self.running.apart.get() && (dialog || new_window) {
             self.aparts.push(Apart::Window(ApartWindow { window: name.to_string(), with, opener: opener.unwrap_or(0), asked, dialog }));
             return;
         }
@@ -605,7 +578,9 @@ impl WindowStack {
                 return;
             }
             if let Some((opener, asked)) = self.opener.take() {
-                let said = effects.into_iter().flat_map(|e| if let Effect::Say(m) = e { m } else { Vec::new() }).collect();
+                // What it said just before (a note its handler said with the close) goes with it to its opener.
+                let mut said = self.notes();
+                said.extend(effects.into_iter().flat_map(|e| if let Effect::Say(m) = e { m } else { Vec::new() }));
                 self.closed = Some(ApartClosed { opener, result, asked, said });
             }
             self.ended = true;
@@ -673,7 +648,8 @@ impl WindowStack {
                         }
                     }
                 }
-                Effect::Open(window, with) => self.open(&window, with, from.as_ref(), None, cx),
+                Effect::Open(window, with) => self.open(&window, with, from.as_ref(), None, false, cx),
+                Effect::OpenNew(window) => self.open(&window, Map::new(), from.as_ref(), None, true, cx),
                 Effect::Close => {
                     let dialog = from.as_ref().and_then(|f| self.dialogs.iter().position(|d| Rc::ptr_eq(&d.host, f)));
                     match dialog {
@@ -690,7 +666,7 @@ impl WindowStack {
                 Effect::Ask(asked) => match &asked.form {
                     AskForm::Window { window, with } => {
                         let what = Asked { handler: asked.handler.clone(), values: asked.values.clone() };
-                        self.open(window, with.clone(), from.as_ref(), Some(what), cx);
+                        self.open(window, with.clone(), from.as_ref(), Some(what), false, cx);
                     }
                     _ => {
                         // A question the app's own start asks has no window to answer it.
@@ -904,6 +880,10 @@ impl Element for WindowStack {
         if self.keys_overlay == Some(overlay) {
             self.keys_overlay = None;
         }
+        // A dialog over the window closed by itself (Escape): it closes as its close does.
+        if let Some(index) = self.dialogs.iter().position(|d| d.overlay == overlay) {
+            self.close_dialog(index, cx);
+        }
     }
 
     /// A long call ended: its bar goes, and its reply is the window's.
@@ -921,13 +901,31 @@ impl Element for WindowStack {
     /// cancel buttons), then Ctrl+Z takes back the last edit of the scope of
     /// the part with the focus, Ctrl+Y or Ctrl+Shift+Z does it again; a part
     /// that takes the key itself (typing not yet an edit) has it first.
+    fn window_key_up(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
+        let Some(index) = self.view_index() else { return false };
+        self.node.children_mut()[index].window_key_up(key, cx)
+    }
+
     fn window_key(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
         let Some(index) = self.view_index() else { return false };
         if self.node.children_mut()[index].window_key(key, cx) {
             return true;
         }
         let host = self.current().cloned();
-        undo_key(self, host.as_ref(), key, cx)
+        if undo_key(self, host.as_ref(), key, cx) {
+            return true;
+        }
+        // A dialog in a desktop window of its own closes on Escape that nothing in it took, as its close does (DESIGN 5.14).
+        if self.dialog && key.key == Key::Escape && key.modifiers == Modifiers::NONE {
+            if self.stack.len() > 1 {
+                self.close_top(cx);
+            } else {
+                self.closing(cx);
+                cx.invalidate();
+            }
+            return true;
+        }
+        false
     }
 }
 

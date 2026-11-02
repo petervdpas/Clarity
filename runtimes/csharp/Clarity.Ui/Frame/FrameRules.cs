@@ -43,6 +43,40 @@ public static class FrameRules
     public static (bool Collapsed, bool Maximized) SidebarNow(SidebarSpec sidebar, bool? collapsed, bool? maximized) =>
         (sidebar.Collapsible && (collapsed ?? sidebar.Collapsed), sidebar.Maximizable && (maximized ?? false));
 
+    /// <summary>
+    /// The access letter of each top item of a menu bar, by its caption as
+    /// shown: the place of its first letter or digit that no item before it
+    /// took, case aside; none for an item without one free. Alt with that
+    /// letter opens the item's menu, as on desktop programs.
+    /// </summary>
+    public static int?[] AccessKeys(IReadOnlyList<string> captions)
+    {
+        var taken = new List<char>();
+        var keys = new int?[captions.Count];
+        for (var i = 0; i < captions.Count; i++)
+        {
+            var caption = captions[i];
+            for (var at = 0; at < caption.Length; at++)
+            {
+                var c = char.ToLowerInvariant(caption[at]);
+                if (!char.IsAsciiLetterOrDigit(c) || taken.Contains(c))
+                    continue;
+                taken.Add(c);
+                keys[i] = at;
+                break;
+            }
+        }
+        return keys;
+    }
+
+    /// <summary>The letter or digit a key writes, for an access letter; none for any other key.</summary>
+    public static char? AccessChar(Key key) => key switch
+    {
+        >= Key.A and <= Key.Z => (char)('a' + (key - Key.A)),
+        >= Key.D0 and <= Key.D9 => (char)('0' + (key - Key.D0)),
+        _ => null,
+    };
+
     /// <summary>Whether a menu item is a line between items.</summary>
     public static bool IsSeparator(CommandSpec item) => item.Text("kind") == "separator";
 

@@ -6,7 +6,7 @@ import { toolsNote } from "./stackTools.ts";
 import type { StackTools } from "@clarity/ui/generated/StackTools.ts";
 
 const all: StackTools[] = [
-  { backend: "rust", ui: "webview", generated: true, ready: true, found: ["cargo 1.96.0"], missing: [], guide: null, web_found: [], web_missing: [], web_installable: false, web_elevated: false },
+  { backend: "rust", ui: "clarity", generated: true, ready: true, found: ["cargo 1.96.0"], missing: [], guide: null, web_found: [], web_missing: [], web_installable: false, web_elevated: false },
   { backend: "csharp", ui: "clarity", generated: true, ready: false, found: [], missing: ["the .NET 10 SDK, from https://dotnet.microsoft.com/download"], guide: "net-on-linux", web_found: [], web_missing: [], web_installable: false, web_elevated: false },
   { backend: "go", ui: "webview", generated: false, ready: false, found: ["go version go1.25.7"], missing: [], guide: null, web_found: [], web_missing: [], web_installable: false, web_elevated: false },
 ];
@@ -15,7 +15,7 @@ const WASM = ".NET's WebAssembly tools, for the web target: dotnet workload inst
 const sdk: StackTools = { backend: "csharp", ui: "clarity", generated: true, ready: true, found: [".NET SDK 10.0.402"], missing: [], guide: null, web_found: [], web_missing: [WASM], web_installable: true, web_elevated: true };
 
 test("a ready stack names its tools", () => {
-  assert.deepEqual(toolsNote(all, "rust", "web", ["desktop"]), { level: "ok", text: "Ready to build: cargo 1.96.0", guide: null, install: null });
+  assert.deepEqual(toolsNote(all, "rust", "clarity", ["desktop"]), { level: "ok", text: "Ready to build: cargo 1.96.0", guide: null, install: null });
 });
 
 test("a stack without its tools says what to install, and that the rest works", () => {
@@ -32,7 +32,7 @@ test("a stack Clarity does not generate yet says so", () => {
 });
 
 test("nothing is said before the tools are known", () => {
-  assert.equal(toolsNote(null, "rust", "web", ["desktop"]), null);
+  assert.equal(toolsNote(null, "rust", "clarity", ["desktop"]), null);
 });
 
 test("the web target of C# says what it needs more, and that Clarity installs it", () => {

@@ -4,6 +4,7 @@
 
 using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Clarity.Runtime;
@@ -104,6 +105,12 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// <summary>Names of a part's own state (an unbound input's text) start so; no name of the window's data does.</summary>
     const string PartState = "#parts.";
 
+    /// <summary>What code sets on a part that an edit compares: the name in an edit, and the field of the part's state.</summary>
+    static readonly (string Field, string Key)[] CodeSet = [("caption", "caption"), ("visible", "visible"), ("enabled", "enabled"), ("readonly", "read_only"), ("error", "error")];
+
+    /// <summary>A custom part's values among the names of a part: <c>board.values.count</c>.</summary>
+    const string ValuesOf = ".values.";
+
     /// <summary>The name the person's settings go by in an edit; no name of the window's data has a #.</summary>
     const string SettingsState = "#settings";
 
@@ -127,6 +134,18 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
             }
             if (own.Count > 0)
                 now[PartState + name] = own;
+            // What code set on the part, each by its own name (conformance/edit-bus.json, states).
+            foreach (var (field, key) in CodeSet)
+            {
+                if (part[key] is { } value)
+                    now[$"{PartState}{name}.{field}"] = value.DeepClone();
+            }
+        }
+        // Each value code set on a custom part, by its own name, with its type so it comes back as it was.
+        foreach (var (name, part) in Snapshot.PartsOf(this))
+        {
+            foreach (var (value, set) in part.Values)
+                now[$"{PartState}{name}{ValuesOf}{value}"] = set is null ? null : JsonSerializer.SerializeToNode(set, typeof(object), Snapshot.Options);
         }
         // A part bound to a setting changes the settings, not the window's data.
         if (AppSettings is { } settings)
@@ -364,14 +383,15 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
             if (changed.Name == SettingsState)
                 settings = value as JsonObject;
             else if (changed.Name.StartsWith(PartState, StringComparison.Ordinal))
-                parts[changed.Name[PartState.Length..]] = value;
+                PutBack(parts, changed.Name[PartState.Length..], value);
             else
                 data[changed.Name] = value;
         }
         applying = true;
         try
         {
-            Snapshot.Apply(this, new JsonObject { ["data"] = data, ["parts"] = parts });
+            Snapshot.Apply(this, new JsonObject { ["data"] = data });
+            ApplyParts(parts);
             if (settings is not null)
                 AppSettings?.Apply(settings);
         }
@@ -381,6 +401,60 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         }
         baseline = DataNow();
         Redraw();
+    }
+
+    /// <summary>One name of a part's state an undo puts back, into <paramref name="parts"/> by part: its own text and tick, a field code set, or a custom part's value.</summary>
+    static void PutBack(JsonObject parts, string name, JsonNode? value)
+    {
+        var dot = name.IndexOf('.');
+        var part = dot < 0 ? name : name[..dot];
+        var into = parts[part] as JsonObject ?? new JsonObject();
+        parts[part] = into;
+        if (dot < 0)
+        {
+            foreach (var (key, own) in value as JsonObject ?? [])
+                into[key] = own?.DeepClone();
+        }
+        else if (name[dot..].StartsWith(ValuesOf, StringComparison.Ordinal))
+        {
+            var values = into["values"] as JsonObject ?? new JsonObject();
+            into["values"] = values;
+            values[name[(dot + ValuesOf.Length)..]] = value;
+        }
+        else
+        {
+            // A field that was not set goes back to the design: ApplyParts reads null so.
+            into[name[(dot + 1)..]] = value;
+        }
+    }
+
+    /// <summary>Gives the parts what an undo put back, only those fields: the rest of each part stays as it is.</summary>
+    void ApplyParts(JsonObject parts)
+    {
+        var all = Snapshot.PartsOf(this).ToDictionary(p => p.Name, p => p.Part);
+        foreach (var (name, node) in parts)
+        {
+            if (!all.TryGetValue(name, out var part) || node is not JsonObject sent)
+                continue;
+            T Get<T>(string key, T design) => sent[key] is { } value ? value.Deserialize<T>(Snapshot.Options) ?? design : design;
+            foreach (var (key, value) in sent)
+            {
+                switch (key)
+                {
+                    case "text": part.Text = value?.GetValue<string>() ?? ""; break;
+                    case "checked": part.IsChecked = value?.GetValue<bool>() ?? false; break;
+                    case "visible": part.IsVisible = Get("visible", true); break;
+                    case "enabled": part.IsEnabled = Get("enabled", true); break;
+                    case "readonly": part.IsReadOnly = Get("readonly", false); break;
+                    case "caption": part.CaptionText = Get("caption", Text.Of("")); break;
+                    case "error": part.ErrorText = Get("error", Text.Plain("")); break;
+                    case "values":
+                        foreach (var (set, was) in value as JsonObject ?? [])
+                            part.SetValue(set, was?.Deserialize<object>(Snapshot.Options));
+                        break;
+                }
+            }
+        }
     }
 
     /// <summary><c>-> undo</c> and <c>-> redo</c>: the last edit of the part that had the focus last.</summary>

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use clarity_project::{out_dir_in, parse, Folders};
 
-const SHOP: &str = "project Shop\n    stack rust webview desktop\n";
+const SHOP: &str = "project Shop\n    stack rust desktop\n";
 
 fn home(name: &str) -> PathBuf {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("folders-{name}"));

@@ -4,7 +4,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { commandAction, commandHandler, eventHandler, fixOf, freePartName, focusOf, handlerName, handlersOf, mergeFocus, wireCommand, wireEvent } from "./codeParts.ts";
+import { commandAction, commandHandler, eventHandler, fixOf, freePartName, focusOf, handlerName, handlersOf, mergeFocus, partGrowsEdit, wireCommand, wireEvent } from "./codeParts.ts";
+import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
 import type { CommandProps } from "@clarity/ui/generated/CommandProps.ts";
 import type { WidgetProps } from "@clarity/ui/generated/WidgetProps.ts";
 
@@ -147,4 +148,18 @@ test("a wired event's handler is named after the part and the event, in camelCas
   assert.equal(eventHandler("save", "click"), "saveClick");
   assert.equal(eventHandler("board", "draw"), "boardDraw");
   assert.equal(eventHandler("Game", "open"), "gameOpen");
+});
+
+// A custom part grows with its window when its declaration says `grows`
+// (DESIGN 5.19): the designer sets it in the module that declares the part.
+test("the designer sets whether a custom part grows in the module that declares it", () => {
+  const files = [
+    { path: "window.clarity", parts: [] },
+    { path: "parts.clarity", parts: [{ name: { name: "Board" }, span: { start: 40 } }] },
+  ] as unknown as SpecFile[];
+  const set = partGrowsEdit(files, "Board", true);
+  assert.equal(set?.file.path, "parts.clarity");
+  assert.deepEqual(set?.edit, { op: "setPartGrows", item: 40, grows: true });
+  assert.deepEqual(partGrowsEdit(files, "Board", false)?.edit, { op: "setPartGrows", item: 40, grows: false });
+  assert.equal(partGrowsEdit(files, "Nowhere", true), null);
 });

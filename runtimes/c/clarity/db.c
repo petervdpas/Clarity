@@ -529,13 +529,40 @@ static bool has_events(const ClarityEntity* entity) {
     return entity->before_save || entity->after_save || entity->before_delete || entity->after_delete;
 }
 
+/// A label as people read it: one written as @key takes the key's value; a plain one is itself.
+static const char* label_text(const char* label) { return label[0] == '@' ? clarity_text_of(label + 1) : label; }
+
+static bool empty_value(const ClarityValue* v) {
+    return v->kind == CLARITY_NULL || (v->kind == CLARITY_TEXT && (!v->text || !v->text[0]));
+}
+
+bool clarity_check_required(const ClarityRequired* required, size_t required_count, const char* const* columns, const ClarityValue* values,
+                            size_t column_count) {
+    for (size_t r = 0; r < required_count; ++r) {
+        for (size_t c = 0; c < column_count; ++c) {
+            if (strcmp(columns[c], required[r].column) != 0 || !empty_value(&values[c])) continue;
+            return clarity_refuse(clarity_text_with(clarity_key_text("fieldRequired"), "field", clarity_slot_text(label_text(required[r].label))));
+        }
+    }
+    return true;
+}
+
+/// Whether the record has a value in each of its entity's required fields; refused when not.
+static bool required_kept(const ClarityEntity* entity, const void* record) {
+    if (!entity->required_count) return true;
+    ClarityValue* values = CLARITY_NEW(ClarityValue, entity->column_count);
+    entity->values(record, values);
+    return clarity_check_required(entity->required, entity->required_count, entity->columns, values, entity->column_count);
+}
+
 bool clarity_save(ClarityDb* db, const ClarityEntity* entity, void* record) {
-    if (!has_events(entity)) return store_record(db, entity, record);
+    if (!has_events(entity)) return required_kept(entity, record) && store_record(db, entity, record);
     int64_t* id = id_of(entity, record);
     int64_t was = *id;
     ClaritySourceDb* s = NULL;
     if (!begin(db, entity->source, &s)) return false;
-    bool ok = (!entity->before_save || entity->before_save(db, record)) && store_record(db, entity, record) &&
+    // A required field is checked after before save, which may fill it.
+    bool ok = (!entity->before_save || entity->before_save(db, record)) && required_kept(entity, record) && store_record(db, entity, record) &&
               (!entity->after_save || entity->after_save(db, record));
     if (end(s, ok)) return true;
     // Nothing was kept, so a new record is still new.

@@ -74,6 +74,36 @@ pub fn replace_decl(source: &str, item: u32, text: &str) -> EditResult<String> {
     Ok(format!("{}{text}{}", &source[..start], &source[end..]))
 }
 
+/// The custom part declared at `item` with its `grows` line (DESIGN 5.19)
+/// when `grows`, without it otherwise; every other line as written.
+pub fn set_part_grows(source: &str, item: u32, grows: bool) -> EditResult<String> {
+    let (start, end) = decl_range(source, item)?;
+    if !source[start..].starts_with("part ") {
+        return fail("there is no custom part at this place; the file may have changed");
+    }
+    let decl = &source[start..end];
+    let lines: Vec<&str> = decl.split_inclusive('\n').collect();
+    if grows && lines.iter().any(|l| l.trim() == "grows") {
+        return Ok(source.to_string());
+    }
+    let mut kept: Vec<String> = lines.iter().filter(|l| l.trim() != "grows").map(|l| l.to_string()).collect();
+    if grows {
+        // Indented as its other lines are, four spaces when it has none.
+        let indent = lines.iter().skip(1).find(|l| !l.trim().is_empty()).map(|l| &l[..l.len() - l.trim_start().len()]).unwrap_or("    ");
+        if let Some(last) = kept.last_mut()
+            && !last.ends_with('\n')
+        {
+            last.push('\n');
+        }
+        kept.push(format!("{indent}grows\n"));
+    }
+    let mut written = kept.concat();
+    if !decl.ends_with('\n') {
+        written.pop();
+    }
+    Ok(format!("{}{written}{}", &source[..start], &source[end..]))
+}
+
 /// Adds `text` as a new declaration at the end of the file.
 pub fn append_decl(source: &str, text: &str) -> EditResult<String> {
     let text = one_decl(text)?;

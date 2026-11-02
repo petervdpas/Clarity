@@ -179,6 +179,22 @@ impl<'a> Painter<'a> {
         chars[..low].iter().collect::<String>().trim_end().to_string() + DOTS
     }
 
+    /// Pixels made elsewhere (a custom part that renders into a texture),
+    /// drawn scaled into `area` with linear sampling: `rgba` holds `height`
+    /// rows of `width` RGBA pixels, unpremultiplied, each row `row_bytes`
+    /// long (a GPU's readback pads rows). Draws nothing when the bytes do not
+    /// hold that many rows, or a row does not hold `width` pixels.
+    pub fn pixels(&self, rgba: &[u8], width: u32, height: u32, row_bytes: usize, area: Rect) {
+        if width == 0 || height == 0 || row_bytes < width as usize * 4 || rgba.len() < row_bytes * height as usize {
+            return;
+        }
+        let info = skia_safe::ImageInfo::new((width as i32, height as i32), skia_safe::ColorType::RGBA8888, skia_safe::AlphaType::Unpremul, None);
+        let data = skia_safe::Data::new_copy(&rgba[..row_bytes * height as usize]);
+        let Some(image) = skia_safe::images::raster_from_data(&info, data, row_bytes) else { return };
+        let sampling = skia_safe::SamplingOptions::new(skia_safe::FilterMode::Linear, skia_safe::MipmapMode::None);
+        self.canvas.draw_image_rect_with_sampling_options(&image, None, area.sk(), sampling, &Paint::default());
+    }
+
     /// Draws only inside `area` until what it gives is dropped.
     pub fn clip(&self, area: Rect) -> Restore<'a> {
         self.canvas.save();

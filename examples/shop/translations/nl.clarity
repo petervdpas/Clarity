@@ -96,6 +96,7 @@ translation nl
     cancel "Annuleren"
     dismiss "Sluiten"
     undoChangedSince "Dit is intussen gewijzigd en kan daarom niet ongedaan worden gemaakt"
+    fieldRequired "{field} is verplicht"
     languagePicker "Taal"
     themePicker "Thema"
     customerTagsLabel "Labels"

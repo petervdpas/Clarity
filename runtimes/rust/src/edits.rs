@@ -1,14 +1,15 @@
 //! The edit bus (DESIGN 5.29): per open window, the record of the person's
 //! edits, kept here in the runtime, not in the screen. Each edit is a message
 //! with the part, its scope (its form or panel, or the part itself), what it
-//! changed (each name of the window's data, or `#parts.<name>` for a part's
-//! own text or tick, with its value before and after) and the database steps
+//! changed (each name of the window's data, `#parts.<name>` for a part's
+//! own text or tick, and the names of what code set on parts, with its value
+//! before and after) and the database steps
 //! its handler made. The screen sends an edit when the person ends one, and
 //! Ctrl+Z or Ctrl+Y as an undo; the runtime takes the steps back or does them
 //! again and answers with the window's state as it was. Every runtime keeps
 //! the record alike (conformance/edit-bus.json).
 
-use crate::ui::{Reply, WindowState};
+use crate::ui::{PartState, Reply, WindowState};
 use crate::{Db, Result};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
@@ -135,10 +136,47 @@ fn buses() -> std::sync::MutexGuard<'static, HashMap<u64, EditBus>> {
     BUSES.get_or_init(Default::default).lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// A part's own text or tick among the data an edit compares: `#parts.<name>`.
+/// A part's own text or tick among the data an edit compares: `#parts.<name>`;
+/// what code set on it, `#parts.<name>.<field>`; a custom part's value,
+/// `#parts.<name>.values.<value>` (conformance/edit-bus.json, `states`).
 const PART_STATE: &str = "#parts.";
 
-/// What an edit of a window compares: its data, and each part's own text and tick.
+/// The part fields code sets that an edit compares, each by its own name.
+const CODE_SET: [&str; 5] = ["caption", "visible", "enabled", "readonly", "error"];
+
+/// A custom part's values among the names of a part: `<name>.values.<value>`.
+const VALUES: &str = ".values.";
+
+/// One field of a part that code set, as the reply carries it; none when it is not set.
+fn code_set(part: &PartState, field: &str) -> Option<Value> {
+    let value = match field {
+        "caption" => part.caption.as_ref().map(serde_json::to_value),
+        "visible" => part.visible.map(serde_json::to_value),
+        "enabled" => part.enabled.map(serde_json::to_value),
+        "readonly" => part.readonly.map(serde_json::to_value),
+        "error" => part.error.as_ref().map(serde_json::to_value),
+        _ => None,
+    };
+    value.and_then(|v| v.ok())
+}
+
+/// Sets one field of a part that code sets from its value in an edit; none clears it.
+fn set_code_set(part: &mut PartState, field: &str, value: Option<&Value>) {
+    fn take<T: serde::de::DeserializeOwned>(v: Option<&Value>) -> Option<T> {
+        v.cloned().and_then(|v| serde_json::from_value(v).ok())
+    }
+    match field {
+        "caption" => part.caption = take(value),
+        "visible" => part.visible = take(value),
+        "enabled" => part.enabled = take(value),
+        "readonly" => part.readonly = take(value),
+        "error" => part.error = take(value),
+        _ => {}
+    }
+}
+
+/// What an edit of a window compares: its data, each part's own text and
+/// tick, what code set on each part and each custom part's values.
 pub fn edit_data(state: &WindowState) -> Map<String, Value> {
     let mut data = state.data.clone();
     for (name, part) in &state.parts {
@@ -152,27 +190,43 @@ pub fn edit_data(state: &WindowState) -> Map<String, Value> {
         if !own.is_empty() {
             data.insert(format!("{PART_STATE}{name}"), Value::Object(own));
         }
+        for field in CODE_SET {
+            if let Some(value) = code_set(part, field) {
+                data.insert(format!("{PART_STATE}{name}.{field}"), value);
+            }
+        }
+        for (value, set) in part.values.iter().flatten() {
+            data.insert(format!("{PART_STATE}{name}{VALUES}{value}"), set.clone());
+        }
     }
     data
 }
 
-/// `state` with `data` as an edit put it back: its data, and each part's own text and tick.
+/// `state` with `data` as an edit put it back: its data, each part's own
+/// text and tick, what code set on each part and each custom part's values.
 pub fn with_edit_data(mut state: WindowState, data: Map<String, Value>) -> WindowState {
     state.data = Map::new();
     for part in state.parts.values_mut() {
         part.text = None;
         part.checked = None;
+        for field in CODE_SET {
+            set_code_set(part, field, None);
+        }
+        part.values = None;
     }
     for (name, value) in data {
-        match name.strip_prefix(PART_STATE) {
-            None => {
-                state.data.insert(name, value);
-            }
-            Some(part) => {
-                let kept = state.parts.entry(part.to_string()).or_default();
-                kept.text = value.get("text").and_then(Value::as_str).map(str::to_string);
-                kept.checked = value.get("checked").and_then(Value::as_bool);
-            }
+        let Some(rest) = name.strip_prefix(PART_STATE) else {
+            state.data.insert(name, value);
+            continue;
+        };
+        if let Some((part, set)) = rest.split_once(VALUES) {
+            state.parts.entry(part.to_string()).or_default().values.get_or_insert_with(Map::new).insert(set.to_string(), value);
+        } else if let Some((part, field)) = rest.split_once('.') {
+            set_code_set(state.parts.entry(part.to_string()).or_default(), field, Some(&value));
+        } else {
+            let kept = state.parts.entry(rest.to_string()).or_default();
+            kept.text = value.get("text").and_then(Value::as_str).map(str::to_string);
+            kept.checked = value.get("checked").and_then(Value::as_bool);
         }
     }
     state

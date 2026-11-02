@@ -2,7 +2,7 @@
 //! panel and a form, a button group, a scroll box, tabs, steps, an
 //! accordion, a splitter and a popover; a separator lines them up. The small
 //! displays show something and take no input: help, badge, progress, busy,
-//! display, icon, image and markdown. Each kind is a module in the folder of
+//! display, icon, image, markdown and text. Each kind is a module in the folder of
 //! this group; KINDS lists the kinds the group draws with the function that
 //! makes each.
 
@@ -22,6 +22,7 @@ pub mod small;
 pub mod splitter;
 pub mod steps;
 pub mod tabs;
+pub mod text;
 
 use super::MakePart;
 
@@ -45,4 +46,5 @@ pub const KINDS: &[(&str, MakePart)] = &[
     ("icon", icon::make),
     ("image", image::make),
     ("markdown", markdown::make),
+    ("text", text::make),
 ];

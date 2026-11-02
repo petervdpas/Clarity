@@ -17,6 +17,13 @@
 
 typedef struct ClarityDb ClarityDb;
 
+/// A stored field a record needs a value in: its column (a file's content
+/// column) and its label as written, a key as @key or the text itself.
+typedef struct {
+    const char* column;
+    const char* label;
+} ClarityRequired;
+
 /// How the runtime reads and writes the records of one entity.
 typedef struct {
     /// The entity's name, as Clarity writes it: `Customer`.
@@ -45,7 +52,18 @@ typedef struct {
     /// Deletes the records that refer to record `id` with `cascade`, each as
     /// any record is deleted; NULL when nothing cascades from the entity.
     bool (*cascade)(ClarityDb* db, int64_t id);
+    /// The required fields a save checks, in the entity's order; NULL when it has none.
+    const ClarityRequired* required;
+    size_t required_count;
 } ClarityEntity;
+
+/// Whether a record with these columns and values has a value in every
+/// required field (no value and empty text are none; 0 and false are values).
+/// False, refused with fieldRequired, at the first empty one in the entity's
+/// order, its slot `field` the field's label in the person's language
+/// (conformance/required.json).
+bool clarity_check_required(const ClarityRequired* required, size_t required_count, const char* const* columns, const ClarityValue* values,
+                            size_t column_count);
 
 /// The database of one data source: its name, its kind and where it is (a
 /// file for SQLite). `env:NAME` takes the location from that environment variable.

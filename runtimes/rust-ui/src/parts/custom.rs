@@ -126,6 +126,29 @@ fn wired(spec: &PartSpec, tell: &str) -> bool {
     wired.iter().any(|w| w.get("tell").and_then(Value::as_str) == Some(tell))
 }
 
+/// The values written on a part's line (`values` in its markup), each
+/// read by its kind as the web screen and C# read them: a number, true or
+/// false, else the text as written.
+fn line_values(spec: &PartSpec) -> Vec<(String, Value)> {
+    let values = match spec.json("values") {
+        Some(Value::Object(map)) => map.clone(),
+        Some(Value::String(text)) => serde_json::from_str::<serde_json::Map<String, Value>>(text).unwrap_or_default(),
+        _ => serde_json::Map::new(),
+    };
+    values
+        .into_iter()
+        .map(|(name, written)| {
+            let text = written.get("value").map(|v| v.as_str().map(str::to_string).unwrap_or_else(|| v.to_string())).unwrap_or_default();
+            let value = match written.get("kind").and_then(Value::as_str) {
+                Some("number" | "integer" | "decimal") => text.parse::<i64>().map(Value::from).or_else(|_| text.parse::<f64>().map(Value::from)).unwrap_or(Value::Null),
+                Some("bool") => Value::Bool(text == "true"),
+                _ => Value::from(text),
+            };
+            (name, value)
+        })
+        .collect()
+}
+
 /// A custom part: what a crate of the program implements. Every method but
 /// `set`, `hear` and `draw` has a default that does nothing.
 pub trait CustomPart: std::any::Any {
@@ -139,6 +162,13 @@ pub trait CustomPart: std::any::Any {
 
     /// Draws itself in `area`, its place in the window.
     fn draw(&self, painter: &Painter, area: Rect);
+
+    /// Its window opened: called once, after the values of its line, what
+    /// code set and what it binds were given; it may start a timer or an
+    /// animation of its own here.
+    fn start(&mut self, cx: &mut CustomCx) {
+        let _ = cx;
+    }
 
     /// Whether it takes the focus: pressed, or reached with Tab.
     fn focusable(&self) -> bool {
@@ -269,9 +299,21 @@ impl CustomPlace {
         if self.inner.is_none() {
             return;
         }
+        // The first time, the values written on its line, before what code set.
+        if !self.started {
+            for (name, value) in line_values(&self.base.spec) {
+                self.with(cx, |part, ccx| part.set(&name, &value, ccx));
+            }
+        }
         let state = self.base.state();
         let values = state.as_ref().and_then(|s| s.values.clone()).unwrap_or_default();
-        let changed: Vec<(String, Value)> = values.iter().filter(|(k, v)| self.shown_values.get(*k) != Some(*v)).map(|(k, v)| (k.clone(), v.clone())).collect();
+        let mut changed: Vec<(String, Value)> = values.iter().filter(|(k, v)| self.shown_values.get(*k) != Some(*v)).map(|(k, v)| (k.clone(), v.clone())).collect();
+        // A value code no longer sets (an undo took it back) goes back to the one on its line.
+        let line = line_values(&self.base.spec);
+        for name in self.shown_values.keys().filter(|k| !values.contains_key(*k)) {
+            let written = line.iter().find(|(n, _)| n == name).map(|(_, v)| v.clone()).unwrap_or(Value::Null);
+            changed.push((name.clone(), written));
+        }
         self.shown_values = values;
         for (name, value) in changed {
             self.with(cx, |part, ccx| part.set(&name, &value, ccx));
@@ -294,7 +336,10 @@ impl CustomPlace {
                 self.with(cx, |part, ccx| part.hear(&hear.hear, &hear.values, ccx));
             }
         }
-        self.started = true;
+        if !self.started {
+            self.started = true;
+            self.with(cx, |part, ccx| part.start(ccx));
+        }
     }
 }
 
@@ -388,5 +433,10 @@ impl Element for CustomPlace {
 impl Part for CustomPlace {
     fn base(&self) -> &PartBase {
         &self.base
+    }
+
+    /// It grows when its declaration says `grows`, which its markup carries.
+    fn grows(&self) -> bool {
+        self.base.spec.flag("grows")
     }
 }

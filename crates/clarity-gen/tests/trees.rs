@@ -25,7 +25,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn the_web_stacks_carry_the_trees_in_their_model() {
-    let rust = generated(Backend::Rust, Ui::Webview);
+    let rust = generated(Backend::Rust, Ui::Clarity);
     has(&rust, "\"kind\":\"tree\"");
     has(&rust, "\"children\":\"children\"");
     has(&rust, "\"kind\":\"treeTable\"");

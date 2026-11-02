@@ -68,7 +68,7 @@ The project file names the themes the application offers; the first is the one i
 
 ```clarity
 project Shop
-    stack rust webview desktop
+    stack rust desktop
     theme Shop Night
 ```
 

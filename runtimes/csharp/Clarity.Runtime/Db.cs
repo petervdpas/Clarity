@@ -317,6 +317,7 @@ public sealed partial class Db : IDisposable
 
     void Write<R>(R record) where R : IRecord<R>
     {
+        Requirements.Check(R.Required, R.ColumnNames, record.ToValues());
         if (recording is null)
         {
             WriteRow(record);

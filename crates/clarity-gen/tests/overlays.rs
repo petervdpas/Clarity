@@ -27,11 +27,11 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn the_web_stacks_close_a_popover_and_disable_an_item_in_the_parts_state() {
-    has(&generated(Backend::Rust, Ui::Webview), "ui.set_visible(\"filters\", false)");
+    has(&generated(Backend::Rust, Ui::Clarity), "ui.set_visible(\"filters\", false)");
     has(&generated(Backend::Go, Ui::Webview), "ui.SetVisible(\"filters\", false)");
     has(&generated(Backend::C, Ui::Webview), "clarity_ui_set_visible(ui, \"filters\", false)");
     has(&generated(Backend::Cpp, Ui::Webview), "ui.set_visible(\"filters\", false)");
-    has(&generated(Backend::Rust, Ui::Webview), "ui.set_enabled(\"pickItem\"");
+    has(&generated(Backend::Rust, Ui::Clarity), "ui.set_enabled(\"pickItem\"");
 }
 
 #[test]

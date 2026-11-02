@@ -10,6 +10,22 @@ fn files(backend: Backend, ui: Ui) -> Vec<OutFile> {
     let mut settings: Settings = starter("Play", "play");
     settings.stack.backend = backend;
     settings.stack.ui = ui;
+    generated_with(settings)
+}
+
+/// The program of `backend` on the shared web screen: Rust's is its web
+/// program, until Clarity.UI draws in the browser (G8d).
+fn web_files(backend: Backend) -> Vec<OutFile> {
+    let mut settings: Settings = starter("Play", "play");
+    settings.stack.backend = backend;
+    settings.stack.ui = clarity_project::usual_ui(backend);
+    if backend == Backend::Rust {
+        settings.stack.targets = vec![clarity_project::Target::Web];
+    }
+    generated_with(settings)
+}
+
+fn generated_with(settings: Settings) -> Vec<OutFile> {
     let mut project = clarity_spec::load_in([("play.clarity", include_str!("../../../conformance/engines/play.clarity"))], [], &clarity_project::source_refs(&settings));
     let bytes = include_bytes!("../../../conformance/engines/screen.wasm").to_vec();
     clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "screen.wasm".into(), bytes }]);
@@ -25,7 +41,7 @@ fn file<'a>(files: &'a [OutFile], path: &str) -> &'a str {
 #[test]
 fn the_web_stacks_carry_the_engine_in_the_model_and_not_on_the_backend() {
     for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
-        let files = files(backend, Ui::Webview);
+        let files = web_files(backend);
         let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
         assert!(!paths.iter().any(|p| p.contains("engines")), "{backend:?} has no backend engine: {paths:?}");
         // The model is a file beside the renderer, or text in the C and C++ sources.
@@ -55,22 +71,10 @@ fn csharp_gives_each_canvas_an_instance_of_its_engine() {
 /// with the tell's values, and a hear comes back with the handler's reply.
 #[test]
 fn the_web_stacks_answer_tells_and_send_hears() {
-    let files = files(Backend::Rust, Ui::Webview);
+    let files = files(Backend::Rust, Ui::Clarity);
     let all: String = files.iter().map(|f| f.text.as_str()).collect();
     assert!(all.contains("(\"Play\", \"finished\")") && all.contains("(\"Play\", \"lapped\")"), "the tells' handlers answer");
     assert!(all.contains("ui.hear(\"sky\", \"start\", vec![to_value(&2"), "a hear goes with the reply");
-}
-
-/// The log of an engine beside the screen goes into the application's log
-/// through the shell; the Rust stack's shell is generated and writes the
-/// line to the standard error, where the backend's engines write.
-#[test]
-fn the_rust_shell_logs_the_engines_lines() {
-    let files = files(Backend::Rust, Ui::Webview);
-    // The shell's commands are in the desktop module.
-    let main = file(&files, "src/desktop.rs");
-    assert!(main.contains("fn log_line(line: String) {\n    eprintln!(\"{line}\");\n}"), "{main}");
-    assert!(main.contains("            log_line,\n"), "{main}");
 }
 
 /// An engine beside the screen written in Clarity (DESIGN 5.12, N5b) is
@@ -92,7 +96,7 @@ fn a_clarity_engine_beside_the_screen_is_carried_compiled() {
         generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"))
     };
     for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
-        let files = generated(backend, Ui::Webview);
+        let files = generated(backend, clarity_project::usual_ui(backend));
         let carried = files.iter().any(|f| f.text.contains("\"screenEngines\":[{\"name\":\"Sky\"") || f.text.contains("\\\"screenEngines\\\":[{\\\"name\\\":\\\"Sky\\\""));
         assert!(carried, "{backend:?} carries the compiled engine in its model");
     }

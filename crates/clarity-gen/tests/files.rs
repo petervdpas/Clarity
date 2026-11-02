@@ -61,7 +61,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn rust_reaches_the_files_of_a_store() {
-    let files = files(Backend::Rust, Ui::Webview);
+    let files = files(Backend::Rust, Ui::Clarity);
     let code = text(&files, "src/modules/catalog.rs");
     has(code, "db.files(\"photos\")?.into_iter().filter(|f| ");
     has(code, ".sort_by(|a, b| b.path.cmp(&a.path).then_with(|| a.name.cmp(&b.name)));");

@@ -199,6 +199,8 @@ export function withProps(props: WidgetProps, changes: Partial<WidgetProps>): Wi
  * something inside it does, so a panel of inputs keeps its height.
  */
 export function widgetGrows(preview: Preview, widget: Widget): boolean {
+  // A custom part grows as its declaration says (`grows`, DESIGN 5.19).
+  if (widget.props.kind === "custom") return widget.props.grows;
   const info = widgetInfo(preview, widget.props.kind);
   if (!info.grows) return false;
   if (info.container === null) return true;

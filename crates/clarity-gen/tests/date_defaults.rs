@@ -46,7 +46,7 @@ fn code(backend: Backend, ui: Ui) -> String {
 #[test]
 fn every_stack_starts_a_new_record_with_its_date_defaults() {
     let written = [
-        (Backend::Rust, Ui::Webview, ["NaiveDate::from_ymd_opt(2026, 10, 20)", "NaiveDate::from_ymd_opt(2026, 10, 20).and_then(|d| d.and_hms_opt(14, 5, 0))"]),
+        (Backend::Rust, Ui::Clarity, ["NaiveDate::from_ymd_opt(2026, 10, 20)", "NaiveDate::from_ymd_opt(2026, 10, 20).and_then(|d| d.and_hms_opt(14, 5, 0))"]),
         (Backend::Go, Ui::Webview, ["&clarity.Date{Year: 2026, Month: 10, Day: 20}", "&clarity.DateTime{Date: clarity.Date{Year: 2026, Month: 10, Day: 20}, Hour: 14, Minute: 5, Second: 0}"]),
         (Backend::C, Ui::Webview, ["(ClarityDate){2026, 10, 20}", "(ClarityDateTime){2026, 10, 20, 14, 5, 0}"]),
         (Backend::Cpp, Ui::Webview, ["clarity::Date{2026, 10, 20}", "clarity::DateTime{clarity::Date{2026, 10, 20}, 14, 5, 0}"]),

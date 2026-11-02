@@ -212,6 +212,22 @@ fn an_overlay_lies_over_everything_and_a_press_outside_closes_it() {
     assert_eq!(2, *closed.borrow());
 }
 
+/// A dropdown's list or a calendar lets a press outside it go on to what is
+/// under once it closed: a click on a button while a list is open presses it.
+#[test]
+fn a_press_outside_a_list_that_lets_it_through_reaches_what_is_under() {
+    let (under_seen, list_seen) = (log(), log());
+    let mut grid = GridPanel::new(1);
+    grid.add(Box::new(Probe::new(&under_seen)), GridItem::new(1, 1, 1, 4, false));
+    let mut screen = Screen::new(Box::new(grid), ThemeLook::clarity(false));
+    screen.resize(400.0, 200.0, 1.0);
+    screen.open(Overlay { through: true, ..Overlay::new(Box::new(Probe::new(&list_seen)), Rect::new(0.0, 0.0, 200.0, 100.0)) });
+    take(&under_seen);
+    screen.click(300.0, 150.0);
+    assert!(screen.overlays().is_empty());
+    assert!(take(&under_seen).contains(&"click".to_string()));
+}
+
 #[test]
 fn a_modal_overlay_keeps_the_pointer_from_what_is_under() {
     let under_seen = log();

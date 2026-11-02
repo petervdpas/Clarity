@@ -26,7 +26,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn the_web_stacks_read_and_set_an_unbound_toggle_as_checked() {
-    has(&generated(Backend::Rust, Ui::Webview), "ui.set_checked(\"rightToggle\", !ui.checked(\"leftToggle\"))");
+    has(&generated(Backend::Rust, Ui::Clarity), "ui.set_checked(\"rightToggle\", !ui.checked(\"leftToggle\"))");
     has(&generated(Backend::Go, Ui::Webview), "ui.SetChecked(\"rightToggle\", !ui.Checked(\"leftToggle\"))");
     has(&generated(Backend::C, Ui::Webview), "clarity_ui_set_checked(ui, \"rightToggle\"");
     has(&generated(Backend::Cpp, Ui::Webview), "ui.set_checked(\"rightToggle\"");

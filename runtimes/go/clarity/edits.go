@@ -258,8 +258,10 @@ func EditsClosed(instance uint64) { buses.Delete(instance) }
 // partState names a part's own text or tick among the data an edit compares.
 const partState = "#parts."
 
-// EditData is what an edit of a window compares: its data, and each part's
-// own text and tick as #parts.<name>.
+// EditData is what an edit of a window compares: its data, each part's own
+// text and tick as #parts.<name>, and what code set on each part as
+// #parts.<name>.caption, .visible, .enabled, .readonly, .error and
+// #parts.<name>.values.<value>, each only when set.
 func EditData(state WindowState) map[string]any {
 	data := make(map[string]any, len(state.Data)+len(state.Parts))
 	for name, value := range state.Data {
@@ -276,17 +278,38 @@ func EditData(state WindowState) map[string]any {
 		if len(own) > 0 {
 			data[partState+name] = own
 		}
+		// What code set on the part, each only when set.
+		set := func(field string, value any) { data[partState+name+"."+field] = copiedValue(value) }
+		if part.Caption != nil {
+			set("caption", *part.Caption)
+		}
+		if part.Visible != nil {
+			set("visible", *part.Visible)
+		}
+		if part.Enabled != nil {
+			set("enabled", *part.Enabled)
+		}
+		if part.Readonly != nil {
+			set("readonly", *part.Readonly)
+		}
+		if part.Error != nil {
+			set("error", *part.Error)
+		}
+		for value, v := range part.Values {
+			set("values."+value, v)
+		}
 	}
 	return data
 }
 
 // WithEditData is state with data as an edit put it back: the window's data,
-// and each part's own text and tick.
+// each part's own text and tick, and what code set on each part.
 func WithEditData(state WindowState, data map[string]any) WindowState {
 	state.Data = map[string]any{}
 	parts := make(map[string]PartState, len(state.Parts))
 	for name, part := range state.Parts {
 		part.Text, part.Checked = nil, nil
+		part.Caption, part.Visible, part.Enabled, part.Readonly, part.Error, part.Values = nil, nil, nil, nil, nil, nil
 		parts[name] = part
 	}
 	for name, value := range data {
@@ -295,7 +318,13 @@ func WithEditData(state WindowState, data map[string]any) WindowState {
 			state.Data[name] = value
 			continue
 		}
+		part, field, isField := strings.Cut(part, ".")
 		kept := parts[part]
+		if isField {
+			setPartField(&kept, field, value)
+			parts[part] = kept
+			continue
+		}
 		if fields, ok := value.(map[string]any); ok {
 			if text, ok := fields["text"].(string); ok {
 				kept.Text = &text
@@ -308,4 +337,46 @@ func WithEditData(state WindowState, data map[string]any) WindowState {
 	}
 	state.Parts = parts
 	return state
+}
+
+// setPartField puts back one field code set on a part, by its name after
+// #parts.<name>.: caption, visible, enabled, readonly, error or values.<value>.
+func setPartField(part *PartState, field string, value any) {
+	flag := func() *bool {
+		b, ok := value.(bool)
+		if !ok {
+			return nil
+		}
+		return &b
+	}
+	text := func() *Text {
+		wire, err := json.Marshal(value)
+		if err != nil {
+			return nil
+		}
+		var t Text
+		if json.Unmarshal(wire, &t) != nil {
+			return nil
+		}
+		return &t
+	}
+	switch field {
+	case "caption":
+		part.Caption = text()
+	case "error":
+		part.Error = text()
+	case "visible":
+		part.Visible = flag()
+	case "enabled":
+		part.Enabled = flag()
+	case "readonly":
+		part.Readonly = flag()
+	default:
+		if name, ok := strings.CutPrefix(field, "values."); ok {
+			if part.Values == nil {
+				part.Values = map[string]any{}
+			}
+			part.Values[name] = copiedValue(value)
+		}
+	}
 }

@@ -62,3 +62,4 @@ translation en
     cliWrongAnswer "{value} does not fit; try again"
     cliNoTerminal "There is nobody to answer: {question}"
     cliChooseNumber "Type a number from 1 to {count}"
+    fieldRequired "{field} is required"

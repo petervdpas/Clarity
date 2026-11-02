@@ -4,9 +4,13 @@
 //! each step the test reads the screen and the database. The same steps run
 //! on every stack: what a person can do is checked the same everywhere.
 //!
+//! On `stack rust desktop` (Clarity.UI) the same steps run in the program
+//! itself, with no display (tests/clarity_live).
+//!
 //! Each test is a whole build, so they are ignored: run one at a time,
 //! `cargo test -p clarity-gen --test everything_live -- --ignored --exact <name>`.
 
+mod clarity_live;
 mod everything_project;
 mod ide_build;
 
@@ -83,7 +87,7 @@ fn go_as_a_person_uses_it() {
 #[test]
 #[ignore = "builds and drives the Rust program; run with --ignored, one at a time"]
 fn rust_as_a_person_uses_it() {
-    runs_as_a_person_uses_it("rust webview web cli");
+    runs_as_a_person_uses_it("rust web cli");
 }
 
 #[test]
@@ -98,3 +102,17 @@ fn cpp_as_a_person_uses_it() {
     runs_as_a_person_uses_it("cpp webview web cli");
 }
 
+
+#[test]
+#[ignore = "builds and drives the Rust program on Clarity.UI; run with --ignored, one at a time"]
+fn rust_clarity_as_a_person_uses_it() {
+    let stack = "rust desktop cli";
+    let (file, project, settings) = everything_project::prepare("everything-live-rust-clarity", stack);
+    let (folder, program) = ide_build::build_for_run(&file, &project, &settings, clarity_project::Target::Desktop);
+    let scratch = file.parent().unwrap().join("scratch");
+    let data = scratch.join("data");
+    let failed = clarity_live::Driver::start(&program, &folder, &data, &scratch).run();
+    println!("{}", if failed.is_empty() { format!("\nall steps passed on {stack}") } else { format!("\n{} failed on {stack}: {}", failed.len(), failed.join("; ")) });
+    assert!(failed.is_empty(), "{} steps failed on {stack}: {}", failed.len(), failed.join("; "));
+    let _ = std::fs::remove_dir_all(file.parent().unwrap());
+}

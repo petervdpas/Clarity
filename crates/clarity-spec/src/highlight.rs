@@ -63,7 +63,7 @@ const KEYWORDS: &[&str] = &[
     // A web API data source: its paging and its OpenAPI description.
     "paging", "offset", "cursor", "next", "items", "link", "openapi", "pick", "schema",
     // Custom parts (DESIGN 5.19).
-    "native", "crate", "go", "nuget", "dll", "binds", "tells", "hears", "preview", "library", "cmake",
+    "native", "crate", "go", "nuget", "dll", "binds", "tells", "hears", "preview", "grows", "library", "cmake",
     // Engines beside the screen and written in Clarity (DESIGN 5.12).
     "record", "tell", "beside", "engines", "compiled", "interpreted", "const",
     // Parts and the frame.

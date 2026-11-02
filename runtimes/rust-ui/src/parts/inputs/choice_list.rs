@@ -114,6 +114,8 @@ pub fn open(cx: &mut Cx, state: SharedList, place: Rect, opener: ElementId) -> E
     let mut overlay = Overlay::new(Box::new(list), place);
     overlay.anchor = Some(opener);
     overlay.opener = Some(opener);
+    // A press outside the list closes it and reaches what it was on.
+    overlay.through = true;
     cx.open(overlay)
 }
 

@@ -854,7 +854,7 @@ fn parse_option(cursor: &mut Cursor, span: Span) -> ParseResult<CommandOption> {
 }
 
 /// `part Arena` with its library, `binds`, properties, `tells`, `hears`,
-/// `size` and `preview` lines (DESIGN 5.19).
+/// `size`, `grows` and `preview` lines (DESIGN 5.19).
 pub(crate) fn parse_part(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<PartDecl> {
     let mut cursor = Cursor::new(node.line);
     cursor.next();
@@ -871,6 +871,7 @@ pub(crate) fn parse_part(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pars
         tells: Vec::new(),
         hears: Vec::new(),
         size: None,
+        grows: false,
         preview: None,
         span: node.span(),
     };
@@ -936,12 +937,19 @@ pub(crate) fn parse_part(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pars
                     let rows = line.expect_number("its rows, as in size 8 x 6")?;
                     part.size = Some((span, rows));
                 }
+                "grows" => {
+                    if part.grows {
+                        return Err(line.error_here("'grows' is written twice"));
+                    }
+                    line.next();
+                    part.grows = true;
+                }
                 "preview" => {
                     line.next();
                     part.preview = Some(line.expect_string("a picture of the resources, as in preview \"arena.png\"")?);
                 }
                 _ => {
-                    let name = line.expect_ident("a property, as in speed: integer, or native, crate, go, nuget, dll, binds, tells, hears, size or preview")?;
+                    let name = line.expect_ident("a property, as in speed: integer, or native, crate, go, nuget, dll, binds, tells, hears, size, grows or preview")?;
                     line.expect(TokenKind::Colon, "':' and a type, as in speed: integer")?;
                     let ty = parse_type_ref(&mut line)?;
                     let mut property = PartProperty { name, ty, default: None, min: None, max: None, span: child.span() };

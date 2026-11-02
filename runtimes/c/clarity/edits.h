@@ -57,9 +57,11 @@ typedef bool (*ClarityTakeSteps)(const int64_t* steps, size_t count, bool back, 
 bool clarity_edits_undo(ClarityEdits* bus, const char* scope, const cJSON* data, bool back, ClarityTakeSteps take, void* context, bool* found,
                         cJSON** out);
 
-/// What an edit of a window compares: its data, and each part's own text
-/// and tick as #parts.<name>.
+/// What an edit of a window compares: its data, each part's own text and
+/// tick as #parts.<name>, and what code set on each part as
+/// #parts.<name>.caption, .visible, .enabled, .readonly, .error and
+/// #parts.<name>.values.<value>, each only when set.
 cJSON* clarity_edit_data(const ClarityWindowState* state);
-/// `state` with `data` as an edit put it back: the window's data, and each
-/// part's own text and tick.
+/// `state` with `data` as an edit put it back: the window's data, each
+/// part's own text and tick, and what code set on each part.
 ClarityWindowState clarity_with_edit_data(const ClarityWindowState* state, const cJSON* data);

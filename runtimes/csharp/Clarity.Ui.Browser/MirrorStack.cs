@@ -143,6 +143,9 @@ public sealed class MirrorStack : Element, IRemote
     /// <summary>The window's own keys: the window on top's (shortcuts, the default and cancel buttons). True when it took the key.</summary>
     public bool KeyPressed(KeyInput key) => View?.KeyPressed(key) ?? false;
 
+    /// <summary>A key let go: the window on top's (Alt for its menu bar).</summary>
+    public bool KeyReleased(KeyInput key) => View?.KeyReleased(key) ?? false;
+
     /// <summary>Time went on: the window on top's info messages go when their time is up.</summary>
     public void Tick() => View?.Tick();
 

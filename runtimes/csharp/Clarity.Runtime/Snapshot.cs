@@ -136,6 +136,10 @@ public static class Snapshot
         throw new SessionException($"the window has no command {command}");
     }
 
+    /// <summary>The window's parts, each by the name its state goes by.</summary>
+    internal static IEnumerable<(string Name, PartState Part)> PartsOf(WindowViewModel window) =>
+        Members(window.GetType()).Where(p => p.PropertyType == typeof(PartState)).Select(p => (p.Name, (PartState)p.GetValue(window)!));
+
     /// <summary>The window's own properties that hold its state.</summary>
     static IEnumerable<PropertyInfo> Members(Type type) =>
         type.GetProperties(BindingFlags.Instance | BindingFlags.Public)

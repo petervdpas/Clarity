@@ -1,6 +1,6 @@
 project Dice
     title "Dice"
-    stack rust webview desktop
+    stack rust desktop
     output "out"
     language "en"
     datasource main sqlite "data/dice.db"

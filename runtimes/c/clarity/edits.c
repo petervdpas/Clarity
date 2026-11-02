@@ -233,13 +233,44 @@ cJSON* clarity_edit_data(const ClarityWindowState* state) {
     cJSON* data = state->data ? cJSON_Duplicate(state->data, true) : cJSON_CreateObject();
     for (size_t i = 0; i < state->part_count; ++i) {
         const ClarityPart* part = &state->parts[i];
-        if (!part->text && !part->has_checked) continue;
-        cJSON* own = cJSON_CreateObject();
-        if (part->text) cJSON_AddStringToObject(own, "text", part->text);
-        if (part->has_checked) cJSON_AddBoolToObject(own, "checked", part->checked);
-        cJSON_AddItemToObject(data, clarity_format("%s%s", part_state, part->name), own);
+        if (part->text || part->has_checked) {
+            cJSON* own = cJSON_CreateObject();
+            if (part->text) cJSON_AddStringToObject(own, "text", part->text);
+            if (part->has_checked) cJSON_AddBoolToObject(own, "checked", part->checked);
+            cJSON_AddItemToObject(data, clarity_format("%s%s", part_state, part->name), own);
+        }
+        // What code set on the part, each only when set.
+        if (part->caption) cJSON_AddItemToObject(data, clarity_format("%s%s.caption", part_state, part->name), clarity_text_json(part->caption));
+        if (part->has_visible) cJSON_AddItemToObject(data, clarity_format("%s%s.visible", part_state, part->name), cJSON_CreateBool(part->visible));
+        if (part->has_enabled) cJSON_AddItemToObject(data, clarity_format("%s%s.enabled", part_state, part->name), cJSON_CreateBool(part->enabled));
+        if (part->has_readonly) cJSON_AddItemToObject(data, clarity_format("%s%s.readonly", part_state, part->name), cJSON_CreateBool(part->readonly));
+        if (part->error) cJSON_AddItemToObject(data, clarity_format("%s%s.error", part_state, part->name), clarity_text_json(part->error));
+        const cJSON* value;
+        cJSON_ArrayForEach(value, part->values) {
+            cJSON_AddItemToObject(data, clarity_format("%s%s.values.%s", part_state, part->name, value->string), cJSON_Duplicate(value, true));
+        }
     }
     return data;
+}
+
+/// Puts back one field code set on a part, by its name after
+/// #parts.<name>.: caption, visible, enabled, readonly, error or values.<value>.
+static void set_part_field(ClarityPart* part, const char* field, const cJSON* value) {
+    ClarityText* text = NULL;
+    if (strcmp(field, "caption") == 0) {
+        if (clarity_text_from_json(value, &text)) part->caption = text;
+    } else if (strcmp(field, "error") == 0) {
+        if (clarity_text_from_json(value, &text)) part->error = text;
+    } else if (strcmp(field, "visible") == 0) {
+        if (cJSON_IsBool(value)) part->has_visible = true, part->visible = cJSON_IsTrue(value);
+    } else if (strcmp(field, "enabled") == 0) {
+        if (cJSON_IsBool(value)) part->has_enabled = true, part->enabled = cJSON_IsTrue(value);
+    } else if (strcmp(field, "readonly") == 0) {
+        if (cJSON_IsBool(value)) part->has_readonly = true, part->readonly = cJSON_IsTrue(value);
+    } else if (strncmp(field, "values.", 7) == 0) {
+        if (!part->values) part->values = cJSON_CreateObject();
+        cJSON_AddItemToObject(part->values, field + 7, cJSON_Duplicate(value, true));
+    }
 }
 
 ClarityWindowState clarity_with_edit_data(const ClarityWindowState* state, const cJSON* data) {
@@ -251,6 +282,9 @@ ClarityWindowState clarity_with_edit_data(const ClarityWindowState* state, const
         out.parts[i] = state->parts[i];
         out.parts[i].text = NULL;
         out.parts[i].has_checked = out.parts[i].checked = false;
+        out.parts[i].caption = out.parts[i].error = NULL;
+        out.parts[i].has_visible = out.parts[i].has_enabled = out.parts[i].has_readonly = false;
+        out.parts[i].values = NULL;
     }
     const cJSON* item;
     cJSON_ArrayForEach(item, data) {
@@ -259,9 +293,16 @@ ClarityWindowState clarity_with_edit_data(const ClarityWindowState* state, const
             continue;
         }
         const char* name = item->string + sizeof part_state - 1;
+        // A field code set on the part follows its name: #parts.<name>.<field>.
+        const char* field = strchr(name, '.');
+        if (field) name = clarity_copy_n(name, (size_t)(field - name)), ++field;
         size_t at = 0;
         while (at < out.part_count && strcmp(out.parts[at].name, name) != 0) ++at;
         if (at == out.part_count) out.parts[out.part_count++] = (ClarityPart){.name = clarity_copy(name)};
+        if (field) {
+            set_part_field(&out.parts[at], field, item);
+            continue;
+        }
         const cJSON* text = cJSON_GetObjectItemCaseSensitive(item, "text");
         const cJSON* checked = cJSON_GetObjectItemCaseSensitive(item, "checked");
         if (cJSON_IsString(text)) out.parts[at].text = clarity_copy(text->valuestring);

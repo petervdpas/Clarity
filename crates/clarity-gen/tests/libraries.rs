@@ -40,7 +40,7 @@ fn line(backend: Backend) -> &'static str {
 fn settings(backend: Backend) -> clarity_project::Settings {
     let stack = match backend {
         Backend::Csharp => "csharp desktop",
-        Backend::Rust => "rust webview desktop",
+        Backend::Rust => "rust desktop",
         Backend::Go => "go webview desktop",
         Backend::C => "c webview desktop",
         Backend::Cpp => "cpp webview desktop",

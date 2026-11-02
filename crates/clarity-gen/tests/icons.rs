@@ -33,7 +33,7 @@ fn the_web_stacks_model_carries_only_the_icons_the_project_uses() {
     let unused = clarity_spec::icons::path("zap").unwrap();
     for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
         // C keeps the model as pieces of 2000 bytes, which may cut a path; joined, it reads whole.
-        let code = all(&files(backend, Ui::Webview)).replace("\",\n    \"", "");
+        let code = all(&files(backend, clarity_project::usual_ui(backend))).replace("\",\n    \"", "");
         assert!(code.contains(check), "{backend:?} carries the check icon");
         assert!(!code.contains(unused), "{backend:?} carries no icon it does not use");
     }
@@ -41,7 +41,7 @@ fn the_web_stacks_model_carries_only_the_icons_the_project_uses() {
 
 #[test]
 fn an_application_with_icons_carries_lucides_license() {
-    for (backend, ui) in [(Backend::Rust, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Clarity), (Backend::Csharp, Ui::Clarity)] {
         let files = files(backend, ui);
         let notices = files.iter().find(|f| f.path == "THIRD_PARTY_NOTICES.md").expect("the notices are written");
         assert!(notices.text.contains("ISC License") && notices.text.contains("Lucide"), "{}", notices.text);

@@ -224,7 +224,7 @@ fn generated(backend: clarity_project::Backend, ui: clarity_project::Ui) -> Stri
 fn every_stack_finds_by_words() {
     use clarity_project::{Backend, Ui};
     for (backend, ui, wanted) in [
-        (Backend::Rust, Ui::Webview, r#"Cond::matches("album", "id", &["title", "tags"], &"#),
+        (Backend::Rust, Ui::Clarity, r#"Cond::matches("album", "id", &["title", "tags"], &"#),
         (Backend::Go, Ui::Webview, r#"clarity.Matches("album", "id", []string{"title", "tags"}, "#),
         (Backend::C, Ui::Webview, r#"clarity_matches("album", "id", 2, (const char*[]){"title", "tags"}, "#),
         (Backend::Cpp, Ui::Webview, r#"clarity::Cond::matches("album", "id", {"title", "tags"}, "#),

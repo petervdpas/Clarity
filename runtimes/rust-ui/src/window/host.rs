@@ -28,6 +28,9 @@ pub enum Effect {
     Say(Vec<Message>),
     /// A window to open in place, with its values.
     Open(String, Map<String, Value>),
+    /// A window a route marked `in new window` opens: in a desktop window of
+    /// its own where the host gives them, else in place.
+    OpenNew(String),
     /// The window closes.
     Close,
     /// Text to put on the clipboard.
@@ -243,6 +246,21 @@ impl ProgramHost {
         }
     }
 
+    /// Keeps the settings the window holds over what the program kept (the
+    /// person's keys among them), as the web screen keeps them; says why when it cannot.
+    fn keep_settings(&self) {
+        let Some(Value::Object(now)) = self.state.borrow().data.get("settings").cloned() else { return };
+        let mut now = now;
+        // The settings record's own number is no setting.
+        now.remove("id");
+        let mut kept = self.program.read_settings();
+        kept.extend(now);
+        if let Err(text) = self.program.keep_settings(kept) {
+            self.effects.borrow_mut().push(Effect::Say(vec![Message { level: Level::Error, text }]));
+            self.changed();
+        }
+    }
+
     /// Sends the person's edit that waits, with the handler of its change when it has one; true when nothing refused.
     fn send_edit(&self, pending: Pending, handler: Option<String>) -> bool {
         let readonly = self.read_only(&pending.part);
@@ -309,6 +327,9 @@ impl PartHost for ProgramHost {
         paths::write(&mut self.state.borrow_mut().data, path, value);
         self.changed();
         self.edit_of(part);
+        if path.starts_with("settings.") {
+            self.keep_settings();
+        }
     }
 
     fn edited(&self, part: &str) {
@@ -332,7 +353,7 @@ impl PartHost for ProgramHost {
             return false;
         }
         // Clarity's own targets: the keys window, ending the program, closing the window.
-        if call.args.is_empty() && call.event == "click" {
+        if call.args.is_empty() && matches!(call.event.as_str(), "click" | crate::parts::NEW_WINDOW_CLICK) {
             let own = match call.handler.as_str() {
                 "keys" => Some(Effect::Keys),
                 "quit" => Some(Effect::Quit),
@@ -359,10 +380,16 @@ impl PartHost for ProgramHost {
                 return true;
             }
         }
+        // A click that names a popover of this window opens it (C#'s `Show_<popover>`).
+        if call.args.is_empty() && self.specs.get(&call.handler).is_some_and(|spec| spec.kind == "popover") {
+            self.change_state(&call.handler, &mut |s| s.visible = Some(true));
+            return true;
+        }
         // A click that names a window opens it.
         if call.args.is_empty() && self.files.window(&call.handler).is_some() {
             self.flush();
-            self.effects.borrow_mut().push(Effect::Open(call.handler.clone(), Map::new()));
+            let open = if call.event == crate::parts::NEW_WINDOW_CLICK { Effect::OpenNew(call.handler.clone()) } else { Effect::Open(call.handler.clone(), Map::new()) };
+            self.effects.borrow_mut().push(open);
             self.changed();
             return true;
         }
@@ -390,8 +417,11 @@ impl PartHost for ProgramHost {
             return self.answered(self.program.edit_event(state, edit));
         }
         self.flush();
-        // A program that watches its long calls runs the handler off the screen's thread.
-        if self.long() {
+        // A program that watches its long calls runs a click's handler off
+        // the screen's thread. Every other event runs in place: a part may
+        // wait for its answer (a wizard's Next refused), and a timer's tick
+        // run apart would bring back a window older than what was typed since.
+        if self.long() && call.event == "click" {
             self.effects.borrow_mut().push(Effect::Call(Call::Dispatch(call.written())));
             self.changed();
             return true;
@@ -408,6 +438,10 @@ impl PartHost for ProgramHost {
                 None => w.to_string(),
             },
         }
+    }
+
+    fn resource(&self, name: &str) -> Option<Vec<u8>> {
+        self.files.resource(name).map(<[u8]>::to_vec)
     }
 
     fn icon_path(&self, name: &str) -> Option<String> {
@@ -432,7 +466,15 @@ impl PartHost for ProgramHost {
     /// The field's facts as the generated program carries them, else as its model says.
     fn field(&self, path: &str) -> Option<FieldFacts> {
         let window = self.window();
-        self.program.facts().field(&window, path).map(crate::facts::from_program).or_else(|| self.facts.field(&window, path))
+        let model = self.facts.field(&window, path);
+        match self.program.facts().field(&window, path).map(crate::facts::from_program) {
+            // The program's facts carry no help; the model's do.
+            Some(mut facts) => {
+                facts.help = model.and_then(|m| m.help);
+                Some(facts)
+            }
+            None => model,
+        }
     }
 
     fn formats(&self) -> Formats {
@@ -447,9 +489,15 @@ impl PartHost for ProgramHost {
         let window = self.window();
         let Some((_, field)) = self.facts.field_at(&window, path) else { return Vec::new() };
         let offers = |offers: Vec<crate::choices::Offer>| offers.into_iter().map(|o| Choice { value: Value::from(o.name), label: o.label, cells: None }).collect();
-        match field.kind.as_str() {
+        // A field of an enum, or a list of an enum's values, offers the enum's values.
+        let enum_name = match field.kind.as_str() {
+            "enum" => field.names.as_deref(),
+            "values" => field.item.as_deref().filter(|item| self.facts.is_enum(item)),
+            _ => None,
+        };
+        match if enum_name.is_some() { "enum" } else { field.kind.as_str() } {
             "enum" => {
-                let Some(name) = field.names.as_deref() else { return Vec::new() };
+                let Some(name) = enum_name else { return Vec::new() };
                 let labelled = self.facts.enum_choices(name);
                 if !labelled.is_empty() {
                     return labelled;

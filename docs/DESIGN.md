@@ -54,7 +54,7 @@ project Shop
 
 | Backend | Desktop shell (web UI) | Web server |
 |---|---|---|
-| Rust | Tauri | an HTTP server in Rust |
+| Rust | Clarity.UI's own window (winit, glutin and Skia; Tauri removed 2026-11-02) | an HTTP server in Rust, serving the web renderer until Clarity.UI draws in the browser (G8d) |
 | Go | Wails | net/http |
 | C# | Clarity.UI's own window (Silk.NET and Skia) | its own HTTP server, the windows drawn in the page by Clarity.UI (7.6) |
 | C, C++ | the webview C library | a small embedded HTTP server |
@@ -62,7 +62,7 @@ project Shop
 **UI.** The UI is either the web renderer or a native toolkit:
 
 - **Web renderer.** One frontend runtime, shared by every backend and both targets: HTML and JavaScript in a webview on the desktop and in a browser on the web. It is the renderer the designer's preview already uses, so the preview and the real application cannot drift apart. Its windows travel as data today; section 7.8 (G6) makes them generated code, as on C#, on a parts package the preview shares. It is built and tested once, so a project does not choose a frontend framework: five backends need one frontend, not five times three. Svelte, Vue or React return only if hand-extending the frontend in that framework becomes a real need.
-- **Clarity.UI.** Clarity's own UI framework, which draws its windows itself with Skia, one version per language (section 7.9). C# has it now, on the desktop and in the browser through WebAssembly; Rust, Go, C and C++ follow. It replaces the native toolkits once planned per backend (Avalonia for C#, removed 2026-11-02; wxWidgets for C++, section 7.7).
+- **Clarity.UI.** Clarity's own UI framework, which draws its windows itself with Skia, one version per language (section 7.9). C# has it now, on the desktop and in the browser through WebAssembly; Rust has it on the desktop (G8); Go, C and C++ follow. It replaces the native toolkits once planned per backend (Avalonia for C#, removed 2026-11-02; wxWidgets for C++, section 7.7), and the webview desktop of a language once its Clarity.UI is there (Rust's Tauri, removed 2026-11-02): a desktop program is nothing web.
 
 The window model maps onto Clarity.UI without loss, because it does not depend on a toolkit. On C#:
 
@@ -102,7 +102,7 @@ examples/
 
 ```clarity
 project Shop
-    stack rust webview desktop
+    stack rust desktop
     output "out"
     datasource main sqlite "data/shop.db"
     datasource payments rest "https://api.example.com/v2"
@@ -117,7 +117,7 @@ A project declares where its data lives. The project file lists one or more data
 
 ```clarity
 project Shop
-    stack rust webview desktop
+    stack rust desktop
     // sqlite, postgres, mysql, mssql or rest; secrets only as env: or setting: references
     datasource main postgres "env:SHOP_DB_URL"
     datasource payments rest "https://api.example.com/v2"
@@ -244,8 +244,8 @@ theme Shop
 
 **Every stack, in its own idiom.** All of this is the transpiler's job: the project says what, and each stack gets it the way a developer of that stack would write it. There are two renderers, and each feature is done only when both have it:
 
-- **The web renderer**, for Rust with Tauri, Go with Wails, C and C++ with webview, and their web target.
-- **Clarity.UI**, for C# (section 7.9): on the desktop, and in the browser through WebAssembly.
+- **The web renderer**, for Go with Wails, C and C++ with webview, their web target, and Rust's web target until G8d.
+- **Clarity.UI**, for C# (section 7.9): on the desktop, and in the browser through WebAssembly; and for Rust on the desktop.
 
 | | Web renderer | C# with Clarity.UI |
 |---|---|---|
@@ -1228,6 +1228,7 @@ page Game: window
 - **`tells`** are the part's own events with typed values: a handler is wired to one (`on scored: arenaScored`) and receives them as its parameters, as with an engine's tells.
 - **`hears`** are commands code gives the part: `arena.restart(2)` in a handler, carried to the part, which runs it.
 - **`size`** is the span and rows the Parts palette drops it with.
+- **`grows`** (decided 2026-11-02) is an option of the part, not of each place: the part takes the height its window has left, as a table or a canvas does; without it the part keeps its rows. The project marks each placed part (`grows` in its props, never written back), the window's markup carries it (`<Custom ... grows="true">`), every Clarity.UI lays it out by it (`conformance/grid-layout.json`, its `made` cases), and the designer sets it in the part's view and the properties panel, which add or take away the declaration's `grows` line (`setPartGrows`).
 - A part is placed by its name, written as declared (`Arena ...`), so it never clashes with a built-in keyword, which is always lower case.
 
 **The part's interface, in its language.** Clarity writes one file of the part's folder from the declaration, and writes it again whenever the declaration changes; the part implements what it asks, and one that no longer fits the declaration fails its build:
@@ -1646,7 +1647,7 @@ A stack is a backend language, a desktop shell (determined by the backend), a fr
 
 | Backend | Desktop shell |
 |---|---|
-| Rust | Tauri |
+| Rust | Clarity.UI, Clarity's own UI drawn with Skia (section 7.9); Tauri with the web renderer until 2026-11-02 |
 | Go | Wails |
 | C# | Clarity.UI, Clarity's own UI drawn with Skia (section 7.9), or WebView2 / Photino with the web renderer |
 | C++ | webview (webview/webview), or wxWidgets, its native toolkit (section 7.7) |
@@ -1906,12 +1907,18 @@ Every library in this table is asked about before a stack adds it, as skia-safe,
 - G7e, **checks**: the every-part project and the examples on the C# version, desktop and web.
 - Then the same for Rust, Go, C and C++.
 
-**Slices, Rust (G8, started 2026-11-02).** The Rust version is the crate `clarity-ui` in `runtimes/rust-ui`, released on its own like `clarity-runtime`. It follows the C# version module by module (C# is the reference now, as Avalonia was for C#) and passes the same conformance cases. It draws with skia-safe; the system's window comes from winit, OpenGL from glutin, the clipboard from arboard, sound from rodio, SVG pictures from resvg (with usvg and tiny-skia; Skia's own SVG module has no prebuilt binaries in this feature set on every system), drawn into a bitmap at the size they show (the user's choice, 2026-11-02); the system's file pickers are written in the crate (the portal on Linux, Win32, macOS), as the C# version writes them. `stack rust desktop` is Clarity.UI; `stack rust webview desktop` keeps the shared screen until the Rust version does all of it.
+**Slices, Rust (G8, started 2026-11-02).** The Rust version is the crate `clarity-ui` in `runtimes/rust-ui`, released on its own like `clarity-runtime`. It follows the C# version module by module (C# is the reference now, as Avalonia was for C#) and passes the same conformance cases. It draws with skia-safe; the system's window comes from winit, OpenGL from glutin, the clipboard from arboard, sound from rodio, SVG pictures from resvg (with usvg and tiny-skia; Skia's own SVG module has no prebuilt binaries in this feature set on every system), drawn into a bitmap at the size they show (the user's choice, 2026-11-02); the system's file pickers are written in the crate (the portal on Linux, Win32, macOS), as the C# version writes them. `stack rust desktop` is Clarity.UI; `stack rust webview desktop` kept the shared screen until the Rust version did all of it, and is gone since (G8c fixes).
 
-- **The window model stays the runtime's.** What a generated Rust program answers the webview today (open a window, run a handler, an edit, close, return to, an answer, a reference's options, a field's values, a picture) becomes a trait of `clarity-runtime`, `Program`, which the generated code implements once. The Tauri commands call it, and Clarity.UI calls it in the program's own process, with no webview and no JSON between them. The state of a window is the runtime's `WindowState`, its replies `Reply`; undo stays the runtime's record.
+- **The window model stays the runtime's.** What a generated Rust program answers the webview today (open a window, run a handler, an edit, close, return to, an answer, a reference's options, a field's values, a picture) becomes a trait of `clarity-runtime`, `Program`, which the generated code implements once. The web server's commands call it, and Clarity.UI calls it in the program's own process, with no webview and no JSON between them. The state of a window is the runtime's `WindowState`, its replies `Reply`; undo stays the runtime's record.
 - G8a, **the base**: the crate with the drawing core (painter, fonts with Inter carried, the theme's look from the same resolved theme JSON as C#, the grid from `conformance/grid-layout.json`, elements, the screen with the pointer, keys, focus, overlays and the frame clock, shortcut keys), the `.cxaml` reader, the part contract (`PartHost`, parts found by their kind, a part that is missing says so in its place), the first parts (label, heading, button, text box, check box), tests on Skia's raster surface, and the desktop host on winit and glutin. Beside it: the `Program` trait in the runtime, and the generator writing a `stack rust desktop` project on Clarity.UI (windows and app frames as `.cxaml`, themes, the program starting `clarity_ui::desktop`).
 - G8b, **every part and the window**: the rest of the catalog, the frame's regions, dialogs, questions, the keys window, the long-call bar, the unconnected window, sound, file pickers, custom parts as a `CustomPart` trait (above). Done 2026-11-02 (five agents and a finishing pass): every kind of the catalog, the frame, dialogs in desktop windows of their own, questions, the keys window, the long-call bar, the unconnected window, file pickers (the Linux portal over D-Bus written in the crate, osascript on macOS, COM on Windows, not yet compiled there), sound through rodio, the timer, IME, custom parts as a crate with a generated trait, SVG through resvg, field facts generated per field (`src/facts.rs`). clarity-ui 523 tests, the runtime, generator and project 649, all passing; the todo copy on `stack rust desktop` runs live under Xvfb (add, edit a cell, Ctrl+Z, Users and back). Still open: rows and markdown scroll on their own rather than through the shared scroll view; a generated project has no `.cargo/config.toml` for building on the repository's crates (the README gives the lines); the Windows file dialog never compiled; sound not heard live.
-- G8c, **the examples live**: the Rust examples on Clarity.UI, under a virtual display.
+- G8c, **the examples live**: the Rust examples on Clarity.UI, under a virtual display. Done 2026-11-02 (three agents: the every-part project, shop, dice), each a copy switched to `stack rust desktop`, used as a person uses it under Xvfb with screenshots looked at:
+  - **Building on the repository's crates**: the environment variable `CLARITY_RUNTIME`, set while Clarity generates, names the Rust runtime's folder (`<Clarity>/runtimes/rust`, as it names `runtimes/csharp` for C#); the generator then writes `.cargo/config.toml` patching clarity-runtime, and clarity-ui from beside it, onto the repository (only the crates the program uses: cargo warns of an unused patch). A plain cargo file in the project, visible and removable, rather than a hidden switch in the build; the README and the manual say so.
+  - **`CLARITY_DATA`** on the Rust runtime too (`clarity_runtime::data_folder`): each SQLite database opens in that folder under its own file name.
+  - **Driven without a display** (1.6): `CLARITY_HEADLESS` makes `clarity_ui::desktop::run` draw on Skia's raster surface in the program's own process and take steps as JSON lines on standard input (click a part or a button by its text, keys, typed text, drags, the wheel, a file for the next picker, `read` of the windows, data, parts, rows and buttons, `shot`). `everything_live.rs` drives the every-part project through every step of `drive.mjs` that applies (`rust_clarity_as_a_person_uses_it`, 42 of 42). Not driven: that a window is drawn from markup (always so on Clarity.UI), the browser's console; a date is typed in the person's format; dialogs show over the window in the one screen rather than in desktop windows of their own.
+  - Fixed on the way, each with a test: resources carried in the program (`AppFiles.resources`: images, markdown and sounds by name); the `text` part; icons on buttons and toggles; split buttons and their menus; a part's own context menu on a right press (C# Clarity.UI lacks it too); a popover opened by a click route and placed by the part it is for; a help part showing its field's help; a part's designed tooltip; an enum list offering its values; a press outside a dropdown's list or a calendar reaching what is under; a radio label's last letter; only the route marked `in new window` opening a window apart (a per-name set opened every route to that window apart); a note said just before a window of its own closes shows in its opener; settings bound by parts are kept; a refused undo in English when the project has no text for it (`Text::keyed`); a wizard's refusal heard with watched long calls, and only clicks run off the screen's thread (a timer's tick run apart brought back an older window); custom parts get the values on their line and `start`, and `Painter::pixels` with Skia re-exported (the dice part renders with Bevy into a texture); the system's dark on X11 read as C# reads it (`GTK_THEME`, the portal, gsettings); secrets in memory for a driven run.
+  - Still open: the first click after a modal dialog of its own closes is sometimes lost under Xvfb (the desktop host's pointer place; not reproduced on the raster screen); following the system's dark while running on X11 (read at start only); sound not heard and the keys window not checked live; a save that stores a record without its required fields (the runtime, as on C#).
+- G8c fixes, **Rust's webview desktop removed** (2026-11-02, the user: a desktop program is nothing web), as Avalonia was from C#: `stack rust desktop` is the only Rust desktop, drawn by Clarity.UI; `stack rust webview desktop` is refused with the line to write instead, and Rust offers no other UI in the IDE's stack choice; the generator writes no Tauri program (no Tauri crates, `tauri.conf.json`, `build.rs`, icons or desktop commands, nor the webview's native part host for Rust parts), and the tools check asks no WebKitGTK for Rust. `stack rust web` stays: a program of its own serving the web renderer until G8d; beside the desktop program (`stack rust desktop web`) it is refused until then. The dice and shop examples run on `stack rust desktop`. A program with custom parts builds its dependencies optimized in a debug build (`[profile.dev.package."*"] opt-level = 3` in its Cargo.toml), so a part with a game engine (dice's Bevy) runs at speed under Run while the program's own code stays quick to build.
 - G8d, **the web target**: decided later, between Emscripten (Skia's Rust bindings build for the browser only through it, a tool to ask about first) and CanvasKit called through `web-sys` (no new compiler, the drawing goes through a JavaScript bridge).
 
 ## 8. The designer

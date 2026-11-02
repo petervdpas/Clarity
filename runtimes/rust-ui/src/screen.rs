@@ -566,7 +566,14 @@ impl Screen {
         let at = at?;
         let tree = self.overlays.iter().rev().map(|o| o.content.as_ref()).find(|c| element::find(*c, at).is_some()).unwrap_or(self.root.as_ref());
         let ids = element::chain(tree, at)?;
-        ids.iter().rev().filter_map(|id| element::find(tree, *id)).find_map(|e| e.tooltip_at(x, y).filter(|t| !t.is_empty()))
+        ids.iter().rev().filter_map(|id| element::find(tree, *id)).find_map(|e| e.tooltip_at(x, y).or_else(|| Self::designed_tip(e)).filter(|t| !t.is_empty()))
+    }
+
+    /// The tooltip a part is designed with (`tooltip "@saveTooltip"`), in the person's language; none for none.
+    fn designed_tip(e: &dyn Element) -> Option<String> {
+        let base = e.as_part()?.base();
+        let written = base.spec.text("tooltip").filter(|t| !t.is_empty())?;
+        Some(base.host.text(Some(written)))
     }
 
     /// The pointer rests on `text` from now (none: on nothing that says something).
@@ -669,18 +676,26 @@ impl Screen {
 
     pub fn pointer_pressed_with(&mut self, x: f64, y: f64, button: PointerButton, clicks: u32, modifiers: Modifiers) {
         self.hide_tip();
-        // A press outside the overlays closes them, top first, and goes no further.
+        // A press outside the overlays closes them, top first, and goes no
+        // further, unless the one closed lets it through (a dropdown's list).
         if let Some(top) = self.overlays.last() {
             let anchored = top.anchor.and_then(|a| self.element(a)).is_some_and(|a| a.node().bounds.contains(x, y));
             if !top.modal && !top.content.node().bounds.contains(x, y) && !top.place.contains(x, y) && !anchored {
-                let id = top.id();
+                let (id, through) = (top.id(), top.through);
                 self.close(id);
-                return;
+                if !through {
+                    return;
+                }
+                return self.pointer_pressed_with(x, y, button, clicks, modifiers);
             }
         }
         self.pointer_moved(x, y);
         // A press starts no new pause: the tip of what was pressed shows again only once the pointer went elsewhere.
         self.tip_due = None;
+        if button == PointerButton::Right {
+            self.context_menu(x, y);
+            return;
+        }
         if button != PointerButton::Left {
             return;
         }
@@ -695,6 +710,50 @@ impl Screen {
             let input = Self::input(e, x, y, modifiers, clicks.max(1));
             e.on_pointer_pressed(input, &mut cx);
         }
+        self.settle(cx);
+        self.redraw = true;
+    }
+
+    /// A right press: the menu of the part under the pointer (`menu` on its
+    /// line, a split button's aside) opens at the pointer; a table, list or
+    /// tree chooses the row there first, as a left press does.
+    fn context_menu(&mut self, x: f64, y: f64) {
+        let Some(at) = self.at(x, y) else { return };
+        let tree = self.overlays.iter().rev().map(|o| o.content.as_ref()).find(|c| element::find(*c, at).is_some()).unwrap_or(self.root.as_ref());
+        let Some(ids) = element::chain(tree, at) else { return };
+        let found = ids.iter().rev().filter_map(|id| element::find(tree, *id)).find_map(|e| {
+            let base = e.as_part()?.base();
+            let menu = base.spec.menu.as_ref().filter(|_| base.spec.kind != "button" && base.enabled())?;
+            Some((e.node().id(), base.spec.kind.clone(), base.spec.name().map(str::to_string), base.host.clone(), menu.items.clone()))
+        });
+        let Some((id, kind, part, host, items)) = found else { return };
+        if matches!(kind.as_str(), "table" | "list" | "tree" | "treeTable") {
+            self.pointer_pressed(x, y, PointerButton::Left, 1);
+            self.pointer_released(x, y, PointerButton::Left);
+        }
+        let entries: Vec<crate::frame::menus::MenuEntry> = items
+            .into_iter()
+            .map(|item| {
+                if item.text("kind") == Some("separator") {
+                    return crate::frame::menus::MenuEntry::line();
+                }
+                let enabled = item.text("name").and_then(|n| host.state(Some(n))).and_then(|s| s.enabled).unwrap_or(true);
+                let (host, part) = (host.clone(), part.clone());
+                let caption = host.text(item.text("caption"));
+                crate::frame::menus::MenuEntry {
+                    caption,
+                    enabled,
+                    key: item.text("shortcut").map(str::to_string),
+                    run: Some(Rc::new(move || crate::parts::pick(host.as_ref(), part.as_deref(), &item))),
+                    ..crate::frame::menus::MenuEntry::default()
+                }
+            })
+            .collect();
+        if entries.iter().all(|e| e.separator) {
+            return;
+        }
+        let mut cx = self.cx();
+        crate::frame::menus::FrameMenus::new().open((id, 0), entries, Rect::new(x, y - 1.0, 0.0, 0.0), None, &mut cx);
         self.settle(cx);
         self.redraw = true;
     }
@@ -819,9 +878,15 @@ impl Screen {
         self.settle(cx);
     }
 
-    /// A key let go: the part with the focus hears it.
+    /// A key let go: the window hears it first (Alt for its menu bar), then the part with the focus.
     pub fn key_released(&mut self, key: KeyInput) {
         let mut cx = self.cx();
+        let top_modal = self.overlays.last().is_some_and(|o| o.modal);
+        if !top_modal && self.root.window_key_up(key, &mut cx) {
+            cx.invalidate();
+            self.settle(cx);
+            return;
+        }
         if let Some(e) = self.focused.and_then(|f| self.element_mut(f)) {
             e.on_key_up(key, &mut cx);
         }

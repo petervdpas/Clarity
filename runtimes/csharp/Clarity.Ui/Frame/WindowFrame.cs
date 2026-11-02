@@ -33,6 +33,9 @@ public sealed class WindowFrame
     public IPartHost Host { get; }
     public ShownFrame Shown { get; }
 
+    /// <summary>Whether the menu bar's access letters show, and how.</summary>
+    public FrameAccess Access { get; set; }
+
     /// <summary>The name of the window it frames, by which the person's keys know its own commands.</summary>
     public string? WindowName { get; init; }
 
@@ -133,6 +136,13 @@ public sealed class WindowFrame
 }
 
 /// <summary>A region of a window's frame: it draws in the frame's colors and knows the height or width it wants.</summary>
+/// <summary>
+/// Whether the menu bar's access letters show: off, while Alt is held
+/// (<see cref="HeldUsed"/> once a key went with it), or kept after Alt went
+/// alone, when the letter alone opens its menu.
+/// </summary>
+public enum FrameAccess { Off, Held, HeldUsed, Kept }
+
 public abstract class FrameRegion(WindowFrame frame) : Element
 {
     public WindowFrame Frame { get; } = frame;

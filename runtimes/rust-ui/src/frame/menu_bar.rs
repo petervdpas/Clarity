@@ -2,7 +2,9 @@
 //! press on one opens its menu below it, and another press closes it; while
 //! one is open, the pointer over another opens that one. A top item without
 //! items runs as a click. The bar hides and is greyed as its part state
-//! says, and so does each item.
+//! says, and so does each item. Each top item has an access letter (the
+//! first of its caption no item before it took), underlined while Alt is
+//! held or after Alt went alone; Alt with it opens the item's menu.
 
 use std::rc::Rc;
 
@@ -12,7 +14,7 @@ use crate::input::{Modifiers, PointerInput};
 use crate::markup::{CommandSpec, MenuSpec};
 use crate::painter::{Painter, TextAlign};
 
-use super::{choices, over, owner, plate, rules, WindowFrame};
+use super::{choices, over, owner, plate, rules, Access, WindowFrame};
 
 /// How high the menu bar is.
 pub const HEIGHT: f64 = 30.0;
@@ -77,6 +79,39 @@ impl FrameMenuBar {
             return;
         }
         self.open(at, area, cx);
+    }
+
+    /// Whether its access letters show now.
+    pub fn access_shown(&self) -> bool {
+        self.frame.access() != Access::Off && self.is_shown() && self.enabled()
+    }
+
+    /// Each placed top item's access letter: its place in the caption, by the item's index.
+    fn access_keys(&self) -> Vec<(usize, Option<usize>)> {
+        let host = self.frame.host().as_ref();
+        let items: Vec<usize> = self.placed.iter().map(|(i, _)| *i).filter(|i| !rules::is_separator(&self.menu().items[*i])).collect();
+        let captions: Vec<String> = items.iter().map(|i| host.text(self.menu().items[*i].text("caption"))).collect();
+        items.into_iter().zip(rules::access_keys(&captions)).collect()
+    }
+
+    /// Opens the menu of the top item whose access letter is `letter` (or runs it, without items): false when none has it.
+    pub fn open_by_letter(&mut self, letter: char, cx: &mut Cx) -> bool {
+        if !self.is_shown() || !self.enabled() {
+            return false;
+        }
+        let host = self.frame.host().clone();
+        let found = self.access_keys().into_iter().find(|(i, at)| {
+            let caption = host.text(self.menu().items[*i].text("caption"));
+            at.and_then(|at| caption.chars().nth(at)).is_some_and(|c| c.to_ascii_lowercase() == letter)
+        });
+        let Some((i, _)) = found else { return false };
+        let Some(area) = self.placed.iter().find(|(p, _)| *p == i).map(|(_, r)| *r) else { return false };
+        if self.frame.menus().owner() == Some(owner(&self.node, i)) {
+            return true;
+        }
+        self.frame.menus().close_all(cx);
+        self.press(i, area, cx);
+        true
     }
 
     fn open(&mut self, at: usize, area: Rect, cx: &mut Cx) {
@@ -152,6 +187,7 @@ impl Element for FrameMenuBar {
         let size = look.size("text");
         let host = self.frame.host().as_ref();
         let open = self.frame.menus().owner();
+        let access = if self.access_shown() { self.access_keys() } else { Vec::new() };
         for (i, area) in &self.placed {
             let item = &self.menu().items[*i];
             if rules::is_separator(item) {
@@ -163,7 +199,17 @@ impl Element for FrameMenuBar {
                 p.fill(*area, look.part("menu", Some("hover")).background.unwrap_or_else(|| look.color("accent_soft")), look.radius("button"));
             }
             let color = look.color(if takes { "frame_text" } else { "muted" });
-            p.text(&host.text(item.text("caption")), *area, color, size, "text", false, TextAlign::Center);
+            let caption = host.text(item.text("caption"));
+            p.text(&caption, *area, color, size, "text", false, TextAlign::Center);
+            // The access letter, underlined.
+            if let Some(at) = access.iter().find(|(k, _)| k == i).and_then(|(_, at)| *at) {
+                let before: String = caption.chars().take(at).collect();
+                let letter: String = caption.chars().skip(at).take(1).collect();
+                let whole = p.fonts.measure(&caption, "text", size, false);
+                let x = area.x + (area.width - whole) / 2.0 + p.fonts.measure(&before, "text", size, false);
+                let y = (area.y + area.height / 2.0 + size * 0.5).round();
+                p.fill(Rect::new(x, y, p.fonts.measure(&letter, "text", size, false), 1.0), color, 0.0);
+            }
         }
     }
 }

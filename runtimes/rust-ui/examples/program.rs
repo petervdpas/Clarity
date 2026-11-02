@@ -24,6 +24,7 @@ const FILES: AppFiles = AppFiles {
     apps: &[],
     themes: &[],
     model: MODEL,
+    resources: &[],
     title: "Small program",
     width: 720.0,
     height: 420.0,

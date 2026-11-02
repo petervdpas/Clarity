@@ -41,20 +41,18 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn every_stack_adds_a_store_that_follows_its_folder_setting() {
-    has(&files(Backend::Rust, Ui::Webview), "db.add_store_setting(\"photos\", \"records\", \"photosFolder\", \"photos\")?;");
+    has(&files(Backend::Rust, Ui::Clarity), "db.add_store_setting(\"photos\", \"records\", \"photosFolder\", \"photos\")?;");
     has(&files(Backend::Go, Ui::Webview), "db.AddStoreSetting(\"photos\", \"records\", \"photosFolder\", \"photos\")");
     has(&files(Backend::Csharp, Ui::Clarity), "db.AddStoreSetting(\"photos\", \"records\", \"photosFolder\", \"photos\");");
     has(&files(Backend::C, Ui::Webview), "clarity_add_store_setting(db, \"photos\", \"records\", \"photosFolder\", \"photos\")");
     has(&files(Backend::Cpp, Ui::Webview), "db.add_store_setting(\"photos\", \"records\", \"photosFolder\", \"photos\");");
 }
 
-/// The folder part's button asks the shell for the system's folder picker:
-/// Tauri's comes from its dialog plugin, only in a program with a folder part.
+/// The folder part's button opens the system's folder picker through
+/// Clarity.UI itself: the program carries nothing of a webview's dialogs.
 #[test]
-fn the_tauri_program_opens_the_systems_folder_picker() {
-    let rust = files(Backend::Rust, Ui::Webview);
-    has(&rust, "tauri-plugin-dialog = \"2\"");
-    has(&rust, ".plugin(tauri_plugin_dialog::init())");
-    has(&rust, "async fn choose_folder(app: tauri::AppHandle, title: String) -> Answer<Option<String>> {");
-    has(&rust, "            choose_folder,\n");
+fn the_rust_program_opens_the_folder_picker_through_clarity_ui() {
+    let rust = files(Backend::Rust, Ui::Clarity);
+    has(&rust, "clarity-ui = ");
+    assert!(!rust.contains("tauri"), "{rust}");
 }

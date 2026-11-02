@@ -2,7 +2,8 @@
 //! kept in its state's `checked`; the person pressing it is a change, what
 //! code sets is not, and a read-only one is not pressed. Drawn as a button
 //! in the theme's `button` look, in the soft accent with an accent line
-//! while it is on, as the shared screen draws it.
+//! while it is on, as the shared screen draws it; its icon before its
+//! caption, or alone in the middle.
 
 use std::rc::Rc;
 
@@ -11,8 +12,9 @@ use serde_json::Value;
 use crate::element::{Cx, Element};
 use crate::input::{Key, KeyInput};
 use crate::markup::PartSpec;
-use crate::painter::{Corners, Painter, TextAlign};
+use crate::painter::{Corners, Painter};
 use crate::part_element;
+use crate::parts::button::{draw_label, icon_of};
 use crate::parts::{Part, PartBase, PartHost};
 use crate::theme::LookValues;
 
@@ -63,15 +65,19 @@ impl TogglePart {
 
     /// How its push looks now: the theme's button look, its style over it, and the hover or pressed look over both.
     fn push_look(&self, p: &Painter, hover: bool, pressed: bool) -> LookValues {
-        let plain = p.look.part("button", None);
-        let styled = match self.base.spec.text("style").filter(|s| !s.is_empty()) {
-            Some(style) => p.look.style(style).over(&plain),
-            None => plain,
+        let state = if !self.base.enabled() || !(hover || pressed) {
+            None
+        } else if pressed {
+            Some("pressed")
+        } else {
+            Some("hover")
         };
-        if !self.base.enabled() || !(hover || pressed) {
-            return styled;
-        }
-        p.look.part_own("button", Some(if pressed { "pressed" } else { "hover" })).over(&styled)
+        p.look.pressable("button", self.base.spec.text("style"), state)
+    }
+
+    /// Whether its style fills it: such a toggle that is on shows its style pressed, not the soft accent.
+    fn style_fills(&self, p: &Painter) -> bool {
+        self.base.spec.text("style").filter(|s| !s.is_empty()).is_some_and(|s| p.look.style(s).background.is_some())
     }
 }
 
@@ -98,10 +104,11 @@ impl Element for TogglePart {
         let node = &self.base.node;
         let bounds = node.bounds;
         let _dimmed = p.dimmed(self.base.enabled() && !self.base.read_only());
-        let values = self.push_look(p, node.hovered, node.pressed && node.hovered);
         let on = self.is_on();
+        let styled_on = on && self.style_fills(p);
+        let values = self.push_look(p, node.hovered || styled_on, (node.pressed && node.hovered) || styled_on);
         let radius = values.radius.map(|r| r as f64).unwrap_or_else(|| p.look.radius("button"));
-        let fill = if on { p.look.color("accent_soft") } else { values.background.unwrap_or_else(|| p.look.color("raised")) };
+        let fill = if on && !styled_on { p.look.color("accent_soft") } else { values.background.unwrap_or_else(|| p.look.color("raised")) };
         let line = if on || self.base.spec.flag("default") { p.look.color("accent") } else { values.border.unwrap_or_else(|| p.look.color("border")) };
         p.plate(bounds, fill, line, p.look.border(), radius, self.corners);
         if node.focused {
@@ -109,7 +116,8 @@ impl Element for TogglePart {
         }
         let size = values.size.map(|s| s as f64).unwrap_or_else(|| p.look.size("text"));
         let font = values.font.clone().unwrap_or_else(|| "text".to_string());
-        p.text(&self.caption(), bounds.inset(p.look.padding()), values.text.unwrap_or_else(|| p.look.color("text")), size, &font, values.bold(), TextAlign::Center);
+        let icon = icon_of(&self.base);
+        draw_label(p, icon.as_deref(), &self.caption(), bounds, values.text.unwrap_or_else(|| p.look.color("text")), size, &font, values.bold());
     }
 }
 

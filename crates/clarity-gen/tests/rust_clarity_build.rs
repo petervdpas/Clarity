@@ -56,7 +56,7 @@ fn written(name: &str) -> PathBuf {
     settings.stack.ui = Ui::Clarity;
     let mut project = load_keyed([("game.clarity", GAME)], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
-    let part = parts::starter_for_ui(&project.files[0].parts[0], Ui::Clarity).into_iter().map(|(path, text)| PartFile { part: "Gauge".into(), path, bytes: text.into_bytes() }).collect();
+    let part = parts::starter_for(&project.files[0].parts[0]).into_iter().map(|(path, text)| PartFile { part: "Gauge".into(), path, bytes: text.into_bytes() }).collect();
     clarity_spec::native::attach(&mut project, part);
     let files = generate(&project, &settings).unwrap_or_else(|errors| panic!("{errors:#?}"));
     let out = root().join("target/generated").join(format!("clarity-ui-{name}-{}", std::process::id()));

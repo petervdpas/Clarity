@@ -101,7 +101,7 @@ public static partial class BrowserCanvas
         var shown = await MirrorStack.Start(new HttpSessionLink(http), settings, AppScreen.CarriedBy(app), OpenAddress, files);
         mirror = shown;
         mirrorDark = PrefersDark();
-        var served = new Screen(shown, AppLook.Of(shown.Carried, Themes.Current, mirrorDark)) { Keys = shown.KeyPressed };
+        var served = new Screen(shown, AppLook.Of(shown.Carried, Themes.Current, mirrorDark)) { Keys = shown.KeyPressed, KeysUp = shown.KeyReleased };
         Themes.Changed += () => served.Show(AppLook.Of(shown.Carried, Themes.Current, mirrorDark));
         shown.TitleChanged += () => SetTitle(shown.Current?.Title ?? "");
         SetTitle(shown.Current?.Title ?? "");

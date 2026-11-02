@@ -147,10 +147,10 @@ fn refuses_unknown_settings_and_a_wrong_shape() {
     assert_eq!(parse("module shop\n").unwrap_err(), "line 1: a project file starts with 'project Name'");
     assert_eq!(
         parse("project Shop\n    datasource main sqlite \"x.db\"\n").unwrap_err(),
-        "the project needs a 'stack' line, like: stack rust webview desktop"
+        "the project needs a 'stack' line, like: stack rust desktop"
     );
     assert_eq!(
-        parse(&SHOP.replace("    datasource main", "    stack rust webview desktop\n    datasource main")).unwrap_err(),
+        parse(&SHOP.replace("    datasource main", "    stack rust desktop\n    datasource main")).unwrap_err(),
         "line 6: 'stack' is set twice"
     );
     assert_eq!(
@@ -158,6 +158,7 @@ fn refuses_unknown_settings_and_a_wrong_shape() {
         "line 10: 'auth' belongs under a datasource line, indented"
     );
     assert!(parse("project Shop\n    stack rust webview\n").unwrap_err().contains("at least one target"));
+    assert!(parse("project Shop\n    stack rust\n").unwrap_err().contains("at least one target"));
 }
 
 #[test]
@@ -178,10 +179,10 @@ fn a_native_toolkit_needs_its_backend() {
     assert_eq!(problems, ["Clarity.UI is a UI for the C# and Rust backends, not for Go"]);
 }
 
-// Rust draws with Clarity.UI when the stack line names no UI, as C# does,
-// and keeps the shared web screen when it names webview (DESIGN 7.9, G8).
+// Rust draws its desktop with Clarity.UI only, unnamed as C#'s; the
+// webview desktop (Tauri) is gone (DESIGN 7.9, G8c).
 #[test]
-fn rust_takes_clarity_ui_unnamed_and_the_web_renderer_named() {
+fn rust_draws_its_desktop_with_clarity_ui_only() {
     let clarity = SHOP.replace("    stack csharp desktop", "    stack rust desktop");
     let settings = parse(&clarity).unwrap();
     assert_eq!(
@@ -191,38 +192,46 @@ fn rust_takes_clarity_ui_unnamed_and_the_web_renderer_named() {
     assert_eq!(validate(&settings), Vec::<String>::new());
     assert_eq!(write(Some(&clarity), &settings).unwrap(), clarity);
 
-    let webview = SHOP.replace("    stack csharp desktop", "    stack rust webview desktop web");
-    let settings = parse(&webview).unwrap();
+    // A UI named for Rust is refused, saying what to write.
     assert_eq!(
-        settings.stack,
-        Stack { backend: Backend::Rust, ui: Ui::Webview, targets: vec![Target::Desktop, Target::Web] }
+        parse(&SHOP.replace("    stack csharp desktop", "    stack rust webview desktop")).unwrap_err(),
+        "line 3: Rust draws its windows with Clarity.UI and names no UI; write stack rust desktop"
     );
-    assert_eq!(validate(&settings), Vec::<String>::new());
-    assert_eq!(write(Some(&webview), &settings).unwrap(), webview);
+    assert_eq!(
+        parse(&SHOP.replace("    stack csharp desktop", "    stack rust webview web cli")).unwrap_err(),
+        "line 3: Rust draws its windows with Clarity.UI and names no UI; write stack rust web cli"
+    );
+    // Settings that still carry the web renderer for Rust are refused too.
+    let mut webview = settings.clone();
+    webview.stack.ui = Ui::Webview;
+    assert_eq!(validate(&webview), ["Web renderer is a UI for Go, C and C++, not for Rust; write stack rust desktop"]);
 
     // A command line program beside the window, in either order.
     let cli = parse(&SHOP.replace("    stack csharp desktop", "    stack rust cli desktop")).unwrap();
     assert_eq!((cli.stack.ui, cli.stack.targets), (Ui::Clarity, vec![Target::Cli, Target::Desktop]));
-    // A program without a window keeps the usual UI, as before.
+    // A program without a window takes Rust's one UI.
     let only = parse(&SHOP.replace("    stack csharp desktop", "    stack rust cli")).unwrap();
-    assert_eq!(only.stack.ui, Ui::Webview);
+    assert_eq!(only.stack.ui, Ui::Clarity);
     // C# still has no other UI to name.
     assert!(parse(&SHOP.replace("    stack csharp desktop", "    stack csharp webview desktop")).unwrap_err().contains("webview"));
 }
 
-// The web target of Rust on Clarity.UI is not generated yet.
+// Rust's web target is the server whose browser page is the shared web
+// screen until Clarity.UI draws in the browser (G8d); it is not generated
+// beside the desktop program yet.
 #[test]
-fn the_web_target_of_rust_on_clarity_ui_is_refused() {
-    for (line, written) in [("stack rust web", "stack rust webview web"), ("stack rust desktop web", "stack rust webview desktop web")] {
-        let settings = parse(&SHOP.replace("stack csharp desktop", line)).unwrap();
-        assert_eq!(settings.stack.ui, Ui::Clarity);
-        assert_eq!(
-            validate(&settings),
-            [format!("the web target of Rust on Clarity.UI is not generated yet; write {written} for the shared web screen")]
-        );
-    }
-    let webview = parse(&SHOP.replace("stack csharp desktop", "stack rust webview web")).unwrap();
-    assert_eq!(validate(&webview), Vec::<String>::new());
+fn rust_serves_the_web_alone() {
+    let web = SHOP.replace("stack csharp desktop", "stack rust web");
+    let settings = parse(&web).unwrap();
+    assert_eq!(settings.stack, Stack { backend: Backend::Rust, ui: Ui::Clarity, targets: vec![Target::Web] });
+    assert_eq!(validate(&settings), Vec::<String>::new());
+    assert_eq!(write(Some(&web), &settings).unwrap(), web);
+
+    let both = parse(&SHOP.replace("stack csharp desktop", "stack rust desktop web")).unwrap();
+    assert_eq!(
+        validate(&both),
+        ["the web program of Rust is not generated beside its desktop program yet; write stack rust desktop, or stack rust web for the web program alone"]
+    );
     // C# on Clarity.UI has its web target.
     let csharp = parse(&SHOP.replace("stack csharp desktop", "stack csharp desktop web")).unwrap();
     assert_eq!(validate(&csharp), Vec::<String>::new());
@@ -315,7 +324,7 @@ fn writes_a_new_project_file() {
     assert_eq!(
         text,
         "project MyShop
-    stack rust webview desktop
+    stack rust desktop
     output \"out\"
     datasource main sqlite \"data/my_shop.db\"
 "
@@ -421,10 +430,10 @@ fn the_catalog_offers_every_backend_and_a_ui_for_each() {
     assert_eq!(catalog.backends.len(), 5);
     let csharp = catalog.backends.iter().find(|b| b.id == Backend::Csharp).unwrap();
     assert_eq!(csharp.uis, [Ui::Clarity]);
-    // Rust offers both; the shared web screen stays its usual one while Clarity.UI in Rust is in progress.
+    // Rust draws with Clarity.UI only, and a new project starts on it.
     let rust = catalog.backends.iter().find(|b| b.id == Backend::Rust).unwrap();
-    assert_eq!(rust.uis, [Ui::Webview, Ui::Clarity]);
-    assert_eq!(catalog.starter.ui, Ui::Webview);
+    assert_eq!(rust.uis, [Ui::Clarity]);
+    assert_eq!(catalog.starter, Stack { backend: Backend::Rust, ui: Ui::Clarity, targets: vec![Target::Desktop] });
     assert!(catalog.backends.iter().filter(|b| ![Backend::Csharp, Backend::Rust].contains(&b.id)).all(|b| b.uis == [Ui::Webview]));
     assert_eq!(catalog.sources.len(), 5);
 }
@@ -461,7 +470,7 @@ fn the_language_reference_project_files_are_valid() {
 
 #[test]
 fn a_data_source_can_be_external_and_read_only() {
-    let text = "project Shop\n    stack rust webview desktop\n    datasource main sqlite \"data/shop.db\"\n    datasource erp sqlite \"legacy/erp.db\" external readonly\n";
+    let text = "project Shop\n    stack rust desktop\n    datasource main sqlite \"data/shop.db\"\n    datasource erp sqlite \"legacy/erp.db\" external readonly\n";
     let settings = parse(text).unwrap();
     let erp = &settings.datasources[1];
     assert!(erp.external && erp.readonly);
@@ -519,7 +528,7 @@ fn loading_hands_the_language_and_currency_to_the_project() {
     let root = std::env::temp_dir().join(format!("clarity-locale-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("shop")).unwrap();
-    std::fs::write(root.join("shop.clarity"), "project Shop\n    stack rust webview desktop\n    language \"nl-NL\"\n    currency EUR\n").unwrap();
+    std::fs::write(root.join("shop.clarity"), "project Shop\n    stack rust desktop\n    language \"nl-NL\"\n    currency EUR\n").unwrap();
     std::fs::write(root.join("shop/shop.clarity"), "module shop\n").unwrap();
     let project = clarity_project::load_modules(&root.join("shop")).unwrap();
     assert_eq!(project.locale.language.as_deref(), Some("nl-NL"));
@@ -544,7 +553,7 @@ fn loading_hands_the_theme_to_the_project() {
     let root = std::env::temp_dir().join(format!("clarity-theme-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("shop")).unwrap();
-    std::fs::write(root.join("shop.clarity"), "project Shop\n    stack rust webview desktop\n    theme Plain\n").unwrap();
+    std::fs::write(root.join("shop.clarity"), "project Shop\n    stack rust desktop\n    theme Plain\n").unwrap();
     std::fs::write(root.join("shop/shop.clarity"), "module shop\n\ntheme Plain\n    radius 2\n").unwrap();
     let project = clarity_project::load_modules(&root.join("shop")).unwrap();
     std::fs::remove_dir_all(&root).unwrap();

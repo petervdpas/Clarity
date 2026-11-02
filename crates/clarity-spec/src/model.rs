@@ -743,6 +743,11 @@ pub struct WidgetProps {
     /// A custom part's tells wired to handlers: `on scored: arenaScored`.
     #[serde(default)]
     pub tells: Vec<TellHandler>,
+    /// A custom part whose declaration says `grows`: it takes the height
+    /// its window has left. Worked out when the project loads, for every
+    /// screen and the designer; it is never written back.
+    #[serde(default)]
+    pub grows: bool,
 }
 
 /// `on scored: arenaScored`: the handler a custom part's tell runs, given its values.

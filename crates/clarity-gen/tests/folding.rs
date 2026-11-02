@@ -42,7 +42,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn code_reads_and_sets_folded_from_the_design_on_every_stack() {
-    let rust = files(Backend::Rust, Ui::Webview);
+    let rust = files(Backend::Rust, Ui::Clarity);
     has(text(&rust, "src/modules/shop.rs"), "if ui.folded(\"details\", true) {");
     has(text(&rust, "src/modules/shop.rs"), "ui.set_folded(\"details\", false);");
     let go = files(Backend::Go, Ui::Webview);

@@ -32,30 +32,9 @@ impl Probe for Machine {
     }
 }
 
-#[test]
-fn rust_needs_cargo_and_on_linux_webkitgtk() {
-    let empty = check(Backend::Rust, Ui::Webview, &Machine::default());
-    assert!(!empty.ready());
-    assert!(empty.generated);
-    assert!(empty.missing[0].contains("Rust") && empty.missing[0].contains("https://rustup.rs"), "{:?}", empty.missing);
-
-    let machine = Machine::default()
-        .with("cargo", "--version", "cargo 1.91.0 (ea2d97820 2025-10-10)\n")
-        .with("pkg-config", "--exists webkit2gtk-4.1", "");
-    let ready = check(Backend::Rust, Ui::Webview, &machine);
-    assert!(ready.ready(), "{:?}", ready.missing);
-    assert_eq!(ready.found, ["cargo 1.91.0 (ea2d97820 2025-10-10)"]);
-
-    if cfg!(target_os = "linux") {
-        let without = Machine::default().with("cargo", "--version", "cargo 1.91.0\n");
-        let check = check(Backend::Rust, Ui::Webview, &without);
-        assert_eq!(check.missing.len(), 1);
-        assert!(check.missing[0].contains("libwebkit2gtk-4.1-dev"), "{:?}", check.missing);
-    }
-}
-
-/// Rust on Clarity.UI draws with Skia, whose prebuilt library cargo
-/// downloads: it needs cargo and no WebKitGTK, Tauri CLI or Node.
+/// Rust draws with Clarity.UI only, on Skia, whose prebuilt library cargo
+/// downloads: it needs cargo and no WebKitGTK, Tauri CLI or Node; its web
+/// program serves the shared web screen and needs nothing more.
 #[test]
 fn rust_on_clarity_ui_needs_only_cargo() {
     let bare = check(Backend::Rust, Ui::Clarity, &Machine::default());
@@ -65,6 +44,11 @@ fn rust_on_clarity_ui_needs_only_cargo() {
     let ready = check(Backend::Rust, Ui::Clarity, &Machine::default().with("cargo", "--version", "cargo 1.91.0\n"));
     assert!(ready.ready(), "{:?}", ready.missing);
     assert_eq!(ready.found, ["cargo 1.91.0"]);
+    if cfg!(target_os = "linux") {
+        assert!(!bare.missing.iter().any(|m| m.contains("WebKitGTK")), "{:?}", bare.missing);
+    }
+    assert!(!clarity_gen::tools::requirements(Backend::Rust).iter().any(|m| m.contains("WebKitGTK")));
+    assert!(!clarity_gen::tools::generates(Backend::Rust, Ui::Webview));
     let all = clarity_gen::tools::check_all(&Machine::default());
     assert!(all.iter().any(|s| s.backend == Backend::Rust && s.ui == Ui::Clarity));
     assert!(clarity_gen::tools::report(&all).contains("Rust with Clarity.UI: missing Rust with cargo"));
@@ -192,11 +176,12 @@ fn a_folder_already_on_the_path_is_not_searched_twice() {
 fn every_stack_of_the_catalog_is_checked_and_reported() {
     let machine = Machine::default().with("dotnet", "--list-sdks", "10.0.402 [/usr/share/dotnet/sdk]\n");
     let all = clarity_gen::tools::check_all(&machine);
-    assert!(all.iter().any(|s| s.backend == Backend::Rust && s.ui == Ui::Webview));
+    assert!(all.iter().any(|s| s.backend == Backend::Rust && s.ui == Ui::Clarity));
+    assert!(!all.iter().any(|s| s.backend == Backend::Rust && s.ui == Ui::Webview));
     assert!(all.iter().any(|s| s.backend == Backend::Csharp && s.ui == Ui::Clarity));
     let report = clarity_gen::tools::report(&all);
     assert!(report.contains("C# with Clarity.UI: ready (.NET SDK 10.0.402)\n"), "{report}");
-    assert!(report.contains("Rust with the web renderer: missing Rust with cargo, from https://rustup.rs"), "{report}");
+    assert!(report.contains("Rust with Clarity.UI: missing Rust with cargo, from https://rustup.rs"), "{report}");
     assert!(report.contains("Go with the web renderer: missing Go, from https://go.dev/dl"), "{report}");
     // Where to read how, once something is missing.
     assert!(report.ends_with("How to install each: the manual's page Setting up the build tools (Manual in Clarity, or docs/manual/setup.tools.md).\n"), "{report}");
@@ -334,12 +319,12 @@ fn every_missing_tool_points_at_the_manual() {
         assert!(anchors.iter().any(|a| a == heading), "the setup page has no heading #{heading}: {anchors:?}");
     }
     // A machine without anything misses every tool, each with its part of the page.
-    for (backend, ui) in [(Backend::Rust, Ui::Webview), (Backend::Rust, Ui::Clarity), (Backend::Csharp, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Clarity), (Backend::Rust, Ui::Clarity), (Backend::Csharp, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview)] {
         let bare = check(backend, ui, &Machine::default());
         assert_eq!(bare.missing.len(), bare.guides.len(), "{backend:?}: {:?} {:?}", bare.missing, bare.guides);
         assert!(bare.guides.iter().all(|g| guide_headings().contains(g)), "{:?}", bare.guides);
     }
-    let rust = check(Backend::Rust, Ui::Webview, &Machine::default());
+    let rust = check(Backend::Rust, Ui::Clarity, &Machine::default());
     let expected = if cfg!(windows) { "rust-on-windows" } else if cfg!(target_os = "macos") { "rust-on-macos" } else { "rust-on-linux" };
     assert_eq!(rust.guides[0], expected);
 }
@@ -393,7 +378,7 @@ fn the_webassembly_tools_install_asks_the_system_where_it_must() {
 /// stack's own tools (DESIGN 7.8).
 #[test]
 fn no_stack_needs_node() {
-    for (backend, ui) in [(Backend::Rust, Ui::Webview), (Backend::Rust, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Clarity), (Backend::Rust, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
         let check = check(backend, ui, &Machine::default());
         assert!(!check.missing.iter().any(|m| m.contains("Node") || m.contains("npm")), "{backend:?}: {:?}", check.missing);
         assert!(!clarity_gen::tools::requirements(backend).iter().any(|r| r.contains("Node")), "{backend:?}");

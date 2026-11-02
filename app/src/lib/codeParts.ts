@@ -7,6 +7,7 @@ import type { Edit } from "@clarity/ui/generated/Edit.ts";
 import type { Event as PartEvent } from "@clarity/ui/generated/Event.ts";
 import type { CommandProps } from "@clarity/ui/generated/CommandProps.ts";
 import type { WidgetProps } from "@clarity/ui/generated/WidgetProps.ts";
+import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
 
 /** A handler of the code behind, with the comment lines above it. */
 export type HandlerCode = {
@@ -207,4 +208,17 @@ export function fixOf(message: string): Fix | null {
   const fix = FIXES.find((f) => message.includes(f.says));
   if (!fix) return null;
   return "edit" in fix ? { label: fix.label, edit: fix.edit } : { label: fix.label, command: fix.command };
+}
+
+/**
+ * The edit that makes the custom part `part` grow with its window or keep
+ * its rows (its declaration's `grows` line, DESIGN 5.19), with the module
+ * that declares it; null for a part no module declares.
+ */
+export function partGrowsEdit(files: SpecFile[], part: string, grows: boolean): { file: SpecFile; edit: Edit } | null {
+  for (const file of files) {
+    const decl = file.parts.find((d) => d.name.name === part);
+    if (decl) return { file, edit: { op: "setPartGrows", item: decl.span.start, grows } };
+  }
+  return null;
 }

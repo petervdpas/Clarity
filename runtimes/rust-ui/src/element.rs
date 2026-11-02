@@ -351,6 +351,12 @@ pub trait Element: Any {
         false
     }
 
+    /// As the screen's root, a key let go before the part with the focus hears it (Alt for the menu bar's access letters): true when it took it.
+    fn window_key_up(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
+        let _ = (key, cx);
+        false
+    }
+
     /// As the screen's root, what the person did was handled: it does what that left to do (an edit to send, a window to open).
     fn after_event(&mut self, cx: &mut Cx) {
         let _ = cx;

@@ -23,11 +23,14 @@ pub struct Overlay {
     pub opener: Option<ElementId>,
     /// Runs when it closed: by a press outside, Escape, or a close.
     pub closed: Option<Box<dyn FnOnce()>>,
+    /// A press outside it closes it and then goes on to what is under (a
+    /// dropdown's list, a calendar); else the press only closes it (a menu).
+    pub through: bool,
 }
 
 impl Overlay {
     pub fn new(content: Box<dyn Element>, place: Rect) -> Overlay {
-        Overlay { content, place, modal: false, covers: false, anchor: None, opener: None, closed: None }
+        Overlay { content, place, modal: false, covers: false, anchor: None, opener: None, closed: None, through: false }
     }
 
     /// A dialog over the whole screen: modal, and covering it.

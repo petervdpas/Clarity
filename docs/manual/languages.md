@@ -8,7 +8,7 @@ The project file says which language its texts are written in, and the currency 
 
 ```clarity
 project Shop
-    stack rust webview desktop
+    stack rust desktop
     language "en"
     currency EUR
 ```

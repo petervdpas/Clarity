@@ -1,0 +1,42 @@
+{
+  "about": "A `required` field must have a value (LANGUAGE.md, Fields): every runtime's save refuses a record whose required field is empty, before anything is written and after the entity's `before save` event (which may fill it), so nothing is kept and a new record stays new. The refusal is Clarity's word `refusal.key` with its English `refusal.english`, its slot `{field}` the field's label in the person's language (a label written as a key takes the key's value; a plain one is shown as it is). It reaches code as any refusal does: the handler stops, and the window shows it as an error message. A case gives the entity's required fields in its order (`required`: each stored column and its label as written) and the values the record would store by column (`values`: JSON null is no value, a string text, a number a whole number, a bool a bool). `refused` is the label shown in the slot of the refusal, or null when the save goes on. Empty text and no value are empty; 0 and false are values.",
+  "refusal": { "key": "fieldRequired", "english": "{field} is required" },
+  "cases": [
+    {
+      "name": "empty text is refused",
+      "required": [{ "column": "name", "label": "Name" }],
+      "values": { "name": "", "city": "" },
+      "refused": "Name"
+    },
+    {
+      "name": "a reference to no record is refused",
+      "required": [{ "column": "customer_id", "label": "Customer" }],
+      "values": { "customer_id": null, "number": "ORD-1" },
+      "refused": "Customer"
+    },
+    {
+      "name": "a date that is not set is refused",
+      "required": [{ "column": "customer_id", "label": "Customer" }, { "column": "placed", "label": "Placed on" }],
+      "values": { "customer_id": 4, "placed": null },
+      "refused": "Placed on"
+    },
+    {
+      "name": "the first empty field in the entity's order is the one named",
+      "required": [{ "column": "customer_id", "label": "Customer" }, { "column": "placed", "label": "Placed on" }],
+      "values": { "customer_id": null, "placed": null },
+      "refused": "Customer"
+    },
+    {
+      "name": "zero and false are values",
+      "required": [{ "column": "count", "label": "Count" }, { "column": "paid", "label": "Paid" }],
+      "values": { "count": 0, "paid": false },
+      "refused": null
+    },
+    {
+      "name": "a field that is not required may stay empty",
+      "required": [{ "column": "name", "label": "Name" }],
+      "values": { "name": "Ada", "city": null, "notes": "" },
+      "refused": null
+    }
+  ]
+}

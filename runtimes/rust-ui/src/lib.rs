@@ -16,6 +16,7 @@ pub mod fonts;
 pub mod frame;
 pub mod geometry;
 pub mod grid;
+pub mod headless;
 pub mod input;
 pub mod later;
 pub mod locale;
@@ -27,6 +28,7 @@ pub mod parts;
 pub mod picture;
 pub mod screen;
 pub mod shortcuts;
+pub mod system_theme;
 pub mod testing;
 pub mod theme;
 pub mod window;
@@ -44,3 +46,7 @@ pub use painter::{Painter, TextAlign};
 pub use parts::{Part, PartBase, PartHost};
 pub use screen::Screen;
 pub use theme::ThemeLook;
+
+/// Skia, which Clarity.UI draws with: a custom part that draws on the whole
+/// canvas (`Painter::canvas`) uses it from here, at the version Clarity.UI is built on.
+pub use skia_safe;

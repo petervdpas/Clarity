@@ -37,7 +37,7 @@ const USERS: &str = r#"<Window name="Users">
 
 const MODEL: &str = r#"{"project": {"locale": {"language": "en"}, "translations": {"en": {"countCaption": "How many"}}}}"#;
 
-const FILES: AppFiles = AppFiles { windows: &[("Main", MAIN), ("Users", USERS)], apps: &[], themes: &[], model: MODEL, title: "Orders", width: 800.0, height: 500.0 };
+const FILES: AppFiles = AppFiles { windows: &[("Main", MAIN), ("Users", USERS)], apps: &[], themes: &[], model: MODEL, resources: &[], title: "Orders", width: 800.0, height: 500.0 };
 
 /// A program that logs every call and answers by the handler.
 #[derive(Default)]

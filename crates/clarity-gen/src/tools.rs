@@ -295,7 +295,7 @@ fn writable(folder: &Path) -> bool {
 pub fn generates(backend: Backend, ui: Ui) -> bool {
     matches!(
         (backend, ui),
-        (Backend::Rust, Ui::Webview) | (Backend::Rust, Ui::Clarity) | (Backend::Go, Ui::Webview) | (Backend::Csharp, Ui::Clarity) | (Backend::C, Ui::Webview) | (Backend::Cpp, Ui::Webview)
+        (Backend::Rust, Ui::Clarity) | (Backend::Go, Ui::Webview) | (Backend::Csharp, Ui::Clarity) | (Backend::C, Ui::Webview) | (Backend::Cpp, Ui::Webview)
     )
 }
 
@@ -367,7 +367,7 @@ pub fn guide_headings() -> Vec<&'static str> {
 /// What to install for each tool, with where to get it: the words of
 /// `check`, `clarity tools`, the app and every generated README.md.
 const RUST: &str = "Rust with cargo, from https://rustup.rs";
-const WEBKIT: &str = "the WebKitGTK development files and pkg-config (Debian and Ubuntu: libwebkit2gtk-4.1-dev; see https://tauri.app/start/prerequisites/)";
+const WEBKIT: &str = "the WebKitGTK development files and pkg-config (Debian and Ubuntu: libwebkit2gtk-4.1-dev; see https://wails.io/docs/gettingstarted/installation)";
 const GO: &str = "Go, from https://go.dev/dl";
 const CMAKE: &str = "CMake, from https://cmake.org/download (Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-cmake)";
 const MAKE: &str = "make or Ninja, to build what CMake writes (Ninja: https://ninja-build.org; Windows: pacman -S mingw-w64-ucrt-x86_64-ninja)";
@@ -396,7 +396,7 @@ fn compiler_needed(backend: Backend) -> String {
 /// Everything `backend` builds with, on any system: what a README lists.
 pub fn requirements(backend: Backend) -> Vec<String> {
     match backend {
-        Backend::Rust => vec![RUST.to_string(), format!("on Linux, {WEBKIT}")],
+        Backend::Rust => vec![RUST.to_string()],
         Backend::Csharp => vec![dotnet()],
         Backend::Go => vec![GO.to_string(), format!("on Linux, {WEBKIT}")],
         Backend::C => vec![
@@ -432,11 +432,7 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
                 Some(version) => found.push(first_line(&version)),
                 None => missing.push((RUST.to_string(), RUST_GUIDE)),
             }
-            // Tauri draws with WebKitGTK on Linux, and builds against its development files.
-            // Clarity.UI draws with Skia instead, whose prebuilt library cargo downloads.
-            if ui == Ui::Webview && cfg!(target_os = "linux") && probe.run("pkg-config", &["--exists", "webkit2gtk-4.1"]).is_none() {
-                missing.push((WEBKIT.to_string(), WEBKIT_GUIDE));
-            }
+            // Clarity.UI draws with Skia, whose prebuilt library cargo downloads: no webview to install.
         }
         Backend::Csharp => {
             let listed = probe.run("dotnet", &["--list-sdks"]);

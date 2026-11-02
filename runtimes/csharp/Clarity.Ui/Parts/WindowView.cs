@@ -199,12 +199,15 @@ public sealed class WindowView : Element, IDisposable
     /// one of a part's menu items; Enter presses the
     /// default button and Escape the cancel button, once the part with the
     /// focus did not take them (a memo's new line, a list that closes). True
-    /// when the window took the key, or asked the part with the focus for it.
+    /// when the window took the key, or asked the part with the focus for it;
+    /// false for Escape in a window without a cancel button.
     /// </summary>
     public bool KeyPressed(KeyInput key)
     {
         if (Screen is not { } screen)
             return false;
+        if (AccessKey(key) is { } took)
+            return took;
         var focused = screen.Focused;
         var typing = focused is TextEditor;
         foreach (var part in ShownParts())
@@ -229,6 +232,9 @@ public sealed class WindowView : Element, IDisposable
                 PartKinds.Pick(Host, part.Spec.Name, item);
                 return true;
             }
+        // Alt with a top item's access letter opens its menu, once no shortcut took the key.
+        if (key.Modifiers == Modifiers.Alt && FrameRules.AccessChar(key.Key) is { } letter && frame.MenuBar is { } bar && bar.OpenByLetter(letter))
+            return true;
         if (key.Modifiers != Modifiers.None || key.Key is not (Key.Enter or Key.Escape))
             return false;
         // The part with the focus has been asked here, so the screen asks it no more.
@@ -242,6 +248,51 @@ public sealed class WindowView : Element, IDisposable
             TakesTyped.From(focused);
             Press(pressed);
         }
+        // Escape without a cancel button is left to the dialog the window is in, which closes as its close does.
+        else if (key.Key == Key.Escape)
+            return false;
+        return true;
+    }
+
+    /// <summary>
+    /// The menu bar's access letters before any other use of a key: Alt
+    /// shows them; after Alt went alone the letter alone opens its menu, and
+    /// any other key ends them (Escape doing nothing more). None when the key
+    /// goes on as any key.
+    /// </summary>
+    bool? AccessKey(KeyInput key)
+    {
+        if (key.Key == Key.Alt)
+        {
+            if (frame.MenuBar is not { IsShown: true })
+                return null;
+            frame.Access = frame.Access == FrameAccess.HeldUsed ? FrameAccess.HeldUsed : FrameAccess.Held;
+            Invalidate();
+            return true;
+        }
+        switch (frame.Access)
+        {
+            case FrameAccess.Kept:
+                frame.Access = FrameAccess.Off;
+                Invalidate();
+                if (key.Modifiers == Modifiers.None && FrameRules.AccessChar(key.Key) is { } letter && frame.MenuBar is { } bar && bar.OpenByLetter(letter))
+                    return true;
+                return key.Key == Key.Escape ? true : null;
+            case FrameAccess.Held:
+                frame.Access = FrameAccess.HeldUsed;
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>A key let go: Alt let go alone keeps the access letters for a plain letter, after another key it hides them. True when it took the key.</summary>
+    public bool KeyReleased(KeyInput key)
+    {
+        if (key.Key != Key.Alt || frame.Access is not (FrameAccess.Held or FrameAccess.HeldUsed))
+            return false;
+        frame.Access = frame.Access == FrameAccess.Held ? FrameAccess.Kept : FrameAccess.Off;
+        Invalidate();
         return true;
     }
 

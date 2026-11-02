@@ -26,7 +26,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn the_web_stacks_carry_the_made_labels_and_set_them_by_name() {
-    let rust = generated(Backend::Rust, Ui::Webview);
+    let rust = generated(Backend::Rust, Ui::Clarity);
     has(&rust, "\"name\":\"albumTitleBoxLabel\"");
     has(&rust, "\"made\":true");
     has(&rust, "ui.set_visible(\"albumCopiesBoxLabel\"");

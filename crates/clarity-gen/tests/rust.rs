@@ -89,10 +89,9 @@ fn files() -> Vec<OutFile> {
     generate(&project, &shop()).unwrap()
 }
 
-/// The program's code: main.rs, and the desktop window's module when it has one.
+/// The program's code: main.rs.
 fn program(files: &[OutFile]) -> String {
-    let desktop = files.iter().find(|f| f.path == "src/desktop.rs").map(|f| f.text.as_str()).unwrap_or("");
-    format!("{}{desktop}", file(files, "src/main.rs"))
+    file(files, "src/main.rs").to_string()
 }
 
 fn file<'a>(files: &'a [OutFile], path: &str) -> &'a str {
@@ -108,25 +107,18 @@ fn writes_a_complete_cargo_project() {
         [
             "Cargo.toml",
             "README.md",
-            "build.rs",
-            "icons/icon.ico",
-            "icons/icon.png",
-            "src/desktop.rs",
+            "src/facts.rs",
             "src/main.rs",
             "src/model.json",
             "src/modules.rs",
             "src/modules/sales.rs",
             "src/schema.rs",
-            "tauri.conf.json",
-            "ui/index.html",
-            "ui/runtime.css",
-            "ui/runtime.js",
-            "ui/themes/clarity.css",
-            "ui/windows/OrderForm.cxaml",
+            "windows/OrderForm.cxaml",
         ]
     );
-    assert!(file(&files, "tauri.conf.json").contains("\"frontendDist\": \"ui\""), "{}", file(&files, "tauri.conf.json"));
     let cargo = file(&files, "Cargo.toml");
+    // Clarity.UI draws the desktop program (DESIGN 7.9): nothing of a webview.
+    assert!(cargo.contains("clarity-ui = ") && !cargo.contains("tauri"), "{cargo}");
     assert!(cargo.contains("name = \"shop\""), "{cargo}");
     // The runtime crate from crates.io, at the version this generator is made
     // with, with the features of the project's databases only.
@@ -155,6 +147,9 @@ fn entities_become_records_with_their_defaults() {
     assert!(sales.contains("active: true,"), "{sales}");
     assert!(sales.contains("const TABLE: &'static str = \"order\";"), "{sales}");
     assert!(sales.contains("pub enum OrderStatus {"), "{sales}");
+    // A save refuses a customer without a name (conformance/required.json).
+    assert!(sales.contains("    const REQUIRED: &'static [(&'static str, &'static str)] = &[(\"name\", \"Name\")];\n"), "{sales}");
+    assert_eq!(sales.matches("const REQUIRED").count(), 1, "{sales}");
 }
 
 #[test]
@@ -232,29 +227,17 @@ fn handlers_work_on_the_window_and_the_screen() {
     assert!(file(&files, "src/model.json").contains("\"OrderForm\""));
 }
 
-/// Every desktop window carries the title of the Clarity window it shows,
-/// as on C#; the renderer sets it when the window changes.
-#[test]
-fn a_desktop_window_takes_the_title_of_its_window() {
-    let files = files();
-    let main = &program(&files);
-    assert!(main.contains("fn set_title(window: tauri::WebviewWindow, title: String) {\n    let _ = window.set_title(&title);\n}"), "{main}");
-    assert!(main.contains("            set_title,\n"), "{main}");
-    let runtime = include_str!("../../../runtimes/web/src/host/Runtime.svelte");
-    assert!(runtime.contains("invoke(\"set_title\", { title })"), "the renderer sets the title");
-}
-
 /// The backend translates text code makes: it loads the model's
-/// translations, and the renderer names the language it picked.
+/// translations, and the web screen names the language it picked.
 #[test]
 fn the_backend_translates_in_the_language_the_screen_picked() {
     let files = files();
     let main = &program(&files);
     assert!(main.contains("    clarity_runtime::i18n::load(MODEL);\n"), "{main}");
-    assert!(main.contains("fn set_language(language: Option<String>) {\n    clarity_runtime::i18n::set_language(language.as_deref());\n}"), "{main}");
-    assert!(main.contains("            set_language,\n"), "{main}");
-    let runtime = include_str!("../../../runtimes/web/src/host/Runtime.svelte");
-    assert!(runtime.contains("invoke(\"set_language\", { language })"), "the renderer names the language");
+    let mut web = shop();
+    web.stack.targets = vec![clarity_project::Target::Web];
+    let web = generate(&load_sources([("sales.clarity", SALES)]), &web).unwrap();
+    assert!(file(&web, "src/main.rs").contains("        \"set_language\" => given((|| {"), "{}", file(&web, "src/main.rs"));
 }
 
 #[test]
@@ -543,7 +526,7 @@ fn a_refusal_reaches_the_screen_with_its_slots() {
     // What goes wrong is the runtime's text: a refusal with its slots, any other error or a panic plainly (runtimes/rust/tests/program.rs).
     assert!(main.contains("use clarity_runtime::program::{self, Answer, Program};"), "{main}");
     assert!(main.contains("program::guarded(&app.0, run)"), "{main}");
-    assert!(main.contains("fn dispatch_event(app: tauri::State<App>, state: WindowState, handler: String) -> Answer<Reply> {\n    app.dispatch_event(state, &handler)\n}"), "{main}");
+    assert!(main.contains("    fn dispatch_event(&self, state: WindowState, handler: &str) -> Answer<Reply> {"), "{main}");
 }
 
 #[test]
@@ -566,58 +549,16 @@ fn the_application_carries_its_theme() {
     assert!(model.contains("\"light\":\"#1f6f5c\""), "{model}");
 }
 
-/// One desktop window (DESIGN.md, Page kinds): Tauri opens one, and the
-/// renderer shows every Clarity window in it.
-#[test]
-fn the_application_has_one_desktop_window() {
-    let files = files();
-    let conf: serde_json::Value = serde_json::from_str(file(&files, "tauri.conf.json")).unwrap();
-    assert_eq!(conf["app"]["windows"].as_array().map(Vec::len), Some(1));
-    for f in files.iter().filter(|f| f.path.ends_with(".rs")) {
-        assert!(!f.text.contains("WebviewWindowBuilder") && !f.text.contains("WindowBuilder"), "{} opens a window", f.path);
-    }
-}
-
-/// A target marked `in new window` is the one way to a second desktop
-/// window: only then does the application make one, through `open_apart`.
-#[test]
-fn only_a_target_in_new_window_makes_a_second_desktop_window() {
-    let apart = SALES.replace(
-        "    button \"Approve\" name approveButton at 1,6 span 2 on click: approveClicked",
-        "    button \"Approve\" name approveButton at 1,6 span 2 on click: approveClicked\n    button \"Again\" name again at 3,6 span 2 on click -> OrderForm in new window",
-    );
-    assert_ne!(apart, SALES);
-    let project = load_sources([("sales.clarity", apart.as_str())]);
-    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
-    let apart_files = generate(&project, &shop()).unwrap();
-    let main = &program(&apart_files);
-    assert!(main.contains("fn open_apart("), "{main}");
-    assert!(main.contains("tauri::WebviewWindowBuilder::new("), "{main}");
-    assert!(main.contains("fn close_apart("), "{main}");
-    assert!(main.contains("open_apart,\n            apart_start,\n            close_apart,"), "{main}");
-    assert!(!program(&files()).contains("open_apart"));
-}
-
-/// A window opens at the size it says: the desktop window Tauri opens takes
-/// the main window's, and a desktop window of its own takes the size the
-/// renderer asks for (the window it shows first), else the standard one.
+/// A window opens at the size it says: Clarity.UI opens the desktop window
+/// at the main window's size, else the standard one.
 #[test]
 fn a_window_opens_at_its_size() {
-    let conf: serde_json::Value = serde_json::from_str(file(&files(), "tauri.conf.json")).unwrap();
-    assert_eq!((conf["app"]["windows"][0]["width"].as_u64(), conf["app"]["windows"][0]["height"].as_u64()), (Some(1100), Some(760)));
-
-    let sized = SALES.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n").replace(
-        "    button \"Approve\" name approveButton at 1,6 span 2 on click: approveClicked",
-        "    button \"Approve\" name approveButton at 1,6 span 2 on click: approveClicked\n    button \"Again\" name again at 3,6 span 2 on click -> OrderForm in new window",
-    );
+    assert!(program(&files()).contains("    width: 1100.0,\n    height: 760.0,\n"));
+    let sized = SALES.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n");
     let project = load_sources([("sales.clarity", sized.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
-    let files = generate(&project, &shop()).unwrap();
-    let conf: serde_json::Value = serde_json::from_str(file(&files, "tauri.conf.json")).unwrap();
-    assert_eq!((conf["app"]["windows"][0]["width"].as_u64(), conf["app"]["windows"][0]["height"].as_u64()), (Some(640), Some(480)));
-    let main = &program(&files);
-    assert!(main.contains("width: Option<f64>, height: Option<f64>"), "{main}");
-    assert!(main.contains(".inner_size(width.unwrap_or(1100.0), height.unwrap_or(760.0))"), "{main}");
+    let main = program(&generate(&project, &shop()).unwrap());
+    assert!(main.contains("    width: 640.0,\n    height: 480.0,\n"), "{main}");
 }
 
 /// A record's id, which code can read, is the record's `id`.
@@ -905,8 +846,8 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
 }
 
 /// The web target (DESIGN 7.3): the program serves the renderer to a
-/// browser, its commands answered by what the desktop commands call; beside
-/// the desktop target it serves with `--serve`.
+/// browser, its commands answered by the program; beside the desktop target
+/// it is not generated yet (G8d).
 #[test]
 fn the_web_target_serves_the_renderer() {
     use clarity_project::Target;
@@ -920,24 +861,20 @@ fn the_web_target_serves_the_renderer() {
     let has = |text: &str, expected: &str| assert!(text.contains(expected), "expected\n{expected}\nin\n{text}");
     let desktop = main_of(vec![Target::Desktop]);
     assert!(!desktop.contains("clarity_runtime::serve::serve("), "a desktop program serves nothing");
-    has(&desktop, "    let app = App(Mutex::new(db));\n    desktop::run(app);\n");
+    has(&desktop, "    let app = App(Mutex::new(db));\n    clarity_ui::desktop::run(app, FILES)\n");
     let web = main_of(vec![Target::Web]);
     has(&web, "clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args, \"127.0.0.1:8080\"), &files, &mut |command, args| served(&app, command, args))");
     has(&web, "        \"open_window\" => given((|| {");
-    // Nor does it link the desktop toolkit: no Tauri, no desktop module, the renderer's files in the program.
-    assert!(!web.contains("tauri") && !web.contains("mod desktop;"), "{web}");
+    // Nor does it link Clarity.UI: the renderer's files are in the program.
+    assert!(!web.contains("clarity_ui"), "{web}");
     has(&web, "            \"index.html\" => Some(include_bytes!(\"../ui/index.html\").to_vec()),\n");
     has(&web, "            \"windows/OrderForm.cxaml\" => Some(include_bytes!(\"../ui/windows/OrderForm.cxaml\").to_vec()),\n");
     let mut settings = shop();
     settings.stack.targets = vec![Target::Web];
     let files = generate(&project, &settings).unwrap();
-    assert!(!file(&files, "Cargo.toml").contains("tauri"), "{}", file(&files, "Cargo.toml"));
-    for path in ["build.rs", "tauri.conf.json", "src/desktop.rs", "icons/icon.png"] {
-        assert!(!files.iter().any(|f| f.path == path), "{path}");
-    }
-    let both = main_of(vec![Target::Desktop, Target::Web]);
-    has(&both, "    let app = App(Mutex::new(db));\n    // --serve runs it as a web server, for a browser, in place of its window.\n    if std::env::args().any(|a| a == \"--serve\") {\n        let files = ");
-    has(&both, "        return;\n    }\n    desktop::run(app);\n");
+    assert!(!file(&files, "Cargo.toml").contains("clarity-ui"), "{}", file(&files, "Cargo.toml"));
+    settings.stack.targets = vec![Target::Desktop, Target::Web];
+    assert!(generate(&project, &settings).is_err(), "the web program beside the desktop one");
 }
 
 /// Backend drives frontend (DESIGN 1.7): the screen sends the person's
@@ -953,32 +890,19 @@ fn the_runtime_decides_what_the_persons_action_does() {
         ("range_event", true, "clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &moved, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
         ("step_event", false, "clarity_runtime::steps::event(db, state, &part, button, steps, next.as_deref(), finish.as_deref(), |state, handler| dispatch(db, state, handler), |state| drawn(db, state))"),
     ] {
-        assert!(main.contains(&format!("fn {command}(app: tauri::State<App>, state: WindowState, part: String")), "{command} in\n{main}");
-        assert!(main.contains(&format!("            {command},\n")), "{command} is registered");
         // A part's options are the runtime's parameters (DESIGN 1.7): a readonly part's change is taken back.
-        // The command is a thin call into the program (DESIGN 7.9), which calls the runtime.
-        assert!(main.contains(&format!("    app.{command}(state, ")), "{command} calls the program in\n{main}");
+        // The program (DESIGN 7.9) calls the runtime.
+        assert!(main.contains(&format!("    fn {command}(&self, state: WindowState, ")), "{command} in\n{main}");
         let call = if readonly { format!("clarity_runtime::edits::guarded(state, readonly, None, None, |state| drawn(db, state), |state| {call})") } else { call.to_string() };
         assert!(main.contains(&format!("window_reply(&sent, locked(self, |db| {call}))")), "{command} calls\n{call}\nin\n{main}");
-        if readonly {
-            assert!(main.contains(&format!("fn {command}(")) && main.contains("readonly: Option<bool>"), "{command} takes readonly");
-        }
     }
     // Canvas modes (DESIGN 5.31): the runtime applies the person's action and runs on change as one edit.
-    assert!(main.contains("fn canvas_event(app: tauri::State<App>, state: WindowState, part: String, scope: Option<String>, mode: String, list: Option<String>, at: Option<[String; 2]>, path: Option<String>, units: Option<[i64; 2]>, grid: Option<i64>, snap: Option<bool>, action: Map<String, Value>, handler: Option<String>, readonly: Option<bool>) -> Answer<Reply> {"), "{main}");
-    assert!(main.contains("let canvas = clarity_runtime::canvas::CanvasArgs { part, mode, list: list.unwrap_or_default(), at, path: path.unwrap_or_default(), units, grid: grid.unwrap_or_default(), snap: snap.unwrap_or_default(), readonly: false };"), "{main}");
     assert!(main.contains("window_reply(&sent, locked(self, |db| clarity_runtime::edits::guarded(state, readonly, None, None, |state| drawn(db, state), |state| clarity_runtime::canvas::event(db, state, &canvas, &action, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))"), "{main}");
-    assert!(main.contains("            canvas_event,\n"), "canvas_event is registered");
-    assert!(main.contains("fn edit_event(app: tauri::State<App>, state: WindowState, handler: Option<String>, part: String, scope: String, ends: bool, readonly: Option<bool>, path: Option<String>, editable: Option<Vec<String>>) -> Answer<Reply> {"), "{main}");
     assert!(main.contains("clarity_runtime::edits::guarded(state, readonly, path.as_deref(), editable.as_deref(), |state| drawn(db, state), |state| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| handled(db, state, handler.as_deref())))"), "{main}");
     // The shown rows (DESIGN 1.7): every window reply fills the views; a view event is no edit and not watched.
     assert!(main.contains("clarity_runtime::views::replied(sent, &mut reply)"), "{main}");
-    assert!(main.contains("fn view_event(app: tauri::State<App>, state: WindowState, part: String, action: Map<String, Value>) -> Answer<Reply> {"), "{main}");
     assert!(main.contains("        let sent = clarity_runtime::views::Sent::view_event(&state);\n        window_reply(&sent, locked(self, |db| clarity_runtime::views::event(state, part, &action, |state| drawn(db, state))))"), "{main}");
-    assert!(main.contains("            view_event,\n"));
     assert!(main.contains("let sent = clarity_runtime::views::Sent::of(&state);\n        window_reply(&sent, locked(self, |db| clarity_runtime::stepped(db, || dispatch(db, state, handler))))"), "{main}");
-    assert!(main.contains("fn find_options(app: tauri::State<App>, kind: String, entity: String, field: Option<String>, show: Option<Vec<String>>, typed: String) -> Answer<Value> {"), "{main}");
-    assert!(main.contains("            find_options,\n"));
     let mut settings = shop();
     settings.stack.targets = vec![Target::Web];
     let web = generate(&project, &settings).unwrap();
@@ -988,6 +912,7 @@ fn the_runtime_decides_what_the_persons_action_does() {
     }
     assert_eq!(web.matches("let readonly: Option<bool> = arg(&args, \"readonly\")?;").count(), 5, "{web}");
     assert!(web.contains("path: arg(&args, \"path\")?, editable: arg(&args, \"editable\")? };"), "{web}");
+    assert!(web.contains("let canvas = clarity_runtime::canvas::CanvasArgs { part: arg(&args, \"part\")?, mode: arg(&args, \"mode\")?, list: list.unwrap_or_default()"), "{web}");
     assert!(web.contains("app.find_options(&kind, &entity, field.as_deref(), &show.unwrap_or_default(), &typed)"), "{web}");
     assert!(web.contains("clarity_runtime::dropdown_options::find(kind, show, typed, || values_of(db, entity, field.unwrap_or_default()), || options(db, entity))"), "{web}");
 }

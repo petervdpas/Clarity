@@ -27,7 +27,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn the_web_stacks_read_and_set_the_step_in_the_parts_state() {
-    let rust = generated(Backend::Rust, Ui::Webview);
+    let rust = generated(Backend::Rust, Ui::Clarity);
     has(&rust, "ui.step(\"wizard\")");
     has(&rust, "ui.set_step(\"wizard\", 3");
     let go = generated(Backend::Go, Ui::Webview);

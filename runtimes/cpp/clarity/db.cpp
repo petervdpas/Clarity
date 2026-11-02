@@ -290,4 +290,20 @@ std::optional<Bytes> Db::picture_bytes(const std::string& source, const std::str
     return read_file(*picture.store, path);
 }
 
+void check_required(const std::vector<Required>& required, const std::vector<std::string>& columns, const std::vector<SqlValue>& values) {
+    auto empty = [](const SqlValue& v) {
+        if (std::holds_alternative<std::monostate>(v)) return true;
+        auto text = std::get_if<std::string>(&v);
+        return text && text->empty();
+    };
+    for (const auto& field : required) {
+        for (size_t i = 0; i < columns.size() && i < values.size(); ++i) {
+            if (columns[i] != field.column || !empty(values[i])) continue;
+            // A label written as @key takes the key's value; a plain one is itself.
+            std::string label = field.label.starts_with("@") ? text_of(field.label.substr(1)) : field.label;
+            refuse(Text::key("fieldRequired").with("field", slot_text(label)));
+        }
+    }
+}
+
 }  // namespace clarity

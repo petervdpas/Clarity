@@ -35,13 +35,12 @@ fn lacks(text: &str, unexpected: &str) {
 
 #[test]
 fn the_rust_app_reads_and_keeps_the_settings_and_never_stores_them() {
-    let code = generated(Backend::Rust, Ui::Webview);
+    let code = generated(Backend::Rust, Ui::Clarity);
     has(&code, "pub struct Settings {");
     has(&code, "pub settings: Settings,");
-    has(&code, "fn read_settings(app: tauri::State<App>) -> Map<String, Value>");
     has(&code, "    fn read_settings(&self) -> Map<String, Value> {\n        clarity_runtime::settings::read(PROGRAM)\n    }");
     has(&code, "clarity_runtime::settings::keep(PROGRAM, &settings)");
-    has(&code, "            read_settings,\n            keep_settings,");
+    has(&code, "    fn keep_settings(&self, settings: Map<String, Value>) -> Answer<()> {");
     lacks(&code, "impl Record for Settings");
     lacks(&code, "CREATE TABLE settings");
     lacks(&code, "\"Settings\" => db");
@@ -51,7 +50,7 @@ fn the_rust_app_reads_and_keeps_the_settings_and_never_stores_them() {
 #[test]
 fn the_other_web_stacks_keep_settings_out_of_the_database() {
     for backend in [Backend::Go, Backend::C, Backend::Cpp] {
-        let code = generated(backend, Ui::Webview);
+        let code = generated(backend, clarity_project::usual_ui(backend));
         lacks(&code, "CREATE TABLE settings");
         // The model the renderer draws from marks them, written as a string of the language.
         assert!(code.contains("settings\\\":true") || code.contains("\"settings\":true"), "{backend:?} carries the settings in its model");

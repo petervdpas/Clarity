@@ -442,8 +442,19 @@ public sealed class Screen : IDisposable
         Root.Detach();
     }
 
-    /// <summary>A key let go: the part with the focus hears it (an engine's held keys). Every host sends it.</summary>
-    public void KeyReleased(KeyInput key) => Focused?.OnKeyUp(key);
+    /// <summary>The window's own keys let go, asked before the part with the focus (Alt for the menu bar's access letters): true when it took the key. Not asked while a modal overlay is on top.</summary>
+    public Func<KeyInput, bool>? KeysUp { get; set; }
+
+    /// <summary>A key let go: the window hears it first, then the part with the focus (an engine's held keys). Every host sends it.</summary>
+    public void KeyReleased(KeyInput key)
+    {
+        if (KeysUp is { } keysUp && !(overlays.Count > 0 && overlays[^1].Modal) && keysUp(key))
+        {
+            Invalidate();
+            return;
+        }
+        Focused?.OnKeyUp(key);
+    }
 
     public void TextTyped(string text) => Focused?.OnText(text);
 }

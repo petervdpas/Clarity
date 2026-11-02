@@ -151,8 +151,40 @@ json edit_data(const WindowState& state) {
         if (part.text) own["text"] = *part.text;
         if (part.checked) own["checked"] = *part.checked;
         if (!own.empty()) data[part_state + name] = own;
+        // What code set on the part, each only when set.
+        const std::string at = part_state + name + ".";
+        if (part.caption) data[at + "caption"] = *part.caption;
+        if (part.visible) data[at + "visible"] = *part.visible;
+        if (part.enabled) data[at + "enabled"] = *part.enabled;
+        if (part.readonly) data[at + "readonly"] = *part.readonly;
+        if (part.error) data[at + "error"] = *part.error;
+        if (part.values && part.values->is_object())
+            for (const auto& [value, v] : part.values->items()) data[at + "values." + value] = v;
     }
     return data;
+}
+
+/// Puts back one field code set on a part, by its name after
+/// #parts.<name>.: caption, visible, enabled, readonly, error or values.<value>.
+static void set_part_field(PartState& part, const std::string& field, const json& value) {
+    auto flag = [&](std::optional<bool>& out) {
+        if (value.is_boolean()) out = value.get<bool>();
+    };
+    auto text = [&](std::optional<Text>& out) {
+        try {
+            out = value.get<Text>();
+        } catch (const json::exception&) {
+        }
+    };
+    if (field == "caption") text(part.caption);
+    else if (field == "error") text(part.error);
+    else if (field == "visible") flag(part.visible);
+    else if (field == "enabled") flag(part.enabled);
+    else if (field == "readonly") flag(part.readonly);
+    else if (field.starts_with("values.")) {
+        if (!part.values || !part.values->is_object()) part.values = json::object();
+        (*part.values)[field.substr(7)] = value;
+    }
 }
 
 WindowState with_edit_data(WindowState state, const json& data) {
@@ -160,13 +192,25 @@ WindowState with_edit_data(WindowState state, const json& data) {
     for (auto& [_, part] : state.parts) {
         part.text.reset();
         part.checked.reset();
+        part.caption.reset();
+        part.visible.reset();
+        part.enabled.reset();
+        part.readonly.reset();
+        part.error.reset();
+        part.values.reset();
     }
     for (const auto& [name, value] : data.items()) {
         if (!name.starts_with(part_state)) {
             state.data[name] = value;
             continue;
         }
-        auto& part = state.parts[name.substr(part_state.size())];
+        // A field code set on the part follows its name: #parts.<name>.<field>.
+        const std::string rest = name.substr(part_state.size());
+        if (auto dot = rest.find('.'); dot != std::string::npos) {
+            set_part_field(state.parts[rest.substr(0, dot)], rest.substr(dot + 1), value);
+            continue;
+        }
+        auto& part = state.parts[rest];
         if (!value.is_object()) continue;
         if (auto text = value.find("text"); text != value.end() && text->is_string()) part.text = text->get<std::string>();
         if (auto checked = value.find("checked"); checked != value.end() && checked->is_boolean()) part.checked = checked->get<bool>();

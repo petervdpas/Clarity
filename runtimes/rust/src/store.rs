@@ -69,7 +69,8 @@ pub(crate) fn location(text: &str) -> Result<String> {
 /// Connects to the database of a data source.
 pub(crate) fn open(dialect: Dialect, at: &str) -> Result<Box<dyn Driver>> {
     #[cfg_attr(not(any(feature = "sqlite", feature = "postgres", feature = "mysql", feature = "mssql")), allow(unused_variables))]
-    let at = location(at)?;
+    // An SQLite file opens in the folder CLARITY_DATA names, when it is set.
+    let at = if dialect == Dialect::Sqlite { location(&crate::data_folder::sqlite_here(at))? } else { location(at)? };
     match dialect {
         #[cfg(feature = "sqlite")]
         Dialect::Sqlite => Ok(Box::new(crate::sqlite::Sqlite::open(std::path::Path::new(&at))?)),

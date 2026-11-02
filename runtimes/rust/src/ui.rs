@@ -156,6 +156,12 @@ impl Text {
         Text { text: String::new(), values: BTreeMap::new(), key: Some(key.to_string()) }
     }
 
+    /// Clarity's own words: the text of key `key` in the person's language,
+    /// and `english` where the program has no text for the key.
+    pub fn keyed(key: &str, english: &str) -> Text {
+        Text { text: english.to_string(), values: BTreeMap::new(), key: Some(key.to_string()) }
+    }
+
     /// Text that is shown as it is: a brace in it is no slot.
     pub fn plain(text: impl Into<String>) -> Text {
         Text::new(&text.into().replace('{', "{{").replace('}', "}}"))
@@ -170,7 +176,8 @@ impl Text {
     /// for logs, and for code that reads a caption back.
     /// A key takes its value in the language the screen picked.
     pub fn show(&self) -> String {
-        let value = self.key.as_deref().map(|k| crate::i18n::value(k).unwrap_or_else(|| k.to_string()));
+        // A key without a text in the language shown falls back to the English it carries, else to the key.
+        let value = self.key.as_deref().map(|k| crate::i18n::value(k).unwrap_or_else(|| if self.text.is_empty() { k.to_string() } else { self.text.clone() }));
         let mut out = String::new();
         let mut rest = value.as_deref().unwrap_or(self.text.as_str());
         while let Some(at) = rest.find(['{', '}']) {

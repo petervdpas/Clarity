@@ -36,6 +36,11 @@ hears: Array<PartMessage>,
  */
 size: [number, number] | null, 
 /**
+ * `grows`: placed in a window it takes the height the window has left,
+ * as a table or a canvas does; without it it keeps its rows.
+ */
+grows: boolean, 
+/**
  * `preview "arena.png"`: its picture on the design canvas, from the resources.
  */
 preview: string | null, span: Span, };

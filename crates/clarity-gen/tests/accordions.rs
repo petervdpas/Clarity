@@ -26,7 +26,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn the_web_stacks_read_and_set_the_open_section_in_the_parts_state() {
-    let rust = generated(Backend::Rust, Ui::Webview);
+    let rust = generated(Backend::Rust, Ui::Clarity);
     has(&rust, "ui.open_section(\"notesAccordion\")");
     has(&rust, "ui.set_open_section(\"notesAccordion\", 2");
     let go = generated(Backend::Go, Ui::Webview);

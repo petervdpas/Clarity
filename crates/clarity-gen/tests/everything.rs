@@ -131,11 +131,10 @@ mod everything_project;
 
 /// Every stack and target, as a project file writes them.
 /// C# on the web comes with Clarity.UI (DESIGN 7.9, G7d).
-const STACKS: [&str; 10] = [
+const STACKS: [&str; 9] = [
     "csharp desktop cli",
     "rust desktop cli",
-    "rust webview desktop cli",
-    "rust webview web cli",
+    "rust web cli",
     "go webview desktop cli",
     "go webview web cli",
     "c webview desktop cli",

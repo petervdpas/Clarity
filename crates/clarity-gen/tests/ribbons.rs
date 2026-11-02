@@ -45,7 +45,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn code_reads_and_sets_a_ribbon_on_every_stack() {
-    let rust = files(Backend::Rust, Ui::Webview);
+    let rust = files(Backend::Rust, Ui::Clarity);
     let code = text(&rust, "src/modules/shop.rs");
     has(code, "ui.set_collapsed(\"mainRibbon\", false);");
     has(code, "if (ui.tab(\"mainRibbon\") == 1i64) {");

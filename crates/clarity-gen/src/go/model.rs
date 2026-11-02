@@ -199,6 +199,12 @@ fn record(project: &Project, entity: &Entity) -> String {
     if !pictures.is_empty() {
         let _ = write!(out, "func (*{name}) Pictures() []clarity.PictureColumn {{\n\treturn []clarity.PictureColumn{{{}}}\n}}\n\n", pictures.join(", "));
     }
+    // The required fields a save checks, each by its column and its label as written.
+    let required: Vec<String> =
+        crate::required_fields(project, entity).iter().map(|(column, label)| format!("{{Column: {}, Label: {}}}", string(column), string(label))).collect();
+    if !required.is_empty() {
+        let _ = write!(out, "func (*{name}) Required() []clarity.RequiredField {{\n\treturn []clarity.RequiredField{{{}}}\n}}\n\n", required.join(", "));
+    }
     let _ = write!(out, "func (r *{name}) GetID() int64 {{\n\treturn r.ID\n}}\n\n");
     let _ = write!(out, "func (r *{name}) SetID(id int64) {{\n\tr.ID = id\n}}\n\n");
     let _ = write!(out, "func (r *{name}) Values() []any {{\n\treturn []any{{{values}}}\n}}\n\n");

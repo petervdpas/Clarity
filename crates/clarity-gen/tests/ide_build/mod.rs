@@ -69,9 +69,14 @@ fn local_runtime(dir: &Path, backend: Backend, command: &mut Command) {
         Backend::Rust => {
             std::fs::create_dir_all(dir.join(".cargo")).unwrap();
             let runtime = repo().join("runtimes/rust");
-            std::fs::write(dir.join(".cargo/config.toml"), format!("[patch.crates-io]\nclarity-runtime = {{ path = {:?} }}\n", runtime.display().to_string())).unwrap();
+            let patch = if on_clarity_ui(dir) {
+                clarity_gen::rust_local_patch(&runtime, true).unwrap()
+            } else {
+                format!("[patch.crates-io]\nclarity-runtime = {{ path = {:?} }}\n", runtime.display().to_string())
+            };
+            std::fs::write(dir.join(".cargo/config.toml"), patch).unwrap();
             // One target folder for every run, so the dependencies compile once.
-            command.env("CARGO_TARGET_DIR", repo().join("target/generated/ide-build-target"));
+            command.env("CARGO_TARGET_DIR", rust_target(dir));
         }
         Backend::Go => {
             let go = include_str!("../../../../runtimes/go/go.mod").lines().find(|l| l.starts_with("go ")).unwrap();
@@ -80,6 +85,18 @@ fn local_runtime(dir: &Path, backend: Backend, command: &mut Command) {
         // C and C++ carry their runtime in the project.
         Backend::C | Backend::Cpp => {}
     }
+}
+
+/// Whether the Rust program in `dir` is drawn by Clarity.UI (its Cargo.toml names clarity-ui).
+fn on_clarity_ui(dir: &Path) -> bool {
+    std::fs::read_to_string(dir.join("Cargo.toml")).is_ok_and(|t| t.contains("clarity-ui"))
+}
+
+/// The target folder a Rust program in `dir` builds into: one shared by
+/// every run, and for a program on Clarity.UI the one where Skia's crates
+/// are built already.
+fn rust_target(dir: &Path) -> PathBuf {
+    if on_clarity_ui(dir) { repo().join("target/g8c-shared") } else { repo().join("target/generated/ide-build-target") }
 }
 
 /// The warnings among what a build said.
@@ -121,7 +138,7 @@ pub fn build_for_run(file: &Path, project: &clarity_spec::Project, settings: &cl
     assert!(ran.status.success(), "{} {}:\n{}{}", toolchain.tool, toolchain.args.join(" "), String::from_utf8_lossy(&ran.stdout), String::from_utf8_lossy(&ran.stderr));
     // Rust builds into the shared target folder.
     let program = if settings.stack.backend == Backend::Rust {
-        repo().join("target/generated/ide-build-target/debug").join(toolchain.program.file_name().unwrap())
+        rust_target(&folder).join("debug").join(toolchain.program.file_name().unwrap())
     } else {
         folder.join(&toolchain.program)
     };

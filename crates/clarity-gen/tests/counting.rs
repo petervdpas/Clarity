@@ -35,7 +35,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn every_stack_counts_and_joins() {
-    let rust = generated(Backend::Rust, Ui::Webview);
+    let rust = generated(Backend::Rust, Ui::Clarity);
     has(&rust, "(1i64..=3i64).collect::<Vec<i64>>()");
     has(&rust, ".join(");
     let go = generated(Backend::Go, Ui::Webview);

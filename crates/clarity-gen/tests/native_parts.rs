@@ -72,40 +72,6 @@ void Arena_restart(ArenaPart*, int64_t level) { fprintf(stderr, "arena restart %
 void Arena_say(ArenaPart*, const char*, bool) {}
 "#;
 
-/// The test's part in Rust: as the C++ one, it tells and says what it hears.
-const TEST_PART_RUST: &str = r#"mod clarity;
-pub use clarity::*;
-
-pub struct Arena {
-    host: ArenaHost,
-    frames: u32,
-}
-
-impl ArenaPart for Arena {
-    fn create(_window: Window, _width: u32, _height: u32, host: ArenaHost) -> Self {
-        Arena { host, frames: 0 }
-    }
-    fn frame(&mut self) {
-        self.frames += 1;
-        if self.frames == 20 {
-            self.host.scored(7, "test");
-        }
-    }
-    fn set_value(&mut self, _value: i64) {}
-    fn set_speed(&mut self, speed: i64) {
-        eprintln!("arena speed {speed}");
-    }
-    fn set_title(&mut self, title: String) {
-        eprintln!("arena title {title}");
-    }
-    fn set_running(&mut self, _running: bool) {}
-    fn restart(&mut self, level: i64) {
-        eprintln!("arena restart {level}");
-    }
-    fn say(&mut self, _words: String, _loud: bool) {}
-}
-"#;
-
 /// The test's part in Go.
 const TEST_PART_GO: &str = r#"package arena
 
@@ -141,7 +107,8 @@ func (p *part) Say(words string, loud bool)   {}
 fn project_for(backend: clarity_project::Backend) -> clarity_spec::Project {
     use clarity_project::Backend;
     let (line, test_file, test_part) = match backend {
-        Backend::Rust => ("crate \"parts/Arena\"", "src/lib.rs", TEST_PART_RUST),
+        // A Rust part is a control of Clarity.UI: its starter as declaring it writes it.
+        Backend::Rust => ("crate \"parts/Arena\"", "", ""),
         Backend::Go => ("go \"parts/arena\"", "arena.go", TEST_PART_GO),
         _ => ("native \"parts/Arena\"", "Arena.cpp", TEST_PART),
     };
@@ -331,13 +298,6 @@ fn a_c_program_places_its_native_part() {
 }
 
 #[test]
-#[ignore = "builds a Tauri program with a part written in Rust and runs it in Xvfb; slow; run with --ignored"]
-fn a_rust_program_places_its_rust_part() {
-    let dir = built(clarity_project::Backend::Rust, &["cargo", "build", "--color", "never"]);
-    places_its_part(&dir, "target/debug/game", ":95");
-}
-
-#[test]
 #[ignore = "builds a Go program with a part written in Go and runs it in Xvfb; slow; run with --ignored"]
 fn a_go_program_places_its_go_part() {
     let dir = built(clarity_project::Backend::Go, &["go", "build", "-o", "bin/game", "."]);
@@ -345,13 +305,9 @@ fn a_go_program_places_its_go_part() {
 }
 
 #[test]
-fn the_rust_and_go_interfaces_type_the_declaration() {
+fn the_go_interface_types_the_declaration() {
     use clarity_project::Backend;
-    let rust = parts::starter_for(&project_for(Backend::Rust).files[0].parts[0]);
-    let rust = &rust.iter().find(|(p, _)| p == "src/clarity.rs").unwrap().1;
-    for line in ["pub trait ArenaPart {", "fn set_speed(&mut self, speed: i64);", "fn say(&mut self, words: String, loud: bool);", "pub fn scored(&self, points: i64, by: &str) {"] {
-        assert!(rust.contains(line), "{line}\n{rust}");
-    }
+    // A Rust part's interface is Clarity.UI's (tests/rust_clarity_parts.rs).
     let go = parts::starter_for(&project_for(Backend::Go).files[0].parts[0]);
     let go = &go.iter().find(|(p, _)| p == "clarity.go").unwrap().1;
     for line in ["package arena", "\tSetSpeed(speed int64)", "\tSay(words string, loud bool)", "func (h Host) Scored(points int64, by string) {"] {
@@ -533,18 +489,6 @@ fn a_csharp_program_with_a_dotnet_part_builds() {
     assert!(out.status.success(), "{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
 }
 
-/// A Rust part's starter uses every value a hear brings without a warning:
-/// one alone as it is, several as a tuple (found by the every-part project).
-#[test]
-fn a_rust_parts_starter_builds_without_a_warning() {
-    let text = GAME.replace("native \"parts/Arena\"", "crate \"parts/Arena\"");
-    let p = load_keyed([("game.clarity", text.as_str())], &[], "en");
-    let lib = parts::starter_for(&p.files[0].parts[0]).into_iter().find(|(path, _)| path == "src/lib.rs").unwrap().1;
-    assert!(lib.contains("let _ = level;"), "{lib}");
-    assert!(lib.contains("let _ = (words, loud);"), "{lib}");
-    assert!(!lib.contains("let _ = (level);"), "{lib}");
-}
-
 #[test]
 fn a_dotnet_part_on_another_stack_is_refused() {
     let mut settings = notes_settings();
@@ -560,13 +504,14 @@ fn a_dotnet_part_on_another_stack_is_refused() {
 #[test]
 fn a_program_served_to_a_browser_alone_has_no_native_parts() {
     use clarity_project::{Backend, Target};
-    for (backend, word) in [(Backend::Cpp, "cpp"), (Backend::Rust, "rust"), (Backend::Go, "go")] {
+    // Rust names no UI; its desktop program is drawn by Clarity.UI and its web program stands alone.
+    for (backend, web, desktop) in [(Backend::Cpp, "cpp webview web", "cpp webview desktop web"), (Backend::Rust, "rust web", "rust desktop"), (Backend::Go, "go webview web", "go webview desktop web")] {
         let project = project_for(backend);
-        let web = clarity_project::parse(&format!("project Game\n    stack {word} webview web\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
+        let web = clarity_project::parse(&format!("project Game\n    stack {web}\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
         assert_eq!(web.stack.targets, [Target::Web]);
         let refused = clarity_gen::generate(&project, &web).expect_err("a part in a browser");
         assert_eq!(refused, ["part Arena draws in a window of the desktop, which a program served to a browser has not; add the desktop target, or leave the part out"]);
-        let both = clarity_project::parse(&format!("project Game\n    stack {word} webview desktop web\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
-        assert!(clarity_gen::generate(&project, &both).is_ok(), "{word} with a desktop window");
+        let both = clarity_project::parse(&format!("project Game\n    stack {desktop}\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
+        assert!(clarity_gen::generate(&project, &both).is_ok(), "{desktop} with a desktop window");
     }
 }

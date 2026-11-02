@@ -24,6 +24,13 @@ public interface IRecord<TSelf> where TSelf : IRecord<TSelf>
     static virtual IReadOnlyList<PictureColumn> Pictures => [];
 
     /// <summary>
+    /// The required fields, each its column and its label as written (a key
+    /// with its @, or the text): a save refuses the record while one is empty
+    /// (conformance/required.json).
+    /// </summary>
+    static virtual IReadOnlyList<(string Column, string Label)> Required => [];
+
+    /// <summary>
     /// Whether the entity has data events. A save or delete then runs with its
     /// events in one transaction: when an event fails, nothing of it is kept.
     /// </summary>
@@ -53,4 +60,28 @@ public interface IRecord<TSelf> where TSelf : IRecord<TSelf>
 
     /// <summary>Deletes the records that refer to this one with <c>cascade</c>, each as any record is deleted.</summary>
     void Cascade(Db db) { }
+}
+
+/// <summary>Whether a record may be saved: none of its required fields is empty (conformance/required.json).</summary>
+public static class Requirements
+{
+    /// <summary>
+    /// Refuses the first of <paramref name="required"/> (each column and label
+    /// as written) that is empty in <paramref name="values"/> (by
+    /// <paramref name="columns"/>), in Clarity's own words with its label in the
+    /// person's language. No value and empty text are empty; 0 and false are values.
+    /// </summary>
+    public static void Check(IReadOnlyList<(string Column, string Label)> required, IReadOnlyList<string> columns, object?[] values)
+    {
+        foreach (var (column, label) in required)
+        {
+            var at = columns.ToList().IndexOf(column);
+            var value = at >= 0 && at < values.Length ? values[at] : null;
+            if (value is null || value is string { Length: 0 })
+            {
+                var shown = label.StartsWith('@') ? Locale.Translate(label[1..]) : label;
+                throw new RefusedException(new Text("{field} is required") { Key = "fieldRequired" }.With("field", Slot.OfText(shown)));
+            }
+        }
+    }
 }

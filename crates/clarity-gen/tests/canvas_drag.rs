@@ -57,7 +57,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn every_stack_reads_where_a_drag_started() {
-    let rust = generated(Backend::Rust, Ui::Webview);
+    let rust = generated(Backend::Rust, Ui::Clarity);
     has(&rust, "ui.from_x(\"sheet\")");
     has(&rust, "\"op\": \"link\"");
     has(&rust, "ui.bent(\"sheet\")");

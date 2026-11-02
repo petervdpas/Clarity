@@ -6,6 +6,7 @@
 
 pub mod canvas;
 pub mod charts;
+pub mod data_folder;
 pub mod cli;
 pub mod dialect;
 pub mod dropdown_options;
@@ -168,6 +169,31 @@ pub enum Error {
     Value(String),
 }
 
+/// Why an undo is refused: what it would take back was changed since, in
+/// Clarity's own words with their English (as the C# runtime says it).
+pub fn undo_changed_since() -> ui::Text {
+    ui::Text::keyed("undoChangedSince", "This was changed since, so it cannot be taken back")
+}
+
+/// Whether a record may be saved: none of its `required` fields (`required`,
+/// each column and label as written) is empty in `values` (by `columns`).
+/// No value and empty text are empty; 0 and false are values. The first
+/// empty one is refused in Clarity's own words, with its label in the
+/// person's language (conformance/required.json).
+pub fn check_required(required: &[(&str, &str)], columns: &[&str], values: &[SqlValue]) -> Result<()> {
+    for (column, label) in required {
+        let value = columns.iter().position(|c| c == column).and_then(|at| values.get(at));
+        if matches!(value, None | Some(SqlValue::Null)) || matches!(value, Some(SqlValue::Text(t)) if t.is_empty()) {
+            let shown = match label.strip_prefix('@') {
+                Some(key) => i18n::text(key),
+                None => label.to_string(),
+            };
+            return Err(Error::Refused(ui::Text::keyed("fieldRequired", "{field} is required").with("field", ui::Slot::text(shown))));
+        }
+    }
+    Ok(())
+}
+
 /// Why the databases did not open, as the person reads it (DESIGN 5.27,
 /// conformance/unconnected.json): in Clarity's own words, which the project
 /// translates, with this runtime's message in the slot.
@@ -235,6 +261,10 @@ pub trait Record: Sized + Clone {
     /// whether there is a picture, and saving leaves alone when the picture
     /// is the one stored.
     const PICTURES: &'static [picture::PictureColumn] = &[];
+    /// The `required` fields, each its column and its label as written (a
+    /// key with its `@`, or the text): a save refuses the record while one
+    /// is empty (conformance/required.json).
+    const REQUIRED: &'static [(&'static str, &'static str)] = &[];
     fn id(&self) -> Id;
     fn set_id(&mut self, id: Id);
     fn to_values(&self) -> Vec<SqlValue>;
@@ -638,6 +668,7 @@ impl Db {
     }
 
     fn store<R: Record>(&self, record: &mut R) -> Result<()> {
+        check_required(R::REQUIRED, R::COLUMNS, &record.to_values())?;
         let recording = self.history.borrow().recording.is_some();
         let before = if recording && record.id() != 0 { self.row(R::SOURCE, R::TABLE, R::KEY, R::COLUMNS, record.id())? } else { None };
         self.store_row(record)?;
@@ -824,7 +855,7 @@ impl Db {
             seen.push(at);
             let expected = if back { &change.after } else { &change.before };
             if &self.row(&change.source, change.table, change.key, change.columns, change.id)? != expected {
-                return Err(Error::Refused(ui::Text::key("undoChangedSince")));
+                return Err(Error::Refused(undo_changed_since()));
             }
         }
         let mut sources: Vec<&str> = step.iter().map(|c| c.source.as_str()).collect();

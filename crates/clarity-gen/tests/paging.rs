@@ -53,7 +53,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn rust_reads_every_page() {
-    let code = code(Backend::Rust, Ui::Webview, "src/modules/api.rs");
+    let code = code(Backend::Rust, Ui::Clarity, "src/modules/api.rs");
     has(&code, "clarity_runtime::http::pages_at(\"https://shop.example.com/api\", &String::from(\"/orders\"), ");
     has(&code, "clarity_runtime::http::Auth::Bearer(\"env:SHOP_TOKEN\"), &clarity_runtime::http::Paging { kind: clarity_runtime::http::PagingKind::Page, param: \"page\", size_param: \"per_page\", size: 100, next: \"\", items: \"data\" })");
 }

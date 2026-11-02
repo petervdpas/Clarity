@@ -57,7 +57,16 @@ public class DialogWindowTests
         </Window>
         """;
 
+    const string NoCancel = """
+        <Window name="PickFriend">
+          <Label name="who" at="1,1" span="12" caption="Who?" />
+          <Button name="adaButton" at="1,2" span="6" caption="Ada" default="true" onclick="close" />
+        </Window>
+        """;
+
     static string MarkupOf(WindowViewModel model) => model is PickFriendViewModel ? Dialog : "<Window name=\"Lender\" />";
+
+    static string NoCancelOf(WindowViewModel model) => model is PickFriendViewModel ? NoCancel : "<Window name=\"Lender\" />";
 
     static (Screen Screen, WindowStack Stack, LenderViewModel Lender) Shown(Action<WindowViewModel, WindowViewModel>? apart = null)
     {
@@ -113,6 +122,55 @@ public class DialogWindowTests
         Assert.Empty(screen.Overlays);
         Assert.Empty(lender.Log);
         Assert.Equal(1, lender.ReturnedTimes);
+    }
+
+    [Fact]
+    public void Escape_closes_a_dialog_without_a_cancel_button_as_its_close_does()
+    {
+        var stack = new WindowStack(NoCancelOf);
+        var app = new Screen(stack, ThemeLook.Clarity(dark: false)) { Keys = stack.KeyPressed };
+        app.Resize(800, 600, 1);
+        var lender = new LenderViewModel();
+        stack.Push(lender);
+        lender.LendClicked();
+        Assert.Single(app.Overlays);
+        app.KeyPressed(new KeyInput(Key.Escape, Modifiers.None));
+        Assert.Empty(app.Overlays);
+        Assert.Empty(lender.Log);
+        Assert.Equal(1, lender.Asked!.ClosingTimes);
+        Assert.Equal(1, lender.ReturnedTimes);
+    }
+
+    [Fact]
+    public void Escape_closes_a_dialog_in_a_desktop_window_of_its_own()
+    {
+        var opener = new LenderViewModel();
+        var stack = new WindowStack(NoCancelOf) { Opener = opener };
+        var own = new Screen(stack, ThemeLook.Clarity(dark: false)) { Keys = stack.KeyPressed };
+        own.Resize(480, 160, 1);
+        var ended = 0;
+        stack.Ended += () => ended++;
+        var dialog = new PickFriendViewModel();
+        stack.Push(dialog);
+        own.KeyPressed(new KeyInput(Key.Escape, Modifiers.None));
+        Assert.Equal(1, ended);
+        Assert.Equal(1, dialog.ClosingTimes);
+        Assert.Equal(1, opener.ReturnedTimes);
+    }
+
+    [Fact]
+    public void Escape_in_a_window_that_is_no_dialog_closes_nothing()
+    {
+        var stack = new WindowStack(NoCancelOf);
+        var app = new Screen(stack, ThemeLook.Clarity(dark: false)) { Keys = stack.KeyPressed };
+        app.Resize(800, 600, 1);
+        var lender = new LenderViewModel();
+        stack.Push(lender);
+        var ended = 0;
+        stack.Ended += () => ended++;
+        app.KeyPressed(new KeyInput(Key.Escape, Modifiers.None));
+        Assert.Equal(0, ended);
+        Assert.Same(lender, stack.Current);
     }
 
     [Fact]

@@ -60,7 +60,7 @@ fn plain(value: &Value) -> String {
 
 // -- Help ------------------------------------------------------------------------
 
-/// Help under an input: its caption, else the error of the input its `for` names, in the error color.
+/// Help under an input: the error of the input its `for` names, in the error color; else its caption, else the help of that input's field.
 pub struct HelpPart {
     base: PartBase,
 }
@@ -79,9 +79,17 @@ impl HelpPart {
         self.error().is_some()
     }
 
-    /// What it says: its input's error, else its caption.
+    /// The help the field of the input it is for declares, as shown in the person's language; none when it has none.
+    fn field_help(&self) -> Option<String> {
+        let target = self.base.spec.text("for").filter(|t| !t.is_empty())?;
+        let bound = self.base.host.bound_of(target)?;
+        let help = self.base.host.field(&bound)?.help?;
+        Some(crate::facts::shown(&help, ""))
+    }
+
+    /// What it says: its input's error, else its caption, else the help its input's field declares.
     pub fn text(&self) -> String {
-        self.error().or_else(|| self.base.caption()).unwrap_or_default()
+        self.error().or_else(|| self.base.caption()).or_else(|| self.field_help()).unwrap_or_default()
     }
 }
 

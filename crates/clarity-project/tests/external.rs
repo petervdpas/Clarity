@@ -4,7 +4,7 @@
 use clarity_project::load_modules;
 use clarity_spec::Severity;
 
-const PROJECT: &str = "project Shop\n    stack rust webview desktop\n    datasource main sqlite \"data/shop.db\"\n    datasource erp sqlite \"legacy/erp.db\" external\n";
+const PROJECT: &str = "project Shop\n    stack rust desktop\n    datasource main sqlite \"data/shop.db\"\n    datasource erp sqlite \"legacy/erp.db\" external\n";
 
 const ERP: &str = "module erp\nsource erp\n\nentity Invoice\n    table \"tblInvoice\"\n    key \"InvoiceID\"\n    number: text(20), column \"InvNo\", label @invoiceNumberLabel\n";
 

@@ -96,6 +96,7 @@ static FILES: AppFiles = AppFiles {
     apps: &[],
     themes: &[("light.light", "{}"), ("light.dark", "{}"), ("dark.light", "{}"), ("dark.dark", "{}")],
     model: MODEL,
+    resources: &[],
     title: "Facts",
     width: 0.0,
     height: 0.0,

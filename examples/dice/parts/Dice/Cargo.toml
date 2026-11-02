@@ -5,10 +5,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# The window's raw handle, which Bevy takes.
-raw-window-handle = "0.6"
-# Bevy's 3D renderer only: no window loop of its own (Clarity's part host gives
-# the window and calls frame), no audio, no UI.
+# Clarity.UI, whose control the part is: src/clarity.rs implements its CustomPart.
+clarity-ui = "0.1.0"
+serde_json = "1"
+# Bevy's 3D renderer only, headless: it draws into a picture of its own that
+# the part reads back and puts in its place. No window, no window loop of its
+# own (the part's wake-ups run its updates), no audio, no UI.
 bevy = { version = "0.20", default-features = false, features = [
     "std",
     "bevy_asset",

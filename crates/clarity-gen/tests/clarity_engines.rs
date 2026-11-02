@@ -42,7 +42,7 @@ fn writes_no_engine_code(files: &[OutFile]) {
 
 #[test]
 fn every_stack_carries_a_clarity_engine_as_a_file() {
-    for (backend, ui) in [(Backend::Rust, Ui::Webview), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
         let files = files(backend, ui);
         carries_the_board(&files);
         writes_no_engine_code(&files);
@@ -55,7 +55,7 @@ fn every_stack_carries_a_clarity_engine_as_a_file() {
 /// The keys the engine's code gives are its texts, translated by the host.
 #[test]
 fn a_clarity_engines_keys_are_its_says() {
-    let files = files(Backend::Rust, Ui::Webview);
+    let files = files(Backend::Rust, Ui::Clarity);
     let all = all(&files);
     assert!(all.contains("thatSquareIsTaken"), "the keys reach the translations");
 }
@@ -83,22 +83,13 @@ fn the_project_chooses_compiled_or_interpreted_engines() {
     assert!(!carries_ir(&board(false)), "the compiled engine carries code, not IR");
 }
 
-/// An engine that says how far a long call is (DESIGN 5.12): the Tauri
-/// program runs handlers off the screen's thread, so the window keeps
-/// painting its bar, and Stop reaches the call.
+/// An engine that says how far a long call is (DESIGN 5.12): the program
+/// watches its long calls, so Clarity.UI runs a handler off the screen's
+/// thread, keeps painting its bar, and Stop reaches the call.
 #[test]
-fn tauri_runs_a_watched_handler_off_the_screens_thread() {
-    let text = all(&files(Backend::Rust, Ui::Webview));
-    for command in ["open_window", "close_window", "return_to", "start_app", "dispatch_event", "answer_event"] {
-        assert!(text.contains(&format!("async fn {command}(app: tauri::State<'_, App>, stopping: tauri::State<'_, Stopping>, webview: tauri::WebviewWindow")), "{command}");
-    }
-    assert!(text.contains("watched(&stopping, &webview, || app.dispatch_event(state, &handler))"));
-    // The program watches its long calls for Clarity.UI too.
+fn the_program_watches_a_long_call() {
+    let text = all(&files(Backend::Rust, Ui::Clarity));
+    assert!(text.contains("    fn watches(&self) -> bool {\n        true\n    }"));
     assert!(text.contains("    fn watched(&self, watch: &program::Watch, run: &mut dyn FnMut()) {"));
-    assert!(text.contains("fn stop_call(stopping: tauri::State<Stopping>)"));
-    assert!(text.contains(".manage(Stopping::default())"));
-    assert!(text.contains("            stop_call,\n"));
-    // The scripts that tell the window, as Rust reads them.
-    assert!(text.contains(r###"window.eval(format!(r#"window.dispatchEvent(new CustomEvent("clarity-progress", {{detail: {{"done":{done},"total":{total}}}}}))"#))"###));
-    assert!(text.contains(r###"webview.eval(r#"window.dispatchEvent(new CustomEvent("clarity-progress", {detail: null}))"#)"###));
+    assert!(!text.contains("tauri"));
 }

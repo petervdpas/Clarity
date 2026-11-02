@@ -169,7 +169,7 @@ public sealed class WindowStack : Element, IDisposable
         Attach(model, () => CloseDialog(dialog));
         var (host, view) = MakeDialogView(model);
         dialog.Host = host;
-        dialog.Overlay = new Overlay(new DialogOverlay(model, view), Bounds) { Modal = true, Covers = true };
+        dialog.Overlay = new Overlay(new DialogOverlay(model, view) { Cancel = () => CloseDialog(dialog) }, Bounds) { Modal = true, Covers = true };
         dialogs.Add(dialog);
         if (Screen is { } screen)
         {
@@ -373,12 +373,21 @@ public sealed class WindowStack : Element, IDisposable
     /// (DESIGN 5.29); a part that takes the key itself (typing not yet an
     /// edit) has it first. True when it took the key.
     /// </summary>
+    /// <summary>A key let go, which the host gives the screen as its <see cref="Screen.KeysUp"/>: the window on top's (Alt for its menu bar). True when it took the key.</summary>
+    public bool KeyReleased(KeyInput key) => View?.KeyReleased(key) ?? false;
+
     public bool KeyPressed(KeyInput key)
     {
         if (stack.Count == 0)
             return false;
         if (View is { } view && view.KeyPressed(key))
             return true;
+        // A dialog in a desktop window of its own closes on Escape that nothing in it took, as its close does (DESIGN 5.14).
+        if (key.Key == Key.Escape && key.Modifiers == Modifiers.None && Current is { IsDialog: true } dialog)
+        {
+            Close(dialog);
+            return true;
+        }
         var command = key.Control || key.Modifiers.HasFlag(Modifiers.Meta);
         if (!command || key.Modifiers.HasFlag(Modifiers.Alt))
             return false;

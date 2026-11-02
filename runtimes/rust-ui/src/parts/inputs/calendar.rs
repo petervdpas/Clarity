@@ -376,6 +376,8 @@ impl DayCalendar {
         let mut overlay = Overlay::new(Box::new(element), place);
         overlay.anchor = anchor;
         overlay.opener = opener;
+        // A press outside the calendar closes it and reaches what it was on.
+        overlay.through = true;
         let id = cx.open(overlay);
         cx.focus(Some(holder.unwrap_or(own)));
         (id, calendar)

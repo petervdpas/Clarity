@@ -173,8 +173,12 @@ func (db *Db) atomic(source string, run func() error) error {
 
 // Save inserts a new record (and gives it its id) or updates a stored one,
 // with the entity's data events around it.
+// A record whose required field is empty is refused (required.go).
 func Save[R Record](db *Db, record R) error {
 	if !hasEvents(record) {
+		if err := checkRequired(record); err != nil {
+			return err
+		}
 		return store(db, record)
 	}
 	id := record.GetID()
@@ -183,6 +187,10 @@ func Save[R Record](db *Db, record R) error {
 			if err := e.BeforeSave(db); err != nil {
 				return err
 			}
+		}
+		// A required field is checked after before save, which may fill it.
+		if err := checkRequired(record); err != nil {
+			return err
 		}
 		if err := store(db, record); err != nil {
 			return err

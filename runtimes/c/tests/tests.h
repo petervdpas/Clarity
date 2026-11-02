@@ -53,6 +53,8 @@
     X(a_picture_is_copied_from_another_record)                     \
     X(a_store_lists_its_files_as_every_runtime_does)              \
     X(events_run_around_a_save)                                   \
+    X(required_fields_are_checked_as_every_runtime_does)          \
+    X(a_save_refuses_a_record_with_an_empty_required_field)       \
     X(deleting_a_record_deletes_what_cascades_from_it_first)      \
     X(a_refused_child_keeps_all_of_it)                            \
     X(a_failing_event_keeps_nothing)                              \
@@ -82,6 +84,7 @@
     X(a_table_takes_back_a_change_to_a_column_it_does_not_edit) \
     X(the_edit_bus_keeps_the_record_as_every_runtime_does)     \
     X(a_parts_own_text_and_tick_are_edit_data)                 \
+    X(the_edit_bus_puts_back_what_code_set_on_parts)            \
     X(the_server_serves_the_page_and_answers_its_commands)        \
     X(the_server_listens_where_it_is_told)                        \
     X(every_open_window_has_its_own_number)                       \

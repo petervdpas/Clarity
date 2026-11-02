@@ -346,7 +346,7 @@ fn record(project: &Project, entity: &Entity) -> String {
     public static string TableName => {table};
     public static string KeyColumn => {key};
     public static IReadOnlyList<string> ColumnNames {{ get; }} = [{columns}];
-{pictures}
+{pictures}{required}
     public long Id {{ get; set; }}
 {properties}
     public object?[] ToValues() => [{to_values}];
@@ -360,9 +360,19 @@ fn record(project: &Project, entity: &Entity) -> String {
 ",
         source = string(project.source_of(name).unwrap_or_default()),
         pictures = pictures(entity),
+        required = required(project, entity),
         table = string(&entity.table_name()),
         key = string(entity.key_column()),
     )
+}
+
+/// The required fields, which a save refuses while one is empty (conformance/required.json).
+fn required(project: &Project, entity: &Entity) -> String {
+    let fields: Vec<String> = crate::required_fields(project, entity).iter().map(|(column, label)| format!("({}, {})", string(column), string(label))).collect();
+    if fields.is_empty() {
+        return String::new();
+    }
+    format!("    public static IReadOnlyList<(string Column, string Label)> Required {{ get; }} = [{}];\n", fields.join(", "))
 }
 
 /// The columns of an entity's image fields, with the file store of each.

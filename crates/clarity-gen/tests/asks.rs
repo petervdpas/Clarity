@@ -29,13 +29,12 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn rust_asks_in_the_reply_and_answers_through_its_own_command() {
-    let code = generated(Backend::Rust, Ui::Webview);
+    let code = generated(Backend::Rust, Ui::Clarity);
     has(&code, "ui.ask(");
     has(&code, "clarity_runtime::ui::AskForm::Confirm { yes: Some(");
     has(&code, "clarity_runtime::ui::AskForm::Value { ty: \"record\".to_string(), of: Some(\"Friend\".to_string()), only: Some(");
     has(&code, "\"lend\", vec![to_value(&");
     has(&code, "fn answer_event(");
-    has(&code, "            answer_event,");
     has(&code, "clarity_runtime::ui::answer_record(db, value(0)?)?, clarity_runtime::ui::answer_record(db, value(1)?)?");
     has(&code, "clarity_runtime::ui::answer(value(0)?)?");
     has(&code, "clarity_runtime::ui::AskForm::Window { window: \"PickFriend\".to_string(), with: [].into_iter().collect() }");

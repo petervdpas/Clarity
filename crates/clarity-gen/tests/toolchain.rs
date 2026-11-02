@@ -21,7 +21,7 @@ fn exe(path: &str) -> PathBuf {
 
 #[test]
 fn rust_builds_with_cargo() {
-    let settings = shop(Backend::Rust, Ui::Webview);
+    let settings = shop(Backend::Rust, Ui::Clarity);
     let debug = clarity_gen::toolchain(&settings, false).unwrap();
     assert_eq!(debug.tool, "cargo");
     assert_eq!(debug.args, ["build", "--color", "never"]);
@@ -85,7 +85,7 @@ fn stacks_without_a_generator_have_no_toolchain() {
 /// tools, into a program named as it is typed.
 #[test]
 fn the_command_line_program_builds_with_the_same_tools() {
-    let rust = clarity_gen::cli_toolchain(&shop(Backend::Rust, Ui::Webview), false).unwrap();
+    let rust = clarity_gen::cli_toolchain(&shop(Backend::Rust, Ui::Clarity), false).unwrap();
     assert_eq!((rust.tool, rust.program.clone()), ("cargo", exe("target/debug/shop")));
     let go = clarity_gen::cli_toolchain(&shop(Backend::Go, Ui::Webview), true).unwrap();
     assert_eq!(go.tool, "go");

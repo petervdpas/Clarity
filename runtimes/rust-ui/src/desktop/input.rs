@@ -219,3 +219,83 @@ pub fn wheel_of(delta: MouseScrollDelta, scale: f64) -> (f64, f64) {
         }
     }
 }
+
+/// Where the pointer is over a desktop window. winit on X11 tells a move
+/// only when it differs from the last move it saw, and the place it gives on
+/// entering the window or on its focus coming back does not count as one.
+/// So after a dialog of its own closed over the main window, a move straight
+/// back to where the pointer last moved there (a touch, a tablet, a warp) is
+/// not told, and a press would go to where the dialog's button was. Kept
+/// here: the place last told, the last move, and whether the pointer moved
+/// (the system's raw motion) since a place was only given; then the pointer
+/// is where it last moved. Where the window system tells every move, the
+/// place told is where it is.
+#[derive(Debug, Clone, Default)]
+pub struct PointerPlace {
+    /// Whether the window system leaves such a move untold (X11).
+    untold: bool,
+    at: (f64, f64),
+    /// Where the window system last saw it move to.
+    moved: Option<(f64, f64)>,
+    /// The next place told is given for entering or focus, not a move.
+    giving: bool,
+    /// The place it is at was given for entering or focus.
+    given: bool,
+    /// The pointer moved since the place was given, and no move was told.
+    moved_untold: bool,
+}
+
+impl PointerPlace {
+    /// A place kept for a window system that leaves a move back untold (`untold`, X11) or tells every move.
+    pub fn new(untold: bool) -> PointerPlace {
+        PointerPlace { untold, ..PointerPlace::default() }
+    }
+
+    /// Where the pointer is, in the screen's units.
+    pub fn at(&self) -> (f64, f64) {
+        self.at
+    }
+
+    /// The pointer entered the window: the next place told is given, not a move.
+    pub fn entered(&mut self) {
+        self.giving = self.untold;
+    }
+
+    /// The window got the focus back: the next place told is given, as on entering.
+    pub fn focused(&mut self) {
+        self.entered();
+    }
+
+    /// The window system told a place.
+    pub fn told(&mut self, x: f64, y: f64) {
+        self.at = (x, y);
+        if self.giving {
+            self.giving = false;
+            self.given = true;
+        } else {
+            self.moved = Some((x, y));
+            self.given = false;
+        }
+        self.moved_untold = false;
+    }
+
+    /// The pointer moved (the system's raw motion), told or not.
+    pub fn raw_motion(&mut self) {
+        if self.given {
+            self.moved_untold = true;
+        }
+    }
+
+    /// Where the pointer is now, when a move was left untold: where it last
+    /// moved to. None when the place told stands.
+    pub fn settle(&mut self) -> Option<(f64, f64)> {
+        if !(self.given && self.moved_untold) {
+            return None;
+        }
+        let moved = self.moved?;
+        self.at = moved;
+        self.given = false;
+        self.moved_untold = false;
+        Some(moved)
+    }
+}

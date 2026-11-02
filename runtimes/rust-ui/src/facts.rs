@@ -136,6 +136,7 @@ impl ModelFacts {
                 refers: if kind == "ref" { names.clone() } else { None },
                 parent: parent.clone(),
                 color: kind == "color",
+                help: modifiers["help"].as_str().filter(|h| !h.is_empty()).map(str::to_string),
             };
             let store = modifiers["store"].as_str().map(str::to_string);
             let item = if kind == "values" { ty["item"]["name"]["name"].as_str().or_else(|| ty["item"]["kind"].as_str()).map(str::to_string) } else { None };
@@ -302,6 +303,7 @@ pub fn from_program(facts: clarity_runtime::fields::FieldFacts) -> FieldFacts {
         refers: facts.refers.map(str::to_string),
         parent: facts.parent.map(str::to_string),
         color: facts.color,
+        help: None,
     }
 }
 

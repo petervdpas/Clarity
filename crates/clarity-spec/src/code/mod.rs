@@ -644,6 +644,9 @@ pub struct PartDecl {
     pub hears: Vec<PartMessage>,
     /// `size 8 x 6`: the span and rows the Parts palette drops it with.
     pub size: Option<(u32, u32)>,
+    /// `grows`: placed in a window it takes the height the window has left,
+    /// as a table or a canvas does; without it it keeps its rows.
+    pub grows: bool,
     /// `preview "arena.png"`: its picture on the design canvas, from the resources.
     pub preview: Option<String>,
     pub span: Span,

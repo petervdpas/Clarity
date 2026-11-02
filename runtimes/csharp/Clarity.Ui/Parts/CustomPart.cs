@@ -114,6 +114,9 @@ public sealed class CustomPlace : Part
     /// <summary>The part it holds: the library's, or one that says why there is none.</summary>
     public Part Inner { get; private set; } = null!;
 
+    /// <summary>It grows when its declaration says <c>grows</c>, which its markup carries.</summary>
+    public override bool Grows => Spec.Flag("grows");
+
     protected internal override void Made()
     {
         var kind = Spec.Text("part") ?? "";

@@ -413,14 +413,12 @@ pub fn write_part_folders(dir: &std::path::Path, project: &Project) -> std::io::
             written.push(adapter);
         }
     }
-    // A Rust part is a control of Clarity.UI on `stack rust desktop`, else drawn in a native window.
-    let ui = project_ui(dir);
     // A native, Rust or Go part: its starter where the folder has none, and
     // the file of Clarity's (the header, `src/clarity.rs`, `clarity.go`) always.
     for part in project.files.iter().flat_map(|f| &f.parts) {
         let (folder, files, manifest, own): (&String, Vec<(String, String)>, &str, &str) = match &part.library {
             Some(PartLibrary::Native { folder }) => (folder, starter(part), native::BUILD_FILE, "clarity/"),
-            Some(PartLibrary::Crate { folder }) => (folder, starter_for_ui(part, ui), "Cargo.toml", "src/clarity.rs"),
+            Some(PartLibrary::Crate { folder }) => (folder, crate::rust::parts::ui_starter(part), "Cargo.toml", "src/clarity.rs"),
             Some(PartLibrary::Go { folder }) => (folder, crate::go::parts::starter(part), "go.mod", "clarity.go"),
             _ => continue,
         };
@@ -479,22 +477,6 @@ pub fn write_part_folders(dir: &std::path::Path, project: &Project) -> std::io::
     Ok(written)
 }
 
-/// The UI of the project in `dir` (its stack line): Clarity.UI or the webview.
-fn project_ui(dir: &std::path::Path) -> clarity_project::Ui {
-    let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
-    clarity_project::load(&file).settings.map_or(clarity_project::Ui::Webview, |s| s.stack.ui)
-}
-
-/// What declaring a part writes into its folder on a stack with `ui`: a
-/// Rust part on Clarity.UI is a control of clarity-ui (DESIGN 7.9); every
-/// other part as [`starter_for`] writes it.
-pub fn starter_for_ui(part: &PartDecl, ui: clarity_project::Ui) -> Vec<(String, String)> {
-    match (&part.library, ui) {
-        (Some(PartLibrary::Crate { .. }), clarity_project::Ui::Clarity) => crate::rust::parts::ui_starter(part),
-        _ => starter_for(part),
-    }
-}
-
 /// The interface file of Rust part `part` on Clarity.UI (`src/clarity.rs`),
 /// which the program carries and the part's folder keeps.
 pub fn rust_ui_interface(part: &PartDecl) -> String {
@@ -525,7 +507,7 @@ pub fn dotnet_half(project: &Project, part: &PartDecl) -> String {
 pub fn starter_for(part: &PartDecl) -> Vec<(String, String)> {
     match &part.library {
         Some(PartLibrary::Native { .. }) => starter(part),
-        Some(PartLibrary::Crate { .. }) => crate::rust::parts::starter(part),
+        Some(PartLibrary::Crate { .. }) => crate::rust::parts::ui_starter(part),
         Some(PartLibrary::Go { .. }) => crate::go::parts::starter(part),
         _ => Vec::new(),
     }

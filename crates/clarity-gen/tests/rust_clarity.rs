@@ -1,6 +1,6 @@
 //! A Rust desktop application on Clarity.UI (DESIGN 7.9, G8a): `stack rust
-//! desktop`. The program is the same as on the shared screen (the runtime's
-//! `Program`, implemented once), without Tauri: the windows and app frames as
+//! desktop`. The program (the runtime's `Program`, implemented once) is the
+//! same one the web server answers with: the windows and app frames as
 //! `.cxaml`, the themes as resolved JSON and the model travel in the program,
 //! and main starts `clarity_ui::desktop`.
 
@@ -121,19 +121,35 @@ fn main_starts_the_program_on_clarity_ui() {
     assert!(!main.contains("fn served(") && !main.contains("#[tauri::command]"), "{main}");
 }
 
-/// The webview stack is unchanged: Tauri, its commands thin calls into the program.
+/// Rust's webview desktop (Tauri) is gone, as Avalonia from C#: a Rust
+/// program with windows draws with Clarity.UI.
 #[test]
-fn the_webview_stack_keeps_tauri() {
-    let files = files_of(Ui::Webview);
+fn the_webview_desktop_is_gone() {
+    let project = load_keyed([("shop.clarity", SHOP)], &[], "en");
+    let errors = generate(&project, &settings(Ui::Webview)).unwrap_err();
+    assert_eq!(errors, ["Rust draws its windows with Clarity.UI only; write stack rust desktop"]);
+}
+
+/// `stack rust web` alone serves the shared web screen to a browser, until
+/// Clarity.UI draws in the browser (G8d); beside the desktop program it is
+/// not generated yet.
+#[test]
+fn the_web_program_serves_the_shared_screen_alone() {
+    let project = load_keyed([("shop.clarity", SHOP)], &[], "en");
+    let mut web = settings(Ui::Clarity);
+    web.stack.targets = vec![clarity_project::Target::Web];
+    let files = generate(&project, &web).unwrap_or_else(|errors| panic!("{errors:#?}"));
     let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
-    for path in ["build.rs", "tauri.conf.json", "src/desktop.rs", "ui/index.html", "ui/windows/CustomerList.cxaml"] {
-        assert!(paths.contains(&path), "no {path} in {paths:?}");
-    }
-    assert!(!paths.iter().any(|p| p.starts_with("themes/") || p.starts_with("texts/")), "{paths:?}");
-    has(file(&files, "Cargo.toml"), "tauri = ");
+    assert!(paths.contains(&"ui/index.html") && !paths.contains(&"src/facts.rs"), "{paths:?}");
     assert!(!file(&files, "Cargo.toml").contains("clarity-ui"));
-    has(file(&files, "src/desktop.rs"), "fn dispatch_event(app: tauri::State<App>, state: WindowState, handler: String) -> Answer<Reply> {\n    app.dispatch_event(state, &handler)\n}");
-    has(file(&files, "src/main.rs"), "impl Program for App {");
+    has(file(&files, "src/main.rs"), "fn served(app: &App, command: &str, args: Value) -> Value {");
+    has(file(&files, "README.md"), "Rust with the web renderer");
+
+    web.stack.targets = vec![clarity_project::Target::Desktop, clarity_project::Target::Web];
+    assert_eq!(
+        generate(&project, &web).unwrap_err(),
+        ["the web program of Rust is not generated beside its desktop program yet; write stack rust desktop, or stack rust web for the web program alone"]
+    );
 }
 
 const ORDERS: &str = "module orders
@@ -184,12 +200,6 @@ fn the_program_carries_the_facts_of_its_fields() {
     has(main, "    fn facts(&self) -> &'static clarity_runtime::fields::Facts {\n        &facts::FACTS\n    }\n");
 }
 
-/// The shared screen reads the model, and carries no table of facts.
-#[test]
-fn the_webview_stack_carries_no_facts() {
-    let files = files_of(Ui::Webview);
-    assert!(!files.iter().any(|f| f.path == "src/facts.rs"));
-}
 
 mod everything_project;
 

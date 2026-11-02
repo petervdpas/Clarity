@@ -9,7 +9,7 @@
 use std::rc::Rc;
 
 use crate::element::{self, Cx, Element, ElementId, GridPanel, Node};
-use crate::frame::{self, FrameFooter, FrameMenuBar, FrameRibbon, FrameSidebar, FrameSpec, FrameToolbar, Showing, ShownFrame, WindowFrame};
+use crate::frame::{self, Access, FrameFooter, FrameMenuBar, FrameRibbon, FrameSidebar, FrameSpec, FrameToolbar, Showing, ShownFrame, WindowFrame};
 use crate::geometry::Rect;
 use crate::grid::ROW_HEIGHT;
 use crate::input::{Key, KeyInput, Modifiers};
@@ -155,6 +155,60 @@ impl WindowView {
         self.region()
     }
 
+    fn open_by_letter(&mut self, letter: char, cx: &mut Cx) -> bool {
+        self.region_mut::<FrameMenuBar>(|_| true).is_some_and(|bar| bar.open_by_letter(letter, cx))
+    }
+
+    /// The menu bar's access letters before any other use of a key: Alt
+    /// shows them; after Alt went alone the letter alone opens its menu,
+    /// and any other key ends them (Escape doing nothing more). None when
+    /// the key goes on as any key.
+    fn access_key(&mut self, key: KeyInput, cx: &mut Cx) -> Option<bool> {
+        let access = self.frame.access();
+        if key.key == Key::Alt {
+            if !self.menu_bar().is_some_and(|bar| bar.is_shown()) {
+                return None;
+            }
+            let used = matches!(access, Access::Held { used: true });
+            self.frame.set_access(Access::Held { used });
+            cx.invalidate();
+            return Some(true);
+        }
+        match access {
+            Access::Kept => {
+                self.frame.set_access(Access::Off);
+                cx.invalidate();
+                if key.modifiers == Modifiers::NONE {
+                    if let Some(letter) = frame::rules::access_char(key.key) {
+                        if self.open_by_letter(letter, cx) {
+                            return Some(true);
+                        }
+                    }
+                }
+                (key.key == Key::Escape).then_some(true)
+            }
+            Access::Held { used: false } => {
+                self.frame.set_access(Access::Held { used: true });
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// A key let go: Alt let go alone keeps the access letters for a plain letter, after another key it hides them.
+    pub fn key_up(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
+        if key.key != Key::Alt {
+            return false;
+        }
+        match self.frame.access() {
+            Access::Held { used: false } => self.frame.set_access(Access::Kept),
+            Access::Held { used: true } => self.frame.set_access(Access::Off),
+            _ => return false,
+        }
+        cx.invalidate();
+        true
+    }
+
     pub fn toolbar(&self) -> Option<&FrameToolbar> {
         self.region()
     }
@@ -249,13 +303,17 @@ impl WindowView {
     /// part's menu items; Enter runs the submit of the form the input with
     /// the focus is in, else presses the default button, and Escape the
     /// cancel button, once the part with the focus did not take them. True
-    /// when the window took the key, or asked the part with the focus for it.
+    /// when the window took the key, or asked the part with the focus for it;
+    /// false for Escape in a window without a cancel button.
     pub fn key(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
         let focused = cx.focused();
         let mine = focused.and_then(|f| element::find(self, f));
         let typing = mine.is_some_and(|e| e.typing());
         // The focus is in something over the window (an open menu or list): it has its keys.
         let elsewhere = focused.is_some() && mine.is_none();
+        if let Some(took) = self.access_key(key, cx) {
+            return took;
+        }
         let keyed = self.keyed();
         for part in &keyed {
             if self.keys_of(part).iter().any(|k| shortcuts::matches(k, &key, typing)) {
@@ -282,6 +340,14 @@ impl WindowView {
                 }
             }
         }
+        // Alt with a top item's access letter opens its menu, once no shortcut took the key.
+        if key.modifiers == Modifiers::ALT {
+            if let Some(letter) = frame::rules::access_char(key.key) {
+                if self.open_by_letter(letter, cx) {
+                    return true;
+                }
+            }
+        }
         if elsewhere || key.modifiers != Modifiers::NONE || !matches!(key.key, Key::Enter | Key::Escape) {
             return false;
         }
@@ -303,9 +369,14 @@ impl WindowView {
             }
         }
         let wanted = |p: &&Keyed| p.button && if key.key == Key::Enter { p.default } else { p.cancel };
-        if let Some(pressed) = keyed.iter().find(wanted) {
-            element::take_typed_from(self, focused, cx);
-            self.press(pressed.id, cx);
+        match keyed.iter().find(wanted) {
+            Some(pressed) => {
+                element::take_typed_from(self, focused, cx);
+                self.press(pressed.id, cx);
+            }
+            // Escape without a cancel button is left to the dialog the window is in, which closes as its close does.
+            None if key.key == Key::Escape => return false,
+            None => {}
         }
         true
     }
@@ -374,6 +445,10 @@ impl Element for WindowView {
 
     fn window_key(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
         self.key(key, cx)
+    }
+
+    fn window_key_up(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
+        self.key_up(key, cx)
     }
 
     /// The window is no longer shown: its menus close.

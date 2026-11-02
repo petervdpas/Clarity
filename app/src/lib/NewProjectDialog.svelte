@@ -28,7 +28,7 @@
   } = $props();
 
   let name = $state("");
-  let stack = $state<Stack>({ backend: "rust", ui: "webview", targets: [] });
+  let stack = $state<Stack>({ backend: "rust", ui: "clarity", targets: [] });
   $effect.pre(() => {
     stack = { ...catalog.starter, targets: [...catalog.starter.targets] };
   });

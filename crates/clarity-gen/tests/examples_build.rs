@@ -36,7 +36,7 @@ fn the_dial_example_builds_without_warnings() {
 }
 
 #[test]
-#[ignore = "builds the dice example (rust webview desktop); run with --ignored, one at a time"]
+#[ignore = "builds the dice example (rust desktop); run with --ignored, one at a time"]
 fn the_dice_example_builds_without_warnings() {
     builds_without_warnings("dice");
 }
@@ -84,7 +84,7 @@ fn the_records_example_builds_without_warnings() {
 }
 
 #[test]
-#[ignore = "builds the shop example (rust webview desktop); run with --ignored, one at a time"]
+#[ignore = "builds the shop example (rust desktop); run with --ignored, one at a time"]
 fn the_shop_example_builds_without_warnings() {
     builds_without_warnings("shop");
 }

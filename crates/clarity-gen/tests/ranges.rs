@@ -27,7 +27,7 @@ fn has(text: &str, expected: &str) {
 #[test]
 fn the_web_stacks_carry_the_slider_and_the_spin_box_in_their_model() {
     for backend in [Backend::Rust, Backend::Go] {
-        let code = generated(backend, Ui::Webview);
+        let code = generated(backend, clarity_project::usual_ui(backend));
         has(&code, "\"kind\":\"slider\"");
         has(&code, "\"kind\":\"spinbox\"");
         has(&code, "\"step\":\"0.5\"");

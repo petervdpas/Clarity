@@ -191,6 +191,13 @@ fn record(project: &Project, entity: &Entity) -> String {
     } else {
         format!("    const PICTURES: &'static [PictureColumn] = &[{}];\n", pictures.join(", "))
     };
+    // A save refuses the record while a required field is empty (conformance/required.json).
+    let required: Vec<String> = crate::required_fields(project, entity).iter().map(|(column, label)| format!("({column:?}, {label:?})")).collect();
+    let required = if required.is_empty() {
+        String::new()
+    } else {
+        format!("    const REQUIRED: &'static [(&'static str, &'static str)] = &[{}];\n", required.join(", "))
+    };
     // What cascades from it is deleted first, each child as any record is.
     let cascades = crate::cascades(project, name);
     if !cascades.is_empty() {
@@ -220,7 +227,7 @@ fn record(project: &Project, entity: &Entity) -> String {
     const TABLE: &'static str = {table:?};
     const KEY: &'static str = {key:?};
     const COLUMNS: &'static [&'static str] = &[{columns}];
-{pictures}
+{pictures}{required}
     fn id(&self) -> Id {{
         self.id
     }}

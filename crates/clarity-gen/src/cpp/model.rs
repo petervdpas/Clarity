@@ -200,6 +200,12 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     if !pictures.is_empty() {
         methods.push_str("    static std::vector<clarity::PictureColumn> pictures();\n");
     }
+    // The required fields a save checks, each by its column and its label as written.
+    let required: Vec<String> =
+        crate::required_fields(project, entity).iter().map(|(column, label)| format!("{{{}, {}}}", string(column), string(label))).collect();
+    if !required.is_empty() {
+        methods.push_str("    static std::vector<clarity::Required> required();\n");
+    }
     for event in &events {
         let _ = writeln!(methods, "    void {}(clarity::Db& db);", event.word());
     }
@@ -241,6 +247,9 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     let _ = write!(source, "{name} {name}::from_values(int64_t id, const clarity::Row& values) {{\n    {name} r;\n    r.id = id;\n{reads}    return r;\n}}\n\n");
     if !pictures.is_empty() {
         let _ = write!(source, "std::vector<clarity::PictureColumn> {name}::pictures() {{\n    return {{{}}};\n}}\n\n", pictures.join(", "));
+    }
+    if !required.is_empty() {
+        let _ = write!(source, "std::vector<clarity::Required> {name}::required() {{\n    return {{{}}};\n}}\n\n", required.join(", "));
     }
     let mut to = String::new();
     let mut from = String::new();

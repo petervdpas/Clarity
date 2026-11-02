@@ -2,7 +2,8 @@
 // opens no window of its own (a browser page): the window under it dimmed,
 // the dialog's title, and its window in a panel sized to the dialog, as its
 // own desktop window would be. Its keys are its own: its shortcuts, Enter
-// for its default button and Escape for its cancel button.
+// for its default button and Escape for its cancel button (without one,
+// Escape closes it as its close does).
 
 using Clarity.Runtime;
 
@@ -39,7 +40,19 @@ public sealed class DialogOverlay : Element, IDialogKeys
         Invalidate();
     }
 
-    public bool KeyPressed(KeyInput key) => View.KeyPressed(key);
+    /// <summary>Closes the dialog as its close does: Escape that nothing in it took.</summary>
+    public Action? Cancel { get; init; }
+
+    public bool KeyPressed(KeyInput key)
+    {
+        if (View.KeyPressed(key))
+            return true;
+        // Escape that nothing in it took closes it, as its close does (DESIGN 5.14).
+        if (key.Key != Key.Escape || key.Modifiers != Modifiers.None || Cancel is not { } cancel)
+            return false;
+        cancel();
+        return true;
+    }
 
     public override void Arrange(Box box)
     {

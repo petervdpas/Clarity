@@ -62,3 +62,4 @@ translation nl
     cliWrongAnswer "{value} past niet; probeer het opnieuw"
     cliNoTerminal "Er is niemand om te antwoorden: {question}"
     cliChooseNumber "Typ een getal van 1 tot en met {count}"
+    fieldRequired "{field} is verplicht"

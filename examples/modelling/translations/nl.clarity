@@ -199,6 +199,7 @@ translation nl
     cancel "Annuleren"
     dismiss "Sluiten"
     undoChangedSince "Dit is intussen gewijzigd en kan daarom niet ongedaan worden gemaakt"
+    fieldRequired "{field} is verplicht"
     chooseFolder "Een map kiezen"
     zoomOut "Uitzoomen"
     zoomWhole "Geheel tonen"

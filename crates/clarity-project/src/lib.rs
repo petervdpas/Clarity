@@ -318,7 +318,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
         title: None,
         stack: Stack {
             backend: Backend::Rust,
-            ui: Ui::Webview,
+            ui: Ui::Clarity,
             targets: vec![Target::Desktop],
         },
         datasources: vec![DataSource {
@@ -456,18 +456,22 @@ pub fn validate(settings: &Settings) -> Vec<String> {
     let stack = &settings.stack;
     let backend = backend_info(stack.backend);
     if !backend.uis.contains(&stack.ui) {
+        // A backend that draws with Clarity.UI only says what to write instead.
+        let instead = if backend.uis == [Ui::Clarity] { format!("; write {}", stack_line(&Stack { ui: Ui::Clarity, ..stack.clone() })) } else { String::new() };
         problems.push(format!(
-            "{} is a UI for {}, not for {}",
+            "{} is a UI for {}, not for {}{instead}",
             ui_label(stack.ui),
             ui_backend_label(stack.ui),
             backend.label
         ));
-    } else if stack.ui == Ui::Clarity && stack.has(Target::Web) && !clarity_ui_on_the_web(stack.backend) {
-        let webview = Stack { ui: Ui::Webview, ..stack.clone() };
+    } else if stack.ui == Ui::Clarity && stack.has(Target::Web) && stack.has(Target::Desktop) && !clarity_ui_on_the_web(stack.backend) {
+        // Rust's web program is the shared web screen's server until Clarity.UI draws in the browser (G8d).
+        let alone = |target| stack_line(&Stack { targets: vec![target], ..stack.clone() });
         problems.push(format!(
-            "the web target of {} on Clarity.UI is not generated yet; write {} for the shared web screen",
+            "the web program of {} is not generated beside its desktop program yet; write {}, or {} for the web program alone",
             backend.label,
-            stack_line(&webview)
+            alone(Target::Desktop),
+            alone(Target::Web)
         ));
     }
     if stack.targets.is_empty() {
@@ -661,12 +665,12 @@ pub fn usual_ui(backend: Backend) -> Ui {
     backend_info(backend).uis[0]
 }
 
-/// The UIs a backend offers, its usual one first. Rust draws with
-/// Clarity.UI too (DESIGN 7.9, G8); the shared web screen stays its usual
-/// one while that is in progress.
+/// The UIs a backend offers, its usual one first. C# and Rust draw with
+/// Clarity.UI only (DESIGN 7.9); Rust's web target serves the shared web
+/// screen until Clarity.UI draws in the browser (G8d).
 pub(crate) fn backend_uis(backend: Backend) -> &'static [Ui] {
     match backend {
-        Backend::Rust => &[Ui::Webview, Ui::Clarity],
+        Backend::Rust => &[Ui::Clarity],
         Backend::Go => &[Ui::Webview],
         Backend::Csharp => &[Ui::Clarity],
         Backend::C => &[Ui::Webview],
@@ -686,7 +690,8 @@ fn backend_info(backend: Backend) -> BackendInfo {
 }
 
 /// Whether Clarity generates the web target of `backend` on Clarity.UI:
-/// C# does; Rust's comes later (DESIGN 7.9).
+/// C# does; Rust's web program serves the shared web screen, alone, until
+/// G8d (DESIGN 7.9).
 fn clarity_ui_on_the_web(backend: Backend) -> bool {
     backend == Backend::Csharp
 }
@@ -701,7 +706,7 @@ fn ui_label(ui: Ui) -> &'static str {
 /// The backends a UI belongs to, for messages.
 fn ui_backend_label(ui: Ui) -> &'static str {
     match ui {
-        Ui::Webview => "any backend",
+        Ui::Webview => "Go, C and C++",
         Ui::Clarity => "the C# and Rust backends",
     }
 }
@@ -836,7 +841,7 @@ fn with_cli(stack: &Stack) -> String {
     stack_line(&stack)
 }
 
-/// The stack line as the project file has it: `stack rust webview desktop`.
+/// The stack line as the project file has it: `stack go webview desktop`.
 pub(crate) fn stack_line(stack: &Stack) -> String {
     let mut line = format!("stack {}", backend_word(stack.backend));
     if stack.names_ui() {

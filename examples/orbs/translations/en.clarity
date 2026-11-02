@@ -15,3 +15,4 @@ translation en
     cancel "Cancel"
     dismiss "Dismiss"
     undoChangedSince "This was changed since, so it cannot be taken back"
+    fieldRequired "{field} is required"

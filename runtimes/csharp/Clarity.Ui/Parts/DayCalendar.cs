@@ -296,7 +296,8 @@ public sealed class DayCalendar : Element
         using var pen = new SkiaSharp.SKPaint { Color = color, IsAntialias = true, Style = SkiaSharp.SKPaintStyle.Stroke, StrokeWidth = 1.6f, StrokeCap = SkiaSharp.SKStrokeCap.Round };
         var cx = (float)(box.X + box.Width / 2);
         var cy = (float)(box.Y + box.Height / 2);
-        painter.Canvas.DrawLine(cx + 2 * way, cy - 4, cx - 2 * way, cy, pen);
-        painter.Canvas.DrawLine(cx - 2 * way, cy, cx + 2 * way, cy + 4, pen);
+        // The point of the arrow lies on the side it turns to.
+        painter.Canvas.DrawLine(cx - 2 * way, cy - 4, cx + 2 * way, cy, pen);
+        painter.Canvas.DrawLine(cx + 2 * way, cy, cx - 2 * way, cy + 4, pen);
     }
 }

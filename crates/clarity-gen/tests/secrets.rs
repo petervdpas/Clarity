@@ -34,7 +34,7 @@ fn generated(backend: Backend, ui: Ui, connection: &str) -> String {
     files.iter().map(|f| format!("// {}\n{}\n", f.path, f.text)).collect()
 }
 
-const STACKS: [(Backend, Ui); 5] = [(Backend::Rust, Ui::Webview), (Backend::Go, Ui::Webview), (Backend::Csharp, Ui::Clarity), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview)];
+const STACKS: [(Backend, Ui); 5] = [(Backend::Rust, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::Csharp, Ui::Clarity), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview)];
 
 /// C and C++ store records in SQLite only, for now, so they have no
 /// connection to keep secret yet.
@@ -50,7 +50,7 @@ fn a_database_connects_with_the_secret_setting_of_its_program() {
 
 #[test]
 fn the_secrets_are_named_to_the_settings() {
-    let rust = generated(Backend::Rust, Ui::Webview, "data/shop.db");
+    let rust = generated(Backend::Rust, Ui::Clarity, "data/shop.db");
     assert!(rust.contains("const SECRETS: &[&str] = &[\"shopDb\"];"));
     assert!(rust.contains("clarity_runtime::settings::read_with(PROGRAM, SECRETS)"));
     let go = generated(Backend::Go, Ui::Webview, "data/shop.db");
@@ -58,7 +58,7 @@ fn the_secrets_are_named_to_the_settings() {
     let csharp = generated(Backend::Csharp, Ui::Clarity, "data/shop.db");
     assert!(csharp.contains("KeptSettings.Read(ProgramName, Secrets)"));
     for backend in [Backend::C, Backend::Cpp] {
-        let code = generated(backend, Ui::Webview, "data/shop.db");
+        let code = generated(backend, clarity_project::usual_ui(backend), "data/shop.db");
         assert!(code.contains("secrets_use();"), "{backend:?} turns the store on");
         assert!(code.contains("clarity_secrets"), "{backend:?} links the store");
     }
@@ -93,7 +93,7 @@ fn handled(backend: Backend, ui: Ui) -> String {
 
 #[test]
 fn the_app_handles_its_databases_not_opening() {
-    let rust = handled(Backend::Rust, Ui::Webview);
+    let rust = handled(Backend::Rust, Ui::Clarity);
     assert!(rust.contains("const UNCONNECTED_HANDLER: Option<&str> = Some(\"notConnected\");"));
     assert!(rust.contains("const CONNECTION_WINDOW: Option<&str> = Some(\"Main\");"));
     assert!(rust.contains("clarity_runtime::ui::answer(value(0)?)?"));
@@ -101,9 +101,8 @@ fn the_app_handles_its_databases_not_opening() {
     assert!(rust.contains("Some(clarity_runtime::unconnected_reason(&err))"));
     // The program opens them again when the person has kept their connection.
     assert!(rust.contains("    fn connect(&self) -> Answer<()> {\n        let db = open_databases().map_err(|err| clarity_runtime::unconnected_reason(&err))?;"));
-    // The title bar's close goes to the screen, which connects again.
-    assert!(rust.contains("tauri::WindowEvent::CloseRequested { api, .. }"));
-    assert!(rust.contains("window.clarityCloseRequested && window.clarityCloseRequested()"));
+    // Clarity.UI shows what the handler opens first, or the window that keeps the connection (DESIGN 7.9).
+    assert!(rust.contains("program::Unconnected { handler: UNCONNECTED_HANDLER.map(String::from), window: CONNECTION_WINDOW.map(String::from), problem }"));
     let go = handled(Backend::Go, Ui::Webview);
     assert!(go.contains("unconnected = &shell.Unconnected{Handler: \"notConnected\", Window: \"Main\", Problem: clarity.UnconnectedReason(err)}"));
     assert!(go.contains("reason, err := clarity.Answer[string](values[0])"));
@@ -165,7 +164,7 @@ fn run(dir: &std::path::Path, command: &mut std::process::Command) -> String {
 #[test]
 #[ignore = "builds the Rust program with cargo (Tauri)"]
 fn an_unconnected_app_builds_in_rust() {
-    let out = written(Backend::Rust, Ui::Webview);
+    let out = written(Backend::Rust, Ui::Clarity);
     let runtime = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/rust").canonicalize().unwrap();
     std::fs::create_dir_all(out.join(".cargo")).unwrap();
     std::fs::write(out.join(".cargo/config.toml"), format!("[patch.crates-io]\nclarity-runtime = {{ path = {:?} }}\n", runtime.display().to_string())).unwrap();
@@ -199,7 +198,7 @@ fn an_unconnected_app_builds_in_csharp() {
 #[ignore = "builds the C and C++ programs with CMake"]
 fn an_unconnected_app_builds_in_c_and_cpp() {
     for backend in [Backend::C, Backend::Cpp] {
-        let out = written(backend, Ui::Webview);
+        let out = written(backend, clarity_project::usual_ui(backend));
         let said = run(&out, std::process::Command::new("cmake").args(["--workflow", "--preset", "debug"]));
         let own: Vec<&str> = said.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();
         assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
@@ -247,4 +246,12 @@ fn every_stack_keeps_under_the_one_program_name() {
             }
         }
     }
+}
+
+/// A Rust program on Clarity.UI driven without a window (CLARITY_HEADLESS)
+/// keeps its secrets in memory for the run, apart from the person's keyring.
+#[test]
+fn a_driven_rust_program_keeps_its_secrets_in_memory() {
+    let text = generated(Backend::Rust, Ui::Clarity, "data/shop.db");
+    assert!(text.contains("    if std::env::var_os(clarity_ui::headless::VARIABLE).is_some_and(|v| !v.is_empty()) {\n        clarity_runtime::secrets::use_memory();\n    }\n"), "{text}");
 }

@@ -18,7 +18,7 @@ code Main
 
 #[test]
 fn every_backend_sends_where_a_text_is_aligned() {
-    for (backend, ui) in [(Backend::Rust, Ui::Webview), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
         let mut settings = starter("Sheet", "sheet");
         settings.stack.backend = backend;
         settings.stack.ui = ui;
@@ -37,7 +37,7 @@ fn every_backend_sends_where_a_text_is_aligned() {
 fn every_backend_counts_the_characters_of_a_text() {
     let source = SHEET.replace("        sheet.text(10, 40, \"Total\")\n", "        sheet.text(10, 40, \"Total\")\n        sheet.rect(0, 0, length(\"Größe\") * 7, 10, \"text\")\n");
     let wanted = [
-        (Backend::Rust, Ui::Webview, ".chars().count() as i64"),
+        (Backend::Rust, Ui::Clarity, ".chars().count() as i64"),
         (Backend::Go, Ui::Webview, "int64(len([]rune("),
         (Backend::C, Ui::Webview, "clarity_length("),
         (Backend::Cpp, Ui::Webview, "clarity::length("),

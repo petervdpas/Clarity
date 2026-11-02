@@ -27,6 +27,7 @@ pub use csharp::runtime_version as csharp_runtime_version;
 pub use go::runtime_version as go_runtime_version;
 pub use rust::runtime_version as rust_runtime_version;
 pub use rust::ui_version as rust_ui_version;
+pub use rust::local_patch as rust_local_patch;
 pub use rust::migration_sql;
 pub use web::{APP_CLASS, base_css, theme_css, theme_file};
 
@@ -103,6 +104,22 @@ pub(crate) fn cascades<'p>(project: &'p Project, entity: &str) -> Vec<(&'p clari
             let file = project.files.iter().find(|f| f.entities.iter().any(|e| e.name.name == child.name.name))?;
             Some((child, file, child.column_of(&field.name.name).to_string()))
         })
+        .collect()
+}
+
+/// The required fields a save of `entity` checks (conformance/required.json):
+/// each stored field with `required`, as its column (a file's content
+/// column) and its label as written (`@key` or the text). None for an
+/// entity no database keeps (settings, a web API's records).
+pub(crate) fn required_fields(project: &Project, entity: &clarity_spec::model::Entity) -> Vec<(String, String)> {
+    if entity.settings || project.in_web_api(&entity.name.name) {
+        return Vec::new();
+    }
+    entity
+        .fields
+        .iter()
+        .filter(|f| f.modifiers.required && !f.modifiers.computed && !f.ty.is_held())
+        .map(|f| (entity.column_of(&f.name.name).to_string(), f.label.clone()))
         .collect()
 }
 
@@ -660,7 +677,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     project.keys_editable = settings.keys_editable;
     let project = &project;
     let mut files = match settings.stack.backend {
-        Backend::Rust => rust::generate(project, settings)?,
+        Backend::Rust if settings.stack.ui == clarity_project::Ui::Clarity => rust::generate(project, settings)?,
+        Backend::Rust => {
+            return Err(vec!["Rust draws its windows with Clarity.UI only; write stack rust desktop".to_string()]);
+        }
         Backend::Csharp if settings.stack.ui == clarity_project::Ui::Clarity => csharp::generate(project, settings)?,
         Backend::Csharp => {
             return Err(vec!["C# draws with Clarity.UI only".to_string()]);
@@ -671,7 +691,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     };
     files.push(OutFile {
         path: "README.md".to_string(),
-        text: readme::readme(settings, project.calls_out()),
+        text: readme::readme(settings, project),
         bytes: None,
     });
     // The icons the application shows are Lucide's, whose license travels with them.
@@ -1082,9 +1102,9 @@ pub fn cli_toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
 /// the build output of another stack goes when a project changes stack.
 pub fn build_output(backend: Backend) -> &'static [&'static str] {
     match backend {
-        // cargo's `target` and lock file, Tauri's `gen`, and the patch that
-        // builds on the runtime in Clarity's repository while working on it.
-        Backend::Rust => &["target", "data", "gen", "Cargo.lock", ".cargo"],
+        // cargo's `target` and lock file, and the patch that builds on the
+        // runtime in Clarity's repository while working on it.
+        Backend::Rust => &["target", "data", "Cargo.lock", ".cargo"],
         // dotnet's `bin` and `obj`.
         Backend::Csharp => &["bin", "obj", "data"],
         // go build's program, and a workspace that builds the module on the

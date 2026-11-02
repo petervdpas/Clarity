@@ -26,7 +26,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn every_web_shell_gives_a_fields_values_and_the_fields_a_search_shows() {
-    let rust = generated(Backend::Rust, Ui::Webview);
+    let rust = generated(Backend::Rust, Ui::Clarity);
     has(&rust, "fn field_values(");
     has(&rust, "(\"Friend\", \"city\") => db.all::<");
     has(&rust, "fields: serde_json::Map::from_iter([(\"name\".to_string(), clarity_runtime::ui::to_value(&r.name)?), (\"city\".to_string(), clarity_runtime::ui::to_value(&r.city)?)])");

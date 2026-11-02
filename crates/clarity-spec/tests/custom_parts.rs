@@ -317,3 +317,48 @@ fn a_crate_or_go_part_needs_its_folder_with_its_manifest() {
     assert!(has(&checked(vec![file("Arena", "src/lib.rs"), file("Field", "go.mod")]), "'parts/Arena' has no Cargo.toml"));
     assert!(has(&checked(vec![file("Arena", "Cargo.toml"), file("Field", "field.go")]), "'parts/field' has no go.mod"));
 }
+
+/// `grows` in the declaration: the part takes the height its window has
+/// left, as a table or a canvas does; without it the part keeps its rows.
+#[test]
+fn a_part_that_grows_says_so_in_its_declaration() {
+    let (file, diagnostics) = parse(&GAME.replace("    size 8 x 6\n", "    size 8 x 6\n    grows\n"), "game.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    assert!(file.parts[0].grows);
+    let (file, _) = parse(GAME, "game.clarity");
+    assert!(!file.parts[0].grows);
+}
+
+#[test]
+fn grows_is_written_once_and_alone() {
+    let (_, diagnostics) = parse(&GAME.replace("    size 8 x 6\n", "    grows\n    grows\n"), "game.clarity");
+    assert!(diagnostics.iter().any(|d| d.message.contains("'grows' is written twice")), "{diagnostics:?}");
+    let (_, diagnostics) = parse(&GAME.replace("    size 8 x 6\n", "    grows tall\n"), "game.clarity");
+    assert!(!diagnostics.is_empty());
+}
+
+/// Every placed part of a declaration that grows grows: the project works
+/// it out when it loads, for every screen and the designer.
+#[test]
+fn a_placed_part_grows_as_its_declaration_says() {
+    let grown = project(&GAME.replace("    size 8 x 6\n", "    size 8 x 6\n    grows\n"), CODE);
+    assert!(grown.files[0].pages[0].widgets[0].props.grows);
+    assert!(!project(GAME, CODE).files[0].pages[0].widgets[0].props.grows);
+    // The window line stays as written: the option is the declaration's.
+    assert!(!widget_line(&grown.files[0].pages[0].widgets[0].props).contains("grows"));
+}
+
+/// The IDE sets the option: a `grows` line is added to or taken from the
+/// declaration, the rest of it as written.
+#[test]
+fn the_ide_sets_whether_a_part_grows() {
+    use clarity_spec::edit::{Edit, apply};
+    let item = GAME.find("part Arena").unwrap() as u32;
+    let on = apply(GAME, &Edit::SetPartGrows { item, grows: true }).unwrap().text;
+    assert_eq!(on, GAME.replace("    preview \"arena.png\"\n", "    preview \"arena.png\"\n    grows\n"));
+    assert!(parse(&on, "game.clarity").0.parts[0].grows);
+    // Set twice it is still one line; taken off it is gone.
+    assert_eq!(apply(&on, &Edit::SetPartGrows { item, grows: true }).unwrap().text, on);
+    assert_eq!(apply(&on, &Edit::SetPartGrows { item, grows: false }).unwrap().text, GAME);
+    assert_eq!(apply(GAME, &Edit::SetPartGrows { item, grows: false }).unwrap().text, GAME);
+}

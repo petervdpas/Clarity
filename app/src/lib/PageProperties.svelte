@@ -7,7 +7,8 @@
   import { literalShown, paramsText, writtenValue } from "@clarity/ui/screen/customParts.ts";
   import type { Edit } from "@clarity/ui/generated/Edit.ts";
   import type { Event as PartEvent } from "@clarity/ui/generated/Event.ts";
-  import { eventHandler, freePartName, wireEvent } from "./codeParts";
+  import { eventHandler, freePartName, partGrowsEdit, wireEvent } from "./codeParts";
+  import { applyEdit } from "./applyEdit";
   import type { Orientation } from "@clarity/ui/generated/Orientation.ts";
   import type { Page } from "@clarity/ui/generated/Page.ts";
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
@@ -188,6 +189,21 @@
   // The engines a canvas can run, and the one it runs (DESIGN 5.12).
   const besides = $derived(besideEngines(preview.project));
   const running = $derived(p?.runs ? besides.find((e) => e.name.name === p.runs) : undefined);
+  /** Sets whether the custom part grows with its window: its declaration's `grows`, in the module that declares it, for every place it is used. */
+  async function setGrows(grows: boolean): Promise<void> {
+    const set = p?.part ? partGrowsEdit(preview.project.files, p.part, grows) : null;
+    if (!set || pageDesigner.saving) return;
+    pageDesigner.saving = true;
+    pageDesigner.error = null;
+    try {
+      onapplied((await applyEdit(set.file, set.edit)).preview);
+    } catch (err) {
+      pageDesigner.error = String(err);
+    } finally {
+      pageDesigner.saving = false;
+    }
+  }
+
   // What tells through the part: a custom part's declared tells, or its engine's.
   const tellsOffered = $derived(declared?.tells ?? running?.tells ?? []);
   // The events offered: none to draw a canvas its engine draws.
@@ -737,8 +753,14 @@
       </fieldset>
     {/if}
 
-    <!-- A custom part (DESIGN 5.19): its declared properties, and its tells wired like events. -->
+    <!-- A custom part (DESIGN 5.19): whether it grows, its declared properties, and its tells wired like events. -->
     {#if p.kind === "custom" && declared}
+      <fieldset class="checks">
+        <legend>Layout</legend>
+        <label title="It takes the height the window has left, as a table or a canvas does; set in the part's declaration, so for every place it is used"
+          ><input type="checkbox" checked={declared.grows} disabled={pageDesigner.saving} onchange={(e) => setGrows(e.currentTarget.checked)} /> Grows with the window</label
+        >
+      </fieldset>
       {#if declared.properties.length > 0}
         <fieldset class="checks">
           <legend>Properties</legend>

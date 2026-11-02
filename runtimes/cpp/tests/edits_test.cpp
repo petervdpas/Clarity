@@ -98,3 +98,58 @@ TEST(a_table_edit_fits_its_editable_fields) {
     CHECK(table_edit_fits(json::parse("[1,2]"), json::parse("[1,2]"), {}));
     CHECK(!table_edit_fits(json::parse("[1,2]"), json::parse("[1,3]"), {}));
 }
+
+// The edit bus on whole window states (conformance/edit-bus.json, `states`):
+// what code set on parts is compared and put back as data is.
+TEST(the_edit_bus_puts_back_what_code_set_on_parts) {
+    const auto& cases = conformance("edit-bus.json")["states"];
+    CHECK(!cases.empty());
+    auto state_of = [](json given) {
+        given["window"] = "Case";
+        return given.get<WindowState>();
+    };
+    for (const auto& c : cases) {
+        std::string name = c["name"];
+        EditBus bus;
+        WindowState state = state_of(c["start"]);
+        bus.reset(edit_data(state));
+        int at = 0;
+        for (const auto& s : c["steps"]) {
+            ++at;
+            std::string where = name + ", step " + std::to_string(at);
+            if (s.contains("edit")) {
+                const auto& made = s["edit"];
+                state = state_of(made["state"]);
+                bus.edit(made["part"], made["scope"], edit_data(state), {});
+                continue;
+            }
+            if (s.contains("reply")) {
+                state = state_of(s["reply"]["state"]);
+                bus.reset(edit_data(state));
+                continue;
+            }
+            bool back = s.contains("undo");
+            auto after = bus.undo(s[back ? "undo" : "redo"], edit_data(state), back, [](const std::vector<int64_t>&, bool) {});
+            if (!after) {
+                check::fail(__FILE__, __LINE__, where + ": nothing taken back");
+                continue;
+            }
+            state = with_edit_data(state, *after);
+            json got = state;
+            const auto& want = s["state"];
+            if (got["data"] != want["data"]) check::fail(__FILE__, __LINE__, where + ": data " + got["data"].dump());
+            for (const auto& [part, fields] : want["parts"].items()) {
+                json has = got["parts"].value(part, json::object());
+                for (const auto& [field, expected] : fields.items()) {
+                    if (field == "values") {
+                        json values = has.value("values", json::object());
+                        for (const auto& [value, v] : expected.items())
+                            if (values.value(value, json()) != v) check::fail(__FILE__, __LINE__, where + ": " + part + ".values." + value + " in " + has.dump());
+                        continue;
+                    }
+                    if (has.value(field, json()) != expected) check::fail(__FILE__, __LINE__, where + ": " + part + "." + field + " in " + has.dump());
+                }
+            }
+        }
+    }
+}

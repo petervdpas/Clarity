@@ -22,6 +22,23 @@ pub fn use_store(get: impl Fn(&str, &str) -> Option<String> + Send + Sync + 'sta
     *STORE.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some((Box::new(get), Box::new(set)));
 }
 
+/// Keeps secrets in memory for this run instead of the system's protected
+/// store: a program driven without a window (CLARITY_HEADLESS), apart from
+/// the person's desktop and keyring. They are gone when the run ends.
+pub fn use_memory() {
+    let kept: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, String>>> = Default::default();
+    let read = kept.clone();
+    use_store(
+        move |program, name| read.lock().ok()?.get(&format!("{program}:{name}")).cloned(),
+        move |program, name, value| {
+            if let Ok(mut kept) = kept.lock() {
+                kept.insert(format!("{program}:{name}"), value.to_string());
+            }
+            Ok(())
+        },
+    );
+}
+
 /// The secret `name` of `program`; none when it was never kept, or the store
 /// cannot be reached.
 pub fn get(program: &str, name: &str) -> Option<String> {

@@ -11,7 +11,7 @@ Clarity designs, previews and generates without any of these. Run and Build need
 1. Install the Visual Studio Build Tools with the **Desktop development with C++** workload, from [visualstudio.microsoft.com](https://visualstudio.microsoft.com/visual-cpp-build-tools/). Rust links its programs with them on Windows.
 2. Run `rustup-init.exe` from [rustup.rs](https://rustup.rs) and take the defaults.
 
-The webview a Rust program shows is WebView2, which ships with Windows 11; on Windows 10, see [WebView2 on Windows](#webview2-on-windows).
+A Rust program draws its windows with Clarity.UI, on Skia, whose prebuilt library cargo downloads: it needs no webview.
 
 ### .NET on Windows
 
@@ -55,7 +55,7 @@ Take every C and C++ tool from that one folder, never a mix: two compilers of di
 
 ### WebView2 on Windows
 
-The window of a Rust, Go, C or C++ program shows its page in WebView2. Its runtime ships with Windows 11; on Windows 10, install the Evergreen runtime from [developer.microsoft.com](https://developer.microsoft.com/microsoft-edge/webview2). A C or C++ build fetches the WebView2 SDK it compiles against by itself, the first time.
+The window of a Go, C or C++ program shows its page in WebView2. Its runtime ships with Windows 11; on Windows 10, install the Evergreen runtime from [developer.microsoft.com](https://developer.microsoft.com/microsoft-edge/webview2). A C or C++ build fetches the WebView2 SDK it compiles against by itself, the first time.
 
 ## Linux
 
@@ -69,17 +69,15 @@ Install Rust with rustup from [rustup.rs](https://rustup.rs):
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-A Rust program also needs WebKitGTK; see [WebKitGTK on Linux](#webkitgtk-on-linux).
+A Rust program draws its windows with Clarity.UI and needs nothing more: cargo downloads Skia's prebuilt library.
 
 ### WebKitGTK on Linux
 
-The window of a Rust, Go, C or C++ program shows its page in WebKitGTK, and builds against its development files:
+The window of a Go, C or C++ program shows its page in WebKitGTK, and builds against its development files:
 
 ```
 sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev
 ```
-
-More about what Tauri needs on each system is on [tauri.app](https://tauri.app/start/prerequisites/).
 
 ### .NET on Linux
 

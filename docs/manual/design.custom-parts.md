@@ -24,12 +24,14 @@ part Arena
     tells scored(points: integer)
     hears restart
     size 8 x 10
+    grows
 ```
 
 - **Properties** (`speed`) are set on the window line and from code: `arena.speed = 7`.
 - **Tells** are what the part tells the window; a handler runs: `Arena name arena ... on scored: arenaScored`.
 - **Hears** are what code tells the part: `arena.restart()`.
 - **`binds`** gives it a value the window binds, as an input has; `size` is its size when placed.
+- **`grows`** makes it take the height its window has left, as a table or a canvas does, so a game board fills a window the person makes taller. Without it, it keeps the height of its rows. In the IDE, **Grows with the window** in the part's view and in the Properties panel of a placed part sets it for every place the part is used.
 
 Place it by its name, from the Custom parts group of the palette or as a line: `Arena name arena at 1,1 span 8 rows 10 speed 3`.
 
@@ -41,6 +43,6 @@ Pick the part under Custom parts in the project tree. Its view shows what the wi
 - The **file tree** opens files in tabs; **+ File**, **+ Folder**, **Rename** and **Delete** change the folder. Clarity's file opens read only: change the declaration and it follows.
 - **Build** builds the part on its own (CMake, Cargo or go build), its compiler's output in the Output panel. A C# adapter builds with the program.
 
-Every Build and Run of the program builds the part in with it. On Linux the part draws in a native window Clarity keeps at its place; the `orbs` example (C++ with SFML) and the `dice` example (Rust with Bevy) show one each.
+Every Build and Run of the program builds the part in with it. On the webview stacks (Go, C and C++) the part draws in a native window Clarity keeps at its place; the `orbs` example (C++ with SFML) shows one.
 
-On Clarity.UI (`stack rust desktop`, and C# on Clarity.UI) a part is no native window: it is a control of Clarity.UI and draws on the window's own surface, in its place, through the trait Clarity writes for it (in Rust, `GaugePart` in the crate's `src/clarity.rs`). It takes the pointer, the wheel, keys and the focus as any part does, and menus and dialogs lie over it. See [Rust](stacks.rust.md#custom-parts-on-clarityui) for the Rust trait.
+On Clarity.UI (Rust and C#) a part is no native window: it is a control of Clarity.UI and draws on the window's own surface, in its place, through the trait Clarity writes for it (in Rust, `GaugePart` in the crate's `src/clarity.rs`). It takes the pointer, the wheel, keys and the focus as any part does, and menus and dialogs lie over it. See [Rust](stacks.rust.md#custom-parts) for the Rust trait; the `dice` example (Rust with Bevy) shows one.

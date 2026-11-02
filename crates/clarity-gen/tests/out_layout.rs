@@ -81,12 +81,15 @@ fn a_folder_clarity_did_not_make_is_refused() {
 #[test]
 fn a_program_served_alone_is_the_web_program() {
     let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
-    let program_of = |targets: Vec<Target>| {
+    let program_of = |backend: Backend, targets: Vec<Target>| {
         let mut settings = clarity_project::starter("A", "a");
+        settings.stack.backend = backend;
+        settings.stack.ui = clarity_project::usual_ui(backend);
         settings.stack.targets = targets;
         clarity_gen::programs(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}")).iter().map(|p| p.target).collect::<Vec<_>>()
     };
-    assert_eq!(program_of(vec![Target::Web]), [Target::Web]);
-    assert_eq!(program_of(vec![Target::Desktop, Target::Web]), [Target::Desktop]);
-    assert_eq!(program_of(vec![Target::Web, Target::Cli]), [Target::Web, Target::Cli]);
+    assert_eq!(program_of(Backend::Rust, vec![Target::Web]), [Target::Web]);
+    // Rust's web program is not generated beside its desktop one yet (G8d); Go's is the desktop program's.
+    assert_eq!(program_of(Backend::Go, vec![Target::Desktop, Target::Web]), [Target::Desktop]);
+    assert_eq!(program_of(Backend::Rust, vec![Target::Web, Target::Cli]), [Target::Web, Target::Cli]);
 }

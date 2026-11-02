@@ -26,7 +26,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn the_table_has_a_column_for_the_files_name() {
-    let code = generated(Backend::Rust, Ui::Webview);
+    let code = generated(Backend::Rust, Ui::Clarity);
     has(&code, "\"booklet\" BLOB");
     // SQLite keeps text of any length as TEXT; the server databases as VARCHAR(255).
     has(&code, "\"booklet\" BLOB,\n    \"booklet_name\" TEXT NOT NULL DEFAULT ''");
@@ -34,11 +34,11 @@ fn the_table_has_a_column_for_the_files_name() {
 
 #[test]
 fn every_stack_reads_and_saves_a_file_with_its_name() {
-    let rust = generated(Backend::Rust, Ui::Webview);
+    let rust = generated(Backend::Rust, Ui::Clarity);
     has(&rust, "pub booklet: Option<RecordFile>,");
     has(&rust, "sql::get_file(\"booklet\", &values[");
     has(&rust, "PictureColumn { column: \"booklet\", store: None, name: Some(\"booklet_name\") }");
-    has(&rust, "fn file_data(");
+    has(&rust, "fn field_bytes(");
     has(&generated(Backend::Go, Ui::Webview), "clarity.FileContent(r.Booklet), clarity.FileNameValue(r.Booklet)");
     has(&generated(Backend::C, Ui::Webview), "clarity_get_file(\"booklet\"");
     has(&generated(Backend::Cpp, Ui::Webview), "clarity::get_file(\"booklet\"");

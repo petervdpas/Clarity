@@ -32,7 +32,7 @@ fn csharp_offers_a_chart_the_records_it_groups_by() {
 
 #[test]
 fn the_web_stacks_carry_the_charts_in_their_model() {
-    let rust = generated(Backend::Rust, Ui::Webview);
+    let rust = generated(Backend::Rust, Ui::Clarity);
     has(&rust, "\"chart\":\"bar\"");
     has(&rust, "\"by\":\"format\"");
     has(&rust, "\"measure\":{\"kind\":\"sum\",\"field\":\"rating\"}");

@@ -31,6 +31,8 @@ pub const MAIN: &str = r#"<Window name="Main">
   <Button name="keys" at="10,4" span="3" caption="Keys" opens="keys" />
   <Button name="long" at="1,5" span="3" caption="Long" onclick="long" />
   <Button name="quit" at="4,5" span="3" caption="Quit" opens="quit" />
+  <Button name="openConnection" at="7,5" span="3" caption="Connection" opens="Connection" />
+  <Button name="openConnectionApart" at="10,5" span="3" caption="Apart" opens="Connection" newWindow="true" />
 </Window>
 "#;
 
@@ -45,6 +47,7 @@ pub const CONNECTION: &str = r#"<Window name="Connection">
   <Heading name="connectionTitle" at="1,1" span="12" caption="Connection" />
   <Button name="keep" at="1,2" span="6" caption="Keep" onclick="keep" />
   <Button name="cancelConnection" at="7,2" span="6" caption="Close" cancel="true" onclick="done" />
+  <Button name="saveConnection" at="1,3" span="6" caption="Save and close" onclick="savedAndDone" />
 </Window>
 "#;
 
@@ -76,7 +79,7 @@ pub const MODEL: &str = r#"{
   ]
 }"#;
 
-pub const FILES: AppFiles = AppFiles { windows: &[("Main", MAIN), ("Pick", PICK), ("Connection", CONNECTION)], apps: &[], themes: &[], model: MODEL, title: "Orders", width: 800.0, height: 500.0 };
+pub const FILES: AppFiles = AppFiles { windows: &[("Main", MAIN), ("Pick", PICK), ("Connection", CONNECTION)], apps: &[], themes: &[], model: MODEL, resources: &[], title: "Orders", width: 800.0, height: 500.0 };
 
 /// The program of the tests.
 #[derive(Default)]
@@ -150,6 +153,13 @@ impl Program for Fake {
             }
             "done" => {
                 let mut r = reply(state);
+                r.close = true;
+                Ok(r)
+            }
+            "refuse" => Err(Text::plain("A title first")),
+            "savedAndDone" => {
+                let mut r = reply(state);
+                r.messages.push(Message { level: Level::Info, text: Text::plain("Saved") });
                 r.close = true;
                 Ok(r)
             }

@@ -24,7 +24,7 @@ use std::num::NonZeroU32;
 use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use glutin::config::{Config, ConfigTemplateBuilder, GlConfig};
 use glutin::context::{ContextApi, ContextAttributesBuilder, NotCurrentGlContext, PossiblyCurrentContext, PossiblyCurrentGlContext};
@@ -35,7 +35,7 @@ use skia_safe::gpu::{self, backend_render_targets, gl::FramebufferInfo, DirectCo
 use skia_safe::{ColorType, Surface};
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
-use winit::event::{ElementState, Ime, MouseButton, WindowEvent};
+use winit::event::{DeviceEvent, DeviceId, ElementState, Ime, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::raw_window_handle::HasWindowHandle;
 use winit::window::{Theme, Window, WindowAttributes, WindowId};
@@ -52,7 +52,7 @@ use crate::screen::Screen;
 use crate::theme::ThemeLook;
 use crate::window::{Apart, ApartClosed, Running, WindowStack};
 
-use self::input::{key_of, modifiers_of, typed_text, wheel_of};
+use self::input::{key_of, modifiers_of, typed_text, wheel_of, PointerPlace};
 
 /// The size a window that names none opens at, in the screen's units, on every stack.
 pub const STANDARD_SIZE: (f64, f64) = (1100.0, 760.0);
@@ -94,6 +94,10 @@ impl ShowOptions {
 /// in its look for the system's light or dark. Ends when its own windows
 /// closed or it quit.
 pub fn run(program: impl Program, files: AppFiles) -> ExitCode {
+    // Driven without a window, step by step from standard input (DESIGN 1.6).
+    if std::env::var_os(crate::headless::VARIABLE).is_some_and(|v| !v.is_empty()) {
+        return crate::headless::run(program, files);
+    }
     // The language and theme the person chose in an earlier run, kept beside the program's settings.
     let kept = clarity_runtime::settings::file(files.title).and_then(|f| f.parent().map(|p| p.to_path_buf()));
     crate::choices::start(&files, kept);
@@ -117,6 +121,7 @@ pub fn show(screen: Screen, mut options: ShowOptions) -> ExitCode {
     };
     let looks: Option<Rc<dyn Fn(bool) -> Arc<ThemeLook>>> = options.looks.take().map(Rc::from);
     let mut host = Host::new(event_loop.create_proxy(), looks);
+    host.untold = untold_moves(&event_loop);
     host.add(screen, options.title.clone(), (options.width, options.height), None, false);
     let ran = event_loop.run_app(&mut host);
     for win in host.wins.iter_mut() {
@@ -137,9 +142,29 @@ fn failed(why: &str) -> ExitCode {
     ExitCode::FAILURE
 }
 
-/// What wakes the host from outside its loop: work off a screen's thread is done.
+/// Whether the window system leaves a move back to where the pointer last
+/// moved untold: winit on X11 (see `PointerPlace`).
+fn untold_moves(event_loop: &EventLoop<Wake>) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        use winit::platform::x11::EventLoopExtX11;
+        event_loop.is_x11()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = event_loop;
+        false
+    }
+}
+
+/// What wakes the host from outside its loop: work off a screen's thread
+/// is done, or the system's light or dark changed (as the watch over it
+/// tells where the window system does not, X11).
 #[derive(Debug, Clone, Copy)]
-struct Wake;
+enum Wake {
+    Done,
+    Dark(bool),
+}
 
 /// The window as it shows: the system's window, its OpenGL surface and
 /// context, and Skia's context and surface over them.
@@ -238,7 +263,10 @@ struct Win {
     /// The window it was opened over takes no input while it is open.
     modal: bool,
     held: Modifiers,
-    pointer: (f64, f64),
+    /// Where the pointer is over it, kept apart from a move the system leaves untold (X11).
+    pointer: PointerPlace,
+    /// Whether the pointer is over it.
+    inside: bool,
     presses: PressCounter,
     caret: Option<Rect>,
 }
@@ -253,17 +281,22 @@ struct Host {
     dark: Option<bool>,
     started: Instant,
     next_key: u64,
+    proxy: EventLoopProxy<Wake>,
+    /// The watch over the system's light or dark, where the window system tells no change (X11).
+    theme_watch: Option<crate::system_theme::Watch>,
+    /// Whether the window system leaves a move back to where the pointer last moved untold (X11).
+    untold: bool,
 }
 
 impl Host {
     fn new(proxy: EventLoopProxy<Wake>, looks: Option<Rc<dyn Fn(bool) -> Arc<ThemeLook>>>) -> Host {
-        let proxy = Mutex::new(proxy);
+        let shared = Mutex::new(proxy.clone());
         let waker: crate::later::Waker = Arc::new(move || {
-            if let Ok(proxy) = proxy.lock() {
-                let _ = proxy.send_event(Wake);
+            if let Ok(proxy) = shared.lock() {
+                let _ = proxy.send_event(Wake::Done);
             }
         });
-        Host { wins: Vec::new(), looks, waker, config: None, failure: None, dark: None, started: Instant::now(), next_key: 1 }
+        Host { wins: Vec::new(), looks, waker, config: None, failure: None, dark: None, started: Instant::now(), next_key: 1, proxy, theme_watch: None, untold: false }
     }
 
     /// A screen in a desktop window of its own, shown once the loop runs; over `owner` when given.
@@ -281,7 +314,7 @@ impl Host {
         screen.set_waker(self.waker.clone());
         let key = self.next_key;
         self.next_key += 1;
-        self.wins.push(Win { key, screen, shown: None, title, size, owner, modal, held: Modifiers::NONE, pointer: (0.0, 0.0), presses: PressCounter::new(), caret: None });
+        self.wins.push(Win { key, screen, shown: None, title, size, owner, modal, held: Modifiers::NONE, pointer: PointerPlace::new(self.untold), inside: false, presses: PressCounter::new(), caret: None });
     }
 
     fn index_of(&self, id: WindowId) -> Option<usize> {
@@ -323,9 +356,20 @@ impl Host {
                 Ok(shown) => {
                     if self.config.is_none() {
                         self.config = Some(shown.config.clone());
-                        let theme = shown.window.theme().or_else(|| event_loop.system_theme());
+                        // Where the window system says nothing (X11), the system is asked as C# asks it, and asked again every 3 s.
+                        let told = shown.window.theme().or_else(|| event_loop.system_theme());
+                        let theme = told.or_else(|| Some(if crate::system_theme::dark_here() { Theme::Dark } else { Theme::Light }));
                         self.wins[i].shown = Some(shown);
                         self.follow_theme(theme);
+                        if told.is_none() {
+                            let proxy = Mutex::new(self.proxy.clone());
+                            let now = theme == Some(Theme::Dark);
+                            self.theme_watch = Some(crate::system_theme::watch(now, Duration::from_secs(3), move |dark| {
+                                if let Ok(proxy) = proxy.lock() {
+                                    let _ = proxy.send_event(Wake::Dark(dark));
+                                }
+                            }));
+                        }
                     } else {
                         self.wins[i].shown = Some(shown);
                     }
@@ -533,7 +577,16 @@ impl ApplicationHandler<Wake> for Host {
     }
 
     /// Work off a screen's thread is done: what it gave goes to its element.
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: Wake) {
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: Wake) {
+        if let Wake::Dark(dark) = event {
+            self.follow_theme(Some(if dark { Theme::Dark } else { Theme::Light }));
+            for win in self.wins.iter() {
+                if let Some(shown) = &win.shown {
+                    shown.window.request_redraw();
+                }
+            }
+            return;
+        }
         for win in self.wins.iter_mut() {
             win.screen.take_later();
         }
@@ -541,6 +594,20 @@ impl ApplicationHandler<Wake> for Host {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         let Some(i) = self.index_of(id) else { return };
+        // Where the pointer is, kept also while a dialog over the window takes its input.
+        match &event {
+            WindowEvent::CursorEntered { .. } => {
+                self.wins[i].inside = true;
+                self.wins[i].pointer.entered();
+            }
+            WindowEvent::CursorLeft { .. } => self.wins[i].inside = false,
+            WindowEvent::Focused(true) => self.wins[i].pointer.focused(),
+            WindowEvent::CursorMoved { position, .. } => {
+                let (x, y) = self.at(i, position.x, position.y);
+                self.wins[i].pointer.told(x, y);
+            }
+            _ => {}
+        }
         if self.blocked(i) && (is_input(&event) || matches!(event, WindowEvent::CloseRequested)) {
             // A window with a dialog of its own open over it stays, and takes nothing.
             return;
@@ -564,10 +631,9 @@ impl ApplicationHandler<Wake> for Host {
             WindowEvent::RedrawRequested => self.draw(i),
             WindowEvent::ModifiersChanged(modifiers) => self.wins[i].held = modifiers_of(modifiers.state()),
             WindowEvent::Focused(false) => self.wins[i].held = Modifiers::NONE,
-            WindowEvent::CursorMoved { position, .. } => {
-                let (x, y) = self.at(i, position.x, position.y);
+            WindowEvent::CursorMoved { .. } => {
                 let win = &mut self.wins[i];
-                win.pointer = (x, y);
+                let (x, y) = win.pointer.at();
                 win.screen.pointer_moved(x, y);
             }
             WindowEvent::CursorLeft { .. } => self.wins[i].screen.pointer_left(),
@@ -575,7 +641,11 @@ impl ApplicationHandler<Wake> for Host {
                 let Some(button) = button_of(button) else { return };
                 let elapsed = self.started.elapsed().as_millis() as i64;
                 let win = &mut self.wins[i];
-                let (x, y) = win.pointer;
+                // A move the system left untold went where the pointer last moved.
+                if let Some((x, y)) = win.pointer.settle() {
+                    win.screen.pointer_moved(x, y);
+                }
+                let (x, y) = win.pointer.at();
                 match state {
                     // The window gives only presses: a double or triple click is counted here.
                     ElementState::Pressed => {
@@ -589,7 +659,10 @@ impl ApplicationHandler<Wake> for Host {
                 let scale = self.wins[i].shown.as_ref().map(Shown::scale).unwrap_or(1.0);
                 let (dx, dy) = wheel_of(delta, scale);
                 let win = &mut self.wins[i];
-                let (x, y) = win.pointer;
+                if let Some((x, y)) = win.pointer.settle() {
+                    win.screen.pointer_moved(x, y);
+                }
+                let (x, y) = win.pointer.at();
                 win.screen.wheel(x, y, dx, dy, win.held);
             }
             // Keys the system repeats for a key held as the window got the focus are not the person's.
@@ -620,6 +693,15 @@ impl ApplicationHandler<Wake> for Host {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// The pointer moved, told to a window or not: the window it is over keeps that it moved.
+    fn device_event(&mut self, _event_loop: &ActiveEventLoop, _device: DeviceId, event: DeviceEvent) {
+        if let DeviceEvent::MouseMotion { .. } = event {
+            for win in self.wins.iter_mut().filter(|w| w.inside) {
+                win.pointer.raw_motion();
+            }
         }
     }
 

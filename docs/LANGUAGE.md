@@ -59,7 +59,7 @@ The project file holds one `project` block:
 ```clarity
 project Shop
     title "Shop"
-    stack rust webview desktop
+    stack rust desktop
     output "out"
     language "en"
     currency EUR
@@ -71,7 +71,7 @@ project Shop
 | Setting | Required | Meaning |
 |---|---|---|
 | `title "text"` | no | The name people see. When it is left out, it is derived from the project name. |
-| `stack language ui target...` | yes | The stack the project is transpiled into, read by position. Languages: `rust`, `go`, `csharp`, `c`, `cpp`. Go, C and C++ name the UI next: `webview`, the shared screen in a webview or a browser. C# names no UI (its windows are drawn by Clarity.UI), so its targets follow the language: `stack csharp desktop`. Rust does either: `stack rust desktop` is Clarity.UI (in progress), `stack rust webview desktop` the shared screen with Tauri. Targets: `desktop` for the program with windows, `web` for a web server that serves it to a browser (every language; Rust's on Clarity.UI is not generated yet; with both, `--serve` serves in place of the window; `--address host:port` says where), and `cli` for a command-line program beside it (`stack go webview desktop cli`); a project whose only target is `cli` names no UI (`stack go cli`). See [Commands](#commands). |
+| `stack language ui target...` | yes | The stack the project is transpiled into, read by position. Languages: `rust`, `go`, `csharp`, `c`, `cpp`. Go, C and C++ name the UI next: `webview`, the shared screen in a webview or a browser. C# and Rust name no UI (their windows are drawn by Clarity.UI), so their targets follow the language: `stack csharp desktop`, `stack rust desktop`. Targets: `desktop` for the program with windows, `web` for a web server that serves it to a browser (every language; Rust's web program serves the shared screen and is generated alone, `stack rust web`, until Clarity.UI draws in the browser; with both, `--serve` serves in place of the window; `--address host:port` says where), and `cli` for a command-line program beside it (`stack go webview desktop cli`); a project whose only target is `cli` names no UI (`stack go cli`). See [Commands](#commands). |
 | `output "folder"` | no | Where the generated application goes, relative to the project folder. The default is `out`. |
 | `output keeps "name", ...` | no | Folders in the output that are the project's own, which Clarity leaves alone: each the name of one folder, not a path. |
 | `language "tag"` | no | The language the project's texts are written in, as a language tag: `"en"`, `"nl-NL"`. Dates and numbers follow the locale of the person using the application; this language where the system names none. |
@@ -89,7 +89,7 @@ project Shop
 
 Each setting appears once, except `datasource` and `filestore`. An unknown setting or value is an error that names the line and lists the accepted words.
 
-Five stacks are generated today: Rust with the shared screen (Tauri), C# with Clarity.UI, Go with the shared screen (Wails), and C and C++ with the shared screen (webview; SQLite only for now). Clarity.UI does not draw a window's parts yet: a C# program opens its main window with the window's title and size.
+Five stacks are generated today: C# and Rust with Clarity.UI, Go with the shared screen (Wails), and C and C++ with the shared screen (webview; SQLite only for now).
 
 ### Translations
 
@@ -272,7 +272,7 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 
 | Modifier | Meaning |
 |---|---|
-| `required` | The field must have a value. Windows mark its label. |
+| `required` | The field must have a value. Windows mark its label, and `save` refuses a record while the field is empty (no value, or empty text; 0 and false are values) in Clarity's word `fieldRequired`, "{field} is required" with the field's label, after `before save`, so nothing is kept. |
 | `unique` | No two records have the same value. Empty text counts as no value, so several records can leave a unique text field empty. |
 | `search` | The field is in its record's full-text index, which `where a matches x` looks in. For text (also `email` and `url`) and lists of text; see [Full-text search](#full-text-search). |
 | `min value`, `max value` | The lowest and highest value allowed. |
@@ -598,7 +598,7 @@ Every part sits on the grid of the window or of the container it is in:
 - `span n` is the number of columns it covers. The default comes from the part's kind.
 - `rows n` is the number of rows it covers. The default also comes from the part's kind.
 
-Rows have a fixed height in the designer. In a running application the columns share the width of the window, and rows that hold something that grows (a table, a list, an image, a canvas, or a container with one of these inside) share the extra height. Everything else keeps its height, also in a row that grows: it stands at the top of its rows, as high as they are at their least.
+Rows have a fixed height in the designer. In a running application the columns share the width of the window, and rows that hold something that grows (a table, a list, an image, a canvas, a custom part declared with `grows`, or a container with one of these inside) share the extra height. Everything else keeps its height, also in a row that grows: it stands at the top of its rows, as high as they are at their least.
 
 The checker reports parts that start outside the grid, run past its last column, or overlap another part in the same container.
 
@@ -1022,6 +1022,7 @@ part Arena
     tells scored(points: integer)
     hears restart(level: integer)
     size 8 x 6
+    grows
     preview "arena.png"
 ```
 
@@ -1037,6 +1038,7 @@ part Arena
 | `tells name(values)` | One of its events, with typed values. |
 | `hears name(values)` | Something code tells it to do. |
 | `size n x n` | The span and rows the Parts palette drops it with. |
+| `grows` | Placed in a window, it takes the height the window has left, as a table or a canvas does (see [The grid](#the-grid)). Without it, it keeps the height of its rows. The designer's Grows with the window sets it. |
 | `preview "file"` | Its picture on the design canvas, from the resources; without it a box with its name. |
 
 A part's name starts with a capital, which no built-in part does. Its properties cannot be named after a word every part has: `at`, `span`, `rows`, `bind`, `name`, `on`, `tooltip`, `taborder`, `visible`, `enabled` or `value`.
@@ -1270,6 +1272,7 @@ Every part the person edits takes back its own edits with Ctrl+Z, and does them 
 - **A menu item or a button** reaches it with the built-in targets `undo` and `redo`: `item @undoItem name undoItem key "Ctrl+Z" on click -> undo`. They act on the part that had the focus last.
 - **Not taken back:** moving around (a tab, folding, zoom and pan, the selected row), what a click or a timer did, and effects outside the databases and the window (files written, messages, the clipboard, calls to other services).
 - **`no undo`** on a part's line switches it off there.
+- **The whole window.** An undo also puts back what the edit's handler set on parts: a caption, visible, enabled, readonly, an error, and each value of a custom part (`board.count = count` in a slider's `on change`), value by value.
 - **Safe.** When what an undo would take back was changed since (by another edit, window or person), it is refused with a message (Clarity's word `undoChangedSince`) and changes nothing.
 
 ### What a handler sees
@@ -2000,7 +2003,7 @@ A project file and one module: a customer list with a filter that opens a form, 
 
 ```clarity
 project Shop
-    stack rust webview desktop
+    stack rust desktop
     datasource main sqlite "data/shop.db"
 ```
 
@@ -2125,7 +2128,7 @@ page-setting  = "title" String | "size" n "x" n
               | "grid" n "columns" | "on" ("open" | "close" | "return") ":" handler
 custom-part   = "part" Name
                     ("native" String | "nuget" String version | "dll" String)
-                    ["binds" type-ref] ["size" n "x" n] ["preview" String]
+                    ["binds" type-ref] ["size" n "x" n] ["grows"] ["preview" String]
                     (name ":" type-ref ("," ("default" | "min" | "max") value)*)*
                     (("tells" | "hears") name ["(" params ")"])*
 library       = "library" Name

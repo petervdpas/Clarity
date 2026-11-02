@@ -118,14 +118,8 @@ fn it_lies_under_its_part_above_when_there_is_no_room_below_kept_off_the_edges()
     assert_eq!(Rect::new(404.0, 220.0, 360.0, 100.0), PopoverPart::place(None, own, size, whole));
 }
 
-#[test]
-#[ignore = "needs the place of the part its `for` names from the screen (g8-shared.md popover-anchor)"]
-fn it_opens_under_the_part_its_for_names() {
-    let (screen, _) = made(true);
-    let place = screen.overlays()[0].content.node().bounds;
-    assert_eq!(4.0, place.x);
-    assert_eq!(44.0 + 36.0 + 4.0, place.y);
-}
+// Where it opens, under the part its `for` names, is tested in g8c_live_popover.rs
+// (the part's place is known after the window is first arranged).
 
 #[test]
 fn it_draws_as_a_panel_with_a_strong_border_over_the_window() {

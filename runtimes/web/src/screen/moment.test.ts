@@ -1,5 +1,5 @@
 // A moment (a datetime field) as a day and a 24-hour time typed as hh:mm,
-// the same on the web as on Avalonia.
+// the same on the web as on every stack.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

@@ -1,7 +1,7 @@
 // A folder part (X2): a folder setting's path, typed, or chosen with the
 // system's folder picker through its button, named in Clarity's own word
 // (chooseFolder). Where nothing opens a picker, as in a browser, the path is
-// only typed. The same as on Avalonia.
+// only typed. The same as on every stack.
 
 import { flushSync, mount, unmount } from "svelte";
 import { expect, test } from "vitest";

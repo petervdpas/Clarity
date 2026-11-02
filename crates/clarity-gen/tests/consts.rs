@@ -25,7 +25,7 @@ code Main
 
 #[test]
 fn every_stack_writes_a_constant_out_as_its_value() {
-    for (backend, ui) in [(Backend::Rust, Ui::Web), (Backend::Go, Ui::Web), (Backend::C, Ui::Web), (Backend::Cpp, Ui::Web), (Backend::Csharp, Ui::Avalonia)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Webview), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
         let mut settings = starter("Play", "play");
         settings.stack.backend = backend;
         settings.stack.ui = ui;

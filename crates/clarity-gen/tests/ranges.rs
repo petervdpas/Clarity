@@ -1,7 +1,6 @@
 //! The slider and the spin box of U1c on every stack: the web stacks draw
-//! them from the model; Avalonia writes Clarity's SliderInput and a
-//! NumberInput with a step, each with its range: as written, else the
-//! field's own.
+//! them from the model; C#'s view model keeps each range: as written,
+//! else the field's own.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -28,19 +27,10 @@ fn has(text: &str, expected: &str) {
 #[test]
 fn the_web_stacks_carry_the_slider_and_the_spin_box_in_their_model() {
     for backend in [Backend::Rust, Backend::Go] {
-        let code = generated(backend, Ui::Web);
+        let code = generated(backend, Ui::Webview);
         has(&code, "\"kind\":\"slider\"");
         has(&code, "\"kind\":\"spinbox\"");
         has(&code, "\"step\":\"0.5\"");
     }
 }
 
-#[test]
-fn avalonia_writes_the_slider_and_the_spin_box_with_their_range() {
-    let code = generated(Backend::Csharp, Ui::Avalonia);
-    has(&code, "<c:SliderInput x:Name=\"ratingSlider\"");
-    has(&code, "Min=\"0\" Max=\"5\" Step=\"0.5\" Whole=\"False\" Value=\"{Binding Album.Rating}\"");
-    has(&code, "ratingSlider.ValueChanged += (_, _) => Vm.EditOf(\"ratingSlider\", \"ratingSlider\", true, () => Vm.FavouriteChangedCommand.Execute(null));");
-    has(&code, "<c:NumberInput x:Name=\"copiesSpin\"");
-    has(&code, "Min=\"0\" Max=\"99\" Step=\"1\"");
-}

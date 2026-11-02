@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Clarity's date input on the web, the same as on Avalonia
+  // Clarity's date input on the web, the same on every stack
   // (conformance/forms.json, tables.json): a day picked from the calendar or
   // typed (taken when the input is left or Enter is pressed), and only
   // another day picked by the person is a change. Its value

@@ -58,7 +58,7 @@ pub fn readme(settings: &Settings, calls_out: bool) -> String {
         out.push_str(&format!(
             "\nClarity's runtime comes as NuGet packages ({} {}, and the driver of each kind of database), which the first build fetches from nuget.org. To build on the runtime's own projects instead, while working on them, name their folder in Clarity's repository:\n\n    dotnet build -p:ClarityRuntime=<Clarity>/runtimes/csharp\n\nor set the environment variable `CLARITY_RUNTIME` to it.\n",
             // A desktop program takes the desktop's package; one served to browsers alone the core (DESIGN 7.6).
-            if crate::windowed_target(settings) == clarity_project::Target::Desktop { "Clarity.Avalonia.Desktop" } else { "Clarity.Avalonia" },
+            if crate::windowed_target(settings) == clarity_project::Target::Desktop { "Clarity.Ui.Desktop" } else { "Clarity.Ui.Browser" },
             crate::csharp::runtime_version()
         ));
     }

@@ -224,11 +224,11 @@ fn generated(backend: clarity_project::Backend, ui: clarity_project::Ui) -> Stri
 fn every_stack_finds_by_words() {
     use clarity_project::{Backend, Ui};
     for (backend, ui, wanted) in [
-        (Backend::Rust, Ui::Web, r#"Cond::matches("album", "id", &["title", "tags"], &"#),
-        (Backend::Go, Ui::Web, r#"clarity.Matches("album", "id", []string{"title", "tags"}, "#),
-        (Backend::C, Ui::Web, r#"clarity_matches("album", "id", 2, (const char*[]){"title", "tags"}, "#),
-        (Backend::Cpp, Ui::Web, r#"clarity::Cond::matches("album", "id", {"title", "tags"}, "#),
-        (Backend::Csharp, Ui::Avalonia, r#"Cond.Matches("album", "id", ["title", "tags"], "#),
+        (Backend::Rust, Ui::Webview, r#"Cond::matches("album", "id", &["title", "tags"], &"#),
+        (Backend::Go, Ui::Webview, r#"clarity.Matches("album", "id", []string{"title", "tags"}, "#),
+        (Backend::C, Ui::Webview, r#"clarity_matches("album", "id", 2, (const char*[]){"title", "tags"}, "#),
+        (Backend::Cpp, Ui::Webview, r#"clarity::Cond::matches("album", "id", {"title", "tags"}, "#),
+        (Backend::Csharp, Ui::Clarity, r#"Cond.Matches("album", "id", ["title", "tags"], "#),
     ] {
         let text = generated(backend, ui);
         assert!(text.contains(wanted), "{backend:?}: missing {wanted}");

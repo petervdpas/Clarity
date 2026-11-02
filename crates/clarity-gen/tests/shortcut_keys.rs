@@ -37,17 +37,10 @@ fn file<'a>(files: &'a [OutFile], path: &str) -> &'a str {
 }
 
 #[test]
-fn avalonia_has_the_keys_window_and_the_persons_keys() {
-    let files = files(Backend::Csharp, Ui::Avalonia, true);
-    let catalog = file(&files, "KeysCatalog.cs");
-    assert!(catalog.contains("new KeyLayerInfo(\"\", null, [new KeyCommandInfo(\"keysItem\", Text.Of(\"keysItem\"), []), new KeyCommandInfo(\"quitItem\", Text.Of(\"quitItem\"), [\"Ctrl+Q\"])])"), "{catalog}");
-    assert!(catalog.contains("new KeyLayerInfo(\"Card\", Text.Of(\"cardTitle\"), [new KeyCommandInfo(\"Card.saveButton\", Text.Of(\"saveCaption\"), [\"Ctrl+S\"])])"), "{catalog}");
-    let app = file(&files, "App.axaml.cs");
-    assert!(app.contains("PersonKeys.Start(\"shop\");"), "{app}");
-    assert!(app.contains("KeysWindow.Catalog = KeysCatalog.Layers;"), "{app}");
-    let view = file(&files, "Windows/CardView.axaml");
-    assert!(view.contains("c:Keys.Id=\"keysItem\""), "{view}");
-    assert!(view.contains("c:Keys.Id=\"Card.saveButton\""), "{view}");
+fn csharp_starts_the_persons_keys() {
+    let files = files(Backend::Csharp, Ui::Clarity, true);
+    let program = file(&files, "Program.cs");
+    assert!(program.contains("PersonKeys.Start(\"shop\");"), "{program}");
     let model = file(&files, "Windows/CardViewModel.cs");
     assert!(model.contains("void Keys_() => ShowKeys();"), "{model}");
 }
@@ -56,7 +49,7 @@ fn avalonia_has_the_keys_window_and_the_persons_keys() {
 fn without_keys_editable_the_design_keys_stay() {
     let mut settings: Settings = starter("Shop", "shop");
     settings.stack.backend = Backend::Csharp;
-    settings.stack.ui = Ui::Avalonia;
+    settings.stack.ui = Ui::Clarity;
     let project = clarity_spec::load_in([("shop.clarity", SHOP)], [], &clarity_project::source_refs(&settings));
     // `-> keys` needs the project file's say.
     let refused = generate(&project, &settings).unwrap_err();
@@ -64,15 +57,13 @@ fn without_keys_editable_the_design_keys_stay() {
     let plain = SHOP.replace("            item @keysItem name keysItem on click -> keys\n", "");
     let project = clarity_spec::load_in([("shop.clarity", plain.as_str())], [], &clarity_project::source_refs(&settings));
     let files = generate(&project, &settings).unwrap();
-    assert!(!files.iter().any(|f| f.path == "KeysCatalog.cs"));
-    assert!(!file(&files, "Windows/CardView.axaml").contains("c:Keys.Id="));
-    assert!(!file(&files, "App.axaml.cs").contains("PersonKeys"));
+    assert!(!file(&files, "Program.cs").contains("PersonKeys"));
 }
 
 #[test]
 fn the_web_stacks_carry_the_catalog_in_their_model() {
     for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
-        let code: String = files(backend, Ui::Web, true).iter().map(|f| f.text.clone()).collect();
+        let code: String = files(backend, Ui::Webview, true).iter().map(|f| f.text.clone()).collect();
         assert!(code.contains("Card.saveButton"), "{backend:?} carries the catalog");
     }
 }

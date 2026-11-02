@@ -1,6 +1,5 @@
 //! The small parts of U1b on every stack: the web stacks draw them from the
-//! model; Avalonia writes a separator line, a HyperlinkButton, a badge, a
-//! ProgressBar and a running bar for busy.
+//! model; on C# Clarity.UI draws them from the window's view model.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -27,7 +26,7 @@ fn has(text: &str, expected: &str) {
 #[test]
 fn the_web_stacks_carry_the_small_parts_in_their_model() {
     for backend in [Backend::Rust, Backend::Go] {
-        let code = generated(backend, Ui::Web);
+        let code = generated(backend, Ui::Webview);
         for kind in ["separator", "link", "badge", "progress", "busy"] {
             has(&code, &format!("\"kind\":\"{kind}\""));
         }
@@ -36,16 +35,3 @@ fn the_web_stacks_carry_the_small_parts_in_their_model() {
     }
 }
 
-#[test]
-fn avalonia_writes_each_small_part_in_its_idiom() {
-    let code = generated(Backend::Csharp, Ui::Avalonia);
-    has(&code, "Classes=\"separator\"");
-    has(&code, "<HyperlinkButton x:Name=\"lucideLink\"");
-    has(&code, "NavigateUri=\"https://lucide.dev\"");
-    has(&code, "NavigateUri=\"{Binding Album.Site, Converter={x:Static local:Shown.Address}}\"");
-    has(&code, "Classes=\"badge\"");
-    has(&code, "<ProgressBar x:Name=\"copiesBar\"");
-    has(&code, "Maximum=\"10\" Value=\"{Binding Album.Copies}\"");
-    has(&code, "<ProgressBar IsIndeterminate=\"True\" />");
-    has(&code, "public static readonly IValueConverter Address");
-}

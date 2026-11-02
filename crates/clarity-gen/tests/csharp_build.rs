@@ -1,5 +1,5 @@
-//! Generates the shop example as C# with Avalonia and builds it with
-//! `dotnet build` (the AXAML compiler checks every binding), then runs it with
+//! Generates the shop example as C# with Clarity.UI and builds it with
+//! `dotnet build`, then runs it with
 //! `--check`: the program opens its database, applies the migration steps and
 //! stops before showing a window. Slow (NuGet and the compiler), so it only
 //! runs when asked, one at a time:
@@ -16,7 +16,6 @@ use std::process::Command;
 use clarity_project::{Backend, SourceKind, Ui};
 
 mod scratch;
-mod served;
 use scratch::empty;
 
 /// Where builds go: target/generated in the repository, on disk; never the
@@ -72,7 +71,7 @@ fn builds_and_runs_in_csharp(name: &str, program: &str, translated: Option<&str>
     assert_eq!(!project.translations.is_empty(), translated.is_some(), "the example's translations");
     let settings = clarity_project::load(&file).settings.expect("the example has a project file");
     // An example builds on the stack its project file names, and no other.
-    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Csharp, Ui::Avalonia), "{name} is not a C# example");
+    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Csharp, Ui::Clarity), "{name} is not a C# example");
     let files = clarity_gen::generate(&project, &settings).unwrap();
     if let Some(translated) = translated {
         assert!(files.iter().any(|f| f.path == format!("Texts.{translated}.resx")));
@@ -232,7 +231,7 @@ fn an_engine_answers_in_the_generated_application_in_csharp() {
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = clarity_project::starter("Shop", "shop");
     settings.stack.backend = Backend::Csharp;
-    settings.stack.ui = Ui::Avalonia;
+    settings.stack.ui = Ui::Clarity;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let root = scratch().join(format!("clarity-gen-csharp-engine-{}", std::process::id()));
     let (out, check) = (root.join("Shop"), root.join("Check"));
@@ -264,7 +263,7 @@ fn functions_named_like_types_build_in_csharp() {
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = clarity_project::starter("Shop", "shop");
     settings.stack.backend = Backend::Csharp;
-    settings.stack.ui = Ui::Avalonia;
+    settings.stack.ui = Ui::Clarity;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch().join(format!("clarity-gen-csharp-names-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
@@ -285,8 +284,7 @@ fn the_noughts_example_builds_and_runs_in_csharp() {
 /// The noughts example's Board engine, written in Clarity and compiled to
 /// WebAssembly, played through the C# application's engine host from a
 /// program of its own.
-const BOARD_CHECK: &str = r#"using Clarity.Avalonia;
-using Clarity.Runtime;
+const BOARD_CHECK: &str = r#"using Clarity.Runtime;
 using Noughts;
 
 // The texts in the project's default language, as the application starts
@@ -354,7 +352,7 @@ fn board_runs_in_csharp(interpreted: bool) {
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
     settings.engines_interpreted = interpreted;
-    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Csharp, Ui::Avalonia), "noughts is a C# example");
+    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Csharp, Ui::Clarity), "noughts is a C# example");
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let root = scratch().join(format!("clarity-gen-csharp-board-{}-{}", interpreted, std::process::id()));
     let (out, check) = (root.join("Noughts"), root.join("Check"));
@@ -382,7 +380,7 @@ fn questions_and_their_answers_build_in_csharp() {
     let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
     let mut settings = clarity_project::starter("Music", "music");
     settings.stack.backend = Backend::Csharp;
-    settings.stack.ui = Ui::Avalonia;
+    settings.stack.ui = Ui::Clarity;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch().join(format!("clarity-gen-csharp-asks-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
@@ -406,7 +404,7 @@ fn pictures_build_in_csharp() {
     assert!(errors.is_empty(), "{errors:#?}");
     let mut settings = clarity_project::starter("Art", "art");
     settings.stack.backend = Backend::Csharp;
-    settings.stack.ui = Ui::Avalonia;
+    settings.stack.ui = Ui::Clarity;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch().join(format!("clarity-gen-csharp-art-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
@@ -429,7 +427,7 @@ fn an_engine_beside_the_screen_builds_in_csharp() {
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = clarity_project::starter("Play", "play");
     settings.stack.backend = Backend::Csharp;
-    settings.stack.ui = Ui::Avalonia;
+    settings.stack.ui = Ui::Clarity;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch().join("clarity-gen-csharp-play");
     let _ = std::fs::remove_dir_all(&out);
@@ -440,66 +438,4 @@ fn an_engine_beside_the_screen_builds_in_csharp() {
     if std::env::var_os("CLARITY_KEEP").is_none() {
         remove(&out);
     }
-}
-
-/// The web target (DESIGN 7.6): the server builds, keeps a session for a
-/// browser tab and answers it with the main window's state. The browser
-/// program needs .NET's wasm-tools workload; it is left out of the build here.
-#[test]
-#[ignore]
-fn the_web_server_keeps_sessions_in_csharp() {
-    let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
-    let mut settings = clarity_project::starter("Music", "music");
-    settings.stack.backend = Backend::Csharp;
-    settings.stack.ui = Ui::Avalonia;
-    settings.stack.targets = vec![clarity_project::Target::Web];
-    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
-    let out = scratch().join(format!("clarity-gen-csharp-web-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&out);
-    std::fs::create_dir_all(&out).unwrap();
-    clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
-    let built = dotnet(&out, &["build", "Server", "--nologo", "-v", "quiet", "-warnaserror", "-p:SkipBrowser=true"], Runtime::Local).output().unwrap();
-    assert!(built.status.success(), "the server does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
-    let address = "127.0.0.1:18735";
-    let program = out.join("Server/bin/Debug/net10.0/Music.Server");
-    let mut server = Command::new(&program).args(["--address", address]).current_dir(&out).spawn().unwrap();
-    let started = served::post(address, "/clarity/session", r#"{"do": "start"}"#);
-    let _ = server.kill();
-    let _ = server.wait();
-    let reply: serde_json::Value = serde_json::from_str(&started).unwrap_or_else(|e| panic!("{e}: {started}"));
-    assert!(reply["session"].as_str().is_some_and(|s| !s.is_empty()), "{started}");
-    let window = &reply["windows"][0];
-    assert!(window["type"].as_str().unwrap_or("").starts_with("Music."), "{started}");
-    assert!(window["state"]["parts"].is_object(), "{started}");
-    remove(&out);
-}
-
-/// The walker example, on its own stack: C# with Avalonia on the web. Its
-/// server builds, with the browser program published into it, and a session
-/// opens its window.
-#[test]
-#[ignore]
-fn the_walker_example_serves_in_csharp() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let file = root.join("examples/walker.clarity");
-    let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
-    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
-    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Csharp, Ui::Avalonia), "walker is not a C# example");
-    let out = scratch().join(format!("clarity-gen-csharp-walker-{}", std::process::id()));
-    settings.datasources[0].url = out.join("data/walker.db").display().to_string();
-    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
-    let _ = std::fs::remove_dir_all(&out);
-    std::fs::create_dir_all(&out).unwrap();
-    clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
-    let built = dotnet(&out, &["build", "Server", "--nologo", "-v", "quiet"], Runtime::Local).output().unwrap();
-    assert!(built.status.success(), "the walker does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
-    assert!(out.join("Server/bin/Debug/net10.0/wwwroot/_framework/dotnet.js").exists(), "the browser program is published into the server");
-    let address = "127.0.0.1:18738";
-    let mut server = Command::new(out.join("Server/bin/Debug/net10.0/Walker.Server")).args(["--address", address]).current_dir(&out).spawn().unwrap();
-    let page = served::post(address, "/clarity/session", r#"{"do": "start"}"#);
-    let _ = server.kill();
-    let _ = server.wait();
-    let reply: serde_json::Value = serde_json::from_str(&page).unwrap_or_else(|e| panic!("{e}: {page}"));
-    assert!(reply["windows"][0]["type"].as_str().unwrap_or("").starts_with("Walker.FieldViewModel"), "{page}");
-    remove(&out);
 }

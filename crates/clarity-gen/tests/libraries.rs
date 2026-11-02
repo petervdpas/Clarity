@@ -39,11 +39,11 @@ fn line(backend: Backend) -> &'static str {
 
 fn settings(backend: Backend) -> clarity_project::Settings {
     let stack = match backend {
-        Backend::Csharp => "csharp avalonia desktop",
-        Backend::Rust => "rust web desktop",
-        Backend::Go => "go web desktop",
-        Backend::C => "c web desktop",
-        Backend::Cpp => "cpp web desktop",
+        Backend::Csharp => "csharp desktop",
+        Backend::Rust => "rust webview desktop",
+        Backend::Go => "go webview desktop",
+        Backend::C => "c webview desktop",
+        Backend::Cpp => "cpp webview desktop",
     };
     clarity_project::parse(&format!("project Shop\n    stack {stack}\n    datasource main sqlite \"data/shop.db\"\n")).unwrap()
 }

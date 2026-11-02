@@ -33,11 +33,11 @@ fn project() -> clarity_spec::Project {
 
 fn settings(backend: Backend) -> clarity_project::Settings {
     let stack = match backend {
-        Backend::Csharp => "csharp avalonia desktop",
-        Backend::Rust => "rust web desktop",
-        Backend::Go => "go web desktop",
-        Backend::C => "c web desktop",
-        Backend::Cpp => "cpp web desktop",
+        Backend::Csharp => "csharp desktop",
+        Backend::Rust => "rust webview desktop",
+        Backend::Go => "go webview desktop",
+        Backend::C => "c webview desktop",
+        Backend::Cpp => "cpp webview desktop",
     };
     clarity_project::parse(&format!("project Watch\n    stack {stack}\n    datasource main sqlite \"data/watch.db\"\n")).unwrap()
 }
@@ -59,18 +59,6 @@ fn the_web_stacks_hand_the_renderer_the_parts() {
     let model = clarity_gen::web::model_json(&project());
     for expected in ["\"kind\":\"timer\"", "\"every\":\"1\"", "\"kind\":\"trend\"", "\"points\":60"] {
         assert!(model.contains(expected), "no {expected} in the model");
-    }
-}
-
-#[test]
-fn avalonia_places_a_timer_a_trend_and_a_chart_of_numbers() {
-    let code = code(Backend::Csharp);
-    for expected in [
-        "<c:Timer Every=\"1\" Command=\"{Binding SampledCommand}\" IsEnabled=\"{Binding Clock.IsEnabled}\" />",
-        "Grid.RowSpan=\"4\" Value=\"{Binding Cpu}\" Points=\"60\" Max=\"100\"",
-        "Numbers=\"{Binding Readings}\" Points=\"30\" Max=\"100\"",
-    ] {
-        assert!(code.contains(expected), "no {expected:?} in\n{code}");
     }
 }
 

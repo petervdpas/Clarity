@@ -40,30 +40,24 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn code_reads_and_sets_a_sidebar_on_every_stack() {
-    let rust = files(Backend::Rust, Ui::Web);
+    let rust = files(Backend::Rust, Ui::Webview);
     has(text(&rust, "src/modules/shop.rs"), "if ui.collapsed(\"nav\", true) {");
     has(text(&rust, "src/modules/shop.rs"), "ui.set_maximized(\"nav\", !ui.maximized(\"nav\"));");
-    let go = files(Backend::Go, Ui::Web);
+    let go = files(Backend::Go, Ui::Webview);
     has(text(&go, "shop_module.go"), "if ui.Collapsed(\"nav\", true) {");
     has(text(&go, "shop_module.go"), "ui.SetMaximized(\"nav\", !ui.Maximized(\"nav\"))");
-    let c = files(Backend::C, Ui::Web);
+    let c = files(Backend::C, Ui::Webview);
     has(text(&c, "src/modules/shop.c"), "if (clarity_ui_collapsed(ui, \"nav\", true)) {");
     has(text(&c, "src/modules/shop.c"), "clarity_ui_set_maximized(ui, \"nav\", !clarity_ui_maximized(ui, \"nav\"));");
-    let cpp = files(Backend::Cpp, Ui::Web);
+    let cpp = files(Backend::Cpp, Ui::Webview);
     has(text(&cpp, "src/modules/shop.cpp"), "if (ui.collapsed(\"nav\", true)) {");
     has(text(&cpp, "src/modules/shop.cpp"), "ui.set_maximized(\"nav\", !ui.maximized(\"nav\"));");
 }
 
-/// Avalonia docks the runtime's SidebarView, its folding and filling bound to the part's state.
+/// C# keeps a sidebar's folding and filling in its part's state, in the window's view model.
 #[test]
-fn avalonia_docks_a_sidebar_view() {
-    let files = files(Backend::Csharp, Ui::Avalonia);
-    let view = text(&files, "Windows/MainView.axaml");
-    has(
-        view,
-        "<c:SidebarView x:Name=\"nav\" DockPanel.Dock=\"Left\" Side=\"Left\" Classes=\"sidebar\" SidebarWidth=\"280\" MinSidebarWidth=\"200\" MaxSidebarWidth=\"480\" Resizable=\"True\" Collapsible=\"True\" Maximizable=\"True\" IsCollapsed=\"{Binding Nav.IsCollapsed}\" IsMaximized=\"{Binding Nav.IsMaximized}\">",
-    );
-    has(view, "<c:SidebarView.Content>");
+fn csharp_keeps_a_sidebar_s_state() {
+    let files = files(Backend::Csharp, Ui::Clarity);
     let vm = text(&files, "Windows/MainViewModel.cs");
     has(vm, "public PartState Nav { get; } = new(\"nav\") { IsCollapsed = true };");
     has(vm, "if (Nav.IsCollapsed)");

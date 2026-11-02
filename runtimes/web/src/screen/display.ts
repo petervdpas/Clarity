@@ -73,7 +73,7 @@ export function cells(text: string, digits: number): Cell[] {
 
 /** A cell is 13 units wide and 20 high; its digit sits in 2..10 across and
  *  2..18 down, its point at the bottom right. Each segment is a bar with
- *  pointed ends, as the points of its outline. Avalonia draws the same. */
+ *  pointed ends, as the points of its outline. Every stack draws the same. */
 export const CELL_WIDTH = 13;
 export const CELL_HEIGHT = 20;
 const T = 1; // half the thickness of a bar

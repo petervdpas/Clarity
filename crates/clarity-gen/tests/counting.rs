@@ -35,19 +35,19 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn every_stack_counts_and_joins() {
-    let rust = generated(Backend::Rust, Ui::Web);
+    let rust = generated(Backend::Rust, Ui::Webview);
     has(&rust, "(1i64..=3i64).collect::<Vec<i64>>()");
     has(&rust, ".join(");
-    let go = generated(Backend::Go, Ui::Web);
+    let go = generated(Backend::Go, Ui::Webview);
     has(&go, "clarity.Range(1, 3)");
     has(&go, "clarity.Join(");
-    let csharp = generated(Backend::Csharp, Ui::Avalonia);
+    let csharp = generated(Backend::Csharp, Ui::Clarity);
     has(&csharp, "Lists.Range(1L, 3L)");
     has(&csharp, "string.Join(");
-    let c = generated(Backend::C, Ui::Web);
+    let c = generated(Backend::C, Ui::Webview);
     has(&c, "clarity_range(1, 3)");
     has(&c, "clarity_joined(");
-    let cpp = generated(Backend::Cpp, Ui::Web);
+    let cpp = generated(Backend::Cpp, Ui::Webview);
     has(&cpp, "clarity::range(int64_t{1}, int64_t{3})");
     has(&cpp, "clarity::joined(");
 }

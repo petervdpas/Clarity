@@ -5,7 +5,7 @@
 // this file.
 project Invaders
     title "Invaders"
-    stack go web web
+    stack go webview web
     output "out"
     language "en"
     datasource main sqlite "data/invaders.db"

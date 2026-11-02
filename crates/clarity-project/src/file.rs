@@ -4,7 +4,7 @@
 //! ```text
 //! project Shop
 //!     title "The shop"
-//!     stack rust web desktop
+//!     stack rust webview desktop
 //!     output "out"
 //!     output keeps "vendor"
 //!     datasource main sqlite "data/shop.db"
@@ -24,7 +24,7 @@ use std::collections::HashMap;
 use clarity_spec::lexer::{Token, TokenKind, lex, quote};
 
 use crate::{
-    AUTH_KINDS, Auth, BACKENDS, DEFAULT_OUT, DataSource, FileStore, Paging, PagingKind, SOURCE_KINDS, Settings, Stack, TARGETS, Target, UIS, auth_word, currency_problem,
+    AUTH_KINDS, Auth, BACKENDS, DEFAULT_OUT, DataSource, FileStore, Paging, PagingKind, SOURCE_KINDS, Settings, Stack, TARGETS, Target, UIS, Ui, auth_word, currency_problem,
     language_problem,
     backend_word, source_word, target_word, ui_word, usual_ui,
 };
@@ -337,20 +337,32 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                         .collect::<Result<Vec<_>, _>>()?;
                     if targets.iter().any(|t| *t != Target::Cli) {
                         return Err(format!(
-                            "line {line}: a program with a window names its UI before the targets, like: stack go web desktop cli"
+                            "line {line}: a program with a window names its UI before the targets, like: stack go webview desktop cli"
                         ));
                     }
                     stack = Some(Stack { backend, ui: usual_ui(backend), targets });
+                } else if let Some(backend) = words.first().map(|b| pick(line, "backend", "backends", &BACKENDS, backend_word, b)).transpose()?
+                    && usual_ui(backend) == Ui::Clarity
+                {
+                    // Clarity.UI is not named: the targets follow the language.
+                    let targets = words[1..]
+                        .iter()
+                        .map(|t| pick(line, "target", "targets", &TARGETS, target_word, t))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    if targets.is_empty() {
+                        return Err(format!("line {line}: the stack needs at least one target, like: stack csharp desktop"));
+                    }
+                    stack = Some(Stack { backend, ui: Ui::Clarity, targets });
                 } else {
                     let (Some(backend), Some(ui), targets) = (words.first(), words.get(1), words.get(2..).unwrap_or(&[]))
                     else {
                         return Err(format!(
-                            "line {line}: write the backend, the UI and at least one target, like: stack rust web desktop"
+                            "line {line}: write the backend, the UI and at least one target, like: stack rust webview desktop"
                         ));
                     };
                     if targets.is_empty() {
                         return Err(format!(
-                            "line {line}: the stack needs at least one target, like: stack rust web desktop"
+                            "line {line}: the stack needs at least one target, like: stack rust webview desktop"
                         ));
                     }
                     stack = Some(Stack {
@@ -421,7 +433,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         }
     }
     let Some(stack) = stack else {
-        return Err("the project needs a 'stack' line, like: stack rust web desktop".to_string());
+        return Err("the project needs a 'stack' line, like: stack rust webview desktop".to_string());
     };
     Ok(Settings {
         name,
@@ -507,7 +519,7 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
     // The lines of the new file, in their canonical order.
     let stack = &settings.stack;
     let mut stack_line = format!("stack {}", backend_word(stack.backend));
-    if stack.has_ui() {
+    if stack.names_ui() {
         stack_line.push(' ');
         stack_line.push_str(ui_word(stack.ui));
     }

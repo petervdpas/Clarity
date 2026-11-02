@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Clarity's color input on the web, the same as on Avalonia
+  // Clarity's color input on the web, the same on every stack
   // (conformance/colors.json): a swatch that opens the palette every
   // renderer shares, and the color as "#rrggbb" to type. Typed text is read
   // when the input is left or Enter is pressed; text that is no color stays

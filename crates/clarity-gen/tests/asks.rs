@@ -1,6 +1,6 @@
 //! Asking the person (DESIGN 5.14) on every stack: the handler that asks
-//! puts the question in its reply (or, on Avalonia, asks its window when it
-//! has finished), and each stack runs the handler the answer goes to, with
+//! puts the question in its reply (or, on C#, asks its window when it has
+//! finished), and each stack runs the handler the answer goes to, with
 //! the values written for it and the answer last: a record by its id or as
 //! it was written, any other value as it is.
 
@@ -29,7 +29,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn rust_asks_in_the_reply_and_answers_through_its_own_command() {
-    let code = generated(Backend::Rust, Ui::Web);
+    let code = generated(Backend::Rust, Ui::Webview);
     has(&code, "ui.ask(");
     has(&code, "clarity_runtime::ui::AskForm::Confirm { yes: Some(");
     has(&code, "clarity_runtime::ui::AskForm::Value { ty: \"record\".to_string(), of: Some(\"Friend\".to_string()), only: Some(");
@@ -44,7 +44,7 @@ fn rust_asks_in_the_reply_and_answers_through_its_own_command() {
 
 #[test]
 fn go_asks_in_the_reply_and_answers_through_its_windows() {
-    let code = generated(Backend::Go, Ui::Web);
+    let code = generated(Backend::Go, Ui::Webview);
     has(&code, "ui.Ask(");
     has(&code, "clarity.Confirm(clarity.Button(");
     has(&code, "clarity.ValueForm(\"record\", clarity.Named(\"Friend\"), clarity.IDs(w.Friends), nil)");
@@ -57,7 +57,7 @@ fn go_asks_in_the_reply_and_answers_through_its_windows() {
 
 #[test]
 fn c_asks_in_the_reply_and_answers_through_its_windows() {
-    let code = generated(Backend::C, Ui::Web);
+    let code = generated(Backend::C, Ui::Webview);
     has(&code, "clarity_ui_ask(ui, ");
     has(&code, "clarity_ask_confirm(");
     has(&code, "clarity_ask_value(\"record\", \"Friend\", ");
@@ -70,7 +70,7 @@ fn c_asks_in_the_reply_and_answers_through_its_windows() {
 
 #[test]
 fn cpp_asks_in_the_reply_and_answers_through_its_windows() {
-    let code = generated(Backend::Cpp, Ui::Web);
+    let code = generated(Backend::Cpp, Ui::Webview);
     has(&code, "ui.ask(");
     has(&code, "clarity::ask_confirm(");
     has(&code, "clarity::ask_value(\"record\", std::string(\"Friend\"), ");
@@ -82,8 +82,8 @@ fn cpp_asks_in_the_reply_and_answers_through_its_windows() {
 }
 
 #[test]
-fn avalonia_asks_its_window_and_the_answer_calls_the_handler() {
-    let code = generated(Backend::Csharp, Ui::Avalonia);
+fn csharp_asks_its_window_and_the_answer_calls_the_handler() {
+    let code = generated(Backend::Csharp, Ui::Clarity);
     has(&code, "Ask(");
     has(&code, "new ConfirmForm(");
     has(&code, "_ => OnDeleteConfirmed()");

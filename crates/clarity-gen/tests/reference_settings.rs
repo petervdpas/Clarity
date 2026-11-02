@@ -37,8 +37,8 @@ fn has(text: &str, expected: &str) {
 }
 
 #[test]
-fn avalonia_reads_the_id_and_offers_the_records() {
-    let csharp = generated(Backend::Csharp, Ui::Avalonia);
+fn csharp_reads_the_id_and_offers_the_records() {
+    let csharp = generated(Backend::Csharp, Ui::Clarity);
     has(&csharp, "public long? OpenProject");
     has(&csharp, "settings.OpenProject = _openProjectKept.GetValue<long>();");
     has(&csharp, "ProjectChoices = Choice.Of(Db.All<Project>()");
@@ -47,6 +47,6 @@ fn avalonia_reads_the_id_and_offers_the_records() {
 #[test]
 fn every_stack_generates_it() {
     for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
-        generated(backend, Ui::Web);
+        generated(backend, Ui::Webview);
     }
 }

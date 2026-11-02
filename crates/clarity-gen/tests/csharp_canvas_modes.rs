@@ -62,7 +62,7 @@ fn generated() -> Vec<OutFile> {
     let project = clarity_spec::keyed::load_keyed([("m.clarity", SOURCE)], &[], "en");
     let mut settings = starter("Canvases", "canvases");
     settings.stack.backend = Backend::Csharp;
-    settings.stack.ui = Ui::Avalonia;
+    settings.stack.ui = Ui::Clarity;
     generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"))
 }
 
@@ -77,17 +77,13 @@ fn a_canvas_with_a_mode_is_the_runtimes_canvas_with_its_options() {
     // Objects: the drawing marks each record's box, the drop goes to the runtime.
     has(&text, "Diagram.Draw(new Shape.Object(t.Id, ");
     has(&text, "Diagram.Draw(new Shape.Ellipse(");
-    has(&text, " Mode=\"objects\" ActionCommand=\"{Binding CanvasAt_DiagramCommand}\"");
     has(&text, "void CanvasAt_Diagram(System.Text.Json.Nodes.JsonObject action) => CanvasEvent(Diagram, \"diagram\", new CanvasArgs(\"objects\") { Grid = Diagram.Grid, Snap = Diagram.Snap, List = \"Types\", At = [\"X\", \"Y\"], Units = [4000, 3000] }, action, OnTypeMoved);");
     has(&text, "Db.Save(Selected<ClassType>(Diagram))");
     // Paint: the picture of the bound field, its tools, brush and ink.
-    has(&text, " Mode=\"paint\" ActionCommand=\"{Binding CanvasAt_SketchCommand}\"");
-    has(&text, " Tools=\"pen,eraser\" Tool=\"{Binding Sketch.Tool}\" Brush=\"{Binding Sketch.Brush}\" Ink=\"{Binding Sketch.Ink}\" Picture=\"{Binding Note.Picture}\" Fetch=\"{Binding NotePicturePicture}\"");
     has(&text, "Sketch { get; } = new(\"sketch\") { Tool = \"pen\", Brush = 4, Ink = \"accent\" }");
     has(&text, "new CanvasArgs(\"paint\") { Grid = Sketch.Grid, Snap = Sketch.Snap, Path = \"Note.Picture\" }");
     has(&text, "public Func<Task<byte[]?>> NotePicturePicture => ");
     // Vector: the SVG of the bound text field, its chosen shape.
-    has(&text, " Svg=\"{Binding Note.Drawing}\" Chosen=\"{Binding Drawing.SelectedItem}\"");
     has(&text, "Path = \"Note.Drawing\", Units = [400, 300] }");
     // What handlers set and read.
     has(&text, "Sketch.Ink = \"#ff0000\"");

@@ -1,7 +1,7 @@
 //! Settings (DESIGN 5.17) on every stack: a record type beside the
 //! entities, never in a database; every window has `settings`. The web
 //! stacks' shells read and keep them (the Rust commands are generated);
-//! Avalonia shares one `Settings.Current`, started with the application.
+//! C# shares one `Settings.Current`, started with the application.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -35,7 +35,7 @@ fn lacks(text: &str, unexpected: &str) {
 
 #[test]
 fn the_rust_app_reads_and_keeps_the_settings_and_never_stores_them() {
-    let code = generated(Backend::Rust, Ui::Web);
+    let code = generated(Backend::Rust, Ui::Webview);
     has(&code, "pub struct Settings {");
     has(&code, "pub settings: Settings,");
     has(&code, "fn read_settings() -> Map<String, Value>");
@@ -50,7 +50,7 @@ fn the_rust_app_reads_and_keeps_the_settings_and_never_stores_them() {
 #[test]
 fn the_other_web_stacks_keep_settings_out_of_the_database() {
     for backend in [Backend::Go, Backend::C, Backend::Cpp] {
-        let code = generated(backend, Ui::Web);
+        let code = generated(backend, Ui::Webview);
         lacks(&code, "CREATE TABLE settings");
         // The model the renderer draws from marks them, written as a string of the language.
         assert!(code.contains("settings\\\":true") || code.contains("\"settings\":true"), "{backend:?} carries the settings in its model");
@@ -58,8 +58,8 @@ fn the_other_web_stacks_keep_settings_out_of_the_database() {
 }
 
 #[test]
-fn avalonia_shares_one_settings_started_with_the_application() {
-    let code = generated(Backend::Csharp, Ui::Avalonia);
+fn csharp_shares_one_settings_started_with_the_application() {
+    let code = generated(Backend::Csharp, Ui::Clarity);
     has(&code, "public sealed partial class Settings : ObservableObject, ISettings\n");
     // A part bound to a setting takes it along in its edit, for Ctrl+Z.
     has(&code, "    protected override ISettings? AppSettings => Settings.Current;\n");
@@ -69,17 +69,14 @@ fn avalonia_shares_one_settings_started_with_the_application() {
     has(&code, "[\"pageSize\"] = new(\"integer\", \"10\", \"200\", null),");
     has(&code, "[\"language\"] = new(\"language\", null, null, Locale.Offered),");
     has(&code, "public Settings Settings => Settings.Current;");
-    has(&code, "            Themes.Start(AppThemes.Offered);\n            Settings.Start();\n");
-    // Choice is the window model's (Clarity.Ui), not Avalonia's.
-    has(&code, "xmlns:ui=\"using:Clarity.Ui\"");
-    has(&code, "Choices=\"{x:Static ui:Choice.LanguagesOffered}\"");
+    has(&code, "        AppThemes.Start();\n        Settings.Start();\n");
 }
 
 /// Ctrl+Z, or a browser, may send a setting that can be none back as none:
 /// it is cleared, not skipped.
 #[test]
-fn avalonia_clears_a_setting_sent_as_none() {
+fn csharp_clears_a_setting_sent_as_none() {
     let source = MUSIC.replace("    pageSize: integer, min 10, max 200, default 50\n", "    pageSize: integer, min 10, max 200, default 50\n    favouriteFriend: ref Friend\n");
-    let code = generated_from(&source, Backend::Csharp, Ui::Avalonia);
+    let code = generated_from(&source, Backend::Csharp, Ui::Clarity);
     has(&code, "        else if (sent.TryGetPropertyValue(\"favouriteFriend\", out var _favouriteFriendNone) && _favouriteFriendNone is null) settings.FavouriteFriend = null;\n");
 }

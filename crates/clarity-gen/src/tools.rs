@@ -220,7 +220,7 @@ pub struct StackTools {
     /// page `SETUP_TOPIC` that tells how to install it on this system.
     pub guides: Vec<&'static str>,
     /// What the web target needs beyond these (DESIGN 7.6), found and missing:
-    /// for C# with Avalonia, .NET's WebAssembly tools.
+    /// for C# with Clarity.UI, .NET's WebAssembly tools.
     pub web_found: Vec<String>,
     pub web_missing: Vec<String>,
     /// How Clarity installs what the web target is missing, when it can.
@@ -249,7 +249,7 @@ pub struct Install {
     pub elevated: bool,
 }
 
-/// What the web target of C# with Avalonia needs: .NET's WebAssembly tools.
+/// What the web target of C# with Clarity.UI needs: .NET's WebAssembly tools.
 const WASM_TOOLS: &str = ".NET's WebAssembly tools, for the web target: dotnet workload install wasm-tools";
 
 /// How Clarity installs .NET's WebAssembly tools into the SDK of `dotnet`:
@@ -295,7 +295,7 @@ fn writable(folder: &Path) -> bool {
 pub fn generates(backend: Backend, ui: Ui) -> bool {
     matches!(
         (backend, ui),
-        (Backend::Rust, Ui::Web) | (Backend::Go, Ui::Web) | (Backend::Csharp, Ui::Avalonia) | (Backend::C, Ui::Web) | (Backend::Cpp, Ui::Web)
+        (Backend::Rust, Ui::Webview) | (Backend::Go, Ui::Webview) | (Backend::Csharp, Ui::Clarity) | (Backend::C, Ui::Webview) | (Backend::Cpp, Ui::Webview)
     )
 }
 
@@ -443,8 +443,8 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
                 Some(version) => found.push(format!(".NET SDK {version}")),
                 None => missing.push((dotnet(), DOTNET_GUIDE)),
             }
-            // The web target links Avalonia's drawing into the browser program (DESIGN 7.6).
-            if ui == Ui::Avalonia && missing.is_empty() {
+            // The web target links Clarity.UI's drawing (Skia) into the browser program (DESIGN 7.9).
+            if ui == Ui::Clarity && missing.is_empty() {
                 let workloads = probe.run("dotnet", &["workload", "list"]).unwrap_or_default();
                 match workloads.lines().find(|l| l.split_whitespace().next() == Some("wasm-tools")) {
                     Some(line) => web_found.push(line.split_whitespace().take(2).collect::<Vec<_>>().join(" ")),
@@ -550,13 +550,13 @@ pub fn check_all(probe: &dyn Probe) -> Vec<StackTools> {
         .collect()
 }
 
-/// A stack as people read it: `C# with Avalonia`.
+/// A stack as people read it: `C# with Clarity.UI`.
 pub fn stack_name(backend: Backend, ui: Ui) -> String {
     let catalog = clarity_project::catalog();
     let language = catalog.backends.iter().find(|b| b.id == backend).map_or("?", |b| b.label);
     let renderer = match ui {
-        Ui::Web => "the web renderer",
-        Ui::Avalonia => "Avalonia",
+        Ui::Webview => "the web renderer",
+        Ui::Clarity => "Clarity.UI",
     };
     format!("{language} with {renderer}")
 }

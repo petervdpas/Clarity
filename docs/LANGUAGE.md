@@ -59,7 +59,7 @@ The project file holds one `project` block:
 ```clarity
 project Shop
     title "Shop"
-    stack rust web desktop
+    stack rust webview desktop
     output "out"
     language "en"
     currency EUR
@@ -71,7 +71,7 @@ project Shop
 | Setting | Required | Meaning |
 |---|---|---|
 | `title "text"` | no | The name people see. When it is left out, it is derived from the project name. |
-| `stack backend ui target...` | yes | The stack the project is transpiled into, read by position. Backends: `rust`, `go`, `csharp`, `c`, `cpp`. UIs: `web` (the shared web renderer) or `avalonia`. Targets: `desktop` for the program with windows, `web` for a web server that serves it to a browser (Rust, Go, C and C++; with both, `--serve` serves in place of the window; `--address host:port` says where), and `cli` for a command-line program beside it (`stack go web desktop cli`); a project whose only target is `cli` names no UI (`stack go cli`). See [Commands](#commands). |
+| `stack language ui target...` | yes | The stack the project is transpiled into, read by position. Languages: `rust`, `go`, `csharp`, `c`, `cpp`. Rust, Go, C and C++ name the UI next: `webview`, the shared screen in a webview or a browser. C# names no UI (its windows are drawn by Clarity.UI), so its targets follow the language: `stack csharp desktop`. Targets: `desktop` for the program with windows, `web` for a web server that serves it to a browser (Rust, Go, C and C++; C#'s is not generated yet; with both, `--serve` serves in place of the window; `--address host:port` says where), and `cli` for a command-line program beside it (`stack go webview desktop cli`); a project whose only target is `cli` names no UI (`stack go cli`). See [Commands](#commands). |
 | `output "folder"` | no | Where the generated application goes, relative to the project folder. The default is `out`. |
 | `output keeps "name", ...` | no | Folders in the output that are the project's own, which Clarity leaves alone: each the name of one folder, not a path. |
 | `language "tag"` | no | The language the project's texts are written in, as a language tag: `"en"`, `"nl-NL"`. Dates and numbers follow the locale of the person using the application; this language where the system names none. |
@@ -89,7 +89,7 @@ project Shop
 
 Each setting appears once, except `datasource` and `filestore`. An unknown setting or value is an error that names the line and lists the accepted words.
 
-Five stacks are generated today: Rust with the web UI (Tauri), C# with Avalonia, Go with the web UI (Wails), and C and C++ with the web UI (webview; SQLite only for now).
+Five stacks are generated today: Rust with the shared screen (Tauri), C# with Clarity.UI, Go with the shared screen (Wails), and C and C++ with the shared screen (webview; SQLite only for now). Clarity.UI does not draw a window's parts yet: a C# program opens its main window with the window's title and size.
 
 ### Translations
 
@@ -131,7 +131,7 @@ The `resources` folder of the module folder holds the files the application carr
 - By its `source`, the same file in every language: `image source "logo.png"`, `markdown source "license.md"`.
 - By a key, a file per language: the part names the key (`markdown @gameRules`), and each language file points the key at the file that language shows (`gameRules resource "rules-nl.md"`).
 
-Every generated application carries the folder: next to the renderer on the web stacks, as embedded resources on Avalonia. The designer shows the resources as they are in the folder, and shows them again when the folder changes.
+Every generated application carries the folder: next to the renderer on the web stacks, as embedded resources on C#. The designer shows the resources as they are in the folder, and shows them again when the folder changes.
 
 #### Pictures
 
@@ -571,7 +571,7 @@ page CustomerForm: window
 
 Only a `window` has frame regions of its own.
 
-An application has one desktop window, on every stack. `open` shows a window in place, on top of the one that opened it, and `close` goes back to the one below. A desktop window of its own opens only where the design says so: a target marked `in new window` starts one, and a `dialog` may get one too (on Avalonia it does; the web stacks show it on top of the window that opened it).
+An application has one desktop window, on every stack. `open` shows a window in place, on top of the one that opened it, and `close` goes back to the one below. A desktop window of its own opens only where the design says so: a target marked `in new window` starts one, and a `dialog` may get one too (the web stacks show it on top of the window that opened it; on C# dialogs come with Clarity.UI).
 
 ### Settings
 
@@ -687,7 +687,7 @@ A color input shows a swatch and the color as `#rrggbb`. The swatch opens a pale
 | `scroll` | parts, on its own grid; parts below its rows scroll into view | none | none |
 | `splitter` | exactly two `pane` blocks, each with parts; `pane span n` starts the first at n columns | `horizontal` or `vertical` | none |
 
-A panel or form with `foldable` has a header the person clicks to fold it to that header and unfold it again; `foldable folded` starts it folded. Code reads and sets whether it is folded as `part.folded`, so a handler can open the section a message is about. In the designer it stays open, to edit what it holds. On Avalonia it is an Expander; on the web stacks the renderer folds it.
+A panel or form with `foldable` has a header the person clicks to fold it to that header and unfold it again; `foldable folded` starts it folded. Code reads and sets whether it is folded as `part.folded`, so a handler can open the section a message is about. In the designer it stays open, to edit what it holds. On the web stacks the renderer folds it; on C# it comes with Clarity.UI's parts.
 
 **Data**
 
@@ -1030,8 +1030,8 @@ part Arena
 | `native "folder"` | C or C++ in that folder with its `CMakeLists.txt`, using SFML, SDL or anything CMake finds. The C and C++ stacks. |
 | `crate "folder"` | A Rust crate in that folder, using any crate (Bevy, wgpu, softbuffer). The Rust stack. |
 | `go "folder"` | A Go package in that folder with its `go.mod`, using any module. The Go stack. |
-| `nuget "Package" version` | An Avalonia control from a NuGet package, with a C# adapter beside it. The C# stack. |
-| `dll "file"` | An Avalonia control from a .NET assembly in the project. The C# stack. |
+| `nuget "Package" version` | A control from a .NET library on NuGet. The C# stack; not generated yet, it comes with Clarity.UI's custom controls. |
+| `dll "file"` | A control from a .NET assembly in the project. The C# stack; not generated yet, it comes with Clarity.UI's custom controls. |
 | `binds type` | The type of value it shows and edits, which `bind` gives it. Without it the part binds nothing. |
 | `name: type, default v, min a, max b` | A property, set in the window and in code. Text, a number, a date, a duration, an enum or bool. |
 | `tells name(values)` | One of its events, with typed values. |
@@ -1172,7 +1172,7 @@ An item with a submenu opens the submenu, so it has no `on click` of its own.
 
 ### Themes
 
-A theme says how the application looks, as named values rather than a style sheet, so every stack can carry it: the web renderer as a CSS file of variables, Avalonia as resources and styles. It is declared in a module, and the project file names the themes the application offers: `theme Shop Night`, the first one the one it starts with.
+A theme says how the application looks, as named values rather than a style sheet, so every stack can carry it: the web renderer as a CSS file of variables, C# as the resolved theme in JSON (light and dark) that Clarity.UI lays over Clarity's own theme. It is declared in a module, and the project file names the themes the application offers: `theme Shop Night`, the first one the one it starts with.
 
 Every theme starts from Clarity's own, the built-in `theme Clarity`, which sets every value below; a theme sets only what it changes, and the rest stays Clarity's. The Module view shows Clarity's own theme, and "New theme" starts from a full copy of it.
 
@@ -2000,7 +2000,7 @@ A project file and one module: a customer list with a filter that opens a form, 
 
 ```clarity
 project Shop
-    stack rust web desktop
+    stack rust webview desktop
     datasource main sqlite "data/shop.db"
 ```
 

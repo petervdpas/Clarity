@@ -124,16 +124,6 @@ pub fn member(name: &str) -> String {
     if VIEW_MODEL_MEMBERS.contains(&name.as_str()) { format!("{name}_") } else { name }
 }
 
-/// A part as a control's `x:Name` in AXAML: `number_input` as `numberInput`.
-/// Camel case never meets a member of the window, which are all Pascal case.
-pub fn control(name: &str) -> String {
-    let local = camel(name);
-    match local.strip_prefix('@') {
-        Some(keyword) => format!("{keyword}Part"),
-        None => local,
-    }
-}
-
 /// The private field behind a property: `credit_limit` as `_creditLimit`,
 /// never a keyword.
 pub fn backing(name: &str) -> String {

@@ -2,6 +2,6 @@
 // kept by an engine written in Clarity with state per window, in the
 // noughts folder next to this file.
 project Noughts
-    stack csharp avalonia desktop
+    stack csharp desktop
     output "out"
     datasource main sqlite "data/noughts.db"

@@ -47,7 +47,7 @@ fn builds_and_runs_in_cpp(name: &str, program: &str) {
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
     // An example builds on the stack its project file names, and no other.
-    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Cpp, Ui::Web), "{name} is not a C++ example");
+    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Cpp, Ui::Webview), "{name} is not a C++ example");
     let out = scratch().join(format!("clarity-gen-cpp-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
@@ -159,7 +159,7 @@ fn an_engine_answers_in_the_generated_application_in_cpp() {
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = clarity_project::starter("Shop", "shop");
     settings.stack.backend = Backend::Cpp;
-    settings.stack.ui = Ui::Web;
+    settings.stack.ui = Ui::Webview;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch().join(format!("clarity-gen-cpp-engine-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
@@ -264,7 +264,7 @@ fn board_runs_in_cpp(interpreted: bool) {
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     let mut settings = clarity_project::load(&file).settings.expect("the fixture has a project file");
     settings.stack.backend = Backend::Cpp;
-    settings.stack.ui = Ui::Web;
+    settings.stack.ui = Ui::Webview;
     settings.datasources[0].url = "data/app.db".into();
     settings.engines_interpreted = interpreted;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
@@ -297,7 +297,7 @@ fn questions_and_their_answers_build_in_cpp() {
     let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
     let mut settings = clarity_project::starter("Music", "music");
     settings.stack.backend = Backend::Cpp;
-    settings.stack.ui = Ui::Web;
+    settings.stack.ui = Ui::Webview;
     let out = scratch().join(format!("clarity-gen-cpp-asks-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
@@ -317,7 +317,7 @@ fn the_web_target_serves_in_cpp() {
     let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
     let mut settings = clarity_project::starter("Music", "music");
     settings.stack.backend = Backend::Cpp;
-    settings.stack.ui = Ui::Web;
+    settings.stack.ui = Ui::Webview;
     settings.stack.targets = vec![clarity_project::Target::Web];
     let out = scratch().join(format!("clarity-gen-cpp-web-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);

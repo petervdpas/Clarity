@@ -1,6 +1,6 @@
 // A password input shows what is typed or hides it again, and copies it,
 // with its buttons named in Clarity's own words (showSecret, hideSecret,
-// copySecret), the same as on Avalonia.
+// copySecret), the same on every stack.
 
 import { flushSync, mount, unmount } from "svelte";
 import { expect, test, vi } from "vitest";

@@ -1,6 +1,5 @@
 //! Trees of U1c: the web stacks carry `tree` and `treetable` in their model
-//! for the renderer, and code reads their selected row as a table's;
-//! Avalonia writes Clarity's table in tree mode.
+//! for the renderer, and code reads their selected row as a table's.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -25,18 +24,8 @@ fn has(text: &str, expected: &str) {
 }
 
 #[test]
-fn avalonia_writes_trees_as_clarity_s_table_in_tree_mode() {
-    let csharp = generated(Backend::Csharp, Ui::Avalonia);
-    has(&csharp, "<c:ClarityTable x:Name=\"folderTree\"");
-    has(&csharp, "TreeParent=\"Parent\" ExpandText=\"{x:Static local:Texts.ExpandRow}\" CollapseText=\"{x:Static local:Texts.CollapseRow}\" HeadersVisible=\"False\"");
-    has(&csharp, "<c:ClarityTable x:Name=\"folderTable\"");
-    has(&csharp, "folderTree.Selected += (_, _) =>");
-    has(&csharp, "folderTable.Opened += (_, _) =>");
-}
-
-#[test]
 fn the_web_stacks_carry_the_trees_in_their_model() {
-    let rust = generated(Backend::Rust, Ui::Web);
+    let rust = generated(Backend::Rust, Ui::Webview);
     has(&rust, "\"kind\":\"tree\"");
     has(&rust, "\"children\":\"children\"");
     has(&rust, "\"kind\":\"treeTable\"");

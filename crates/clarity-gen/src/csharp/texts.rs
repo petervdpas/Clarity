@@ -52,15 +52,6 @@ impl Texts {
         key_of(text).and_then(|key| self.names.get(key)).map(|name| format!("Texts.{name}"))
     }
 
-    /// A text as an AXAML attribute value that follows the language: the
-    /// accessor's property for a key, or the text itself.
-    pub fn attr(&self, text: &str) -> String {
-        match key_of(text).and_then(|key| self.names.get(key)) {
-            Some(name) => format!("{{x:Static local:Texts.{name}}}"),
-            None => plain_attr(text),
-        }
-    }
-
     /// A text as a C# expression that follows the language.
     pub fn code(&self, text: &str) -> String {
         self.property(text).unwrap_or_else(|| string(text))
@@ -93,7 +84,7 @@ impl Texts {
             "{HEADER}
 using System.Globalization;
 using System.Resources;
-using Clarity.Avalonia;
+using Clarity.Runtime;
 
 namespace {namespace};
 
@@ -145,12 +136,6 @@ public static class Texts
 /// Text in XML.
 fn xml(text: &str) -> String {
     text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
-}
-
-/// Text as an AXAML attribute value: escaped, and a leading brace kept as text.
-pub fn plain_attr(text: &str) -> String {
-    let escaped = xml(text);
-    if escaped.starts_with('{') { format!("{{}}{escaped}") } else { escaped }
 }
 
 fn resx<'a>(entries: impl Iterator<Item = (&'a str, String, Option<String>)>) -> String {

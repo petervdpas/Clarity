@@ -4,7 +4,7 @@
 </script>
 
 <script lang="ts">
-  // Clarity's file input on the web, the same as on Avalonia (U1c): the
+  // Clarity's file input on the web, the same on every stack (U1c): the
   // name of a record's file, or that it has none, with buttons to choose
   // one, open it in the program the system uses for its kind, save a copy
   // in the person's Downloads folder, and remove it. Choosing and removing

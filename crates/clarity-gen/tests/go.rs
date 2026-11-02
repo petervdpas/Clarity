@@ -68,7 +68,7 @@ page OrderForm: window
 fn settings() -> Settings {
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = Backend::Go;
-    settings.stack.ui = Ui::Web;
+    settings.stack.ui = Ui::Webview;
     settings
 }
 

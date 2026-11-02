@@ -28,8 +28,8 @@
 </script>
 
 <script lang="ts">
-  // Clarity's table part on the web. It owns how a table behaves, the same as
-  // on Avalonia (conformance/tables.json): which input a cell holds, when a
+  // Clarity's table part on the web. It owns how a table behaves, the same on
+  // every stack (conformance/tables.json): which input a cell holds, when a
   // row counts as chosen and when it counts as edited, and how text that is
   // no value is marked. The designer and running windows only describe the
   // columns. Rows show in the table's order (`order by`, a click on a

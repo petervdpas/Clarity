@@ -739,7 +739,7 @@ impl Tools for ProjectTools {
                     json!({
                         "name": { "type": "string", "description": "The project's file name, like todo." },
                         "folder": { "type": "string", "description": "The folder to make it in; the folder of the open project by default." },
-                        "stack": { "type": "object", "description": "Optional: { backend: rust|go|csharp|c|cpp, ui: web|avalonia, targets: [desktop, cli] }." }
+                        "stack": { "type": "object", "description": "Optional: { backend: rust|go|csharp|c|cpp, ui: webview|clarity, targets: [desktop, cli] }." }
                     }),
                     &["name"],
                 ),

@@ -148,7 +148,7 @@ fn the_go_program_builds_and_runs_its_commands() {
 #[ignore = "builds the C# program with dotnet"]
 fn the_csharp_program_builds_and_runs_its_commands() {
     let mut settings = settings(Backend::Csharp);
-    settings.stack.ui = clarity_project::Ui::Avalonia;
+    settings.stack.ui = clarity_project::Ui::Clarity;
     let files = clarity_gen::generate_cli(&project(), &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch("commands-csharp");
     clarity_gen::write_out(&out, &files, &["bin", "obj", "data"]).unwrap();

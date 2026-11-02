@@ -42,7 +42,7 @@ fn writes_no_engine_code(files: &[OutFile]) {
 
 #[test]
 fn every_stack_carries_a_clarity_engine_as_a_file() {
-    for (backend, ui) in [(Backend::Rust, Ui::Web), (Backend::Go, Ui::Web), (Backend::C, Ui::Web), (Backend::Cpp, Ui::Web), (Backend::Csharp, Ui::Avalonia)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Webview), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
         let files = files(backend, ui);
         carries_the_board(&files);
         writes_no_engine_code(&files);
@@ -55,7 +55,7 @@ fn every_stack_carries_a_clarity_engine_as_a_file() {
 /// The keys the engine's code gives are its texts, translated by the host.
 #[test]
 fn a_clarity_engines_keys_are_its_says() {
-    let files = files(Backend::Rust, Ui::Web);
+    let files = files(Backend::Rust, Ui::Webview);
     let all = all(&files);
     assert!(all.contains("thatSquareIsTaken"), "the keys reach the translations");
 }
@@ -70,7 +70,7 @@ fn the_project_chooses_compiled_or_interpreted_engines() {
         let project = clarity_spec::load_dir(&clarity_project::module_dir(&file)).unwrap();
         let mut settings = clarity_project::load(&file).settings.expect("the fixture has a project file");
         settings.stack.backend = Backend::Go;
-        settings.stack.ui = Ui::Web;
+        settings.stack.ui = Ui::Webview;
         settings.engines_interpreted = interpreted;
         let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
         files.into_iter().find(|f| f.path.ends_with("board.wasm")).and_then(|f| f.bytes).expect("board.wasm").into_owned()
@@ -88,7 +88,7 @@ fn the_project_chooses_compiled_or_interpreted_engines() {
 /// painting its bar, and Stop reaches the call.
 #[test]
 fn tauri_runs_a_watched_handler_off_the_screens_thread() {
-    let text = all(&files(Backend::Rust, Ui::Web));
+    let text = all(&files(Backend::Rust, Ui::Webview));
     for command in ["open_window", "close_window", "return_to", "start_app", "dispatch_event", "answer_event"] {
         assert!(text.contains(&format!("async fn {command}(app: tauri::State<'_, App>, stopping: tauri::State<'_, Stopping>, webview: tauri::WebviewWindow")), "{command}");
     }

@@ -21,7 +21,7 @@ Install the .NET 10 SDK from [dotnet.microsoft.com](https://dotnet.microsoft.com
 winget install Microsoft.DotNet.SDK.10
 ```
 
-For an application with the web target (`stack csharp avalonia web`), add .NET's WebAssembly tools, which link Avalonia's drawing into the browser program, once; they stay with the SDK. Clarity installs them itself: **Install** in the Build tools row of the project settings, after you agree, with Windows asking for permission. To install them by hand, run this in a terminal opened as administrator when .NET is installed for every user, as winget installs it:
+For an application with C#'s web target (`stack csharp web`), add .NET's WebAssembly tools, which link Clarity.UI's drawing (Skia) into the browser program, once; they stay with the SDK. That target is not generated yet. Clarity installs them itself: **Install** in the Build tools row of the project settings, after you agree, with Windows asking for permission. To install them by hand, run this in a terminal opened as administrator when .NET is installed for every user, as winget installs it:
 
 ```
 dotnet workload install wasm-tools
@@ -85,7 +85,7 @@ More about what Tauri needs on each system is on [tauri.app](https://tauri.app/s
 
 Install the .NET 10 SDK as [learn.microsoft.com](https://learn.microsoft.com/dotnet/core/install/linux) describes for your system, from its packages or with the install script.
 
-For an application with the web target (`stack csharp avalonia web`), add .NET's WebAssembly tools, which link Avalonia's drawing into the browser program, once; they stay with the SDK. Clarity installs them itself: **Install** in the Build tools row of the project settings, after you agree, with the system asking for your password where .NET is installed for every user. To install them by hand: with .NET from the system's packages (in `/usr/share/dotnet`) it takes `sudo`; with the install script, in your home folder, leave `sudo` out:
+For an application with C#'s web target (`stack csharp web`), add .NET's WebAssembly tools, which link Clarity.UI's drawing (Skia) into the browser program, once; they stay with the SDK. That target is not generated yet. Clarity installs them itself: **Install** in the Build tools row of the project settings, after you agree, with the system asking for your password where .NET is installed for every user. To install them by hand: with .NET from the system's packages (in `/usr/share/dotnet`) it takes `sudo`; with the install script, in your home folder, leave `sudo` out:
 
 ```
 sudo dotnet workload install wasm-tools
@@ -115,7 +115,7 @@ Install the Xcode Command Line Tools with `xcode-select --install`, then Rust fr
 
 Install the .NET 10 SDK from [dotnet.microsoft.com](https://dotnet.microsoft.com/download).
 
-For an application with the web target (`stack csharp avalonia web`), add .NET's WebAssembly tools, which link Avalonia's drawing into the browser program, once; they stay with the SDK. Clarity installs them itself: **Install** in the Build tools row of the project settings, after you agree, with macOS asking for your password. To install them by hand:
+For an application with C#'s web target (`stack csharp web`), add .NET's WebAssembly tools, which link Clarity.UI's drawing (Skia) into the browser program, once; they stay with the SDK. That target is not generated yet. Clarity installs them itself: **Install** in the Build tools row of the project settings, after you agree, with macOS asking for your password. To install them by hand:
 
 ```
 sudo dotnet workload install wasm-tools

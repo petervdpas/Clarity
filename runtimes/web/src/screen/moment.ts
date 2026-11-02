@@ -1,5 +1,5 @@
 // A moment (a datetime field) as a day and a 24-hour time typed as hh:mm,
-// the same on the web as on Avalonia. The backends read and write moments
+// the same on the web as on every stack. The backends read and write moments
 // as 2026-10-20T09:30:00.
 
 const TIME = /^(\d{1,2}):(\d{2})$/;

@@ -8,7 +8,7 @@ The project file says which language its texts are written in, and the currency 
 
 ```clarity
 project Shop
-    stack rust web desktop
+    stack rust webview desktop
     language "en"
     currency EUR
 ```
@@ -145,6 +145,6 @@ A number input reads what is typed in the same locale: in Dutch `1.250,50` is 12
 
 ## On each stack
 
-Every stack shows the same texts and formats. On Rust, Go, C and C++ the web renderer carries the translations and fills in the formats; C# with Avalonia gets a `.resx` file per language and formats with .NET's culture data, pinned to the same answers.
+Every stack shows the same texts and formats. On Rust, Go, C and C++ the web renderer carries the translations and fills in the formats; C# gets a `.resx` file per language and formats with .NET's culture data, pinned to the same answers.
 
 See [Entities](data.entities.md) for fields, and [the language reference](../LANGUAGE.md#translations) for the full rules, with formats under [Formats](../LANGUAGE.md#formats).

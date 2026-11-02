@@ -4,7 +4,7 @@
   // with the system's folder picker through its button, named in Clarity's
   // own word; a chosen folder is a change at once. Where nothing opens a
   // picker, as in a browser, there is no button and the path is typed. The
-  // same as on Avalonia.
+  // same as on every stack.
 
   let {
     value,

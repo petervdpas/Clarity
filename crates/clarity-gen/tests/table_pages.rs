@@ -1,6 +1,6 @@
 //! A table shown a page at a time (U1c): the web stacks carry `page` in
-//! their model for the renderer; Avalonia writes it on Clarity's table with
-//! the bar's own words.
+//! their model for the renderer; C#'s view model keeps it for
+//! Clarity.UI.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -19,13 +19,7 @@ fn generated(backend: Backend, ui: Ui) -> String {
 }
 
 #[test]
-fn avalonia_pages_its_table_with_the_bars_own_words() {
-    let csharp = generated(Backend::Csharp, Ui::Avalonia);
-    assert!(csharp.contains("PageSize=\"20\" FirstText=\"{x:Static local:Texts.FirstPage}\""), "no page size");
-}
-
-#[test]
 fn the_web_stacks_carry_the_page_in_their_model() {
-    let rust = generated(Backend::Rust, Ui::Web);
+    let rust = generated(Backend::Rust, Ui::Webview);
     assert!(rust.contains("\"page\":20"), "no page in the model");
 }

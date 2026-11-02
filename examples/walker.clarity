@@ -5,7 +5,7 @@
 // are in the walker folder next to this file.
 project Walker
     title "Walker"
-    stack csharp avalonia web
+    stack csharp web
     output "out"
     language "en"
     datasource main sqlite "data/walker.db"

@@ -298,11 +298,11 @@ pub fn start_part(app: AppHandle, name: String, folder: PathBuf, steps: Vec<Vec<
     start_steps(app, folder, steps, env, format!("{name} built"), format!("{name} did not build"))
 }
 
-/// Installs what the web target of C# with Avalonia is missing (DESIGN 7.6),
+/// Installs what the web target of C# with Clarity.UI is missing (DESIGN 7.6),
 /// .NET's WebAssembly tools, its output in the Output panel; the system asks
 /// the person's permission first where .NET is installed for every user.
 pub fn install_web_tools(app: AppHandle) -> Result<(), String> {
-    let tools = clarity_gen::tools::check(clarity_project::Backend::Csharp, clarity_project::Ui::Avalonia, &clarity_gen::tools::System);
+    let tools = clarity_gen::tools::check(clarity_project::Backend::Csharp, clarity_project::Ui::Clarity, &clarity_gen::tools::System);
     let Some(install) = tools.web_install else {
         return Err(if tools.web_missing.is_empty() { "the WebAssembly tools are installed already".into() } else { "Clarity cannot install the WebAssembly tools here; the manual says how".into() });
     };
@@ -761,7 +761,7 @@ mod tests {
     fn missing_tools_say_what_to_install_after_generating() {
         let check = clarity_gen::tools::StackTools {
             backend: clarity_project::Backend::Csharp,
-            ui: clarity_project::Ui::Avalonia,
+            ui: clarity_project::Ui::Clarity,
             generated: true,
             found: vec![],
             missing: vec!["the .NET 10 SDK, from https://dotnet.microsoft.com/download".into()],
@@ -773,7 +773,7 @@ mod tests {
         assert_eq!(
             cannot_build(&check, Path::new("/p/shop/out")),
             Some(
-                "the project is generated in /p/shop/out; to build C# with Avalonia here, install the .NET 10 SDK, from https://dotnet.microsoft.com/download (the manual's page Setting up the build tools says how)"
+                "the project is generated in /p/shop/out; to build C# with Clarity.UI here, install the .NET 10 SDK, from https://dotnet.microsoft.com/download (the manual's page Setting up the build tools says how)"
                     .to_string()
             )
         );

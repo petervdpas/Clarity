@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Clarity's slider on the web, the same as on Avalonia
+  // Clarity's slider on the web, the same on every stack
   // (conformance/ranges.json): dragged, it takes the nearest step when let
   // go; its keys move a step, ten, or to an end. Only a value that differs
   // is a change.

@@ -81,7 +81,7 @@ fn a_dotnet_part_comes_from_a_package_or_a_dll() {
     let text = "module notes
 
 part Notes
-    nuget \"AvaloniaEdit\" 11.1.0
+    nuget \"Markdig\" 0.40.0
     binds text
 
 part Plot
@@ -89,7 +89,7 @@ part Plot
 ";
     let (file, diagnostics) = parse(text, "notes.clarity");
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
-    assert_eq!(file.parts[0].library, Some(PartLibrary::Nuget { package: "AvaloniaEdit".into(), version: "11.1.0".into() }));
+    assert_eq!(file.parts[0].library, Some(PartLibrary::Nuget { package: "Markdig".into(), version: "0.40.0".into() }));
     assert_eq!(file.parts[1].library, Some(PartLibrary::Dll { file: "libs/Plot.dll".into() }));
     assert!(file.parts[1].binds.is_none());
 }

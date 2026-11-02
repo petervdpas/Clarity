@@ -1,6 +1,6 @@
 //! The dropdown's options of U1c on every stack: a typed dropdown's values
 //! come from the shell (`field_values`), a search dropdown's records carry
-//! the fields it shows; Avalonia writes Clarity's TypedInput and LookupInput.
+//! the fields it shows; on C# the window's view model offers them.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -26,30 +26,24 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn every_web_shell_gives_a_fields_values_and_the_fields_a_search_shows() {
-    let rust = generated(Backend::Rust, Ui::Web);
+    let rust = generated(Backend::Rust, Ui::Webview);
     has(&rust, "fn field_values(");
     has(&rust, "(\"Friend\", \"city\") => db.all::<");
     has(&rust, "fields: serde_json::Map::from_iter([(\"name\".to_string(), clarity_runtime::ui::to_value(&r.name)?), (\"city\".to_string(), clarity_runtime::ui::to_value(&r.city)?)])");
-    let go = generated(Backend::Go, Ui::Web);
+    let go = generated(Backend::Go, Ui::Webview);
     has(&go, "func (windows) Values(");
     has(&go, "Fields: map[string]any{\"name\": r.Name, \"city\": r.City}");
-    let c = generated(Backend::C, Ui::Web);
+    let c = generated(Backend::C, Ui::Webview);
     has(&c, "static bool windows_values(");
     has(&c, "cJSON_AddItemToObject(fields, \"city\", clarity_json_text(r->city));");
-    let cpp = generated(Backend::Cpp, Ui::Web);
+    let cpp = generated(Backend::Cpp, Ui::Webview);
     has(&cpp, "std::vector<std::string> values(");
     has(&cpp, "nlohmann::json{{\"name\", r.name}, {\"city\", r.city}}");
 }
 
 #[test]
-fn avalonia_writes_a_typed_and_a_search_dropdown() {
-    let csharp = generated(Backend::Csharp, Ui::Avalonia);
-    has(&csharp, "<c:TypedInput x:Name=\"cityBox\"");
-    has(&csharp, "Values=\"{Binding FriendCityValues}\"");
+fn csharp_offers_a_typed_and_a_search_dropdown_their_values() {
+    let csharp = generated(Backend::Csharp, Ui::Clarity);
     has(&csharp, "FriendCityValues = [.. Db.All<Friend>().Select(r => r.City)];");
-    has(&csharp, "<c:LookupInput x:Name=\"lentToBox\"");
-    has(&csharp, "Choices=\"{Binding FriendNameCityChoices}\"");
-    has(&csharp, "FriendNameCityChoices = Choice.Of(Db.All<Friend>(), r => r.Name, r => [Shown.Converter.TextOf(r.Name), Shown.Converter.TextOf(r.City)]);");
-    has(&csharp, "Choices=\"{Binding FriendChoices}\"");
-    has(&csharp, "lentToBox.ValueChanged += (_, _) =>");
+    has(&csharp, "FriendNameCityChoices = Choice.Of(Db.All<Friend>(), r => r.Name, r => [ShownText.Of(r.Name), ShownText.Of(r.City)]);");
 }

@@ -1,6 +1,6 @@
 // A long engine call on the screen (DESIGN 5.12): a bar of how far it is
-// and a Stop button, named in Clarity's own word (stopCall), the same as on
-// Avalonia.
+// and a Stop button, named in Clarity's own word (stopCall), the same on
+// every stack.
 
 import { flushSync, mount, unmount } from "svelte";
 import { expect, test } from "vitest";

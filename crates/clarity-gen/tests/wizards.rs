@@ -1,7 +1,7 @@
 //! Wizards (DESIGN 5.15) on every stack: the web stacks read and set the
 //! step in the part's state and the shared renderer draws the steps part;
-//! Avalonia writes the runtime's StepsView, its step bound to the part's
-//! state and its Next asking the handler whether it refused.
+//! C# keeps the step in the part's state, and Next asks the handler
+//! whether it refused.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -27,29 +27,23 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn the_web_stacks_read_and_set_the_step_in_the_parts_state() {
-    let rust = generated(Backend::Rust, Ui::Web);
+    let rust = generated(Backend::Rust, Ui::Webview);
     has(&rust, "ui.step(\"wizard\")");
     has(&rust, "ui.set_step(\"wizard\", 3");
-    let go = generated(Backend::Go, Ui::Web);
+    let go = generated(Backend::Go, Ui::Webview);
     has(&go, "ui.Step(\"wizard\")");
     has(&go, "ui.SetStep(\"wizard\", 3)");
-    let c = generated(Backend::C, Ui::Web);
+    let c = generated(Backend::C, Ui::Webview);
     has(&c, "clarity_ui_step(ui, \"wizard\")");
     has(&c, "clarity_ui_set_step(ui, \"wizard\", 3");
-    let cpp = generated(Backend::Cpp, Ui::Web);
+    let cpp = generated(Backend::Cpp, Ui::Webview);
     has(&cpp, "ui.step(\"wizard\")");
     has(&cpp, "ui.set_step(\"wizard\", int64_t{3});");
 }
 
 #[test]
-fn avalonia_writes_a_steps_view_whose_next_asks_whether_the_handler_refused() {
-    let code = generated(Backend::Csharp, Ui::Avalonia);
-    has(&code, "<c:StepsView x:Name=\"wizard\"");
-    has(&code, "Step=\"{Binding Wizard.Step}\"");
-    has(&code, "<c:StepItem Header=");
+fn csharp_s_next_asks_whether_the_handler_refused() {
+    let code = generated(Backend::Csharp, Ui::Clarity);
     has(&code, "public bool Next_Wizard() => Handle(() => OnCheckStep());");
-    // The view model is looked up when Next is pressed: the view has none yet while it is made.
-    has(&code, "wizard.Next = () => Vm.Next_Wizard();");
-    has(&code, "wizard.Finished += () => Vm.DoneCommand.Execute(null);");
     has(&code, "Wizard.Step = 3");
 }

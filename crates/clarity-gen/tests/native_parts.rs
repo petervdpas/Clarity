@@ -35,7 +35,7 @@ code Game
 ";
 
 fn settings() -> clarity_project::Settings {
-    clarity_project::parse("project Game\n    stack cpp web desktop\n    datasource main sqlite \"data/game.db\"\n").unwrap()
+    clarity_project::parse("project Game\n    stack cpp webview desktop\n    datasource main sqlite \"data/game.db\"\n").unwrap()
 }
 
 fn generated() -> Vec<clarity_gen::OutFile> {
@@ -242,7 +242,7 @@ fn built(backend: clarity_project::Backend, build: &[&str]) -> std::path::PathBu
     let mut settings = settings();
     settings.stack.backend = backend;
     if backend == clarity_project::Backend::Csharp {
-        settings.stack.ui = clarity_project::Ui::Avalonia;
+        settings.stack.ui = clarity_project::Ui::Clarity;
     }
     let files = clarity_gen::generate(&project_for(backend), &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../target/generated/native-parts-{backend:?}"));
@@ -282,8 +282,6 @@ fn places_its_part(dir: &std::path::Path, program: &str, display: &str) {
     places(dir, program, display, "arena");
 }
 
-/// As `places_its_part`, for the part host's name of the part: on Avalonia
-/// each part is a window of its own to the part host, named `part`.
 fn places(dir: &std::path::Path, program: &str, display: &str, part: &str) {
     let mut xvfb = std::process::Command::new("Xvfb").args([display, "-screen", "0", "1280x800x24"]).spawn().expect("Xvfb is installed");
     std::thread::sleep(std::time::Duration::from_secs(1));
@@ -402,34 +400,21 @@ code Writing
 
 fn notes_project() -> clarity_spec::Project {
     let mut p = load_keyed([("notes.clarity", NOTES)], &[], "en");
-    let adapter = clarity_gen::parts::dotnet_adapter(&p, "Notes").expect("the part is declared");
-    clarity_spec::native::attach(&mut p, vec![PartFile { part: "Notes".into(), path: "Notes.cs".into(), bytes: adapter.into_bytes() }]);
+    clarity_spec::native::attach(&mut p, vec![PartFile { part: "Notes".into(), path: "Notes.cs".into(), bytes: b"// The adapter.\n".to_vec() }]);
     assert!(!p.has_errors(), "{:?}", p.diagnostics);
     p
 }
 
 fn notes_settings() -> clarity_project::Settings {
-    clarity_project::parse("project Notes\n    stack csharp avalonia desktop\n    datasource main sqlite \"data/notes.db\"\n").unwrap()
+    clarity_project::parse("project Notes\n    stack csharp desktop\n    datasource main sqlite \"data/notes.db\"\n").unwrap()
 }
 
+/// A .NET custom part comes with Clarity.UI's custom controls (DESIGN 7.9);
+/// until then generating it says so.
 #[test]
-fn a_dotnet_part_has_its_package_its_adapter_and_its_generated_half() {
-    let files = clarity_gen::generate(&notes_project(), &notes_settings()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let half = text(&files, "parts/Notes/Notes.g.cs");
-    for line in [
-        "public partial class Notes : DotNetPart",
-        "private partial void ShowValue(string value);",
-        "private partial void ShowWrap(bool wrap);",
-        "private partial void OnClear();",
-        "private partial void OnJump(long line);",
-        "protected void Edited(long words) => Tell(\"edited\", words);",
-    ] {
-        assert!(half.contains(line), "{line}\n{half}");
-    }
-    assert!(files.iter().any(|f| f.path == "parts/Notes/Notes.cs"));
-    assert!(text(&files, "Notes.csproj").contains("<PackageReference Include=\"Newtonsoft.Json\" Version=\"13.0.1\" />"));
-    let view = files.iter().find(|f| f.path.ends_with("WritingView.axaml")).map(|f| f.text.as_str()).unwrap_or_default();
-    assert!(view.contains("<parts:Notes ") && view.contains("xmlns:parts=\"using:ClarityParts\""), "{view}");
+fn a_dotnet_part_waits_for_clarity_ui_s_custom_controls() {
+    let refused = clarity_gen::generate(&notes_project(), &notes_settings()).unwrap_err();
+    assert_eq!(refused, ["custom part Notes is not generated yet: custom parts on C# come with Clarity.UI's custom controls (DESIGN 7.9)"]);
 }
 
 /// A Rust part's starter uses every value a hear brings without a warning:
@@ -444,38 +429,13 @@ fn a_rust_parts_starter_builds_without_a_warning() {
     assert!(!lib.contains("let _ = (level);"), "{lib}");
 }
 
-/// The adapter's starter shows the value as text, whatever its type: a
-/// number has no `?.` (found by the every-part project).
-#[test]
-fn a_dotnet_parts_starter_shows_a_value_of_any_type() {
-    let gauge = NOTES.replace("binds text", "binds integer");
-    let p = load_keyed([("notes.clarity", gauge.as_str())], &[], "en");
-    let starter = clarity_gen::parts::dotnet_adapter(&p, "Notes").expect("the part is declared");
-    assert!(starter.contains("private partial void ShowValue(long value) => shown.Text = $\"{value}\";"), "{starter}");
-    let text = clarity_gen::parts::dotnet_adapter(&notes_project(), "Notes").unwrap();
-    assert!(text.contains("private partial void ShowValue(string value) => shown.Text = $\"{value}\";"), "{text}");
-}
-
 #[test]
 fn a_dotnet_part_on_another_stack_is_refused() {
     let mut settings = notes_settings();
     settings.stack.backend = clarity_project::Backend::Go;
-    settings.stack.ui = clarity_project::Ui::Web;
+    settings.stack.ui = clarity_project::Ui::Webview;
     let refused = clarity_gen::generate(&notes_project(), &settings).unwrap_err();
     assert!(refused.iter().any(|e| e.contains("part Notes is .NET, but the project is written in Go")), "{refused:?}");
-}
-
-#[test]
-#[ignore = "builds a C# program with a .NET part; run with --ignored"]
-fn a_csharp_program_with_a_dotnet_part_builds() {
-    let files = clarity_gen::generate(&notes_project(), &notes_settings()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/generated/dotnet-part");
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    clarity_gen::write_out(&dir, &files, &["bin", "obj"]).unwrap();
-    let runtime = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/csharp");
-    let out = std::process::Command::new("dotnet").args(["build", "--nologo", "-v", "quiet", "-warnaserror"]).current_dir(&dir).env("CLARITY_RUNTIME", runtime).output().unwrap();
-    assert!(out.status.success(), "{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
 }
 
 /// A custom part draws in a native window of the desktop (DESIGN 6.5), which a
@@ -486,11 +446,11 @@ fn a_program_served_to_a_browser_alone_has_no_native_parts() {
     use clarity_project::{Backend, Target};
     for (backend, word) in [(Backend::Cpp, "cpp"), (Backend::Rust, "rust"), (Backend::Go, "go")] {
         let project = project_for(backend);
-        let web = clarity_project::parse(&format!("project Game\n    stack {word} web web\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
+        let web = clarity_project::parse(&format!("project Game\n    stack {word} webview web\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
         assert_eq!(web.stack.targets, [Target::Web]);
         let refused = clarity_gen::generate(&project, &web).expect_err("a part in a browser");
         assert_eq!(refused, ["part Arena draws in a window of the desktop, which a program served to a browser has not; add the desktop target, or leave the part out"]);
-        let both = clarity_project::parse(&format!("project Game\n    stack {word} web desktop web\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
+        let both = clarity_project::parse(&format!("project Game\n    stack {word} webview desktop web\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
         assert!(clarity_gen::generate(&project, &both).is_ok(), "{word} with a desktop window");
     }
 }

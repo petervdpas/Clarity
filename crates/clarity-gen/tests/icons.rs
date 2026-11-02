@@ -1,6 +1,6 @@
 //! Icons (U1b) on every stack: the web stacks' model carries the drawings
-//! of the icons the project uses; Avalonia gets an Icons class with their
-//! geometries, drawn on buttons, menu items and the icon part.
+//! of the icons the project uses; C# gets an Icons class with their
+//! SVG paths, for Clarity.UI to draw.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -33,7 +33,7 @@ fn the_web_stacks_model_carries_only_the_icons_the_project_uses() {
     let unused = clarity_spec::icons::path("zap").unwrap();
     for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
         // C keeps the model as pieces of 2000 bytes, which may cut a path; joined, it reads whole.
-        let code = all(&files(backend, Ui::Web)).replace("\",\n    \"", "");
+        let code = all(&files(backend, Ui::Webview)).replace("\",\n    \"", "");
         assert!(code.contains(check), "{backend:?} carries the check icon");
         assert!(!code.contains(unused), "{backend:?} carries no icon it does not use");
     }
@@ -41,7 +41,7 @@ fn the_web_stacks_model_carries_only_the_icons_the_project_uses() {
 
 #[test]
 fn an_application_with_icons_carries_lucides_license() {
-    for (backend, ui) in [(Backend::Rust, Ui::Web), (Backend::Csharp, Ui::Avalonia)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
         let files = files(backend, ui);
         let notices = files.iter().find(|f| f.path == "THIRD_PARTY_NOTICES.md").expect("the notices are written");
         assert!(notices.text.contains("ISC License") && notices.text.contains("Lucide"), "{}", notices.text);
@@ -49,13 +49,9 @@ fn an_application_with_icons_carries_lucides_license() {
 }
 
 #[test]
-fn avalonia_draws_its_icons_from_a_class_of_geometries() {
-    let code = all(&files(Backend::Csharp, Ui::Avalonia));
+fn csharp_has_a_class_of_its_icons_svg_paths() {
+    let code = all(&files(Backend::Csharp, Ui::Clarity));
     has(&code, "public static class Icons");
-    has(&code, "public static Geometry Check { get; } = Geometry.Parse(\"");
-    has(&code, "public static Geometry UserCheck { get; }");
-    has(&code, "<Path Classes=\"icon\" Data=\"{x:Static local:Icons.Check}\" />");
-    has(&code, "<MenuItem.Icon><Viewbox Width=\"16\" Height=\"16\">");
-    has(&code, "<Border x:Name=\"friendsIcon\" Grid.Column=\"5\" Grid.Row=\"6\" Classes=\"icon\"");
-    has(&code, "<Style Selector=\"Path.icon\">");
+    has(&code, "public const string Check = \"");
+    has(&code, "public const string UserCheck = ");
 }

@@ -1,6 +1,6 @@
 //! The accordion and the scroll box of U1b on every stack: the web stacks
-//! read and set an accordion's open section in the part's state; Avalonia
-//! writes the runtime's AccordionView and a ScrollViewer.
+//! read and set an accordion's open section in the part's state; C# keeps
+//! it in the window's view model, which Clarity.UI draws.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -26,23 +26,18 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn the_web_stacks_read_and_set_the_open_section_in_the_parts_state() {
-    let rust = generated(Backend::Rust, Ui::Web);
+    let rust = generated(Backend::Rust, Ui::Webview);
     has(&rust, "ui.open_section(\"notesAccordion\")");
     has(&rust, "ui.set_open_section(\"notesAccordion\", 2");
-    let go = generated(Backend::Go, Ui::Web);
+    let go = generated(Backend::Go, Ui::Webview);
     has(&go, "ui.OpenSection(\"notesAccordion\")");
     has(&go, "ui.SetOpenSection(\"notesAccordion\", 2)");
-    has(&generated(Backend::C, Ui::Web), "clarity_ui_set_open_section(ui, \"notesAccordion\"");
-    has(&generated(Backend::Cpp, Ui::Web), "ui.set_open_section(\"notesAccordion\"");
+    has(&generated(Backend::C, Ui::Webview), "clarity_ui_set_open_section(ui, \"notesAccordion\"");
+    has(&generated(Backend::Cpp, Ui::Webview), "ui.set_open_section(\"notesAccordion\"");
 }
 
 #[test]
-fn avalonia_writes_an_accordion_view_and_a_scroll_viewer() {
-    let code = generated(Backend::Csharp, Ui::Avalonia);
-    has(&code, "<c:AccordionView x:Name=\"notesAccordion\"");
-    has(&code, "Open=\"{Binding NotesAccordion.OpenSection}\"");
-    has(&code, "<c:SectionItem Header=");
-    has(&code, "notesAccordion.Changed += () => Vm.FavouriteChangedCommand.Execute(null);");
+fn csharp_opens_an_accordion_section_in_its_state() {
+    let code = generated(Backend::Csharp, Ui::Clarity);
     has(&code, "NotesAccordion.OpenSection = 2");
-    has(&code, "<ScrollViewer x:Name=\"moreScroll\"");
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
   // A number in seven-segment digits, as on a calculator: the display part.
   // Lit segments take the text color; dark ones show faintly, as on an LCD.
-  // The part's style gives its colors; Avalonia's SegmentDisplay draws the same.
+  // The part's style gives its colors; every stack draws the same.
   import { CELL_HEIGHT, CELL_WIDTH, POINT, SEGMENTS, SHAPES, cells, displayText } from "../screen/display";
 
   let { value, digits, id }: { value: unknown; digits: number; id?: string } = $props();

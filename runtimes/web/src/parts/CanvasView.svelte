@@ -1,7 +1,7 @@
 <script lang="ts">
   // A canvas drawn by code: the shapes its draw handler sent, in SVG, in the
   // canvas's own units, fitted to the part in proportion and centred.
-  // Avalonia's CanvasView draws the same (conformance/drawing.json). With
+  // Every stack draws the same (conformance/drawing.json). With
   // `onpoint`, a click (mouse, pen or touch) gives the unit under it.
   //
   // With `zoom` it moves as Clarity's own diagram designer does

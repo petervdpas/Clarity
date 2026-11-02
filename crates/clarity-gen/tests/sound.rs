@@ -1,5 +1,5 @@
 //! The sound part in the output (DESIGN 5.22): what code tells a sound goes
-//! to the renderer (web stacks) or to Clarity.Avalonia's Sound (C#), and the
+//! to the renderer (web stacks) or to the part's state (C#), and the
 //! sound files travel with the program.
 
 use clarity_project::Backend;
@@ -28,11 +28,11 @@ fn project() -> clarity_spec::Project {
 
 fn settings(backend: Backend) -> clarity_project::Settings {
     let stack = match backend {
-        Backend::Csharp => "csharp avalonia desktop",
-        Backend::Rust => "rust web desktop",
-        Backend::Go => "go web desktop",
-        Backend::C => "c web desktop",
-        Backend::Cpp => "cpp web desktop",
+        Backend::Csharp => "csharp desktop",
+        Backend::Rust => "rust webview desktop",
+        Backend::Go => "go webview desktop",
+        Backend::C => "c webview desktop",
+        Backend::Cpp => "cpp webview desktop",
     };
     clarity_project::parse(&format!("project Dice\n    stack {stack}\n    datasource main sqlite \"data/dice.db\"\n")).unwrap()
 }
@@ -51,9 +51,8 @@ fn the_web_stacks_tell_the_renderer() {
 }
 
 #[test]
-fn avalonia_places_a_sound_and_tells_it() {
+fn csharp_tells_a_sound() {
     let code = code(Backend::Csharp);
-    assert!(code.contains("<c:Sound State=\"{Binding RollSound}\" Source=\"roll.wav\" Volume=\"80\" />"), "{code}");
     assert!(code.contains("RollSound.Hear(\"play\");"), "{code}");
     assert!(code.contains("Tune.Hear(\"melody\", \"C4 E4 G4\", 120L);"), "{code}");
 }

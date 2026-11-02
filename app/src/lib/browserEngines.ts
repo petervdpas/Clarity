@@ -1,4 +1,4 @@
-// The engines beside the screen of C# with Avalonia in a browser (DESIGN
+// The engines beside the screen of C# with Clarity.UI in a browser (DESIGN
 // 7.6), where Wasmtime cannot run inside .NET: the browser's own
 // WebAssembly, on the page's thread, so each call .NET makes is answered at
 // once and the canvas's frame loop is the desktop's. An engine that runs

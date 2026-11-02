@@ -1,6 +1,6 @@
 //! A form's label column (U1b) on every stack: the labels the spec makes
 //! for it are parts like any other, in the model the web stacks carry and
-//! in the AXAML and part states of Avalonia, and code sets them by name.
+//! in the part states of C#, and code sets them by name.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -26,18 +26,16 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn the_web_stacks_carry_the_made_labels_and_set_them_by_name() {
-    let rust = generated(Backend::Rust, Ui::Web);
+    let rust = generated(Backend::Rust, Ui::Webview);
     has(&rust, "\"name\":\"albumTitleBoxLabel\"");
     has(&rust, "\"made\":true");
     has(&rust, "ui.set_visible(\"albumCopiesBoxLabel\"");
-    has(&generated(Backend::Go, Ui::Web), "ui.SetVisible(\"albumCopiesBoxLabel\"");
+    has(&generated(Backend::Go, Ui::Webview), "ui.SetVisible(\"albumCopiesBoxLabel\"");
 }
 
 #[test]
-fn avalonia_writes_the_made_labels_as_its_labels() {
-    let code = generated(Backend::Csharp, Ui::Avalonia);
-    has(&code, "x:Name=\"albumTitleBoxLabel\"");
+fn csharp_keeps_the_made_labels_as_parts() {
+    let code = generated(Backend::Csharp, Ui::Clarity);
     has(&code, "public PartState AlbumCopiesBoxLabel { get; }");
     has(&code, "AlbumCopiesBoxLabel.IsVisible = ");
-    has(&code, "x:Key=\"ClarityFramePadding\"");
 }

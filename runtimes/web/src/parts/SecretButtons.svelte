@@ -1,6 +1,6 @@
 <script lang="ts">
   // The buttons beside a password or another secret: an eye that shows what
-  // is typed or hides it again, and one that copies it. The same on Avalonia.
+  // is typed or hides it again, and one that copies it. The same on every stack.
 
   let {
     revealed = $bindable(false),

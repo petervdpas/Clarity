@@ -2,7 +2,7 @@
   import SecretButtons from "./SecretButtons.svelte";
 
   // Clarity's text input on the web: a line of text, an email, a password or
-  // a memo, the same as on Avalonia (conformance/forms.json). Typed text is
+  // a memo, the same on every stack (conformance/forms.json). Typed text is
   // taken when the field is left or Enter is pressed (a memo: only when it is
   // left, Enter is a new line); only text that differs from the value is a
   // change. What the code sets is never a change. A password has an eye that

@@ -21,11 +21,11 @@ pub const RESOURCES_DIR: &str = "resources";
 pub const MARKDOWN_EXTENSION: &str = "md";
 
 /// The kinds of picture every stack shows without extra libraries: the
-/// web renderer, and Avalonia through Skia.
+/// web renderer, and Clarity.UI through Skia.
 pub const PICTURE_EXTENSIONS: [&str; 7] = ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"];
 
 /// The sound files every stack plays (DESIGN 5.22): the browser engines of
-/// the web stacks and SoundFlow on Avalonia read these alike.
+/// the web stacks and C# read these alike.
 pub const SOUND_EXTENSIONS: [&str; 3] = ["wav", "mp3", "flac"];
 
 /// A file of the resources folder that the application carries as it is,

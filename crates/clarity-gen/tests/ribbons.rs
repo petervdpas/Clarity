@@ -45,29 +45,25 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn code_reads_and_sets_a_ribbon_on_every_stack() {
-    let rust = files(Backend::Rust, Ui::Web);
+    let rust = files(Backend::Rust, Ui::Webview);
     let code = text(&rust, "src/modules/shop.rs");
     has(code, "ui.set_collapsed(\"mainRibbon\", false);");
     has(code, "if (ui.tab(\"mainRibbon\") == 1i64) {");
     has(code, "ui.set_tab(\"mainRibbon\", 2i64);");
     has(code, "ui.set_visible(\"clipboardGroup\", false);");
-    let go = files(Backend::Go, Ui::Web);
+    let go = files(Backend::Go, Ui::Webview);
     has(text(&go, "shop_module.go"), "ui.SetTab(\"mainRibbon\", 2)");
-    let c = files(Backend::C, Ui::Web);
+    let c = files(Backend::C, Ui::Webview);
     has(text(&c, "src/modules/shop.c"), "clarity_ui_set_tab(ui, \"mainRibbon\", 2);");
-    let cpp = files(Backend::Cpp, Ui::Web);
+    let cpp = files(Backend::Cpp, Ui::Webview);
     has(text(&cpp, "src/modules/shop.cpp"), "ui.set_tab(\"mainRibbon\", int64_t{2});");
 }
 
-/// Avalonia's ribbon is a tab control whose open tab, folding and the
-/// visibility of its tabs and groups follow the parts' state.
+/// C# keeps a ribbon's open tab, its folding and the visibility of its tabs
+/// and groups in the parts' state.
 #[test]
-fn avalonia_ribbon_follows_its_state() {
-    let files = files(Backend::Csharp, Ui::Avalonia);
-    let view = text(&files, "Windows/MainView.axaml");
-    has(view, "<c:RibbonView x:Name=\"mainRibbon\" DockPanel.Dock=\"Top\" Classes=\"ribbon\" Collapsible=\"True\" IsCollapsed=\"{Binding MainRibbon.IsCollapsed}\" Tab=\"{Binding MainRibbon.Tab}\">");
-    has(view, "<TabItem x:Name=\"homeTab\" Header=\"{x:Static local:Texts.HomeTab}\" IsVisible=\"{Binding HomeTab.IsVisible}\">");
-    has(view, "IsVisible=\"{Binding ClipboardGroup.IsVisible}\"");
+fn csharp_ribbon_follows_its_state() {
+    let files = files(Backend::Csharp, Ui::Clarity);
     let vm = text(&files, "Windows/MainViewModel.cs");
     has(vm, "public PartState MainRibbon { get; } = new(\"mainRibbon\") { IsCollapsed = true };");
     has(vm, "public PartState HomeTab { get; } = new(\"homeTab\");");

@@ -37,8 +37,10 @@ pub enum Backend {
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum Ui {
-    Web,
-    Avalonia,
+    /// The shared HTML screen in a webview or a browser (DESIGN 7.8), until a language has its Clarity.UI.
+    Webview,
+    /// Clarity.UI, Clarity's own UI framework (DESIGN 7.9); never named in the stack line.
+    Clarity,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -85,6 +87,12 @@ impl Stack {
     /// Whether a target shows windows, so the project has a UI.
     pub fn has_ui(&self) -> bool {
         self.targets.iter().any(|t| *t != Target::Cli)
+    }
+
+    /// Whether the stack line names its UI: a program with a window on the
+    /// shared web screen does (`stack go webview desktop`); Clarity.UI is never named.
+    pub fn names_ui(&self) -> bool {
+        self.has_ui() && self.ui != Ui::Clarity
     }
 
     pub fn has(&self, target: Target) -> bool {
@@ -206,7 +214,7 @@ pub fn serve_address(settings: &Settings) -> String {
 pub const DEFAULT_OUT: &str = "out";
 
 pub const BACKENDS: [Backend; 5] = [Backend::Rust, Backend::Go, Backend::Csharp, Backend::C, Backend::Cpp];
-pub const UIS: [Ui; 2] = [Ui::Web, Ui::Avalonia];
+pub const UIS: [Ui; 2] = [Ui::Webview, Ui::Clarity];
 pub const TARGETS: [Target; 3] = [Target::Desktop, Target::Web, Target::Cli];
 pub const SOURCE_KINDS: [SourceKind; 5] =
     [SourceKind::Sqlite, SourceKind::Postgres, SourceKind::Mysql, SourceKind::Mssql, SourceKind::Rest];
@@ -226,8 +234,8 @@ pub fn backend_word(backend: Backend) -> &'static str {
 
 pub fn ui_word(ui: Ui) -> &'static str {
     match ui {
-        Ui::Web => "web",
-        Ui::Avalonia => "avalonia",
+        Ui::Webview => "webview",
+        Ui::Clarity => "clarity",
     }
 }
 
@@ -310,7 +318,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
         title: None,
         stack: Stack {
             backend: Backend::Rust,
-            ui: Ui::Web,
+            ui: Ui::Webview,
             targets: vec![Target::Desktop],
         },
         datasources: vec![DataSource {
@@ -648,27 +656,27 @@ pub fn usual_ui(backend: Backend) -> Ui {
 
 fn backend_info(backend: Backend) -> BackendInfo {
     let (label, uis) = match backend {
-        Backend::Rust => ("Rust", vec![Ui::Web]),
-        Backend::Go => ("Go", vec![Ui::Web]),
-        Backend::Csharp => ("C#", vec![Ui::Web, Ui::Avalonia]),
-        Backend::C => ("C", vec![Ui::Web]),
-        Backend::Cpp => ("C++", vec![Ui::Web]),
+        Backend::Rust => ("Rust", vec![Ui::Webview]),
+        Backend::Go => ("Go", vec![Ui::Webview]),
+        Backend::Csharp => ("C#", vec![Ui::Clarity]),
+        Backend::C => ("C", vec![Ui::Webview]),
+        Backend::Cpp => ("C++", vec![Ui::Webview]),
     };
     BackendInfo { id: backend, label, uis }
 }
 
 fn ui_label(ui: Ui) -> &'static str {
     match ui {
-        Ui::Web => "Web renderer",
-        Ui::Avalonia => "Avalonia",
+        Ui::Webview => "Web renderer",
+        Ui::Clarity => "Clarity.UI",
     }
 }
 
 /// The backend a native toolkit belongs to, for messages.
 fn ui_backend_label(ui: Ui) -> &'static str {
     match ui {
-        Ui::Web => "any",
-        Ui::Avalonia => "C#",
+        Ui::Webview => "any",
+        Ui::Clarity => "C#",
     }
 }
 
@@ -683,7 +691,7 @@ pub fn catalog() -> Catalog {
     Catalog {
         starter: starter("", "").stack,
         backends: BACKENDS.into_iter().map(backend_info).collect(),
-        uis: [Ui::Web, Ui::Avalonia].into_iter().map(|id| Choice { id, label: ui_label(id) }).collect(),
+        uis: UIS.into_iter().map(|id| Choice { id, label: ui_label(id) }).collect(),
         targets: vec![
             Choice { id: Target::Desktop, label: "Desktop" },
             Choice { id: Target::Web, label: "Web" },
@@ -799,7 +807,7 @@ fn with_cli(stack: &Stack) -> String {
     if !stack.has(Target::Cli) {
         targets.push(target_word(Target::Cli));
     }
-    let ui = if stack.has_ui() { format!(" {}", ui_word(stack.ui)) } else { String::new() };
+    let ui = if stack.names_ui() { format!(" {}", ui_word(stack.ui)) } else { String::new() };
     format!("stack {}{ui} {}", backend_word(stack.backend), targets.join(" "))
 }
 

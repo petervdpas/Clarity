@@ -3,7 +3,7 @@
   // `done` of `total`, and a Stop button named in Clarity's own word. The
   // shell sends how far the call is while the handler runs; Stop asks it
   // once to stop the call, which then fails with "it was stopped". The same
-  // as on Avalonia.
+  // as on every stack.
 
   let {
     done,

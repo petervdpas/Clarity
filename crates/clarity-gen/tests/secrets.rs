@@ -34,7 +34,7 @@ fn generated(backend: Backend, ui: Ui, connection: &str) -> String {
     files.iter().map(|f| format!("// {}\n{}\n", f.path, f.text)).collect()
 }
 
-const STACKS: [(Backend, Ui); 5] = [(Backend::Rust, Ui::Web), (Backend::Go, Ui::Web), (Backend::Csharp, Ui::Avalonia), (Backend::C, Ui::Web), (Backend::Cpp, Ui::Web)];
+const STACKS: [(Backend, Ui); 5] = [(Backend::Rust, Ui::Webview), (Backend::Go, Ui::Webview), (Backend::Csharp, Ui::Clarity), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview)];
 
 /// C and C++ store records in SQLite only, for now, so they have no
 /// connection to keep secret yet.
@@ -50,15 +50,15 @@ fn a_database_connects_with_the_secret_setting_of_its_program() {
 
 #[test]
 fn the_secrets_are_named_to_the_settings() {
-    let rust = generated(Backend::Rust, Ui::Web, "data/shop.db");
+    let rust = generated(Backend::Rust, Ui::Webview, "data/shop.db");
     assert!(rust.contains("const SECRETS: &[&str] = &[\"shopDb\"];"));
     assert!(rust.contains("clarity_runtime::settings::read_with(PROGRAM, SECRETS)"));
-    let go = generated(Backend::Go, Ui::Web, "data/shop.db");
+    let go = generated(Backend::Go, Ui::Webview, "data/shop.db");
     assert!(go.contains("clarity.Secrets = secrets.System{}"));
-    let csharp = generated(Backend::Csharp, Ui::Avalonia, "data/shop.db");
+    let csharp = generated(Backend::Csharp, Ui::Clarity, "data/shop.db");
     assert!(csharp.contains("KeptSettings.Read(ProgramName, Secrets)"));
     for backend in [Backend::C, Backend::Cpp] {
-        let code = generated(backend, Ui::Web, "data/shop.db");
+        let code = generated(backend, Ui::Webview, "data/shop.db");
         assert!(code.contains("secrets_use();"), "{backend:?} turns the store on");
         assert!(code.contains("clarity_secrets"), "{backend:?} links the store");
     }
@@ -93,7 +93,7 @@ fn handled(backend: Backend, ui: Ui) -> String {
 
 #[test]
 fn the_app_handles_its_databases_not_opening() {
-    let rust = handled(Backend::Rust, Ui::Web);
+    let rust = handled(Backend::Rust, Ui::Webview);
     assert!(rust.contains("const UNCONNECTED_HANDLER: Option<&str> = Some(\"notConnected\");"));
     assert!(rust.contains("const CONNECTION_WINDOW: Option<&str> = Some(\"Main\");"));
     assert!(rust.contains("clarity_runtime::ui::answer(value(0)?)?"));
@@ -102,13 +102,13 @@ fn the_app_handles_its_databases_not_opening() {
     // The title bar's close goes to the screen, which connects again.
     assert!(rust.contains("tauri::WindowEvent::CloseRequested { api, .. }"));
     assert!(rust.contains("window.clarityCloseRequested && window.clarityCloseRequested()"));
-    let go = handled(Backend::Go, Ui::Web);
+    let go = handled(Backend::Go, Ui::Webview);
     assert!(go.contains("unconnected = &shell.Unconnected{Handler: \"notConnected\", Window: \"Main\", Problem: clarity.UnconnectedReason(err)}"));
     assert!(go.contains("reason, err := clarity.Answer[string](values[0])"));
-    let csharp = handled(Backend::Csharp, Ui::Avalonia);
-    assert!(csharp.contains("Handler = (db, unconnecting) => new AppUnconnectedViewModel(db).Unconnected(unconnecting),"));
+    let csharp = handled(Backend::Csharp, Ui::Clarity);
     assert!(csharp.contains("RunUnconnected(unconnecting, reason => OnNotConnected(reason));"));
-    assert!(csharp.contains("problem = Unconnected.Reason(e);"));
+    // Until Clarity.UI shows the window for it, the program says why (DESIGN 7.9).
+    assert!(csharp.contains("Console.Error.WriteLine(Locale.Show(Unconnecting.Why(e)));"));
 }
 
 /// C and C++ keep their records in SQLite: a file that does not open runs
@@ -118,7 +118,7 @@ fn c_and_cpp_handle_their_database_not_opening() {
     for backend in [Backend::C, Backend::Cpp] {
         let mut settings: Settings = starter("Shop", "shop");
         settings.stack.backend = backend;
-        settings.stack.ui = Ui::Web;
+        settings.stack.ui = Ui::Webview;
         let source = format!("{SHOP}{HANDLED}");
         let project = clarity_spec::load_in([("shop.clarity", source.as_str())], [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
         let files: Vec<OutFile> = generate(&project, &settings).unwrap_or_else(|e| panic!("{backend:?}: {e:#?}"));
@@ -162,7 +162,7 @@ fn run(dir: &std::path::Path, command: &mut std::process::Command) -> String {
 #[test]
 #[ignore = "builds the Rust program with cargo (Tauri)"]
 fn an_unconnected_app_builds_in_rust() {
-    let out = written(Backend::Rust, Ui::Web);
+    let out = written(Backend::Rust, Ui::Webview);
     let runtime = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/rust").canonicalize().unwrap();
     std::fs::create_dir_all(out.join(".cargo")).unwrap();
     std::fs::write(out.join(".cargo/config.toml"), format!("[patch.crates-io]\nclarity-runtime = {{ path = {:?} }}\n", runtime.display().to_string())).unwrap();
@@ -174,7 +174,7 @@ fn an_unconnected_app_builds_in_rust() {
 #[test]
 #[ignore = "builds the Go program"]
 fn an_unconnected_app_builds_in_go() {
-    let out = written(Backend::Go, Ui::Web);
+    let out = written(Backend::Go, Ui::Webview);
     let runtime = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/go").canonicalize().unwrap();
     let go = include_str!("../../../runtimes/go/go.mod").lines().find(|l| l.starts_with("go ")).unwrap();
     std::fs::write(out.join("go.work"), format!("{go}\n\nuse .\n\nreplace github.com/petervdpas/Clarity/runtimes/go => {}\n", clarity_project::slashed(&runtime))).unwrap();
@@ -186,7 +186,7 @@ fn an_unconnected_app_builds_in_go() {
 #[test]
 #[ignore = "builds the C# program with dotnet"]
 fn an_unconnected_app_builds_in_csharp() {
-    let out = written(Backend::Csharp, Ui::Avalonia);
+    let out = written(Backend::Csharp, Ui::Clarity);
     let runtime = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/csharp");
     run(&out, std::process::Command::new("dotnet").args(["build", "-warnaserror"]).env("CLARITY_RUNTIME", runtime));
     std::fs::remove_dir_all(&out).unwrap();
@@ -196,7 +196,7 @@ fn an_unconnected_app_builds_in_csharp() {
 #[ignore = "builds the C and C++ programs with CMake"]
 fn an_unconnected_app_builds_in_c_and_cpp() {
     for backend in [Backend::C, Backend::Cpp] {
-        let out = written(backend, Ui::Web);
+        let out = written(backend, Ui::Webview);
         let said = run(&out, std::process::Command::new("cmake").args(["--workflow", "--preset", "debug"]));
         let own: Vec<&str> = said.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();
         assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));

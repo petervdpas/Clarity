@@ -66,7 +66,7 @@ code OrderForm
 fn settings() -> Settings {
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = Backend::C;
-    settings.stack.ui = Ui::Web;
+    settings.stack.ui = Ui::Webview;
     settings
 }
 
@@ -359,7 +359,7 @@ fn an_engine_brings_its_host_and_wasm3() {
     clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes }]);
     let mut settings = clarity_project::starter("Shop", "shop");
     settings.stack.backend = clarity_project::Backend::C;
-    settings.stack.ui = clarity_project::Ui::Web;
+    settings.stack.ui = clarity_project::Ui::Webview;
     let with = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/c");
     for folder in ["engine", "third_party/wasm3"] {

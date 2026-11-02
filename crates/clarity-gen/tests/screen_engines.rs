@@ -1,6 +1,6 @@
 //! Engines beside the screen in the generated application (DESIGN 5.12):
 //! the renderer runs them, so the backend never loads one. The web stacks
-//! carry the engine's file in the model the renderer reads; Avalonia
+//! carry the engine's file in the model the renderer reads; C#
 //! embeds it and gives each canvas that runs it an instance of its own.
 
 use clarity_gen::{OutFile, generate};
@@ -25,7 +25,7 @@ fn file<'a>(files: &'a [OutFile], path: &str) -> &'a str {
 #[test]
 fn the_web_stacks_carry_the_engine_in_the_model_and_not_on_the_backend() {
     for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
-        let files = files(backend, Ui::Web);
+        let files = files(backend, Ui::Webview);
         let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
         assert!(!paths.iter().any(|p| p.contains("engines")), "{backend:?} has no backend engine: {paths:?}");
         // The model is a file beside the renderer, or text in the C and C++ sources.
@@ -35,17 +35,12 @@ fn the_web_stacks_carry_the_engine_in_the_model_and_not_on_the_backend() {
 }
 
 #[test]
-fn avalonia_gives_each_canvas_an_instance_of_its_engine() {
-    let files = files(Backend::Csharp, Ui::Avalonia);
+fn csharp_gives_each_canvas_an_instance_of_its_engine() {
+    let files = files(Backend::Csharp, Ui::Clarity);
     let engines = file(&files, "ScreenEngines.cs");
     assert!(engines.contains("public static readonly Func<IFrames> Screen = () => InBrowser is { } load\n        ? load(\"Screen\", Read(\"screen.wasm\"), [\"log\"], true, 1, 256)\n        : ScreenEngine.Load(\"Screen\", Read(\"screen.wasm\"), [\"log\"], true, new EngineLimits(1, 256));"), "{engines}");
-    let view = file(&files, "Windows/PlayView.axaml");
-    assert!(view.contains("Grid.RowSpan=\"10\" Runs=\"{x:Static local:ScreenEngines.Screen}\" State=\"{Binding Sky}\" UnitsWidth=\"160\" UnitsHeight=\"100\""), "{view}");
-    // What the engine tells runs its handler with its values; a handler tells it through the canvas's state.
-    let behind = file(&files, "Windows/PlayView.axaml.cs");
-    assert!(behind.contains("sky.Told += (tell, values) => Vm.Told_Sky(tell, values);"), "{behind}");
     let model = file(&files, "Windows/PlayViewModel.cs");
-    assert!(model.contains("case \"finished\":\n                Handle(() => OnFinished(DotNetPart.Read<long>(values, 0)), [tell, values]);"), "{model}");
+    assert!(model.contains("case \"finished\":\n                Handle(() => OnFinished(PartValues.Read<long>(values, 0)), [tell, values]);"), "{model}");
     // A mirror in a browser sends it to the server, which runs it as a command (DESIGN 7.6).
     assert!(model.contains("    [Command]\n    public void Told_Sky(string tell, System.Text.Json.JsonElement[] values)"), "{model}");
     assert!(model.contains("sky.Hear(\"start\", 2L);") || model.contains("Sky.Hear(\"start\", 2L);"), "{model}");
@@ -60,7 +55,7 @@ fn avalonia_gives_each_canvas_an_instance_of_its_engine() {
 /// with the tell's values, and a hear comes back with the handler's reply.
 #[test]
 fn the_web_stacks_answer_tells_and_send_hears() {
-    let files = files(Backend::Rust, Ui::Web);
+    let files = files(Backend::Rust, Ui::Webview);
     let all: String = files.iter().map(|f| f.text.as_str()).collect();
     assert!(all.contains("(\"Play\", \"finished\")") && all.contains("(\"Play\", \"lapped\")"), "the tells' handlers answer");
     assert!(all.contains("ui.hear(\"sky\", \"start\", vec![to_value(&2"), "a hear goes with the reply");
@@ -71,7 +66,7 @@ fn the_web_stacks_answer_tells_and_send_hears() {
 /// line to the standard error, where the backend's engines write.
 #[test]
 fn the_rust_shell_logs_the_engines_lines() {
-    let files = files(Backend::Rust, Ui::Web);
+    let files = files(Backend::Rust, Ui::Webview);
     // The shell's commands are in the desktop module.
     let main = file(&files, "src/desktop.rs");
     assert!(main.contains("fn log_line(line: String) {\n    eprintln!(\"{line}\");\n}"), "{main}");
@@ -97,11 +92,11 @@ fn a_clarity_engine_beside_the_screen_is_carried_compiled() {
         generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"))
     };
     for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
-        let files = generated(backend, Ui::Web);
+        let files = generated(backend, Ui::Webview);
         let carried = files.iter().any(|f| f.text.contains("\"screenEngines\":[{\"name\":\"Sky\"") || f.text.contains("\\\"screenEngines\\\":[{\\\"name\\\":\\\"Sky\\\""));
         assert!(carried, "{backend:?} carries the compiled engine in its model");
     }
-    let files = generated(Backend::Csharp, Ui::Avalonia);
-    assert!(file(&files, "ScreenEngines.cs").contains("ScreenEngine.Load(\"Sky\", Read(\"sky.wasm\"), [], false,"), "Avalonia loads the compiled engine");
+    let files = generated(Backend::Csharp, Ui::Clarity);
+    assert!(file(&files, "ScreenEngines.cs").contains("ScreenEngine.Load(\"Sky\", Read(\"sky.wasm\"), [], false,"), "C# loads the compiled engine");
     assert!(files.iter().any(|f| f.path == "Engines/sky.wasm"));
 }

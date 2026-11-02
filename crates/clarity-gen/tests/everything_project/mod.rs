@@ -28,13 +28,12 @@ fn library(backend: &str) -> &'static str {
     match backend {
         "rust" => "    crate \"parts/Gauge\"\n",
         "go" => "    go \"parts/gauge\"\n",
-        "csharp" => "    nuget \"Newtonsoft.Json\" 13.0.1\n",
         _ => PART_LINE,
     }
 }
 
 /// The project ready for `stack` (as a project file writes it, such as
-/// `csharp avalonia web`), in `target/generated/<name>`: its project file,
+/// `csharp web`), in `target/generated/<name>`: its project file,
 /// the loaded project and its settings.
 pub fn prepare(name: &str, stack: &str) -> (PathBuf, clarity_spec::Project, clarity_project::Settings) {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
@@ -42,16 +41,18 @@ pub fn prepare(name: &str, stack: &str) -> (PathBuf, clarity_spec::Project, clar
     let _ = std::fs::remove_dir_all(&root);
     copy(&fixtures.join("everything"), &root.join("everything"));
     let file = root.join("everything.clarity");
-    let project_text = std::fs::read_to_string(fixtures.join("everything.clarity")).unwrap().replace("stack csharp avalonia desktop cli", &format!("stack {stack}"));
+    let project_text = std::fs::read_to_string(fixtures.join("everything.clarity")).unwrap().replace("stack csharp desktop cli", &format!("stack {stack}"));
     std::fs::write(&file, &project_text).unwrap();
     let settings = clarity_project::parse(&project_text).unwrap_or_else(|e| panic!("{stack}: {e:?}"));
     let module = root.join("everything/everything.clarity");
     let mut text = std::fs::read_to_string(&module).unwrap();
     assert!(text.contains(PART_LINE), "the every-part project declares its part with {PART_LINE}");
-    if settings.stack.has(clarity_project::Target::Desktop) {
-        text = text.replace(PART_LINE, library(stack.split_whitespace().next().unwrap_or_default()));
+    // C#'s custom part comes with Clarity.UI's custom controls (DESIGN 7.9).
+    let backend = stack.split_whitespace().next().unwrap_or_default();
+    if settings.stack.has(clarity_project::Target::Desktop) && backend != "csharp" {
+        text = text.replace(PART_LINE, library(backend));
     } else {
-        // In a browser alone: no custom part, nor the code that speaks to it.
+        // In a browser alone, and on C# for now: no custom part, nor the code that speaks to it.
         let start = text.find("part Gauge\n").unwrap();
         let end = start + text[start..].find("\n\n").unwrap() + 2;
         text.replace_range(start..end, "");

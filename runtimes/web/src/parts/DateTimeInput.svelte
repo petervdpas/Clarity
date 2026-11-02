@@ -1,6 +1,6 @@
 <script lang="ts">
   // A moment (a datetime field): a day picked from the calendar and a time
-  // typed as hh:mm on a 24-hour clock, as on Avalonia. The time is taken when
+  // typed as hh:mm on a 24-hour clock, as on every stack. The time is taken when
   // it is left or Enter is pressed; a time that is no time is marked and the
   // moment stays.
   import { joinMoment, readTime, splitMoment } from "../screen/moment";

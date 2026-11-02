@@ -1,6 +1,6 @@
 //! The color field type of U1c on every stack: kept as text in every
-//! backend; the web stacks draw the color input from the model, Avalonia
-//! writes Clarity's ColorInput.
+//! backend; the web stacks draw the color input from the model; on C#
+//! Clarity.UI draws it.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -26,18 +26,11 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn every_backend_keeps_a_color_as_text_with_its_default() {
-    has(&generated(Backend::Rust, Ui::Web), "String::from(\"#3b82f6\")");
-    has(&generated(Backend::Go, Ui::Web), "\"#3b82f6\"");
-    has(&generated(Backend::C, Ui::Web), "\"#3b82f6\"");
-    has(&generated(Backend::Cpp, Ui::Web), "\"#3b82f6\"");
-    has(&generated(Backend::Csharp, Ui::Avalonia), "\"#3b82f6\"");
-    has(&generated(Backend::Rust, Ui::Web), "\"kind\":\"color\"");
+    has(&generated(Backend::Rust, Ui::Webview), "String::from(\"#3b82f6\")");
+    has(&generated(Backend::Go, Ui::Webview), "\"#3b82f6\"");
+    has(&generated(Backend::C, Ui::Webview), "\"#3b82f6\"");
+    has(&generated(Backend::Cpp, Ui::Webview), "\"#3b82f6\"");
+    has(&generated(Backend::Csharp, Ui::Clarity), "\"#3b82f6\"");
+    has(&generated(Backend::Rust, Ui::Webview), "\"kind\":\"color\"");
 }
 
-#[test]
-fn avalonia_writes_the_color_input() {
-    let code = generated(Backend::Csharp, Ui::Avalonia);
-    has(&code, "<c:ColorInput x:Name=\"tintBox\"");
-    has(&code, "Value=\"{Binding Album.Tint}\"");
-    has(&code, "tintBox.ValueChanged += (_, _) => Vm.EditOf(\"tintBox\", \"tintBox\", true, () => Vm.FavouriteChangedCommand.Execute(null));");
-}

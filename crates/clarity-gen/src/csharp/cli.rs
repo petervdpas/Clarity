@@ -1,5 +1,5 @@
 //! The C# command-line program (DESIGN 5.20): a console project of its own
-//! in `out/cli`, on Clarity.Runtime without Avalonia, with the project's
+//! in `out/cli`, on Clarity.Runtime alone, with the project's
 //! records, actions and commands, and a Main that reads the command line
 //! and runs the command it names.
 
@@ -151,7 +151,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         files.push(text("Engines.cs", super::engines_cs(project, &name)));
     }
     // The texts, as the desktop program has them, shown in the program's language.
-    files.push(text("Texts.cs", texts.class(project, &name).replace("using Clarity.Avalonia;\n", "")));
+    files.push(text("Texts.cs", texts.class(project, &name)));
     files.push(text("Texts.resx", texts.base_resx(project)));
     let default = clarity_spec::translations::default_language(project);
     for (language, values) in project.translations.iter().filter(|(l, _)| **l != default) {

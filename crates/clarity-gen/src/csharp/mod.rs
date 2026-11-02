@@ -1,10 +1,12 @@
-//! The C# backend with Avalonia: one C# file per Clarity module with its
-//! enums, records, functions, actions and data events; each window as an
-//! AXAML view with its ViewModel, shown in the runtime's one-window shell;
-//! and the migration steps of every database. The project builds with
-//! `dotnet build` on the runtime's NuGet packages (Clarity.Avalonia and the
-//! driver of each kind of database), or on the runtime's own projects while
-//! working on them (the `ClarityRuntime` switch of the project file).
+//! The C# backend with Clarity.UI (DESIGN 7.9): one C# file per Clarity
+//! module with its enums, records, functions, actions and data events; each
+//! window's view model, and the window itself as markup (`Windows/*.cxaml`)
+//! that Clarity.UI draws; the app frames (`Apps/*.cxaml`); the themes as
+//! Clarity resolves them; and the migration steps of every database. The
+//! project builds with `dotnet build` on the runtime's NuGet packages
+//! (Clarity.Ui.Desktop and the driver of each kind of database), or on the
+//! runtime's own projects while working on them (the `ClarityRuntime`
+//! switch of the project file).
 
 pub(crate) mod parts;
 mod cli;
@@ -14,16 +16,12 @@ mod names;
 pub(crate) use names::value_type as value_type_of;
 mod texts;
 mod themes;
-mod web;
 mod windows;
-
-pub use themes::avalonia_theme;
 
 use clarity_project::Settings;
 use clarity_spec::Project;
 use clarity_spec::code::check;
-use clarity_spec::model::{FieldType, ThemeDecl};
-use clarity_spec::layout::MESSAGE_MS;
+use clarity_spec::model::FieldType;
 
 use crate::OutFile;
 use crate::ddl::Sql;
@@ -44,13 +42,9 @@ pub fn runtime_version() -> &'static str {
     RUNTIME_PROPS[start..start + end].trim()
 }
 
-/// The package everything a program in a browser needs comes with: the
-/// windows, and through it Clarity.Runtime with SQLite. Nothing native.
-const UI_PACKAGE: &str = "Clarity.Avalonia";
-
-/// The package a desktop program takes instead: the desktop's own (native
-/// windows, sound, the shell), and through it Clarity.Avalonia (DESIGN 7.6).
-const DESKTOP_PACKAGE: &str = "Clarity.Avalonia.Desktop";
+/// The package a desktop program draws its windows with: Clarity.UI in the
+/// system's own window, and through it Clarity.Ui and Clarity.Runtime (DESIGN 7.9).
+const DESKTOP_PACKAGE: &str = "Clarity.Ui.Desktop";
 
 /// What a kind of database brings into a project: the runtime's package of
 /// its driver (with the client it stands on), and the class whose Use() turns
@@ -69,9 +63,6 @@ const DRIVERS: [Driver; 4] = [
     Driver { sql: Sql::Mssql, class: "SqlServer", package: "Clarity.Runtime.SqlServer" },
 ];
 
-/// The application's styles, with a line where the style classes of its themes go.
-const APP_AXAML: &str = include_str!("App.axaml");
-
 /// The .NET the generated project targets.
 pub const TARGET_FRAMEWORK: &str = "net10.0";
 
@@ -85,22 +76,20 @@ pub use cli::generate as generate_cli;
 /// The program of the project: the desktop program, or with the web target
 /// alone the web application (DESIGN 7.6).
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    if settings.stack.has(clarity_project::Target::Desktop) || !settings.stack.has(clarity_project::Target::Web) {
-        return generate_desktop(project, settings, DESKTOP_PACKAGE);
+    if settings.stack.has(clarity_project::Target::Web) {
+        return Err(vec!["C#'s web target on Clarity.UI is not generated yet (DESIGN 7.9, G7d); use the desktop target".to_string()]);
     }
-    // The windows as the desktop program has them, on the package without the desktop's own.
-    let windows = generate_desktop(project, settings, UI_PACKAGE)?;
-    web::generate(&crate::with_secret_settings(project, &crate::settings_program(settings)), settings, windows)
+    generate_desktop(project, settings, DESKTOP_PACKAGE)
 }
 
-/// The desktop program, its windows on the package `ui`: the desktop's, or the core one for the web.
+/// The desktop program, its windows drawn by the package `ui`.
 fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<Vec<OutFile>, Vec<String>> {
     let project = &crate::with_secret_settings(project, &crate::settings_program(settings));
     let (databases, owned) = crate::databases(project, settings)?;
     let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
-    let Some(main_window) = main_window(project) else {
+    if main_window(project).is_none() {
         return Err(vec!["the project has no window to start with".to_string()]);
-    };
+    }
     let name = project_name(settings);
     let types = check::types(&project.files);
     let mut errors = Vec::new();
@@ -109,15 +98,17 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     let engines = !crate::engines(project).is_empty();
     // Engines beside the screen run in the application's process too, through the same package.
     let screen_engines = !crate::screen_engines(project).is_empty();
-    // On the web the databases are the server's, which references their drivers instead.
-    let carried: &[&Driver] = if ui == UI_PACKAGE { &[] } else { &drivers };
-    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, ui, carried, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, parts::references(project) + &library_references(project)))];
+    // Custom parts become Clarity.UI's custom controls, in C# (DESIGN 7.9).
+    if let Some(part) = parts::dotnet_parts(project).first() {
+        return Err(vec![format!("custom part {} is not generated yet: custom parts on C# come with Clarity.UI's custom controls (DESIGN 7.9)", part.name.name)]);
+    }
+    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, ui, &drivers, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, library_references(project)))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
         // The settings read and keep JSON, numbers and dates written the same everywhere.
-        let settings_usings = if file.entities.iter().any(|e| e.settings) { "using System.Globalization;\nusing System.Text.Json.Nodes;\nusing Avalonia.Threading;\n" } else { "" };
-        let mut code = format!("{HEADER}\n{settings_usings}using Clarity.Avalonia;\nusing Clarity.Runtime;\nusing CommunityToolkit.Mvvm.ComponentModel;\n\nnamespace {name};\n\n");
+        let settings_usings = if file.entities.iter().any(|e| e.settings) { "using System.Globalization;\nusing System.Text.Json.Nodes;\n" } else { "" };
+        let mut code = format!("{HEADER}\n{settings_usings}using Clarity.Runtime;\nusing CommunityToolkit.Mvvm.ComponentModel;\n\nnamespace {name};\n\n");
         code.push_str(&model::emit(project, file, &name, &crate::settings_program(settings), &texts, false));
         match logic::emit(project, file, &file_types) {
             Ok(methods) => code.push_str(&methods),
@@ -139,14 +130,14 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
         let host = unconnected_host(project);
         match windows::emit(project, &host, &file_types, &name, &texts) {
-            Ok(window) => files.extend(window.into_iter().filter(|f| f.path.ends_with("ViewModel.cs"))),
+            Ok(window) => files.extend(window),
             Err(mut problems) => errors.append(&mut problems),
         }
         let reason = if crate::unconnected_takes_reason(project, &app, &handler) { "reason" } else { "" };
         files.push(text(
             &format!("Windows/{}Run.cs", host.name.name),
             format!(
-                "{HEADER}\nusing Clarity.Avalonia;\n\nnamespace {name};\n\npublic sealed partial class {}ViewModel\n{{\n    /// <summary>Runs the app's <c>on unconnected</c>, with why the databases did not open.</summary>\n    public void Unconnected(Unconnecting unconnecting) => RunUnconnected(unconnecting, reason => On{}({reason}));\n}}\n",
+                "{HEADER}\nusing Clarity.Runtime;\n\nnamespace {name};\n\npublic sealed partial class {}ViewModel\n{{\n    /// <summary>Runs the app's <c>on unconnected</c>, with why the databases did not open.</summary>\n    public void Unconnected(Unconnecting unconnecting) => RunUnconnected(unconnecting, reason => On{}({reason}));\n}}\n",
                 host.name.name,
                 pascal(&handler)
             ),
@@ -172,21 +163,12 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
         files.extend(crate::libraries::adapter_files(project, n, &own));
         files.push(text(&format!("{}/{own}", crate::libraries::folder(n)), crate::libraries::csharp_half(project, library)));
     }
-    // The .NET parts: each adapter, and the half generated from its declaration.
-    for part in parts::dotnet_parts(project) {
-        let n = &part.name.name;
-        for file in project.part_files.iter().flatten().filter(|f| f.part == *n) {
-            files.push(OutFile { path: format!("parts/{n}/{}", file.path), text: String::new(), bytes: Some(file.bytes.clone().into()) });
-        }
-        files.push(text(&format!("parts/{n}/{n}.g.cs"), parts::generated_half(project, part)));
+    // The windows and the app frames as markup, which Clarity.UI draws (DESIGN 7.8, 7.9).
+    for file in crate::web_windows::window_files(project).into_iter().chain(crate::web_windows::app_files(project)) {
+        let path = file.path.replace("ui/windows/", "Windows/").replace("ui/apps/", "Apps/");
+        files.push(OutFile { path, ..file });
     }
-    files.push(text("App.axaml.cs", app_cs(project, &name, &main_window, &crate::settings_program(settings))));
-    // The keys window's commands (DESIGN 5.28), where the person sets the keys.
-    if project.keys_editable {
-        files.push(text("KeysCatalog.cs", keys_catalog(project, &name)));
-    }
-    files.push(text("Views.cs", views_cs(project, &name)));
-    files.push(text("Shown.cs", shown_cs(project, &name)));
+    files.push(text("Labels.cs", labels_cs(project, &name)));
     if !clarity_spec::icons::used(project).is_empty() {
         files.push(text("Icons.cs", icons_cs(project, &name)));
     }
@@ -197,27 +179,9 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     for (language, values) in project.translations.iter().filter(|(l, _)| **l != default) {
         files.push(text(&format!("Texts.{language}.resx"), texts.language_resx(values)));
     }
-    // The themes offered, each merged with Clarity's own; without any, Clarity's own.
-    let built_in = clarity_spec::themes::built_in();
-    let mut offered: Vec<&ThemeDecl> =
-        project.themes.iter().filter_map(|n| project.files.iter().flat_map(|f| &f.themes).find(|t| t.name.name == *n)).collect();
-    if offered.is_empty() {
-        offered.push(&built_in);
-    }
-    let styles = themes::style_properties(&offered);
-    for theme in &offered {
-        let class = format!("{name}.{}", themes::theme_class(theme));
-        files.push(text(&themes::theme_path(theme), themes::theme_axaml(theme, &styles, Some(&class))));
-        files.push(text(&format!("{}.cs", themes::theme_path(theme)), themes::theme_code(theme, &name)));
-    }
-    files.push(text("AppThemes.cs", themes::app_themes(&offered, &name)));
+    // The themes offered, as Clarity resolves them for light and dark mode (DESIGN 7.9).
+    files.extend(themes::theme_files(project, &name));
     files.extend(crate::web::resource_files(project, "resources"));
-    // The template travels in the program as it was checked out, so its
-    // lines end as that checkout's do; the project's own styles take the
-    // place of a line, and every generated file ends its lines with one
-    // newline, whoever generated it.
-    let template = APP_AXAML.replace("\r\n", "\n");
-    files.push(text("App.axaml", template.replace("{namespace}", &name).replace("    <!-- {styles} -->\n", &themes::style_classes(&styles))));
     Ok(files)
 }
 
@@ -238,8 +202,8 @@ fn main_window(project: &Project) -> Option<String> {
         .or_else(|| project.pages().next().map(|p| p.name.name.clone()))
 }
 
-/// The project file. It references the runtime's packages: `ui` (Clarity.Avalonia.Desktop,
-/// or Clarity.Avalonia for the web) and the driver of each kind of database the data sources are. With the
+/// The project file. It references the runtime's packages: `ui` (Clarity.Ui.Desktop)
+/// and the driver of each kind of database the data sources are. With the
 /// property `ClarityRuntime` (or the environment variable CLARITY_RUNTIME) set
 /// to the runtime's folder (runtimes/csharp in Clarity's repository), it
 /// references the runtime's own projects there instead, for working on them.
@@ -250,12 +214,12 @@ fn csproj(name: &str, ui: &str, drivers: &[&Driver], carried: bool, engines: boo
     let references: String = packages.iter().map(|p| format!("    <PackageReference Include=\"{p}\" Version=\"{version}\" />\n")).collect();
     let projects: String = packages.iter().map(|p| format!("    <ProjectReference Include=\"$(ClarityRuntime)/{p}/{p}.csproj\" />\n")).collect();
     // The files of the project's resources folder, embedded.
-    let mut resources = if carried { "  <ItemGroup>\n    <AvaloniaResource Include=\"resources/**\" />\n  </ItemGroup>\n".to_string() } else { String::new() };
+    let mut resources = if carried { "  <ItemGroup>\n    <EmbeddedResource Include=\"resources/**\" LogicalName=\"resources/%(RecursiveDir)%(Filename)%(Extension)\" />\n  </ItemGroup>\n".to_string() } else { String::new() };
     // The engines' files, embedded under their names.
     if engines {
         resources.push_str("  <ItemGroup>\n    <EmbeddedResource Include=\"Engines/*.wasm\" LogicalName=\"Engines/%(Filename)%(Extension)\" />\n  </ItemGroup>\n");
     }
-    // The packages and assemblies of the .NET parts.
+    // The libraries' packages and assemblies.
     resources.push_str(&dotnet);
     format!(
         "<!-- Generated by Clarity. Do not edit: change the project in Clarity instead. -->
@@ -267,15 +231,16 @@ fn csproj(name: &str, ui: &str, drivers: &[&Driver], carried: bool, engines: boo
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>{name}</RootNamespace>
     <AssemblyName>{name}</AssemblyName>
-    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <!-- Where Clarity's runtime projects are, to build on them instead of its
          packages: dotnet build -p:ClarityRuntime=<folder>, or the environment
          variable CLARITY_RUNTIME. Empty: the packages. -->
     <ClarityRuntime Condition=\"'$(ClarityRuntime)' == ''\">$(CLARITY_RUNTIME)</ClarityRuntime>
   </PropertyGroup>
   <ItemGroup>
-    <!-- The window model every window's view model builds on (DESIGN 7.9). -->
-    <Using Include=\"Clarity.Ui\" />
+    <!-- The windows and app frames as markup, and the themes, which Clarity.UI draws (DESIGN 7.9). -->
+    <EmbeddedResource Include=\"Windows/*.cxaml\" LogicalName=\"Windows/%(Filename)%(Extension)\" />
+    <EmbeddedResource Include=\"Apps/*.cxaml\" LogicalName=\"Apps/%(Filename)%(Extension)\" />
+    <EmbeddedResource Include=\"Themes/*.json\" LogicalName=\"Themes/%(Filename)%(Extension)\" />
   </ItemGroup>
   <ItemGroup Condition=\"'$(ClarityRuntime)' == ''\">
 {references}  </ItemGroup>
@@ -452,11 +417,18 @@ fn opening(project: &Project, databases: &[(String, Sql, String)], drivers: &[&D
 fn program_cs(project: &Project, name: &str, databases: &[(String, Sql, String)], drivers: &[&Driver], settings: &Settings, engines: bool) -> String {
     let check_engines = check_engines(engines);
     let opening = opening(project, databases, drivers, settings, "OpenDatabases");
+    let main_window = main_window(project).unwrap_or_default();
+    // Engines ask for the language the person picked.
+    let engines_language = if engines { "        Clarity.Runtime.Engine.Language = () => Locale.Language?.Name;\n" } else { "" };
+    let currency = project.locale.currency.as_deref().map_or_else(|| "null".to_string(), string);
+    // The person's settings, after the language and theme they may name (DESIGN 5.17).
+    let settings_start = if project.entities().any(|e| e.settings) { "        Settings.Start();\n" } else { "" };
+    // The person's keys (DESIGN 5.28).
+    let keys_start = if project.keys_editable { format!("        PersonKeys.Start({});\n", string(&crate::settings_program(settings))) } else { String::new() };
     format!(
         "{HEADER}
-using Avalonia;
-using Clarity.Avalonia;
 using Clarity.Runtime;
+using Clarity.Ui.Desktop;
 
 namespace {name};
 
@@ -473,107 +445,29 @@ public static class Program
             Console.WriteLine({ready});
             return 0;
         }}
-        return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        // The language and theme kept from the last run, or the system's.
+        Remembered.Use({application});
+        Locale.Start(Texts.BaseLanguage, Texts.Languages, {currency}, Texts.In, Labels.Named);
+{engines_language}        AppThemes.Start();
+{settings_start}{keys_start}        Db opened;
+        try
+        {{
+            opened = OpenDatabases();
+        }}
+        catch (Exception e)
+        {{
+            // The databases did not open (DESIGN 5.27): Clarity.UI's window for it comes with G7d.
+            Console.Error.WriteLine(Locale.Show(Unconnecting.Why(e)));
+            return 1;
+        }}
+        using var databases = opened;
+        DesktopWindow.Run(new {main_window}ViewModel(databases));
+        return 0;
     }}
-
-    public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>().UseClarityDesktop().LogToTrace();
 }}
 ",
+        application = string(name),
         ready = string(&format!("{name}: the databases are ready."))
-    )
-}
-
-/// The application: it starts in the language and theme kept from the last
-/// run (or the system's), opens the databases and shows the main window.
-/// The commands the keys window lists, by place (DESIGN 5.28).
-fn keys_catalog(project: &Project, name: &str) -> String {
-    let text = |written: &Option<String>, name: &str| match written.as_deref() {
-        Some(t) => match t.strip_prefix('@') {
-            Some(key) => format!("Text.Of({})", string(key)),
-            None => format!("Text.Plain({})", string(t)),
-        },
-        None => format!("Text.Plain({})", string(name)),
-    };
-    let layers: Vec<String> = clarity_spec::shortcuts::catalog(project)
-        .iter()
-        .map(|layer| {
-            let commands: Vec<String> = layer
-                .commands
-                .iter()
-                .map(|c| {
-                    let keys: Vec<String> = c.keys.iter().map(|k| string(k)).collect();
-                    format!("new KeyCommandInfo({}, {}, [{}])", string(&c.id), text(&c.caption, &c.name), keys.join(", "))
-                })
-                .collect();
-            let title = if layer.id.is_empty() { "null".to_string() } else { text(&layer.title, &layer.id) };
-            format!("        new KeyLayerInfo({}, {title}, [{}]),\n", string(&layer.id), commands.join(", "))
-        })
-        .collect();
-    format!(
-        "{HEADER}\nusing Clarity.Avalonia;\nusing Clarity.Runtime;\n\nnamespace {name};\n\n/// <summary>The commands a person gives keys in the keys window, by place (DESIGN 5.28).</summary>\npublic static class KeysCatalog\n{{\n    public static readonly KeyLayerInfo[] Layers =\n    [\n{}    ];\n}}\n",
-        layers.concat()
-    )
-}
-
-fn app_cs(project: &Project, name: &str, main_window: &str, program: &str) -> String {
-    // Engines ask for the language the person picked.
-    let engines_language = if !crate::engines(project).is_empty() {
-        "            Clarity.Runtime.Engine.Language = () => Locale.Language?.Name;\n"
-    } else {
-        ""
-    };
-    let currency = project.locale.currency.as_deref().map_or_else(|| "null".to_string(), string);
-    let application = string(name);
-    // The person's settings, after the language and theme they may name (DESIGN 5.17).
-    let settings_start = if project.entities().any(|e| e.settings) { "            Settings.Start();\n" } else { "" };
-    // The person's keys and the keys window's commands (DESIGN 5.28).
-    let keys_start = if project.keys_editable {
-        format!("            PersonKeys.Start({});\n            KeysWindow.Catalog = KeysCatalog.Layers;\n", string(program))
-    } else {
-        String::new()
-    };
-    let runtime_using = if crate::unconnected(project).is_some() { "using Clarity.Runtime;\n" } else { "" };
-    let start_main = match crate::unconnected(project) {
-        None => format!("            var db = Program.OpenDatabases();\n            desktop.Exit += (_, _) => db.Dispose();\n            desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;\n            desktop.MainWindow = Shell.Start(new {main_window}ViewModel(db), Views.Create, TimeSpan.FromMilliseconds({MESSAGE_MS}));\n"),
-        Some(unconnected) => {
-            let window = unconnected.window.map(|w| format!("                    Window = db => new {w}ViewModel(db),\n")).unwrap_or_default();
-            let handler = if unconnected.handler.is_some() {
-                format!("                    Handler = (db, unconnecting) => new {}ViewModel(db).Unconnected(unconnecting),\n", unconnected_host(project).name.name)
-            } else {
-                String::new()
-            };
-            let settings = if project.entities().any(|e| e.settings) { "                    Settings = Settings.Current,\n" } else { "" };
-            format!(
-                "            Db? db = null;\n            Clarity.Runtime.Text? problem = null;\n            try\n            {{\n                db = Program.OpenDatabases();\n            }}\n            catch (Exception e)\n            {{\n                problem = Unconnected.Reason(e);\n            }}\n            if (db is not null)\n            {{\n                desktop.Exit += (_, _) => db.Dispose();\n                desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;\n                desktop.MainWindow = Shell.Start(new {main_window}ViewModel(db), Views.Create, TimeSpan.FromMilliseconds({MESSAGE_MS}));\n            }}\n            else\n            {{\n                // The databases did not open (DESIGN 5.27): what keeps the connection shows first.\n                desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;\n                new Unconnected\n                {{\n                    Connect = Program.OpenDatabases,\n                    Main = open => new {main_window}ViewModel(open),\n{window}{handler}                    View = Views.Create,\n                    InfoDuration = TimeSpan.FromMilliseconds({MESSAGE_MS}),\n{settings}                    Shown = shell => desktop.MainWindow = shell,\n                    Connected = open =>\n                    {{\n                        desktop.Exit += (_, _) => open.Dispose();\n                        desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;\n                    }},\n                    Ended = () => desktop.Shutdown(),\n                }}.Start(problem!);\n            }}\n"
-            )
-        }
-    };
-    format!(
-        "{HEADER}
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Markup.Xaml;
-using Clarity.Avalonia;
-{runtime_using}
-namespace {name};
-
-public partial class App : Application
-{{
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
-
-    public override void OnFrameworkInitializationCompleted()
-    {{
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-        {{
-            Remembered.Use({application});
-            Locale.Start(Texts.BaseLanguage, Texts.Languages, {currency}, Texts.In, Labels.Named);
-{engines_language}            Themes.Start(AppThemes.Offered);
-{settings_start}{keys_start}{start_main}        }}
-        base.OnFrameworkInitializationCompleted();
-    }}
-}}
-"
     )
 }
 
@@ -598,85 +492,17 @@ fn unconnected_host(project: &Project) -> clarity_spec::model::Page {
     }
 }
 
-/// The view of each window's ViewModel, for the shell.
-fn views_cs(project: &Project, name: &str) -> String {
-    let arms: String = project
-        .pages()
-        .map(|p| format!("        {page}ViewModel vm => new {page}View {{ DataContext = vm }},\n", page = p.name.name))
-        .collect();
-    format!(
-        "{HEADER}
-using Avalonia.Controls;
-using Clarity.Avalonia;
-
-namespace {name};
-
-public static class Views
-{{
-    /// <summary>The view that shows <paramref name=\"model\"/>.</summary>
-    public static Control Create(WindowViewModel model) => model switch
-    {{
-{arms}        _ => throw new ArgumentException($\"no view shows {{model.GetType().Name}}\"),
-    }};
-}}
-"
-    )
-}
-
-/// How values show in text and tables: enums by their labels, values of
-/// fields with a format in the person's format (a converter per field), and
-/// how number inputs read what is typed.
-fn shown_cs(project: &Project, name: &str) -> String {
-    let enums: Vec<&str> = project.files.iter().flat_map(|f| &f.enums).map(|e| e.name.name.as_str()).collect();
-    let arms: String = enums.iter().map(|e| format!("        {e} v => Labels.Of(v),\n")).collect();
-    let named: String = enums
+/// The labels of enum values by the enum's name, for text with slots.
+fn labels_cs(project: &Project, name: &str) -> String {
+    let named: String = project
+        .files
         .iter()
-        .map(|e| format!("        {lit} => Enum.TryParse<{e}>(value, out var v) ? Of(v) : value,\n", lit = string(e)))
+        .flat_map(|f| &f.enums)
+        .map(|e| format!("        {lit} => Enum.TryParse<{e}>(value, out var v) ? Of(v) : value,\n", lit = string(&e.name.name), e = e.name.name))
         .collect();
-    let mut shown = String::new();
-    let mut edit = String::new();
-    for entity in project.files.iter().flat_map(|f| &f.entities) {
-        for field in &entity.fields {
-            let Some(format) = field_format(field) else { continue };
-            let member = format!("{}{}", entity.name.name, pascal(&field.name.name));
-            shown.push_str(&format!("\n    /// <summary>{}.{}</summary>\n    public static readonly FormatConverter {member} = new({format});\n", entity.name.name, field.name.name));
-            if matches!(field.ty, FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money | FieldType::Duration) {
-                edit.push_str(&format!("\n    /// <summary>{}.{}</summary>\n    public static readonly FieldFormat {member} = {format};\n", entity.name.name, field.name.name));
-            }
-        }
-    }
     format!(
         "{HEADER}
-using Avalonia.Data.Converters;
-using Clarity.Avalonia;
-using Clarity.Runtime;
-
 namespace {name};
-
-/// <summary>Values as text in the person's language and format.</summary>
-public static class Shown
-{{
-    /// <summary>A value as text: an enum by its label, the rest as the runtime shows it.</summary>
-    public static readonly ShownConverter Converter = new(value => value switch
-    {{
-{arms}        _ => null,
-    }});
-
-    /// <summary>A link's address (conformance/small-parts.json): an email address to write to, one with a scheme as it is, else none.</summary>
-    public static readonly IValueConverter Address = new FuncValueConverter<string?, Uri?>(value =>
-    {{
-        var text = value?.Trim() ?? \"\";
-        if (text.Length == 0)
-            return null;
-        var address = text.Contains('@') && !text.Contains(':') ? $\"mailto:{{text}}\" : text;
-        return Uri.TryCreate(address, UriKind.Absolute, out var uri) ? uri : null;
-    }});
-
-{shown}}}
-
-/// <summary>How number inputs show their value and read what is typed: the field's kind and format.</summary>
-public static class Edit
-{{{edit}}}
 
 public static partial class Labels
 {{
@@ -690,9 +516,22 @@ public static partial class Labels
     )
 }
 
+/// The icons the application shows, from Clarity's Lucide set (ISC license):
+/// a geometry each in a 24 by 24 box, which a part draws with a round line.
+fn icons_cs(project: &Project, namespace: &str) -> String {
+    let mut out = format!(
+        "// Generated by Clarity. Do not edit: change the project in Clarity instead.\n// The icons are Lucide's (https://lucide.dev), under the ISC license.\n\nnamespace {namespace};\n\n/// <summary>The icons the application shows: an SVG path each in a 24 by 24 box.</summary>\npublic static class Icons\n{{\n"
+    );
+    for (name, path) in clarity_spec::icons::used(project) {
+        out.push_str(&format!("    public const string {} = \"{path}\";\n", windows::icon_member(&name)));
+    }
+    out.push_str("}\n");
+    out
+}
+
 /// How a field's values are formatted, as the runtime's `FieldFormat`, for
 /// the types that have formats.
-fn field_format(field: &clarity_spec::model::Field) -> Option<String> {
+pub(super) fn field_format(field: &clarity_spec::model::Field) -> Option<String> {
     let format = field.modifiers.format.as_deref().map(string);
     let (kind, scale) = match &field.ty {
         FieldType::Integer => ("Integer", None),
@@ -711,17 +550,4 @@ fn field_format(field: &clarity_spec::model::Field) -> Option<String> {
         (None, None) => {}
     }
     Some(format!("new FieldFormat({})", args.join(", ")))
-}
-
-/// The icons the application shows, from Clarity's Lucide set (ISC license):
-/// a geometry each in a 24 by 24 box, which a part draws with a round line.
-fn icons_cs(project: &Project, namespace: &str) -> String {
-    let mut out = format!(
-        "// Generated by Clarity. Do not edit: change the project in Clarity instead.\n// The icons are Lucide's (https://lucide.dev), under the ISC license.\n\nusing Avalonia.Media;\n\nnamespace {namespace};\n\n/// <summary>The icons the application shows: a path each in a 24 by 24 box.</summary>\npublic static class Icons\n{{\n"
-    );
-    for (name, path) in clarity_spec::icons::used(project) {
-        out.push_str(&format!("    public static Geometry {} {{ get; }} = Geometry.Parse(\"{path}\");\n", windows::icon_member(&name)));
-    }
-    out.push_str("}\n");
-    out
 }

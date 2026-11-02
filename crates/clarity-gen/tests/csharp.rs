@@ -68,7 +68,7 @@ page OrderForm: window
 fn settings() -> Settings {
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = Backend::Csharp;
-    settings.stack.ui = Ui::Avalonia;
+    settings.stack.ui = Ui::Clarity;
     settings
 }
 
@@ -101,30 +101,24 @@ fn writes_a_complete_dotnet_project_on_the_runtime_packages() {
     assert_eq!(
         paths,
         [
-            "App.axaml",
-            "App.axaml.cs",
             "AppThemes.cs",
+            "Labels.cs",
             "Modules/Sales.cs",
             "Program.cs",
             "README.md",
             "Schema.cs",
             "Shop.csproj",
-            "Shown.cs",
             "Texts.cs",
             "Texts.resx",
-            "Themes/Clarity.axaml",
-            "Themes/Clarity.axaml.cs",
-            "Views.cs",
-            "Windows/OrderFormView.axaml",
-            "Windows/OrderFormView.axaml.cs",
+            "Windows/OrderForm.cxaml",
             "Windows/OrderFormViewModel.cs",
         ]
     );
     let project = file(&files, "Shop.csproj");
     has(project, "<TargetFramework>net10.0</TargetFramework>");
     has(project, "<RootNamespace>Shop</RootNamespace>");
-    // Clarity.Avalonia.Desktop brings Clarity.Avalonia, Clarity.Runtime and the packages they stand on.
-    has(project, &format!("<PackageReference Include=\"Clarity.Avalonia.Desktop\" Version=\"{}\" />", runtime_version()));
+    // Clarity.Ui.Desktop brings Clarity.Ui, Clarity.Runtime and the packages they stand on.
+    has(project, &format!("<PackageReference Include=\"Clarity.Ui.Desktop\" Version=\"{}\" />", runtime_version()));
     assert!(!project.contains("Include=\"Clarity.Runtime\"") && !project.contains("Microsoft.Data.Sqlite"), "{project}");
 }
 
@@ -139,11 +133,11 @@ fn the_local_runtime_projects_can_stand_in_for_the_packages() {
         &project,
         &format!(
             "  <ItemGroup Condition=\"'$(ClarityRuntime)' == ''\">
-    <PackageReference Include=\"Clarity.Avalonia.Desktop\" Version=\"{v}\" />
+    <PackageReference Include=\"Clarity.Ui.Desktop\" Version=\"{v}\" />
     <PackageReference Include=\"Clarity.Runtime.Sqlite\" Version=\"{v}\" />
   </ItemGroup>
   <ItemGroup Condition=\"'$(ClarityRuntime)' != ''\">
-    <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Avalonia.Desktop/Clarity.Avalonia.Desktop.csproj\" />
+    <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Ui.Desktop/Clarity.Ui.Desktop.csproj\" />
     <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Runtime.Sqlite/Clarity.Runtime.Sqlite.csproj\" />
   </ItemGroup>",
             v = runtime_version()
@@ -278,11 +272,11 @@ fn the_program_opens_and_migrates_every_database() {
 }
 
 #[test]
-fn csharp_needs_avalonia_or_the_web_renderer() {
+fn csharp_draws_with_clarity_ui_only() {
     let project = clarity_spec::keyed::load_keyed([("sales.clarity", SALES)], &[], "en");
     let mut settings = settings();
-    settings.stack.ui = Ui::Web;
-    assert_eq!(generate(&project, &settings).unwrap_err(), ["C# with the web renderer is not generated yet; C# uses Avalonia"]);
+    settings.stack.ui = Ui::Webview;
+    assert_eq!(generate(&project, &settings).unwrap_err(), ["C# draws with Clarity.UI only"]);
 }
 
 /// A project references the package of each kind of database its data
@@ -410,12 +404,6 @@ fn a_duration_is_seconds_shown_as_minutes_and_seconds() {
     has(music, "public long Length");
     has(music, "long _length = 180L;");
     has(music, ".With(\"length\", Slot.OfDuration(track.Length))");
-    let shown = file(&files, "Shown.cs");
-    has(shown, "public static readonly FormatConverter TrackLength = new(new FieldFormat(FormatKind.Duration));");
-    has(shown, "public static readonly FieldFormat TrackLength = new FieldFormat(FormatKind.Duration);");
-    let view = file(&files, "Windows/TracksView.axaml");
-    has(view, "Format=\"{x:Static local:Edit.TrackLength}\" Value=\"{Binding Track.Length}\"");
-    has(view, "Text=\"{Binding Track.Length, Converter={x:Static local:Shown.TrackLength}}\"");
 }
 
 /// X2: a query through a reference: the condition and the order read the

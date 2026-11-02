@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Clarity's tags input on the web, the same as on Avalonia
+  // Clarity's tags input on the web, the same on every stack
   // (conformance/list-fields.json): a list field's items as chips, each with
   // a button that removes it, and a place to add one: a box to type text or
   // a number in (taken on Enter or when the box is left), a date to pick,

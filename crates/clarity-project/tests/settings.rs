@@ -7,7 +7,7 @@ use clarity_project::{
 
 const SHOP: &str = r#"// The shop example.
 project Shop
-    stack csharp avalonia desktop   // C# with Avalonia
+    stack csharp desktop   // C# with Clarity.UI
     language "nl-NL"
     currency EUR
     datasource main postgres "env:SHOP_DB_URL"
@@ -38,7 +38,7 @@ fn shop() -> Settings {
         title: None,
         stack: Stack {
             backend: Backend::Csharp,
-            ui: Ui::Avalonia,
+            ui: Ui::Clarity,
             targets: vec![Target::Desktop],
         },
         datasources: vec![
@@ -104,7 +104,7 @@ fn reads_a_project_file() {
 /// stack's build tools make; they are read, written back and checked.
 #[test]
 fn the_output_keeps_the_folders_the_project_names() {
-    let text = SHOP.replace("    stack csharp avalonia desktop", "    stack csharp avalonia desktop\n    output keeps \"vendor\", \"notes\"");
+    let text = SHOP.replace("    stack csharp desktop", "    stack csharp desktop\n    output keeps \"vendor\", \"notes\"");
     let settings = parse(&text).unwrap();
     assert_eq!(settings.keeps, ["vendor", "notes"]);
     assert!(validate(&settings).is_empty(), "{:?}", validate(&settings));
@@ -117,16 +117,16 @@ fn the_output_keeps_the_folders_the_project_names() {
     assert!(plain.keeps.is_empty());
     assert!(!write(Some(SHOP), &plain).unwrap().contains("output keeps"));
     // A path is not the name of a folder in the output.
-    let bad = SHOP.replace("    stack csharp avalonia desktop", "    stack csharp avalonia desktop\n    output keeps \"a/b\"");
+    let bad = SHOP.replace("    stack csharp desktop", "    stack csharp desktop\n    output keeps \"a/b\"");
     assert!(parse(&bad).unwrap_err().contains("is a path"), "{}", parse(&bad).unwrap_err());
 }
 
 #[test]
 fn reads_a_title_and_several_targets() {
-    let text = SHOP.replace("    stack csharp avalonia desktop", "    title \"The shop\"\n    stack csharp web desktop web");
+    let text = SHOP.replace("    stack csharp desktop", "    title \"The shop\"\n    stack csharp desktop web");
     let settings = parse(&text).unwrap();
     assert_eq!(settings.title.as_deref(), Some("The shop"));
-    assert_eq!(settings.stack.ui, Ui::Web);
+    assert_eq!(settings.stack.ui, Ui::Clarity);
     assert_eq!(settings.stack.targets, [Target::Desktop, Target::Web]);
     assert_eq!(title(&settings), "The shop");
     assert_eq!(title(&shop()), "Shop");
@@ -147,17 +147,17 @@ fn refuses_unknown_settings_and_a_wrong_shape() {
     assert_eq!(parse("module shop\n").unwrap_err(), "line 1: a project file starts with 'project Name'");
     assert_eq!(
         parse("project Shop\n    datasource main sqlite \"x.db\"\n").unwrap_err(),
-        "the project needs a 'stack' line, like: stack rust web desktop"
+        "the project needs a 'stack' line, like: stack rust webview desktop"
     );
     assert_eq!(
-        parse(&SHOP.replace("    datasource main", "    stack rust web desktop\n    datasource main")).unwrap_err(),
+        parse(&SHOP.replace("    datasource main", "    stack rust webview desktop\n    datasource main")).unwrap_err(),
         "line 6: 'stack' is set twice"
     );
     assert_eq!(
         parse(&SHOP.replace("        auth bearer", "    auth bearer")).unwrap_err(),
         "line 10: 'auth' belongs under a datasource line, indented"
     );
-    assert!(parse("project Shop\n    stack rust web\n").unwrap_err().contains("at least one target"));
+    assert!(parse("project Shop\n    stack rust webview\n").unwrap_err().contains("at least one target"));
 }
 
 #[test]
@@ -175,7 +175,20 @@ fn problems_of(change: impl FnOnce(&mut Settings)) -> Vec<String> {
 #[test]
 fn a_native_toolkit_needs_its_backend() {
     let problems = problems_of(|s| s.stack.backend = Backend::Rust);
-    assert_eq!(problems, ["Avalonia is a UI for the C# backend, not for Rust"]);
+    assert_eq!(problems, ["Clarity.UI is a UI for the C# backend, not for Rust"]);
+}
+
+// Clarity.UI is never named in the stack line: after the language come the targets.
+#[test]
+fn clarity_ui_is_not_named_in_the_stack_line() {
+    let settings = parse(&SHOP.replace("    stack csharp desktop", "    stack csharp web desktop")).unwrap();
+    assert_eq!((settings.stack.ui, settings.stack.targets.clone()), (Ui::Clarity, vec![Target::Web, Target::Desktop]));
+    // A UI word is no target: C# draws with Clarity.UI only.
+    let named = parse(&SHOP.replace("    stack csharp desktop", "    stack csharp wpf desktop")).unwrap_err();
+    assert!(named.contains("wpf"), "{named}");
+    // The other languages still name the shared web screen.
+    let go = parse(&SHOP.replace("    stack csharp desktop", "    stack go webview desktop")).unwrap();
+    assert_eq!((go.stack.ui, go.stack.targets), (Ui::Webview, vec![Target::Desktop]));
 }
 
 #[test]
@@ -252,7 +265,7 @@ fn writes_a_new_project_file() {
     assert_eq!(
         text,
         "project MyShop
-    stack rust web desktop
+    stack rust webview desktop
     output \"out\"
     datasource main sqlite \"data/my_shop.db\"
 "
@@ -269,7 +282,7 @@ fn writing_keeps_comments_and_untouched_lines() {
     changed.title = Some("The \"best\" shop".into());
     let text = write(Some(SHOP), &changed).unwrap();
     assert!(text.starts_with("// The shop example.\nproject Shop\n    title \"The \\\"best\\\" shop\"\n"), "{text}");
-    assert!(text.contains("    stack csharp avalonia desktop web\n"), "{text}");
+    assert!(text.contains("    stack csharp desktop web\n"), "{text}");
     assert!(text.contains("    // The payment provider.\n    datasource payments rest"), "{text}");
     assert!(text.contains("    datasource main postgres \"env:SHOP_DATABASE\"\n"), "{text}");
     assert_eq!(parse(&text).unwrap(), changed);
@@ -356,9 +369,10 @@ fn loads_a_project_file() {
 fn the_catalog_offers_every_backend_and_a_ui_for_each() {
     let catalog = catalog();
     assert_eq!(catalog.backends.len(), 5);
-    assert!(catalog.backends.iter().all(|b| b.uis.contains(&Ui::Web)));
+    assert!(catalog.backends.iter().all(|b| b.uis.len() == 1));
     let csharp = catalog.backends.iter().find(|b| b.id == Backend::Csharp).unwrap();
-    assert_eq!(csharp.uis, [Ui::Web, Ui::Avalonia]);
+    assert_eq!(csharp.uis, [Ui::Clarity]);
+    assert!(catalog.backends.iter().filter(|b| b.id != Backend::Csharp).all(|b| b.uis == [Ui::Webview]));
     assert_eq!(catalog.sources.len(), 5);
 }
 
@@ -394,7 +408,7 @@ fn the_language_reference_project_files_are_valid() {
 
 #[test]
 fn a_data_source_can_be_external_and_read_only() {
-    let text = "project Shop\n    stack rust web desktop\n    datasource main sqlite \"data/shop.db\"\n    datasource erp sqlite \"legacy/erp.db\" external readonly\n";
+    let text = "project Shop\n    stack rust webview desktop\n    datasource main sqlite \"data/shop.db\"\n    datasource erp sqlite \"legacy/erp.db\" external readonly\n";
     let settings = parse(text).unwrap();
     let erp = &settings.datasources[1];
     assert!(erp.external && erp.readonly);
@@ -452,7 +466,7 @@ fn loading_hands_the_language_and_currency_to_the_project() {
     let root = std::env::temp_dir().join(format!("clarity-locale-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("shop")).unwrap();
-    std::fs::write(root.join("shop.clarity"), "project Shop\n    stack rust web desktop\n    language \"nl-NL\"\n    currency EUR\n").unwrap();
+    std::fs::write(root.join("shop.clarity"), "project Shop\n    stack rust webview desktop\n    language \"nl-NL\"\n    currency EUR\n").unwrap();
     std::fs::write(root.join("shop/shop.clarity"), "module shop\n").unwrap();
     let project = clarity_project::load_modules(&root.join("shop")).unwrap();
     assert_eq!(project.locale.language.as_deref(), Some("nl-NL"));
@@ -477,7 +491,7 @@ fn loading_hands_the_theme_to_the_project() {
     let root = std::env::temp_dir().join(format!("clarity-theme-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("shop")).unwrap();
-    std::fs::write(root.join("shop.clarity"), "project Shop\n    stack rust web desktop\n    theme Plain\n").unwrap();
+    std::fs::write(root.join("shop.clarity"), "project Shop\n    stack rust webview desktop\n    theme Plain\n").unwrap();
     std::fs::write(root.join("shop/shop.clarity"), "module shop\n\ntheme Plain\n    radius 2\n").unwrap();
     let project = clarity_project::load_modules(&root.join("shop")).unwrap();
     std::fs::remove_dir_all(&root).unwrap();
@@ -546,9 +560,9 @@ fn a_command_line_program_needs_no_ui() {
 
 #[test]
 fn a_command_line_program_beside_the_desktop_one() {
-    let text = SHOP.replace("stack csharp avalonia desktop", "stack csharp avalonia desktop cli");
+    let text = SHOP.replace("stack csharp desktop", "stack csharp desktop cli");
     let settings = parse(&text).unwrap();
-    assert_eq!(settings.stack.ui, Ui::Avalonia);
+    assert_eq!(settings.stack.ui, Ui::Clarity);
     assert_eq!(settings.stack.targets, [Target::Desktop, Target::Cli]);
     assert!(settings.stack.has_ui());
     assert_eq!(write(Some(&text), &settings).unwrap(), text);
@@ -558,7 +572,7 @@ fn a_command_line_program_beside_the_desktop_one() {
 fn a_window_needs_its_ui_named() {
     assert_eq!(
         parse("project Shop\n    stack go cli desktop\n").unwrap_err(),
-        "line 2: a program with a window names its UI before the targets, like: stack go web desktop cli"
+        "line 2: a program with a window names its UI before the targets, like: stack go webview desktop cli"
     );
     assert!(catalog().targets.iter().any(|t| t.id == Target::Cli && t.label == "Command line"));
 }
@@ -574,7 +588,7 @@ fn each_target_has_its_own_output_folder() {
 /// which the system's protected store keeps.
 #[test]
 fn a_web_api_signs_with_a_secret_setting() {
-    let text = "project Shop\n    stack go web desktop\n    datasource shop rest \"https://shop.example.com/api\"\n        auth bearer \"setting:shopToken\"\n";
+    let text = "project Shop\n    stack go webview desktop\n    datasource shop rest \"https://shop.example.com/api\"\n        auth bearer \"setting:shopToken\"\n";
     let settings = parse(text).unwrap();
     assert_eq!(validate(&settings), Vec::<String>::new());
     let bare = text.replace("\"setting:shopToken\"", "\"setting:\"");
@@ -676,7 +690,7 @@ fn the_project_says_which_port_it_serves_on() {
 #[test]
 fn a_web_api_says_how_it_pages() {
     use clarity_project::{Paging, PagingKind};
-    let file = |paging: &str| format!("project Forms\n    stack go web desktop\n    datasource forms rest \"https://forms.example.com/api\"\n        {paging}\n");
+    let file = |paging: &str| format!("project Forms\n    stack go webview desktop\n    datasource forms rest \"https://forms.example.com/api\"\n        {paging}\n");
     let cases = [
         ("paging page \"page\" size \"per_page\" 100 items \"data\"", Paging { kind: PagingKind::Page, param: "page".into(), size_param: "per_page".into(), size: 100, next: String::new(), items: "data".into() }),
         ("paging offset \"offset\" size \"limit\" 50", Paging { kind: PagingKind::Offset, param: "offset".into(), size_param: "limit".into(), size: 50, next: String::new(), items: String::new() }),
@@ -702,11 +716,11 @@ fn a_web_api_says_how_it_pages() {
         assert_eq!(parse(&file(line)).unwrap_err(), problem, "{line}");
     }
     // Written under the auth line, before the description and its picks.
-    let text = "project Forms\n    stack go web desktop\n    datasource forms rest \"https://forms.example.com/api\"\n        auth bearer \"env:FORMS_TOKEN\"\n        paging link\n        openapi \"forms.yaml\"\n        pick \"listForms\"\n";
+    let text = "project Forms\n    stack go webview desktop\n    datasource forms rest \"https://forms.example.com/api\"\n        auth bearer \"env:FORMS_TOKEN\"\n        paging link\n        openapi \"forms.yaml\"\n        pick \"listForms\"\n";
     let settings = parse(text).unwrap();
     assert_eq!(write(None, &settings).unwrap(), text.replace("desktop\n", "desktop\n    output \"out\"\n"));
     // Only a web API pages.
-    let settings = parse("project Shop\n    stack go web desktop\n    datasource main sqlite \"data/shop.db\"\n        paging link\n").unwrap();
+    let settings = parse("project Shop\n    stack go webview desktop\n    datasource main sqlite \"data/shop.db\"\n        paging link\n").unwrap();
     assert_eq!(validate(&settings), ["data source 'main': only a web API pages"]);
     // Settings the IDE's form saves are checked as the file's lines are, so a file it writes always reads back.
     let paged = |paging: Paging| {

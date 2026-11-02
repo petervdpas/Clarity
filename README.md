@@ -16,7 +16,7 @@ crates/clarity-gen/      the transpiler: a project as a Rust, C#, Go, C or C++ a
 crates/clarity-cli/      the `clarity` command
 runtimes/rust/           the runtime of generated Rust applications (the clarity-runtime crate)
 runtimes/rust-engine/    what an engine written in Rust stands on (the clarity-engine crate): the engine interface, typed functions, services
-runtimes/csharp/         the runtime of generated C# applications, with Avalonia
+runtimes/csharp/         the runtime of generated C# applications, with Clarity.UI
 runtimes/go/             the runtime of generated Go applications, with Wails
 runtimes/c/              the runtime of generated C applications, with webview and cJSON
 runtimes/cpp/            the runtime of generated C++ applications, with webview
@@ -39,11 +39,11 @@ examples/                example projects, each a project file with a folder of 
   waves                  water whose waves meet, drawn by a Go package into a buffer of pixels (a custom part in Go)
   pills                  a game like Arkanoid, breaking a wall of pills: its engine beside the screen, written in Clarity and run by its interpreter, in Go
   invaders               a fleet that marches down and you shoot it: a game served to a browser, the web target, in Go
-  walker                 a stick figure that walks across the window and back: C# with Avalonia in the browser, its timer's handler on the server
+  walker                 a stick figure that walks across the window and back: C# in the browser, its timer's handler on the server (not generated until C#'s web target exists)
   build-engines.sh       builds the examples' engines from their sources in <example>/engines/<name>/
 ```
 
-Generated applications get their runtime as a package: Rust from crates.io (`clarity-runtime`), Go as a module (`github.com/petervdpas/Clarity/runtimes/go`), C# from NuGet (`Clarity.Runtime`, `Clarity.Avalonia`, `Clarity.Avalonia.Desktop` for a desktop program, and a driver package per kind of database, such as `Clarity.Runtime.Sqlite`). The C and C++ runtimes are copied into every application, so it builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`). `runtimes/parts` is the part host of the C and C++ stacks, which runs custom parts written in C or C++, with its tests in `runtimes/parts/tests`; the Rust and Go runtimes host their parts themselves.
+Generated applications get their runtime as a package: Rust from crates.io (`clarity-runtime`), Go as a module (`github.com/petervdpas/Clarity/runtimes/go`), C# from NuGet (`Clarity.Ui.Desktop` for a desktop program, which brings `Clarity.Ui` and `Clarity.Runtime`; `Clarity.Ui.Browser` for a browser page; a driver package per kind of database, such as `Clarity.Runtime.Sqlite`; and `Clarity.Runtime.Engines` for engines). The C and C++ runtimes are copied into every application, so it builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`). `runtimes/parts` is the part host of the C and C++ stacks, which runs custom parts written in C or C++, with its tests in `runtimes/parts/tests`; the Rust and Go runtimes host their parts themselves.
 
 ## Requirements
 
@@ -53,7 +53,7 @@ Generated applications get their runtime as a package: Rust from crates.io (`cla
 - For C applications: CMake 3.25 or newer, a C17 compiler and a C++ compiler (for the webview), pkg-config, and the SQLite 3 development package (`libsqlite3-dev` on Debian)
 - For C++ applications: CMake 3.25 or newer, a C++20 compiler, pkg-config, and the SQLite 3 and nlohmann-json development packages (`libsqlite3-dev nlohmann-json3-dev` on Debian)
 - On Windows, for C and C++ applications: the WebView2 SDK, which the webview builds against (the `Microsoft.Web.WebView2` NuGet package; the runtime itself ships with Windows 11)
-- For C# applications: the .NET 10 SDK; for one with the web target (`stack csharp avalonia web`), also .NET's WebAssembly tools, which link Avalonia's drawing into the browser program: `dotnet workload install wasm-tools` (with `sudo` where .NET is installed for the whole system, as on Linux in `/usr/share/dotnet`)
+- For C# applications: the .NET 10 SDK; for one with the web target (`stack csharp web`, not generated yet), also .NET's WebAssembly tools, which link Clarity.UI's drawing (Skia) into the browser program: `dotnet workload install wasm-tools` (with `sudo` where .NET is installed for the whole system, as on Linux in `/usr/share/dotnet`)
 
 ### Setting up the tools
 

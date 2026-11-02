@@ -1,6 +1,6 @@
 //! Lists of values as fields (U1c) on every stack: kept in one column as
-//! JSON, read and saved with the record, used in code with `contains`, and
-//! edited on Avalonia with Clarity's TagsInput.
+//! JSON, read and saved with the record, and used in code with
+//! `contains`.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -26,14 +26,14 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn a_list_is_one_text_column_that_starts_empty() {
-    let code = generated(Backend::Rust, Ui::Web);
+    let code = generated(Backend::Rust, Ui::Webview);
     has(&code, "\"tags\" TEXT NOT NULL DEFAULT '[]'");
     has(&code, "\"formats\" TEXT NOT NULL DEFAULT '[]'");
 }
 
 #[test]
 fn every_stack_reads_and_saves_a_list_with_its_record() {
-    let rust = generated(Backend::Rust, Ui::Web);
+    let rust = generated(Backend::Rust, Ui::Webview);
     has(&rust, "pub tags: Vec<String>,");
     has(&rust, "pub formats: Vec<Format>,");
     has(&rust, "pub plays: Vec<Option<NaiveDate>>,");
@@ -42,33 +42,29 @@ fn every_stack_reads_and_saves_a_list_with_its_record() {
     has(&rust, ".tags.contains(&");
     has(&rust, "Cond::holds(\"tags\", sql::text(");
     has(&rust, "Cond::holds(\"formats\", sql::name(");
-    let go = generated(Backend::Go, Ui::Web);
+    let go = generated(Backend::Go, Ui::Webview);
     has(&go, "clarity.ListValue(r.Tags)");
     has(&go, "clarity.ReadList[Format](read, ");
     has(&go, "clarity.ListHolds(");
     has(&go, "clarity.Holds(\"tags\", ");
-    let c = generated(Backend::C, Ui::Web);
+    let c = generated(Backend::C, Ui::Webview);
     has(&c, "ClarityTexts tags;");
     has(&c, "FormatValues formats;");
     has(&c, "clarity_texts_value(format_values_names(r->formats))");
     has(&c, "clarity_get_dates(\"plays\"");
     has(&c, "format_values_holds(");
     has(&c, "clarity_holds(\"plays\", clarity_date_value(");
-    let cpp = generated(Backend::Cpp, Ui::Web);
+    let cpp = generated(Backend::Cpp, Ui::Webview);
     has(&cpp, "std::vector<std::string> tags;");
     has(&cpp, "clarity::sql::list(tags)");
     has(&cpp, "clarity::sql::get_list(\"formats\", values[");
     has(&cpp, "clarity::holds(");
     has(&cpp, "clarity::Cond::holds(\"tags\", ");
-    let csharp = generated(Backend::Csharp, Ui::Avalonia);
+    let csharp = generated(Backend::Csharp, Ui::Clarity);
     has(&csharp, "public List<string> Tags");
     has(&csharp, "ListFields.Kept(Tags)");
     has(&csharp, "ListFields.Read<Format>(\"formats\", values[");
-    has(&csharp, "<c:TagsInput x:Name=\"tagsBox\"");
     has(&csharp, "Cond.Holds(\"formats\", ");
-    has(&csharp, "Item=\"Choice\" Choices=\"{x:Static local:Choices.Format}\"");
-    has(&csharp, "Item=\"Date\"");
-    has(&csharp, "tagsBox.ValueChanged += (_, _) =>");
 }
 
 #[test]

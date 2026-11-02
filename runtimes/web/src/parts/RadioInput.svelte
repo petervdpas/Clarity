@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Clarity's radio group on the web, the same as on Avalonia
+  // Clarity's radio group on the web, the same on every stack
   // (conformance/forms.json): one button per choice of an enum, and only the
   // person picking another one is a change.
   import type { JsonValue } from "../generated/serde_json/JsonValue";

@@ -1,6 +1,6 @@
 //! The button kinds of U1b on every stack: the web stacks read and set an
-//! unbound toggle as `checked` in the part's state; Avalonia writes a
-//! ToggleButton, a joined group and a SplitButton with a MenuFlyout.
+//! unbound toggle as `checked` in the part's state; C# keeps them in
+//! the window's view model, which Clarity.UI draws.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -26,23 +26,14 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn the_web_stacks_read_and_set_an_unbound_toggle_as_checked() {
-    has(&generated(Backend::Rust, Ui::Web), "ui.set_checked(\"rightToggle\", !ui.checked(\"leftToggle\"))");
-    has(&generated(Backend::Go, Ui::Web), "ui.SetChecked(\"rightToggle\", !ui.Checked(\"leftToggle\"))");
-    has(&generated(Backend::C, Ui::Web), "clarity_ui_set_checked(ui, \"rightToggle\"");
-    has(&generated(Backend::Cpp, Ui::Web), "ui.set_checked(\"rightToggle\"");
+    has(&generated(Backend::Rust, Ui::Webview), "ui.set_checked(\"rightToggle\", !ui.checked(\"leftToggle\"))");
+    has(&generated(Backend::Go, Ui::Webview), "ui.SetChecked(\"rightToggle\", !ui.Checked(\"leftToggle\"))");
+    has(&generated(Backend::C, Ui::Webview), "clarity_ui_set_checked(ui, \"rightToggle\"");
+    has(&generated(Backend::Cpp, Ui::Webview), "ui.set_checked(\"rightToggle\"");
 }
 
 #[test]
-fn avalonia_writes_a_toggle_button_a_joined_group_and_a_split_button() {
-    let code = generated(Backend::Csharp, Ui::Avalonia);
-    has(&code, "<ToggleButton x:Name=\"favouriteToggle\"");
-    has(&code, "IsChecked=\"{Binding Album.Favourite}\"");
-    has(&code, "IsChecked=\"{Binding RightToggle.IsChecked}\"");
-    has(&code, "favouriteToggle.Click += (_, _) => Vm.EditOf(\"favouriteToggle\", \"favouriteToggle\", true, () => Vm.FavouriteChangedCommand.Execute(null));");
-    has(&code, "Classes=\"buttons\"");
-    has(&code, "ColumnSpacing=\"0\"");
-    has(&code, "<SplitButton x:Name=\"saveButton\"");
-    has(&code, "<MenuFlyout Placement=\"BottomEdgeAlignedLeft\">");
-    has(&code, "Command=\"{Binding NewClickedCommand}\"");
+fn csharp_keeps_a_toggle_button_s_state() {
+    let code = generated(Backend::Csharp, Ui::Clarity);
     has(&code, "public PartState FavouriteToggle { get; } = new(\"favouriteToggle\", caption: \"favouriteToggleCaption\")");
 }

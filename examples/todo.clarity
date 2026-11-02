@@ -1,6 +1,6 @@
 project Todo
     title "Todo"
-    stack csharp avalonia desktop
+    stack csharp desktop
     output "out"
     language "en"
     theme Light Dark

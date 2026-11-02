@@ -57,7 +57,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn every_stack_reads_where_a_drag_started() {
-    let rust = generated(Backend::Rust, Ui::Web);
+    let rust = generated(Backend::Rust, Ui::Webview);
     has(&rust, "ui.from_x(\"sheet\")");
     has(&rust, "\"op\": \"link\"");
     has(&rust, "ui.bent(\"sheet\")");
@@ -71,7 +71,7 @@ fn every_stack_reads_where_a_drag_started() {
     has(&rust, "ui.background(\"sheet\", \"panel\")");
     has(&rust, "ui.dot_size(\"sheet\", 3)");
     has(&rust, "ui.set_dot_color(\"sheet\", ");
-    let go = generated(Backend::Go, Ui::Web);
+    let go = generated(Backend::Go, Ui::Webview);
     has(&go, "ui.FromX(\"sheet\")");
     has(&go, "\"op\": \"link\"");
     has(&go, "ui.Via(\"sheet\")");
@@ -80,7 +80,7 @@ fn every_stack_reads_where_a_drag_started() {
     has(&go, "ui.SetGrid(\"sheet\", ");
     has(&go, "ui.SetBackground(\"sheet\", ");
     has(&go, "ui.DotSize(\"sheet\", 3)");
-    let c = generated(Backend::C, Ui::Web);
+    let c = generated(Backend::C, Ui::Webview);
     has(&c, "clarity_ui_from_x(ui, \"sheet\")");
     has(&c, "clarity_json_integers(");
     has(&c, "clarity_ui_via(ui, \"sheet\")");
@@ -89,7 +89,7 @@ fn every_stack_reads_where_a_drag_started() {
     has(&c, "clarity_ui_set_grid(ui, \"sheet\", ");
     has(&c, "clarity_ui_set_background(ui, \"sheet\", ");
     has(&c, "clarity_ui_set_dot_size(ui, \"sheet\", ");
-    let cpp = generated(Backend::Cpp, Ui::Web);
+    let cpp = generated(Backend::Cpp, Ui::Webview);
     has(&cpp, "ui.from_x(\"sheet\")");
     has(&cpp, "{\"op\", \"link\"}");
     has(&cpp, "ui.bent(\"sheet\")");
@@ -98,18 +98,14 @@ fn every_stack_reads_where_a_drag_started() {
     has(&cpp, "ui.set_grid(\"sheet\", ");
     has(&cpp, "ui.set_background(\"sheet\", ");
     has(&cpp, "ui.set_dot_color(\"sheet\", ");
-    let csharp = generated(Backend::Csharp, Ui::Avalonia);
-    has(&csharp, " Zoom=\"True\" Grid=\"{Binding Sheet.Grid}\" Paper=\"{Binding Sheet.Background}\" DotSize=\"{Binding Sheet.DotSize}\" DotColor=\"{Binding Sheet.DotColor}\"");
+    let csharp = generated(Backend::Csharp, Ui::Clarity);
     has(&csharp, "Sheet.Background = ");
     has(&csharp, "Numbers.Snapped(");
     has(&csharp, "Sheet.Snap = false");
     has(&csharp, "Sheet.Grid = 40");
     // The line's grid and snap are where the part's state starts.
     has(&csharp, "{ Grid = 20, Snap = true, Background = \"panel\", DotSize = 3, DotColor = \"muted\" }");
-    has(&csharp, " DragCommand=\"{Binding DragAt_SheetCommand}\"");
-    has(&csharp, " DropCommand=\"{Binding DropAt_SheetCommand}\"");
     has(&csharp, "Sheet.FromX");
     has(&csharp, "new Shape.Link(");
     has(&csharp, "Sheet.Via");
-    has(&csharp, " BendCommand=\"{Binding BendAt_SheetCommand}\"");
 }

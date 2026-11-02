@@ -100,7 +100,7 @@ fn an_engine_answers_in_the_generated_application_in_c() {
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = clarity_project::starter("Shop", "shop");
     settings.stack.backend = clarity_project::Backend::C;
-    settings.stack.ui = clarity_project::Ui::Web;
+    settings.stack.ui = clarity_project::Ui::Webview;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch().join(format!("clarity-gen-c-engine-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
@@ -192,7 +192,7 @@ fn board_runs_in_c(interpreted: bool) {
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     let mut settings = clarity_project::load(&file).settings.expect("the fixture has a project file");
     settings.stack.backend = Backend::C;
-    settings.stack.ui = Ui::Web;
+    settings.stack.ui = Ui::Webview;
     settings.datasources[0].url = "data/app.db".into();
     settings.engines_interpreted = interpreted;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
@@ -224,7 +224,7 @@ fn questions_and_their_answers_build_in_c() {
     let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
     let mut settings = clarity_project::starter("Music", "music");
     settings.stack.backend = Backend::C;
-    settings.stack.ui = Ui::Web;
+    settings.stack.ui = Ui::Webview;
     let out = scratch().join(format!("clarity-gen-c-asks-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
@@ -244,7 +244,7 @@ fn the_web_target_serves_in_c() {
     let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
     let mut settings = clarity_project::starter("Music", "music");
     settings.stack.backend = Backend::C;
-    settings.stack.ui = Ui::Web;
+    settings.stack.ui = Ui::Webview;
     settings.stack.targets = vec![clarity_project::Target::Web];
     let out = scratch().join(format!("clarity-gen-c-web-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);

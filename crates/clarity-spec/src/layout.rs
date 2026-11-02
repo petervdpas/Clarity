@@ -1,6 +1,6 @@
 //! The layout values every renderer shares (design section 2), so a window
-//! has the same rows and spacing on the web and in Avalonia. The web
-//! renderer writes them in TypeScript; a test keeps those equal to these.
+//! has the same rows and spacing on every stack. The web renderer writes
+//! them in TypeScript; a test keeps those equal to these.
 
 /// The size a window opens at on every stack, and the designer shows it at,
 /// in pixels: the width the columns share and the height growing rows fill.

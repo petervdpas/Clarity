@@ -900,14 +900,14 @@ pub(crate) fn parse_part(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pars
                 "nuget" => {
                     library(&part, &line)?;
                     line.next();
-                    let package = line.expect_string("the package, as in nuget \"AvaloniaEdit\" 11.1.0")?;
+                    let package = line.expect_string("the package, as in nuget \"Markdig\" 0.40.0")?;
                     // The version is read as written: `11.1.0` is several tokens.
                     let mut version = String::new();
                     while let Some(token) = line.next() {
                         version.push_str(&token.text);
                     }
                     if version.is_empty() {
-                        return Err(line.error_here("expected the package's version, as in nuget \"AvaloniaEdit\" 11.1.0"));
+                        return Err(line.error_here("expected the package's version, as in nuget \"Markdig\" 0.40.0"));
                     }
                     part.library = Some(PartLibrary::Nuget { package, version });
                 }

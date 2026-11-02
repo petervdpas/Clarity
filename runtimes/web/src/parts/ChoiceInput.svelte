@@ -6,7 +6,7 @@
 </script>
 
 <script lang="ts">
-  // Clarity's dropdown on the web, the same as on Avalonia
+  // Clarity's dropdown on the web, the same on every stack
   // (conformance/forms.json, tables.json): it shows the choice of its value
   // (an enum has no empty choice, a reference has one first), and only the
   // person picking another choice is a change.

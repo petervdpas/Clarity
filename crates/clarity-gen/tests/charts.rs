@@ -1,6 +1,6 @@
 //! Charts of U1c: the web stacks carry `chart` in their model for the
-//! renderer, which groups the rows itself; Avalonia writes Clarity's
-//! ChartView with what to group by and what to count.
+//! renderer, which groups the rows itself; on C# Clarity.UI draws it
+//! from the window's view model.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -25,21 +25,14 @@ fn has(text: &str, expected: &str) {
 }
 
 #[test]
-fn avalonia_writes_a_chart_view_that_groups_its_rows() {
-    let csharp = generated(Backend::Csharp, Ui::Avalonia);
-    has(&csharp, "<c:ChartView x:Name=\"formatChart\"");
-    has(&csharp, "Shape=\"Bar\" By=\"Format\" ByKind=\"Enum\"");
-    has(&csharp, "Number=\"Count\"");
-    has(&csharp, "Shape=\"Line\" By=\"Copies\" ByKind=\"Number\"");
-    has(&csharp, "Number=\"Sum\" Of=\"Rating\"");
-    has(&csharp, "ByChoices=\"{Binding FriendChoices}\"");
-    has(&csharp, "Number=\"Average\" Of=\"Copies\"");
+fn csharp_offers_a_chart_the_records_it_groups_by() {
+    let csharp = generated(Backend::Csharp, Ui::Clarity);
     has(&csharp, "FriendChoices = Choice.Of(Db.All<Friend>()");
 }
 
 #[test]
 fn the_web_stacks_carry_the_charts_in_their_model() {
-    let rust = generated(Backend::Rust, Ui::Web);
+    let rust = generated(Backend::Rust, Ui::Webview);
     has(&rust, "\"chart\":\"bar\"");
     has(&rust, "\"by\":\"format\"");
     has(&rust, "\"measure\":{\"kind\":\"sum\",\"field\":\"rating\"}");

@@ -43,7 +43,7 @@ fn files(backend: Backend, server: &str) -> Vec<clarity_gen::OutFile> {
     let mut settings = clarity_project::parse("project Calls\n    stack rust cli\n    datasource main sqlite \"data/calls.db\"\n").unwrap();
     settings.stack.backend = backend;
     if backend == Backend::Csharp {
-        settings.stack.ui = clarity_project::Ui::Avalonia;
+        settings.stack.ui = clarity_project::Ui::Clarity;
     }
     clarity_gen::generate_cli(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"))
 }

@@ -1,4 +1,4 @@
-// A color part on the web: its swatch shows the color picked, as Avalonia's
+// A color part on the web: its swatch shows the color picked, as every stack's
 // does (conformance/colors.json), and a crossed-out swatch when there is none.
 
 import { flushSync, mount, unmount } from "svelte";

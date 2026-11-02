@@ -3,6 +3,6 @@
 // Clarity while each example builds only on its own stack. The tests set
 // the stack.
 project Noughts
-    stack rust web desktop
+    stack rust webview desktop
     output "out"
     datasource main sqlite "data/noughts.db"

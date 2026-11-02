@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Clarity's chart on the web, the same as on Avalonia
+  // Clarity's chart on the web, the same on every stack
   // (conformance/charts.json): bars or a line on an axis in steps of 1, 2,
   // 2.5 or 5 times a power of ten, or the slices of a pie in the palette's
   // colors. Each bar, point and slice tells its group and number when

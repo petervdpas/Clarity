@@ -7,7 +7,6 @@ use clarity_spec::layout::{BUTTON_SIDES, CONTENT_PADDING, GAP, INPUT_SIDES, MESS
 const GRID_TS: &str = include_str!("../../../runtimes/web/src/screen/grid.ts");
 const RUNTIME_SVELTE: &str = include_str!("../../../runtimes/web/src/host/Runtime.svelte");
 const SIDEBARS_TS: &str = include_str!("../../../runtimes/web/src/frame/sidebars.ts");
-const SIDEBAR_VIEW: &str = include_str!("../../../runtimes/csharp/Clarity.Avalonia/SidebarView.cs");
 const FRAME_VIEW: &str = include_str!("../../../runtimes/web/src/frame/FrameView.svelte");
 const RENDER_CSS: &str = include_str!("../../../runtimes/web/src/screen/render.css");
 const SHOWN_WINDOW: &str = include_str!("../../../app/src/lib/ShownWindow.svelte");
@@ -17,7 +16,7 @@ const APP: &str = include_str!("../../../app/src/App.svelte");
 /// The shells of the stacks whose runtime opens the window itself.
 const SHELLS: [(&str, &str); 4] = [
     ("Go", include_str!("../../../runtimes/go/desktop/desktop.go")),
-    ("Avalonia", include_str!("../../../runtimes/csharp/Clarity.Avalonia.Desktop/Shell.cs")),
+    ("C#", include_str!("../../../runtimes/csharp/Clarity.Ui.Desktop/DesktopWindow.cs")),
     ("C", include_str!("../../../runtimes/c/shell/service.c")),
     ("C++", include_str!("../../../runtimes/cpp/shell/service.cpp")),
 ];
@@ -41,10 +40,9 @@ fn the_web_renderer_uses_the_shared_values() {
     assert_eq!((constant(GRID_TS, "WINDOW_MIN_WIDTH"), constant(GRID_TS, "WINDOW_MIN_HEIGHT")), clarity_spec::layout::WINDOW_MIN);
     assert_eq!((constant(GRID_TS, "WINDOW_MAX_WIDTH"), constant(GRID_TS, "WINDOW_MAX_HEIGHT")), clarity_spec::layout::WINDOW_MAX);
     assert_eq!(constant(RUNTIME_SVELTE, "MESSAGE_MS"), MESSAGE_MS);
-    // A sidebar's widths, the same on the web and in Avalonia.
+    // A sidebar's widths.
     let (narrowest, widest) = clarity_spec::model::SIDEBAR_WIDTHS;
     assert_eq!((constant(SIDEBARS_TS, "NARROWEST"), constant(SIDEBARS_TS, "WIDEST")), (narrowest, widest));
-    assert!(SIDEBAR_VIEW.contains(&format!("Narrowest = {narrowest}, Widest = {widest};")), "SidebarView.cs");
     assert!(FRAME_VIEW.contains("sidebarWidth("), "FrameView sizes sidebars by sidebars.ts");
     // The space around a running window's grid, written in its CSS.
     let client = RUNTIME_SVELTE.split("  .client {").nth(1).expect("the .client rule");

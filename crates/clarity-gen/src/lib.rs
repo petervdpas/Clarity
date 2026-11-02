@@ -23,7 +23,7 @@ mod schema;
 pub mod web;
 pub mod web_windows;
 
-pub use csharp::{avalonia_theme, runtime_version as csharp_runtime_version};
+pub use csharp::runtime_version as csharp_runtime_version;
 pub use go::runtime_version as go_runtime_version;
 pub use rust::runtime_version as rust_runtime_version;
 pub use rust::migration_sql;
@@ -230,7 +230,7 @@ pub(crate) fn engine_files(project: &Project, folder: &str) -> Vec<OutFile> {
 }
 
 /// The engines beside the screen (DESIGN 5.12), which the renderer runs:
-/// the web stacks carry them in the model, Avalonia in the application.
+/// the web stacks carry them in the model, C# in the application.
 pub(crate) fn screen_engines(project: &Project) -> Vec<&clarity_spec::code::EngineDecl> {
     project.files.iter().flat_map(|f| &f.engines).filter(|e| e.body.is_none() && e.beside).collect()
 }
@@ -393,7 +393,7 @@ pub(crate) fn wired_calls(page: &clarity_spec::model::Page) -> Vec<&clarity_spec
 /// The named tables and lists of a page that show the rows of its data, by
 /// the data's name. When a handler replaces those rows (`reload`, or a new
 /// list), they are other records, so these parts lose their selected row: on
-/// the web stacks through the runtime's `deselect`, on Avalonia because the
+/// the web stacks through the runtime's `deselect`, on C# because the
 /// table is given new rows.
 pub(crate) fn rows_shown(page: Option<&clarity_spec::model::Page>) -> std::collections::BTreeMap<String, Vec<String>> {
     use clarity_spec::model::Widget;
@@ -660,9 +660,9 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let project = &project;
     let mut files = match settings.stack.backend {
         Backend::Rust => rust::generate(project, settings)?,
-        Backend::Csharp if settings.stack.ui == clarity_project::Ui::Avalonia => csharp::generate(project, settings)?,
+        Backend::Csharp if settings.stack.ui == clarity_project::Ui::Clarity => csharp::generate(project, settings)?,
         Backend::Csharp => {
-            return Err(vec!["C# with the web renderer is not generated yet; C# uses Avalonia".to_string()]);
+            return Err(vec!["C# draws with Clarity.UI only".to_string()]);
         }
         Backend::Go => go::generate(project, settings)?,
         Backend::C => c::generate(project, settings)?,
@@ -704,11 +704,6 @@ pub fn programs(project: &Project, settings: &Settings) -> Result<Vec<Program>, 
     let mut programs = Vec::new();
     if settings.stack.has_ui() {
         programs.push(Program { target: windowed_target(settings), files: generate(project, settings)? });
-        // C# with Avalonia makes the web application apart from the desktop program (DESIGN 7.6).
-        if settings.stack.backend == Backend::Csharp && settings.stack.has(Target::Desktop) && settings.stack.has(Target::Web) {
-            let web = Settings { stack: clarity_project::Stack { targets: vec![Target::Web], ..settings.stack.clone() }, ..settings.clone() };
-            programs.push(Program { target: Target::Web, files: generate(project, &web)? });
-        }
     }
     if settings.stack.has(Target::Cli) {
         programs.push(Program { target: Target::Cli, files: generate_cli(project, settings)? });
@@ -967,19 +962,13 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
                 missing: "is Rust installed?",
             })
         }
-        Backend::Csharp if settings.stack.ui == clarity_project::Ui::Avalonia => {
+        Backend::Csharp if settings.stack.ui == clarity_project::Ui::Clarity => {
             let configuration = if release { "Release" } else { "Debug" };
-            // The web application is built as its server, which publishes the browser program into it (DESIGN 7.6).
-            let web = windowed_target(settings) == clarity_project::Target::Web;
-            let (project, folder, program) = if web {
-                (vec!["Server".to_string()], "Server/", format!("{}.Server", csharp::project_name(settings)))
-            } else {
-                (vec![], "", csharp::project_name(settings))
-            };
+            let (folder, program) = ("", csharp::project_name(settings));
             Some(Toolchain {
                 tool: "dotnet",
                 // `-tl:off`: plain lines, not the terminal logger.
-                args: std::iter::once("build".to_string()).chain(project).chain(["--nologo", "-tl:off", "-c", configuration].map(String::from)).collect(),
+                args: ["build", "--nologo", "-tl:off", "-c", configuration].map(String::from).to_vec(),
                 env: vec![("DOTNET_CLI_TELEMETRY_OPTOUT", "1"), ("DOTNET_NOLOGO", "1")],
                 program: exe(format!("{folder}bin/{configuration}/{}/{program}", csharp::TARGET_FRAMEWORK)),
                 missing: "is the .NET SDK installed?",

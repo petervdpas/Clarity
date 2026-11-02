@@ -2,6 +2,7 @@
 // it through OpenGL when it changed, at the window's own scale, and what the
 // person does with the mouse and keys goes to the screen.
 
+using Clarity.Runtime;
 using Clarity.Ui;
 using Silk.NET.Input;
 using Silk.NET.Maths;
@@ -15,6 +16,21 @@ public static class DesktopWindow
 {
     // OpenGL's RGBA8, the window's own framebuffer's format.
     const uint Rgba8 = 0x8058;
+
+    /// <summary>The size a window that names none opens at, on every stack (clarity_spec::layout).</summary>
+    public static readonly Extent StandardSize = new(1100, 760);
+
+    /// <summary>
+    /// Shows the application's main window until the person closes it: its
+    /// title and size. Drawing its parts from its markup comes with DESIGN
+    /// 7.9, G7d; until then the window shows its theme's background.
+    /// </summary>
+    public static void Run(WindowViewModel main)
+    {
+        var size = main.WindowSize ?? StandardSize;
+        var screen = new Screen(new GridPanel(columns: 12), ThemeLook.Clarity(dark: false));
+        Run(screen, main.Title, (int)size.Width, (int)size.Height);
+    }
 
     /// <summary>Shows <paramref name="screen"/> in a window until the person closes it.</summary>
     public static void Run(Screen screen, string title, int width, int height)

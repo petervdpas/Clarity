@@ -421,7 +421,7 @@ fn stop_app(app: AppHandle) {
     build::stop(&app);
 }
 
-/// Installs what the web target of C# with Avalonia is missing, .NET's
+/// Installs what the web target of C# with Clarity.UI is missing, .NET's
 /// WebAssembly tools; the system asks the person's permission first where
 /// .NET is installed for every user.
 #[tauri::command]
@@ -987,7 +987,7 @@ mod tests {
     fn csharp() -> Stack {
         Stack {
             backend: Backend::Csharp,
-            ui: Ui::Avalonia,
+            ui: Ui::Clarity,
             targets: vec![Target::Desktop],
         }
     }
@@ -1001,7 +1001,7 @@ mod tests {
             backend: Backend::Go,
             ..csharp()
         };
-        assert!(write_new_project(&base.join("shop.clarity"), stack).unwrap_err().contains("Avalonia"));
+        assert!(write_new_project(&base.join("shop.clarity"), stack).unwrap_err().contains("Clarity.UI"));
         assert_eq!(std::fs::read_dir(&base).unwrap().count(), 0);
         std::fs::remove_dir_all(&base).unwrap();
     }
@@ -1034,13 +1034,13 @@ mod tests {
         assert!(settings_change(&file, &version, &settings).unwrap().is_none(), "nothing changed");
         assert!(settings_change(&file, "stale", &settings).unwrap_err().contains("changed on disk"));
 
-        settings.stack.ui = Ui::Avalonia;
+        settings.stack.ui = Ui::Clarity;
         assert!(settings_change(&file, &version, &settings).unwrap_err().contains("C#"));
 
         settings.stack = csharp();
         let change = settings_change(&file, &version, &settings).unwrap().unwrap();
         let after = change.after.as_deref().unwrap_or_default();
-        assert!(after.contains("    stack csharp avalonia desktop\n"), "{after}");
+        assert!(after.contains("    stack csharp desktop\n"), "{after}");
         assert!(change.before.is_some());
         std::fs::remove_dir_all(&base).unwrap();
     }

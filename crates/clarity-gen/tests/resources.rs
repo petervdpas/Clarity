@@ -72,7 +72,7 @@ fn text<'a>(files: &'a [OutFile], path: &str) -> &'a str {
 #[test]
 fn the_web_stacks_carry_the_resources_with_the_renderer() {
     for (backend, model) in [(Backend::Rust, "src/model.json"), (Backend::Go, "model.json")] {
-        let files = files(backend, Ui::Web);
+        let files = files(backend, Ui::Webview);
         assert_eq!(bytes(&files, "ui/resources/logo.png"), LOGO, "{backend:?}");
         assert_eq!(bytes(&files, "ui/resources/rules-nl.md"), b"# Regels", "{backend:?}");
         let model = text(&files, model);
@@ -81,25 +81,15 @@ fn the_web_stacks_carry_the_resources_with_the_renderer() {
     }
 }
 
-/// Avalonia embeds every resource under its name. A Markdown file shows
-/// with the runtime's MarkdownView; a key's Markdown and pictures come
-/// through the texts, in the language shown.
+/// C# embeds every resource under its name; a key's Markdown and pictures
+/// come through the texts, in the language shown.
 #[test]
-fn avalonia_embeds_the_resources() {
-    let files = files(Backend::Csharp, Ui::Avalonia);
+fn csharp_embeds_the_resources() {
+    let files = files(Backend::Csharp, Ui::Clarity);
     assert_eq!(bytes(&files, "resources/logo.png"), LOGO);
     assert_eq!(bytes(&files, "resources/rules-nl.md"), b"# Regels");
-    assert!(text(&files, "Shop.csproj").contains("<AvaloniaResource Include=\"resources/**\" />"), "{}", text(&files, "Shop.csproj"));
+    assert!(text(&files, "Shop.csproj").contains("<EmbeddedResource Include=\"resources/**\" LogicalName=\"resources/%(RecursiveDir)%(Filename)%(Extension)\" />"), "{}", text(&files, "Shop.csproj"));
     assert!(text(&files, "Texts.nl.resx").contains("<data name=\"GameRules\" xml:space=\"preserve\">\n    <value># Regels</value>"), "{}", text(&files, "Texts.nl.resx"));
-    let view = text(&files, "Windows/HomeView.axaml");
-    // A picture of the resources by name, SVG or bitmap alike.
-    assert!(view.contains("<c:ResourceImage x:Name=\"image1\"") && view.contains("Picture=\"logo.png\" Stretch=\"Uniform\""), "{view}");
-    assert!(view.contains("<c:MarkdownView x:Name=\"licenseText\" Grid.Column=\"0\" Grid.Row=\"3\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"3\" Source=\"license.md\" "), "{view}");
-    assert!(view.contains("<c:MarkdownView x:Name=\"rulesText\" Grid.Column=\"0\" Grid.Row=\"6\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"3\" Markdown=\"{x:Static local:Texts.GameRules}\" "), "{view}");
-    assert!(view.contains("<Image x:Name=\"banner\" Grid.Column=\"0\" Grid.Row=\"9\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"2\" Source=\"{Binding Source={x:Static local:Texts.BannerPicture}, Converter={x:Static c:ResourcePictures.Named}}\" Stretch=\"Uniform\""), "{view}");
-    assert!(view.contains("<c:MarkdownView x:Name=\"notesText\" Grid.Column=\"0\" Grid.Row=\"11\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"3\" Markdown=\"{Binding Notes}\" "), "{view}");
-    // The pictures come from Clarity.Avalonia's ResourcePictures, which reads SVG too.
-    assert!(!text(&files, "Shown.cs").contains("new Bitmap("), "{}", text(&files, "Shown.cs"));
 }
 
 /// A project without resources carries no folder for them.
@@ -108,16 +98,16 @@ fn no_resources_no_folder() {
     let project = load_sources([("shop.clarity", "module shop\n\nentity Customer\n    name: text(80)\n\npage Home: window\n    label \"Hi\" name label1 at 1,1 span 2\n")]);
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = Backend::Csharp;
-    settings.stack.ui = Ui::Avalonia;
+    settings.stack.ui = Ui::Clarity;
     let files = generate(&project, &settings).unwrap();
-    assert!(!text(&files, "Shop.csproj").contains("AvaloniaResource Include=\"resources"));
+    assert!(!text(&files, "Shop.csproj").contains("Include=\"resources/**\""));
 }
 
 /// A link of a markdown part opens in the browser through the shell; the
 /// Rust stack's shell is generated, and opens only web and mail addresses.
 #[test]
 fn the_rust_shell_opens_links() {
-    let files = files(Backend::Rust, Ui::Web);
+    let files = files(Backend::Rust, Ui::Webview);
     // The shell's commands are in the desktop module.
     let main = text(&files, "src/desktop.rs");
     assert!(main.contains("fn open_link(address: String) -> std::result::Result<(), String> {"), "{main}");

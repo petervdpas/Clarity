@@ -68,7 +68,7 @@ The project file names the themes the application offers; the first is the one i
 
 ```clarity
 project Shop
-    stack rust web desktop
+    stack rust webview desktop
     theme Shop Night
 ```
 
@@ -95,6 +95,6 @@ The **Style** field in the part properties (see [Parts](design.parts.md)) lists 
 ## On each stack
 
 - The web renderer (Rust, Go, C and C++) gets a CSS file of variables per theme: Clarity's own as `ui/themes/clarity.css`, each offered theme in its own file. The application holds the theme's class (`theme-shop`) and a styled part its style's class (`style-primary`). C and C++ put these styles inside the program's single page.
-- C# with Avalonia gets one resource dictionary per offered theme, `Themes/Shop.axaml`, with Clarity's values merged in and light and dark colors. A style becomes a style class (`Classes="primary"`).
+- C# gets two files per offered theme, `Themes/Shop.light.json` and `Themes/Shop.dark.json`: the theme as Clarity resolves it, which Clarity.UI lays over Clarity's own theme. `AppThemes.cs` lists them.
 
-The designer draws with the web renderer, so for Avalonia the canvas shows the theme faithfully but not pixel for pixel; Run shows the real window. See [the language reference](../LANGUAGE.md#themes) for every line.
+The designer draws with the web renderer, so for C# the canvas shows the theme faithfully but not pixel for pixel; Run shows the real window. See [the language reference](../LANGUAGE.md#themes) for every line.

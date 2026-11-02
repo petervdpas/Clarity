@@ -58,7 +58,7 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn rust_calls_through_the_runtime() {
-    let files = files(API, Backend::Rust, Ui::Web);
+    let files = files(API, Backend::Rust, Ui::Webview);
     let code = text(&files, "src/modules/api.rs");
     has(code, "clarity_runtime::http::call(clarity_runtime::http::Method::Post, ");
     has(code, "&String::from(\"https://api.example.com/orders\"), Some((order.summary.clone()).as_str()), &[(\"Authorization\", ");
@@ -68,12 +68,12 @@ fn rust_calls_through_the_runtime() {
     has(code, "reply.status");
     has(text(&files, "src/modules/api.rs"), "clarity_runtime::http::call(clarity_runtime::http::Method::Get, ");
     has(text(&files, "Cargo.toml"), "\"http\"");
-    assert!(!text(&self::files(PLAIN, Backend::Rust, Ui::Web), "Cargo.toml").contains("\"http\""));
+    assert!(!text(&self::files(PLAIN, Backend::Rust, Ui::Webview), "Cargo.toml").contains("\"http\""));
 }
 
 #[test]
 fn go_calls_through_the_runtime() {
-    let files = files(API, Backend::Go, Ui::Web);
+    let files = files(API, Backend::Go, Ui::Webview);
     let code = text(&files, "api_module.go");
     has(code, "clarity.HTTP(\"POST\", \"https://api.example.com/orders\", order.Summary, []clarity.Header{{Name: \"Authorization\", Value: ");
     has(code, "{Name: \"Accept\", Value: \"text/plain\"}})");
@@ -83,7 +83,7 @@ fn go_calls_through_the_runtime() {
 
 #[test]
 fn csharp_calls_through_the_runtime() {
-    let files = files(API, Backend::Csharp, Ui::Avalonia);
+    let files = files(API, Backend::Csharp, Ui::Clarity);
     let code = text(&files, "Modules/Api.cs");
     has(code, "Http.Post(\"https://api.example.com/orders\", order.Summary, [(\"Authorization\", ");
     has(code, "(\"Accept\", \"text/plain\")])");
@@ -95,18 +95,18 @@ fn csharp_calls_through_the_runtime() {
 
 #[test]
 fn cpp_calls_through_the_runtime_and_links_libcurl() {
-    let files = files(API, Backend::Cpp, Ui::Web);
+    let files = files(API, Backend::Cpp, Ui::Webview);
     let code = text(&files, "src/modules/api.cpp");
     has(code, "clarity::http_call(clarity::HttpMethod::Post, ");
     has(code, "{\"Accept\", std::string(\"text/plain\")}}");
     has(code, "reply.ok");
     has(text(&files, "CMakeLists.txt"), " clarity_http");
-    assert!(!text(&self::files(PLAIN, Backend::Cpp, Ui::Web), "CMakeLists.txt").contains("clarity_http"));
+    assert!(!text(&self::files(PLAIN, Backend::Cpp, Ui::Webview), "CMakeLists.txt").contains("clarity_http"));
 }
 
 #[test]
 fn c_calls_through_the_runtime_and_links_libcurl() {
-    let files = files(API, Backend::C, Ui::Web);
+    let files = files(API, Backend::C, Ui::Webview);
     let code = text(&files, "src/modules/api.c");
     has(code, "clarity_http_call(CLARITY_HTTP_POST, ");
     has(code, "(ClarityHttpHeader[]){{\"Authorization\", ");
@@ -114,7 +114,7 @@ fn c_calls_through_the_runtime_and_links_libcurl() {
     has(code, "clarity_http_call(CLARITY_HTTP_GET, \"https://status.example.com/api/now\", NULL, NULL, 0)");
     has(code, ".ok");
     has(text(&files, "CMakeLists.txt"), " clarity_http");
-    assert!(!text(&self::files(PLAIN, Backend::C, Ui::Web), "CMakeLists.txt").contains("clarity_http"));
+    assert!(!text(&self::files(PLAIN, Backend::C, Ui::Webview), "CMakeLists.txt").contains("clarity_http"));
 }
 
 /// The README of a C or C++ project that calls out names libcurl, which
@@ -122,8 +122,8 @@ fn c_calls_through_the_runtime_and_links_libcurl() {
 #[test]
 fn a_readme_names_libcurl_where_the_build_needs_it() {
     for backend in [Backend::C, Backend::Cpp] {
-        assert!(text(&files(API, backend, Ui::Web), "README.md").contains("libcurl"), "{backend:?}");
-        assert!(!text(&files(PLAIN, backend, Ui::Web), "README.md").contains("libcurl"), "{backend:?}");
+        assert!(text(&files(API, backend, Ui::Webview), "README.md").contains("libcurl"), "{backend:?}");
+        assert!(!text(&files(PLAIN, backend, Ui::Webview), "README.md").contains("libcurl"), "{backend:?}");
     }
-    assert!(!text(&files(API, Backend::Rust, Ui::Web), "README.md").contains("libcurl"));
+    assert!(!text(&files(API, Backend::Rust, Ui::Webview), "README.md").contains("libcurl"));
 }

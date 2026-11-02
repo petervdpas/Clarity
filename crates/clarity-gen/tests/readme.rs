@@ -48,22 +48,16 @@ fn a_rust_project_says_what_it_needs_and_how_to_build_it() {
 fn a_csharp_project_says_what_it_needs_and_how_to_build_it() {
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = Backend::Csharp;
-    settings.stack.ui = Ui::Avalonia;
+    settings.stack.ui = Ui::Clarity;
     let text = readme(&settings);
-    has(&text, "C# with Avalonia");
+    has(&text, "C# with Clarity.UI");
     has(&text, "- the .NET 10 SDK, from https://dotnet.microsoft.com/download\n");
     has(&text, "    dotnet build -c Release\n");
     has(&text, "    dotnet run\n");
     has(&text, "bin/Release/net10.0/Shop");
     // The runtime comes from nuget.org, or from its own projects while working on it.
-    has(&text, &format!("Clarity's runtime comes as NuGet packages (Clarity.Avalonia.Desktop {},", clarity_gen::csharp_runtime_version()));
+    has(&text, &format!("Clarity's runtime comes as NuGet packages (Clarity.Ui.Desktop {},", clarity_gen::csharp_runtime_version()));
     has(&text, "    dotnet build -p:ClarityRuntime=<Clarity>/runtimes/csharp\n");
-    // Served to browsers alone, the package without the desktop's own.
-    settings.stack.targets = vec![clarity_project::Target::Web];
-    let web = readme(&settings);
-    has(&web, &format!("Clarity's runtime comes as NuGet packages (Clarity.Avalonia {},", clarity_gen::csharp_runtime_version()));
-    // Trimmed and compressed in Release, for putting it online.
-    has(&web, "    dotnet build Server -c Release\n    dotnet Server/bin/Release/net10.0/Shop.Server.dll\n");
 }
 
 #[test]

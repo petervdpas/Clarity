@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Clarity's checkbox and switch on the web, the same as on Avalonia
+  // Clarity's checkbox and switch on the web, the same on every stack
   // (conformance/forms.json, tables.json): only the person ticking it is a
   // change; what the code sets is not. A read-only one cannot be ticked.
 

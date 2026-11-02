@@ -42,27 +42,25 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn code_reads_and_sets_folded_from_the_design_on_every_stack() {
-    let rust = files(Backend::Rust, Ui::Web);
+    let rust = files(Backend::Rust, Ui::Webview);
     has(text(&rust, "src/modules/shop.rs"), "if ui.folded(\"details\", true) {");
     has(text(&rust, "src/modules/shop.rs"), "ui.set_folded(\"details\", false);");
-    let go = files(Backend::Go, Ui::Web);
+    let go = files(Backend::Go, Ui::Webview);
     has(text(&go, "shop_module.go"), "if ui.Folded(\"details\", true) {");
     has(text(&go, "shop_module.go"), "ui.SetFolded(\"details\", false)");
-    let c = files(Backend::C, Ui::Web);
+    let c = files(Backend::C, Ui::Webview);
     has(text(&c, "src/modules/shop.c"), "if (clarity_ui_folded(ui, \"details\", true)) {");
     has(text(&c, "src/modules/shop.c"), "clarity_ui_set_folded(ui, \"details\", false);");
-    let cpp = files(Backend::Cpp, Ui::Web);
+    let cpp = files(Backend::Cpp, Ui::Webview);
     has(text(&cpp, "src/modules/shop.cpp"), "if (ui.folded(\"details\", true)) {");
     has(text(&cpp, "src/modules/shop.cpp"), "ui.set_folded(\"details\", false);");
 }
 
-/// Avalonia folds with an Expander, open when the part is not folded; the
-/// window starts it as designed.
+/// C# keeps whether a part is folded in its part's state; the window starts
+/// it as designed.
 #[test]
-fn avalonia_folds_with_an_expander() {
-    let files = files(Backend::Csharp, Ui::Avalonia);
-    let view = text(&files, "Windows/MainView.axaml");
-    has(view, "<Expander x:Name=\"details\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"4\" Header=\"{x:Static local:Texts.DetailsCaption}\" IsExpanded=\"{Binding Details.IsOpen}\"");
+fn csharp_keeps_folded_in_the_part_s_state() {
+    let files = files(Backend::Csharp, Ui::Clarity);
     let vm = text(&files, "Windows/MainViewModel.cs");
     has(vm, "public PartState Details { get; } = new(\"details\") { IsFolded = true };");
     has(vm, "if (Details.IsFolded)");

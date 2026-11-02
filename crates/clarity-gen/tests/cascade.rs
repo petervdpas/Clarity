@@ -37,19 +37,19 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn every_stack_deletes_what_cascades_first() {
-    let rust = generated(Backend::Rust, Ui::Web);
+    let rust = generated(Backend::Rust, Ui::Webview);
     has(&rust, "const CASCADES: bool = true;");
     has(&rust, "Cond::compare(\"project\", clarity_runtime::query::Op::Eq, SqlValue::Integer(id))");
-    let go = generated(Backend::Go, Ui::Web);
+    let go = generated(Backend::Go, Ui::Webview);
     has(&go, "func (r *Project) Cascade(db *clarity.Db) error {");
     has(&go, "clarity.Compare(\"project\", clarity.Eq, r.ID)");
-    let csharp = generated(Backend::Csharp, Ui::Avalonia);
+    let csharp = generated(Backend::Csharp, Ui::Clarity);
     has(&csharp, "public static bool HasCascades => true;");
     has(&csharp, "db.Find<Task>(new Query().Filter(Cond.Compare(\"project\", Op.Eq, Id)))");
-    let c = generated(Backend::C, Ui::Web);
+    let c = generated(Backend::C, Ui::Webview);
     has(&c, ".cascade = ");
     has(&c, "clarity_compare(\"project\", CLARITY_EQ, clarity_integer_value(id))");
-    let cpp = generated(Backend::Cpp, Ui::Web);
+    let cpp = generated(Backend::Cpp, Ui::Webview);
     has(&cpp, "void cascade(clarity::Db& db) const;");
     has(&cpp, "db.find<Task>(clarity::Query().filter(clarity::Cond::compare(\"project\", clarity::Op::Eq, clarity::sql::integer(id))))");
 }

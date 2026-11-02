@@ -21,7 +21,7 @@ fn exe(path: &str) -> PathBuf {
 
 #[test]
 fn rust_builds_with_cargo() {
-    let settings = shop(Backend::Rust, Ui::Web);
+    let settings = shop(Backend::Rust, Ui::Webview);
     let debug = clarity_gen::toolchain(&settings, false).unwrap();
     assert_eq!(debug.tool, "cargo");
     assert_eq!(debug.args, ["build", "--color", "never"]);
@@ -33,7 +33,7 @@ fn rust_builds_with_cargo() {
 
 #[test]
 fn csharp_builds_with_dotnet() {
-    let settings = shop(Backend::Csharp, Ui::Avalonia);
+    let settings = shop(Backend::Csharp, Ui::Clarity);
     let debug = clarity_gen::toolchain(&settings, false).unwrap();
     assert_eq!(debug.tool, "dotnet");
     assert_eq!(debug.args, ["build", "--nologo", "-tl:off", "-c", "Debug"]);
@@ -45,20 +45,9 @@ fn csharp_builds_with_dotnet() {
     assert!(debug.missing.contains(".NET SDK"), "{}", debug.missing);
 }
 
-/// The web application of C# with Avalonia (DESIGN 7.6) is built as its
-/// server, which publishes the browser program into it first.
-#[test]
-fn csharp_on_the_web_builds_its_server() {
-    let mut settings = shop(Backend::Csharp, Ui::Avalonia);
-    settings.stack.targets = vec![clarity_project::Target::Web];
-    let debug = clarity_gen::toolchain(&settings, false).unwrap();
-    assert_eq!(debug.args, ["build", "Server", "--nologo", "-tl:off", "-c", "Debug"]);
-    assert_eq!(debug.program, exe("Server/bin/Debug/net10.0/Shop.Server"));
-}
-
 #[test]
 fn go_builds_with_go_build() {
-    let settings = shop(Backend::Go, Ui::Web);
+    let settings = shop(Backend::Go, Ui::Webview);
     let debug = clarity_gen::toolchain(&settings, false).unwrap();
     assert_eq!(debug.tool, "go");
     // `go build -o` writes the name it is given, so the program is built
@@ -76,7 +65,7 @@ fn go_builds_with_go_build() {
 #[test]
 fn c_and_cpp_build_with_a_cmake_workflow() {
     for backend in [Backend::C, Backend::Cpp] {
-        let settings = shop(backend, Ui::Web);
+        let settings = shop(backend, Ui::Webview);
         let debug = clarity_gen::toolchain(&settings, false).unwrap();
         assert_eq!(debug.tool, "cmake");
         assert_eq!(debug.args, ["--workflow", "--preset", "debug"]);
@@ -89,23 +78,23 @@ fn c_and_cpp_build_with_a_cmake_workflow() {
 
 #[test]
 fn stacks_without_a_generator_have_no_toolchain() {
-    assert!(clarity_gen::toolchain(&shop(Backend::Csharp, Ui::Web), false).is_none());
+    assert!(clarity_gen::toolchain(&shop(Backend::Csharp, Ui::Webview), false).is_none());
 }
 
 /// The command-line program (DESIGN 5.20) builds in `out/cli` with the same
 /// tools, into a program named as it is typed.
 #[test]
 fn the_command_line_program_builds_with_the_same_tools() {
-    let rust = clarity_gen::cli_toolchain(&shop(Backend::Rust, Ui::Web), false).unwrap();
+    let rust = clarity_gen::cli_toolchain(&shop(Backend::Rust, Ui::Webview), false).unwrap();
     assert_eq!((rust.tool, rust.program.clone()), ("cargo", exe("target/debug/shop")));
-    let go = clarity_gen::cli_toolchain(&shop(Backend::Go, Ui::Web), true).unwrap();
+    let go = clarity_gen::cli_toolchain(&shop(Backend::Go, Ui::Webview), true).unwrap();
     assert_eq!(go.tool, "go");
     assert_eq!(go.program, exe("bin/shop"));
     assert!(!go.args.contains(&"production".to_string()), "{:?}", go.args);
-    let csharp = clarity_gen::cli_toolchain(&shop(Backend::Csharp, Ui::Avalonia), false).unwrap();
+    let csharp = clarity_gen::cli_toolchain(&shop(Backend::Csharp, Ui::Clarity), false).unwrap();
     assert_eq!((csharp.tool, csharp.program.clone()), ("dotnet", exe("bin/Debug/net10.0/shop")));
     for backend in [Backend::C, Backend::Cpp] {
-        let release = clarity_gen::cli_toolchain(&shop(backend, Ui::Web), true).unwrap();
+        let release = clarity_gen::cli_toolchain(&shop(backend, Ui::Webview), true).unwrap();
         assert_eq!((release.tool, release.program.clone()), ("cmake", exe("build/release/shop")));
     }
 }

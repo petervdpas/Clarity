@@ -53,35 +53,35 @@ fn has(text: &str, expected: &str) {
 
 #[test]
 fn rust_reads_every_page() {
-    let code = code(Backend::Rust, Ui::Web, "src/modules/api.rs");
+    let code = code(Backend::Rust, Ui::Webview, "src/modules/api.rs");
     has(&code, "clarity_runtime::http::pages_at(\"https://shop.example.com/api\", &String::from(\"/orders\"), ");
     has(&code, "clarity_runtime::http::Auth::Bearer(\"env:SHOP_TOKEN\"), &clarity_runtime::http::Paging { kind: clarity_runtime::http::PagingKind::Page, param: \"page\", size_param: \"per_page\", size: 100, next: \"\", items: \"data\" })");
 }
 
 #[test]
 fn go_reads_every_page() {
-    let code = code(Backend::Go, Ui::Web, "api_module.go");
+    let code = code(Backend::Go, Ui::Webview, "api_module.go");
     has(&code, "clarity.HTTPPages(\"https://shop.example.com/api\", \"/orders\", ");
     has(&code, "clarity.HTTPAuth{Kind: \"bearer\", Secret: \"env:SHOP_TOKEN\"}, clarity.HTTPPaging{Kind: \"page\", Param: \"page\", SizeParam: \"per_page\", Size: 100, Next: \"\", Items: \"data\"})");
 }
 
 #[test]
 fn csharp_reads_every_page() {
-    let code = code(Backend::Csharp, Ui::Avalonia, "Modules/Api.cs");
+    let code = code(Backend::Csharp, Ui::Clarity, "Modules/Api.cs");
     has(&code, "Http.Pages(\"https://shop.example.com/api\", \"/orders\", ");
     has(&code, "\"bearer\", \"env:SHOP_TOKEN\", new HttpPaging(\"page\", \"page\", \"per_page\", 100, \"\", \"data\"))");
 }
 
 #[test]
 fn cpp_reads_every_page() {
-    let code = code(Backend::Cpp, Ui::Web, "src/modules/api.cpp");
+    let code = code(Backend::Cpp, Ui::Webview, "src/modules/api.cpp");
     has(&code, "clarity::http_pages(std::string(\"https://shop.example.com/api\"), ");
     has(&code, "clarity::HttpAuth::Bearer, std::string(\"env:SHOP_TOKEN\"), clarity::HttpPaging{clarity::PagingKind::Page, \"page\", \"per_page\", 100, \"\", \"data\"})");
 }
 
 #[test]
 fn c_reads_every_page() {
-    let code = code(Backend::C, Ui::Web, "src/modules/api.c");
+    let code = code(Backend::C, Ui::Webview, "src/modules/api.c");
     has(&code, "clarity_http_pages(\"https://shop.example.com/api\", ");
     has(&code, "CLARITY_AUTH_BEARER, \"env:SHOP_TOKEN\", (ClarityHttpPaging){CLARITY_PAGING_PAGE, \"page\", \"per_page\", 100, \"\", \"data\"})");
 }

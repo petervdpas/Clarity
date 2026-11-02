@@ -130,17 +130,17 @@ fn the_every_part_project_uses_every_field_type_and_kind_of_page() {
 mod everything_project;
 
 /// Every stack and target, as a project file writes them.
-const STACKS: [&str; 10] = [
-    "csharp avalonia desktop cli",
-    "csharp avalonia web cli",
-    "rust web desktop cli",
-    "rust web web cli",
-    "go web desktop cli",
-    "go web web cli",
-    "c web desktop cli",
-    "c web web cli",
-    "cpp web desktop cli",
-    "cpp web web cli",
+/// C# on the web comes with Clarity.UI (DESIGN 7.9, G7d).
+const STACKS: [&str; 9] = [
+    "csharp desktop cli",
+    "rust webview desktop cli",
+    "rust webview web cli",
+    "go webview desktop cli",
+    "go webview web cli",
+    "c webview desktop cli",
+    "c webview web cli",
+    "cpp webview desktop cli",
+    "cpp webview web cli",
 ];
 
 #[test]

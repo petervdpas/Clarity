@@ -34,7 +34,7 @@ impl Probe for Machine {
 
 #[test]
 fn rust_needs_cargo_and_on_linux_webkitgtk() {
-    let empty = check(Backend::Rust, Ui::Web, &Machine::default());
+    let empty = check(Backend::Rust, Ui::Webview, &Machine::default());
     assert!(!empty.ready());
     assert!(empty.generated);
     assert!(empty.missing[0].contains("Rust") && empty.missing[0].contains("https://rustup.rs"), "{:?}", empty.missing);
@@ -42,37 +42,37 @@ fn rust_needs_cargo_and_on_linux_webkitgtk() {
     let machine = Machine::default()
         .with("cargo", "--version", "cargo 1.91.0 (ea2d97820 2025-10-10)\n")
         .with("pkg-config", "--exists webkit2gtk-4.1", "");
-    let ready = check(Backend::Rust, Ui::Web, &machine);
+    let ready = check(Backend::Rust, Ui::Webview, &machine);
     assert!(ready.ready(), "{:?}", ready.missing);
     assert_eq!(ready.found, ["cargo 1.91.0 (ea2d97820 2025-10-10)"]);
 
     if cfg!(target_os = "linux") {
         let without = Machine::default().with("cargo", "--version", "cargo 1.91.0\n");
-        let check = check(Backend::Rust, Ui::Web, &without);
+        let check = check(Backend::Rust, Ui::Webview, &without);
         assert_eq!(check.missing.len(), 1);
         assert!(check.missing[0].contains("libwebkit2gtk-4.1-dev"), "{:?}", check.missing);
     }
 }
 
 #[test]
-fn avalonia_needs_the_dotnet_sdk_the_project_targets() {
+fn csharp_needs_the_dotnet_sdk_the_project_targets() {
     let old = Machine::default().with("dotnet", "--list-sdks", "8.0.426 [/usr/share/dotnet/sdk]\n9.0.319 [/usr/share/dotnet/sdk]\n");
-    let check_old = check(Backend::Csharp, Ui::Avalonia, &old);
+    let check_old = check(Backend::Csharp, Ui::Clarity, &old);
     assert!(!check_old.ready());
     assert!(check_old.missing[0].contains(".NET 10 SDK"), "{:?}", check_old.missing);
     // The runtime alone, without an SDK, cannot build.
     let runtime_only = Machine::default().with("dotnet", "--list-sdks", "");
-    assert!(!check(Backend::Csharp, Ui::Avalonia, &runtime_only).ready());
+    assert!(!check(Backend::Csharp, Ui::Clarity, &runtime_only).ready());
 
     let new = Machine::default().with("dotnet", "--list-sdks", "9.0.319 [/usr/share/dotnet/sdk]\n10.0.402 [/usr/share/dotnet/sdk]\n");
-    let ready = check(Backend::Csharp, Ui::Avalonia, &new);
+    let ready = check(Backend::Csharp, Ui::Clarity, &new);
     assert!(ready.ready(), "{:?}", ready.missing);
     assert_eq!(ready.found, [".NET SDK 10.0.402"]);
 }
 
 #[test]
 fn go_needs_go_and_on_linux_webkitgtk() {
-    let go = check(Backend::Go, Ui::Web, &Machine::default());
+    let go = check(Backend::Go, Ui::Webview, &Machine::default());
     // Go with Wails is generated (G3b); Wails builds against WebKitGTK on Linux, like Tauri.
     assert!(go.generated);
     assert!(go.missing[0].contains("https://go.dev/dl"), "{:?}", go.missing);
@@ -93,7 +93,7 @@ fn c_and_cpp_need_a_compiler_cmake_and_their_libraries() {
     // C needs a C++ compiler too, for the webview's one C++ file.
     let c = check(
         Backend::C,
-        Ui::Web,
+        Ui::Webview,
         &with_libraries(
             Machine::default()
                 .with("clang", "--version", "clang version 19.1.7\nTarget: x86_64\n")
@@ -106,18 +106,18 @@ fn c_and_cpp_need_a_compiler_cmake_and_their_libraries() {
     assert!(c.generated);
     assert_eq!(c.found, ["clang version 19.1.7", "clang version 19.1.7", "cmake version 3.31.6", "GNU Make 4.4.1"]);
     assert!(c.missing.is_empty(), "{:?}", c.missing);
-    let cpp = check(Backend::Cpp, Ui::Web, &with_libraries(Machine::default().with("g++", "--version", "g++ (Debian 14.2.0-19) 14.2.0\n").with("ninja", "--version", "1.12.1\n")));
+    let cpp = check(Backend::Cpp, Ui::Webview, &with_libraries(Machine::default().with("g++", "--version", "g++ (Debian 14.2.0-19) 14.2.0\n").with("ninja", "--version", "1.12.1\n")));
     assert!(cpp.generated);
     assert_eq!(cpp.found, ["g++ (Debian 14.2.0-19) 14.2.0", "ninja 1.12.1"]);
     assert_eq!(cpp.missing.len(), 1);
     assert!(cpp.missing[0].contains("CMake") && cpp.missing[0].contains("https://cmake.org/download"), "{:?}", cpp.missing);
-    let bare = check(Backend::C, Ui::Web, &Machine::default().with("cc", "--version", "cc (Debian 14.2.0-19) 14.2.0\n").with("cmake", "--version", "cmake version 3.31.6\n"));
+    let bare = check(Backend::C, Ui::Webview, &Machine::default().with("cc", "--version", "cc (Debian 14.2.0-19) 14.2.0\n").with("cmake", "--version", "cmake version 3.31.6\n"));
     assert!(bare.missing.iter().any(|m| m.contains("C++ compiler")), "{:?}", bare.missing);
     assert!(bare.missing.iter().any(|m| m.contains("make or Ninja")), "{:?}", bare.missing);
     if cfg!(target_os = "linux") {
         assert!(bare.missing.iter().any(|m| m.contains("libsqlite3-dev")), "{:?}", bare.missing);
         assert!(bare.missing.iter().any(|m| m.contains("libwebkit2gtk-4.1-dev")), "{:?}", bare.missing);
-        let no_json = check(Backend::Cpp, Ui::Web, &Machine::default().with("g++", "--version", "g++ 14\n"));
+        let no_json = check(Backend::Cpp, Ui::Webview, &Machine::default().with("g++", "--version", "g++ 14\n"));
         assert!(no_json.missing.iter().any(|m| m.contains("nlohmann-json3-dev")), "{:?}", no_json.missing);
     }
 }
@@ -176,10 +176,10 @@ fn a_folder_already_on_the_path_is_not_searched_twice() {
 fn every_stack_of_the_catalog_is_checked_and_reported() {
     let machine = Machine::default().with("dotnet", "--list-sdks", "10.0.402 [/usr/share/dotnet/sdk]\n");
     let all = clarity_gen::tools::check_all(&machine);
-    assert!(all.iter().any(|s| s.backend == Backend::Rust && s.ui == Ui::Web));
-    assert!(all.iter().any(|s| s.backend == Backend::Csharp && s.ui == Ui::Avalonia));
+    assert!(all.iter().any(|s| s.backend == Backend::Rust && s.ui == Ui::Webview));
+    assert!(all.iter().any(|s| s.backend == Backend::Csharp && s.ui == Ui::Clarity));
     let report = clarity_gen::tools::report(&all);
-    assert!(report.contains("C# with Avalonia: ready (.NET SDK 10.0.402)\n"), "{report}");
+    assert!(report.contains("C# with Clarity.UI: ready (.NET SDK 10.0.402)\n"), "{report}");
     assert!(report.contains("Rust with the web renderer: missing Rust with cargo, from https://rustup.rs"), "{report}");
     assert!(report.contains("Go with the web renderer: missing Go, from https://go.dev/dl"), "{report}");
     // Where to read how, once something is missing.
@@ -285,7 +285,7 @@ fn visual_studio_s_cl_counts_as_a_c_and_cpp_compiler() {
         .with("cl", "", "Microsoft (R) C/C++ Optimizing Compiler Version 19.40.33811 for x64\n")
         .with("cmake", "--version", "cmake version 3.29.5\n")
         .with("ninja", "--version", "1.11.1\n");
-    let cpp = check(Backend::Cpp, Ui::Web, &with_libraries(machine));
+    let cpp = check(Backend::Cpp, Ui::Webview, &with_libraries(machine));
     assert!(cpp.found.contains(&"Microsoft (R) C/C++ Optimizing Compiler Version 19.40.33811 for x64".to_string()), "{:?}", cpp.found);
     assert!(!cpp.missing.iter().any(|m| m.contains("compiler")), "{:?}", cpp.missing);
 }
@@ -293,7 +293,7 @@ fn visual_studio_s_cl_counts_as_a_c_and_cpp_compiler() {
 #[test]
 fn mingw_s_make_counts_as_make() {
     let machine = Machine::default().with("g++", "--version", "g++ (Rev2, Built by MSYS2 project) 14.2.0\n").with("cmake", "--version", "cmake version 3.31.6\n").with("mingw32-make", "--version", "GNU Make 4.4.1\n");
-    let cpp = check(Backend::Cpp, Ui::Web, &with_libraries(machine));
+    let cpp = check(Backend::Cpp, Ui::Webview, &with_libraries(machine));
     assert!(cpp.found.contains(&"GNU Make 4.4.1".to_string()), "{:?}", cpp.found);
     assert!(!cpp.missing.iter().any(|m| m.contains("make or Ninja")), "{:?}", cpp.missing);
 }
@@ -318,12 +318,12 @@ fn every_missing_tool_points_at_the_manual() {
         assert!(anchors.iter().any(|a| a == heading), "the setup page has no heading #{heading}: {anchors:?}");
     }
     // A machine without anything misses every tool, each with its part of the page.
-    for (backend, ui) in [(Backend::Rust, Ui::Web), (Backend::Csharp, Ui::Avalonia), (Backend::Go, Ui::Web), (Backend::C, Ui::Web), (Backend::Cpp, Ui::Web)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Webview), (Backend::Csharp, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview)] {
         let bare = check(backend, ui, &Machine::default());
         assert_eq!(bare.missing.len(), bare.guides.len(), "{backend:?}: {:?} {:?}", bare.missing, bare.guides);
         assert!(bare.guides.iter().all(|g| guide_headings().contains(g)), "{:?}", bare.guides);
     }
-    let rust = check(Backend::Rust, Ui::Web, &Machine::default());
+    let rust = check(Backend::Rust, Ui::Webview, &Machine::default());
     let expected = if cfg!(windows) { "rust-on-windows" } else if cfg!(target_os = "macos") { "rust-on-macos" } else { "rust-on-linux" };
     assert_eq!(rust.guides[0], expected);
 }
@@ -332,10 +332,10 @@ fn every_missing_tool_points_at_the_manual() {
 /// WebAssembly tools, which link Avalonia's drawing into the browser program;
 /// a desktop project builds without them.
 #[test]
-fn the_web_target_of_avalonia_needs_the_webassembly_tools() {
+fn the_web_target_of_csharp_needs_the_webassembly_tools() {
     let sdk = "10.0.402 [/usr/share/dotnet/sdk]\n";
     let without = Machine::default().with("dotnet", "--list-sdks", sdk).with("dotnet", "workload list", "\nInstalled Workload Id      Manifest Version\n------------------\n");
-    let tools = check(Backend::Csharp, Ui::Avalonia, &without);
+    let tools = check(Backend::Csharp, Ui::Clarity, &without);
     assert!(tools.ready(), "a desktop project builds without them");
     assert!(!tools.ready_for(true));
     assert!(tools.web_missing[0].contains("dotnet workload install wasm-tools"), "{:?}", tools.web_missing);
@@ -344,12 +344,12 @@ fn the_web_target_of_avalonia_needs_the_webassembly_tools() {
     assert!(install.args.join(" ").contains("workload install wasm-tools"), "{install:?}");
 
     let with = Machine::default().with("dotnet", "--list-sdks", sdk).with("dotnet", "workload list", "wasm-tools                 10.0.114/10.0.100      SDK 10.0.400\n");
-    let tools = check(Backend::Csharp, Ui::Avalonia, &with);
+    let tools = check(Backend::Csharp, Ui::Clarity, &with);
     assert!(tools.ready_for(true), "{:?}", tools.web_missing);
     assert_eq!(tools.web_found, ["wasm-tools 10.0.114/10.0.100"]);
     assert_eq!(tools.web_install, None);
     // Another stack needs nothing more for the web.
-    assert!(check(Backend::Go, Ui::Web, &Machine::default()).web_missing.is_empty());
+    assert!(check(Backend::Go, Ui::Webview, &Machine::default()).web_missing.is_empty());
 }
 
 /// .NET installed for the whole system needs the system's permission to add
@@ -377,7 +377,7 @@ fn the_webassembly_tools_install_asks_the_system_where_it_must() {
 /// stack's own tools (DESIGN 7.8).
 #[test]
 fn no_stack_needs_node() {
-    for (backend, ui) in [(Backend::Rust, Ui::Web), (Backend::Go, Ui::Web), (Backend::C, Ui::Web), (Backend::Cpp, Ui::Web), (Backend::Csharp, Ui::Avalonia)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Webview), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
         let check = check(backend, ui, &Machine::default());
         assert!(!check.missing.iter().any(|m| m.contains("Node") || m.contains("npm")), "{backend:?}: {:?}", check.missing);
         assert!(!clarity_gen::tools::requirements(backend).iter().any(|r| r.contains("Node")), "{backend:?}");

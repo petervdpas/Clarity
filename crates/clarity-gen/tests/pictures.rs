@@ -54,7 +54,7 @@ fn a_picture_column_holds_the_picture_or_the_path_of_its_file() {
         (SourceKind::Mysql, "`cover` LONGBLOB", "`photo` VARCHAR(400)"),
         (SourceKind::Mssql, "[cover] VARBINARY(MAX)", "[photo] NVARCHAR(400)"),
     ] {
-        let schema = text(&files(Backend::Go, Ui::Web, kind), "schema.go").to_string();
+        let schema = text(&files(Backend::Go, Ui::Webview, kind), "schema.go").to_string();
         has(&schema, picture);
         has(&schema, path);
     }
@@ -65,14 +65,14 @@ fn a_picture_column_holds_the_picture_or_the_path_of_its_file() {
 fn a_store_must_be_in_the_project_settings() {
     let mut settings = starter("Records", "records");
     settings.stack.backend = Backend::Go;
-    settings.stack.ui = Ui::Web;
+    settings.stack.ui = Ui::Webview;
     let errors = generate(&project(), &settings).unwrap_err();
     assert_eq!(errors, ["Album.photo is kept in file store 'photos', which the project settings do not have"]);
 }
 
 #[test]
 fn rust_records_hold_their_pictures() {
-    let files = files(Backend::Rust, Ui::Web, SourceKind::Sqlite);
+    let files = files(Backend::Rust, Ui::Webview, SourceKind::Sqlite);
     let music = text(&files, "src/modules/music.rs");
     has(music, "    pub cover: Option<Picture>,
 ");
@@ -89,7 +89,7 @@ fn rust_records_hold_their_pictures() {
 
 #[test]
 fn csharp_records_hold_their_pictures() {
-    let files = files(Backend::Csharp, Ui::Avalonia, SourceKind::Sqlite);
+    let files = files(Backend::Csharp, Ui::Clarity, SourceKind::Sqlite);
     let music = text(&files, "Modules/Music.cs");
     has(music, "    public Picture? Cover { get => _cover; set => SetProperty(ref _cover, value); }\n");
     has(music, "    public static IReadOnlyList<PictureColumn> Pictures { get; } = [new(\"cover\", null), new(\"photo\", \"photos\")];\n");
@@ -102,7 +102,7 @@ fn csharp_records_hold_their_pictures() {
 
 #[test]
 fn go_records_hold_their_pictures() {
-    let files = files(Backend::Go, Ui::Web, SourceKind::Sqlite);
+    let files = files(Backend::Go, Ui::Webview, SourceKind::Sqlite);
     let music = text(&files, "music_module.go");
     has(music, "\tCover *clarity.Picture `json:\"cover\"`\n");
     has(music, "clarity.PictureValue(r.Cover), clarity.PictureValue(r.Photo)}");
@@ -113,15 +113,10 @@ fn go_records_hold_their_pictures() {
     has(main, "\tcase \"Album.cover\":\n\t\treturn clarity.PictureOf[Album](db, id, \"cover\")\n");
 }
 
-/// Avalonia shows a picture field with the runtime's PictureBox, which
-/// fetches a stored picture through the window's view model.
+/// C# fetches a stored picture through the window's view model.
 #[test]
-fn avalonia_shows_a_picture_field_in_a_picture_box() {
-    let files = files(Backend::Csharp, Ui::Avalonia, SourceKind::Sqlite);
-    let view = text(&files, "Windows/AlbumFormView.axaml");
-    has(view, "<c:PictureBox x:Name=\"cover\"");
-    has(view, "Picture=\"{Binding Album.Cover}\" Record=\"{Binding Album}\" Fetch=\"{Binding AlbumCoverPicture}\"");
-    has(view, "EmptyText=\"{x:Static local:Texts.NoPicture}\"");
+fn csharp_fetches_a_picture_through_the_view_model() {
+    let files = files(Backend::Csharp, Ui::Clarity, SourceKind::Sqlite);
     let model = text(&files, "Windows/AlbumFormViewModel.cs");
     has(model, "    public Func<Task<byte[]?>> AlbumCoverPicture => () => Fetched(nameof(AlbumCoverPicture), () => Db.PictureOf<Album>(Album.Id, \"cover\"));\n");
 }
@@ -129,17 +124,15 @@ fn avalonia_shows_a_picture_field_in_a_picture_box() {
 /// A picture linked from a file before its record is saved shows from its store.
 #[test]
 fn a_linked_picture_shows_from_its_store_before_it_is_saved() {
-    let rust = files(Backend::Rust, Ui::Web, SourceKind::Sqlite);
+    let rust = files(Backend::Rust, Ui::Webview, SourceKind::Sqlite);
     // The shell's commands are in the desktop module.
     let main = text(&rust, "src/desktop.rs");
     has(main, "fn store_file(app: tauri::State<App>, store: String, path: String) -> Answer<String> {");
     has(main, "            store_file,\n");
-    let csharp = files(Backend::Csharp, Ui::Avalonia, SourceKind::Sqlite);
+    let csharp = files(Backend::Csharp, Ui::Clarity, SourceKind::Sqlite);
     let model = text(&csharp, "Windows/AlbumFormViewModel.cs");
     has(model, "    public Func<string, Task<byte[]?>> AlbumPhotoFile => path => Fetched(nameof(AlbumPhotoFile), () => Db.StoreFile(\"photos\", path), path);\n");
-    let view = text(&csharp, "Windows/AlbumFormView.axaml");
-    has(view, "Fetch=\"{Binding AlbumPhotoPicture}\" FetchFile=\"{Binding AlbumPhotoFile}\"");
-    assert!(!view.contains("AlbumCoverFile"), "a picture kept in the database has no store file");
+    assert!(!model.contains("AlbumCoverFile"), "a picture kept in the database has no store file");
 }
 
 const COPIES: &str = "module music
@@ -181,19 +174,19 @@ fn all(files: &[OutFile]) -> String {
 /// stored one's bytes, so it needs the record, the column and both stores.
 #[test]
 fn code_copies_a_picture_and_a_file_from_another_record() {
-    let rust = all(&copies(Backend::Rust, Ui::Web));
+    let rust = all(&copies(Backend::Rust, Ui::Webview));
     has(&rust, "db.copied_picture::<Album>(&other.cover, other.id, \"cover\", None, Some(\"photos\"))?");
     has(&rust, "db.copied_file::<Album>(&other.booklet, other.id, \"booklet\", None, None)?");
-    let go = all(&copies(Backend::Go, Ui::Web));
+    let go = all(&copies(Backend::Go, Ui::Webview));
     has(&go, "clarity.CopiedPicture[Album](db, w.Other.Cover, w.Other.ID, \"cover\", \"\", \"photos\")");
     has(&go, "clarity.CopiedFile[Album](db, w.Other.Booklet, w.Other.ID, \"booklet\", \"\", \"\")");
-    let csharp = all(&copies(Backend::Csharp, Ui::Avalonia));
+    let csharp = all(&copies(Backend::Csharp, Ui::Clarity));
     has(&csharp, "Album.Photo = Db.CopiedPicture<Album>(Other.Cover, Other.Id, \"cover\", null, \"photos\");");
     has(&csharp, "Album.Booklet = Db.CopiedFile<Album>(Other.Booklet, Other.Id, \"booklet\", null, null);");
-    let c = all(&copies(Backend::C, Ui::Web));
+    let c = all(&copies(Backend::C, Ui::Webview));
     has(&c, "clarity_copied_picture(db, &album_entity, w->other.cover, w->other.id, \"cover\", NULL, \"photos\", &");
     has(&c, "clarity_copied_file(db, &album_entity, w->other.booklet, w->other.id, \"booklet\", NULL, NULL, &");
-    let cpp = all(&copies(Backend::Cpp, Ui::Web));
+    let cpp = all(&copies(Backend::Cpp, Ui::Webview));
     has(&cpp, "album.photo = db.copied_picture<Album>(other.cover, other.id, \"cover\", std::nullopt, \"photos\");");
     has(&cpp, "album.booklet = db.copied_file<Album>(other.booklet, other.id, \"booklet\", std::nullopt, std::nullopt);");
 }

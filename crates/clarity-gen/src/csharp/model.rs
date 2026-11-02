@@ -91,7 +91,7 @@ fn initial(field: &Field) -> Option<String> {
 
 /// The person's settings (DESIGN 5.17) as one shared object: every
 /// window's `Settings` is `Settings.Current`. `Start` takes back what was
-/// kept and still fits (Clarity.Avalonia's KeptSettings), shows its language
+/// kept and still fits (the runtime's KeptSettings), shows its language
 /// and theme, keeps every change, and follows the pickers.
 fn settings_class(project: &Project, entity: &Entity, program: &str, cli: bool) -> String {
     let name = &entity.name.name;
@@ -168,7 +168,7 @@ fn settings_class(project: &Project, entity: &Entity, program: &str, cli: bool) 
 "));
                 follow.push_str(&format!(
                     "            // The views are rebuilt for a language, so the input that changed it is done first.
-            if (e.PropertyName == nameof({prop}) && settings.{prop} != Locale.Current) Dispatcher.UIThread.Post(() => Locale.Choose(settings.{prop}));
+            if (e.PropertyName == nameof({prop}) && settings.{prop} != Locale.Current) Later.Post(() => Locale.Choose(settings.{prop}));
 "
                 ));
                 shown.push_str(&format!("        Locale.Changed += () => settings.{prop} = Locale.Current;

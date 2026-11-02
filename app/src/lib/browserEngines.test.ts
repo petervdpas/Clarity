@@ -1,4 +1,4 @@
-// The engines beside the screen of C# with Avalonia in a browser (DESIGN
+// The engines beside the screen of C# with Clarity.UI in a browser (DESIGN
 // 7.6): .NET calls them on the page's own thread, each call answered at
 // once, so the canvas's frame loop is the desktop's.
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Clarity's number input on the web, the same as on Avalonia
+  // Clarity's number input on the web, the same on every stack
   // (conformance/forms.json, tables.json): the value shows in the person's
   // format and typed text is read the same way, when the field is left or
   // Enter is pressed. Text that is no number stays as typed and is marked,

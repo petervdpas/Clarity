@@ -7,7 +7,7 @@ How Clarity turns a project into a Rust desktop program with Tauri and the web r
 Name the stack in the project file, or pick it on the Project tab:
 
 ```clarity
-stack rust web desktop
+stack rust webview desktop
 ```
 
 The backend is Rust, the UI is Clarity's web renderer, and the shell is Tauri 2. See [The project file](project.file.md).
@@ -68,4 +68,4 @@ The application has one desktop window. `open` shows a window in place, on top o
 
 ## The same on every stack
 
-The screen is shared by the Rust, Go, C and C++ stacks, so they cannot differ; a window drawn from its markup draws exactly what the same window drawn from the model does, which a test checks for every window of every example. The parts of a window behave alike on the web renderer and on Avalonia ([C# with Avalonia](stacks.csharp.md)): the shared cases in `conformance/` say what each part must do, and both renderers run them.
+The screen is shared by the Rust, Go, C and C++ stacks, so they cannot differ; a window drawn from its markup draws exactly what the same window drawn from the model does, which a test checks for every window of every example. The parts of a window behave alike on the web renderer and on C# ([C# with Clarity.UI](stacks.csharp.md)): the shared cases in `conformance/` say what each part must do, and every renderer runs them.

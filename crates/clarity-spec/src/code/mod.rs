@@ -690,9 +690,9 @@ pub enum PartLibrary {
     Crate { folder: String },
     /// `go "parts/arena"`: a Go package in that folder, with its go.mod (the Go stack).
     Go { folder: String },
-    /// `nuget "AvaloniaEdit" 11.1.0`: an Avalonia control from a NuGet package.
+    /// `nuget "Markdig" 0.40.0`: a .NET library from a NuGet package (the C# stack).
     Nuget { package: String, version: String },
-    /// `dll "libs/Plot.dll"`: an Avalonia control from a .NET assembly.
+    /// `dll "libs/Plot.dll"`: a .NET library from an assembly (the C# stack).
     Dll { file: String },
 }
 

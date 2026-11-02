@@ -14,17 +14,17 @@ const PROGRAM: &str = "module shop\n\ncli Shop\n    help \"The shop\"\n\ncommand
 #[test]
 fn the_cli_target_and_block_go_together() {
     assert!(problems("go cli", PROGRAM).is_empty());
-    assert!(problems("go web desktop cli", PROGRAM).is_empty());
-    assert!(problems("go web desktop", "module shop\n").is_empty());
+    assert!(problems("go webview desktop cli", PROGRAM).is_empty());
+    assert!(problems("go webview desktop", "module shop\n").is_empty());
     assert_eq!(
         problems("go cli", "module shop\n"),
         ["the stack has the cli target, so a module needs the program's block: cli Shop"]
     );
     assert_eq!(
-        problems("go web desktop", PROGRAM),
+        problems("go webview desktop", PROGRAM),
         [
-            "cli Shop is the command-line program, which needs the cli target: stack go web desktop cli",
-            "command backup is for the command-line program, which needs the cli target: stack go web desktop cli",
+            "cli Shop is the command-line program, which needs the cli target: stack go webview desktop cli",
+            "command backup is for the command-line program, which needs the cli target: stack go webview desktop cli",
         ]
     );
     assert_eq!(

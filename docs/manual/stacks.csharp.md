@@ -1,16 +1,18 @@
-# C# with Avalonia
+# C# with Clarity.UI
 
-How Clarity turns a project into a C# desktop program whose windows are native Avalonia views, what you need to install, and how to build it.
+How Clarity turns a project into a C# desktop program whose windows Clarity.UI draws, what you need to install, and how to build it.
+
+Clarity.UI is Clarity's own UI framework. It draws the windows itself with Skia, on the desktop and in a browser page, and every stack gets its own version of it (DESIGN 7.9). The C# version is the first. It does not draw a window's parts yet: a C# program opens its main window with the window's title and size, and the parts follow as Clarity.UI gets them.
 
 ## Choosing the stack
 
 Name the stack in the project file, or pick it on the Project tab:
 
 ```clarity
-stack csharp avalonia desktop
+stack csharp desktop
 ```
 
-C# always uses Avalonia. C# with the web renderer is not generated yet. See [The project file](project.file.md).
+Clarity.UI is not named in the stack line: after the language come the targets. The web target of C# is not generated yet. See [The project file](project.file.md).
 
 ## What is generated
 
@@ -18,11 +20,13 @@ Clarity writes a .NET project into the output folder (`out` by default). `<Name>
 
 - `<Name>.csproj`: the project, targeting .NET 10 (`net10.0`).
 - `Modules/<Module>.cs`: one file per Clarity module, with its enums, records, functions, actions and data events.
-- `Windows/<Window>View.axaml`, its code behind `<Window>View.axaml.cs`, and `Windows/<Window>ViewModel.cs`: each window as an Avalonia view with a view model that holds its data and handlers.
-- `Program.cs`, `App.axaml`, `App.axaml.cs`, `Views.cs` and `Shown.cs`: the start of the program, the list of views, and how fields are shown and read.
+- `Windows/<Window>ViewModel.cs`: each window's view model, which holds its data, the state of its parts and its handlers.
+- `Windows/<Window>.cxaml` and `Apps/<App>.cxaml`: each window and each app frame as markup, which Clarity.UI draws (see [Windows](design.windows.md)).
+- `Program.cs`: the start of the program. It starts the language and theme kept from the last run, opens the databases and shows the main window.
+- `Labels.cs`: the labels of enum values, for texts with slots.
 - `Schema.cs`: the migration steps of every database Clarity owns.
 - `Texts.resx` with the texts as written, `Texts.<language>.resx` per language, and `Texts.cs`, a typed class with a property per text. See [Languages](languages.md).
-- `Themes/<Theme>.axaml` per offered theme, with its Light and Dark colors, and `AppThemes.cs`, which lists them. See [Themes](themes.md).
+- `Themes/<theme>.light.json` and `Themes/<theme>.dark.json` per offered theme, as Clarity resolves it, and `AppThemes.cs`, which lists them. See [Themes](themes.md).
 - `resources/`: the project's resources (pictures and Markdown files), embedded in the program.
 - `README.md`: how to build the project without Clarity.
 
@@ -32,9 +36,8 @@ Do not edit these files. Change the project in Clarity; it writes the folder aga
 
 The generated project carries no runtime sources. It references NuGet packages from nuget.org, at one shared version:
 
-- `Clarity.Avalonia.Desktop`: what only a desktop program has: the platform's windows, the shell, sound through the speakers, quitting and the keys window. It brings `Clarity.Avalonia`.
-- `Clarity.Avalonia`: the windows and parts, without anything native, so a program served to browsers takes it alone. It brings `Clarity.Runtime`: records, queries and migrations, without a database driver.
-- `Clarity.Runtime.Sqlite`, `Clarity.Runtime.PostgreSql`, `Clarity.Runtime.MySql` and `Clarity.Runtime.SqlServer`: one per kind of database, added only when a data source uses it. In a program served to browsers the server takes them, and the browser program none.
+- `Clarity.Ui.Desktop`: Clarity.UI in the system's own window, on Linux, Windows and macOS. It brings `Clarity.Ui`, which draws, and `Clarity.Runtime`: the window model (view models, part state, undo), records, queries and migrations, without a database driver.
+- `Clarity.Runtime.Sqlite`, `Clarity.Runtime.PostgreSql`, `Clarity.Runtime.MySql` and `Clarity.Runtime.SqlServer`: one per kind of database, added only when a data source uses it.
 - `Clarity.Runtime.Engines`: runs [engines](code.engines.md) with Wasmtime, added only when the project has one.
 
 To build on the runtime's own projects in Clarity's repository instead (while you work on the runtime itself), name their folder:
@@ -64,12 +67,15 @@ dotnet run
 
 The release program is `bin/Release/net10.0/<Name>` (with `.exe` on Windows). A debug build goes to `bin/Debug/net10.0/<Name>`.
 
-## Windows on screen
+## Not yet on C#
 
-The application has one desktop window. `open` shows a window in place, on top of the one that opened it, and `close` goes back to the one below. A dialog gets a desktop window of its own. A click target marked `in new window` opens a second desktop window with its own stack of windows. See [Windows](design.windows.md).
+These come with Clarity.UI's parts and its custom controls (DESIGN 7.9):
 
-The designer shows an Avalonia window's layout faithfully, but not pixel for pixel. The real window appears with Run.
+- the parts of a window, its frame and its dialogs;
+- the window that keeps a database connection when the databases do not open; until then the program says why and stops;
+- custom parts from a .NET library;
+- the web target.
 
 ## The same on every stack
 
-The parts of a window behave alike on Avalonia and on the web renderer that the other stacks use. Each part is Clarity's own control (in `Clarity.Avalonia`) rather than a stock one, and the shared cases in `conformance/` say what each part must do. Both renderers run them, and a difference fails the build of the renderer that has it.
+The parts of a window behave alike on every stack. The shared cases in `conformance/` say what each part must do, and every version of Clarity.UI runs them.

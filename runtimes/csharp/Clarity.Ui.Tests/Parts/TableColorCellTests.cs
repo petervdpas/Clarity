@@ -33,7 +33,7 @@ public class TableColorCellTests
         Assert.Equal("#ff0000", table.Shown(0, "color"));
         using var pixels = Shot.Of(screen, 800, 400);
         var swatch = table.SwatchBox(0, "color")!.Value;
-        Assert.Equal(new SKColor(255, 0, 0), pixels.GetPixel((int)(swatch.X + swatch.Width / 2), (int)(swatch.Y + swatch.Height / 2)));
+        Assert.Equal(new SKColor(255, 0, 0), pixels.PixelAt((int)(swatch.X + swatch.Width / 2), (int)(swatch.Y + swatch.Height / 2)));
         // A cell without a color has no swatch.
         Assert.Null(table.SwatchBox(1, "color"));
     }
@@ -46,7 +46,7 @@ public class TableColorCellTests
         var table = Assert.IsType<TablePart>(parts[0]);
         using var pixels = Shot.Of(screen, 800, 400);
         var swatch = table.SwatchBox(0, "color")!.Value;
-        Assert.Equal(new SKColor(255, 0, 0), pixels.GetPixel((int)(swatch.X + swatch.Width / 2), (int)(swatch.Y + swatch.Height / 2)));
+        Assert.Equal(new SKColor(255, 0, 0), pixels.PixelAt((int)(swatch.X + swatch.Width / 2), (int)(swatch.Y + swatch.Height / 2)));
     }
 
     [Fact]

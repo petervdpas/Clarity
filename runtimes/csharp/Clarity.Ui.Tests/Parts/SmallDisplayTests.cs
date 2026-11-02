@@ -26,8 +26,8 @@ public class SmallDisplayTests
         var (screen, _, parts) = Made.Window("""<Progress at="1,1" span="12" bind="done" max="250" />""", host, width: 808);
         Assert.Equal(0.5, ((ProgressPart)parts[0]).Shown);
         using var pixels = Shot.Of(screen, 808, 400);
-        Assert.Equal(screen.Look.Color("accent"), pixels.GetPixel(200, 18));
-        Assert.Equal(screen.Look.Color("raised"), pixels.GetPixel(600, 18));
+        Assert.Equal(screen.Look.Color("accent"), pixels.PixelAt(200, 18));
+        Assert.Equal(screen.Look.Color("raised"), pixels.PixelAt(600, 18));
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public class SmallDisplayTests
         busy.Clock = () => 0;
         using var pixels = Shot.Of(screen, 808, 400);
         // At the start of a turn its arc starts at the top, in the accent.
-        var top = pixels.GetPixel(8, 11);
+        var top = pixels.PixelAt(8, 11);
         Assert.True(top.Blue > top.Red + 50, $"the top of the indicator is {top}");
     }
 
@@ -67,8 +67,8 @@ public class SmallDisplayTests
         using var pixels = Shot.Of(screen, 808, 400);
         var box = parts[0].Bounds;
         // A line across the middle of a 20 high icon in the middle of its place.
-        Assert.True(pixels.GetPixel((int)(box.X + box.Width / 2), (int)(box.Y + box.Height / 2)).Red < 100);
-        Assert.Equal(screen.Look.Color("background"), pixels.GetPixel((int)(box.X + box.Width / 2), (int)(box.Y + 4)));
+        Assert.True(pixels.PixelAt((int)(box.X + box.Width / 2), (int)(box.Y + box.Height / 2)).Red < 100);
+        Assert.Equal(screen.Look.Color("background"), pixels.PixelAt((int)(box.X + box.Width / 2), (int)(box.Y + 4)));
     }
 
     [Fact]
@@ -87,8 +87,8 @@ public class SmallDisplayTests
         var fitted = ImagePart.Fit(box, 200, 100);
         Assert.Equal(new Box(76, 0, 248, 124), fitted);
         using var pixels = Shot.Of(screen, 808, 124);
-        Assert.Equal(SKColors.Red, pixels.GetPixel(200, 62));
-        Assert.Equal(screen.Look.Color("background"), pixels.GetPixel(20, 62));
+        Assert.Equal(SKColors.Red, pixels.PixelAt(200, 62));
+        Assert.Equal(screen.Look.Color("background"), pixels.PixelAt(20, 62));
         // One that is not there shows its name in a dashed frame.
         Assert.Null(((ImagePart)parts[1]).Shown);
         Assert.True(parts[1].Grows);

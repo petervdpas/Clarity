@@ -1,8 +1,9 @@
 // A trend (DESIGN 5.26), the same as on the web: the last values of one
-// number, taken every so many seconds while its window shows, drawn as
-// Clarity's line chart with the newest at the right. It takes a value when
-// it is first drawn, and asks the screen to wake it when the next is due
-// (Screen.Wake), so it draws once a second rather than every frame.
+// number, taken every so many seconds while its window is open (hidden
+// too, so its history has no gap), drawn as Clarity's line chart with the
+// newest at the right. It takes a value when it is first drawn, and asks the
+// screen to wake it when the next is due (Screen.Wake), so it draws once a
+// second rather than every frame.
 
 using Clarity.Runtime;
 
@@ -16,7 +17,6 @@ public sealed class TrendPart : Part
 
     readonly List<double> history = [];
     DateTime? lastTaken;
-    (double X, double Y)? pointer;
 
     public override bool Grows => true;
 
@@ -47,29 +47,43 @@ public sealed class TrendPart : Part
     /// <summary>Where each value is drawn.</summary>
     public IReadOnlyList<ChartMark> Marks() => ChartDrawing.Marks(Bounds, ChartShape.Line, Shown, Max);
 
-    /// <summary>The next value is due: it draws again, and drawing takes it.</summary>
-    public override void OnWake() => Invalidate();
-
-    public override void OnPointerMoved(PointerInput at)
+    /// <summary>On its screen it starts taking values at once, shown or hidden, as Avalonia's trend did while its window was open.</summary>
+    protected override void OnAttached()
     {
-        pointer = (at.ScreenX, at.ScreenY);
-        Invalidate();
+        // Due at once, whatever the screen's clock says.
+        Screen?.Wake(this, DateTime.MinValue);
     }
+
+    /// <summary>The next value is due: shown, it draws again and drawing takes it; hidden, it takes it now, so its history has no gap when it shows again.</summary>
+    public override void OnWake()
+    {
+        if (ShowsInTree)
+            Invalidate();
+        else
+            Sample();
+    }
+
+    /// <summary>Takes the value when the next is due, and asks the screen to wake it for the one after.</summary>
+    void Sample()
+    {
+        if (Screen is not { } screen)
+            return;
+        var now = screen.Now();
+        if (lastTaken is { } last && now - last < TimeSpan.FromSeconds(Every))
+            return;
+        Take();
+        lastTaken = now;
+        screen.Wake(this, now + TimeSpan.FromSeconds(Every));
+    }
+
+    /// <summary>A value tells itself as the screen's tooltip, once the pointer rests on it.</summary>
+    public override string? TooltipAt(double x, double y) => ChartDrawing.TipAt(Bounds, ChartShape.Line, Shown, Max, x, y) ?? base.TooltipAt(x, y);
 
     public override void Draw(Painter painter)
     {
         if (!IsShown)
             return;
-        if (Screen is { } screen)
-        {
-            var now = screen.Now();
-            if (lastTaken is not { } last || now - last >= TimeSpan.FromSeconds(Every))
-            {
-                Take();
-                lastTaken = now;
-                screen.Wake(this, now + TimeSpan.FromSeconds(Every));
-            }
-        }
-        ChartDrawing.Draw(painter, Bounds, ChartShape.Line, Shown, Max, Hovered ? pointer : null);
+        Sample();
+        ChartDrawing.Draw(painter, Bounds, ChartShape.Line, Shown, Max);
     }
 }

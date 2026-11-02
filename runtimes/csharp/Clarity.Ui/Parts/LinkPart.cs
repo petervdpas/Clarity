@@ -46,6 +46,9 @@ public sealed class LinkPart : Part
 
     public override void OnClick() => Follow();
 
+    /// <summary>The pointer is a hand over it while it can be followed.</summary>
+    public override Cursor? CursorAt(double x, double y) => Enabled ? Cursor.Hand : null;
+
     public override bool OnKey(KeyInput key)
     {
         if (key.Key != Key.Enter)

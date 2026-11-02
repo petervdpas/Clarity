@@ -45,6 +45,13 @@ const EN: &str = "translation en
     cancel \"Cancel\"
     dismiss \"Dismiss\"
     undoChangedSince \"This was changed since, so it cannot be taken back\"
+    cutText \"Cut\"
+    copyText \"Copy\"
+    pasteText \"Paste\"
+    selectAllText \"Select all\"
+    itemOutsideList \"There is no item {position} in a list of {count}\"
+    recordNotThere \"There is no {table} with id {id}\"
+    recordStillUsed \"This {table} is still used by other records\"
 ";
 
 const NL: &str = "translation nl
@@ -63,6 +70,13 @@ const NL: &str = "translation nl
     cancel \"Annuleren\"
     dismiss \"Sluiten\"
     undoChangedSince \"Dit is intussen gewijzigd en kan daarom niet ongedaan worden gemaakt\"
+    cutText \"Knippen\"
+    copyText \"Kopiëren\"
+    pasteText \"Plakken\"
+    selectAllText \"Alles selecteren\"
+    itemOutsideList \"Er is geen item {position} in een lijst van {count}\"
+    recordNotThere \"Er is geen {table} met id {id}\"
+    recordStillUsed \"Deze {table} wordt nog door andere records gebruikt\"
 ";
 
 fn project(source: &str, files: &[(&str, &str)]) -> Project {

@@ -4,7 +4,10 @@
 // with its button and back, and lets a maximizable one fill the window and
 // give it back. Whether it is folded and whether it fills the window are its
 // part state (IsCollapsed, IsMaximized), so code reads and sets them; an
-// unnamed sidebar keeps them itself.
+// unnamed sidebar keeps them itself. Folding leaves whether it fills the
+// window as it was, as Avalonia's did: shown again, it fills it again. Its
+// buttons take the focus and say what they do; its edge shows the resize
+// pointer.
 
 using Clarity.Runtime;
 
@@ -25,7 +28,6 @@ public sealed class FrameSidebar : FrameRegion
     bool ownCollapsed;
     bool ownMaximized;
     (double X, double Width)? dragging;
-    string? pressedOn;
 
     public FrameSidebar(WindowFrame frame, SidebarSpec sidebar) : base(frame)
     {
@@ -38,12 +40,18 @@ public sealed class FrameSidebar : FrameRegion
             parts.Add(part);
             grid.Add(part, spec.Place(part.Grows));
         }
+        // As Avalonia's header: the fill button, then the fold button, then its parts, in Tab order.
+        AddChild(new SidebarButton(this, fills: true));
+        AddChild(new SidebarButton(this, fills: false));
         holder = new Showing(() => !Collapsed);
         holder.Add(grid);
         AddChild(holder);
     }
 
     public SidebarSpec Sidebar { get; }
+
+    /// <summary>Its fill and fold buttons.</summary>
+    public IReadOnlyList<SidebarButton> Buttons => [.. Children.OfType<SidebarButton>()];
 
     /// <summary>Its parts, in the order of its markup.</summary>
     public IReadOnlyList<Part> Parts => parts;
@@ -84,21 +92,15 @@ public sealed class FrameSidebar : FrameRegion
         return new Box(Collapsed ? inner.X : x, inner.Y, ButtonsHeight, ButtonsHeight);
     }
 
-    /// <summary>Folds it to its strip or shows it again; folded, it no longer fills the window.</summary>
+    /// <summary>Folds it to its strip or shows it again; whether it fills the window stays as it was, folded it does not show.</summary>
     public void Fold(bool folded)
     {
         if (!Sidebar.Collapsible)
             return;
         if (State is { } state)
-        {
             state.IsCollapsed = folded;
-            state.IsMaximized = false;
-        }
         else
-        {
             ownCollapsed = folded;
-            ownMaximized = false;
-        }
         Invalidate();
     }
 
@@ -127,17 +129,17 @@ public sealed class FrameSidebar : FrameRegion
         var inner = box.Inset(Padding);
         var top = HasButtons ? ButtonsHeight + 6 : 0;
         holder.Arrange(new Box(inner.X, inner.Y + top, inner.Width, Math.Max(0, inner.Height - top)));
+        foreach (var button in Buttons)
+            button.Arrange((button.Fills ? FillButton : FoldButton) ?? default);
     }
+
+    /// <summary>Over its edge, while the person may drag it, the pointer shows it resizes.</summary>
+    public override Cursor? CursorAt(double x, double y) => Edge is { } edge && edge.Contains(x, y) ? Cursor.ResizeLeftRight : null;
 
     public override void OnPointerPressed(PointerInput at)
     {
-        pressedOn = null;
         if (Edge is { } edge && edge.Contains(at.ScreenX, at.ScreenY))
             dragging = (at.ScreenX, Width);
-        else if (FoldButton is { } fold && fold.Contains(at.ScreenX, at.ScreenY))
-            pressedOn = "fold";
-        else if (FillButton is { } fill && fill.Contains(at.ScreenX, at.ScreenY))
-            pressedOn = "fill";
     }
 
     public override void OnPointerMoved(PointerInput at)
@@ -149,15 +151,6 @@ public sealed class FrameSidebar : FrameRegion
 
     public override void OnPointerReleased(PointerInput at) => dragging = null;
 
-    public override void OnClick()
-    {
-        if (pressedOn == "fold")
-            Fold(!Collapsed);
-        else if (pressedOn == "fill")
-            Fill(!Maximized);
-        pressedOn = null;
-    }
-
     public override void Draw(Painter painter)
     {
         var look = painter.Look;
@@ -165,18 +158,8 @@ public sealed class FrameSidebar : FrameRegion
         Plate(painter, Bounds, line);
         if (Edge is { } edge && (Over(edge) || dragging is not null))
             painter.Fill(edge, look.Color("accent_soft"));
-        var text = look.Color("frame_text");
-        // The fold button points the way the sidebar goes; the fill button shows the arrows out, or in while it fills.
-        if (FoldButton is { } fold)
-            Button(painter, fold, Sidebar.Left != Collapsed ? "\u2039" : "\u203A", Over(fold), text);
-        if (FillButton is { } fill)
-        {
-            Button(painter, fill, "", Over(fill), text);
-            FillMark(painter, fill, Maximized, look.Part("button", Over(fill) ? "hover" : null).Text ?? text);
-        }
-        if (!Collapsed)
-            using (painter.Clip(Bounds))
-                base.Draw(painter);
+        using (painter.Clip(Bounds))
+            base.Draw(painter);
     }
 
     /// <summary>
@@ -202,7 +185,7 @@ public sealed class FrameSidebar : FrameRegion
         }
     }
 
-    static void Button(Painter painter, Box box, string mark, bool over, SkiaSharp.SKColor text)
+    internal static void Button(Painter painter, Box box, string mark, bool over, SkiaSharp.SKColor text)
     {
         var look = painter.Look;
         var values = look.Part("button", over ? "hover" : null);
@@ -210,5 +193,70 @@ public sealed class FrameSidebar : FrameRegion
         painter.Fill(box, values.Background ?? look.Color("panel"), radius);
         painter.Stroke(box, values.Border ?? look.Color("border"), look.Border, radius);
         painter.Text(mark, box, values.Text ?? text, look.Size("text"), align: TextAlign.Center);
+    }
+}
+
+/// <summary>
+/// A sidebar's fold or fill button: a click, Enter or Space folds it (or
+/// shows it again) or lets it fill the window (or gives the window back).
+/// It takes the focus, shows the focus ring, and says what it does.
+/// </summary>
+public sealed class SidebarButton : Element
+{
+    readonly FrameSidebar sidebar;
+
+    internal SidebarButton(FrameSidebar sidebar, bool fills)
+    {
+        this.sidebar = sidebar;
+        Fills = fills;
+    }
+
+    /// <summary>Whether it is the fill button; else the fold button.</summary>
+    public bool Fills { get; }
+
+    Box? Place => Fills ? sidebar.FillButton : sidebar.FoldButton;
+
+    public override bool IsShown => Place is not null;
+
+    public override bool Focusable => true;
+
+    public override void OnClick() => Press();
+
+    public override bool OnKey(KeyInput key)
+    {
+        if (key.Key is not (Key.Enter or Key.Space) || key.Modifiers != Modifiers.None)
+            return false;
+        Press();
+        return true;
+    }
+
+    void Press()
+    {
+        if (Fills)
+            sidebar.Fill(!sidebar.Maximized);
+        else
+            sidebar.Fold(!sidebar.Collapsed);
+    }
+
+    public override string? TooltipAt(double x, double y) => Fills
+        ? sidebar.Maximized ? Locale.Translate("sidebarGiveBack", "Give the window back") : Locale.Translate("sidebarFill", "Fill the window")
+        : sidebar.Collapsed ? Locale.Translate("sidebarShow", "Show the sidebar") : Locale.Translate("sidebarFold", "Fold the sidebar away");
+
+    public override void OnPointerMoved(PointerInput at) => Invalidate();
+
+    public override void Draw(Painter painter)
+    {
+        var look = painter.Look;
+        var text = look.Color("frame_text");
+        // The fold button points the way the sidebar goes; the fill button shows the arrows out, or in while it fills.
+        if (Fills)
+        {
+            FrameSidebar.Button(painter, Bounds, "", Hovered, text);
+            FrameSidebar.FillMark(painter, Bounds, sidebar.Maximized, look.Part("button", Hovered ? "hover" : null).Text ?? text);
+        }
+        else
+            FrameSidebar.Button(painter, Bounds, sidebar.Sidebar.Left != sidebar.Collapsed ? "\u2039" : "\u203A", Hovered, text);
+        if (Focused)
+            PressLooks.FocusRing(painter, Bounds, look.Radius("button"));
     }
 }

@@ -8,4 +8,5 @@ project Walker
     stack csharp web
     output "out"
     language "en"
+    theme Light Dark
     datasource main sqlite "data/walker.db"

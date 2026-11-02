@@ -12,6 +12,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Clarity.Runtime;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 namespace Clarity.Runtime;
@@ -127,7 +128,8 @@ public static class Snapshot
 
     static MethodInfo Command(Type type, string command)
     {
-        for (var t = type; t is not null && t != typeof(WindowViewModel); t = t.BaseType)
+        // The window's own commands, and the few every window has (DrawAnew).
+        for (var t = type; t is not null && t != typeof(ObservableObject); t = t.BaseType)
         {
             var method = t.GetMethod(command, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             if (method?.GetCustomAttribute<RelayCommandAttribute>() is not null || method?.GetCustomAttribute<CommandAttribute>() is not null)

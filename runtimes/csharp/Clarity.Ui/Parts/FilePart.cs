@@ -1,7 +1,9 @@
 // A file part (U1c), the same as on every stack: the name of a record's
-// file, or that it has none, with buttons to open it in the program the
-// system uses for its kind, save a copy of it, choose another and remove
-// it, named in Clarity's own words. A stored file is fetched only to open it
+// file (cut off with an ellipsis when it is too long), or that it has none,
+// with buttons to choose another, open it in the program the system uses
+// for its kind, save a copy of it and remove it, in that order, named in
+// Clarity's own words. A saved copy says where it went: the place the
+// person chose on the desktop, the Downloads folder in a browser. A stored file is fetched only to open it
 // or save a copy (RecordFetch). Choosing and removing are changes, each
 // running its change handlers; opening and saving a copy are not. A
 // read-only one neither chooses nor removes.
@@ -61,9 +63,10 @@ public sealed class FilePart : Part
             Shows = () => !ReadOnly,
             Usable = () => Enabled && File is not null,
         };
+        // In the order they read, which is the Tab order too.
+        AddChild(ChooseButton);
         AddChild(OpenButton);
         AddChild(SaveButton);
-        AddChild(ChooseButton);
         AddChild(RemoveButton);
         Host.Changed += Placed;
     }
@@ -125,7 +128,7 @@ public sealed class FilePart : Part
             if (await Host.Files.SaveFile(Locale.Translate("saveFileCopy", "Save a copy"), file.Name, bytes) is { } place)
             {
                 CopySaved?.Invoke(place);
-                Host.Say(Level.Info, Text.Plain(Locale.Translate("fileCopySaved", "A copy is in your Downloads folder")));
+                Host.Say(Level.Info, Text.Plain(SavedWhere(place)));
             }
         }
         catch (Exception e) when (e is not OutOfMemoryException)
@@ -133,6 +136,12 @@ public sealed class FilePart : Part
             Console.Error.WriteLine($"{Spec.Name ?? Spec.Kind} cannot save a copy: {e.Message}");
         }
     }
+
+    /// <summary>What a saved copy says: the place chosen (a whole path, on the desktop), else that it is in the Downloads folder (a browser's download).</summary>
+    public static string SavedWhere(string place) =>
+        Path.IsPathRooted(place)
+            ? Locale.Translate("fileCopySavedAt", "A copy is saved as {place}").Replace("{place}", place)
+            : Locale.Translate("fileCopySaved", "A copy is in your Downloads folder");
 
     /// <summary>Asks the system's dialog for a file, and takes the one chosen.</summary>
     async Task Choose()
@@ -167,7 +176,8 @@ public sealed class FilePart : Part
     {
         Bounds = box;
         var right = box.Right;
-        foreach (var button in new[] { RemoveButton, ChooseButton, SaveButton, OpenButton })
+        // From the right: Remove, Save a copy, Open, Choose; so they read Choose, Open, Save a copy, Remove.
+        foreach (var button in new[] { RemoveButton, SaveButton, OpenButton, ChooseButton })
         {
             if (!button.IsShown)
             {
@@ -185,6 +195,9 @@ public sealed class FilePart : Part
     /// <summary>Where the file's name shows.</summary>
     public Box NameBox { get; private set; }
 
+    /// <summary>The name as it was drawn last: cut off with an ellipsis where it is wider than its place.</summary>
+    public string DrawnName { get; private set; } = "";
+
     public override void Draw(Painter painter)
     {
         if (!IsShown)
@@ -194,7 +207,9 @@ public sealed class FilePart : Part
         var look = painter.Look;
         using (PressLooks.Dimmed(painter, Enabled))
         {
-            painter.Text(Shown, NameBox.Inset(look.Padding), look.Color(IsEmpty ? "muted" : "text"), look.Size("text"));
+            var place = NameBox.Inset(look.Padding);
+            DrawnName = PartTexts.Fit(painter, Shown, place.Width, look.Size("text"));
+            painter.Text(DrawnName, place, look.Color(IsEmpty ? "muted" : "text"), look.Size("text"));
             base.Draw(painter);
         }
     }

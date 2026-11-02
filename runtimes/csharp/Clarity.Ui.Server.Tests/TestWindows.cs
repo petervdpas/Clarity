@@ -100,17 +100,53 @@ sealed class InProcess(WebServer server) : ISessionLink
 
     public TaskCompletionSource? Gate { get; set; }
 
+    /// <summary>Each request answered on a thread of its own, as a browser's requests cross the wire at once: a long call's reply does not hold back the questions how far it is.</summary>
+    public bool Threaded { get; init; }
+
+    /// <summary>What each request asked, as it was sent.</summary>
+    public List<JsonObject> Requests { get; } = [];
+
     public async Task<JsonObject> Send(JsonObject request)
     {
-        Sent.Add(request["do"]!.GetValue<string>());
-        if (request["command"]?.GetValue<string>() is { } command)
-            Commands.Add(command);
+        lock (Sent)
+        {
+            Sent.Add(request["do"]!.GetValue<string>());
+            Requests.Add((JsonObject)request.DeepClone());
+            if (request["command"]?.GetValue<string>() is { } command)
+                Commands.Add(command);
+        }
         if (Gate is { } gate)
             await gate.Task;
-        var reply = server.Answer("POST", WebServer.SessionPath, request.ToJsonString());
+        var body = request.ToJsonString();
+        var reply = Threaded ? await Task.Run(() => server.Answer("POST", WebServer.SessionPath, body)) : server.Answer("POST", WebServer.SessionPath, body);
         return JsonNode.Parse(reply.Body)!.AsObject();
     }
 
     public Task<JsonObject> Markup() =>
         Task.FromResult(JsonNode.Parse(server.Answer("GET", WebServer.MarkupPath, "").Body)!.AsObject());
+}
+
+/// <summary>A window whose canvas draws the name typed in a box, as the walker example draws its walker's name.</summary>
+sealed partial class SketchViewModel(Db? db) : WindowViewModel(db)
+{
+    public string Name { get => name; set => SetProperty(ref name, value); }
+    string name = "";
+
+    public PartState Field { get; } = new("field");
+
+    protected override void Redraw()
+    {
+        Field.BeginDrawing();
+        Field.Draw(new Shape.Words(50, 50, Text.Plain(Name), "text", 10));
+        Field.EndDrawing();
+    }
+}
+
+/// <summary>A window whose handler says a text it builds from a key, outside a slot, and a number written out.</summary>
+sealed partial class HelloViewModel(Db? db) : WindowViewModel(db)
+{
+    public string Said { get; set; } = "";
+
+    [RelayCommand]
+    void Hello() => Handle(() => Said = Locale.Show(Text.Of("hello")) + " " + 2.5m.ToString(System.Globalization.CultureInfo.CurrentCulture));
 }

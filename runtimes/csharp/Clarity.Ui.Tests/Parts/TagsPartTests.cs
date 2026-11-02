@@ -46,6 +46,9 @@ public class TagsPartTests
     {
         var (screen, tags, host) = Make(new List<DateOnly> { new(2026, 10, 1) });
         screen.Focus(tags.Editor);
+        Assert.Empty(screen.Overlays);
+        // Down in the box opens it; the button inside the box does too.
+        screen.KeyPressed(new KeyInput(Key.Down, Modifiers.None));
         var calendar = Assert.IsType<DayCalendar>(Assert.Single(screen.Overlays).Content);
         // The box keeps the focus: its keys work the calendar.
         Assert.Same(tags.Editor, screen.Focused);
@@ -55,9 +58,12 @@ public class TagsPartTests
         // Escape closes it and adds nothing.
         screen.Focus(null);
         screen.Focus(tags.Editor);
+        Click(screen, tags.CalendarButton!.Bounds);
         Assert.Single(screen.Overlays);
+        Assert.Same(tags.Editor, screen.Focused);
         screen.KeyPressed(new KeyInput(Key.Escape, Modifiers.None));
         Assert.Empty(screen.Overlays);
+        Assert.Equal(2, ((List<DateOnly>)host.Values["album.genres"]!).Count);
     }
 
     [Fact]

@@ -62,6 +62,42 @@ pub fn catalog(project: &Project) -> Vec<KeyLayer> {
     layers
 }
 
+/// Where a command of the keys window lives when it is no menu item nor a
+/// button in a window: the toolbar, or a ribbon's tab and group (their titles
+/// as written). The keys window shows it beside the command's name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KeyPlace {
+    Toolbar,
+    Ribbon { tab: String, group: String },
+}
+
+/// The place of each toolbar and ribbon command the catalog lists, by its id.
+pub fn places(project: &Project) -> Vec<(String, KeyPlace)> {
+    fn walk(items: &[Command], prefix: &str, place: &KeyPlace, out: &mut Vec<(String, KeyPlace)>) {
+        for c in items {
+            if let Some(name) = &c.props.name {
+                out.push((format!("{prefix}{name}"), place.clone()));
+            }
+            walk(&c.items, prefix, place, out);
+        }
+    }
+    let mut out = Vec::new();
+    let frames = project.files.iter().flat_map(|f| f.apps.iter().map(|a| (String::new(), &a.frame)).chain(f.pages.iter().map(|p| (format!("{}.", p.name.name), &p.frame))));
+    for (prefix, frame) in frames {
+        if let Some(toolbar) = &frame.toolbar {
+            walk(&toolbar.items, &prefix, &KeyPlace::Toolbar, &mut out);
+        }
+        if let Some(ribbon) = &frame.ribbon {
+            for tab in &ribbon.tabs {
+                for group in &tab.groups {
+                    walk(&group.items, &prefix, &KeyPlace::Ribbon { tab: tab.title.clone(), group: group.title.clone() }, &mut out);
+                }
+            }
+        }
+    }
+    out
+}
+
 /// The menu items and toolbar and ribbon buttons that do something; an item
 /// with a submenu only opens it.
 fn frame_commands(frame: &Frame, prefix: &str, out: &mut Vec<KeyCommand>) {

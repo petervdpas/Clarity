@@ -171,6 +171,37 @@ public sealed partial class Formats(CultureInfo culture, string? currency)
     /// <summary>A long date without its weekday: <c>dddd d MMMM yyyy</c> is <c>d MMMM yyyy</c>.</summary>
     static string LongDate(string pattern) => Weekday().Replace(pattern, "").Trim(' ', ',');
 
+    /// <summary>
+    /// A typed time of day: 21:30, or on any clock 9:30 PM (the culture's AM
+    /// and PM, or plain am/pm); empty is midnight; null when it is no time.
+    /// </summary>
+    public TimeSpan? ReadClock(string typed)
+    {
+        var text = typed.Trim();
+        if (text.Length == 0)
+            return TimeSpan.Zero;
+        var m = ClockPattern().Match(text);
+        if (!m.Success)
+            return null;
+        var (hours, minutes) = (int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture), int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture));
+        var half = m.Groups[3].Value.Trim().TrimEnd('.').Replace(".", "");
+        bool Is(string designator, string plain) =>
+            half.Equals(plain, StringComparison.OrdinalIgnoreCase) || (designator.Length > 0 && half.Equals(designator.Replace(".", "").Trim(), StringComparison.CurrentCultureIgnoreCase));
+        if (half.Length > 0)
+        {
+            var pm = Is(culture.DateTimeFormat.PMDesignator, "pm");
+            if (!pm && !Is(culture.DateTimeFormat.AMDesignator, "am"))
+                return null;
+            if (hours < 1 || hours > 12)
+                return null;
+            hours = hours % 12 + (pm ? 12 : 0);
+        }
+        return hours < 24 && minutes < 60 ? new TimeSpan(hours, minutes, 0) : null;
+    }
+
+    [GeneratedRegex(@"^(\d{1,2})[:.](\d{2})\s*(\S.*)?$")]
+    private static partial Regex ClockPattern();
+
     string TimePart(DateTime time, string? format)
     {
         if (format == "iso")

@@ -5,7 +5,10 @@
 // window` opens in place, since a page has one). The browser keeps a mirror
 // of each window: it sends what the person did, with the state they left,
 // and gets every open window's state back, with what was said and asked.
-// One request at a time, as every stack runs one handler at a time.
+// Each request runs in the person's own language and formats, which it
+// brings. One request at a time, as every stack runs one handler at a time; while a
+// session's handler waits for a long engine call, the other sessions' requests
+// are answered, and that session's own only say how far the call is or stop it.
 
 using System.Collections.Specialized;
 using System.Text.Json;
@@ -28,6 +31,13 @@ public sealed class Sessions(Func<WindowViewModel> main, TimeSpan? quiet = null,
     /// None for an application without settings.
     /// </summary>
     public (Func<JsonObject> Of, Action<JsonObject> Apply)? Settings { get; init; }
+
+    /// <summary>
+    /// What else takes the requests one at a time (a server's own turn), let go
+    /// while a session waits for a long engine call and taken again after it,
+    /// so the other sessions are answered meanwhile. None when nothing else does.
+    /// </summary>
+    public (Action Release, Action Take)? Turn { get; set; }
 
     /// <summary>
     /// Answers one request of a browser: <c>start</c> a session; <c>run</c> a
@@ -54,6 +64,14 @@ public sealed class Sessions(Func<WindowViewModel> main, TimeSpan? quiet = null,
 
     JsonObject Do(JsonObject request)
     {
+        // How far a long call is, and its Stop, touch no settings.
+        if (request["do"]?.GetValue<string>() is "progress" or "stop")
+            return DoWith(request);
+        // The person's language and formats, for what runs for them and what is said back
+        // (and an engine call it waits for), as the desktop shows its one person's.
+        using var shown = request["locale"] is JsonObject locale
+            ? Locale.For(locale["language"]?.GetValue<string>(), locale["formats"]?.GetValue<string>())
+            : null;
         // The person's settings, before anything of theirs runs.
         if (Settings is { } settings && request["settings"] is JsonObject theirs)
             settings.Apply(theirs);
@@ -68,7 +86,7 @@ public sealed class Sessions(Func<WindowViewModel> main, TimeSpan? quiet = null,
         var what = request["do"]?.GetValue<string>();
         if (what == "start")
         {
-            var started = new Session(Guid.NewGuid().ToString("N"), now());
+            var started = new Session(Guid.NewGuid().ToString("N"), now(), WaitOutside);
             sessions[started.Id] = started;
             started.Push(main());
             return started.Reply();
@@ -77,6 +95,16 @@ public sealed class Sessions(Func<WindowViewModel> main, TimeSpan? quiet = null,
         if (!sessions.TryGetValue(id, out var session))
             throw new SessionException("the session has ended; start again");
         session.LastSeen = now();
+        // How far the session's long call is, and the person's Stop: only its own call.
+        if (what is "progress" or "stop")
+        {
+            if (what == "stop")
+                session.Calls.Stop();
+            return new JsonObject { ["session"] = session.Id, ["waiting"] = session.Calls.Waiting, ["progress"] = Progress(session.Calls) };
+        }
+        // While it waits for a long call it takes nothing else, as a window then takes no handler.
+        if (session.Calls.Waiting)
+            throw new SessionException("the session waits for a long call to end");
         switch (what)
         {
             case "run":
@@ -106,10 +134,40 @@ public sealed class Sessions(Func<WindowViewModel> main, TimeSpan? quiet = null,
         return reply;
     }
 
-    /// <summary>Ends the sessions quiet longer than they may be: their windows close.</summary>
+    static JsonArray? Progress(LongCall call) => call.Current is var (done, total) ? new JsonArray(done, total) : null;
+
+    /// <summary>
+    /// A session's handler waits for its long engine call: meanwhile the other
+    /// sessions are answered (the lock and the server's turn let go), then the
+    /// handler goes on with the person's settings it ran with.
+    /// </summary>
+    void WaitOutside(Task call)
+    {
+        if (!gate.IsHeldByCurrentThread)
+        {
+            ((IAsyncResult)call).AsyncWaitHandle.WaitOne();
+            return;
+        }
+        var theirs = Settings?.Of();
+        gate.Exit();
+        Turn?.Release();
+        try
+        {
+            ((IAsyncResult)call).AsyncWaitHandle.WaitOne();
+        }
+        finally
+        {
+            Turn?.Take();
+            gate.Enter();
+            if (Settings is { } settings && theirs is not null)
+                settings.Apply(theirs);
+        }
+    }
+
+    /// <summary>Ends the sessions quiet longer than they may be: their windows close; not one that waits for a long call.</summary>
     void EndQuiet()
     {
-        foreach (var session in sessions.Values.Where(s => now() - s.LastSeen > quiet).ToList())
+        foreach (var session in sessions.Values.Where(s => now() - s.LastSeen > quiet && !s.Calls.Waiting).ToList())
         {
             session.CloseAll();
             sessions.Remove(session.Id);
@@ -117,9 +175,12 @@ public sealed class Sessions(Func<WindowViewModel> main, TimeSpan? quiet = null,
     }
 
     /// <summary>One tab's windows.</summary>
-    sealed class Session(string id, DateTime started)
+    sealed class Session(string id, DateTime started, Action<Task> wait)
     {
         public string Id { get; } = id;
+
+        /// <summary>The long engine call of this tab's windows, which no other tab waits for or sees.</summary>
+        public LongCall Calls { get; } = new() { Waiter = wait };
         public DateTime LastSeen { get; set; } = started;
         public bool Ended { get; private set; }
 
@@ -147,6 +208,7 @@ public sealed class Sessions(Func<WindowViewModel> main, TimeSpan? quiet = null,
                 messages.CollectionChanged += Said;
             listening = true;
             model.Messages = messages;
+            model.LongCall = Calls;
             model.OpenRequested += (other, _) =>
             {
                 if (other.IsDialog)

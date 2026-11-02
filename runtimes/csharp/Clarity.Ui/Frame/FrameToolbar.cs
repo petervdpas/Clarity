@@ -6,15 +6,21 @@
 
 namespace Clarity.Ui;
 
-public sealed class FrameToolbar(WindowFrame frame, ToolbarSpec toolbar) : FrameRegion(frame)
+public sealed class FrameToolbar : FrameRegion
 {
     /// <summary>How high the toolbar is.</summary>
     public const double Height = 38;
 
     readonly List<(CommandSpec Item, Box Box)> placed = [];
-    int pressedAt = -1;
+    readonly FrameButtonRow row;
 
-    public ToolbarSpec Toolbar { get; } = toolbar;
+    public FrameToolbar(WindowFrame frame, ToolbarSpec toolbar) : base(frame)
+    {
+        Toolbar = toolbar;
+        row = new FrameButtonRow(this, toolbar.Items, large: false, Click);
+    }
+
+    public ToolbarSpec Toolbar { get; }
 
     public override double Wanted => Height;
 
@@ -22,6 +28,9 @@ public sealed class FrameToolbar(WindowFrame frame, ToolbarSpec toolbar) : Frame
     public override bool IsShown => FrameRules.Shows(Host, Toolbar.Name) && Toolbar.Items.Any(i => !FrameRules.IsSeparator(i) && FrameRules.Shows(Host, i.Text("name")));
 
     public bool Enabled => FrameRules.Takes(Host, Toolbar.Name);
+
+    /// <summary>A disabled toolbar's buttons take no press, focus or key.</summary>
+    public override bool IsEnabled => Enabled;
 
     /// <summary>A button says its caption and its keys when the pointer rests on it.</summary>
     public override string? TooltipAt(double x, double y) =>
@@ -36,21 +45,16 @@ public sealed class FrameToolbar(WindowFrame frame, ToolbarSpec toolbar) : Frame
     {
         Bounds = box;
         placed.Clear();
+        row.Hide();
         var x = box.X + 6;
         foreach (var item in Toolbar.Items.Where(i => FrameRules.Shows(Host, i.Text("name"))))
         {
             var wide = FrameButtons.Width(this, item, large: false);
-            placed.Add((item, new Box(x, box.Y + 4, wide, box.Height - 8)));
+            var place = new Box(x, box.Y + 4, wide, box.Height - 8);
+            placed.Add((item, place));
+            row.Place(item, place);
             x += wide + 4;
         }
-    }
-
-    public override void OnPointerPressed(PointerInput at) => pressedAt = placed.FindIndex(p => p.Box.Contains(at.ScreenX, at.ScreenY));
-
-    public override void OnClick()
-    {
-        if (pressedAt >= 0 && pressedAt < placed.Count)
-            Click(placed[pressedAt].Item);
     }
 
     /// <summary>A button clicked: it runs, unless it or the toolbar is disabled.</summary>
@@ -67,11 +71,91 @@ public sealed class FrameToolbar(WindowFrame frame, ToolbarSpec toolbar) : Frame
         var look = painter.Look;
         Plate(painter, Bounds, new Box(Bounds.X, Bounds.Bottom - look.Border, Bounds.Width, look.Border));
         using var dimmed = PressLooks.Dimmed(painter, Enabled);
-        for (var i = 0; i < placed.Count; i++)
-        {
-            var (item, box) = placed[i];
-            FrameButtons.Draw(painter, Host, item, box, large: false, Over(box), Pressed && pressedAt == i && Over(box));
-        }
+        base.Draw(painter);
+    }
+}
+
+/// <summary>
+/// The buttons of a toolbar or a ribbon as elements of their region, one
+/// per item, so each takes the pointer, the focus (Tab reaches it) and
+/// Enter or Space, as Avalonia's buttons did. A region places those it
+/// shows; the others are hidden.
+/// </summary>
+sealed class FrameButtonRow
+{
+    readonly Dictionary<CommandSpec, FrameButton> buttons = new(ReferenceEqualityComparer.Instance);
+
+    public FrameButtonRow(FrameRegion region, IEnumerable<CommandSpec> items, bool large, Action<CommandSpec> click)
+    {
+        foreach (var item in items)
+            if (!buttons.ContainsKey(item))
+                buttons[item] = region.Hold(new FrameButton(region.Host, item, large, click));
+    }
+
+    /// <summary>Every button leaves its place until the region places it again.</summary>
+    public void Hide()
+    {
+        foreach (var button in buttons.Values)
+            button.Placed = false;
+    }
+
+    public void Place(CommandSpec item, Box box)
+    {
+        if (!buttons.TryGetValue(item, out var button))
+            return;
+        button.Placed = true;
+        button.Arrange(box);
+    }
+}
+
+/// <summary>
+/// A button of a toolbar or a ribbon: a click, Enter or Space runs its
+/// item; it shows the focus ring while it has the focus. A separator is a
+/// line that takes no focus. One code hid shows nowhere, one it disabled is
+/// greyed and passed over by Tab.
+/// </summary>
+public sealed class FrameButton : Element
+{
+    readonly IPartHost host;
+    readonly bool large;
+    readonly Action<CommandSpec> click;
+
+    internal FrameButton(IPartHost host, CommandSpec item, bool large, Action<CommandSpec> click)
+    {
+        this.host = host;
+        this.large = large;
+        this.click = click;
+        Item = item;
+    }
+
+    public CommandSpec Item { get; }
+
+    /// <summary>Whether its region placed it this time.</summary>
+    internal bool Placed { get; set; }
+
+    public override bool IsShown => Placed;
+
+    public override bool IsEnabled => FrameRules.Takes(host, Item.Text("name"));
+
+    public override bool Focusable => !FrameRules.IsSeparator(Item);
+
+    public override void OnClick() => click(Item);
+
+    public override bool OnKey(KeyInput key)
+    {
+        if (key.Key is not (Key.Enter or Key.Space) || key.Modifiers != Modifiers.None || FrameRules.IsSeparator(Item))
+            return false;
+        click(Item);
+        return true;
+    }
+
+    public override void OnPointerMoved(PointerInput at) => Invalidate();
+
+    public override void Draw(Painter painter)
+    {
+        FrameButtons.Draw(painter, host, Item, Bounds, large, Hovered, Pressed && Hovered);
+        if (Focused)
+            PressLooks.FocusRing(painter, Bounds, painter.Look.Radius("button"));
     }
 }
 

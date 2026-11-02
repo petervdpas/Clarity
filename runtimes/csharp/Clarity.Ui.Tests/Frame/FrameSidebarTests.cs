@@ -172,13 +172,13 @@ public class SidebarCatalogTests
         // To fill: from the bottom left to the top right.
         canvas.Clear(SKColors.White);
         FrameSidebar.FillMark(painter, new Box(0, 0, 40, 40), filling: false, SKColors.Black);
-        Assert.NotEqual(SKColors.White, bitmap.GetPixel(29, 11));
-        Assert.Equal(SKColors.White, bitmap.GetPixel(11, 11));
+        Assert.NotEqual(SKColors.White, bitmap.PixelAt(29, 11));
+        Assert.Equal(SKColors.White, bitmap.PixelAt(11, 11));
         // While it fills: from the top left to the bottom right.
         canvas.Clear(SKColors.White);
         FrameSidebar.FillMark(painter, new Box(0, 0, 40, 40), filling: true, SKColors.Black);
-        Assert.NotEqual(SKColors.White, bitmap.GetPixel(11, 11));
-        Assert.Equal(SKColors.White, bitmap.GetPixel(29, 11));
+        Assert.NotEqual(SKColors.White, bitmap.PixelAt(11, 11));
+        Assert.Equal(SKColors.White, bitmap.PixelAt(29, 11));
     }
 
     [Fact]

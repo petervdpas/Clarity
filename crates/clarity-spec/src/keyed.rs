@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
-use crate::translations::{UNDO_KEYS, REQUIRED_KEYS, CLI_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, has_letters};
+use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -70,6 +70,8 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
     let trees = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("tree ") || l.trim_start().starts_with("treetable ")));
     let tags = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("tags ") && l.contains(" bind ")));
     let commands = modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("command ")));
+    // A date input, or a date field a table cell opens the calendar for.
+    let dates = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("date ") || (l.starts_with("    ") && l.contains(':') && l.split([':', ',', ' ']).any(|w| w == "date" || w == "datetime"))));
     // Only the project file says which database connects with a secret: a
     // secret setting or an `on unconnected` may mean it does.
     let passwords = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("password ")));
@@ -84,6 +86,8 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
     let own = RENDERER_KEYS
         .iter()
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("page "))) { UNDO_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("page "))) { TEXT_EDIT_KEYS.as_slice() } else { &[] })
+        .chain(if dates && modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("page "))) { CALENDAR_KEYS.as_slice() } else { &[] })
         .chain(if pictures { PICTURE_KEYS.as_slice() } else { &[] })
         .chain(if wizards { STEP_KEYS.as_slice() } else { &[] })
         .chain(if files { FILE_KEYS.as_slice() } else { &[] })
@@ -102,7 +106,10 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
         .chain(if clicks_to("keys") { KEYS_WINDOW_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim() == "beside the screen")) { SCREEN_ENGINE_KEYS.as_slice() } else { &[] })
         // A field line with `required` (an option of a command is no field).
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("    ") && !l.trim_start().starts_with("option ") && l.contains(':') && l.split([',', ' ']).any(|w| w == "required"))) { REQUIRED_KEYS.as_slice() } else { &[] });
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("    ") && !l.trim_start().starts_with("option ") && l.contains(':') && l.split([',', ' ']).any(|w| w == "required"))) { REQUIRED_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("sidebar ") && l.split_whitespace().any(|w| w == "collapsible" || w == "maximizable"))) { SIDEBAR_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("page "))) { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("engine "))) { ENGINE_ERROR_KEYS.as_slice() } else { &[] });
     for (key, value) in own {
         maker.add_exact(key, value);
     }

@@ -159,3 +159,73 @@ public class EditTests
         Assert.False(window.VipBox.IsChecked);
     }
 }
+
+/// <summary>Settings as a generated app keeps them: read whole and given back whole.</summary>
+sealed class KeptSettingsLike : ISettings
+{
+    public bool Compact { get; set; }
+    public string Theme { get; set; } = "Light";
+    public System.Text.Json.Nodes.JsonObject ToJson() => new() { ["compact"] = Compact, ["theme"] = Theme };
+    public void Apply(System.Text.Json.Nodes.JsonObject sent)
+    {
+        Compact = sent["compact"]!.GetValue<bool>();
+        Theme = sent["theme"]!.GetValue<string>();
+    }
+}
+
+sealed class SettingsWindowViewModel(Db? db, KeptSettingsLike settings) : WindowViewModel(db)
+{
+    public string Name { get; set; } = "Ada";
+    protected override ISettings? AppSettings => settings;
+}
+
+public class SettingsUndoTests
+{
+    /// Avalonia's InputUndoTests.A_setting_a_part_changed_is_taken_back: a part bound to a setting edits the settings, and Ctrl+Z gives them back.
+    [Fact]
+    public void A_setting_a_part_changed_is_taken_back()
+    {
+        var settings = new KeptSettingsLike();
+        var window = new SettingsWindowViewModel(null, settings);
+        window.Opened();
+        settings.Compact = true;
+        window.Edited("compactBox", "compactBox");
+        settings.Theme = "Dark";
+        window.Edited("themeBox", "settingsForm");
+        // Each scope takes back its own setting, and only that one.
+        window.UndoEdit("compactBox", back: true);
+        Assert.Equal((false, "Dark"), (settings.Compact, settings.Theme));
+        window.UndoEdit("settingsForm", back: true);
+        Assert.Equal((false, "Light"), (settings.Compact, settings.Theme));
+        window.UndoEdit("compactBox", back: false);
+        Assert.Equal((true, "Light"), (settings.Compact, settings.Theme));
+        // The window's own data was never part of these edits.
+        Assert.Equal("Ada", window.Name);
+    }
+}
+
+sealed class ShelfOfShapesViewModel(Db? db) : WindowViewModel(db)
+{
+    public List<Sketched> Shapes { get; set; } = [new() { Id = 1, Name = "box", X = 3 }, new() { Id = 2, Name = "dot", X = 5 }];
+    public Sketched Shape { get; set; } = new();
+}
+
+public class RecordUndoTests
+{
+    /// The record a form shows is the list's row: an undo puts its values back in that record, so the list keeps it selected and shows them too.
+    [Fact]
+    public void An_undo_puts_back_the_values_of_the_record_the_window_shows()
+    {
+        var window = new ShelfOfShapesViewModel(null);
+        window.Shape = window.Shapes[1];
+        window.Opened();
+        window.Shape.X = 9;
+        window.Edited("xSlider", "shapeForm");
+        window.UndoEdit("shapeForm", back: true);
+        Assert.Same(window.Shapes[1], window.Shape);
+        Assert.Equal(5, window.Shapes[1].X);
+        window.UndoEdit("shapeForm", back: false);
+        Assert.Same(window.Shapes[1], window.Shape);
+        Assert.Equal(9, window.Shape.X);
+    }
+}

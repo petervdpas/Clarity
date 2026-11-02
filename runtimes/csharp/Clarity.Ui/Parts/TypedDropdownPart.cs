@@ -5,8 +5,11 @@
 // it is typed). The list opens when the box gets the focus or text is
 // typed; Up and Down move through it, Enter or a click picks, Escape closes
 // it and puts the value's text back. Typed text that is not picked counts
-// only for `typed`; for `search`, empty text is no record. Only a value that
-// differs is a change; what code sets is never one.
+// only for `typed`; for `search`, empty text is no record. Enter with no
+// row marked takes the text and is handled there: the form does not submit.
+// Up and Down go round past the ends of the list. Only a value that
+// differs is a change; what code sets is never one. An unbound typed
+// dropdown keeps what was typed as its own value.
 
 using Clarity.Runtime;
 
@@ -28,7 +31,13 @@ public abstract class TypeAheadPart : Part, ITakesTyped
     public Overlay? List => open;
 
 
-    bool Usable => Enabled && !ReadOnly && Bound is not null;
+    bool Usable => Enabled && !ReadOnly && Writes;
+
+    /// <summary>Whether it has a value to write: its field; a typed one keeps its own without one.</summary>
+    protected virtual bool Writes => Bound is not null;
+
+    /// <summary>Makes <paramref name="value"/> its value: its field's.</summary>
+    protected virtual void Store(object? value) => Host.Write(Spec.Name ?? "", Bound!, value);
 
     /// <summary>What fits the text in the box now.</summary>
     public IReadOnlyList<Choice> Offered => Offer(editor.Text);
@@ -60,10 +69,11 @@ public abstract class TypeAheadPart : Part, ITakesTyped
             ReadOnly = () => ReadOnly,
             Marked = () => State?.HasError == true,
             KeyFirst = Key,
+            // Enter with no row marked takes the text, and stays here: the form does not submit.
             Entered = () =>
             {
                 Take();
-                return PartTexts.Submit(this);
+                return true;
             },
         };
         editor.Edited += () =>
@@ -126,7 +136,7 @@ public abstract class TypeAheadPart : Part, ITakesTyped
             if (at >= 0 && at < picked.Count)
                 Pick(picked[at]);
         })
-        { Holder = editor, Cells = cells.All(c => c is not null) ? [.. cells.Select(c => c!)] : null };
+        { Holder = editor, Wraps = true, Cells = cells.All(c => c is not null) ? [.. cells.Select(c => c!)] : null };
         this.open = new Overlay(list, DropdownList.Below(screen, Bounds, Bounds.Width, rows.Count))
         {
             Anchor = () => Bounds,
@@ -172,7 +182,7 @@ public abstract class TypeAheadPart : Part, ITakesTyped
 
     void Write(object? value)
     {
-        Host.Write(Spec.Name ?? "", Bound!, value);
+        Store(value);
         Fire("change");
     }
 
@@ -219,10 +229,29 @@ public sealed class TypedDropdownPart : TypeAheadPart
 {
     public static bool Fits(PartSpec spec, IPartHost host) => spec.Flag("typed");
 
+    string own = "";
+
     /// <summary>The values its field already has, with repeats and empty ones, as the host offers them.</summary>
     IEnumerable<string> Values => Bound is { } path ? Host.Offered(Spec, path).Select(c => c.Value as string ?? c.Label) : [];
 
-    string Value => Bound is { } path ? Host.Read(path) as string ?? "" : "";
+    /// <summary>Its value: its field's, else the text it keeps in its state or of its own.</summary>
+    public string Value => Bound is { } path ? Host.Read(path) as string ?? "" : State?.Text ?? own;
+
+    protected override bool Writes => true;
+
+    protected override void Store(object? value)
+    {
+        var text = value as string ?? "";
+        if (Bound is not null)
+            base.Store(text);
+        else if (State is { } state)
+        {
+            state.Text = text;
+            Host.Edited(Spec.Name!);
+        }
+        else
+            own = text;
+    }
 
     protected override List<Choice> Offer(string typed) => [.. DropdownOptions.Suggestions(Values, typed).Select(v => new Choice(v, v))];
 

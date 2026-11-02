@@ -202,9 +202,37 @@ public class FilePartTests
         Click(screen, part.SaveButton);
         Assert.Equal("manual.pdf", Assert.Single(host.Picker.Saved).Name);
         Assert.Equal("/home/ada/Downloads/copy", saved);
-        // The person hears where it went, among the window's messages.
-        Assert.Equal([$"Info {Locale.Translate("fileCopySaved", "A copy is in your Downloads folder")}"], host.Said);
+        // The person hears where it really went, among the window's messages.
+        Assert.Equal([$"Info {Locale.Translate("fileCopySavedAt", "A copy is saved as {place}").Replace("{place}", "/home/ada/Downloads/copy")}"], host.Said);
         Assert.Empty(host.Log);
+    }
+
+    [Fact]
+    public void A_saved_copy_says_where_it_went_the_chosen_place_or_the_Downloads_folder()
+    {
+        var (screen, part, host) = Make(new RecordFile("manual.pdf", Picture.New([1])));
+        host.Picker.SavedTo = "/srv/elsewhere/manual.pdf";
+        Click(screen, part.SaveButton);
+        Assert.Contains("/srv/elsewhere/manual.pdf", Assert.Single(host.Said));
+        // A browser's download has only the name: it is in the Downloads folder.
+        Assert.Equal(Locale.Translate("fileCopySaved", "A copy is in your Downloads folder"), FilePart.SavedWhere("manual.pdf"));
+    }
+
+    [Fact]
+    public void Its_buttons_read_choose_open_save_a_copy_remove_and_a_long_name_ends_in_an_ellipsis()
+    {
+        var (screen, part, _) = Make(new RecordFile(new string('n', 300) + ".pdf", Picture.New([1])));
+        var order = new[] { part.ChooseButton, part.OpenButton, part.SaveButton, part.RemoveButton };
+        for (var i = 1; i < order.Length; i++)
+            Assert.True(order[i - 1].Bounds.Right <= order[i].Bounds.X, $"button {i} stands after the one before");
+        Assert.Equal([part.ChooseButton, part.OpenButton, part.SaveButton, part.RemoveButton], screen.TabOrder().Where(order.Contains).ToList());
+        // The name the part draws is cut off inside its place, its end shown as dots.
+        using var shot = Shot.Of(screen, 800, 60);
+        var drawn = part.DrawnName;
+        Assert.EndsWith("\u2026", drawn);
+        Assert.True(drawn.Length < part.Shown.Length);
+        Assert.StartsWith(drawn[..^1], part.Shown);
+        Assert.True(screen.Fonts.Measure(drawn, "text", screen.Look.Size("text"), false) <= part.NameBox.Width - 2 * screen.Look.Padding);
     }
 
     [Fact]

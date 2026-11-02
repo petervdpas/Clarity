@@ -1,11 +1,14 @@
 // A place to type text: one line, or several lines that wrap (a memo). It
 // has a caret and a selection, takes typed text, the keys that move and
-// delete, copying, cutting and pasting through the screen's clipboard, and
-// the pointer: a press places the caret, a drag selects, a double click
-// selects a word. A long line scrolls sideways; wrapped lines scroll up and
-// down. Empty, it shows its placeholder; a password shows dots. The parts
-// that edit text (text box, memo, password, number, spin box) hold one, and
-// say what they do with the text through its events.
+// delete, copying, cutting and pasting through the screen's clipboard (also
+// from its right-click menu), and the pointer: a press places the caret, a
+// drag selects, a double click selects a word. A long line scrolls sideways;
+// wrapped lines scroll up and down. Empty, it shows its placeholder; a
+// password shows a * per character. Ctrl+Z takes back its own typing first, while it has
+// the focus; once its text is taken (it is left, or set), Ctrl+Z goes on to
+// the window's edits. The parts that edit text (text box, memo, password,
+// number, spin box) hold one, and say what they do with the text through its
+// events.
 
 using SkiaSharp;
 
@@ -34,6 +37,8 @@ public sealed class TextEditor(bool multiline = false) : Element
             text = clean;
             caret = anchor = text.Length;
             layout = null;
+            // Text set from elsewhere is no typing to take back.
+            ForgetTyping();
             // With the focus the caret shows at its end; else it shows from its start.
             follow = Focused;
             if (!Focused)
@@ -53,7 +58,7 @@ public sealed class TextEditor(bool multiline = false) : Element
     /// <summary>Shown while it is empty, in the muted color.</summary>
     public string? Placeholder { get; set; }
 
-    /// <summary>A password: each character shows as a dot, and it is not copied or cut.</summary>
+    /// <summary>A password: each character shows as a <c>*</c>, and it is not copied or cut.</summary>
     public bool Password
     {
         get => password;
@@ -81,6 +86,9 @@ public sealed class TextEditor(bool multiline = false) : Element
     public double RightInset { get; set; }
 
     public TextAlign Align { get; set; } = TextAlign.Left;
+
+    /// <summary>How many characters the person may type at most; none: any number. Text set from elsewhere is not cut.</summary>
+    public int? MaxLength { get; set; }
 
     /// <summary>Whether it draws the input's frame; without one it is text to read (a text part over several rows).</summary>
     public bool Framed { get; set; } = true;
@@ -147,13 +155,82 @@ public sealed class TextEditor(bool multiline = false) : Element
         Edited?.Invoke();
     }
 
+    // -- Its own undo -------------------------------------------------------
+
+    /// <summary>The text, caret and selection as they were before one step of typing.</summary>
+    readonly record struct Typed(string Text, int Caret, int Anchor);
+
+    readonly List<Typed> undo = [];
+    readonly List<Typed> redo = [];
+
+    /// <summary>Whether the last step was typing characters, which the next typed character joins.</summary>
+    bool typing;
+
+    /// <summary>Whether it has typing of its own to take back (true) or to do again (false).</summary>
+    public bool CanUndo(bool back) => (back ? undo : redo).Count > 0;
+
+    /// <summary>The text is taken or set: its typing is no longer its own to take back.</summary>
+    public void ForgetTyping()
+    {
+        undo.Clear();
+        redo.Clear();
+        typing = false;
+    }
+
+    /// <summary>Keeps the text as it is now as a step to take back; typed characters in a row are one step, a word at a time.</summary>
+    void Remember(bool typed, string added = "")
+    {
+        var joins = typed && this.typing && undo.Count > 0 && !added.Any(char.IsWhiteSpace);
+        if (!joins)
+            undo.Add(new Typed(text, caret, anchor));
+        redo.Clear();
+        this.typing = typed;
+    }
+
+    /// <summary>Takes back (<paramref name="back"/>) or does again one step of its own typing; false when it has none.</summary>
+    public bool UndoTyping(bool back)
+    {
+        var from = back ? undo : redo;
+        var to = back ? redo : undo;
+        if (from.Count == 0)
+            return false;
+        var step = from[^1];
+        from.RemoveAt(from.Count - 1);
+        to.Add(new Typed(text, caret, anchor));
+        text = step.Text;
+        caret = Math.Clamp(step.Caret, 0, text.Length);
+        anchor = Math.Clamp(step.Anchor, 0, text.Length);
+        typing = false;
+        Changed();
+        return true;
+    }
+
+    /// <summary>Whether Ctrl+Z may take back its typing: not in a part with <c>no undo</c>.</summary>
+    bool Undoes
+    {
+        get
+        {
+            for (var e = Parent; e is not null; e = e.Parent)
+                if (e is Part part)
+                    return !part.Spec.Flag("noUndo");
+            return true;
+        }
+    }
+
     /// <summary>Puts <paramref name="typed"/> where the selection is, as the person typed it.</summary>
-    void Insert(string typed)
+    void Insert(string typed, bool typedNow = false)
     {
         var clean = Clean(typed);
         var (start, end) = Selection;
+        if (MaxLength is { } most)
+        {
+            var room = Math.Max(0, most - (text.Length - (end - start)));
+            if (clean.Length > room)
+                clean = clean[..room];
+        }
         if (clean.Length == 0 && start == end)
             return;
+        Remember(typedNow && start == end, clean);
         text = text[..start] + clean + text[end..];
         caret = anchor = start + clean.Length;
         Changed();
@@ -161,11 +238,52 @@ public sealed class TextEditor(bool multiline = false) : Element
 
     void DeleteSelection()
     {
+        Remember(typed: false);
         var (start, end) = Selection;
         text = text[..start] + text[end..];
         caret = anchor = start;
         Changed();
     }
+
+    void Copy()
+    {
+        if (caret != anchor && !password)
+            Screen?.Clipboard.SetText(SelectedText);
+    }
+
+    void Cut()
+    {
+        if (caret != anchor && !password && Editable)
+        {
+            Screen?.Clipboard.SetText(SelectedText);
+            DeleteSelection();
+        }
+    }
+
+    void Paste()
+    {
+        if (Editable && Screen?.Clipboard.GetText() is { Length: > 0 } pasted)
+            Insert(pasted);
+    }
+
+    /// <summary>A right press: Cut, Copy, Paste and Select all, in the person's language, each usable when it can do something.</summary>
+    public override IReadOnlyList<MenuEntry>? ContextMenuAt(double x, double y)
+    {
+        if (!Enabled() || !TakesFocus)
+            return null;
+        var selected = caret != anchor && !password;
+        static MenuEntry Entry(string caption, bool enabled, Action run) => new(caption, null, null, false, enabled, false, [], run);
+        return
+        [
+            Entry(Clarity.Runtime.Locale.Translate("cutText", "Cut"), selected && Editable, Cut),
+            Entry(Clarity.Runtime.Locale.Translate("copyText", "Copy"), selected, Copy),
+            Entry(Clarity.Runtime.Locale.Translate("pasteText", "Paste"), Editable, Paste),
+            Entry(Clarity.Runtime.Locale.Translate("selectAllText", "Select all"), text.Length > 0, SelectAll),
+        ];
+    }
+
+    /// <summary>The pointer is a text cursor over it while the person may use it.</summary>
+    public override Cursor? CursorAt(double x, double y) => Enabled() && TakesFocus ? Cursor.Text : null;
 
     public override void OnText(string typed)
     {
@@ -174,7 +292,7 @@ public sealed class TextEditor(bool multiline = false) : Element
         // Keys that type no character (Backspace, Escape) come as keys.
         var printable = new string([.. typed.Where(c => !char.IsControl(c) || c == '\t' || (Multiline && c == '\n'))]);
         if (printable.Length > 0)
-            Insert(printable);
+            Insert(printable, typedNow: true);
     }
 
     public override bool OnKey(KeyInput key)
@@ -186,10 +304,10 @@ public sealed class TextEditor(bool multiline = false) : Element
         switch (key.Key)
         {
             case Key.Left:
-                MoveTo(command ? WordBefore(caret) : caret > 0 && anchor != caret && !shift ? Selection.Start : Before(caret), shift);
+                MoveTo(Sideways(toLeft: true, command, shift), shift);
                 return true;
             case Key.Right:
-                MoveTo(command ? WordAfter(caret) : anchor != caret && !shift ? Selection.End : After(caret), shift);
+                MoveTo(Sideways(toLeft: false, command, shift), shift);
                 return true;
             case Key.Home:
                 MoveTo(command || !Multiline ? 0 : LineStart(caret), shift);
@@ -229,30 +347,64 @@ public sealed class TextEditor(bool multiline = false) : Element
                 SelectAll();
                 return true;
             case Key.C when command:
-                if (caret != anchor && !password)
-                    Screen?.Clipboard.SetText(SelectedText);
+                Copy();
                 return true;
             case Key.X when command:
-                if (caret != anchor && !password && Editable)
-                {
-                    Screen?.Clipboard.SetText(SelectedText);
-                    DeleteSelection();
-                }
+                Cut();
                 return true;
             case Key.V when command:
-                if (Editable && Screen?.Clipboard.GetText() is { Length: > 0 } pasted)
-                    Insert(pasted);
+                Paste();
                 return true;
+            // Its own typing first; with none left, the key goes on to the window's edits.
+            case Key.Z when command && !key.Modifiers.HasFlag(Modifiers.Alt):
+                return Undoes && UndoTyping(back: !shift);
+            case Key.Y when command && !key.Modifiers.HasFlag(Modifiers.Alt):
+                return Undoes && UndoTyping(back: false);
         }
         return false;
     }
 
     void MoveTo(int place, bool extend)
     {
+        typing = false;
         caret = Math.Clamp(place, 0, text.Length);
         if (!extend)
             anchor = caret;
         Moved();
+    }
+
+    /// <summary>
+    /// Where Left or Right takes the caret. In text of one direction a
+    /// character back or on. Where Hebrew or Arabic is on the caret's line,
+    /// the place next to it as the line shows, so Left goes left in text
+    /// that runs right to left; a word at a time goes the paragraph's way.
+    /// </summary>
+    int Sideways(bool toLeft, bool command, bool shift)
+    {
+        var laid = Layout();
+        var n = LineOf(laid, caret);
+        var shape = laid.Shapes[n];
+        if (!shape.HasRightToLeft)
+        {
+            if (toLeft)
+                return command ? WordBefore(caret) : caret > 0 && anchor != caret && !shift ? Selection.Start : Before(caret);
+            return command ? WordAfter(caret) : anchor != caret && !shift ? Selection.End : After(caret);
+        }
+        if (command)
+            return toLeft != shape.RightToLeft ? WordBefore(caret) : WordAfter(caret);
+        if (anchor != caret && !shift)
+        {
+            // The selection gives way at its end on that side.
+            var (start, end) = Selection;
+            return laid.Across[start] < laid.Across[end] == toLeft ? start : end;
+        }
+        var line = laid.Lines[n];
+        var step = shape.Step(caret - line.Start, toRight: !toLeft);
+        if (step != caret - line.Start)
+            return line.Start + step;
+        // At the line's edge: on to the next line from its end, back to the line before from its start.
+        var onward = toLeft == shape.RightToLeft;
+        return onward && caret == line.End ? After(caret) : !onward && caret == line.Start ? Before(caret) : caret;
     }
 
     int Before(int at) => at <= 0 ? 0 : at >= 2 && char.IsLowSurrogate(text[at - 1]) && char.IsHighSurrogate(text[at - 2]) ? at - 2 : at - 1;
@@ -348,6 +500,9 @@ public sealed class TextEditor(bool multiline = false) : Element
     public override void OnFocusChanged(bool focused)
     {
         dragging = false;
+        // Left, its text is taken: from then on Ctrl+Z takes back the window's edit of it.
+        if (!focused)
+            ForgetTyping();
         FocusMoved?.Invoke(focused);
         Invalidate();
     }
@@ -366,7 +521,7 @@ public sealed class TextEditor(bool multiline = false) : Element
     readonly record struct Line(int Start, int End);
 
     /// <summary>The lines, how high each is, and where each place of the text is across its line.</summary>
-    sealed record Laid(List<Line> Lines, double Height, double[] Across, double Width, Fonts Fonts, double Size);
+    sealed record Laid(List<Line> Lines, ShapedText[] Shapes, double Height, double[] Across, double Width, Fonts Fonts, double Size);
 
     Laid? layout;
 
@@ -384,8 +539,8 @@ public sealed class TextEditor(bool multiline = false) : Element
         }
     }
 
-    /// <summary>What is drawn for the text: the text itself, or a dot for each character of a password.</summary>
-    string Shown => password ? new string('\u2022', text.Length) : text;
+    /// <summary>What is drawn for the text: the text itself, or a <c>*</c> for each character of a password.</summary>
+    public string Shown => password ? new string('*', text.Length) : text;
 
     Laid Layout()
     {
@@ -393,27 +548,20 @@ public sealed class TextEditor(bool multiline = false) : Element
             return laid;
         using var font = FontsNow.Font("text", Size, false);
         var shown = Shown;
-        // Where each place is from the start of the text, as each character's width adds up.
+        // The text shaped as drawn (Arabic joined, Hebrew right to left): each character's width, in the text's order.
+        var whole = FontsNow.Shape(shown, "text", Size, false);
         var from = new double[shown.Length + 1];
-        var widths = new Dictionary<string, double>();
         for (var i = 0; i < shown.Length; i++)
-        {
-            var one = char.IsHighSurrogate(shown[i]) && i + 1 < shown.Length ? shown.Substring(i, 2) : shown[i].ToString();
-            var w = one == "\n" ? 0 : widths.TryGetValue(one, out var known) ? known : widths[one] = font.MeasureText(one);
-            from[i + 1] = from[i] + w;
-            if (one.Length == 2)
-            {
-                from[i + 2] = from[i + 1];
-                i++;
-            }
-        }
+            from[i + 1] = from[i] + (shown[i] == '\n' ? 0 : whole.RightOf(i) - whole.LeftOf(i));
         var lines = Multiline ? Wrap(shown, from, Inner.Width) : [new Line(0, shown.Length)];
+        // Each line shaped as it is drawn, so the caret and the pointer land on its letters.
+        var shapes = lines.Select(l => l.Start == 0 && l.End == shown.Length ? whole : FontsNow.Shape(shown[l.Start..l.End], "text", Size, false)).ToArray();
         // Across is measured from the start of each place's own line.
         var across = new double[shown.Length + 1];
-        foreach (var line in lines)
-            for (var i = line.Start; i <= line.End; i++)
-                across[i] = from[i] - from[line.Start];
-        return layout = new Laid(lines, font.Spacing, across, Inner.Width, FontsNow, Size);
+        for (var n = 0; n < lines.Count; n++)
+            for (var i = lines[n].Start; i <= lines[n].End; i++)
+                across[i] = shapes[n].CaretX(i - lines[n].Start);
+        return layout = new Laid(lines, shapes, font.Spacing, across, Inner.Width, FontsNow, Size);
     }
 
     /// <summary>
@@ -477,21 +625,11 @@ public sealed class TextEditor(bool multiline = false) : Element
             return 0;
         if (to >= laid.Lines.Count)
             return text.Length;
-        return Nearest(laid, laid.Lines[to], laid.Across[caret]);
+        return Nearest(laid, to, laid.Across[caret]);
     }
 
-    static int Nearest(Laid laid, Line line, double x)
-    {
-        var best = line.Start;
-        for (var i = line.Start; i <= line.End; i++)
-        {
-            if (Math.Abs(laid.Across[i] - x) < Math.Abs(laid.Across[best] - x))
-                best = i;
-            if (laid.Across[i] > x)
-                break;
-        }
-        return best;
-    }
+    /// <summary>The place on a line nearest <paramref name="x"/> across it, on its shaped letters.</summary>
+    static int Nearest(Laid laid, int line, double x) => laid.Lines[line].Start + laid.Shapes[line].PlaceAt(x);
 
     /// <summary>The place nearest a point, from the element's top left.</summary>
     public int PlaceAt(double x, double y)
@@ -499,16 +637,16 @@ public sealed class TextEditor(bool multiline = false) : Element
         var laid = Layout();
         var inner = Inner;
         var line = Multiline ? Math.Clamp((int)Math.Floor((y - (inner.Y - Bounds.Y) + ScrollY) / laid.Height), 0, laid.Lines.Count - 1) : 0;
-        var across = x - (inner.X - Bounds.X) + ScrollX - AlignShift(laid, laid.Lines[line]);
-        return Nearest(laid, laid.Lines[line], across);
+        var across = x - (inner.X - Bounds.X) + ScrollX - AlignShift(laid, line);
+        return Nearest(laid, line, across);
     }
 
     /// <summary>How far a line moves right for its alignment, when it fits.</summary>
-    double AlignShift(Laid laid, Line line)
+    double AlignShift(Laid laid, int line)
     {
         if (Align == TextAlign.Left || Multiline)
             return 0;
-        var spare = Inner.Width - laid.Across[line.End];
+        var spare = Inner.Width - laid.Shapes[line].Width;
         return spare <= 0 ? 0 : Align == TextAlign.Right ? spare : spare / 2;
     }
 
@@ -535,7 +673,7 @@ public sealed class TextEditor(bool multiline = false) : Element
         }
         else
         {
-            var full = laid.Across[text.Length];
+            var full = laid.Shapes[0].Width;
             var most = Math.Max(0, full - inner.Width + 1);
             if (follow)
             {
@@ -584,11 +722,11 @@ public sealed class TextEditor(bool multiline = false) : Element
         if (text.Length == 0 && !string.IsNullOrEmpty(Placeholder))
         {
             using var muted = new SKPaint { Color = Faded(look.Color("muted"), faded), IsAntialias = true };
-            var x = Align == TextAlign.Left || Multiline ? inner.X : Align == TextAlign.Right ? inner.Right - font.MeasureText(Placeholder) : inner.X + (inner.Width - font.MeasureText(Placeholder)) / 2;
-            painter.Canvas.DrawText(Placeholder, (float)x, (float)Baseline(0), SKTextAlign.Left, font, muted);
+            var wide = painter.Fonts.Measure(Placeholder, "text", Size, false);
+            var x = Align == TextAlign.Left || Multiline ? inner.X : Align == TextAlign.Right ? inner.Right - wide : inner.X + (inner.Width - wide) / 2;
+            painter.Fonts.Draw(painter.Canvas, Placeholder, x, Baseline(0), "text", Size, false, muted);
         }
 
-        var shown = Shown;
         var (start, end) = Selection;
         for (var i = 0; i < laid.Lines.Count; i++)
         {
@@ -596,25 +734,33 @@ public sealed class TextEditor(bool multiline = false) : Element
             var top = Top(i);
             if (top + laid.Height < inner.Y || top > inner.Bottom)
                 continue;
-            var left = inner.X - ScrollX + AlignShift(laid, line);
-            // The selection behind the text, while it has the focus.
+            var left = inner.X - ScrollX + AlignShift(laid, i);
+            var shape = laid.Shapes[i];
+            // The selection behind the text, while it has the focus: one stretch, or more where directions mix.
             if (Focused && start != end && start <= line.End && end >= line.Start)
             {
-                var from = laid.Across[Math.Max(start, line.Start)];
-                var to = laid.Across[Math.Min(end, line.End)];
-                // A selected line break shows as a little space.
+                var from = Math.Max(start, line.Start) - line.Start;
+                var to = Math.Min(end, line.End) - line.Start;
+                var spans = shape.Spans(from, to).ToList();
+                if (spans.Count == 0)
+                    spans.Add((shape.CaretX(from), shape.CaretX(from)));
+                // A selected line break shows as a little space, at the line's end.
                 if (end > line.End && line.End < text.Length)
-                    to += Size / 3;
-                painter.Fill(new Box(left + from, top, Math.Max(1, to - from), laid.Height), look.Color("selection"));
+                    if (shape.RightToLeft)
+                        spans[0] = (spans[0].From - Size / 3, spans[0].To);
+                    else
+                        spans[^1] = (spans[^1].From, spans[^1].To + Size / 3);
+                foreach (var (a, b) in spans)
+                    painter.Fill(new Box(left + a, top, Math.Max(1, b - a), laid.Height), look.Color("selection"));
             }
             if (line.End > line.Start)
-                painter.Canvas.DrawText(shown[line.Start..line.End], (float)left, (float)Baseline(i), SKTextAlign.Left, font, paint);
+                shape.Draw(painter.Canvas, left, Baseline(i), paint);
         }
 
         if (Focused && Enabled())
         {
             var line = LineOf(laid, caret);
-            var x = inner.X - ScrollX + AlignShift(laid, laid.Lines[line]) + laid.Across[caret];
+            var x = inner.X - ScrollX + AlignShift(laid, line) + laid.Across[caret];
             painter.Fill(new Box(Math.Round(x), Top(line), 1, laid.Height), textColor);
         }
     }

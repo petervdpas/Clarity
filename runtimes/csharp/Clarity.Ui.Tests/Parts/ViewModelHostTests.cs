@@ -31,6 +31,7 @@ namespace Clarity.Ui.Tests.Generated
             ["Order.total"] = new("@orderTotalLabel", new FieldFormat(FormatKind.Decimal), Required: true, Min: "0", Max: "500"),
             ["Order.finished_by"] = new("Finished by", Refers: "Helper"),
             ["Order.note"] = new("Note"),
+            ["Order.count"] = new("Count"),
         };
     }
 
@@ -50,6 +51,7 @@ namespace Clarity.Ui.Tests.Generated
         public long? FinishedBy { get => finishedBy; set => SetProperty(ref finishedBy, value); }
         long? finishedBy;
         public decimal Total { get; set; }
+        public long Count { get; set; }
     }
 
     /// <summary>
@@ -167,6 +169,16 @@ namespace Clarity.Ui.Tests.Generated
         public IRelayCommand CloseWindow_Command => closeWindow ??= new RelayCommand(CloseWindow_);
         void CloseWindow_() => Handle(Close);
 
+        // A part and a handler of the same name: the generator names the handler's command RedInk_.
+        public PartState RedInk { get; } = new("redInk");
+        public int Inked;
+
+        RelayCommand? redInk;
+        public IRelayCommand RedInk_Command => redInk ??= new RelayCommand(RedInk_);
+        void RedInk_() => Handle(OnRedInk);
+
+        void OnRedInk() => Inked++;
+
         public int OpenedTimes;
         public int ReturnedTimes;
 
@@ -221,7 +233,7 @@ namespace Clarity.Ui.Tests
         [Fact]
         public void A_table_cell_edit_writes_the_field_of_the_record_at_its_place()
         {
-            var (model, host) = Made("""<Table name="grid" bind="orders" columns="note, status" edit="note, status" />""");
+            var (model, host) = Made("""<Table name="grid" bind="orders" columns="note, status" edit="note, status" undoScope="grid" />""");
             Assert.Equal("second", host.Read("orders[1].note"));
             Assert.Null(host.Read("orders[5].note"));
             host.Write("grid", "orders[1].note", "changed");
@@ -254,12 +266,16 @@ namespace Clarity.Ui.Tests
         }
 
         [Fact]
-        public void A_part_without_an_undo_scope_is_undone_in_its_own_name()
+        public void A_part_the_markup_gives_no_undo_scope_makes_no_edit()
         {
+            // The generator writes undoScope on every part clarity_spec gives one (Avalonia's Edits.Scope); without it, no edit.
             var (model, host) = Made("<Number name=\"shownBox\" bind=\"shown\" />");
             host.Write("shownBox", "shown", 12.0);
             Assert.Equal(12L, model.Shown);
-            Assert.True(model.Edits.CanUndo("shownBox"));
+            Assert.False(model.Edits.CanUndo("shownBox"));
+            var (scoped, scopedHost) = Made("<Number name=\"shownBox\" bind=\"shown\" undoScope=\"shownBox\" />");
+            scopedHost.Write("shownBox", "shown", 12.0);
+            Assert.True(scoped.Edits.CanUndo("shownBox"));
         }
 
         [Fact]
@@ -314,7 +330,7 @@ namespace Clarity.Ui.Tests
         [Fact]
         public void A_change_handler_runs_inside_the_edit()
         {
-            var (model, host) = Made("<Textbox name=\"note\" bind=\"order.note\" onchange=\"noteChanged\" />");
+            var (model, host) = Made("<Textbox name=\"note\" bind=\"order.note\" onchange=\"noteChanged\" undoScope=\"note\" />");
             host.Write("note", "order.note", "typed");
             host.Run("note", new HandlerCall("change", "noteChanged", []));
             Assert.Equal(1, model.NoteChanges);
@@ -391,6 +407,24 @@ namespace Clarity.Ui.Tests
             Assert.Equal("someMissingKey", host.Text("@someMissingKey"));
         }
 
+        /// <summary>Braces a translation writes doubled show single in a part's text, a placeholder's too (hosts-7).</summary>
+        [Fact]
+        public void A_translated_text_shows_its_braces_single()
+        {
+            var (_, host) = Made();
+            Assert.Equal("Type {name}", host.Text("@Type {{name}}"));
+            Assert.Equal("Type {{name}}", host.Text("Type {{name}}"));
+        }
+
+        /// <summary>A command that cannot run now says so, so a timer leaves its tick out (hosts-4).</summary>
+        [Fact]
+        public void A_handler_whose_command_cannot_run_is_known()
+        {
+            var (_, host) = Made();
+            Assert.True(host.CanRun("approveButton", new HandlerCall("click", "approveClicked", [])));
+            Assert.True(host.CanRun("x", new HandlerCall("click", "nowhere", [])));
+        }
+
         [Fact]
         public void An_enum_offers_its_generated_choices_and_a_reference_its_records()
         {
@@ -401,6 +435,25 @@ namespace Clarity.Ui.Tests
             Assert.Same(model.HelperChoices, host.Choices("order.finished_by"));
             Assert.Same(model.HelperChoices, host.Choices("orders.finished_by"));
             Assert.Empty(host.Choices("order.note"));
+        }
+
+        /// <summary>A plain whole number whose facts refer to nothing is no reference: it offers no records (data-3).</summary>
+        [Fact]
+        public void A_plain_integer_field_offers_no_records()
+        {
+            var (model, host) = Made();
+            Assert.Empty(host.Choices("order.count"));
+            Assert.Empty(host.Choices("orders.count"));
+            Assert.Same(model.HelperChoices, host.Choices("order.finished_by"));
+        }
+
+        /// <summary>A handler named as a part runs by the command the generator named around the part (RedInk_).</summary>
+        [Fact]
+        public void A_handler_named_as_a_part_runs_by_its_stepped_around_command()
+        {
+            var (model, host) = Made();
+            Assert.True(host.Run("redInk", new HandlerCall("click", "redInk", [])));
+            Assert.Equal(1, model.Inked);
         }
 
         [Fact]
@@ -503,7 +556,7 @@ namespace Clarity.Ui.Tests
         [Fact]
         public void An_unbound_parts_own_text_is_an_edit_undo_takes_back()
         {
-            var (model, host) = Made("<Textbox name=\"note\" />");
+            var (model, host) = Made("<Textbox name=\"note\" undoScope=\"note\" />");
             model.Opened();
             model.Note.Text = "typed";
             host.Edited("note");

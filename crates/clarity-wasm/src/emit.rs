@@ -345,6 +345,21 @@ impl<'w, 'a> Body<'w, 'a> {
                 self.block(body);
                 self.code.extend([I::Br(0), I::End, I::End]);
             }
+            // From `from` to `to`, both included; `to` is read once, before the first step.
+            ir::Stmt::ForRange { var, from, to, body } => {
+                self.expr(from);
+                self.code.extend([I::I64Const(1), I::I64Sub, I::LocalSet(*var)]);
+                let last = self.local(Kind::Int);
+                self.expr(to);
+                self.code.push(I::LocalSet(last));
+                self.check_failed();
+                let at = self.local(Kind::Int);
+                self.code.extend([I::LocalGet(*var), I::LocalSet(at), I::Block(BlockType::Empty), I::Loop(BlockType::Empty)]);
+                self.code.extend([I::LocalGet(at), I::LocalGet(last), I::I64GeS, I::BrIf(1)]);
+                self.code.extend([I::LocalGet(at), I::I64Const(1), I::I64Add, I::LocalTee(at), I::LocalSet(*var)]);
+                self.block(body);
+                self.code.extend([I::Br(0), I::End, I::End]);
+            }
             ir::Stmt::Eval(call) => {
                 if self.expr(call).is_some() {
                     self.code.push(I::Drop);

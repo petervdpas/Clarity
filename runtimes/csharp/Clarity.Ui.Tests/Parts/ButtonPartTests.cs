@@ -74,13 +74,13 @@ public class ButtonPartTests
         var (screen, _, _) = Made.Window("""<Button at="1,1" span="2" caption="" />""", host);
         var look = screen.Look;
         using (var plain = Shot.Of(screen, 800, 400))
-            Assert.True(Near(look.Part("button", null).Background!.Value, plain.GetPixel(6, 18)));
+            Assert.True(Near(look.Part("button", null).Background!.Value, plain.PixelAt(6, 18)));
         screen.PointerMoved(6, 18);
         using (var hovered = Shot.Of(screen, 800, 400))
-            Assert.True(Near(look.Part("button", "hover").Border!.Value, hovered.GetPixel(0, 18), 40));
+            Assert.True(Near(look.Part("button", "hover").Border!.Value, hovered.PixelAt(0, 18), 40));
         screen.PointerPressed(6, 18, PointerButton.Left);
         using (var pressed = Shot.Of(screen, 800, 400))
-            Assert.True(Near(look.Part("button", "pressed").Background!.Value, pressed.GetPixel(6, 18)));
+            Assert.True(Near(look.Part("button", "pressed").Background!.Value, pressed.PixelAt(6, 18)));
     }
 
     [Fact]
@@ -90,14 +90,14 @@ public class ButtonPartTests
         var (screen, _, _) = Made.Window("""<Button at="1,1" span="2" name="go" caption="" />""", host);
         screen.KeyPressed(new KeyInput(Key.Tab, Modifiers.None));
         using (var focused = Shot.Of(screen, 800, 400))
-            Assert.True(Near(screen.Look.Color("focus"), focused.GetPixel(1, 18), 40));
+            Assert.True(Near(screen.Look.Color("focus"), focused.PixelAt(1, 18), 40));
         screen.Focus(null);
         SKColor enabled;
         using (var shot = Shot.Of(screen, 800, 400))
-            enabled = shot.GetPixel(0, 18);
+            enabled = shot.PixelAt(0, 18);
         host.State("go")!.IsEnabled = false;
         using var dimmed = Shot.Of(screen, 800, 400);
-        Assert.NotEqual(enabled, dimmed.GetPixel(0, 18));
+        Assert.NotEqual(enabled, dimmed.PixelAt(0, 18));
     }
 
     [Fact]

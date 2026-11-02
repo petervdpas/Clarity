@@ -137,10 +137,10 @@ public class FrameViewTests
             App + """<Ribbon name="r"><Tab title="Home"><Group title="Edit"><Item caption="Cut" large="true" icon="scissors" onclick="cut" /></Group></Tab></Ribbon>""");
         host.Icons["scissors"] = "M6 6l12 12";
         using var light = Framed.Draw(screen);
-        Assert.Equal(screen.Look.Color("frame"), light.GetPixel(2, 2));
+        Assert.Equal(screen.Look.Color("frame"), light.PixelAt(2, 2));
         screen.Show(ThemeLook.Clarity(dark: true));
         using var dark = Framed.Draw(screen);
-        Assert.Equal(screen.Look.Color("frame"), dark.GetPixel(2, 2));
+        Assert.Equal(screen.Look.Color("frame"), dark.PixelAt(2, 2));
     }
 
     [Fact]

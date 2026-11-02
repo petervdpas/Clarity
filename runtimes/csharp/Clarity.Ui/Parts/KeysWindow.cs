@@ -16,7 +16,12 @@ using Clarity.Runtime;
 namespace Clarity.Ui;
 
 /// <summary>A command a key can run: its id among the person's keys, its caption, and the keys its design gives it.</summary>
-public sealed record KeyCommandInfo(string Id, Text Caption, IReadOnlyList<string> Keys);
+/// <summary>
+/// A command a key can run: its id among the person's keys, its caption, the
+/// keys its design gives it, and where it lives when that is the toolbar or a
+/// ribbon (Toolbar; a ribbon's tab and group), shown beside its name.
+/// </summary>
+public sealed record KeyCommandInfo(string Id, Text Caption, IReadOnlyList<string> Keys, IReadOnlyList<Text>? Place = null);
 
 /// <summary>The commands of one place: the app's frame (<c>Id</c> empty, no title) or a window.</summary>
 public sealed record KeyLayerInfo(string Id, Text? Title, IReadOnlyList<KeyCommandInfo> Commands);
@@ -134,7 +139,17 @@ public sealed class KeysWindow : Element
 
     /// <summary>How high everything it shows is, from the heading to the Close button.</summary>
     double ContentHeight =>
-        HeadingHeight + Gap + MessageHeight + Gap + layers.Sum(l => TitleHeight + RowGap + GroupHeight(l) + Gap) + RowHeight;
+        HeadingHeight + Gap + MessageRoom + layers.Sum(l => TitleHeight + RowGap + GroupHeight(l) + Gap) + RowHeight;
+
+    /// <summary>
+    /// The room of the message line, always there so nothing moves when it
+    /// says something (as Avalonia's KeysView); while it has nothing to say
+    /// it says how the window works, muted, so it is no empty band.
+    /// </summary>
+    double MessageRoom => MessageHeight + Gap;
+
+    /// <summary>What the message line says while nothing happens.</summary>
+    static string Hint => Locale.Translate("keysHint", "Change gives a command a new key; Reset gives it its own key back");
 
     static double GroupHeight(KeyLayerInfo layer) =>
         2 * GroupPad + layer.Commands.Count * RowHeight + Math.Max(0, layer.Commands.Count - 1) * RowGap;
@@ -153,14 +168,13 @@ public sealed class KeysWindow : Element
         get
         {
             var said = new List<string> { Title };
-            if (Message is { } message)
-                said.Add(message);
+            said.Add(Message ?? Hint);
             foreach (var layer in layers)
             {
                 said.Add(PlaceName(layer));
                 foreach (var c in layer.Commands)
                 {
-                    said.Add(NameOf(c.Id));
+                    said.Add(PlaceOf(c) is { } place ? $"{NameOf(c.Id)} {place}" : NameOf(c.Id));
                     said.Add(KeysText(c));
                 }
             }
@@ -174,6 +188,10 @@ public sealed class KeysWindow : Element
 
     static string PlaceName(KeyLayerInfo layer) =>
         layer.Title is { } title ? Locale.Show(title) : Locale.Translate("keysEverywhere", "Everywhere");
+
+    /// <summary>Where a toolbar or ribbon command lives, as its window shows it: Toolbar, or Home, Edit; none for the others.</summary>
+    static string? PlaceOf(KeyCommandInfo c) =>
+        c.Place is { Count: > 0 } place ? string.Join(", ", place.Select(Locale.Show)) : null;
 
     string NameOf(string id) => captions.TryGetValue(id, out var caption) ? Locale.Show(caption) : id;
 
@@ -191,13 +209,16 @@ public sealed class KeysWindow : Element
         return Locale.Show(text);
     }
 
-    /// <summary>A key pressed as Clarity writes keys (<c>Ctrl+Shift+N</c>); null for a key Clarity.UI does not know.</summary>
+    /// <summary>A key pressed as Clarity writes keys (<c>Ctrl+Shift+N</c>), a key Clarity.UI has no Key for by the name its host gives it (<c>Ctrl+F13</c>); null for a key without a name, or a modifier on its own (Ctrl going down before the K of Ctrl+K).</summary>
     public static string? Written(KeyInput key)
     {
-        if (key.Key == Key.Other)
+        if (key.Key is Key.Shift or Key.Control or Key.Alt || key.Typed is not null)
+            return null;
+        if (key.Key == Key.Other && OwnName(key.Name) is null)
             return null;
         var name = key.Key switch
         {
+            Key.Other => OwnName(key.Name)!,
             >= Key.A and <= Key.Z => ((char)('A' + (key.Key - Key.A))).ToString(),
             >= Key.D0 and <= Key.D9 => ((char)('0' + (key.Key - Key.D0))).ToString(),
             _ => Names.TryGetValue(key.Key, out var written) ? written : key.Key.ToString(),
@@ -214,6 +235,10 @@ public sealed class KeysWindow : Element
         held.Add(name);
         return string.Join("+", held);
     }
+
+    /// <summary>A host's name of a key as a shortcut can name it: one word of letters and digits that names no key Clarity.UI has; none otherwise.</summary>
+    static string? OwnName(string? name) =>
+        name is { Length: > 1 } && name.All(char.IsAsciiLetterOrDigit) && Shortcuts.KeyOf(name) == Key.Other ? name : null;
 
     /// <summary>
     /// A key for the window: while it waits for a command's new key, the key
@@ -298,6 +323,9 @@ public sealed class KeysWindow : Element
     {
         if (Screen is { } screen && screen.Focused is Push { } push && Children.Contains(push) && !push.ShowsInTree)
             screen.Focus(this);
+        // The message line takes room only while it says something, so the rows move with it.
+        if (Bounds.Width > 0)
+            Arrange(Bounds);
         Invalidate();
     }
 
@@ -326,10 +354,11 @@ public sealed class KeysWindow : Element
         var y = view.Y - scroll;
         // The swap offer's buttons sit at the bottom of the message line, kept for it.
         var messageBottom = y + HeadingHeight + Gap + MessageHeight;
+        var contentTop = y + HeadingHeight + Gap + MessageRoom;
         var swapWidth = ButtonWidth(swapButton);
         swapButton.Arrange(new Box(x, messageBottom - RowHeight, swapWidth, RowHeight));
         cancelButton.Arrange(new Box(x + swapWidth + ColumnGap, messageBottom - RowHeight, ButtonWidth(cancelButton), RowHeight));
-        y = messageBottom + Gap;
+        y = contentTop;
         var index = 0;
         foreach (var layer in layers)
         {
@@ -407,6 +436,9 @@ public sealed class KeysWindow : Element
             var y = view.Y - scroll;
             painter.Text(Title, new Box(x, y, width, HeadingHeight), look.Color("text"), look.Size("heading"), bold: true);
             y += HeadingHeight + Gap;
+            if (Message is null)
+                foreach (var (hint, i) in SaidDialog.Wrap(Hint, width, painter.Fonts, size).Select((l, i) => (l, i)).Where(l => (l.i + 1) * Line <= MessageHeight))
+                    painter.Text(hint, new Box(x, y + i * Line, width, Line), look.Color("muted"), size);
             if (Message is { } message)
             {
                 var room = swap is null ? MessageHeight : MessageHeight - RowHeight - 4;
@@ -414,7 +446,7 @@ public sealed class KeysWindow : Element
                 for (var i = 0; i < lines.Count && (i + 1) * Line <= room; i++)
                     painter.Text(lines[i], new Box(x, y + i * Line, width, Line), look.Color("text"), size);
             }
-            y += MessageHeight + Gap;
+            y += MessageRoom;
             var index = 0;
             foreach (var layer in layers)
             {
@@ -428,7 +460,17 @@ public sealed class KeysWindow : Element
                     var (_, change, _) = rows[index++];
                     var keysX = change.Bounds.X - ColumnGap - KeysWidth;
                     var nameX = x + GroupPad;
-                    painter.Text(NameOf(c.Id), new Box(nameX, rowY, Math.Max(0, keysX - ColumnGap - nameX), RowHeight), look.Color("text"), size, bold: capturing == c.Id);
+                    var nameWidth = Math.Max(0, keysX - ColumnGap - nameX);
+                    var name = NameOf(c.Id);
+                    var bold = capturing == c.Id;
+                    painter.Text(name, new Box(nameX, rowY, nameWidth, RowHeight), look.Color("text"), size, bold: bold);
+                    // Where it lives, muted after its name: Toolbar, or a ribbon's tab and group.
+                    if (PlaceOf(c) is { } place)
+                    {
+                        var after = painter.Fonts.Measure(name, "text", size, bold) + ColumnGap;
+                        if (after < nameWidth)
+                            painter.Text(place, new Box(nameX + after, rowY, nameWidth - after, RowHeight), look.Color("muted"), size);
+                    }
                     var keys = KeysOf(c);
                     painter.Text(KeysText(c), new Box(keysX, rowY, KeysWidth, RowHeight), look.Color(keys.Count > 0 ? "text" : "muted"), size);
                     rowY += RowHeight + RowGap;

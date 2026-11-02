@@ -81,7 +81,7 @@ public class CanvasPartTests
     static SKColor Pixel(Screen screen, int x, int y, int width = 800, int height = 400)
     {
         using var shot = Shot.Of(screen, width, height);
-        return shot.GetPixel(x, y);
+        return shot.PixelAt(x, y);
     }
 
     [Fact]
@@ -245,17 +245,36 @@ public class CanvasPartTests
         Assert.True(zoomOut.X < back.X);
     }
 
+    /// <summary>Shift and the wheel pan a canvas sideways (Screen.Wheel turns it, data-2), as Avalonia's ScrollViewer did.</summary>
+    [Fact]
+    public void Shift_and_the_wheel_pan_the_canvas_sideways()
+    {
+        var (_, screen, canvas) = Canvas("""units="{&quot;width&quot;:100,&quot;height&quot;:100}" zoom="true" """);
+        var whole = canvas.Viewport;
+        screen.Wheel(400, 200, 0, 50, Modifiers.Shift);
+        Assert.Equal(whole.X + 50 / whole.Scale, canvas.Viewport.X, 6);
+        Assert.Equal(whole.Y, canvas.Viewport.Y, 6);
+    }
+
     [Fact]
     public void Ctrl_and_the_wheel_zoom_at_the_pointer_and_its_buttons_say_what_they_do()
     {
         var (_, screen, canvas) = Canvas("""units="{&quot;width&quot;:100,&quot;height&quot;:100}" zoom="true" """);
         var whole = canvas.Viewport;
         screen.PointerMoved(400, 200);
-        screen.Wheel(400, 200, 0, -40, Modifiers.Control);
-        Assert.Equal(whole.Scale * 1.2, canvas.Viewport.Scale, 6);
+        // A notch (50 pixels) zooms 1.15 closer, as Avalonia's canvas did.
+        screen.Wheel(400, 200, 0, -50, Modifiers.Control);
+        Assert.Equal(whole.Scale * 1.15, canvas.Viewport.Scale, 6);
         // The point under the pointer stays where it was.
         Assert.Equal(whole.X + 400 / whole.Scale, canvas.Viewport.X + 400 / canvas.Viewport.Scale, 6);
-        screen.Wheel(400, 200, 0, 40, Modifiers.Control);
+        // Cmd on macOS zooms as Ctrl does.
+        screen.Wheel(400, 200, 0, 50, Modifiers.Meta);
+        Assert.Equal(whole.Scale, canvas.Viewport.Scale, 6);
+        // A touchpad's ten small turns zoom as far as the one notch they make.
+        for (var i = 0; i < 10; i++)
+            screen.Wheel(400, 200, 0, -5, Modifiers.Control);
+        Assert.Equal(whole.Scale * 1.15, canvas.Viewport.Scale, 6);
+        screen.Wheel(400, 200, 0, 50, Modifiers.Control);
         Assert.Equal(whole.Scale, canvas.Viewport.Scale, 6);
         var (zoomOut, back, zoomIn) = canvas.ZoomButtons();
         Assert.Equal(CanvasPart.ZoomWord("zoomIn"), canvas.TooltipAt(zoomIn.X + 5, zoomIn.Y + 5));
@@ -379,8 +398,8 @@ public class CanvasPartTests
         using var picture = SKBitmap.Decode(CanvasModes.StrokeBytes(action));
         Assert.Equal((100, 100), (picture.Width, picture.Height));
         // The pen painted the theme's text color along the line, and nothing far from it.
-        Assert.Equal(ThemeLook.Clarity(dark: false).Color("text"), picture.GetPixel(15, 15));
-        Assert.Equal(0, picture.GetPixel(80, 20).Alpha);
+        Assert.Equal(ThemeLook.Clarity(dark: false).Color("text"), picture.PixelAt(15, 15));
+        Assert.Equal(0, picture.PixelAt(80, 20).Alpha);
     }
 
     [Fact]

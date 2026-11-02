@@ -49,7 +49,7 @@ public sealed class ThemeLook
     /// <summary>A project's theme, resolved by Clarity, over <paramref name="under"/>.</summary>
     public static ThemeLook Over(string resolved, ThemeLook under) => new(JsonDocument.Parse(resolved).RootElement.Clone(), under);
 
-    public bool Dark => own.TryGetProperty("dark", out var d) && d.ValueKind == JsonValueKind.True;
+    public bool Dark => own.TryGetProperty("dark", out var d) ? d.ValueKind == JsonValueKind.True : under?.Dark ?? false;
 
     JsonElement? Table(string name, string key) =>
         own.TryGetProperty(name, out var table) && table.ValueKind == JsonValueKind.Object && table.TryGetProperty(key, out var value) && value.ValueKind != JsonValueKind.Null ? value : null;

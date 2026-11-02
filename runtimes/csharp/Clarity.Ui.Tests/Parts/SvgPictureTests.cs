@@ -17,8 +17,8 @@ public class SvgPictureTests
         Assert.True(picture!.Width >= 40 && picture.Height >= 80);
         Assert.Equal(picture.Width * 2, picture.Height);
         // The figure is dark in the middle, and nothing is drawn around it.
-        Assert.Equal(new SKColor(0x20, 0x20, 0x20), picture.GetPixel(picture.Width / 2, picture.Height / 2));
-        Assert.Equal(0, picture.GetPixel(1, 1).Alpha);
+        Assert.Equal(new SKColor(0x20, 0x20, 0x20), picture.PixelAt(picture.Width / 2, picture.Height / 2));
+        Assert.Equal(0, picture.PixelAt(1, 1).Alpha);
     }
 
     [Fact]

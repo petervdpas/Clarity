@@ -64,6 +64,9 @@ public sealed class FrameMenus
     readonly List<(Overlay Overlay, FrameMenuList List, MenuEntry? From)> open = [];
     bool closing;
 
+    /// <summary>What Left and Right do in the first menu (a menu bar opens the menu beside, -1 left, 1 right); none for a menu on its own.</summary>
+    public Action<int>? Beside { get; set; }
+
     /// <summary>What the open menu belongs to (a menu bar's item, a toolbar button); none while no menu is open.</summary>
     public object? Owner { get; private set; }
 
@@ -139,7 +142,10 @@ public sealed class FrameMenus
             closing = false;
         }
         if (open.Count == 0)
+        {
             Owner = null;
+            Beside = null;
+        }
     }
 
     public void CloseAll() => CloseFrom(0);
@@ -283,8 +289,17 @@ public sealed class FrameMenuList(FrameMenus menus, IReadOnlyList<MenuEntry> ent
                 Activate(marked);
                 return true;
             case Key.Left when level > 0:
+                // The screen, kept before this menu closes and leaves it.
+                var screen = Screen;
                 menus.CloseFrom(level);
-                Screen?.Focus(menus.At(level - 1));
+                screen?.Focus(menus.At(level - 1));
+                return true;
+            // In a menu bar's menu, Left and Right open the menu beside it on the bar.
+            case Key.Left when menus.Beside is { } beside:
+                beside(-1);
+                return true;
+            case Key.Right when menus.Beside is { } beside:
+                beside(1);
                 return true;
         }
         return false;
@@ -308,6 +323,8 @@ public sealed class FrameMenuList(FrameMenus menus, IReadOnlyList<MenuEntry> ent
                 continue;
             }
             var lit = i == marked && entry.Enabled;
+            // A disabled entry is greyed as a disabled button is: muted and dimmed.
+            using var dimmed = PressLooks.Dimmed(painter, entry.Enabled);
             var values = lit ? look.Part("menu", "hover") : menu;
             if (lit)
                 painter.Fill(row, values.Background ?? look.Color("accent_soft"), look.Radius("button"));

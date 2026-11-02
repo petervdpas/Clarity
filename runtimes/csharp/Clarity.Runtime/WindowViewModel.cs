@@ -29,6 +29,13 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// <summary>The number of this open window, its own: what belongs to it, such as an engine's state per window, goes by it.</summary>
     public long Instance { get; } = OpenWindows.Next();
 
+    /// <summary>
+    /// The long engine call of the windows this one shows with: the shell that
+    /// shows it (a window stack, a server's session) gives its own, so a long
+    /// call holds back only their handlers. Its own until a shell shows it.
+    /// </summary>
+    public LongCall LongCall { get; set; } = new();
+
     /// <summary>The window's title.</summary>
     public virtual string Title => "";
 
@@ -111,8 +118,8 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// <summary>A custom part's values among the names of a part: <c>board.values.count</c>.</summary>
     const string ValuesOf = ".values.";
 
-    /// <summary>The name the person's settings go by in an edit; no name of the window's data has a #.</summary>
-    const string SettingsState = "#settings";
+    /// <summary>Names of the person's settings in an edit start so (<c>#settings.compact</c>), each setting by itself; no name of the window's data has a #.</summary>
+    const string SettingsState = "#settings.";
 
     /// <summary>The person's settings, which parts may change (bound to <c>settings.x</c>); none in a window without them.</summary>
     protected virtual ISettings? AppSettings => null;
@@ -148,8 +155,12 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
                 now[$"{PartState}{name}{ValuesOf}{value}"] = set is null ? null : JsonSerializer.SerializeToNode(set, typeof(object), Snapshot.Options);
         }
         // A part bound to a setting changes the settings, not the window's data.
+        // Each setting by itself, so an undo takes back only the settings its edit changed.
         if (AppSettings is { } settings)
-            now[SettingsState] = settings.ToJson();
+        {
+            foreach (var (name, value) in settings.ToJson())
+                now[SettingsState + name] = value?.DeepClone();
+        }
         return now;
     }
 
@@ -191,10 +202,11 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// </summary>
     public void EditOf(string part, string scope, bool ends, Action handler)
     {
-        // A mirror's handlers run on the server, which keeps its edits.
+        // A mirror's handlers run on the server, which keeps its edits; it draws the change anew.
         if (Remote is not null)
         {
             handler();
+            Changed();
             return;
         }
         baseline ??= DataNow();
@@ -247,7 +259,7 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         }
         catch (ClarityException e)
         {
-            Say(Level.Error, Text.Plain(e.Message));
+            Say(Level.Error, e.Said);
             return false;
         }
         if (apply is null)
@@ -380,8 +392,12 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         foreach (var changed in back ? Enumerable.Reverse(edit.Changes) : edit.Changes)
         {
             var value = (back ? changed.Before : changed.After)?.DeepClone();
-            if (changed.Name == SettingsState)
-                settings = value as JsonObject;
+            if (changed.Name.StartsWith(SettingsState, StringComparison.Ordinal))
+            {
+                settings ??= AppSettings?.ToJson();
+                if (settings is not null)
+                    settings[changed.Name[SettingsState.Length..]] = value;
+            }
             else if (changed.Name.StartsWith(PartState, StringComparison.Ordinal))
                 PutBack(parts, changed.Name[PartState.Length..], value);
             else
@@ -390,6 +406,7 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         applying = true;
         try
         {
+            PutBackInPlace(data);
             Snapshot.Apply(this, new JsonObject { ["data"] = data });
             ApplyParts(parts);
             if (settings is not null)
@@ -401,6 +418,55 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         }
         baseline = DataNow();
         Redraw();
+    }
+
+    /// <summary>
+    /// A record the window shows that is still the same record (its type and
+    /// id), alone or in a list of the same records, gets its values back in
+    /// place, so a list that holds it keeps it selected and every part that
+    /// shows it shows them; those names leave <paramref name="data"/>.
+    /// </summary>
+    void PutBackInPlace(JsonObject data)
+    {
+        foreach (var (name, node) in data.ToList())
+        {
+            var property = GetType().GetProperty(name);
+            if (property?.GetValue(this) is not { } now || node is null)
+                continue;
+            var was = node.Deserialize(property.PropertyType, Snapshot.Options);
+            var same = (now, was) switch
+            {
+                (System.Collections.IList rows, System.Collections.IList back) => rows.Count == back.Count
+                    && Enumerable.Range(0, rows.Count).All(i => SameRecord(rows[i], back[i])),
+                _ => SameRecord(now, was),
+            };
+            if (!same)
+                continue;
+            if (now is System.Collections.IList list && was is System.Collections.IList earlier)
+            {
+                for (var i = 0; i < list.Count; i++)
+                    CopyValues(earlier[i]!, list[i]!);
+            }
+            else
+                CopyValues(was!, now);
+            data.Remove(name);
+        }
+    }
+
+    /// <summary>Whether two values are the same stored record: one type with a long Id, the same id.</summary>
+    static bool SameRecord(object? now, object? was) =>
+        now is not null && was is not null && now.GetType() == was.GetType() && !now.GetType().IsValueType
+        && now.GetType().GetProperty("Id") is { PropertyType: var type } id && type == typeof(long)
+        && Equals(id.GetValue(now), id.GetValue(was));
+
+    /// <summary>Gives <paramref name="into"/> every value of <paramref name="from"/> it can be given.</summary>
+    static void CopyValues(object from, object into)
+    {
+        foreach (var field in into.GetType().GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public))
+        {
+            if (field.CanRead && field.GetSetMethod() is { } set && field.GetIndexParameters().Length == 0)
+                set.Invoke(into, [field.GetValue(from)]);
+        }
     }
 
     /// <summary>One name of a part's state an undo puts back, into <paramref name="parts"/> by part: its own text and tick, a field code set, or a custom part's value.</summary>
@@ -503,12 +569,17 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         // A mirror's handlers run on the server: the command goes there, by its name.
         if (Remote is not null)
         {
+            // The server draws the canvases anew after it, with the person's change.
+            stale = false;
             Remote.Command(this, command, args ?? []);
             return true;
         }
-        // While the screen waits for a long engine call, it takes no other handler.
+        // While the screen waits for a long engine call of these windows, it takes no other handler.
         if (LongCall.Waiting)
             return false;
+        // A required field the last save refused is checked again by the next one.
+        if (running == 0)
+            ClearRequired();
         running++;
         var ran = false;
         try
@@ -529,15 +600,19 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
             ran = true;
             // The canvases show what the handler left, drawn anew.
             if (running == 1)
+            {
+                stale = false;
                 Redraw();
+            }
         }
         catch (RefusedException e)
         {
-            Say(Level.Error, e.Text);
+            if (!ShownAtInput(e))
+                Say(Level.Error, e.Text);
         }
         catch (ClarityException e)
         {
-            Say(Level.Error, Text.Plain(e.Message));
+            Say(Level.Error, e.Said);
         }
         catch (Exception e)
         {
@@ -570,6 +645,43 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         foreach (var question in asks)
             AskRequested?.Invoke(question);
         return ran;
+    }
+
+    /// <summary>The inputs that show why a save was refused, with the error each was given.</summary>
+    readonly List<(PartState Part, Text Error)> requiredShown = [];
+
+    /// <summary>
+    /// Shows a refused required field at each input bound to that field of
+    /// the refused record, as a form check would. False when no input shows it.
+    /// </summary>
+    bool ShownAtInput(RefusedException refused)
+    {
+        if (refused is not { Column: { } column, Record: { } record })
+            return false;
+        var shown = false;
+        foreach (var (_, part) in Snapshot.PartsOf(this))
+        {
+            if (part.Field is not { } field || field.Column != column)
+                continue;
+            var data = GetType().GetProperty(char.ToUpperInvariant(field.Data[0]) + field.Data[1..]);
+            if (data is null || !ReferenceEquals(data.GetValue(this), record))
+                continue;
+            part.ErrorText = refused.Text;
+            requiredShown.Add((part, refused.Text));
+            shown = true;
+        }
+        return shown;
+    }
+
+    /// <summary>Takes away what <see cref="ShownAtInput"/> showed, unless code has set another error since.</summary>
+    void ClearRequired()
+    {
+        foreach (var (part, error) in requiredShown)
+        {
+            if (ReferenceEquals(part.ErrorText, error))
+                part.ErrorText = Text.Plain("");
+        }
+        requiredShown.Clear();
     }
 
     /// <summary>
@@ -668,10 +780,80 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// <summary>A window this one opened has closed: the place to reload a list.</summary>
     public void Returned() => Handle(OnReturn);
 
+    /// <summary>Whether the window has canvases its draw handlers draw: its Redraw is its own.</summary>
+    bool Draws => drawsByType.GetOrAdd(GetType(), static type =>
+        type.GetMethod(nameof(Redraw), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, Type.EmptyTypes)?.DeclaringType != typeof(WindowViewModel));
+
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool> drawsByType = new();
+
+    /// <summary>Whether the person changed what the window shows and its canvases were not drawn anew since.</summary>
+    bool stale;
+
+    /// <summary>
+    /// The person changed a value the window shows (typed in a box bound to a
+    /// setting, ticked a box) and no handler runs: once the work at hand is
+    /// done the canvases draw anew, as after a handler, since a draw handler
+    /// may read it. A handler that runs first (the part's on change) draws
+    /// them itself, and nothing more is drawn; a mirror asks the server, where
+    /// the draw handlers run.
+    /// </summary>
+    public void Changed()
+    {
+        if (running > 0 || applying || stale || !Draws)
+            return;
+        stale = true;
+        Later.Post(() =>
+        {
+            if (stale)
+                DrawAnew();
+        });
+    }
+
+    /// <summary>
+    /// Draws the canvases anew with what the window shows now, as after a
+    /// handler; a failing draw handler says why. A mirror's command, which the
+    /// server runs with the person's change.
+    /// </summary>
+    [Command]
+    public void DrawAnew()
+    {
+        stale = false;
+        if (Remote is not null)
+        {
+            Remote.Command(this, nameof(DrawAnew), []);
+            return;
+        }
+        if (running > 0 || LongCall.Waiting)
+            return;
+        running++;
+        try
+        {
+            Redraw();
+        }
+        catch (RefusedException e)
+        {
+            Say(Level.Error, e.Text);
+        }
+        catch (ClarityException e)
+        {
+            Say(Level.Error, e.Said);
+        }
+        catch (Exception e)
+        {
+            // Fail safe: a draw handler that fails says why, and the window keeps working.
+            Console.Error.WriteLine($"{nameof(DrawAnew)} failed: {e}");
+            Say(Level.Error, Text.Plain(e.Message));
+        }
+        finally
+        {
+            running--;
+        }
+    }
+
     /// <summary>
     /// Draws the window's canvases anew, each by its draw handler on an
-    /// empty drawing (conformance/drawing.json): after every handler, and
-    /// when the window opens.
+    /// empty drawing (conformance/drawing.json): after every handler, when
+    /// the window opens, and after a change the person made (Changed).
     /// </summary>
     protected virtual void Redraw() { }
 

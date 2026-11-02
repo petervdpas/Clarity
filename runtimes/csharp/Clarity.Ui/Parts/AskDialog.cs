@@ -1,7 +1,8 @@
 // A question a handler asks: ask ... then handler(values) (DESIGN 5.14),
 // in Clarity's own dialog over the window, never a dialog of the system:
 // the question, the input its form needs (a text box, a number box in the
-// value's format, or a dropdown of its choices) and OK and Cancel. OK or
+// value's format, a date input for a day or a moment, or a dropdown of its
+// choices) and OK and Cancel. An empty text answers "" as Avalonia did. OK or
 // Enter answers, and the window runs the handler the answer goes to;
 // Cancel or Escape runs nothing.
 
@@ -12,7 +13,8 @@ namespace Clarity.Ui;
 
 public sealed class AskDialog : Element, IDialogKeys
 {
-    const double Width = 440;
+    /// <summary>How narrow and how wide the dialog is: as wide as its question, wrapped beyond the widest (Avalonia's MinWidth and MaxWidth).</summary>
+    const double MinWidth = 320, MaxWidth = 520;
     const double Line = 20;
     const double ButtonWidth = 104;
 
@@ -61,7 +63,13 @@ public sealed class AskDialog : Element, IDialogKeys
     {
         var kind = form.Choices is not null
             ? "Dropdown"
-            : form.Format?.Kind is FormatKind.Integer or FormatKind.Decimal or FormatKind.Money or FormatKind.Duration ? "Number" : "Textbox";
+            : form.Format?.Kind switch
+            {
+                FormatKind.Integer or FormatKind.Decimal or FormatKind.Money or FormatKind.Duration => "Number",
+                // A day picks a DateOnly, a moment a DateTime, as the answer's handler expects.
+                FormatKind.Date or FormatKind.DateTime => "Date",
+                _ => "Textbox",
+            };
         return new XElement(kind, new XAttribute("name", "answer"), new XAttribute("bind", AskHost.Path), new XAttribute("at", "1,1"), new XAttribute("span", "12"));
     }
 
@@ -76,8 +84,15 @@ public sealed class AskDialog : Element, IDialogKeys
             case NumberPart number:
                 number.Take();
                 break;
+            case DatePart date:
+                date.Take();
+                break;
         }
-        return Input is null ? null : host.Read(AskHost.Path);
+        if (Input is null)
+            return null;
+        var value = host.Read(AskHost.Path);
+        // Nothing typed in a text answers an empty text, not nothing.
+        return value is null && Input is TextBoxPart ? "" : value;
     }
 
     /// <summary>Answers with <paramref name="value"/>, as OK does.</summary>
@@ -107,7 +122,8 @@ public sealed class AskDialog : Element, IDialogKeys
     public override void Arrange(Box box)
     {
         Bounds = box;
-        var width = Math.Min(Width, Math.Max(200, box.Width - 32));
+        var question = Screen is { } screen ? screen.Fonts.Measure(Locale.Show(Question.Text), "text", screen.Look.Size("text"), false) + 40 : MaxWidth;
+        var width = Math.Min(Math.Clamp(question, MinWidth, MaxWidth), Math.Max(200, box.Width - 32));
         var inner = width - 40;
         var lines = Lines(inner).Count;
         var height = 20 + lines * Line + 16 + (Input is null ? 0 : GridLayout.RowHeight + 16) + GridLayout.RowHeight + 20;
@@ -207,20 +223,33 @@ public sealed class DialogButton(string text, bool accent, Action pressed) : Ele
 {
     public string Text { get; } = text;
 
+    /// <summary>Whether it can be pressed now (Stop once pressed cannot); greyed when not.</summary>
+    public Func<bool>? Usable { get; init; }
+
+    public override bool IsEnabled => Usable?.Invoke() ?? true;
+
     public override bool Focusable => true;
 
-    public override void OnClick() => pressed();
+    public override void OnClick() => Press();
+
+    /// <summary>Pressed, as a click, Enter or Space does, while it can be.</summary>
+    public void Press()
+    {
+        if (EnabledInTree)
+            pressed();
+    }
 
     public override bool OnKey(KeyInput key)
     {
         if (key.Modifiers != Modifiers.None || key.Key is not (Key.Enter or Key.Space))
             return false;
-        pressed();
+        Press();
         return true;
     }
 
     public override void Draw(Painter painter)
     {
+        using var dimmed = PressLooks.Dimmed(painter, EnabledInTree);
         var look = painter.Look;
         var values = look.Part("button", Pressed ? "pressed" : Hovered ? "hover" : null);
         var radius = values.Radius ?? look.Radius("button");

@@ -246,6 +246,15 @@ public abstract class RowsPart : Part
         return was;
     }
 
+    /// <summary>The pointer was taken away mid-press (a touch the browser took over, the window lost the focus): a row being dragged stays where it was.</summary>
+    public override void OnPointerCancelled()
+    {
+        pressedRow = null;
+        dragging = false;
+        Drop = null;
+        Invalidate();
+    }
+
     /// <summary>The move Alt and an arrow key ask for, or none.</summary>
     static MoveKey? KeyOf(KeyInput key)
     {
@@ -261,13 +270,12 @@ public abstract class RowsPart : Part
         };
     }
 
-    /// <summary>Alt and an arrow key move the chosen row; true when the key was one of those.</summary>
+    /// <summary>Alt and an arrow key move the chosen row; true when it took the key. Without a chosen row the key passes on.</summary>
     protected bool MoveKeyed(KeyInput key)
     {
-        if (!Moves || KeyOf(key) is not { } move)
+        if (!Moves || KeyOf(key) is not { } move || ChosenPlace is not (var place and >= 0))
             return false;
-        if (ChosenPlace is var place and >= 0)
-            Move(tree => Reorder.Key(tree, place, move, IsTree), place);
+        Move(tree => Reorder.Key(tree, place, move, IsTree), place);
         return true;
     }
 
@@ -363,7 +371,7 @@ public abstract class RowsPart : Part
     protected RowsPart()
     {
         surface = new RowsSurface(this);
-        Scroller = new ScrollView(surface) { Measure = (width, _) => (width, RowsHeight(LookNow)) };
+        Scroller = new ScrollView(surface) { Measure = (width, _) => (RowsWidth(LookNow, width), RowsHeight(LookNow)) };
         Scroller.Scrolled += Invalidate;
         AddChild(Scroller);
     }
@@ -384,6 +392,9 @@ public abstract class RowsPart : Part
     /// <summary>How high all the rows are together.</summary>
     protected abstract double RowsHeight(ThemeLook look);
 
+    /// <summary>How wide the rows are for a place <paramref name="width"/> wide: as wide as it, unless they are wider (a table's columns) and scroll sideways.</summary>
+    protected virtual double RowsWidth(ThemeLook look, double width) => width;
+
     /// <summary>Draws the rows in sight; the scroll view has clipped to <see cref="RowsBox"/>.</summary>
     protected abstract void DrawRows(Painter painter);
 
@@ -398,6 +409,10 @@ public abstract class RowsPart : Part
 
     /// <summary>The wheel anywhere over the part (a table's header too) scrolls the rows.</summary>
     public override bool OnWheel(double dx, double dy) => Scroller.OnWheel(dx, dy);
+
+    /// <summary>With Shift held, a wheel that turns only up and down scrolls sideways.</summary>
+    public override bool OnWheel(double dx, double dy, Modifiers held) =>
+        held.HasFlag(Modifiers.Shift) && dx == 0 ? Scroller.OnWheel(dy, 0) : Scroller.OnWheel(dx, dy);
 
     /// <summary>Scrolls back to the first row (another page, another order).</summary>
     protected void ScrollToTop() => Scroller.ScrollY = 0;
@@ -415,8 +430,7 @@ public abstract class RowsPart : Part
     /// <summary>The box on the screen of the row at <paramref name="index"/> in the content, in sight or not.</summary>
     protected Box RowOnScreen(int index, double pitch, double height)
     {
-        var view = Scroller.Bounds;
-        return new Box(view.X, surface.Bounds.Y + index * pitch, view.Width, height);
+        return new Box(surface.Bounds.X, surface.Bounds.Y + index * pitch, surface.Bounds.Width, height);
     }
 
     /// <summary>The box on the screen of the row at <paramref name="index"/>; none while it is scrolled out of sight.</summary>
@@ -464,6 +478,10 @@ public abstract class RowsPart : Part
         public override void OnPointerMoved(PointerInput at) => part.OnPointerMoved(at);
 
         public override void OnPointerReleased(PointerInput at) => part.OnPointerReleased(at);
+
+        public override void OnPointerCancelled() => part.OnPointerCancelled();
+
+        public override bool OnWheel(double dx, double dy, Modifiers held) => part.OnWheel(dx, dy, held);
     }
 
     /// <summary>

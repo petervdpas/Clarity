@@ -139,8 +139,8 @@ public static class ChartDrawing
     public static string? TipAt(Box box, ChartShape shape, IReadOnlyList<ChartShown> groups, double? max, double x, double y) =>
         Marks(box, shape, groups, max).LastOrDefault(m => m.Holds(x, y)) is { } mark ? Told(mark.Group) : null;
 
-    /// <summary>Draws a chart in <paramref name="box"/>, and the tip of what the pointer is on at <paramref name="pointer"/>.</summary>
-    public static void Draw(Painter painter, Box box, ChartShape shape, IReadOnlyList<ChartShown> groups, double? max, (double X, double Y)? pointer)
+    /// <summary>Draws a chart in <paramref name="box"/>; what the pointer is on tells itself in the screen's tooltip.</summary>
+    public static void Draw(Painter painter, Box box, ChartShape shape, IReadOnlyList<ChartShown> groups, double? max)
     {
         using (painter.Clip(box))
         {
@@ -148,8 +148,6 @@ public static class ChartDrawing
                 DrawPie(painter, box, groups);
             else
                 DrawAxis(painter, box, shape, groups, max);
-            if (pointer is { } at && TipAt(box, shape, groups, max, at.X, at.Y) is { } tip)
-                DrawTip(painter, box, tip, at);
         }
     }
 
@@ -169,7 +167,8 @@ public static class ChartDrawing
         for (var t = scale.Bottom; t <= scale.Top + scale.Step / 1e6; t = Math.Round((t + scale.Step) * 1e12) / 1e12)
         {
             var y = Math.Round(Y(t)) + 0.5;
-            using (var line = Paint(look.Color(t == 0 ? "strong_border" : "border"), stroke: true))
+            // The axis lines as Avalonia drew them: muted, the zero line 1 pixel, the others thin.
+            using (var line = Paint(look.Color("muted"), stroke: true, width: t == 0 ? 1 : 0.4))
                 painter.Canvas.DrawLine((float)(box.X + Left), (float)y, (float)(box.X + Left + plotW), (float)y, line);
             painter.Text(t.ToString(CultureInfo.CurrentCulture), new Box(box.X, Y(t) - 8, Left - 6, 16), look.Color("muted"), small, align: TextAlign.Right);
         }
@@ -223,21 +222,6 @@ public static class ChartDrawing
             painter.Text(groups[i].Label, new Box(left + 16, top - 1, Math.Max(0, box.Right - left - 16), 16), look.Color("text"), look.Size("small"));
             row++;
         }
-    }
-
-    static void DrawTip(Painter painter, Box box, string tip, (double X, double Y) at)
-    {
-        var look = painter.Look;
-        var size = look.Size("small");
-        var width = painter.Fonts.Measure(tip, "text", size, false) + 2 * look.Padding + 4;
-        var height = size + 2 * look.Padding + 4;
-        var x = Math.Clamp(at.X + 12, box.X, Math.Max(box.X, box.Right - width));
-        var y = at.Y - height - 8 < box.Y ? at.Y + 16 : at.Y - height - 8;
-        var place = new Box(x, Math.Min(y, Math.Max(box.Y, box.Bottom - height)), width, height);
-        var radius = look.Radius("input");
-        painter.Fill(place, look.Color("raised"), radius);
-        painter.Stroke(place, look.Color("border"), look.Border, radius);
-        painter.Text(tip, place.Inset(look.Padding + 2), look.Color("text"), size);
     }
 }
 
@@ -342,7 +326,8 @@ public sealed class ChartPart : Part
         var choices = Host.Choices(RowFields.ColumnPath(bound, by));
         // A reference groups, and orders, by the text of the record it names.
         var reference = choices.Count > 0 && kind is not (ChartBy.Enum or ChartBy.Bool);
-        string? Named(object? id) => choices.FirstOrDefault(c => RowsPart.Same(c.Value, id))?.Label;
+        // Fail safe: a record the choices do not name yet (added since they were read) shows by its key, not left out.
+        string? Named(object? id) => id is null ? null : choices.FirstOrDefault(c => RowsPart.Same(c.Value, id))?.Label ?? ShownText.Of(id);
         var pairs = rows.Select(r =>
         {
             var key = RowFields.Read(r, by);
@@ -373,16 +358,15 @@ public sealed class ChartPart : Part
     /// <summary>What the group the pointer is on tells, while the pointer is over it.</summary>
     public string? Tip => Hovered && pointer is { } at ? TipAt(at.X, at.Y) : null;
 
-    public override void OnPointerMoved(PointerInput at)
-    {
-        pointer = (at.ScreenX, at.ScreenY);
-        Invalidate();
-    }
+    public override void OnPointerMoved(PointerInput at) => pointer = (at.ScreenX, at.ScreenY);
+
+    /// <summary>A bar, point or slice tells its group and number as the screen's tooltip, once the pointer rests on it (as Avalonia's ToolTip did).</summary>
+    public override string? TooltipAt(double x, double y) => TipAt(x, y) ?? base.TooltipAt(x, y);
 
     public override void Draw(Painter painter)
     {
         if (!IsShown)
             return;
-        ChartDrawing.Draw(painter, Bounds, Shape, Groups(), Max, Hovered ? pointer : null);
+        ChartDrawing.Draw(painter, Bounds, Shape, Groups(), Max);
     }
 }

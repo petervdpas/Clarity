@@ -215,6 +215,17 @@ impl<'l, 'a> Scope<'l, 'a> {
                 }
                 None => ir::Stmt::Return(None),
             },
+            // `for i in 1 to n`: counted, without making the list.
+            StmtKind::For { var, list, body } if matches!(&list.kind, ExprKind::Range { .. }) => {
+                let ExprKind::Range { from, to } = &list.kind else { unreachable!() };
+                let from = self.expr_as(from, Kind::Int)?;
+                let to = self.expr_as(to, Kind::Int)?;
+                let local = self.local(Kind::Int);
+                self.scopes.push(HashMap::from([(var.name.clone(), (local, Kind::Int))]));
+                let body = self.block(body);
+                self.scopes.pop();
+                ir::Stmt::ForRange { var: local, from, to, body: body? }
+            }
             StmtKind::For { var, list, body } => {
                 let item = item_of(&self.types().type_of(list));
                 let list = self.expr(list)?;

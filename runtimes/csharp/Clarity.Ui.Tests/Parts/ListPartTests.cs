@@ -88,12 +88,12 @@ public class ListPartTests
         host.State("folders")!.SelectedItem = host.Lists["folders"][1];
         using var pixels = Shot.Of(screen, 800, 400);
         var row = list.RowBox(1)!.Value;
-        Assert.Equal(screen.Look.Part("list", "selected").Background, pixels.GetPixel((int)row.Right - 20, (int)(row.Y + row.Height / 2)));
+        Assert.Equal(screen.Look.Part("list", "selected").Background, pixels.PixelAt((int)row.Right - 20, (int)(row.Y + row.Height / 2)));
         var other = list.RowBox(2)!.Value;
-        Assert.Equal(screen.Look.Part("list", null).Background, pixels.GetPixel((int)other.Right - 20, (int)(other.Y + other.Height / 2)));
+        Assert.Equal(screen.Look.Part("list", null).Background, pixels.PixelAt((int)other.Right - 20, (int)(other.Y + other.Height / 2)));
         // Its border, in the list look.
         Assert.True(list.Framed);
-        Assert.Equal(screen.Look.Part("list", null).Border, pixels.GetPixel((int)list.Bounds.X + 30, (int)list.Bounds.Y));
+        Assert.Equal(screen.Look.Part("list", null).Border, pixels.PixelAt((int)list.Bounds.X + 30, (int)list.Bounds.Y));
     }
 
     [Fact]
@@ -106,10 +106,10 @@ public class ListPartTests
         var plain = list.RowBox(1)!.Value;
         // A card is higher than a row: the title, then its lines.
         Assert.True(chosen.Height > 40);
-        Assert.Equal(screen.Look.Part("card", "selected").Background, pixels.GetPixel((int)chosen.Right - 10, (int)chosen.Y + 6));
-        Assert.Equal(screen.Look.Part("card", null).Background, pixels.GetPixel((int)plain.Right - 10, (int)plain.Y + 6));
+        Assert.Equal(screen.Look.Part("card", "selected").Background, pixels.PixelAt((int)chosen.Right - 10, (int)chosen.Y + 6));
+        Assert.Equal(screen.Look.Part("card", null).Background, pixels.PixelAt((int)plain.Right - 10, (int)plain.Y + 6));
         // No frame of its own: between the cards, the window.
-        Assert.Equal(screen.Look.Color("background"), pixels.GetPixel((int)plain.Right - 10, (int)plain.Y - 2));
+        Assert.Equal(screen.Look.Color("background"), pixels.PixelAt((int)plain.Right - 10, (int)plain.Y - 2));
     }
 
     [Fact]

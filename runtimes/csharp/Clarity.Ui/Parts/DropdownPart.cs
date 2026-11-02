@@ -4,7 +4,10 @@
 // not. Its choices are an enum's values or the records a reference can point
 // at (an empty one first), as the host offers them, or the project's
 // languages and offered themes for the settings `language` and `theme`.
-// The list is also a split button's menu.
+// Closed, Up and Down pick the choice before or after at once and a typed
+// letter jumps to the next choice that starts with it, as a system's
+// dropdown does; Enter, Space, Alt+Down or F4 open the list. The list is
+// also a split button's menu.
 
 using Clarity.Runtime;
 
@@ -127,10 +130,32 @@ public sealed class DropdownPart : Part
     {
         if (list is null)
         {
-            if ((key.Key is Key.Down or Key.Up or Key.Enter or Key.Space) && Usable)
+            if (!Usable || key.Control)
+                return false;
+            var alt = key.Modifiers.HasFlag(Modifiers.Alt);
+            if (key.Key is Key.Enter or Key.Space or Key.F4 || (alt && key.Key is Key.Down or Key.Up))
             {
                 Open();
                 return true;
+            }
+            if (alt)
+                return false;
+            var count = Choices.Count;
+            var now = Chosen;
+            switch (key.Key)
+            {
+                case Key.Down:
+                    Pick(Math.Min(count - 1, now + 1));
+                    return true;
+                case Key.Up:
+                    Pick(now < 0 ? 0 : Math.Max(0, now - 1));
+                    return true;
+                case Key.Home:
+                    Pick(0);
+                    return true;
+                case Key.End:
+                    Pick(count - 1);
+                    return true;
             }
             return false;
         }
@@ -164,6 +189,28 @@ public sealed class DropdownPart : Part
                 return true;
         }
         return false;
+    }
+
+    /// <summary>A typed letter: the next choice whose label starts with it, picked when the list is closed, marked when it is open.</summary>
+    public override void OnText(string text)
+    {
+        if (!Usable || text.Trim().Length == 0)
+            return;
+        var choices = Choices;
+        if (choices.Count == 0)
+            return;
+        var from = list?.Highlighted ?? Chosen;
+        for (var step = 1; step <= choices.Count; step++)
+        {
+            var at = ((from < 0 ? -1 : from) + step) % choices.Count;
+            if (!choices[at].Label.StartsWith(text.Trim(), StringComparison.CurrentCultureIgnoreCase))
+                continue;
+            if (list is not null)
+                list.Mark(at);
+            else
+                Pick(at);
+            return;
+        }
     }
 
     public override void OnFocusChanged(bool focused)
@@ -215,6 +262,9 @@ public sealed class DropdownList : Element
 
     /// <summary>The part it belongs to, which keeps the focus while the person picks.</summary>
     public Element? Holder { get; init; }
+
+    /// <summary>Whether Up past the first line goes to the last, and Down past the last to the first (a typed dropdown's list).</summary>
+    public bool Wraps { get; init; }
 
     /// <summary>Each line's cells, shown in columns as wide as their widest cell (a search's records with their fields); none: each line is its label.</summary>
     public IReadOnlyList<IReadOnlyList<string>>? Cells { get; init; }
@@ -273,7 +323,20 @@ public sealed class DropdownList : Element
     {
         if (labels.Count == 0)
             return;
-        highlighted = Math.Clamp(highlighted < 0 ? (by > 0 ? by - 1 : labels.Count + by) : highlighted + by, 0, labels.Count - 1);
+        var next = highlighted < 0 ? (by > 0 ? by - 1 : labels.Count + by) : highlighted + by;
+        // A single step past an end goes round when it wraps; a page or Home and End stop at the ends.
+        if (Wraps && Math.Abs(by) == 1 && highlighted >= 0)
+            next = (next + labels.Count) % labels.Count;
+        highlighted = Math.Clamp(next, 0, labels.Count - 1);
+        Reveal();
+    }
+
+    /// <summary>Marks the line <paramref name="at"/>, and scrolls it into view.</summary>
+    public void Mark(int at)
+    {
+        if (at < 0 || at >= labels.Count)
+            return;
+        highlighted = at;
         Reveal();
     }
 

@@ -180,6 +180,15 @@ impl Machine<'_> {
                     }
                 }
             }
+            ir::Stmt::ForRange { var, from, to, body } => {
+                let (from, to) = (self.expr(from, locals)?.int(), self.expr(to, locals)?.int());
+                for i in from..=to {
+                    locals[*var as usize] = self.held(ir::Kind::Int, Value::Int(i));
+                    if let Flow::Return(value) = self.block(body, locals)? {
+                        return Ok(Flow::Return(value));
+                    }
+                }
+            }
             ir::Stmt::Return(value) => return Ok(Flow::Return(value.as_ref().map(|v| self.expr(v, locals)).transpose()?)),
             ir::Stmt::Refuse(text) => return stop(self.expr(text, locals)?.show()),
             ir::Stmt::Tell(name, args) => {

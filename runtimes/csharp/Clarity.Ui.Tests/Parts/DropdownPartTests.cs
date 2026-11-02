@@ -1,8 +1,10 @@
 // The plain dropdown: a closed box showing its choice's label, which opens
 // its list over the window below it (above when there is no room below).
 // Picking another choice is a change; the one it has, closing the list and
-// what code sets are not. Up, Down, Enter and Escape work the list. The
-// settings language and theme offer the project's languages and themes.
+// what code sets are not. Closed, Up and Down pick the choice before or
+// after and a typed letter jumps to a choice; Enter, Alt+Down and F4 open
+// the list, whose Up, Down, Enter and Escape work it. The settings language
+// and theme offer the project's languages and themes.
 
 using Clarity.Runtime;
 
@@ -78,7 +80,7 @@ public class DropdownPartTests
         var (screen, _, parts) = Made.Window(Owner, host);
         var dropdown = (DropdownPart)parts[0];
         Press(screen, Key.Tab);
-        Press(screen, Key.Down);
+        screen.KeyPressed(new KeyInput(Key.Down, Modifiers.Alt));
         Assert.NotNull(dropdown.List);
         Press(screen, Key.Down);
         Press(screen, Key.Escape);
@@ -92,6 +94,49 @@ public class DropdownPartTests
         Assert.Null(host.Values["task.owner"]);
         Assert.Equal("", dropdown.Shown);
         Assert.Equal(["write owner task.owner ", "run owner change ownerChanged"], host.Log);
+    }
+
+    /// As Avalonia's ComboBox: closed, Up and Down change the choice at once, and a typed letter jumps to one.
+    [Fact]
+    public void Closed_Up_and_Down_pick_the_choice_beside_it_and_a_letter_jumps_to_one()
+    {
+        var host = Owners();
+        var (screen, _, parts) = Made.Window(Owner, host);
+        var dropdown = (DropdownPart)parts[0];
+        Press(screen, Key.Tab);
+        Press(screen, Key.Down);
+        Assert.Null(dropdown.List);
+        Assert.Equal(2L, host.Values["task.owner"]);
+        // At the end Down stays.
+        Press(screen, Key.Down);
+        Assert.Equal(["write owner task.owner 2", "run owner change ownerChanged"], host.Log);
+        Press(screen, Key.Up);
+        Assert.Equal(1L, host.Values["task.owner"]);
+        host.Log.Clear();
+        screen.TextTyped("g");
+        Assert.Equal(2L, host.Values["task.owner"]);
+        Assert.Equal("Grace", dropdown.Shown);
+        // While the list is open a letter marks, and Enter picks.
+        Press(screen, Key.F4);
+        screen.TextTyped("a");
+        Assert.Equal(1, dropdown.Highlighted);
+        Press(screen, Key.Enter);
+        Assert.Equal(1L, host.Values["task.owner"]);
+    }
+
+    [Fact]
+    public void Choices_that_come_after_the_value_do_not_clear_it()
+    {
+        var host = new TestHost();
+        host.Values["task.owner"] = 2L;
+        var (_, _, parts) = Made.Window(Owner, host);
+        var dropdown = (DropdownPart)parts[0];
+        Assert.Equal("", dropdown.Shown);
+        host.Offered["task.owner"] = [new(null, ""), new(1L, "Ada"), new(2L, "Grace")];
+        host.Change();
+        Assert.Equal("Grace", dropdown.Shown);
+        Assert.Equal(2L, host.Values["task.owner"]);
+        Assert.Empty(host.Log);
     }
 
     [Fact]

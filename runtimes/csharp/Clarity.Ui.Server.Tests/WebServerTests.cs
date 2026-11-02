@@ -84,7 +84,7 @@ public class WebServerTests
         var reply = server.Answer("GET", WebServer.MarkupPath, "");
         Assert.Equal((200, "application/json"), (reply.Status, reply.Type));
         var markup = JsonNode.Parse(reply.Body)!.AsObject();
-        Assert.Equal(["Windows/Book.cxaml", "Windows/Pick.cxaml", "Windows/Shelf.cxaml"], markup.Select(m => m.Key));
+        Assert.Equal(["Windows/Book.cxaml", "Windows/Crunch.cxaml", "Windows/Hello.cxaml", "Windows/Pick.cxaml", "Windows/Shelf.cxaml", "Windows/Sketch.cxaml"], markup.Select(m => m.Key));
         Assert.Contains("<Window name=\"Shelf\">", markup["Windows/Shelf.cxaml"]!.GetValue<string>());
         // Without the application, there is none.
         Assert.Empty(JsonNode.Parse(new WebServer(new Sessions(() => new ShelfViewModel(null)), "").Answer("GET", WebServer.MarkupPath, "").Body)!.AsObject());

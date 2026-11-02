@@ -92,6 +92,7 @@ public sealed partial record MarkdownLayout(IReadOnlyList<MarkdownRun> Runs, IRe
     {
         var height = LineHeight(size);
         var x = left;
+        var first = runs.Count;
         // A word may be made of pieces of spans that look different ("then" and "."): it moves to a new line as a whole.
         var word = new List<(string Text, MarkdownSpan Span, string Font, bool Bold, double Width)>();
         void Place()
@@ -149,7 +150,59 @@ public sealed partial record MarkdownLayout(IReadOnlyList<MarkdownRun> Runs, IRe
             }
         }
         Place();
+        if (!codeBlock)
+            Reorder(runs, first, left, right, fonts);
         return y + height;
+    }
+
+    /// <summary>
+    /// A paragraph with Hebrew or Arabic in it, its words placed as they are
+    /// read: on each line the words in visual order (Bidi), a word that runs
+    /// right to left with its space on its left, and a paragraph that starts
+    /// right to left set against the right edge.
+    /// </summary>
+    static void Reorder(List<MarkdownRun> runs, int first, double left, double right, Fonts fonts)
+    {
+        if (first >= runs.Count)
+            return;
+        var block = string.Concat(runs.Skip(first).Select(r => r.Text));
+        if (!Bidi.HasRightToLeft(block))
+            return;
+        var paragraph = Bidi.ParagraphLevel(block);
+        var lines = Enumerable.Range(first, runs.Count - first).GroupBy(i => runs[i].Box.Y).ToList();
+        foreach (var line in lines)
+        {
+            var members = line.ToList();
+            var text = string.Concat(members.Select(i => runs[i].Text));
+            var levels = Bidi.Levels(text, paragraph);
+            var runLevels = new List<int>(members.Count);
+            var at = 0;
+            foreach (var i in members)
+            {
+                var piece = runs[i].Text;
+                var k = 0;
+                while (k < piece.Length && char.IsWhiteSpace(piece[k]))
+                    k++;
+                runLevels.Add(k < piece.Length ? levels[at + k] : paragraph);
+                at += piece.Length;
+            }
+            var order = Bidi.VisualOrder(runLevels);
+            var width = members.Sum(i => runs[i].Box.Width);
+            var x = paragraph == 1 ? Math.Max(left, right - width) : left;
+            foreach (var o in order)
+            {
+                var run = runs[members[o]];
+                var box = run.Box with { X = x };
+                if (runLevels[o] % 2 == 1)
+                {
+                    var trimmed = run.Text.TrimEnd();
+                    var space = trimmed.Length == run.Text.Length ? 0 : run.Box.Width - fonts.Measure(trimmed, run.Font, run.Size, run.Bold);
+                    box = box with { X = x + space, Width = run.Box.Width - space };
+                }
+                runs[members[o]] = run with { Box = box };
+                x += run.Box.Width;
+            }
+        }
     }
 
     static int Fits(string text, double width, string font, double size, bool bold, Fonts fonts)
@@ -195,6 +248,9 @@ public sealed class MarkdownPage(MarkdownPart part) : Element
 
     public override void OnPointerPressed(PointerInput at) => pressedLink = LinkAt(at.X, at.Y);
 
+    /// <summary>The hand over a link, as Avalonia's Markdown view showed it.</summary>
+    public override Cursor? CursorAt(double x, double y) => part.Enabled && LinkAt(x - Bounds.X, y - Bounds.Y) is not null ? Cursor.Hand : null;
+
     public override void OnPointerReleased(PointerInput at)
     {
         var link = pressedLink;
@@ -214,18 +270,18 @@ public sealed class MarkdownPage(MarkdownPart part) : Element
         {
             var box = run.Box.Offset(Bounds.X, Bounds.Y);
             using var font = painter.Fonts.Font(run.Font, run.Size, run.Bold);
-            if (run.Italic)
-                font.SkewX = -0.2f;
             var color = run.Link is not null ? look.Color("accent") : look.Color("text");
             using var paint = new SKPaint { Color = color, IsAntialias = true };
             var metrics = font.Metrics;
             var baseline = box.Y + (box.Height - (metrics.Descent - metrics.Ascent)) / 2 - metrics.Ascent;
             var text = run.Text.TrimEnd();
+            // Shaped as every text is: Arabic joined, Hebrew right to left.
+            var width = painter.Fonts.Measure(text, run.Font, run.Size, run.Bold);
             if (run.Code && laid.CodeBoxes.All(c => !c.Contains(run.Box.X, run.Box.Y + 1)) && text.Length > 0)
-                painter.Fill(new Box(box.X - 1, box.Y + 1, font.MeasureText(text) + 2, box.Height - 2), shade, 3);
-            painter.Canvas.DrawText(text, (float)box.X, (float)baseline, SKTextAlign.Left, font, paint);
+                painter.Fill(new Box(box.X - 1, box.Y + 1, width + 2, box.Height - 2), shade, 3);
+            painter.Fonts.Draw(painter.Canvas, text, box.X, baseline, run.Font, run.Size, run.Bold, paint, run.Italic ? -0.2f : 0);
             if (run.Link is not null && text.Length > 0)
-                painter.Fill(new Box(box.X, Math.Round(baseline + 2), font.MeasureText(text), 1), color);
+                painter.Fill(new Box(box.X, Math.Round(baseline + 2), width, 1), color);
         }
     }
 }

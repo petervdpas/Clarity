@@ -15,13 +15,28 @@ using Clarity.Runtime;
 
 namespace Clarity.Ui.Server;
 
-/// <summary>
-/// The server of <paramref name="sessions"/>, serving the browser program's
-/// files from the folder <paramref name="files"/> and the markup that the
-/// application <paramref name="app"/> carries (none when it is not given).
-/// </summary>
-public sealed class WebServer(Sessions sessions, string files, Assembly? app = null)
+/// <summary>The server of a program's sessions, its browser program's files and its windows' markup.</summary>
+public sealed class WebServer
 {
+    readonly Sessions sessions;
+    readonly string files;
+    readonly Assembly? app;
+
+    /// <summary>
+    /// The server of <paramref name="sessions"/>, serving the browser program's
+    /// files from the folder <paramref name="files"/> and the markup that the
+    /// application <paramref name="app"/> carries (none when it is not given).
+    /// While a session waits for a long engine call, its turn goes to the other
+    /// requests (the sessions' Turn), so one person's long call keeps no one else waiting.
+    /// </summary>
+    public WebServer(Sessions sessions, string files, Assembly? app = null)
+    {
+        this.sessions = sessions;
+        this.files = files;
+        this.app = app;
+        sessions.Turn = (LetGo, TakeAgain);
+    }
+
     /// <summary>Where the browser program sends its sessions' requests.</summary>
     public const string SessionPath = "/clarity/session";
 
@@ -152,11 +167,21 @@ public sealed class WebServer(Sessions sessions, string files, Assembly? app = n
     };
 
     /// <summary>Serves at <paramref name="address"/> until the program stops.</summary>
-    public void Serve(string name, string address)
+    public void Serve(string name, string address) => Serve(name, address, Console.Error, CancellationToken.None);
+
+    /// <summary>Serves at <paramref name="address"/>, saying where on <paramref name="said"/>, until <paramref name="stop"/> is cancelled.</summary>
+    public void Serve(string name, string address, TextWriter said, CancellationToken stop)
     {
         using var listening = Start(address);
-        Console.Error.WriteLine($"{name}: serving on http://{address}");
-        listening.Done.Wait();
+        said.WriteLine($"{name}: serving on http://{address}");
+        try
+        {
+            listening.Done.Wait(stop);
+        }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+            // Asked to stop: the listening ends as it is disposed.
+        }
     }
 
     /// <summary>A server listening, until it is disposed.</summary>
@@ -206,6 +231,25 @@ public sealed class WebServer(Sessions sessions, string files, Assembly? app = n
 
     /// <summary>One request at a time, as the sessions are answered.</summary>
     readonly SemaphoreSlim one = new(1, 1);
+
+    /// <summary>Whether the request answered on this thread has the turn; one answered without a connection has none.</summary>
+    [ThreadStatic]
+    static WebServer? turnHeld;
+
+    void LetGo()
+    {
+        if (turnHeld == this)
+            one.Release();
+    }
+
+    void TakeAgain()
+    {
+        if (turnHeld == this)
+            one.Wait();
+    }
+
+    /// <summary>How a request is answered once it is its turn: <see cref="Answer"/>; a test watches it to see no two run at once.</summary>
+    internal Func<string, string, string, string?, Reply>? Answering { get; set; }
 
     /// <summary>The longest head of a request, and the largest body, it reads.</summary>
     const int HeadLimit = 64 * 1024, BodyLimit = 64 * 1024 * 1024;
@@ -262,10 +306,12 @@ public sealed class WebServer(Sessions sessions, string files, Assembly? app = n
                 await one.WaitAsync(stop);
                 try
                 {
-                    reply = Answer(start[0], start[1], Encoding.UTF8.GetString(body), headers.GetValueOrDefault("Accept-Encoding"));
+                    turnHeld = this;
+                    reply = (Answering ?? Answer)(start[0], start[1], Encoding.UTF8.GetString(body), headers.GetValueOrDefault("Accept-Encoding"));
                 }
                 finally
                 {
+                    turnHeld = null;
                     one.Release();
                 }
                 var close = start[2] == "HTTP/1.0" || headers.GetValueOrDefault("Connection")?.Equals("close", StringComparison.OrdinalIgnoreCase) == true;

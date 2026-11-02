@@ -38,6 +38,13 @@ translation en
     cancel \"Cancel\"
     dismiss \"Dismiss\"
     undoChangedSince \"This was changed since, so it cannot be taken back\"
+    cutText \"Cut\"
+    copyText \"Copy\"
+    pasteText \"Paste\"
+    selectAllText \"Select all\"
+    itemOutsideList \"There is no item {position} in a list of {count}\"
+    recordNotThere \"There is no {table} with id {id}\"
+    recordStillUsed \"This {table} is still used by other records\"
 ";
 
 const NL: &str = "// Dutch.
@@ -54,6 +61,13 @@ translation nl
     cancel \"Annuleren\"
     dismiss \"Sluiten\"
     undoChangedSince \"Dit is intussen gewijzigd en kan daarom niet ongedaan worden gemaakt\"
+    cutText \"Knippen\"
+    copyText \"Kopiëren\"
+    pasteText \"Plakken\"
+    selectAllText \"Alles selecteren\"
+    itemOutsideList \"Er is geen item {position} in een lijst van {count}\"
+    recordNotThere \"Er is geen {table} met id {id}\"
+    recordStillUsed \"Deze {table} wordt nog door andere records gebruikt\"
 ";
 
 fn project_with(files: &[(&str, &str)]) -> Project {
@@ -199,7 +213,7 @@ fn a_text_without_letters_needs_no_key() {
     assert!(!translations::has_letters("{name}"));
     let calc = "module calc\n\npage Calc: window\n    button \"7\" name seven at 1,1\n";
     let mut project = load_sources([("calc.clarity", calc)]);
-    translations::attach(&mut project, [("translations/en.clarity", "translation en\n    yes \"Yes\"\n    no \"No\"\n    ok \"OK\"\n    cancel \"Cancel\"\n    dismiss \"Dismiss\"\n    undoChangedSince \"This was changed since, so it cannot be taken back\"\n")]);
+    translations::attach(&mut project, [("translations/en.clarity", "translation en\n    yes \"Yes\"\n    no \"No\"\n    ok \"OK\"\n    cancel \"Cancel\"\n    dismiss \"Dismiss\"\n    undoChangedSince \"This was changed since, so it cannot be taken back\"\n    cutText \"Cut\"\n    copyText \"Copy\"\n    pasteText \"Paste\"\n    selectAllText \"Select all\"\n    itemOutsideList \"There is no item {position} in a list of {count}\"\n    recordNotThere \"There is no {table} with id {id}\"\n    recordStillUsed \"This {table} is still used by other records\"\n")]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
 }
 
@@ -225,4 +239,27 @@ fn every_example_is_complete_in_every_language() {
             assert_eq!(*missing, 0, "{name}: {language} leaves keys empty");
         }
     }
+}
+
+/// A collapsible or maximizable sidebar brings the words of its buttons, a
+/// window the words of failed values and records, and an engine the words of
+/// a failed call: every language file gives them (frame-1, runtime errors).
+#[test]
+fn sidebars_windows_and_engines_bring_their_own_words() {
+    let keys = |source: &str| -> Vec<String> { translations::keys(&load_sources([("a.clarity", source)])).into_iter().map(|u| u.key).collect() };
+    let window = "module m\n\npage Main: window\n    button \"Go\" name go at 1,1\n";
+    let folded = "module m\n\napp A\n    main Main\n    sidebar left name nav width 240 collapsible\n\npage Main: window\n    button \"Go\" name go at 1,1\n";
+    let engine = "module m\n\nengine Count\n    function one() -> integer\n        return 1\n";
+    for (key, _) in translations::SIDEBAR_KEYS {
+        assert!(keys(folded).iter().any(|k| k == key), "{key}");
+        assert!(!keys(window).iter().any(|k| k == key), "{key}");
+    }
+    for (key, _) in translations::RUNTIME_ERROR_KEYS {
+        assert!(keys(window).iter().any(|k| k == key), "{key}");
+    }
+    for (key, _) in translations::ENGINE_ERROR_KEYS {
+        assert!(keys(engine).iter().any(|k| k == key), "{key}");
+        assert!(!keys(window).iter().any(|k| k == key), "{key}");
+    }
+    assert!(translations::own_words().any(|(k, _)| *k == "sidebarGiveBack"));
 }

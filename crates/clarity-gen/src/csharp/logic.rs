@@ -15,7 +15,7 @@ use clarity_spec::code::{
 };
 use clarity_spec::model::FieldType;
 
-use super::names::{camel, function as function_name, member, pascal, property, string, value_type};
+use super::names::{camel, function as function_name, member, on, pascal, property, string, value_type};
 use crate::print;
 
 /// The methods of `file`'s functions, actions and data events.
@@ -117,7 +117,7 @@ pub fn handler(project: &Project, types: &FileTypes, ctx: &WindowCtx, decl: &Han
     }
     // The values a click gives it, typed.
     let params: Vec<String> = decl.params.iter().map(|p| format!("{} {}", value_type(&type_ref_info(project, &p.ty)), camel(&p.name.name))).collect();
-    Ok(format!("    void On{}({})\n    {{\n{body}    }}\n", pascal(&decl.name.name), params.join(", ")))
+    Ok(format!("    void {}({})\n    {{\n{body}    }}\n", on(&decl.name.name), params.join(", ")))
 }
 
 /// A value written in the design as C#, of the parameter's type.
@@ -486,7 +486,7 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{pad}var {local} = {};\n", self.value(arg)));
                     passed.push(local);
                 }
-                let method = format!("On{}", pascal(&then.name));
+                let method = on(&then.name);
                 // A dialog window opens as `open` opens it; what it closes with is the answer, of the type it gives.
                 if let AskForm::Window { window, with } = form.as_ref() {
                     let init: Vec<String> = with.iter().map(|a| format!("{} = {}", pascal(&a.name.name), self.value(&a.value))).collect();
@@ -947,7 +947,7 @@ impl<'a> Emitter<'a> {
             }
             ExprKind::Call { function, args, .. } if self.types.name_of(expr) == Some(&NameKind::Handler) => {
                 let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
-                format!("On{}({})", pascal(&function.name), values.join(", "))
+                format!("{}({})", on(&function.name), values.join(", "))
             }
             ExprKind::Call { function, args, .. } => self.call(&function.name, args),
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),

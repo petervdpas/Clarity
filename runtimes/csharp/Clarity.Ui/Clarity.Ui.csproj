@@ -23,6 +23,8 @@
   <ItemGroup>
     <!-- What it draws with, on every system and in the browser (DESIGN 7.9); the hosts bring the native library. -->
     <PackageReference Include="SkiaSharp" Version="4.148.0" />
+    <!-- Text shaped as the font says (Arabic joined, marks placed, Indic and Thai scripts, ligatures): HarfBuzz, at the version of this SkiaSharp. -->
+    <PackageReference Include="SkiaSharp.HarfBuzz" Version="4.148.0" />
     <!-- SVG pictures (an image part's, a canvas image shape's), drawn by Skia. -->
     <PackageReference Include="Svg.Skia" Version="5.2.3" />
   </ItemGroup>

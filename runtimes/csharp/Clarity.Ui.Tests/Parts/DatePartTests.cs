@@ -147,6 +147,22 @@ public class DatePartTests
     }
 
     [Fact]
+    public void A_required_day_cleared_is_no_day_and_the_form_says_it_is_missing_on_save()
+    {
+        // As Avalonia's DateInput: no input refuses an empty value, required or not.
+        var host = new DatePartHost();
+        host.Values["task.due"] = new DateOnly(2026, 10, 20);
+        host.Fields["task.due"] = new FieldFacts("Due", Required: true);
+        var (screen, _, parts) = Made.Window(Due, host);
+        var part = Assert.IsType<DatePart>(parts[0]);
+        Type(screen, part.Editor, "");
+        screen.Focus(null);
+        Assert.Null(part.Bad);
+        Assert.Null(host.Values["task.due"]);
+        Assert.Equal(["write due task.due ", "run due change dueChanged"], host.Log);
+    }
+
+    [Fact]
     public void The_calendar_opens_below_on_its_value_month_and_a_click_on_a_day_picks_it()
     {
         var (screen, part, host) = Day(new DateOnly(2026, 10, 20));
@@ -263,6 +279,19 @@ public class DatePartTests
         Assert.Equal(2, host.Log.Count);
     }
 
+    /// <summary>A time typed on a 12-hour clock (9:30 PM) is read as the person means it; it then shows as hh:mm, as on every renderer.</summary>
+    [Fact]
+    public void A_time_typed_with_am_or_pm_is_read()
+    {
+        var (screen, part, host) = Moment(new DateTime(2026, 10, 20, 14, 5, 0));
+        Type(screen, part.Time!, "9:30 PM");
+        screen.Focus(null);
+        Assert.Equal(new DateTime(2026, 10, 20, 21, 30, 0), host.Values["task.due"]);
+        Assert.Equal("21:30", part.Time!.Text);
+        Assert.Equal(TimeSpan.FromMinutes(30), DatePart.ReadTime("12:30 am", new Formats(System.Globalization.CultureInfo.GetCultureInfo("en-US"), null)));
+        Assert.Null(DatePart.ReadTime("13:30 PM", new Formats(System.Globalization.CultureInfo.GetCultureInfo("en-US"), null)));
+    }
+
     [Fact]
     public void A_typed_day_keeps_a_moments_time_and_an_empty_moment_starts_at_midnight()
     {
@@ -364,12 +393,12 @@ public class DatePartTests
     /// <summary>Whether the arrow's ink farthest to the left (or right) in <paramref name="box"/> lies near the box's middle row.</summary>
     static bool PointOf(SKBitmap shot, Box box, bool left)
     {
-        var ground = shot.GetPixel((int)box.X + 1, (int)box.Y + 1);
+        var ground = shot.PixelAt((int)box.X + 1, (int)box.Y + 1);
         var middle = box.Y + box.Height / 2;
         var columns = Enumerable.Range((int)box.X, (int)box.Width);
         foreach (var x in left ? columns : columns.Reverse())
         {
-            var ink = Enumerable.Range((int)box.Y, (int)box.Height).Where(y => Far(shot.GetPixel(x, y), ground)).ToList();
+            var ink = Enumerable.Range((int)box.Y, (int)box.Height).Where(y => Far(shot.PixelAt(x, y), ground)).ToList();
             if (ink.Count > 0)
                 return ink.All(y => Math.Abs(y + 0.5 - middle) < 2.5);
         }
@@ -377,6 +406,48 @@ public class DatePartTests
     }
 
     static bool Far(SKColor a, SKColor b) => Math.Abs(a.Red - b.Red) + Math.Abs(a.Green - b.Green) + Math.Abs(a.Blue - b.Blue) > 90;
+
+    [Fact]
+    public void A_time_without_a_day_waits_for_one()
+    {
+        var (screen, part, host) = Moment(null);
+        Type(screen, part.Time!, "8:15");
+        Press(screen, Key.Enter);
+        screen.Focus(null);
+        Assert.Null(host.Values["task.due"]);
+        Assert.Null(part.BadTime);
+        Assert.Empty(host.Log);
+        Assert.Equal("8:15", part.Time!.Text);
+    }
+
+    [Fact]
+    public void Enter_in_the_time_takes_it_and_then_the_form_submits()
+    {
+        var host = new DatePartHost();
+        host.Values["task.due"] = new DateTime(2026, 10, 20, 14, 5, 0);
+        host.Fields["task.due"] = new FieldFacts("Due", new FieldFormat(FormatKind.DateTime));
+        var (screen, form, parts) = TextWindow.InForm(Due, host);
+        var part = (DatePart)parts[0];
+        form.Submitted = () => host.Log.Add("submit");
+        Type(screen, part.Time!, "9:30");
+        Press(screen, Key.Enter);
+        Assert.Equal(new DateTime(2026, 10, 20, 9, 30, 0), host.Values["task.due"]);
+        Assert.Equal("submit", host.Log[^1]);
+        Assert.Equal("run due change dueChanged", host.Log[^2]);
+    }
+
+    [Fact]
+    public void Clearing_the_day_empties_the_moment()
+    {
+        var (screen, part, host) = Moment(new DateTime(2026, 10, 20, 14, 5, 0));
+        Type(screen, part.Editor, "");
+        screen.Focus(null);
+        Assert.Null(host.Values["task.due"]);
+        Assert.Null(part.Value);
+        Assert.Equal("", part.Editor.Text);
+        Assert.Equal("", part.Time!.Text);
+        Assert.Equal("run due change dueChanged", host.Log[^1]);
+    }
 
     [Fact]
     public void It_draws_closed_and_open_without_failing()

@@ -1,8 +1,11 @@
 // The color part, the same as on every stack (conformance/colors.json): a
 // swatch that opens the palette every renderer shares (Palette.Rows) over
-// the window, and the color as "#rrggbb" to type. Typed text is taken when
-// the input is left or Enter is pressed; text that is no color stays as
-// typed and is marked, and the value stays. Only a color that differs is a
+// the window, and the color as "#rrggbb" to type (at most 7 characters).
+// Typed text is taken when the input is left or Enter is pressed (Enter then
+// submits the form); text that is no color stays as typed and is marked, and
+// the value stays. The palette works by keyboard too: the arrows and Tab
+// move through its colors, Enter or Space picks one; each color says its
+// "#rrggbb" when the pointer rests on it. Only a color that differs is a
 // change; what code sets is never one. A bound part writes its field; an
 // unbound named one keeps its color in its state's text.
 
@@ -15,6 +18,9 @@ namespace Clarity.Ui;
 public sealed class ColorPart : Part, ITakesTyped
 {
     const double Gap = 4;
+
+    /// <summary>How wide the swatch is.</summary>
+    public const double SwatchWidth = 32;
 
     TextEditor editor = null!;
     ColorSwatch swatch = null!;
@@ -30,6 +36,9 @@ public sealed class ColorPart : Part, ITakesTyped
 
     /// <summary>The palette, while it is open.</summary>
     public Overlay? Palette => open;
+
+    /// <summary>The palette's colors, while it is open.</summary>
+    public PaletteGrid? Grid { get; private set; }
 
     /// <summary>Whether what is typed is no color: the input is marked, the value stays.</summary>
     public bool Bad { get; private set; }
@@ -49,10 +58,11 @@ public sealed class ColorPart : Part, ITakesTyped
             Enabled = () => Enabled,
             ReadOnly = () => ReadOnly,
             Marked = () => Bad || State?.HasError == true,
+            MaxLength = 7,
             Entered = () =>
             {
                 Take();
-                return true;
+                return PartTexts.Submit(this);
             },
         };
         editor.FocusMoved += focused =>
@@ -141,13 +151,18 @@ public sealed class ColorPart : Part, ITakesTyped
         if (!Usable || Screen is not { } screen)
             return;
         var grid = new PaletteGrid(Value, Pick) { Holder = swatch };
+        Grid = grid;
         var x = Math.Max(0, Math.Min(swatch.Bounds.X, screen.Width - PaletteGrid.Width));
         var below = Bounds.Bottom + 4;
         var y = below + PaletteGrid.Height > screen.Height && Bounds.Y - 4 - PaletteGrid.Height >= 0 ? Bounds.Y - 4 - PaletteGrid.Height : below;
         open = new Overlay(grid, new Box(x, y, PaletteGrid.Width, PaletteGrid.Height))
         {
             Anchor = () => swatch.Bounds,
-            Closed = () => open = null,
+            Closed = () =>
+            {
+                open = null;
+                Grid = null;
+            },
         };
         screen.Open(open);
     }
@@ -163,8 +178,8 @@ public sealed class ColorPart : Part, ITakesTyped
     public override void Arrange(Box box)
     {
         Bounds = box;
-        var side = box.Height;
-        swatch.Arrange(new Box(box.X, box.Y, side, side));
+        var side = Math.Min(SwatchWidth, box.Width);
+        swatch.Arrange(new Box(box.X, box.Y, side, box.Height));
         editor.Arrange(new Box(box.X + side + Gap, box.Y, Math.Max(0, box.Width - side - Gap), box.Height));
     }
 
@@ -180,19 +195,23 @@ public sealed class ColorPart : Part, ITakesTyped
         Clarity.Runtime.Palette.Read(text) is { Length: 7 } color && SKColor.TryParse(color, out var parsed) ? parsed : null;
 }
 
-/// <summary>A color part's swatch: the color in a framed square, a line across it for none; a click or Enter opens the palette.</summary>
+/// <summary>A color part's swatch: the color in a framed square, a line across it for none; a click or Enter opens the palette, whose keys it then hands on.</summary>
 public sealed class ColorSwatch(ColorPart part) : Element
 {
     public override bool Focusable => part.Enabled && !part.ReadOnly;
+
+    /// <summary>While the palette is open, Tab moves through its colors.</summary>
+    public override bool WantsTab => part.Grid is not null;
 
     public override void OnClick() => part.Toggle();
 
     public override bool OnKey(KeyInput key)
     {
+        if (part.Grid is { } grid)
+            return grid.Keyed(key);
         if (key.Key is Key.Enter or Key.Space or Key.Down)
         {
-            if (part.Palette is null)
-                part.Toggle();
+            part.Toggle();
             return true;
         }
         return false;
@@ -219,7 +238,7 @@ public sealed class ColorSwatch(ColorPart part) : Element
     }
 }
 
-/// <summary>The palette every renderer shares, ten colors a row, over the window; a press on a color picks it.</summary>
+/// <summary>The palette every renderer shares, ten colors a row, over the window; a press on a color picks it, and so do Enter and Space on the color the keys marked.</summary>
 public sealed class PaletteGrid : Element
 {
     const double Cell = 22;
@@ -242,7 +261,44 @@ public sealed class PaletteGrid : Element
     {
         Chosen = chosen;
         this.picked = picked;
+        Marked = Math.Max(0, Colors.ToList().IndexOf(chosen ?? ""));
     }
+
+    /// <summary>The color the keys move and Enter picks: at first the one the part has, else the first.</summary>
+    public int Marked { get; private set; }
+
+    /// <summary>A key from the swatch while it is open: the arrows a color or a row on, Tab the next color, Home and End the ends, Enter or Space picks.</summary>
+    public bool Keyed(KeyInput key)
+    {
+        var count = Colors.Count;
+        int? to = key.Key switch
+        {
+            Key.Left => Marked - 1,
+            Key.Right => Marked + 1,
+            Key.Up => Marked - Across,
+            Key.Down => Marked + Across,
+            Key.Tab => Marked + (key.Shift ? -1 : 1),
+            Key.Home => 0,
+            Key.End => count - 1,
+            _ => null,
+        };
+        if (to is { } next)
+        {
+            // Tab goes round; the arrows stop at the edges.
+            Marked = key.Key == Key.Tab ? (next + count) % count : Math.Clamp(next, 0, count - 1);
+            Invalidate();
+            return true;
+        }
+        if (key.Key is Key.Enter or Key.Space)
+        {
+            picked(Colors[Marked]);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>A color says its "#rrggbb" when the pointer rests on it.</summary>
+    public override string? TooltipAt(double x, double y) => ColorAt(x, y) is var at and >= 0 ? Colors[at] : null;
 
     /// <summary>The colors it offers, in order: row by row.</summary>
     public IReadOnlyList<string> Colors { get; } = [.. Clarity.Runtime.Palette.Rows.SelectMany(r => r)];
@@ -303,6 +359,9 @@ public sealed class PaletteGrid : Element
             painter.Stroke(place, look.Color(i == hoveredAt ? "strong_border" : "border"), 1, 3);
             if (Colors[i] == Chosen)
                 painter.Stroke(new Box(place.X - 2, place.Y - 2, place.Width + 4, place.Height + 4), look.Color("accent"), 2, 4);
+            // The color the keys marked has the focus ring.
+            if (i == Marked && Holder is { Focused: true })
+                PressLooks.FocusRing(painter, place.Inset(-1), 4);
         }
     }
 }

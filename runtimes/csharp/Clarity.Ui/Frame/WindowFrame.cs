@@ -164,6 +164,13 @@ public abstract class FrameRegion(WindowFrame frame) : Element
         Invalidate();
     }
 
+    /// <summary>Takes <paramref name="child"/> into it (a button of its own), and gives it back.</summary>
+    internal T Hold<T>(T child) where T : Element
+    {
+        AddChild(child);
+        return child;
+    }
+
     /// <summary>A frame does not scroll the window's parts.</summary>
     public override bool OnWheel(double dx, double dy) => true;
 

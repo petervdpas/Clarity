@@ -35,11 +35,34 @@ public enum Key
     Plus, Minus, Multiply, Slash, Period, Comma, Equal, Semicolon, Quote, Backslash, BracketLeft, BracketRight, Backquote,
 }
 
+/// <summary>The shape of the mouse pointer over a place: each host shows it as its system's.</summary>
+public enum Cursor
+{
+    Default,
+    /// <summary>Something that runs when clicked: a link, a canvas command.</summary>
+    Hand,
+    /// <summary>Text the person types or selects in.</summary>
+    Text,
+    /// <summary>An edge dragged left or right: a sidebar, a splitter, a column.</summary>
+    ResizeLeftRight,
+    /// <summary>An edge dragged up or down.</summary>
+    ResizeUpDown,
+    Move,
+    Crosshair,
+    NotAllowed,
+}
+
 /// <summary>Where the pointer is, on the screen and from the element's top left, and the keys held.</summary>
 public readonly record struct PointerInput(double ScreenX, double ScreenY, double X, double Y, Modifiers Modifiers = Modifiers.None, int Clicks = 1);
 
 public readonly record struct KeyInput(Key Key, Modifiers Modifiers)
 {
+    /// <summary>The character the key typed on the person's keyboard, for a key the screen asks the window's character shortcuts with (Key is then Other); none for a key press.</summary>
+    public string? Typed { get; init; }
+
+    /// <summary>The key's own name, from the host, for a key Clarity.UI has no Key for (F13, Pause, PrintScreen); Key is then Other.</summary>
+    public string? Name { get; init; }
+
     public bool Shift => Modifiers.HasFlag(Modifiers.Shift);
     public bool Control => Modifiers.HasFlag(Modifiers.Control);
 }

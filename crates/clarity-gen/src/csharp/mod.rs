@@ -75,7 +75,8 @@ pub fn project_name(settings: &Settings) -> String {
 pub use cli::generate as generate_cli;
 
 /// The program of the project: the desktop program, or with the web target
-/// alone the web application (DESIGN 7.6).
+/// alone the web application (DESIGN 7.6). With both targets the desktop
+/// program; `crate::programs` asks for each target on its own.
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     if settings.stack.has(clarity_project::Target::Desktop) || !settings.stack.has(clarity_project::Target::Web) {
         return generate_desktop(project, settings, DESKTOP_PACKAGE);
@@ -141,9 +142,9 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
         files.push(text(
             &format!("Windows/{}Run.cs", host.name.name),
             format!(
-                "{HEADER}\nusing Clarity.Runtime;\n\nnamespace {name};\n\npublic sealed partial class {}ViewModel\n{{\n    /// <summary>Runs the app's <c>on unconnected</c>, with why the databases did not open.</summary>\n    public void Unconnected(Unconnecting unconnecting) => RunUnconnected(unconnecting, reason => On{}({reason}));\n}}\n",
+                "{HEADER}\nusing Clarity.Runtime;\n\nnamespace {name};\n\npublic sealed partial class {}ViewModel\n{{\n    /// <summary>Runs the app's <c>on unconnected</c>, with why the databases did not open.</summary>\n    public void Unconnected(Unconnecting unconnecting) => RunUnconnected(unconnecting, reason => {}({reason}));\n}}\n",
                 host.name.name,
-                pascal(&handler)
+                names::on(&handler)
             ),
         ));
     }
@@ -513,6 +514,8 @@ fn keys_catalog(project: &Project, name: &str) -> String {
         },
         None => format!("Text.Plain({})", string(name)),
     };
+    // Where a toolbar or ribbon command lives, shown beside its name.
+    let places = clarity_spec::shortcuts::places(project);
     let layers: Vec<String> = clarity_spec::shortcuts::catalog(project)
         .iter()
         .map(|layer| {
@@ -521,7 +524,14 @@ fn keys_catalog(project: &Project, name: &str) -> String {
                 .iter()
                 .map(|c| {
                     let keys: Vec<String> = c.keys.iter().map(|k| string(k)).collect();
-                    format!("new KeyCommandInfo({}, {}, [{}])", string(&c.id), text(&c.caption, &c.name), keys.join(", "))
+                    let place = match places.iter().find(|(id, _)| *id == c.id).map(|(_, p)| p) {
+                        Some(clarity_spec::shortcuts::KeyPlace::Toolbar) => ", [new Text(\"Toolbar\") { Key = \"keysToolbar\" }]".to_string(),
+                        Some(clarity_spec::shortcuts::KeyPlace::Ribbon { tab, group }) => {
+                            format!(", [{}, {}]", text(&Some(tab.clone()), tab), text(&Some(group.clone()), group))
+                        }
+                        None => String::new(),
+                    };
+                    format!("new KeyCommandInfo({}, {}, [{}]{place})", string(&c.id), text(&c.caption, &c.name), keys.join(", "))
                 })
                 .collect();
             let title = if layer.id.is_empty() { "null".to_string() } else { text(&layer.title, &layer.id) };

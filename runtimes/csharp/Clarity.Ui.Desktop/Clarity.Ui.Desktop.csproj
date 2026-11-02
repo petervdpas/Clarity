@@ -7,6 +7,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Clarity.Ui.Desktop</RootNamespace>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- OpenGL's and GLFW's functions the window calls itself: drawing in software, the content scale. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsPackable>true</IsPackable>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>bin/$(Configuration)</PackageOutputPath>
@@ -24,6 +26,10 @@
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.148.0" />
     <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="4.148.0" />
     <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="4.148.0" />
+    <!-- HarfBuzz's native library on each system, for shaping text. -->
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="14.2.0" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.Win32" Version="14.2.0" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.macOS" Version="14.2.0" />
     <!-- The sound part's output (DESIGN 5.22): miniaudio on Windows, macOS and Linux, MIT. -->
     <PackageReference Include="SoundFlow" Version="1.4.2" />
   </ItemGroup>
@@ -32,6 +38,10 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Clarity.Ui/Clarity.Ui.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The window's icon when the application carries none of its own. -->
+    <EmbeddedResource Include="../assets/icon.png" LogicalName="Clarity.Ui.Desktop.icon.png" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="" />

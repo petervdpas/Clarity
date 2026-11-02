@@ -18,11 +18,21 @@ public enum InputIcon
     Copy,
     Up,
     Down,
+    /// <summary>Three dots: a folder part's button that opens the system's picker.</summary>
+    More,
 }
 
-/// <summary>A small flat button inside an input's right edge: a password's eye and copy, a spin box's arrows.</summary>
+/// <summary>
+/// A small flat button inside an input's right edge: a password's eye and
+/// copy, a spin box's arrows, a folder's picker. It takes no focus. One that
+/// repeats (a spin box's arrow) acts as it is pressed, and again and again
+/// while it is held, as a system's repeat button does.
+/// </summary>
 public sealed class InputSideButton(InputIcon icon, Action clicked) : Element
 {
+    /// <summary>How long a repeating button waits before it repeats, and then between repeats.</summary>
+    public static readonly TimeSpan RepeatDelay = TimeSpan.FromMilliseconds(300), RepeatInterval = TimeSpan.FromMilliseconds(100);
+
     public InputIcon Icon { get; set; } = icon;
 
     /// <summary>What it does, in the person's language.</summary>
@@ -30,13 +40,40 @@ public sealed class InputSideButton(InputIcon icon, Action clicked) : Element
 
     public Func<bool> Enabled { get; set; } = () => true;
 
+    /// <summary>Whether it shows; a hidden one takes no room and no press.</summary>
+    public Func<bool> Shows { get; set; } = () => true;
+
+    public override bool IsShown => Shows();
+
+    /// <summary>Whether it acts on the press and repeats while it is held.</summary>
+    public bool Repeats { get; init; }
+
     /// <summary>It says what it does when the pointer rests on it.</summary>
     public override string? TooltipAt(double x, double y) => Name.Length > 0 ? Name : null;
 
     public override void OnClick()
     {
-        if (Enabled())
+        if (!Repeats && Enabled())
             clicked();
+    }
+
+    public override void OnPointerPressed(PointerInput at)
+    {
+        if (!Repeats || !Enabled())
+            return;
+        clicked();
+        if (Screen is { } screen)
+            screen.Wake(this, screen.Now() + RepeatDelay);
+    }
+
+    /// <summary>Held on it: it acts again, and wakes for the next time.</summary>
+    public override void OnWake()
+    {
+        if (!Repeats || !Pressed || !Hovered || !Enabled())
+            return;
+        clicked();
+        if (Screen is { } screen)
+            screen.Wake(this, screen.Now() + RepeatInterval);
     }
 
     public override void Draw(Painter painter)
@@ -70,6 +107,11 @@ public sealed class InputSideButton(InputIcon icon, Action clicked) : Element
             case InputIcon.Down:
                 canvas.DrawLine(cx - 4, cy - 2, cx, cy + 2, pen);
                 canvas.DrawLine(cx, cy + 2, cx + 4, cy - 2, pen);
+                break;
+            case InputIcon.More:
+                using (var dot = new SKPaint { Color = color, IsAntialias = true })
+                    for (var i = -1; i <= 1; i++)
+                        canvas.DrawCircle(cx + i * 5, cy, 1.5f, dot);
                 break;
         }
     }

@@ -19,7 +19,7 @@ namespace Clarity.Ui;
 public sealed class WindowStack : Element, IDisposable
 {
     /// <summary>The width a dialog that names no size opens at.</summary>
-    public const double DialogWidth = 480;
+    public const double DialogWidth = 560;
 
     readonly Func<WindowViewModel, string?> markupOf;
     readonly List<Shown> stack = [];
@@ -50,6 +50,20 @@ public sealed class WindowStack : Element, IDisposable
 
     /// <summary>The regions of the app's frame (<c>Apps/Shop.cxaml</c>), which every window but a dialog shows where it has none of its own.</summary>
     public IReadOnlyList<System.Xml.Linq.XElement>? AppFrame { get; init; }
+
+    LongCall? longCall;
+
+    /// <summary>
+    /// The long engine call of these windows, which every window it shows
+    /// holds: while one runs, no other handler of them runs, and its bar shows
+    /// here. A desktop window of its own shares its opener's; another stack's
+    /// call is not this one's.
+    /// </summary>
+    public LongCall LongCall
+    {
+        get => longCall ??= Opener?.LongCall ?? new LongCall();
+        init => longCall = value;
+    }
 
     /// <summary>The window that opened this desktop window of its own; told when it closes. None for the application's.</summary>
     public WindowViewModel? Opener { get; init; }
@@ -143,6 +157,7 @@ public sealed class WindowStack : Element, IDisposable
     void Attach(WindowViewModel model, Action close)
     {
         model.Messages = Messages;
+        model.LongCall = LongCall;
         model.OpenRequested += (other, newWindow) => Open(other, newWindow, model);
         model.CloseRequested += close;
         model.CopyRequested += text => Screen?.Clipboard.SetText(Locale.Show(text));
@@ -200,12 +215,13 @@ public sealed class WindowStack : Element, IDisposable
     }
 
     /// <summary>
-    /// The size of a dialog's window: as it says, else <see cref="DialogWidth"/>
-    /// wide and as high as its rows with the window's padding.
+    /// The size of a dialog's window: as it says, else as wide as its parts'
+    /// captions need, at least <see cref="DialogWidth"/> (Avalonia's dialog
+    /// view sized to its content), and as high as its rows with the window's padding.
     /// </summary>
     public static Extent DialogSize(WindowView view, WindowViewModel model)
     {
-        var width = model.WindowSize?.Width ?? DialogWidth;
+        var width = model.WindowSize?.Width ?? Math.Clamp(ContentWidth(view), DialogWidth, MaxDialogWidth);
         if (model.WindowSize is { } size)
             return new Extent(width, size.Height);
         // Laid out with no spare height, the grid's content is its rows as they are.
@@ -213,6 +229,44 @@ public sealed class WindowStack : Element, IDisposable
         var rows = view.Find<GridPanel>()?.Content ?? 6 * GridLayout.RowHeight;
         var height = Math.Clamp(rows + 2 * WindowView.ContentPadding, GridLayout.RowHeight + 2 * WindowView.ContentPadding, 720);
         return new Extent(width, height);
+    }
+
+    /// <summary>How wide a dialog grows for its captions, at most.</summary>
+    public const double MaxDialogWidth = 1000;
+
+    /// <summary>
+    /// The width a window's grid needs so each part's caption fits in the columns it spans, with the padding around.
+    /// The parts in a container count too (a form's labels, every tab's parts): a container's grid has a column for each
+    /// it spans, so its columns are as wide as the window's.
+    /// </summary>
+    static double ContentWidth(WindowView view)
+    {
+        var columns = view.Find<GridPanel>()?.Columns ?? WindowView.StandardColumns;
+        var look = view.LookNow;
+        var fonts = view.FontsNow;
+        var widest = 0.0;
+        foreach (var part in AllParts(view.Parts))
+        {
+            if (part.Spec.Text("caption") is not { Length: > 0 } caption)
+                continue;
+            var needs = fonts.Measure(part.Host.Text(caption), "text", look.Size("text"), false) + 4 * look.Padding + 8;
+            var span = Math.Max(1, (int)(part.Spec.Number("width") ?? 1));
+            var column = (needs - (span - 1) * GridLayout.Gap) / span;
+            widest = Math.Max(widest, column * columns + (columns - 1) * GridLayout.Gap);
+        }
+        return widest + 2 * WindowView.ContentPadding;
+    }
+
+    /// <summary>The parts and every part their containers hold, at any depth.</summary>
+    static IEnumerable<Part> AllParts(IEnumerable<Part> parts)
+    {
+        foreach (var part in parts)
+        {
+            yield return part;
+            if (part is ContainerPart container)
+                foreach (var inner in AllParts(container.Grids.SelectMany(g => g.Children.OfType<Part>())))
+                    yield return inner;
+        }
     }
 
     // -- Questions -----------------------------------------------------------------
@@ -246,7 +300,7 @@ public sealed class WindowStack : Element, IDisposable
             return;
         if (LongCall.Current is not null && bar is null && stack.Count > 0)
         {
-            bar = new Overlay(LongCallBar.OfLongCall(), screen.Whole) { Modal = true, Covers = true };
+            bar = new Overlay(LongCallBar.Of(LongCall), screen.Whole) { Modal = true, Covers = true };
             screen.Open(bar);
         }
         else if (LongCall.Current is null && bar is { } shown)
@@ -322,6 +376,7 @@ public sealed class WindowStack : Element, IDisposable
         {
             var was = stack[i];
             var top = i == stack.Count - 1;
+            var focused = top ? FocusedPartIn(was.View) : null;
             // What was said into its text values shows in the new language before it is drawn again.
             was.Model.Reshow();
             if (top)
@@ -333,19 +388,52 @@ public sealed class WindowStack : Element, IDisposable
             }
             stack[i] = Make(was.Model);
             if (top)
+            {
                 AddChild(stack[i].View);
+                Refocus(stack[i].View, focused);
+            }
         }
         foreach (var dialog in dialogs)
         {
+            var focused = FocusedPartIn(dialog.Content.View);
             dialog.Model.Reshow();
             dialog.Content.View.Dispose();
             dialog.Host.Dispose();
             var (host, view) = MakeDialogView(dialog.Model);
             dialog.Host = host;
             dialog.Content.Replace(view);
+            Refocus(view, focused);
         }
         TitleChanged?.Invoke();
         Invalidate();
+    }
+
+    /// <summary>The name of the part in <paramref name="view"/> that has the focus, if one has.</summary>
+    static string? FocusedPartIn(Element view)
+    {
+        var focused = view.Screen?.Focused;
+        for (var e = focused; e is not null; e = e.Parent)
+            if (e == view)
+                return PartOf(focused)?.Spec.Name;
+        return null;
+    }
+
+    /// <summary>Gives the focus back to the part of that name in the view made again, as Tab would reach it.</summary>
+    static void Refocus(Element view, string? name)
+    {
+        if (name is null || view.Screen is not { } screen)
+            return;
+        var taker = screen.TabOrder().FirstOrDefault(e => PartOf(e) is { } part && part.Spec.Name == name && Within(e, view));
+        if (taker is not null)
+            screen.Focus(taker);
+    }
+
+    static bool Within(Element element, Element view)
+    {
+        for (var e = element; e is not null; e = e.Parent)
+            if (e == view)
+                return true;
+        return false;
     }
 
     public override void Arrange(Box box)
@@ -395,9 +483,8 @@ public sealed class WindowStack : Element, IDisposable
         var again = key.Key == Key.Y || (key.Key == Key.Z && key.Shift);
         if (!back && !again)
             return false;
+        // The screen asked the part with the focus first (typing it takes back itself).
         var focused = Screen?.Focused;
-        if (focused is not null && focused.OnKey(key))
-            return true;
         var (model, host, _) = stack[^1];
         if (PartOf(focused) is { } part && host.Scope(part.Spec.Name) is { } scope)
             model.UndoEdit(scope, back);

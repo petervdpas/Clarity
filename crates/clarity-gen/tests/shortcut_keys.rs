@@ -16,6 +16,8 @@ app Shop
 
 page Card: window
     title @cardTitle
+    toolbar name cardToolbar
+        button @printCaption name printButton on click: saveClicked
     button @saveCaption name saveButton at 1,1 span 2 key \"Ctrl+S\" on click: saveClicked
 
 code Card
@@ -44,7 +46,8 @@ fn csharp_starts_the_persons_keys() {
     let catalog = file(&files, "KeysCatalog.cs");
     assert!(catalog.contains("using Clarity.Ui;\n"), "{catalog}");
     assert!(catalog.contains("new KeyLayerInfo(\"\", null, [new KeyCommandInfo(\"keysItem\", Text.Of(\"keysItem\"), []), new KeyCommandInfo(\"quitItem\", Text.Of(\"quitItem\"), [\"Ctrl+Q\"])])"), "{catalog}");
-    assert!(catalog.contains("new KeyLayerInfo(\"Card\", Text.Of(\"cardTitle\"), [new KeyCommandInfo(\"Card.saveButton\", Text.Of(\"saveCaption\"), [\"Ctrl+S\"])])"), "{catalog}");
+    // A toolbar command says where it lives, in Clarity's words.
+    assert!(catalog.contains("new KeyLayerInfo(\"Card\", Text.Of(\"cardTitle\"), [new KeyCommandInfo(\"Card.printButton\", Text.Of(\"printCaption\"), [], [new Text(\"Toolbar\") { Key = \"keysToolbar\" }]), new KeyCommandInfo(\"Card.saveButton\", Text.Of(\"saveCaption\"), [\"Ctrl+S\"])])"), "{catalog}");
     let model = file(&files, "Windows/CardViewModel.cs");
     assert!(model.contains("void Keys_() => ShowKeys();"), "{model}");
 }

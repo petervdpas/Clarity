@@ -123,6 +123,20 @@ public class TimerPartTests
         Assert.Equal(["run clock tick clockTicked"], host.Log);
     }
 
+    /// <summary>A tick whose command cannot run now is left out, as Avalonia's timer asked the command's CanExecute.</summary>
+    [Fact]
+    public void A_tick_whose_command_cannot_run_is_left_out()
+    {
+        var host = new TestHost();
+        var (_, _, ticks) = Window("""<Timer name="clock" at="1,1" ontick="clockTicked" />""", host);
+        host.CannotRun.Add("clockTicked");
+        ticks.TickAll();
+        Assert.Empty(host.Log);
+        host.CannotRun.Clear();
+        ticks.TickAll();
+        Assert.Equal(["run clock tick clockTicked"], host.Log);
+    }
+
     sealed class SlowHost : TestHost
     {
         public Action? During;

@@ -27,11 +27,73 @@ public static class Locale
     /// <summary>The language shown changed: views show their texts and values again.</summary>
     public static event Action? Changed;
 
+    static CultureInfo? language;
+    static Formats formats = new(CultureInfo.CurrentCulture, null);
+
+    /// <summary>One person's language and formats on a server, for the work of their request (For); none outside it.</summary>
+    static readonly AsyncLocal<(CultureInfo? Language, Formats Formats)?> person = new();
+
     /// <summary>The language whose translations are shown; null shows the texts as written.</summary>
-    public static CultureInfo? Language { get; private set; }
+    public static CultureInfo? Language
+    {
+        get => person.Value is { } theirs ? theirs.Language : language;
+        private set => language = value;
+    }
 
     /// <summary>How values are shown and read.</summary>
-    public static Formats Formats { get; private set; } = new(CultureInfo.CurrentCulture, null);
+    public static Formats Formats
+    {
+        get => person.Value?.Formats ?? formats;
+        private set => formats = value;
+    }
+
+    /// <summary>
+    /// Shows <paramref name="languageName"/> and the formats of the culture
+    /// <paramref name="formatsName"/> to the work that runs until disposed,
+    /// and to what it starts (an engine call's thread), as the desktop shows
+    /// its one person's: a server answers each person's request so, while the
+    /// application's own language stays and nothing else hears of it. A
+    /// language the application does not offer shows its own; a culture .NET
+    /// does not know keeps the formats there are.
+    /// </summary>
+    public static IDisposable For(string? languageName, string? formatsName)
+    {
+        var shownLanguage = Language;
+        if (languageName is { Length: > 0 } wanted)
+        {
+            if (wanted == (baseLanguage ?? "en"))
+                shownLanguage = null;
+            else if (available.Contains(wanted))
+                shownLanguage = CultureInfo.GetCultureInfo(wanted);
+        }
+        var culture = Formats.Culture;
+        if (formatsName is { Length: > 0 } named)
+        {
+            try
+            {
+                culture = CultureInfo.GetCultureInfo(named);
+            }
+            catch (CultureNotFoundException)
+            {
+                // Fail safe: an unknown culture keeps the formats shown.
+            }
+        }
+        var was = (person.Value, CultureInfo.CurrentCulture, CultureInfo.CurrentUICulture);
+        person.Value = (shownLanguage, new Formats(culture, currency));
+        CultureInfo.CurrentCulture = culture;
+        CultureInfo.CurrentUICulture = shownLanguage ?? culture;
+        return new Restore(() =>
+        {
+            person.Value = was.Item1;
+            CultureInfo.CurrentCulture = was.Item2;
+            CultureInfo.CurrentUICulture = was.Item3;
+        });
+    }
+
+    sealed class Restore(Action back) : IDisposable
+    {
+        public void Dispose() => back();
+    }
 
     /// <summary>The languages the application offers, the one its texts are written in first.</summary>
     public static string[] Offered => Languages.Offered(baseLanguage, available);

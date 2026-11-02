@@ -3,7 +3,9 @@
 // (runtimes/web/src/screen/shortcut.ts): the modifiers exactly, letters in
 // either case, Shift for a symbol only when written (it makes + and *),
 // and a typed key without Ctrl, Alt or Meta left to an input the person
-// types in. A symbol is the same key from the keyboard or the number pad.
+// types in. A symbol is the same key from the keyboard or the number pad,
+// and a symbol shortcut also answers the character the keyboard typed, so
+// `*` is Shift+8 on a US keyboard and whatever key makes it on another.
 
 namespace Clarity.Ui;
 
@@ -70,8 +72,15 @@ public static class Shortcuts
     public static bool Matches(string shortcut, KeyInput key, bool typing)
     {
         var (modifiers, word) = Parts(shortcut.Trim());
+        // A character typed: a symbol shortcut without Ctrl, Alt or Meta answers what the keyboard typed, wherever its key is.
+        if (key.Typed is { } character)
+            return !typing && word.Length == 1 && !char.IsAsciiLetterOrDigit(word[0]) && word == character
+                && modifiers.All(m => string.Equals(m, "Shift", StringComparison.OrdinalIgnoreCase));
         var wanted = KeyOf(word);
-        if (wanted == Key.Other || wanted != key.Key)
+        // A key Clarity.UI has no Key for answers by the name its host gives it (F13, Pause).
+        if (wanted == Key.Other && !(key.Key == Key.Other && key.Name is { } name && string.Equals(name, word, StringComparison.OrdinalIgnoreCase)))
+            return false;
+        if (wanted != key.Key)
             return false;
         bool Held(string name) => modifiers.Any(m => string.Equals(m, name, StringComparison.OrdinalIgnoreCase));
         var control = Held("Ctrl") || Held("Control");

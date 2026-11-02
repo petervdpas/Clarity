@@ -206,7 +206,7 @@ public class TextEditorTests
         for (var y = (int)box.Y; y < (int)box.Bottom; y++)
             for (var x = (int)box.X; x < (int)box.Right; x++)
             {
-                var p = pixels.GetPixel(x, y);
+                var p = pixels.PixelAt(x, y);
                 if (Math.Abs(p.Red - color.Red) < 6 && Math.Abs(p.Green - color.Green) < 6 && Math.Abs(p.Blue - color.Blue) < 6)
                     return true;
             }

@@ -61,13 +61,27 @@ pub const LANGUAGE_PICKER_KEYS: [(&str, &str); 1] = [("languagePicker", "Languag
 pub const THEME_PICKER_KEYS: [(&str, &str); 1] = [("themePicker", "Theme")];
 /// Clarity's words of a file part bound to a file field: its empty state,
 /// its buttons, and what it says when a copy was saved.
-pub const FILE_KEYS: [(&str, &str); 6] = [
+pub const FILE_KEYS: [(&str, &str); 7] = [
     ("noFile", "No file"),
     ("chooseFile", "Choose a file"),
     ("openFile", "Open"),
     ("saveFileCopy", "Save a copy"),
     ("removeFile", "Remove the file"),
     ("fileCopySaved", "A copy is in your Downloads folder"),
+    ("fileCopySavedAt", "A copy is saved as {place}"),
+];
+/// Clarity's words of the menu a right click opens on a text input.
+pub const TEXT_EDIT_KEYS: [(&str, &str); 4] = [("cutText", "Cut"), ("copyText", "Copy"), ("pasteText", "Paste"), ("selectAllText", "Select all")];
+/// Clarity's words of the calendar a date input opens: its buttons by month,
+/// year and decade, and the heading that shows more at once.
+pub const CALENDAR_KEYS: [(&str, &str); 7] = [
+    ("previousMonth", "Previous month"),
+    ("nextMonth", "Next month"),
+    ("previousYear", "Previous year"),
+    ("nextYear", "Next year"),
+    ("previousDecade", "Previous decade"),
+    ("nextDecade", "Next decade"),
+    ("calendarZoomOut", "Show more"),
 ];
 /// Clarity's words of a tags part bound to a list field: the place a new
 /// item is typed or picked, and the button that removes one.
@@ -113,8 +127,10 @@ pub const SECRET_KEYS: [(&str, &str); 3] = [("showSecret", "Show"), ("hideSecret
 
 /// Clarity's words of the keys window (DESIGN 5.28), where a person sets
 /// the keys of the application's commands. The runtimes fill the slots.
-pub const KEYS_WINDOW_KEYS: [(&str, &str); 15] = [
+pub const KEYS_WINDOW_KEYS: [(&str, &str); 17] = [
     ("keysTitle", "Keys"),
+    ("keysHint", "Change gives a command a new key; Reset gives it its own key back"),
+    ("keysToolbar", "Toolbar"),
     ("keysEverywhere", "Everywhere"),
     ("keysChange", "Change"),
     ("keysReset", "Reset"),
@@ -148,6 +164,32 @@ pub const UNDO_KEYS: [(&str, &str); 1] = [("undoChangedSince", "This was changed
 /// (conformance/required.json). The runtimes fill the slot with its label.
 pub const REQUIRED_KEYS: [(&str, &str); 1] = [("fieldRequired", "{field} is required")];
 
+/// Clarity's words of a sidebar's buttons (tooltips): fold it away and back,
+/// fill the window and give it back. A collapsible or maximizable sidebar has them.
+pub const SIDEBAR_KEYS: [(&str, &str); 4] = [
+    ("sidebarShow", "Show the sidebar"),
+    ("sidebarFold", "Fold the sidebar away"),
+    ("sidebarFill", "Fill the window"),
+    ("sidebarGiveBack", "Give the window back"),
+];
+
+/// What a window says when code fails at a value or a record: an item
+/// outside its list, a record that is not there or still used. The
+/// runtimes fill the slots; every application with windows has them.
+pub const RUNTIME_ERROR_KEYS: [(&str, &str); 3] = [
+    ("itemOutsideList", "There is no item {position} in a list of {count}"),
+    ("recordNotThere", "There is no {table} with id {id}"),
+    ("recordStillUsed", "This {table} is still used by other records"),
+];
+
+/// Why a call of an engine failed (DESIGN 5.11, 5.12), in place of the
+/// host's own message: it ran too long, the person stopped it, or it broke.
+pub const ENGINE_ERROR_KEYS: [(&str, &str); 3] = [
+    ("engineTooLong", "{engine} ran longer than {seconds} seconds and was stopped"),
+    ("engineStopped", "{engine} was stopped"),
+    ("engineBroke", "{engine} stopped working in {function}"),
+];
+
 /// Every list of Clarity's own words, with their English.
 pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
     RENDERER_KEYS
@@ -155,6 +197,8 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&PICTURE_KEYS)
         .chain(&STEP_KEYS)
         .chain(&FILE_KEYS)
+        .chain(&TEXT_EDIT_KEYS)
+        .chain(&CALENDAR_KEYS)
         .chain(&FOLDER_KEYS)
         .chain(&ZOOM_KEYS)
         .chain(&CANVAS_TOOL_KEYS)
@@ -171,6 +215,9 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&SCREEN_ENGINE_KEYS)
         .chain(&UNDO_KEYS)
         .chain(&REQUIRED_KEYS)
+        .chain(&SIDEBAR_KEYS)
+        .chain(&RUNTIME_ERROR_KEYS)
+        .chain(&ENGINE_ERROR_KEYS)
 }
 
 /// The key a text names, without its `@`; none for a text written as it is.
@@ -558,9 +605,16 @@ fn shown(project: &Project) -> Shown {
     let passwords = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Password));
     let windows = project.files.iter().any(|f| !f.pages.is_empty());
     let required = project.entities().any(|e| !e.settings && e.fields.iter().any(|f| f.modifiers.required));
+    let sidebars = project.files.iter().flat_map(|f| f.pages.iter().map(|p| &p.frame).chain(f.apps.iter().map(|a| &a.frame))).any(|frame| frame.sidebars.iter().any(|s| s.props.collapsible || s.props.maximizable));
+    let engines = project.files.iter().any(|f| !f.engines.is_empty());
+    // A date input, or a table cell of a date field, opens the calendar.
+    let dates = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Date))
+        || project.entities().any(|e| e.fields.iter().any(|f| matches!(f.ty, FieldType::Date | FieldType::DateTime)));
     let own = RENDERER_KEYS
         .iter()
         .chain(if windows { UNDO_KEYS.as_slice() } else { &[] })
+        .chain(if windows { TEXT_EDIT_KEYS.as_slice() } else { &[] })
+        .chain(if windows && dates { CALENDAR_KEYS.as_slice() } else { &[] })
         .chain(if bound_picture { PICTURE_KEYS.as_slice() } else { &[] })
         .chain(if wizard { STEP_KEYS.as_slice() } else { &[] })
         .chain(if bound_file { FILE_KEYS.as_slice() } else { &[] })
@@ -578,7 +632,10 @@ fn shown(project: &Project) -> Shown {
         .chain(if passwords { SECRET_KEYS.as_slice() } else { &[] })
         .chain(if keys_window { KEYS_WINDOW_KEYS.as_slice() } else { &[] })
         .chain(if screen_engines { SCREEN_ENGINE_KEYS.as_slice() } else { &[] })
-        .chain(if required { REQUIRED_KEYS.as_slice() } else { &[] });
+        .chain(if required { REQUIRED_KEYS.as_slice() } else { &[] })
+        .chain(if sidebars { SIDEBAR_KEYS.as_slice() } else { &[] })
+        .chain(if windows { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
+        .chain(if engines { ENGINE_ERROR_KEYS.as_slice() } else { &[] });
     // The runtimes fill the slots of Clarity's own words, the ones its English has.
     for (key, english) in own {
         shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: Some(slots(english)) });

@@ -6,6 +6,13 @@
 // text and an item the list has add nothing, and text that is no value of
 // the list's kind stays as typed and is marked. Every change gives the
 // record a new list of its own type, so its property tells it changed.
+// Enter in the box takes the item and then submits the form it is in. A
+// list of days has a calendar button inside the box's right edge (Down in
+// the box opens the calendar too). Each chip's remove button says what it
+// does, is a Tab stop and is pressed by Enter or Space; when it goes, the
+// focus goes on to the next chip's button, else to the place to add. A tags
+// part bound to no field keeps its own list: a named one in its part state,
+// so the list stays when the window is made again (another language).
 
 using System.Collections;
 using System.Globalization;
@@ -20,12 +27,14 @@ public sealed class TagsPart : Part, ITakesTyped
     const double ChipHeight = 24;
     const double Space = 4;
     const double EditorWidth = 120;
+    const double ButtonWidth = 26;
 
     readonly List<TagChip> chips = [];
     TextEditor? editor;
     TagAdder? adder;
     Overlay? open;
     IList? shownList;
+    IList? ownHere;
     int shownCount = -1;
 
     /// <summary>The chips, in the order of the items.</summary>
@@ -41,8 +50,27 @@ public sealed class TagsPart : Part, ITakesTyped
     public bool Bad { get; private set; }
 
 
-    /// <summary>The record's list; none when it has none.</summary>
-    public IList? Value => Bound is { } path ? Host.Read(path) as IList : null;
+    /// <summary>The record's list, or its own when it is bound to no field; none when it has none.</summary>
+    public IList? Value => Bound is { } path ? Host.Read(path) as IList : Own;
+
+    /// <summary>The list of a part bound to no field: its state's when it is named, else its own.</summary>
+    IList? Own
+    {
+        get => State is { } state ? state.Values.GetValueOrDefault(OwnList) as IList : ownHere;
+        set
+        {
+            if (State is { } state)
+                state.SetValue(OwnList, value);
+            else
+                ownHere = value;
+        }
+    }
+
+    /// <summary>The name its own list goes by in its part state.</summary>
+    const string OwnList = "tags";
+
+    /// <summary>The button inside the box of a list of days that opens the calendar; none for other lists.</summary>
+    public CalendarButton? CalendarButton { get; private set; }
 
     /// <summary>The type of the list's items: text, a whole number, a decimal, a day or an enum.</summary>
     public Type ItemType
@@ -77,7 +105,7 @@ public sealed class TagsPart : Part, ITakesTyped
         }
     }
 
-    bool Usable => Enabled && !ReadOnly && Bound is not null;
+    bool Usable => Enabled && !ReadOnly;
 
     protected internal override void Made()
     {
@@ -107,7 +135,8 @@ public sealed class TagsPart : Part, ITakesTyped
         for (var i = 0; i < items.Count; i++)
         {
             var at = i;
-            var chip = new TagChip(Label(items[i]), usable ? () => RemoveAt(at) : null);
+            TagChip? chip = null;
+            chip = new TagChip(Label(items[i]), usable ? () => Removed(chip!, at) : null, () => Usable);
             chips.Add(chip);
             AddChild(chip);
         }
@@ -117,8 +146,11 @@ public sealed class TagsPart : Part, ITakesTyped
                 RemoveChild(editor);
             if (adder is not null)
                 RemoveChild(adder);
+            if (CalendarButton is not null)
+                RemoveChild(CalendarButton);
             editor = null;
             adder = null;
+            CalendarButton = null;
         }
         else if (ItemType.IsEnum)
         {
@@ -138,16 +170,13 @@ public sealed class TagsPart : Part, ITakesTyped
                 Entered = () =>
                 {
                     Take();
-                    return true;
+                    return PartTexts.Submit(this);
                 },
             };
             editor.FocusMoved += focused =>
             {
                 if (focused)
-                {
-                    OpenCalendar();
                     return;
-                }
                 // A press in its own calendar takes the focus for a moment and gives it back.
                 if (Screen?.Focused is not null)
                     CloseCalendar();
@@ -155,12 +184,27 @@ public sealed class TagsPart : Part, ITakesTyped
             };
             editor.KeyFirst = DayKey;
             AddChild(editor);
+            if (ItemType == typeof(DateOnly))
+            {
+                editor.RightInset = ButtonWidth + 2;
+                CalendarButton = new CalendarButton(ToggleCalendar)
+                {
+                    Name = Locale.Translate("openCalendar", "Calendar"),
+                    Enabled = () => Usable,
+                };
+                AddChild(CalendarButton);
+            }
         }
         else
         {
             // The box stays after the chips, so Tab reaches it last.
             RemoveChild(editor);
             AddChild(editor);
+            if (CalendarButton is not null)
+            {
+                RemoveChild(CalendarButton);
+                AddChild(CalendarButton);
+            }
         }
         if (Bounds.Width > 0)
             Arrange(Bounds);
@@ -185,6 +229,15 @@ public sealed class TagsPart : Part, ITakesTyped
             Invalidate();
         });
         Calendar = (DayCalendar)calendarOverlay.Content;
+    }
+
+    /// <summary>The calendar button: opens the calendar, or closes it when it is open.</summary>
+    void ToggleCalendar()
+    {
+        if (calendarOverlay is null)
+            OpenCalendar();
+        else
+            CloseCalendar();
     }
 
     void CloseCalendar()
@@ -261,10 +314,25 @@ public sealed class TagsPart : Part, ITakesTyped
         Offer(next);
     }
 
-    /// <summary>A new list of the record's own type, with its items.</summary>
+    /// <summary>
+    /// A chip's button removed its item. When that button had the focus (a
+    /// key pressed it, or a click), the focus goes on to the button of the
+    /// chip that is now in its place, else to the place to add.
+    /// </summary>
+    void Removed(TagChip chip, int at)
+    {
+        var hadFocus = chip.Remove is { } button && Screen?.Focused == button;
+        RemoveAt(at);
+        if (!hadFocus || Screen is not { } screen || chips.Contains(chip))
+            return;
+        Element? next = at < chips.Count ? chips[at].Remove : null;
+        screen.Focus(next ?? (Element?)editor ?? adder);
+    }
+
+    /// <summary>A new list of the record's own type, with its items; a part bound to no field starts a list of text.</summary>
     IList Copy()
     {
-        var next = Value is { } list ? (IList)Activator.CreateInstance(list.GetType())! : new List<object?>();
+        var next = Value is { } list ? (IList)Activator.CreateInstance(list.GetType())! : Bound is null ? new List<string>() : new List<object?>();
         foreach (var item in Value ?? Array.Empty<object?>())
             next.Add(item);
         return next;
@@ -272,7 +340,10 @@ public sealed class TagsPart : Part, ITakesTyped
 
     void Offer(IList next)
     {
-        Host.Write(Spec.Name ?? "", Bound!, next);
+        if (Bound is { } path)
+            Host.Write(Spec.Name ?? "", path, next);
+        else
+            Own = next;
         Fire("change");
         Sync();
     }
@@ -344,7 +415,9 @@ public sealed class TagsPart : Part, ITakesTyped
                 x = box.X;
                 y += line + Space;
             }
-            place.Arrange(new Box(x, y, Math.Max(EditorWidth, box.Right - x), line));
+            var at = new Box(x, y, Math.Max(EditorWidth, box.Right - x), line);
+            place.Arrange(at);
+            CalendarButton?.Arrange(new Box(at.Right - 2 - ButtonWidth, at.Y + 2, ButtonWidth, Math.Max(0, at.Height - 4)));
         }
     }
 
@@ -363,12 +436,12 @@ public sealed class TagChip : Element
     const double Pad = 8;
     const double ButtonSide = 18;
 
-    public TagChip(string label, Action? remove)
+    public TagChip(string label, Action? remove, Func<bool>? usable = null)
     {
         Label = label;
         if (remove is not null)
         {
-            Remove = new TagRemove(remove) { Name = Locale.Translate("removeTag", "Remove") };
+            Remove = new TagRemove(remove) { Name = Locale.Translate("removeTag", "Remove"), Usable = usable ?? (() => true) };
             AddChild(Remove);
         }
     }
@@ -400,19 +473,41 @@ public sealed class TagChip : Element
     }
 }
 
-/// <summary>A chip's small round button with a cross, which removes its item.</summary>
+/// <summary>A chip's small round button with a cross, which removes its item: a Tab stop that Enter and Space press, and its name as its tooltip.</summary>
 public sealed class TagRemove(Action clicked) : Element
 {
     /// <summary>What it does, in the person's language.</summary>
     public string Name { get; init; } = "";
 
-    public override void OnClick() => clicked();
+    /// <summary>Whether the list may change now.</summary>
+    public Func<bool> Usable { get; init; } = () => true;
+
+    public override bool Focusable => Usable();
+
+    /// <summary>It says what it does when the pointer rests on it.</summary>
+    public override string? TooltipAt(double x, double y) => Name.Length > 0 ? Name : null;
+
+    public override void OnClick()
+    {
+        if (Usable())
+            clicked();
+    }
+
+    public override bool OnKey(KeyInput key)
+    {
+        if (key.Key is not (Key.Enter or Key.Space) || key.Control)
+            return false;
+        OnClick();
+        return true;
+    }
 
     public override void Draw(Painter painter)
     {
         var look = painter.Look;
         if (Hovered || Pressed)
             painter.Fill(Bounds, look.Color(Pressed ? "accent_soft" : "border"), Bounds.Height / 2);
+        if (Focused)
+            PressLooks.FocusRing(painter, Bounds, Bounds.Height / 2);
         using var pen = new SKPaint { Color = look.Color("muted"), IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, StrokeCap = SKStrokeCap.Round };
         var cx = (float)(Bounds.X + Bounds.Width / 2);
         var cy = (float)(Bounds.Y + Bounds.Height / 2);

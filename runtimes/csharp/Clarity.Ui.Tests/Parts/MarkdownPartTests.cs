@@ -99,7 +99,7 @@ public class MarkdownPartTests
         var found = false;
         for (var x = (int)(part.Page.Bounds.X + run.Box.X); x < part.Page.Bounds.X + run.Box.Right; x++)
             for (var y = (int)(part.Page.Bounds.Y + run.Box.Y); y < part.Page.Bounds.Y + run.Box.Bottom; y++)
-                found |= shot.GetPixel(x, y) == accent;
+                found |= shot.PixelAt(x, y) == accent;
         Assert.True(found);
     }
 }

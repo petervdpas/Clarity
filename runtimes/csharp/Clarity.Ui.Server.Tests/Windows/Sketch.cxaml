@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window name="Sketch">
+  <Canvas name="field" at="1,1" span="6" />
+  <Textbox name="nameBox" at="1,2" span="6" bind="name" />
+</Window>

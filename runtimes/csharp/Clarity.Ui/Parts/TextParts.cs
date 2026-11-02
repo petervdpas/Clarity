@@ -60,6 +60,9 @@ public static class PartTexts
                 return b ? Locale.Translate("yes", "Yes") : Locale.Translate("no", "No");
             case Enum:
                 return part.Host.Choices(path).FirstOrDefault(c => Equals(c.Value, value))?.Label ?? value.ToString() ?? "";
+            // A list field shows each item as one is shown, joined (Avalonia's Bindings).
+            case System.Collections.IList items:
+                return string.Join(", ", items.Cast<object?>().Select(item => part.Shown(path, item)));
         }
         if (part.FormatOf(path) is { } format && value is not "")
             return part.FormatsOf().Show(format, value);
@@ -259,6 +262,9 @@ public sealed class SeparatorPart : Part
 [PartKind("badge")]
 public sealed class BadgePart : Part
 {
+    /// <summary>Its style colors its pill.</summary>
+    protected override bool DrawsOwnStyle => true;
+
     public string Text => Bound is { } path ? this.Shown(path, Host.Read(path)) : this.Caption() ?? "";
 
     /// <summary>Where the pill is drawn: as wide as its text, in the middle of its place's height.</summary>

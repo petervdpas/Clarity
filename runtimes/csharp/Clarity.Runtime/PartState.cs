@@ -19,6 +19,13 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     /// <summary>The part's name in Clarity, for messages.</summary>
     public string Name { get; } = name;
 
+    /// <summary>
+    /// For an input bound to a stored field: the window's data that holds the
+    /// record and the field's column, so a save refused for that field shows
+    /// why at this input.
+    /// </summary>
+    public (string Data, string Column)? Field { get; init; }
+
     public bool IsVisible { get => visible; set => SetProperty(ref visible, value); }
     bool visible = true;
 

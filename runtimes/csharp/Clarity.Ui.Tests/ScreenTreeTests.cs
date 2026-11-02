@@ -29,7 +29,7 @@ public class ScreenTreeTests
         // Nothing of the panel is drawn: its place is the window's background.
         using var pixels = Shot.Of(screen, 800, 400);
         var at = inner.Bounds;
-        Assert.Equal(screen.Look.Color("background"), pixels.GetPixel((int)(at.X + 4), (int)(at.Y + at.Height / 2)));
+        Assert.Equal(screen.Look.Color("background"), pixels.PixelAt((int)(at.X + 4), (int)(at.Y + at.Height / 2)));
         Assert.IsNotType<TextEditor>(screen.At(at.X + 4, at.Y + at.Height / 2));
     }
 

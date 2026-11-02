@@ -41,9 +41,9 @@ public class PanelPartTests
         var (screen, _, parts) = Made.Window(Panel, new TestHost(), width: 808);
         using var pixels = Shot.Of(screen, 808, 400);
         var header = screen.Look.Part("header", null).Background!.Value;
-        Assert.Equal(header, pixels.GetPixel(800, 6));
+        Assert.Equal(header, pixels.PixelAt(800, 6));
         // Its frame, in the strong border, down its side.
-        Assert.Equal(screen.Look.Color("strong_border"), pixels.GetPixel(405, 100));
+        Assert.Equal(screen.Look.Color("strong_border"), pixels.PixelAt(405, 100));
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public class PanelPartTests
         var (screen, _, _) = Made.Window(Panel, host, width: 808);
         host.State("box")!.IsVisible = false;
         using var pixels = Shot.Of(screen, 808, 400);
-        Assert.Equal(screen.Look.Color("background"), pixels.GetPixel(800, 6));
+        Assert.Equal(screen.Look.Color("background"), pixels.PixelAt(800, 6));
     }
 
     [Fact]

@@ -98,9 +98,9 @@ public class CheckPartTests
         host.Values["a"] = false;
         var (screen, _, _) = Made.Window("""<Checkbox at="1,1" span="3" name="first" bind="a" />""", host);
         using (var off = Shot.Of(screen, 800, 400))
-            Assert.True(Near(screen.Look.Color("input"), off.GetPixel(5, 14)));
+            Assert.True(Near(screen.Look.Color("input"), off.PixelAt(5, 14)));
         host.Values["a"] = true;
         using var on = Shot.Of(screen, 800, 400);
-        Assert.True(Near(screen.Look.Color("accent"), on.GetPixel(5, 14)));
+        Assert.True(Near(screen.Look.Color("accent"), on.PixelAt(5, 14)));
     }
 }

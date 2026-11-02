@@ -176,7 +176,7 @@ fn handlers_are_viewmodel_methods() {
     has(vm, "    public override string Title => Texts.OrderFormTitle;");
     has(vm, "    public Order Order { get => _order; set => SetProperty(ref _order, value); }\n    Order _order = new();");
     has(vm, "    public List<Order> Orders { get => _orders; set => SetProperty(ref _orders, value); }");
-    has(vm, "    public PartState NumberInput { get; } = new(\"numberInput\");");
+    has(vm, "    public PartState NumberInput { get; } = new(\"numberInput\") { Field = (\"order\", \"number\") };");
     has(vm, "    public PartState ApproveButton { get; } = new(\"approveButton\", caption: \"approveButtonCaption\");");
     has(vm, "        _orders = Db.All<Order>();");
     has(vm, "        CustomerChoices = Choice.Of(Db.All<Customer>(), r => r.Name);");
@@ -578,4 +578,30 @@ fn a_said_text_follows_the_language() {
 
 fn file_of<'a>(files: &'a [OutFile], name: &str) -> &'a str {
     &files.iter().find(|f| f.path.ends_with(name)).unwrap_or_else(|| panic!("no {name}")).text
+}
+
+/// Names never clash in the view model (data-4, S8): a handler named as a
+/// part, or as a member every view model has, gets a command of its own name
+/// with `_`, and a button can open the keys window.
+#[test]
+fn a_handler_named_as_a_part_or_a_view_model_member_still_builds() {
+    let source = SHOP
+        .replace(
+            "    button \"New\" name button1 at 11,10 span 2 on click -> OrderForm\n",
+            "    button \"New\" name button1 at 11,10 span 2 on click -> OrderForm\n    button \"Red\" name redInk at 1,13 span 2 on click: redInk\n    button \"Opened\" name button2 at 3,13 span 2 on click: opened\n    button \"Keys\" name keysButton at 5,13 span 2 on click -> keys\n",
+        )
+        .replace("    handler gridSelected\n", "    handler redInk\n        redInk.enabled = false\n\n    handler opened\n        redInk()\n\n    handler gridSelected\n");
+    let mut project = load_keyed([("shop.clarity", source.as_str())], &[], "en");
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    project.keys_editable = true;
+    let mut settings = settings();
+    settings.keys_editable = true;
+    let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let vm = file(&files, "Windows/OrderFormViewModel.cs");
+    has(vm, "public PartState RedInk { get; }");
+    has(vm, "    [RelayCommand]\n    void RedInk_() => Handle(OnRedInk);\n");
+    has(vm, "RedInk.IsEnabled = false;");
+    has(vm, "    [RelayCommand]\n    void Opened_() => Handle(OnOpened);\n");
+    has(vm, "OnRedInk();");
+    has(vm, "    void Keys_() => ShowKeys();\n");
 }

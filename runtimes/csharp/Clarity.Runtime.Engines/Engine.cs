@@ -210,9 +210,11 @@ public sealed class Engine
 
     JsonNode? RunHere(long window, string function, List<ScreenTell>? told, EngineWatch? watch, object?[] args)
     {
-        EngineException Failed(string why) => new($"engine {name} failed in {function}: {why}");
+        EngineException Failed(string why, Text? said = null) => new($"engine {name} failed in {function}: {why}", said);
+        // What a person reads: Clarity's own words, never the host's trace.
+        EngineException Stopped() => Failed("it was stopped", ClarityException.Own("engineStopped", "{engine} was stopped", ("engine", name)));
         if (watch?.Stop.IsCancellationRequested == true)
-            throw Failed("it was stopped");
+            throw Stopped();
         // An engine with state keeps its instance, unless a call fails or runs
         // past its limit: then its memory may be half changed, so the next
         // call starts a new one. Its calls take turns.
@@ -259,18 +261,29 @@ public sealed class Engine
                     {
                         OpenFailed open => Failed(open.Message),
                         EngineException => e,
-                        Wasmtime.TrapException { Type: Wasmtime.TrapCode.Interrupt } when call.Stopped => Failed("it was stopped"),
-                        Wasmtime.TrapException { Type: Wasmtime.TrapCode.Interrupt } => Failed($"it ran longer than {limits.Seconds} second{(limits.Seconds == 1 ? "" : "s")}"),
-                        _ => Failed(e.Message),
+                        Wasmtime.TrapException { Type: Wasmtime.TrapCode.Interrupt } when call.Stopped => Stopped(),
+                        Wasmtime.TrapException { Type: Wasmtime.TrapCode.Interrupt } => Failed(
+                            $"it ran longer than {limits.Seconds} second{(limits.Seconds == 1 ? "" : "s")}",
+                            ClarityException.Own("engineTooLong", "{engine} ran longer than {seconds} seconds and was stopped", ("engine", name), ("seconds", (long)limits.Seconds))),
+                        _ => Broke(e),
                     };
                 }
+            }
+            // A trap (wasm's unreachable, out of memory) or another failure: the
+            // whole trace goes to the log, its first line to the message and
+            // the person reads Clarity's own words.
+            EngineException Broke(Exception e)
+            {
+                Console.Error.WriteLine($"engine {name} failed in {function}: {e}");
+                var first = e.Message.Split('\n', 2)[0].Trim();
+                return Failed(first, ClarityException.Own("engineBroke", "{engine} stopped working in {function}", ("engine", name), ("function", function)));
             }
             // The engine answered, even with a refusal, so its memory is whole.
             if (keeps)
                 kept[key] = live;
             else
                 live.Dispose();
-            return Answer(output, Failed, told);
+            return Answer(output, why => Failed(why), told);
         }
     }
 

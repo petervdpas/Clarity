@@ -125,7 +125,7 @@ public class ChartPartTests
     {
         for (var x = (int)box.X; x < (int)box.Right; x++)
             for (var y = (int)box.Y; y < (int)box.Bottom; y++)
-                if (shot.GetPixel(x, y) == color)
+                if (shot.PixelAt(x, y) == color)
                     return true;
         return false;
     }
@@ -140,7 +140,7 @@ public class ChartPartTests
         Assert.True(Has(shot, bars.Bounds, accent));
         var marks = bars.Marks(bars.Bounds);
         Assert.Equal(2, marks.Count);
-        Assert.All(marks, m => Assert.Equal(accent, shot.GetPixel((int)(m.Box.X + m.Box.Width / 2), (int)(m.Box.Bottom - 2))));
+        Assert.All(marks, m => Assert.Equal(accent, shot.PixelAt((int)(m.Box.X + m.Box.Width / 2), (int)(m.Box.Bottom - 2))));
 
         var pie = Chart(host, "pie");
         var pieShot = Drawn(pie);
@@ -175,6 +175,10 @@ public class ChartPartTests
             Assert.Null(chart.TipAt(chart.Bounds.X + 1, chart.Bounds.Y + 1));
             chart.Screen!.PointerMoved(x, y);
             Assert.Equal($"Open: {ShownText.Of(2.5m)}", chart.Tip);
+            // It shows as the screen's tooltip once the pointer rested, as Avalonia's ToolTip did; not at once.
+            Assert.Null(chart.Screen.Tip);
+            chart.Screen.WakeDue(chart.Screen.Now() + Screen.TipPause);
+            Assert.Equal($"Open: {ShownText.Of(2.5m)}", chart.Screen.Tip?.Text);
         }
     }
 

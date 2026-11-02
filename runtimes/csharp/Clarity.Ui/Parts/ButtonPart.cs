@@ -17,6 +17,9 @@ public abstract class PressPart : Part
     /// <summary>Its round corners: all, or only the outer ones in a button group.</summary>
     public RoundCorners Corners { get; set; } = RoundCorners.All;
 
+    /// <summary>Its style fills and colors its push (PushLook).</summary>
+    protected override bool DrawsOwnStyle => true;
+
     public override bool Focusable => Enabled;
 
     /// <summary>Its caption as shown: what code set, else as the design wrote it, translated.</summary>

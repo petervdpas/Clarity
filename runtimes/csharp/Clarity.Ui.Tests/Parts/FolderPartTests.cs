@@ -64,16 +64,35 @@ public class FolderPartTests
         Assert.Equal(2, host.Log.Count);
         // Choosing none leaves it.
         host.Picker.NextFolder = null;
-        button.Press();
+        button.OnClick();
         Assert.Equal(2, host.Log.Count);
     }
 
+    /// The Avalonia test asserted the button's own name: it says "Choose a folder" when the pointer rests on it.
     [Fact]
     public void Its_button_is_named_in_Clarity_words()
     {
         var (_, part, _) = Make();
-        Assert.Equal(Locale.Translate("chooseFolder", "Choose a folder"), part.ChooseName);
-        Assert.Equal("...", part.ChooseButton.Text);
+        var words = Locale.Translate("chooseFolder", "Choose a folder");
+        Assert.Equal(words, part.ChooseName);
+        Assert.Equal(words, part.ChooseButton.Name);
+        var button = part.ChooseButton.Bounds;
+        Assert.Equal(words, part.ChooseButton.TooltipAt(button.X + 2, button.Y + 2));
+        Assert.Equal(InputIcon.More, part.ChooseButton.Icon);
+    }
+
+    [Fact]
+    public void Its_button_sits_inside_the_box_and_is_no_Tab_stop()
+    {
+        var (screen, part, _) = Make();
+        var box = part.Editor.Bounds;
+        var button = part.ChooseButton.Bounds;
+        Assert.Equal(part.Bounds, box);
+        Assert.True(button.X > box.X && button.Right <= box.Right && button.Y >= box.Y && button.Bottom <= box.Bottom);
+        Assert.False(part.ChooseButton.Focusable);
+        Assert.DoesNotContain(part.ChooseButton, screen.TabOrder());
+        // The typed path stops before the button.
+        Assert.True(part.Editor.RightInset >= button.Width);
     }
 
     [Fact]

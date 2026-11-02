@@ -163,11 +163,28 @@ fn the_browser_program_is_clarity_ui_in_webassembly_over_the_server_s_sessions()
     lacks(readme, "Avalonia");
 }
 
+/// With `stack csharp desktop web` the target list gives two programs, each
+/// in its folder of `out` and each building on its own: the desktop program
+/// and the web program (application, server and browser program).
 #[test]
-fn desktop_and_web_together_make_the_desktop_program() {
-    let files = files(vec![Target::Desktop, Target::Web]);
-    file(&files, "Program.cs");
-    assert!(!files.iter().any(|f| f.path.starts_with("Server/")));
+fn desktop_and_web_together_make_the_desktop_and_the_web_program() {
+    let project = clarity_spec::keyed::load_keyed([("walker.clarity", WALKER)], &[], "en");
+    let programs = clarity_gen::programs(&project, &settings(vec![Target::Desktop, Target::Web])).unwrap_or_else(|e| panic!("{e:#?}"));
+    assert_eq!(programs.iter().map(|p| p.target).collect::<Vec<_>>(), [Target::Desktop, Target::Web]);
+    let desktop = &programs[0].files;
+    file(desktop, "Walker.csproj");
+    file(desktop, "Program.cs");
+    assert!(!desktop.iter().any(|f| f.path.starts_with("Server/") || f.path.starts_with("Browser/")));
+    has(file(desktop, "Walker.csproj"), "Clarity.Ui.Desktop");
+    let web = &programs[1].files;
+    file(web, "App/Walker.csproj");
+    file(web, "Server/Walker.Server.csproj");
+    file(web, "Browser/Walker.Browser.csproj");
+    assert!(!web.iter().any(|f| f.path == "Program.cs"));
+    lacks(file(web, "App/Walker.csproj"), "Clarity.Ui.Desktop");
+    // Each README tells how to build its own program.
+    has(file(web, "README.md"), "dotnet build Server");
+    lacks(file(desktop, "README.md"), "dotnet build Server");
 }
 
 #[test]
@@ -175,4 +192,45 @@ fn generated_web_files_use_no_dashes_of_prose() {
     for f in files(vec![Target::Web]) {
         assert!(!f.text.contains('\u{2014}') && !f.text.contains('\u{2013}'), "{}", f.path);
     }
+}
+
+/// The web program has one README: how to build and start the server, and
+/// where its data is. A second, the desktop program's, written over it said
+/// to build and run a project the folder does not have.
+#[test]
+fn the_web_program_has_one_readme_with_its_server_and_its_data() {
+    let files = files(vec![Target::Web]);
+    let readmes: Vec<&OutFile> = files.iter().filter(|f| f.path == "README.md").collect();
+    assert_eq!(readmes.len(), 1, "{:?}", readmes.iter().map(|f| &f.text).collect::<Vec<_>>());
+    let readme = &readmes[0].text;
+    has(readme, "dotnet build Server");
+    has(readme, "--address host:port");
+    has(readme, "## Data");
+    has(readme, "CLARITY_DATA");
+    lacks(readme, "dotnet run\n");
+}
+
+/// A language the person picks in the browser shows: the page carries the
+/// data of every culture (the default ICU shard of an English page has no
+/// Dutch) and loads every language's texts, not only the starting one's.
+/// Seen in the walker example, where Nederlands was chosen and kept but the
+/// page stayed English, before and after a reload.
+#[test]
+fn the_browser_program_carries_every_language_it_can_be_shown_in() {
+    let files = files(vec![Target::Web]);
+    has(file(&files, "Browser/Walker.Browser.csproj"), "<BlazorWebAssemblyLoadAllGlobalizationData>true</BlazorWebAssemblyLoadAllGlobalizationData>");
+    has(file(&files, "Browser/wwwroot/main.js"), "await dotnet.withConfig({ loadAllSatelliteResources: true }).run();");
+}
+
+/// The server knows the application's languages and themes: the settings a
+/// browser sends are checked against them, and a language it did not know
+/// (Dutch) was refused and sent back as English, so the page never switched.
+#[test]
+fn the_server_knows_the_languages_and_themes_the_settings_may_name() {
+    let files = files(vec![Target::Web]);
+    let program = file(&files, "Server/Program.cs");
+    has(program, "Locale.Start(Texts.BaseLanguage, Texts.Languages, null, Texts.In, Labels.Named);");
+    has(program, "AppThemes.Start();");
+    let start = program.find("Locale.Start(").unwrap();
+    assert!(start < program.find("new Sessions(").unwrap(), "{program}");
 }

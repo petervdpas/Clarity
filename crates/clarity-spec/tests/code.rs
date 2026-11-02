@@ -331,6 +331,24 @@ code Shop
     assert_eq!(problems(&code), vec![]);
 }
 
+/// A window's handler and an app's handler of the same name would both be
+/// the window's (the app's run for its frame there): the checker refuses it.
+#[test]
+fn a_window_handler_does_not_share_a_name_with_the_app_s() {
+    let app = "
+app Shop
+    main CustomerForm
+    menu name mainMenu
+        item \"Save\" name saveItem on click: saveClicked
+
+code Shop
+    handler saveClicked
+        close
+";
+    let code = format!("{app}{}", CODE);
+    assert_eq!(errors(&code), ["handler 'saveClicked' of CustomerForm has the name of a handler of the app Shop; give one of them another name"]);
+}
+
 /// Every record has an id, which code can read (to tell two records apart)
 /// but only `save` sets.
 #[test]
@@ -354,6 +372,18 @@ fn a_button_can_close_its_window() {
     let source = format!("{base}{CODE}");
     let problems: Vec<String> = load_sources([("shop.clarity", source.as_str())]).diagnostics.into_iter().map(|d| d.message).collect();
     assert_eq!(problems, ["'theme' picks in a menu or a toolbar; a button can close its window or quit"]);
+}
+
+/// A button opens the keys window as a menu item does (LANGUAGE.md, `keys editable`).
+#[test]
+fn a_button_can_open_the_keys_window() {
+    let base = BASE.replace(
+        "    button \"Save\" name save at 1,3 span 2 on click: saveClicked\n",
+        "    button \"Save\" name save at 1,3 span 2 on click: saveClicked\n    button \"Keys\" name keysButton at 3,3 span 2 on click -> keys\n",
+    );
+    let source = format!("{base}{CODE}");
+    let problems: Vec<String> = load_sources([("shop.clarity", source.as_str())]).diagnostics.into_iter().map(|d| d.message).collect();
+    assert!(problems.is_empty(), "{problems:#?}");
 }
 
 /// A click passes values to its handler: `on click: digit(7)` runs

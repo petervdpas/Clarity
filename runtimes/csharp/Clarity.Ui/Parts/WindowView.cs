@@ -54,9 +54,10 @@ public sealed class WindowView : Element, IDisposable
         // While a sidebar fills the window, its own parts make room.
         body = new Showing(() => frame.Filling is null);
         body.Add(grid);
-        AddChild(body);
+        // The frame comes first in Tab order, as it is docked around the grid.
         foreach (var region in frame.Regions)
             AddChild(region);
+        AddChild(body);
         notes = new NoteList(this);
         AddChild(notes);
         host.Changed += Invalidate;
@@ -84,10 +85,12 @@ public sealed class WindowView : Element, IDisposable
             frame.Menus.CloseAll();
             foreach (var region in frame.Regions)
                 RemoveChild(region);
+            RemoveChild(body);
             RemoveChild(notes);
             frame = new WindowFrame(Host, ShownFrame.Of(value is null ? null : FrameSpec.Read(value), FrameSpec.Read(Spec.Frame))) { WindowName = Spec.Name };
             foreach (var region in frame.Regions)
                 AddChild(region);
+            AddChild(body);
             AddChild(notes);
             Invalidate();
         }
@@ -96,8 +99,8 @@ public sealed class WindowView : Element, IDisposable
     /// <summary>The frame around the window's parts: its regions and the menus open over it.</summary>
     public WindowFrame Frame => frame;
 
-    /// <summary>How wide its sidebars are now: each shown one's width, a folded one its strip; none while one fills the window.</summary>
-    public double SidebarsWidth => frame.Filling is not null ? 0 : new[] { frame.Left, frame.Right }.Sum(s => s is { Shows: true } ? s.Wanted : 0);
+    /// <summary>How wide its sidebars are now: each shown one's width, a folded one its strip; one that fills the window counts its own width, so giving the window back grows nothing.</summary>
+    public double SidebarsWidth => new[] { frame.Left, frame.Right }.Sum(s => s is { Shows: true } ? s.Wanted : 0);
 
     /// <summary>Why the window shows nothing: its markup could not be read.</summary>
     public string? Problem { get; init; }
@@ -144,10 +147,11 @@ public sealed class WindowView : Element, IDisposable
                 grid.Draw(painter);
         if (MaxScrollY > 0 && body.IsShown)
         {
-            // A thin bar at the right says how much of the content shows, and where.
-            var shown = inside.Height / grid.Content;
-            var bar = new Box(Bounds.Right - ContentPadding / 2 - 2, inside.Y + inside.Height * (ScrollY / grid.Content), 4, Math.Max(16, inside.Height * shown));
-            painter.Fill(bar, painter.Look.Color("strong_border"), 2);
+            // A bar at the right says how much of the content shows, and where; it is wider while the pointer is on it or drags it.
+            var thumb = Thumb;
+            var wide = dragFrom is not null || (Hovered && hoverX >= Track.X);
+            var bar = wide ? thumb with { X = Track.X + 2, Width = Track.Width - 4 } : thumb;
+            painter.Fill(bar, painter.Look.Color(wide ? "muted" : "strong_border"), bar.Width / 2);
         }
         if (Problem is not null)
             painter.Text(Problem, new Box(inside.X, inside.Y, inside.Width, GridLayout.RowHeight), painter.Look.Color("error"), painter.Look.Size("text"));
@@ -157,14 +161,116 @@ public sealed class WindowView : Element, IDisposable
         notes.Draw(painter);
     }
 
-    public override bool OnWheel(double dx, double dy)
+    public override bool OnWheel(double dx, double dy) => ScrollTo(ScrollY + dy);
+
+    /// <summary>Scrolls the window's content to <paramref name="y"/>, within what it can; true when it moved.</summary>
+    public bool ScrollTo(double y)
     {
-        var to = Math.Clamp(ScrollY + dy, 0, MaxScrollY);
+        var to = Math.Clamp(y, 0, MaxScrollY);
         if (to == ScrollY)
             return false;
         ScrollY = to;
+        if (Bounds.Width > 0)
+            Arrange(Bounds);
         Invalidate();
         return true;
+    }
+
+    /// <summary>Where the scroll bar runs: the padding at the window's right, beside the content.</summary>
+    Box Track => new(Bounds.Right - ContentPadding, Inside.Y, ContentPadding, Inside.Height);
+
+    /// <summary>The part of the bar that says what shows: as long as the share shown, where it shows.</summary>
+    public Box Thumb
+    {
+        get
+        {
+            var inside = Inside;
+            var content = Math.Max(grid.Content, 1);
+            var height = Math.Max(16, inside.Height * inside.Height / content);
+            var y = inside.Y + (inside.Height - height) * (MaxScrollY <= 0 ? 0 : ScrollY / MaxScrollY);
+            return new Box(Bounds.Right - ContentPadding / 2 - 2, y, 4, height);
+        }
+    }
+
+    double hoverX;
+    (double PointerY, double ScrollY)? dragFrom;
+
+    public override void OnPointerMoved(PointerInput at)
+    {
+        hoverX = at.ScreenX;
+        if (dragFrom is { } from && Pressed)
+        {
+            var inside = Inside;
+            var room = Math.Max(1, inside.Height - Thumb.Height);
+            ScrollTo(from.ScrollY + (at.ScreenY - from.PointerY) * MaxScrollY / room);
+        }
+        else if (MaxScrollY > 0)
+            Invalidate();
+    }
+
+    /// <summary>A press on the bar: on what shows it drags it, above or below it pages there, as a scroll bar does.</summary>
+    public override void OnPointerPressed(PointerInput at)
+    {
+        dragFrom = null;
+        if (MaxScrollY <= 0 || !body.IsShown || !Track.Contains(at.ScreenX, at.ScreenY))
+            return;
+        var thumb = Thumb;
+        if (at.ScreenY < thumb.Y)
+            Page(-1);
+        else if (at.ScreenY > thumb.Bottom)
+            Page(1);
+        else
+            dragFrom = (at.ScreenY, ScrollY);
+    }
+
+    public override void OnPointerReleased(PointerInput at)
+    {
+        dragFrom = null;
+        Invalidate();
+    }
+
+    /// <summary>One page down (1) or up (-1): the height shown, less a row, as PageDown does.</summary>
+    public bool Page(int by) => ScrollTo(ScrollY + by * Math.Max(GridLayout.RowHeight, Inside.Height - GridLayout.RowHeight));
+
+    /// <summary>The focus moved: a part of the window's grid that is out of sight scrolls into view, as Avalonia's ScrollViewer brought it.</summary>
+    void FocusMoved(Element? focused)
+    {
+        if (focused is null || MaxScrollY <= 0 || !Within(focused, grid) || heard?.Pointing == true)
+            return;
+        var inside = Inside;
+        var place = focused.Bounds;
+        // A part in a part (a text box's editor) shows with the part it is in, up to the window's grid.
+        for (var e = focused.Parent; e is not null && e != grid; e = e.Parent)
+            if (e is Part)
+                place = e.Bounds;
+        if (place.Y < inside.Y || place.Height > inside.Height)
+            ScrollTo(ScrollY - (inside.Y - place.Y));
+        else if (place.Bottom > inside.Bottom)
+            ScrollTo(ScrollY + (place.Bottom - inside.Bottom));
+    }
+
+    static bool Within(Element element, Element root)
+    {
+        for (Element? e = element; e is not null; e = e.Parent)
+            if (e == root)
+                return true;
+        return false;
+    }
+
+    Screen? heard;
+
+    protected override void OnAttached()
+    {
+        heard = Screen;
+        if (heard is not null)
+            heard.FocusChanged += FocusMoved;
+    }
+
+    protected override void OnDetached()
+    {
+        if (heard is not null)
+            heard.FocusChanged -= FocusMoved;
+        heard = null;
     }
 
     // -- Keys --------------------------------------------------------------------
@@ -206,7 +312,7 @@ public sealed class WindowView : Element, IDisposable
     {
         if (Screen is not { } screen)
             return false;
-        if (AccessKey(key) is { } took)
+        if (key.Typed is null && AccessKey(key) is { } took)
             return took;
         var focused = screen.Focused;
         var typing = focused is TextEditor;
@@ -218,7 +324,8 @@ public sealed class WindowView : Element, IDisposable
                 Press(part);
                 return true;
             }
-        foreach (var (item, app) in FrameRules.Keyed(frame.Shown, Host))
+        // While a menu of the frame is open, its commands wait for it to close, as a desktop menu's do.
+        foreach (var (item, app) in frame.Menus.IsOpen || screen.ContextMenus.IsOpen ? [] : FrameRules.Keyed(frame.Shown, Host))
             if (Answers(KeysOf(item.Text("name"), app, item.Text("shortcut")), key, typing))
             {
                 TakesTyped.From(focused);
@@ -232,21 +339,37 @@ public sealed class WindowView : Element, IDisposable
                 PartKinds.Pick(Host, part.Spec.Name, item);
                 return true;
             }
+        // F10 puts the focus on the menu bar, once no shortcut took it.
+        if (key.Typed is null && key.Key == Key.F10 && key.Modifiers == Modifiers.None && frame.MenuBar?.FocusFirst() == true)
+            return true;
         // Alt with a top item's access letter opens its menu, once no shortcut took the key.
         if (key.Modifiers == Modifiers.Alt && FrameRules.AccessChar(key.Key) is { } letter && frame.MenuBar is { } bar && bar.OpenByLetter(letter))
             return true;
-        if (key.Modifiers != Modifiers.None || key.Key is not (Key.Enter or Key.Escape))
-            return false;
-        // The part with the focus has been asked here, so the screen asks it no more.
-        if (focused is not null && focused.OnKey(key))
+        // PageUp and PageDown that the part with the focus left scroll the window a page.
+        if (key.Typed is null && key.Modifiers == Modifiers.None && key.Key is Key.PageUp or Key.PageDown && MaxScrollY > 0)
+        {
+            Page(key.Key == Key.PageDown ? 1 : -1);
             return true;
+        }
+        if (key.Typed is not null || key.Modifiers != Modifiers.None || key.Key is not (Key.Enter or Key.Escape))
+            return false;
+        // The screen asked the part with the focus first; a memo keeps its Enter.
         if (key.Key == Key.Enter && focused is TextEditor { Multiline: true })
+            return true;
+        // Enter anywhere in a form (a checkbox, a dropdown, a radio) runs its submit, as Avalonia's Events.OnEnter did.
+        if (key.Key == Key.Enter && focused is not null && PartTexts.Submit(focused))
             return true;
         var flag = key.Key == Key.Enter ? "default" : "cancel";
         if (ShownParts().FirstOrDefault(p => p is ButtonPart && p.Spec.Flag(flag)) is { } pressed)
         {
             TakesTyped.From(focused);
             Press(pressed);
+        }
+        // A wizard's Next or Finish is the default button of its step.
+        else if (key.Key == Key.Enter && ShownParts().OfType<IDefaultButton>().FirstOrDefault(d => d.TakesEnter) is { } wizard)
+        {
+            TakesTyped.From(focused);
+            wizard.PressDefault();
         }
         // Escape without a cancel button is left to the dialog the window is in, which closes as its close does.
         else if (key.Key == Key.Escape)
@@ -286,12 +409,15 @@ public sealed class WindowView : Element, IDisposable
         }
     }
 
-    /// <summary>A key let go: Alt let go alone keeps the access letters for a plain letter, after another key it hides them. True when it took the key.</summary>
+    /// <summary>A key let go: Alt let go alone keeps the access letters for a plain letter and puts the focus on the menu bar; after another key it hides them. True when it took the key.</summary>
     public bool KeyReleased(KeyInput key)
     {
         if (key.Key != Key.Alt || frame.Access is not (FrameAccess.Held or FrameAccess.HeldUsed))
             return false;
         frame.Access = frame.Access == FrameAccess.Held ? FrameAccess.Kept : FrameAccess.Off;
+        // Alt alone puts the focus on the menu bar, its first menu marked, as a desktop menu bar does.
+        if (frame.Access == FrameAccess.Kept)
+            frame.MenuBar?.FocusFirst();
         Invalidate();
         return true;
     }
@@ -390,7 +516,7 @@ public sealed class WindowView : Element, IDisposable
     /// <summary>The info messages, as notes at the top right of the window, each with a small x that closes it.</summary>
     sealed class NoteList(WindowView view) : Element
     {
-        const double Width = 360;
+        const double Width = 420;
         const double Line = 20;
         readonly List<(Message Message, Box Note, Box Close)> placed = [];
 
@@ -425,13 +551,19 @@ public sealed class WindowView : Element, IDisposable
                 var lines = SaidDialog.Wrap(message.Shown, note.Width - 48, painter.Fonts, size);
                 for (var i = 0; i < lines.Count; i++)
                     painter.Text(lines[i], new Box(note.X + 14, note.Y + 10 + i * Line, note.Width - 48, Line), look.Color("text"), size);
-                painter.Text("x", close, look.Color("muted"), size, align: TextAlign.Center);
+                painter.Text("\u00d7", close, look.Color("muted"), size, align: TextAlign.Center);
             }
         }
 
         public override void OnClick()
         {
         }
+
+        /// <summary>A note's x says what it does.</summary>
+        public override string? TooltipAt(double x, double y) =>
+            placed.Any(p => p.Close.Contains(x, y)) ? Locale.Translate("dismiss", "Dismiss") : null;
+
+        public override Cursor? CursorAt(double x, double y) => placed.Any(p => p.Close.Contains(x, y)) ? Cursor.Hand : null;
 
         public override void OnPointerPressed(PointerInput at)
         {

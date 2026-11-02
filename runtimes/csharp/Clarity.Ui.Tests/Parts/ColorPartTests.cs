@@ -116,7 +116,7 @@ public class ColorPartTests
     {
         var (screen, part, _) = Make("#ff0000");
         using var shot = Shot.Of(screen, 800, 400);
-        var middle = shot.GetPixel((int)(part.Swatch.Bounds.X + part.Swatch.Bounds.Width / 2), (int)(part.Swatch.Bounds.Y + part.Swatch.Bounds.Height / 2));
+        var middle = shot.PixelAt((int)(part.Swatch.Bounds.X + part.Swatch.Bounds.Width / 2), (int)(part.Swatch.Bounds.Y + part.Swatch.Bounds.Height / 2));
         Assert.Equal((255, 0, 0), (middle.Red, middle.Green, middle.Blue));
     }
 }

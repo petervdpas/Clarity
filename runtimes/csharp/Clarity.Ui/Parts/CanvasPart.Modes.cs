@@ -103,6 +103,8 @@ public sealed partial class CanvasPart
     {
         var look = painter.Look;
         var inHand = ToolInHand;
+        // A canvas the person may not change shows its toolbar disabled, as Avalonia's did.
+        using var _ = PressLooks.Dimmed(painter, Acts);
         foreach (var (tool, box) in ToolButtons())
         {
             var chosen = tool == inHand;
@@ -181,33 +183,63 @@ public sealed partial class CanvasPart
     /// <summary>The picture painted on: as the field holds it, or as the last stroke left it.</summary>
     SKBitmap? painted;
 
-    /// <summary>The field's picture <see cref="painted"/> was read from.</summary>
-    object? paintedFrom;
+    /// <summary>The field's picture and its record <see cref="painted"/> was read for: every stored picture is the same value, so another record reads its own.</summary>
+    (object? Value, object? Record)? paintedFor;
+
+    /// <summary>Whether the field's picture is still on its way (a stored one, or one of a file store): a stroke waits for it, so it never paints over the picture the record has.</summary>
+    public bool Fetching { get; private set; }
+
+    /// <summary>Which read of the field's picture is the last; an answer to an older one is left.</summary>
+    int reads;
 
     /// <summary>The stroke being painted, in units.</summary>
     List<(double X, double Y)>? stroke;
 
-    /// <summary>The picture of the bound image field, read again when the field holds another.</summary>
+    /// <summary>The picture of the bound image field, read again when the field or its record holds another.</summary>
     SKBitmap? Painted()
     {
         var value = Bound is { } path ? Host.Read(path) : null;
-        if (!ReferenceEquals(value, paintedFrom))
+        var record = RecordFetch.Record(Host, Bound);
+        if (paintedFor is not { } was || !ReferenceEquals(was.Value, value) || !ReferenceEquals(was.Record, record))
         {
-            paintedFrom = value;
+            paintedFor = (value, record);
             painted?.Dispose();
             painted = null;
-            // Fail safe: a picture that does not load leaves the canvas blank to paint on.
-            if (value is Picture { Bytes: { } bytes })
-                try
-                {
-                    painted = SKBitmap.Decode(bytes);
-                }
-                catch (Exception e) when (e is ArgumentException or InvalidOperationException or IOException)
-                {
-                    Console.Error.WriteLine($"a canvas's picture did not load: {e.Message}");
-                }
+            if (value is Picture picture)
+                _ = Read(picture, ++reads);
+            else
+                Fetching = false;
         }
         return painted;
+    }
+
+    /// <summary>Reads the field's picture: new bytes as they are, a stored one or one of the field's file store fetched through the window (as a picture field fetches it).</summary>
+    async Task Read(Picture picture, int read)
+    {
+        Fetching = picture.Bytes is null;
+        byte[]? bytes;
+        try
+        {
+            bytes = await RecordFetch.Bytes(Host, Bound, picture);
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            Console.Error.WriteLine($"{Spec.Name ?? Spec.Kind} cannot fetch its picture: {e.Message}");
+            bytes = null;
+        }
+        if (read != reads)
+            return;
+        Fetching = false;
+        painted?.Dispose();
+        painted = null;
+        // Fail safe: a picture that does not load leaves the canvas blank to paint on.
+        if (bytes is not null)
+        {
+            painted = SKBitmap.Decode(bytes);
+            if (painted is null)
+                Console.Error.WriteLine($"{Spec.Name ?? Spec.Kind}: its picture did not load");
+        }
+        Invalidate();
     }
 
     /// <summary>The size of the picture painted on: the picture's own, else the canvas's units.</summary>
@@ -366,61 +398,82 @@ public sealed partial class CanvasPart
     /// <summary>Where a text is being typed, in units; none while no text is.</summary>
     (double X, double Y)? typingAt;
 
+    /// <summary>The input the text tool types in, in place: a text editor as every text box has (caret, selection, clipboard); none while no text is typed.</summary>
+    public TextEditor? TypingEditor { get; private set; }
+
     /// <summary>The text typed with the text tool so far; none while no text is being typed.</summary>
-    public string? Typing { get; private set; }
+    public string? Typing => TypingEditor?.Text;
 
     void StartTyping((double X, double Y) unit)
     {
         EndTyping(true);
         typingAt = unit;
-        Typing = "";
+        var editor = new TextEditor
+        {
+            Placeholder = Locale.Translate("canvasText", "The text"),
+            Entered = () =>
+            {
+                EndTyping(true);
+                return true;
+            },
+            KeyFirst = key =>
+            {
+                if (key.Key != Key.Escape)
+                    return false;
+                EndTyping(false);
+                return true;
+            },
+        };
+        editor.Edited += Invalidate;
+        // Leaving the input places what was typed, so no typing is lost.
+        editor.FocusMoved += focused =>
+        {
+            if (!focused)
+                EndTyping(true);
+        };
+        TypingEditor = editor;
+        AddChild(editor);
+        PlaceTyping();
+        Screen?.Focus(editor);
         Invalidate();
+    }
+
+    /// <summary>The box the text being typed takes on the screen, where it goes.</summary>
+    Box TypingBox(CanvasViewport v)
+    {
+        var p = At(v, typingAt?.X ?? 0, typingAt?.Y ?? 0);
+        var size = LookNow.Size("text");
+        var width = Math.Max(160, FontsNow.Measure(Typing ?? "", "text", size, false) + 24);
+        return new Box(p.X, p.Y - size, width, size * 2 + 4);
+    }
+
+    void PlaceTyping()
+    {
+        if (TypingEditor is { } editor)
+            editor.Arrange(TypingBox(Viewport));
     }
 
     /// <summary>Places the text typed (<paramref name="place"/>) or drops it.</summary>
     public void EndTyping(bool place)
     {
-        if (Typing is not { } text || typingAt is not { } at)
+        if (TypingEditor is not { } editor || typingAt is not { } at)
             return;
-        Typing = null;
+        var text = editor.Text;
+        TypingEditor = null;
         typingAt = null;
+        RemoveChild(editor);
+        if (editor.Focused && KeepsFocus)
+            Screen?.Focus(this);
         Invalidate();
         if (place && !string.IsNullOrWhiteSpace(text))
             Act(new JsonObject { ["add"] = new JsonObject { ["op"] = "text", ["x"] = at.X, ["y"] = at.Y, ["text"] = text, ["color"] = Ink, ["size"] = Math.Max(10, Brush * 4) } });
     }
 
-    public override void OnText(string text)
-    {
-        if (Typing is null)
-            return;
-        Typing += text;
-        Invalidate();
-    }
-
-    public override void OnFocusChanged(bool focused)
-    {
-        // A text being typed is placed when the canvas loses the keyboard.
-        if (!focused)
-            EndTyping(true);
-    }
+    /// <summary>Whether the canvas takes the focus back from its text input, for its Delete key.</summary>
+    bool KeepsFocus => Focusable;
 
     public override bool OnKey(KeyInput key)
     {
-        if (Typing is { } typed)
-        {
-            switch (key.Key)
-            {
-                case Key.Enter or Key.Escape:
-                    EndTyping(key.Key == Key.Enter);
-                    return true;
-                case Key.Backspace:
-                    if (typed.Length > 0)
-                        Typing = typed[..^1];
-                    Invalidate();
-                    return true;
-            }
-            return false;
-        }
         // Delete deletes the chosen shape of a vector canvas.
         if (!Acts || Mode != "vector" || key.Key is not (Key.Delete or Key.Backspace) || key.Modifiers != Modifiers.None || ChosenPlace < 0)
             return false;
@@ -455,6 +508,10 @@ public sealed partial class CanvasPart
                 dragging = (box, at.X, at.Y, o.X, o.Y, 0, 0, false);
                 break;
             case "paint":
+                // The record's picture first: a stroke on a blank one would send it over the picture kept.
+                Painted();
+                if (Fetching)
+                    return true;
                 stroke = [unit];
                 break;
             case "vector":
@@ -554,6 +611,14 @@ public sealed partial class CanvasPart
         return false;
     }
 
+    /// <summary>A gesture of the mode dropped unfinished: the object dragged, the stroke and the shape being drawn.</summary>
+    void ModeCancelled()
+    {
+        dragging = null;
+        stroke = null;
+        sketching = null;
+    }
+
     // -- drawing ----------------------------------------------------------------------
 
     /// <summary>The drawing as it shows: an object being dragged moved with what is drawn after it.</summary>
@@ -596,16 +661,11 @@ public sealed partial class CanvasPart
             }
             if (sketching is { Moved: true } d && ToolInHand != "select" && Sketched(ToolInHand, d.FromX, d.FromY, d.ToX, d.ToY, d.Points) is { } sketch && ShapeOf(sketch) is { } preview)
                 DrawShape(painter, preview, v.Scale, P, Picture);
-            if (Typing is { } typed && typingAt is { } at)
+            if (TypingEditor is { } editor)
             {
-                // The text being typed, where it goes, with its caret.
-                var p = P(at.X, at.Y);
-                var size = painter.Look.Size("text");
-                var width = Math.Max(160, painter.Fonts.Measure(typed, "text", size, false) + 12);
-                var field = new Box(p.X, p.Y - size, width, size * 2);
-                painter.Fill(field, painter.Look.Color("input"), painter.Look.Radius("input"));
-                painter.Stroke(field, painter.Look.Color("accent"), painter.Look.Border, painter.Look.Radius("input"));
-                painter.Text(typed.Length == 0 ? Locale.Translate("canvasText", "The text") : typed + "|", field.Inset(4), painter.Look.Color(typed.Length == 0 ? "muted" : "text"), size);
+                // The text being typed, in its input where it goes.
+                editor.Arrange(TypingBox(v));
+                editor.DrawSafely(painter);
             }
         }
         if (ToolsShown().Count > 0)

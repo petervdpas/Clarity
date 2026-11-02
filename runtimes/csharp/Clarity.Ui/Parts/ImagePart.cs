@@ -1,9 +1,10 @@
 // An image: a picture of the project's resources folder by its name (its
 // `source`, or a text key that names one), fitted into its place in
 // proportion and centered. A picture that is not there shows its name in a
-// dashed frame. Bitmaps (PNG, JPEG, WebP, GIF's first frame) are drawn;
-// SVG pictures are not yet, and show as one that is not there. The host
-// gives the picture's bytes (a generated application's embedded resources).
+// dashed frame. Bitmaps (PNG, JPEG, WebP, GIF's first frame) are drawn as
+// they are; an SVG picture is drawn from its shapes at the size it is shown,
+// so it stays sharp however large (PictureArt). The host gives the picture's
+// bytes (a generated application's embedded resources).
 
 using SkiaSharp;
 
@@ -13,7 +14,7 @@ namespace Clarity.Ui;
 public sealed class ImagePart : Part
 {
     string? loadedName;
-    SKBitmap? loaded;
+    PictureArt? loaded;
 
     public override bool Grows => true;
 
@@ -63,7 +64,7 @@ public sealed class ImagePart : Part
     }
 
     /// <summary>The picture it shows, as the host gives its bytes, loaded once per name.</summary>
-    public SKBitmap? Shown
+    public PictureArt? Shown
     {
         get
         {
@@ -72,7 +73,7 @@ public sealed class ImagePart : Part
             {
                 loaded?.Dispose();
                 loadedName = name;
-                loaded = string.IsNullOrEmpty(name) ? null : Picture(name, Host.Resource(name));
+                loaded = string.IsNullOrEmpty(name) ? null : PictureArt.Of(name, Host.Resource(name));
             }
             return loaded;
         }
@@ -94,10 +95,9 @@ public sealed class ImagePart : Part
             return;
         var look = painter.Look;
         var name = Named;
-        if (Shown is { } bitmap)
+        if (Shown is { } art)
         {
-            using var image = SKImage.FromBitmap(bitmap);
-            painter.Canvas.DrawImage(image, Fit(Bounds, bitmap.Width, bitmap.Height).Rect, new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+            art.Draw(painter.Canvas, Fit(Bounds, art.Width, art.Height).Rect);
             return;
         }
         using var dashed = new SKPaint
@@ -111,5 +111,80 @@ public sealed class ImagePart : Part
         var radius = look.Radius("panel");
         painter.Canvas.DrawRoundRect(Bounds.Inset(look.Border / 2.0).Rect, radius, radius, dashed);
         painter.Text(name ?? "", Bounds.Inset(2 * look.Padding), look.Color("muted"), look.Size("small"), "mono", align: TextAlign.Center);
+    }
+}
+
+/// <summary>
+/// A picture as a part or a canvas draws it: a bitmap as it is, or an SVG
+/// picture kept as its shapes and drawn at the size it is shown, so it is
+/// sharp at any size (Avalonia drew it at twice the size shown, up to 4096
+/// pixels; shapes need no such limit).
+/// </summary>
+public sealed class PictureArt : IDisposable
+{
+    readonly SKBitmap? bitmap;
+    readonly Svg.Skia.SKSvg? svg;
+    readonly SKRect cull;
+
+    PictureArt(SKBitmap bitmap) => (this.bitmap, Width, Height) = (bitmap, bitmap.Width, bitmap.Height);
+
+    PictureArt(Svg.Skia.SKSvg svg, SKRect cull) => (this.svg, this.cull, Width, Height) = (svg, cull, cull.Width, cull.Height);
+
+    /// <summary>Its own size: a bitmap's pixels, an SVG's drawn shapes.</summary>
+    public double Width { get; }
+
+    public double Height { get; }
+
+    /// <summary>Whether it is drawn from shapes (an SVG), not pixels.</summary>
+    public bool Vector => svg is not null;
+
+    /// <summary>The picture of <paramref name="bytes"/> named <paramref name="name"/>; none when there are none or they are no picture.</summary>
+    public static PictureArt? Of(string? name, byte[]? bytes)
+    {
+        if (string.IsNullOrEmpty(name) || bytes is null)
+            return null;
+        if (!name.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+            return ImagePart.Picture(name, bytes) is { } decoded ? new PictureArt(decoded) : null;
+        var svg = new Svg.Skia.SKSvg();
+        try
+        {
+            using var stream = new MemoryStream(bytes);
+            if (svg.Load(stream) is { CullRect: { Width: > 0, Height: > 0 } cull })
+                return new PictureArt(svg, cull);
+        }
+        catch (Exception e) when (e is IOException or ArgumentException or InvalidOperationException or System.Xml.XmlException or FormatException or NullReferenceException)
+        {
+            // Fail safe: an SVG that does not read is no picture.
+        }
+        svg.Dispose();
+        return null;
+    }
+
+    /// <summary>Draws it stretched to <paramref name="into"/>.</summary>
+    public void Draw(SKCanvas canvas, SKRect into)
+    {
+        if (into.Width <= 0 || into.Height <= 0)
+            return;
+        if (bitmap is not null)
+        {
+            using var image = SKImage.FromBitmap(bitmap);
+            canvas.DrawImage(image, into, new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+            return;
+        }
+        if (svg?.Picture is not { } picture)
+            return;
+        canvas.Save();
+        canvas.ClipRect(into);
+        canvas.Translate(into.Left, into.Top);
+        canvas.Scale(into.Width / cull.Width, into.Height / cull.Height);
+        canvas.Translate(-cull.Left, -cull.Top);
+        canvas.DrawPicture(picture);
+        canvas.Restore();
+    }
+
+    public void Dispose()
+    {
+        bitmap?.Dispose();
+        svg?.Dispose();
     }
 }

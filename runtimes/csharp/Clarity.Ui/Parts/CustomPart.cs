@@ -45,9 +45,18 @@ public abstract class CustomPart : Part
         }
         Sync();
         State?.Listen(Set, Hear);
+        // What it binds and whether it is enabled reach it when they change,
+        // as Avalonia's bound properties did, not at the next layout.
+        Host.Changed += Sync;
+        if (State is { } own)
+            own.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName is nameof(PartState.IsEnabled) or null or "")
+                    Sync();
+            };
     }
 
-    /// <summary>The value it binds and whether it is enabled, given again when they changed (read as its window lays it out).</summary>
+    /// <summary>The value it binds and whether it is enabled, given again when they changed (when the view model or its state changes, and as its window lays it out).</summary>
     void Sync()
     {
         if (!started)
@@ -66,6 +75,7 @@ public abstract class CustomPart : Part
             shownEnabled = Enabled;
             Set("enabled", Enabled);
         }
+        Invalidate();
     }
 
     public override void Arrange(Box box)
@@ -85,13 +95,16 @@ public abstract class CustomPart : Part
         Fire("change");
     }
 
-    /// <summary>It tells <paramref name="tell"/> with its values: the handler wired to it runs with them.</summary>
+    /// <summary>The part told something: the tell and its values, wired to a handler or not, as Avalonia's DotNetPart.Told was.</summary>
+    public event Action<string, JsonElement[]>? Told;
+
+    /// <summary>It tells <paramref name="tell"/> with its values: <see cref="Told"/> hears it, and the handler wired to it runs with them.</summary>
     protected void Tell(string tell, params object?[] values)
     {
-        if (Spec.Name is not { } name || !Wired(tell))
-            return;
         var told = values.Select(v => JsonDocument.Parse(PartValues.Write(v)).RootElement.Clone()).ToArray();
-        Host.Told(name, tell, told);
+        Told?.Invoke(tell, told);
+        if (Spec.Name is { } name && Wired(tell))
+            Host.Told(name, tell, told);
     }
 
     /// <summary>Whether a handler is wired to <paramref name="tell"/> on its line: <c>on reached: gaugeReached</c>.</summary>

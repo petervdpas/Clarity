@@ -80,17 +80,24 @@ public class TrendPartTests
         Assert.Equal(3, marks.Count);
         Assert.All(marks, m => Assert.Equal(ChartMarkKind.Point, m.Kind));
         var (x, y) = marks[1].Center;
-        Assert.Equal(ThemeLook.Clarity(dark: false).Color("accent"), shot.GetPixel((int)x, (int)y));
+        Assert.Equal(ThemeLook.Clarity(dark: false).Color("accent"), shot.PixelAt((int)x, (int)y));
     }
 
     [Fact]
-    public void A_hidden_trend_takes_nothing_and_wakes_no_more()
+    public void A_hidden_trend_keeps_taking_values_while_its_window_is_open()
     {
         var (screen, trend, host) = Trend();
+        var now = new DateTime(2026, 11, 2, 12, 0, 0);
+        screen.Now = () => now;
         host.Values["machine.load"] = 5;
         host.State("load")!.IsVisible = false;
         Shot.Of(screen, 800, 400);
-        Assert.Empty(trend.History);
-        Assert.Null(screen.NextWake);
+        Assert.Equal([5.0], trend.History);
+        Assert.Equal(now.AddSeconds(1), screen.NextWake);
+        host.Values["machine.load"] = 6;
+        now = now.AddSeconds(1);
+        screen.WakeDue(now);
+        // Shown again, no value is missing.
+        Assert.Equal([5.0, 6.0], trend.History);
     }
 }

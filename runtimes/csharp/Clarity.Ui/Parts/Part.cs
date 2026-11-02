@@ -27,6 +27,15 @@ public interface ITakesTyped
     void TakeTyped();
 }
 
+/// <summary>A part with a button Enter presses anywhere in its window, as a default button (a wizard's Next, or Finish on its last step).</summary>
+public interface IDefaultButton
+{
+    /// <summary>Whether Enter presses it now (its button shows and can be pressed).</summary>
+    bool TakesEnter { get; }
+
+    void PressDefault();
+}
+
 /// <summary>Has the input the focus is in take what is typed in it.</summary>
 public static class TakesTyped
 {
@@ -68,6 +77,9 @@ public interface IPartHost
     /// it refused).
     /// </summary>
     bool Run(string? part, HandlerCall call);
+
+    /// <summary>Whether the command of a call can run now (a timer leaves a tick out while its handler still runs, as Avalonia's timer asked CanExecute).</summary>
+    bool CanRun(string? part, HandlerCall call) => true;
 
     /// <summary>
     /// The person changed what an unbound part keeps in its own state (its
@@ -178,8 +190,78 @@ public abstract class Part : Element
     /// <summary>Whether the person may only look: marked read-only in its markup, or made read-only by code through its state.</summary>
     public bool ReadOnly => Spec.Flag("readonly") || (State?.IsReadOnly ?? false);
 
-    /// <summary>Whether the person may use it: enabled, and its window not waiting.</summary>
-    public bool Enabled => State?.IsEnabled ?? true;
+    /// <summary>Its own state's enabled; <see cref="Enabled"/> also asks the parts it is in.</summary>
+    public override bool IsEnabled => State?.IsEnabled ?? true;
+
+    /// <summary>Whether the person may use it: it and every part it is in are enabled (a disabled form disables its buttons).</summary>
+    public bool Enabled => EnabledInTree;
+
+    /// <summary>Its <c>taborder</c>: its place among the parts Tab reaches, lower first.</summary>
+    public override int? TabIndex => Spec.Number("tabOrder") is { } order ? (int)order : null;
+
+    /// <summary>Its <c>tooltip</c> in the person's language, wherever the pointer rests on it; what is in it may say its own first.</summary>
+    public override string? TooltipAt(double x, double y) => Spec.Text("tooltip") is { Length: > 0 } tip ? Host.Text(tip) : null;
+
+    /// <summary>
+    /// Its <c>menu</c>, as a context menu at the pointer: hidden items left
+    /// out, disabled ones greyed, as the menu's and each item's state says.
+    /// A split button's menu is its dropdown, not a context menu.
+    /// </summary>
+    public override IReadOnlyList<MenuEntry>? ContextMenuAt(double x, double y)
+    {
+        if (Spec.Menu is not { Items.Count: > 0 } menu || Spec.Flag("split"))
+            return null;
+        if (!FrameRules.Shows(Host, menu.Name) || !FrameRules.Takes(Host, menu.Name))
+            return null;
+        return MenuEntries.Of(Host, menu.Items, Pick, target => target == "theme" ? FramePicker.Theme : FramePicker.Language);
+    }
+
+    /// <summary>Whether it draws its <c>style</c> itself (a button, a badge); any other part has it from <see cref="Styled"/>.</summary>
+    protected virtual bool DrawsOwnStyle => false;
+
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ThemeLook, Dictionary<string, (ThemeLook Look, Fonts Fonts)>> styledLooks = [];
+
+    /// <summary>
+    /// Its <c>style</c> (a style of the theme, as Avalonia gave the part its
+    /// class): the style's fill and border under it, and its text color,
+    /// size and font as the look of everything it draws.
+    /// </summary>
+    protected override Painter Styled(Painter painter)
+    {
+        if (DrawsOwnStyle || Spec.Text("style") is not { Length: > 0 } name)
+            return painter;
+        var style = painter.Look.Style(name);
+        if (style.Background is { } fill)
+            painter.Fill(Bounds, fill, style.Radius ?? painter.Look.Radius("input"));
+        if (style.Border is { } border)
+            painter.Stroke(Bounds, border, painter.Look.Border, style.Radius ?? painter.Look.Radius("input"));
+        // The style's weight and align reach every text the part draws, as an Avalonia class's FontWeight and alignment did.
+        var align = style.Align switch
+        {
+            "center" => TextAlign.Center,
+            "right" or "end" => TextAlign.Right,
+            "left" or "start" => TextAlign.Left,
+            _ => (TextAlign?)null,
+        };
+        if (style.Text is null && style.Size is null && style.Font is null)
+            return style.Bold || align is not null ? new Painter(painter.Canvas, painter.Look, painter.Fonts) { StyleBold = style.Bold || painter.StyleBold, StyleAlign = align ?? painter.StyleAlign } : painter;
+        var looks = styledLooks.GetOrCreateValue(painter.Look);
+        if (!looks.TryGetValue(name, out var styled))
+        {
+            static string Hex(SkiaSharp.SKColor c) => $"#{c.Alpha:x2}{c.Red:x2}{c.Green:x2}{c.Blue:x2}";
+            var own = new JsonObject();
+            if (style.Text is { } text)
+                // The style's foreground is every text of the part, a label's muted one too, as an Avalonia class's Foreground was.
+                own["colors"] = new JsonObject { ["text"] = Hex(text), ["muted"] = Hex(text) };
+            if (style.Size is { } size)
+                own["sizes"] = new JsonObject { ["text"] = size, ["heading"] = size };
+            if (style.Font is { } font)
+                own["fonts"] = new JsonObject { ["text"] = font };
+            var look = ThemeLook.Over(own.ToJsonString(), painter.Look);
+            looks[name] = styled = (look, new Fonts(look));
+        }
+        return new Painter(painter.Canvas, styled.Look, styled.Fonts) { StyleBold = style.Bold || painter.StyleBold, StyleAlign = align ?? painter.StyleAlign };
+    }
 
     /// <summary>The path in the window's data it binds: <c>order.status</c>; none unbound.</summary>
     public string? Bound => Spec.Text("bind");

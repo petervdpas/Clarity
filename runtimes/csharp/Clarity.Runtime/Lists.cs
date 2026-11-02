@@ -30,5 +30,6 @@ public static class Lists
         list[(int)(position - 1)] = value;
     }
 
-    static ValueException Outside(long position, int count) => new($"there is no item {position} in a list of {count}");
+    static ValueException Outside(long position, int count) =>
+        new($"there is no item {position} in a list of {count}", ClarityException.Own("itemOutsideList", "There is no item {position} in a list of {count}", ("position", position), ("count", count)));
 }

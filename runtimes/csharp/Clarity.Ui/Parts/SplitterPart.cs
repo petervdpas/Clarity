@@ -131,6 +131,9 @@ public sealed class SplitterPart : ContainerPart
 
         public override void OnPointerPressed(PointerInput at) => grab = splitter.Vertical ? at.Y : at.X;
 
+        /// <summary>A divider shows it is dragged along the splitter.</summary>
+        public override Cursor? CursorAt(double x, double y) => splitter.Vertical ? Cursor.ResizeUpDown : Cursor.ResizeLeftRight;
+
         public override void OnPointerMoved(PointerInput at)
         {
             if (Pressed && splitter.Enabled)

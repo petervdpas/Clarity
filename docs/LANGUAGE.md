@@ -272,7 +272,7 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 
 | Modifier | Meaning |
 |---|---|
-| `required` | The field must have a value. Windows mark its label, and `save` refuses a record while the field is empty (no value, or empty text; 0 and false are values) in Clarity's word `fieldRequired`, "{field} is required" with the field's label, after `before save`, so nothing is kept. |
+| `required` | The field must have a value. Windows mark its label, and `save` refuses a record while the field is empty (no value, or empty text; 0 and false are values) in Clarity's word `fieldRequired`, "{field} is required" with the field's label, after `before save`, so nothing is kept. The refusal shows at the window's input bound to that field, else as an error message; code can catch it. |
 | `unique` | No two records have the same value. Empty text counts as no value, so several records can leave a unique text field empty. |
 | `search` | The field is in its record's full-text index, which `where a matches x` looks in. For text (also `email` and `url`) and lists of text; see [Full-text search](#full-text-search). |
 | `min value`, `max value` | The lowest and highest value allowed. |

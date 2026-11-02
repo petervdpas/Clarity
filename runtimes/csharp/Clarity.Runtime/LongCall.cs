@@ -2,72 +2,108 @@
 // while one of its engine calls runs on another thread the screen waits as
 // it says (Waiter): on the desktop the windows' loop goes on, so the window keeps
 // painting, shows how far the call is with a bar and Stop, and takes no other
-// handler. One handler runs at a time in an application, so this is the
-// application's.
+// handler. One handler runs at a time in the windows that show together, so a
+// long call belongs to them: the window stack on the desktop (with the desktop
+// windows it opened), a session on a server. Each window holds the long call
+// of the windows it shows with (WindowViewModel.LongCall), and another
+// stack's or session's handlers neither wait for it nor see it.
 
 using Clarity.Runtime;
 
 namespace Clarity.Runtime;
 
-public static class LongCall
+public sealed class LongCall
 {
-    static CancellationTokenSource? stopping;
-    static DateTime last;
+    readonly Lock gate = new();
+    CancellationTokenSource? stopping;
+    DateTime last;
+    (long Done, long Total)? current;
+    volatile bool waiting;
 
     /// <summary>How far the call that runs is, done of total; none while no call reports.</summary>
-    public static (long Done, long Total)? Current { get; private set; }
-
-    /// <summary>Whether the screen waits for an engine call: no other handler runs then.</summary>
-    public static bool Waiting { get; private set; }
-
-    /// <summary>Raised on the screen's thread when Current changes.</summary>
-    public static event Action? Changed;
-
-    /// <summary>How the screen waits for a call while it goes on showing the window; without one the call is waited for.</summary>
-    public static Action<Task>? Waiter { get; set; }
-
-    /// <summary>The person's Stop: the call ends at its next look, failing with "it was stopped".</summary>
-    public static void Stop() => stopping?.Cancel();
-
-    /// <summary>The watch of a handler that starts.</summary>
-    internal static EngineWatch Start()
+    public (long Done, long Total)? Current
     {
-        stopping?.Dispose();
-        stopping = new CancellationTokenSource();
-        last = default;
-        return new EngineWatch(Report, stopping.Token, Wait);
+        get
+        {
+            lock (gate)
+                return current;
+        }
     }
 
-    /// <summary>The handler ended: the bar goes.</summary>
-    internal static void End()
+    /// <summary>Whether the screen waits for an engine call: no other handler of these windows runs then.</summary>
+    public bool Waiting => waiting;
+
+    /// <summary>Raised on the screen's thread when Current changes.</summary>
+    public event Action? Changed;
+
+    /// <summary>How the screen waits for a call while it goes on showing the window; without one the call is waited for.</summary>
+    public Action<Task>? Waiter { get; set; }
+
+    /// <summary>The person's Stop: the call ends at its next look, failing with "it was stopped".</summary>
+    public void Stop()
     {
-        if (Current is null)
-            return;
-        Current = null;
-        Changed?.Invoke();
+        lock (gate)
+            stopping?.Cancel();
+    }
+
+    /// <summary>The watch of a handler that starts.</summary>
+    internal EngineWatch Start()
+    {
+        lock (gate)
+        {
+            stopping?.Dispose();
+            stopping = new CancellationTokenSource();
+            last = default;
+            var started = stopping;
+            return new EngineWatch((done, total) => Report(started, done, total), started.Token, Wait);
+        }
+    }
+
+    /// <summary>The handler ended: the bar goes, and what its call still reports shows no more.</summary>
+    internal void End()
+    {
+        bool shown;
+        lock (gate)
+        {
+            shown = current is not null;
+            current = null;
+            stopping?.Dispose();
+            stopping = null;
+        }
+        if (shown)
+            Changed?.Invoke();
     }
 
     // From the engine call's thread, at most ten times a second.
-    static void Report(long done, long total)
+    void Report(CancellationTokenSource of, long done, long total)
     {
-        var now = DateTime.UtcNow;
-        if (now - last < TimeSpan.FromMilliseconds(100) && done < total)
-            return;
-        last = now;
+        lock (gate)
+        {
+            var now = DateTime.UtcNow;
+            if (stopping != of || (now - last < TimeSpan.FromMilliseconds(100) && done < total))
+                return;
+            last = now;
+        }
         Later.Post(() =>
         {
-            Current = (done, total);
+            lock (gate)
+            {
+                // A report that comes after its handler ended shows nothing.
+                if (stopping != of)
+                    return;
+                current = (done, total);
+            }
             Changed?.Invoke();
         });
     }
 
     // The screen goes on showing the window until the call ended.
-    static void Wait(Task call)
+    void Wait(Task call)
     {
         if (call.IsCompleted)
             return;
-        var was = Waiting;
-        Waiting = true;
+        var was = waiting;
+        waiting = true;
         try
         {
             if (Waiter is { } waiter)
@@ -81,7 +117,7 @@ public static class LongCall
         }
         finally
         {
-            Waiting = was;
+            waiting = was;
         }
     }
 }

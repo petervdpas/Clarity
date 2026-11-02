@@ -38,6 +38,9 @@ public abstract class ContainerPart : Part, IFramesParts
         return false;
     }
 
+    /// <summary>Every grid it holds, shown or not (a tab that is not open keeps its grid here).</summary>
+    public IReadOnlyList<GridPanel> Grids => grids;
+
     /// <summary>A container grows when a part in it does.</summary>
     public override bool Grows => grids.Any(g => g.Children.OfType<Part>().Any(p => p.Grows));
 

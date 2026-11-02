@@ -240,4 +240,57 @@ public class MirrorStackTests
         Assert.Equal(3, ((FasterViewModel)mirror.Current!).Seen);
         Assert.Equal(4, person["speed"]!.GetValue<int>());
     }
+
+    /// <summary>
+    /// A timer's tick is out at the server while the person changes a
+    /// setting (a name typed, a slider moved): the reply carries the settings
+    /// as the tick sent them, and must not take the change back. Seen in the
+    /// walker example, where a name typed while the figure walked was lost.
+    /// </summary>
+    [Fact]
+    public async Task A_setting_changed_while_a_request_is_out_is_kept()
+    {
+        var person = new JsonObject { ["speed"] = 3 };
+        var sessions = new Sessions(() => new ShelfViewModel(null)) { Settings = Prefs.Hooks };
+        var link = new InProcess(new WebServer(sessions, "", typeof(InProcess).Assembly));
+        var mirror = await MirrorStack.Start(link, (() => person, sent => { foreach (var (key, value) in sent) person[key] = value?.DeepClone(); }));
+        link.Gate = new TaskCompletionSource();
+        ((ShelfViewModel)mirror.Current!).SteppedCommand.Execute(null);
+        person["speed"] = 5;
+        link.Gate.SetResult();
+        await mirror.Idle;
+        Assert.Equal(5, person["speed"]!.GetValue<int>());
+        Assert.Equal(1, ((ShelfViewModel)mirror.Current!).Steps);
+    }
+
+    /// <summary>
+    /// The same for the window's own state: text typed into a part while a
+    /// tick is out stays, and what the handler changed (the steps) comes in.
+    /// </summary>
+    [Fact]
+    public async Task Text_typed_while_a_request_is_out_is_kept_and_the_handler_s_change_comes_in()
+    {
+        var (mirror, link) = await Started();
+        var main = (ShelfViewModel)mirror.Current!;
+        link.Gate = new TaskCompletionSource();
+        main.SteppedCommand.Execute(null);
+        await Task.Yield();
+        main.Name.Text = "Ann";
+        link.Gate.SetResult();
+        await mirror.Idle;
+        Assert.Equal("Ann", main.Name.Text);
+        Assert.Equal(1, main.Steps);
+    }
+
+    /// <summary>What a handler sets is shown even when the person had changed it meanwhile: the server's word is the last.</summary>
+    [Fact]
+    public async Task A_setting_the_handler_changed_comes_in()
+    {
+        var person = new JsonObject { ["speed"] = 3 };
+        var sessions = new Sessions(() => new FasterViewModel(null)) { Settings = Prefs.Hooks };
+        var mirror = await MirrorStack.Start(new InProcess(new WebServer(sessions, "", typeof(InProcess).Assembly)), (() => person, sent => { foreach (var (key, value) in sent) person[key] = value?.DeepClone(); }));
+        ((FasterViewModel)mirror.Current!).FasterCommand.Execute(null);
+        await mirror.Idle;
+        Assert.Equal(4, person["speed"]!.GetValue<int>());
+    }
 }

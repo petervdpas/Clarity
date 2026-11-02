@@ -46,6 +46,10 @@ public class TestHost : IPartHost
     }
 
     /// <summary>Logs the run; a handler named in <see cref="Refusing"/> refuses.</summary>
+    public readonly HashSet<string> CannotRun = [];
+
+    public virtual bool CanRun(string? part, HandlerCall call) => !CannotRun.Contains(call.Handler);
+
     public virtual bool Run(string? part, HandlerCall call)
     {
         Log.Add($"run {part} {call.Event} {call.Written}");

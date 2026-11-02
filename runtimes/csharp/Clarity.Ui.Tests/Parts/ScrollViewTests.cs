@@ -102,9 +102,9 @@ public class ScrollViewTests
         grid.Add(view, new GridItem(1, 1, 1, 1, false));
         var screen = new Screen(grid, ThemeLook.Clarity(dark: false));
         using var pixels = Shot.Of(screen, 200, 200);
-        Assert.Equal(screen.Look.Color("accent"), pixels.GetPixel(20, 20));
+        Assert.Equal(screen.Look.Color("accent"), pixels.PixelAt(20, 20));
         // Its place is one row high: below it the window shows.
-        Assert.Equal(screen.Look.Color("background"), pixels.GetPixel(20, 100));
+        Assert.Equal(screen.Look.Color("background"), pixels.PixelAt(20, 100));
     }
 
     [Fact]

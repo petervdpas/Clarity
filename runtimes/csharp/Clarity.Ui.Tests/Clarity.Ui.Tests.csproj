@@ -12,6 +12,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
     <!-- Skia's native library, to draw in the tests as the desktop does. -->
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.148.0" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="14.2.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Clarity.Ui/Clarity.Ui.csproj" />
@@ -21,6 +22,8 @@
   <ItemGroup>
     <!-- The cases every stack shares. -->
     <None Include="../../../conformance/*.json" LinkBase="conformance" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Fonts with Arabic and Hebrew (Noto, SIL Open Font License, see Fonts/Noto-LICENSE.txt), so shaping is tested alike on every machine. -->
+    <None Include="Fonts/*.ttf;Fonts/Noto-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Clarity.Ui" />

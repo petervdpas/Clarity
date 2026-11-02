@@ -1,7 +1,8 @@
 // The slider (DESIGN 7.9, conformance/ranges.json): a number between its
 // lowest and highest value (its bound field's range when the part writes
 // none, else 0 and 100). Dragged,
-// it takes the nearest step when let go; its keys move a step, ten, or to an
+// its thumb snaps from step to step and it takes the nearest step when let
+// go; its keys move a step, ten, or to an
 // end. Only a value that differs is a change. Bound, it changes the field
 // (a long for whole numbers, a decimal for the rest); unbound, its state's
 // text. As the shared screen draws it (runtimes/web/src/parts/SliderInput.svelte).
@@ -54,7 +55,7 @@ public sealed class SliderPart : Part
     /// <summary>Its value as a number; none when it has none.</summary>
     public decimal? Value => NumberRange.Number(Bound is { } bound ? Host.Read(bound) : State?.Text ?? kept);
 
-    /// <summary>The value it shows: where it is dragged, else its value, else its lowest.</summary>
+    /// <summary>The value it shows: the step it is dragged to, else its value, else its lowest.</summary>
     public decimal Shown => dragging ?? Value ?? Range.Min ?? 0m;
 
     protected internal override void Made() => PressLooks.Watch(this, Host, State);
@@ -76,7 +77,7 @@ public sealed class SliderPart : Part
     {
         if (!Usable)
             return;
-        dragging = At(at.ScreenX);
+        dragging = Range.Dragged(At(at.ScreenX));
         Invalidate();
     }
 
@@ -84,7 +85,8 @@ public sealed class SliderPart : Part
     {
         if (!Pressed || dragging is null)
             return;
-        dragging = At(at.ScreenX);
+        // The thumb snaps to the steps while it is dragged, as it will when let go.
+        dragging = Range.Dragged(At(at.ScreenX));
         Invalidate();
     }
 

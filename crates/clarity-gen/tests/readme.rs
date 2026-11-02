@@ -101,3 +101,25 @@ fn a_file_store_says_where_its_pictures_are() {
     has(&text, "- `photos`: a file store of pictures. Set the environment variable `PHOTO_FOLDER` to its folder.\n");
     has(&text, "- `scans`: the file store of pictures in the folder `scans`; a relative path is taken from the folder the program starts in.\n");
 }
+
+/// A built project's SQLite file is opened at the full path of the project's
+/// folder, so the README gives the path as the project file writes it and
+/// says it is in the project's folder, not the machine's full path with the
+/// words that a relative path is taken from the folder the program starts in.
+#[test]
+fn a_sqlite_file_is_named_as_the_project_writes_it_in_the_projects_folder() {
+    let dir = std::env::temp_dir().join("clarity-readme-shop");
+    let unbuilt = starter("Shop", "shop");
+    let written = unbuilt.datasources[0].url.clone();
+    let settings = clarity_project::build_settings(&dir, &unbuilt);
+    assert!(std::path::Path::new(&settings.datasources[0].url).is_absolute());
+    let mut project = load_sources([("shop.clarity", SHOP)]);
+    let mut source = clarity_spec::SourceRef::sql(&unbuilt.datasources[0].name);
+    source.address = written.clone();
+    project.sources.push(source);
+    let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let text = &files.iter().find(|f| f.path == "README.md").expect("a README.md").text;
+    has(text, &format!("the SQLite file `{written}` in the project's folder, migrated by the program when it starts."));
+    assert!(!text.contains(&settings.datasources[0].url), "{text}");
+    assert!(!text.contains("a relative path is taken from the folder the program starts in"), "{text}");
+}

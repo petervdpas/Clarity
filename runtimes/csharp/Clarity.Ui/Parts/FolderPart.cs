@@ -2,9 +2,10 @@
 // setting, where a file store keeps its files. It is typed like any text,
 // taken when the input is left or Enter is pressed, and only a text that
 // differs from the value is a change; or it is chosen with the system's
-// folder picker through the button beside it, named in Clarity's own words,
-// and a chosen folder is taken at once. Where nothing picks a folder (a
-// browser) and on a read-only one, there is no button. A bound one writes
+// folder picker through the "..." button inside its right edge, which says
+// what it does in Clarity's own words when the pointer rests on it and takes
+// no Tab stop, and a chosen folder is taken at once. Where nothing picks a
+// folder (a browser) and on a read-only one, there is no button. A bound one writes
 // its field; an unbound named one keeps its text in its state.
 
 using Clarity.Runtime;
@@ -14,7 +15,7 @@ namespace Clarity.Ui;
 [PartKind("folder")]
 public sealed class FolderPart : Part, ITakesTyped
 {
-    const double Gap = 4;
+    const double ButtonWidth = 28;
 
     TextEditor editor = null!;
     string own = "";
@@ -24,7 +25,7 @@ public sealed class FolderPart : Part, ITakesTyped
     public TextEditor Editor => editor;
 
     /// <summary>The button that opens the system's folder picker.</summary>
-    public ContainerButton ChooseButton { get; private set; } = null!;
+    public InputSideButton ChooseButton { get; private set; } = null!;
 
     /// <summary>What the button does, in Clarity's own words: its name and the title of the picker.</summary>
     public string ChooseName => Locale.Translate("chooseFolder", "Choose a folder");
@@ -55,10 +56,11 @@ public sealed class FolderPart : Part, ITakesTyped
                 Fire("leave");
             }
         };
-        ChooseButton = new ContainerButton(() => "...", () => _ = Choose())
+        ChooseButton = new InputSideButton(InputIcon.More, () => _ = Choose())
         {
+            Name = ChooseName,
             Shows = () => !ReadOnly && Host.Files.PicksFolders,
-            Usable = () => Enabled,
+            Enabled = () => Enabled,
         };
         AddChild(editor);
         AddChild(ChooseButton);
@@ -130,19 +132,14 @@ public sealed class FolderPart : Part, ITakesTyped
         }
     }
 
-    /// <summary>The input, and the button at its right when it shows, as tall as the input.</summary>
+    /// <summary>The input, with the button inside its right edge when it shows.</summary>
     public override void Arrange(Box box)
     {
         Bounds = box;
-        if (!ChooseButton.IsShown)
-        {
-            editor.Arrange(box);
-            ChooseButton.Arrange(new Box(box.Right, box.Y, 0, box.Height));
-            return;
-        }
-        var width = Math.Min(ChooseButton.WidthFor(FontsNow, LookNow), box.Width / 2);
-        editor.Arrange(new Box(box.X, box.Y, Math.Max(0, box.Width - width - Gap), box.Height));
-        ChooseButton.Arrange(new Box(box.Right - width, box.Y, width, box.Height));
+        var shows = ChooseButton.IsShown;
+        editor.RightInset = shows ? ButtonWidth + 2 : 0;
+        editor.Arrange(box);
+        ChooseButton.Arrange(shows ? new Box(box.Right - 2 - ButtonWidth, box.Y + 2, ButtonWidth, Math.Max(0, box.Height - 4)) : new Box(box.Right, box.Y, 0, box.Height));
     }
 
     public override void Draw(Painter painter)

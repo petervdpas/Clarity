@@ -47,10 +47,10 @@ public class DisplayPartTests
         using var pixels = Shot.Of(screen, 808, 400);
         // The last cell's middle segment, lit in the text's color, on the right of its place.
         var (left, top, scale) = DisplayPart.Fit(display.Bounds, 5);
-        var middle = pixels.GetPixel((int)(left + (6 + 4 * 13) * scale), (int)(top + 10 * scale));
+        var middle = pixels.PixelAt((int)(left + (6 + 4 * 13) * scale), (int)(top + 10 * scale));
         Assert.Equal(screen.Look.Color("text"), middle);
         // The first cell is dark: only faintly drawn.
-        var dark = pixels.GetPixel((int)(left + 6 * scale), (int)(top + 10 * scale));
+        var dark = pixels.PixelAt((int)(left + 6 * scale), (int)(top + 10 * scale));
         Assert.NotEqual(screen.Look.Color("text"), dark);
     }
 }

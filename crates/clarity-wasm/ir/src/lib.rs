@@ -85,6 +85,8 @@ pub enum Stmt {
     If(Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
     /// `for` over a list: each item into local `var`, of kind `item`.
     For { var: u32, item: Kind, list: Expr, body: Vec<Stmt> },
+    /// `for i in from to to`: each whole number from `from` up to `to`, both included, into local `var`.
+    ForRange { var: u32, from: Expr, to: Expr, body: Vec<Stmt> },
     Return(Option<Expr>),
     Refuse(Expr),
     Tell(String, Vec<Expr>),

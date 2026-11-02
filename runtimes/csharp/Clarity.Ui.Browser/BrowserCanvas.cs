@@ -2,9 +2,14 @@
 // program as on the desktop, compiled to WebAssembly. Skia draws the screen
 // into pixels when it changed, on the page's next frame, at the page's pixel
 // scale, and on every frame while something animates; clarity-ui.js puts
-// them on the canvas and sends what the person does: the pointer, the wheel,
-// keys going down and up and typed text, to the same screen methods the desktop sends them to
-// (a dialog's keys and the window's own included, which are asked first).
+// them on the canvas and sends what the person does: the pointer (clicks
+// counted into double and triple ones, a finger's taps, swipes and drags),
+// the wheel, keys going down and up, and text from a hidden text field (so
+// AltGr, Option, dead keys, input methods and a phone's keyboard type what
+// they make), to the same screen methods the desktop sends them to (PageInput).
+// Copying and pasting go through the browser's clipboard, the pointer takes
+// the shape of what is under it, and frames and the parts' clock go on in a
+// hidden tab.
 // A generated application runs its windows here as on the desktop, through
 // the same stack (AppScreen). A program served to the browser runs its
 // windows on the server instead and draws mirrors of them (MirrorStack),
@@ -29,6 +34,7 @@ public static partial class BrowserCanvas
 {
     const string Module = "clarity-ui";
     static Screen? screen;
+    static PageInput? input;
     static AppScreen? app;
     static SKBitmap? pixels;
     static bool wanted;
@@ -40,6 +46,14 @@ public static partial class BrowserCanvas
     public static async Task Run(Screen shown, string canvas = "clarity")
     {
         screen = shown;
+        // The pointer's clicks counted, text from the page's field, and the browser's clipboard.
+        input = new PageInput(shown, CopyText);
+        // The pointer's shape is the page's cursor, as the element under it says.
+        shown.CursorChanged += () =>
+        {
+            if (imported)
+                SetCursor(PageCursor.Css(shown.Cursor));
+        };
         shown.Invalidated += Want;
         shown.WakesChanged += WaitForWake;
         await Import();
@@ -61,6 +75,8 @@ public static partial class BrowserCanvas
         Prepare();
         await Import();
         var assembly = main.GetType().Assembly;
+        // A page has no system fonts: the fallback fonts the application carries draw what Inter lacks.
+        Fonts.CarryFallbacks(assembly);
         var shown = new AppScreen(AppScreen.CarriedBy(assembly), PrefersDark(), OpenAddress, appFrame: AppScreen.AppFrameOf(assembly), files: files);
         app = shown;
         // What runs once the work at hand is done runs on the next frame.
@@ -90,6 +106,7 @@ public static partial class BrowserCanvas
     /// </summary>
     public static async Task Serve(System.Reflection.Assembly app, (Func<System.Text.Json.Nodes.JsonObject> Of, Action<System.Text.Json.Nodes.JsonObject> Apply)? settings = null, string canvas = "clarity")
     {
+        Fonts.CarryFallbacks(app);
         Prepare();
         await Import();
         Later.Poster = action =>
@@ -150,7 +167,8 @@ public static partial class BrowserCanvas
             return;
         prepared = true;
         var page = new Page();
-        BrowserPage.Current = page;
+        // The page's storage keeps the person's settings, so they last across reloads.
+        PageServices.Use(page);
         SoundPart.Output = new PageSoundOutput(page);
         files = new PagePicker(page, OpenFile);
         Ticks.Source = ticks;
@@ -363,28 +381,90 @@ public static partial class BrowserCanvas
     [JSExport]
     internal static void PointerLeft() => screen?.PointerLeft();
 
+    /// <summary>A press, at the page's time in milliseconds: a double or triple click is counted from the presses.</summary>
     [JSExport]
-    internal static void PointerPressed(double x, double y, int button) => screen?.PointerPressed(x, y, (PointerButton)button);
+    internal static void PointerPressed(double x, double y, int button, double ms)
+    {
+        input?.Pressed(x, y, (PointerButton)button, (long)ms);
+        ShowTextField();
+    }
+
+    /// <summary>A finger went down, moved and lifted: a tap clicks, a swipe pans, a rest then a move drags.</summary>
+    [JSExport]
+    internal static void TouchDown(double x, double y, double ms) => input?.TouchDown(x, y, (long)ms);
+
+    [JSExport]
+    internal static void TouchMoved(double x, double y, double ms) => input?.TouchMoved(x, y, (long)ms);
+
+    [JSExport]
+    internal static void TouchCancelled() => input?.TouchCancelled();
+
+    [JSExport]
+    internal static void TouchUp(double x, double y, double ms)
+    {
+        input?.TouchUp(x, y, (long)ms);
+        ShowTextField();
+    }
 
     [JSExport]
     internal static void PointerReleased(double x, double y, int button) => screen?.PointerReleased(x, y, (PointerButton)button);
 
-    /// <summary>The wheel turned, in the page's pixels, down and right positive (a wheel event's deltas), with the keys held.</summary>
+    /// <summary>The wheel turned: a wheel event's deltas as the browser gave them, down and right positive, in its deltaMode, with the keys held; a notch is 50 of the screen's units (PageInput.WheelUnits).</summary>
     [JSExport]
-    internal static void Wheel(double x, double y, double dx, double dy, int modifiers) => screen?.Wheel(x, y, dx, dy, (Modifiers)modifiers);
+    internal static void Wheel(double x, double y, double dx, double dy, int mode, double pageHeight, int modifiers) =>
+        input?.Wheel(x, y, dx, dy, mode, pageHeight, (Modifiers)modifiers);
 
+    /// <summary>The browser took the pointer away mid-press (pointercancel, the page lost the focus): a drag is dropped.</summary>
     [JSExport]
-    internal static void KeyPressed(string key, int modifiers)
+    internal static void PointerCancelled() => input?.PointerCancelled();
+
+    /// <summary>A key went down: true when the page keeps the browser from doing anything with it.</summary>
+    [JSExport]
+    internal static bool KeyPressed(string key, int modifiers, bool altGraph, bool mac)
     {
-        if (screen is not null)
-            screen.KeyPressed(new KeyInput(WebKeys.Of(key), (Modifiers)modifiers));
+        if (input is null)
+            return true;
+        var way = input.KeyDown(key, (Modifiers)modifiers, altGraph, mac);
+        ShowTextField();
+        return way == PageKeyWay.Prevent;
     }
 
     [JSExport]
-    internal static void KeyReleased(string key, int modifiers) => screen?.KeyReleased(new KeyInput(WebKeys.Of(key), (Modifiers)modifiers));
+    internal static void KeyReleased(string key, int modifiers, bool altGraph) => input?.KeyUp(key, (Modifiers)modifiers, altGraph);
 
+    /// <summary>Text the page's field took: a key's character, AltGr's, a dead key's, an input method's.</summary>
     [JSExport]
-    internal static void TextTyped(string text) => screen?.TextTyped(text);
+    internal static void TextTyped(string text)
+    {
+        input?.Typed(text);
+        ShowTextField();
+    }
+
+    /// <summary>The browser pasted text: the screen pastes it.</summary>
+    [JSExport]
+    internal static void Pasted(string text)
+    {
+        input?.Pasted(text);
+        ShowTextField();
+    }
+
+    /// <summary>The page's text field goes where the focus is, so an input method shows its words there; a phone shows its keyboard only for a part that takes text.</summary>
+    static void ShowTextField()
+    {
+        if (input is null)
+            return;
+        var place = input.FocusedPlace ?? new Box(0, 0, 0, 0);
+        TextFieldAt(place.X, place.Y, place.Height, input.TakesText);
+    }
+
+    [JSImport("textFieldAt", Module)]
+    private static partial void TextFieldAt(double x, double y, double height, bool takesText);
+
+    [JSImport("setCursor", Module)]
+    private static partial void SetCursor(string cursor);
+
+    [JSImport("copyText", Module)]
+    private static partial void CopyText(string text);
 }
 
 /// <summary>A browser's name of a key (KeyboardEvent.key), as Clarity.UI's.</summary>
@@ -417,4 +497,16 @@ public static class WebKeys
         [var c] when Shortcuts.Symbols.TryGetValue(c, out var symbol) => symbol,
         _ => Key.Other,
     };
+
+    /// <summary>
+    /// The browser's own name of a key Clarity.UI has no Key for (F13,
+    /// Pause, PrintScreen, ContextMenu), so the person can make it a
+    /// command's key; none for the keys it has, a typed character, and keys
+    /// that only change others (Meta, Caps Lock, AltGraph) or make text.
+    /// </summary>
+    public static string? NameOf(string key) =>
+        Of(key) == Key.Other && key.Length > 1 && key.All(char.IsAsciiLetterOrDigit)
+            && key is not ("Meta" or "OS" or "Super" or "Hyper" or "Fn" or "FnLock" or "CapsLock" or "NumLock" or "Symbol" or "SymbolLock" or "AltGraph" or "Dead" or "Process" or "Unidentified" or "Compose")
+            ? key
+            : null;
 }

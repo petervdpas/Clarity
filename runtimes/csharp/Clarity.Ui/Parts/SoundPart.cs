@@ -3,9 +3,9 @@
 // custom part: play its source (a sound of the program's resources), stop,
 // a tone, a melody, a volume. Everything plays through SoundPart.Output: the
 // page's audio in a browser (BrowserPage), the desktop's once its host sets
-// one, nothing until then. It plays only while its window is on the screen:
-// what it plays stops as its window leaves (closed, or under a window opened
-// in place), and a sound told to play while it is off the screen is not heard.
+// one, nothing until then. What it plays stops as its window leaves the
+// screen (closed, or under a window opened in place); a sound told to play
+// while it is off the screen still plays, as Avalonia's did.
 
 using System.Globalization;
 using Clarity.Runtime;
@@ -130,11 +130,7 @@ public sealed class SoundPart : Part
             var other => double.TryParse(other?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var n) ? n : 0,
         };
 
-    void Start(byte[] file, bool repeat)
-    {
-        if (Attached)
-            playing.Add(Output.Play(file, Volume / 100f, repeat));
-    }
+    void Start(byte[] file, bool repeat) => playing.Add(Output.Play(file, Volume / 100f, repeat));
 
     /// <summary>Its window left the screen: what it plays stops.</summary>
     protected override void OnDetached() => Stop();

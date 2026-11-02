@@ -21,6 +21,9 @@
     <ProjectReference Include="../Clarity.Runtime/Clarity.Runtime.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Clarity.Ui.Server.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="" />
     <None Include="../assets/icon.png" Pack="true" PackagePath="assets/" />
     <None Include="../assets/LICENSE.txt" Pack="true" PackagePath="assets/" />

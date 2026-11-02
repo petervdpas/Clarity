@@ -106,8 +106,8 @@ public class PointerTests
         var screen = new Screen(new GridPanel(columns: 1), ThemeLook.Clarity(dark: false));
         screen.Open(new Overlay(new Plate("accent"), new Box(10, 10, 50, 50)));
         using var pixels = Shot.Of(screen, 200, 100);
-        Assert.Equal(screen.Look.Color("accent"), pixels.GetPixel(30, 30));
-        Assert.Equal(screen.Look.Color("background"), pixels.GetPixel(150, 80));
+        Assert.Equal(screen.Look.Color("accent"), pixels.PixelAt(30, 30));
+        Assert.Equal(screen.Look.Color("background"), pixels.PixelAt(150, 80));
     }
 
     [Fact]

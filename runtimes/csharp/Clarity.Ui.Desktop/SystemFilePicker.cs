@@ -4,9 +4,12 @@
 // own: Linux asks the desktop portal over D-Bus
 // (org.freedesktop.portal.FileChooser), then zenity, then kdialog; macOS
 // asks osascript (AppleScript's choose file, choose file name, choose
-// folder); Windows shows the common item dialog through COM. The dialog
-// waits off the screen's thread, and what the person chose comes back on it
-// (Later), so the window goes on drawing while the dialog is open.
+// folder); Windows shows the common item dialog through COM. Each dialog
+// belongs to the window the person works in (its owner, where the system
+// lets a dialog name one), and while one is open the windows take no input,
+// as under a dialog of their own. The dialog waits off the screen's thread,
+// and what the person chose comes back on it (Later), so the window goes on
+// drawing while the dialog is open.
 
 using System.ComponentModel;
 using System.Diagnostics;
@@ -26,8 +29,23 @@ public sealed class SystemFilePicker : IFilePicker
         Folder,
     }
 
-    /// <summary>A dialog to show: what it chooses, its title, the name it suggests (saving) and the kinds of file it offers (opening).</summary>
-    public sealed record Ask(Kind Kind, string Title, string? Name = null, FileFilter? Filter = null);
+    /// <summary>A dialog to show: what it chooses, its title, the name it suggests (saving), the kinds of file it offers (opening) and the window it belongs to.</summary>
+    public sealed record Ask(Kind Kind, string Title, string? Name = null, FileFilter? Filter = null, SystemWindow? Owner = null);
+
+    /// <summary>A desktop window as the system knows it: its X11 window, or its Win32 window handle; zero for none.</summary>
+    public sealed record SystemWindow(ulong X11 = 0, nint Win32 = 0)
+    {
+        /// <summary>The window as the desktop portal names a parent: <c>x11:</c> and its number in hex; empty for none.</summary>
+        public string Portal => X11 != 0 ? $"x11:{X11:x}" : "";
+    }
+
+    /// <summary>The window the person works in, which a dialog belongs to; none while there is none.</summary>
+    public Func<SystemWindow?>? Owner { get; set; }
+
+    int showing;
+
+    /// <summary>Whether a dialog is open: the windows take no input meanwhile.</summary>
+    public bool Showing => Volatile.Read(ref showing) > 0;
 
     /// <summary>How a system shows its dialogs, in the order they are tried.</summary>
     public enum Way
@@ -68,18 +86,18 @@ public sealed class SystemFilePicker : IFilePicker
     public bool PicksFolders => true;
 
     public Task<ChosenFile?> OpenFile(string title, FileFilter? filter = null) =>
-        OffScreen(() => choose(new Ask(Kind.Open, title, Filter: filter)) is { } path ? new ChosenFile(Path.GetFileName(path), File.ReadAllBytes(path)) : null);
+        OffScreen(owner => choose(new Ask(Kind.Open, title, Filter: filter, Owner: owner)) is { } path ? new ChosenFile(Path.GetFileName(path), File.ReadAllBytes(path)) : null);
 
     public Task<string?> SaveFile(string title, string name, byte[] bytes) =>
-        OffScreen(() =>
+        OffScreen(owner =>
         {
-            if (choose(new Ask(Kind.Save, title, Name: name)) is not { } path)
+            if (choose(new Ask(Kind.Save, title, Name: name, Owner: owner)) is not { } path)
                 return null;
             File.WriteAllBytes(path, bytes);
             return path;
         });
 
-    public Task<string?> ChooseFolder(string title) => OffScreen(() => choose(new Ask(Kind.Folder, title)));
+    public Task<string?> ChooseFolder(string title) => OffScreen(owner => choose(new Ask(Kind.Folder, title, Owner: owner)));
 
     /// <summary>Opens a copy of the file, in a folder of its own among the system's temporary files, in the system's program for its kind.</summary>
     public void Show(string name, byte[] bytes)
@@ -128,19 +146,30 @@ public sealed class SystemFilePicker : IFilePicker
     }
 
     /// <summary>Runs <paramref name="work"/> off the screen's thread; its answer, or what went wrong, comes back on the screen's thread.</summary>
-    Task<T?> OffScreen<T>(Func<T?> work)
+    Task<T?> OffScreen<T>(Func<SystemWindow?, T?> work)
     {
         var done = new TaskCompletionSource<T?>();
+        // The window it belongs to is read on the screen's thread, as it asks.
+        var owner = Owner?.Invoke();
+        Interlocked.Increment(ref showing);
         Task.Run(() =>
         {
             try
             {
-                var answer = work();
-                post(() => done.TrySetResult(answer));
+                var answer = work(owner);
+                post(() =>
+                {
+                    Interlocked.Decrement(ref showing);
+                    done.TrySetResult(answer);
+                });
             }
             catch (Exception e)
             {
-                post(() => done.TrySetException(e));
+                post(() =>
+                {
+                    Interlocked.Decrement(ref showing);
+                    done.TrySetException(e);
+                });
             }
         });
         return done.Task;
@@ -218,6 +247,9 @@ public sealed class SystemFilePicker : IFilePicker
     static SystemAddress.Command Zenity(Ask ask)
     {
         List<string> args = ["--file-selection", $"--title={ask.Title}"];
+        // Over the window it belongs to, which takes no input meanwhile.
+        if (ask.Owner is { X11: not 0 } owner)
+            args.AddRange(["--modal", $"--attach={owner.X11}"]);
         switch (ask.Kind)
         {
             case Kind.Save:
@@ -238,6 +270,8 @@ public sealed class SystemFilePicker : IFilePicker
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         List<string> args = ["--title", ask.Title];
+        if (ask.Owner is { X11: not 0 } owner)
+            args.AddRange(["--attach", owner.X11.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
         switch (ask.Kind)
         {
             case Kind.Save:
@@ -356,8 +390,8 @@ public sealed class SystemFilePicker : IFilePicker
         {
             using var writer = connection.GetMessageWriter();
             writer.WriteMethodCallHeader(Bus, ObjectPath, Chooser, ask.Kind == Kind.Save ? "SaveFile" : "OpenFile", "ssa{sv}");
-            // No parent window: the system's own windows have no handle the portal knows.
-            writer.WriteString("");
+            // The parent window, an X11 window as the portal names it; none on Wayland, whose handles GLFW does not export.
+            writer.WriteString(ask.Owner?.Portal ?? "");
             writer.WriteString(ask.Title);
             var options = writer.WriteDictionaryStart();
             writer.WriteDictionaryEntryStart();
@@ -459,7 +493,8 @@ public sealed class SystemFilePicker : IFilePicker
                     dialog.SetFileName(ask.Name ?? "");
                 if (ask.Kind == Kind.Open && ask.Filter is { } filter)
                     dialog.SetFileTypes(1, [new FilterSpec { Name = filter.Name, Spec = string.Join(';', filter.Patterns) }]);
-                var shown = dialog.Show(IntPtr.Zero);
+                // Shown over its owner, which Windows keeps from taking input while it is open.
+                var shown = dialog.Show(ask.Owner?.Win32 ?? IntPtr.Zero);
                 if (shown == Cancelled)
                     return (true, null);
                 Marshal.ThrowExceptionForHR(shown);

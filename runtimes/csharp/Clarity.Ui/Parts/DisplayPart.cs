@@ -147,8 +147,7 @@ public sealed class DisplayPart : Part
         if (!IsShown)
             return;
         var look = painter.Look;
-        painter.Fill(Bounds, look.Color("raised"), look.Radius("input"));
-        painter.Stroke(Bounds, look.Color("border"), look.Border, look.Radius("input"));
+        // As Avalonia drew it: no background of its own, the segments in the text color over what is behind it.
         var cells = Cells(Text, Digits);
         var (left, top, scale) = Fit(Bounds, cells.Length);
         if (scale <= 0)

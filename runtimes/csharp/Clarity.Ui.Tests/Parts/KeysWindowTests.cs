@@ -48,6 +48,32 @@ public sealed class KeysWindowTests
         Assert.Equal("Keys", KeysWindow.Title);
     }
 
+    /// <summary>A toolbar or ribbon command shows where it lives beside its name, as Avalonia's KeysView did.</summary>
+    [Fact]
+    public void A_toolbar_or_ribbon_command_says_where_it_lives()
+    {
+        var (_, window) = Shown([
+            new("", null, [
+                new("printButton", Text.Plain("Print"), [], [new Text("Toolbar") { Key = "keysToolbar" }]),
+                new("copyButton", Text.Plain("Copy"), [], [Text.Plain("Home"), Text.Plain("Edit")]),
+                new("quitItem", Text.Plain("Quit"), []),
+            ]),
+        ]);
+        Assert.Contains("Print Toolbar", window.Says);
+        Assert.Contains("Copy Home, Edit", window.Says);
+        Assert.Contains("Quit", window.Says);
+    }
+
+    /// <summary>While nothing happens the message line says how the window works, so no empty band sits under the heading; its buttons still stay put.</summary>
+    [Fact]
+    public void No_empty_band_sits_under_the_heading()
+    {
+        var (screen, window) = Shown();
+        Assert.Equal("Change gives a command a new key; Reset gives it its own key back", window.Says[1]);
+        Click(screen, window.Button("change", "keysItem"));
+        Assert.Equal("Press the new key; Escape stops", window.Says[1]);
+    }
+
     [Fact]
     public void A_new_key_is_taken_and_kept_and_reset_puts_it_back()
     {
@@ -159,8 +185,12 @@ public sealed class KeysWindowTests
         Assert.Equal("Shift+F5", KeysWindow.Written(new KeyInput(Key.F5, Modifiers.Shift)));
         Assert.Equal("Ctrl+Alt+Shift+Meta+X", KeysWindow.Written(new KeyInput(Key.X, Modifiers.Control | Modifiers.Alt | Modifiers.Shift | Modifiers.Meta)));
         Assert.Null(KeysWindow.Written(new KeyInput(Key.Other, Modifiers.Control)));
+        // A modifier on its own is no key (PersonKeyTests): Ctrl going down before K waits for the K.
+        Assert.Null(KeysWindow.Written(new KeyInput(Key.Control, Modifiers.Control)));
+        Assert.Null(KeysWindow.Written(new KeyInput(Key.Shift, Modifiers.Shift)));
+        Assert.Null(KeysWindow.Written(new KeyInput(Key.Alt, Modifiers.Alt)));
         // Each key written so reads back as the same key.
-        foreach (var key in Enum.GetValues<Key>().Where(k => k != Key.Other))
+        foreach (var key in Enum.GetValues<Key>().Where(k => k is not (Key.Other or Key.Shift or Key.Control or Key.Alt)))
             Assert.Equal(key, Shortcuts.KeyOf(Shortcuts.Parts(KeysWindow.Written(new KeyInput(key, Modifiers.Control))!).Key));
     }
 
@@ -261,7 +291,7 @@ public sealed class KeysWindowTests
         var written = 0;
         for (var x = 16; x < 120; x++)
             for (var y = 16; y < 44; y++)
-                if (root.GetPixel(x, y) != background)
+                if (root.PixelAt(x, y) != background)
                     written++;
         Assert.True(written > 0);
         var under = new Screen(new Plate("background"), ThemeLook.Clarity(dark: false));
@@ -270,7 +300,7 @@ public sealed class KeysWindowTests
         under.Open(new Overlay(over, new Box(0, 0, 900, 700)) { Modal = true });
         using var shot = Shot.Of(under, 900, 700);
         // The window under it is dimmed; the panel is in the panel color.
-        Assert.NotEqual(ThemeLook.Clarity(dark: false).Color("background"), shot.GetPixel(5, 5));
-        Assert.Equal(ThemeLook.Clarity(dark: false).Color("panel"), shot.GetPixel((int)over.Panel.X + 6, (int)over.Panel.Bottom - 6));
+        Assert.NotEqual(ThemeLook.Clarity(dark: false).Color("background"), shot.PixelAt(5, 5));
+        Assert.Equal(ThemeLook.Clarity(dark: false).Color("panel"), shot.PixelAt((int)over.Panel.X + 6, (int)over.Panel.Bottom - 6));
     }
 }

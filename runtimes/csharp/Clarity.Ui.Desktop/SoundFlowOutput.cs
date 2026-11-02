@@ -88,11 +88,7 @@ public sealed class SoundFlowOutput : ISoundOutput, IDisposable
             mixer.AddComponent(player);
             var playing = new Playing(mixer, player, data);
             // A sound that played to its end lets go of what it held, on the screen's thread.
-            player.PlaybackEnded += (_, _) =>
-            {
-                if (!player.IsLooping)
-                    Later.Post(playing.Dispose);
-            };
+            player.PlaybackEnded += (_, _) => Ended(player.IsLooping, playing, Later.Post);
             player.Play();
             return playing;
         }
@@ -101,6 +97,18 @@ public sealed class SoundFlowOutput : ISoundOutput, IDisposable
             Console.Error.WriteLine($"a sound did not play: {e.Message}");
             return new Nothing();
         }
+    }
+
+    /// <summary>
+    /// A sound played to its end (SoundFlow says so on its audio thread):
+    /// one that repeats goes on; another lets go of what it held, posted to
+    /// the screen's thread (<paramref name="post"/>, Later.Post), not on the
+    /// audio thread, as Avalonia's Dispatcher post did.
+    /// </summary>
+    internal static void Ended(bool repeats, IDisposable playing, Action<Action> post)
+    {
+        if (!repeats)
+            post(playing.Dispose);
     }
 
     bool Ready()

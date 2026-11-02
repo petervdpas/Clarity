@@ -81,7 +81,7 @@ public class MarkupTests
         grid.Add(missing, spec.Place(false));
         var screen = new Screen(grid, ThemeLook.Clarity(dark: false));
         using var pixels = Shot.Of(screen, 800, 400);
-        Assert.NotEqual(screen.Look.Color("background"), pixels.GetPixel(0, 18));
+        Assert.NotEqual(screen.Look.Color("background"), pixels.PixelAt(0, 18));
     }
 
     [Fact]

@@ -8,7 +8,8 @@
 // window's state, opens and closes windows, says messages, copies text and
 // asks questions, which the person answers here. A command sent while the
 // same one waits unsent (a timer that ticks faster than the server answers)
-// takes the place of the one that waits.
+// takes the place of the one that waits. While a handler's request is out,
+// the page asks how far its long call is and shows the bar with Stop.
 
 using System.Collections.ObjectModel;
 using System.Text.Json;
@@ -161,6 +162,9 @@ public sealed class MirrorStack : Element, IRemote
         return Idle;
     }
 
+    /// <summary>The language and the formats the page shows, which the server's handlers take for this person.</summary>
+    internal static JsonObject LocaleNow() => new() { ["language"] = Locale.Current, ["formats"] = Locale.Formats.Culture.Name };
+
     static bool Same(JsonObject a, JsonObject b) =>
         a["do"]?.GetValue<string>() == "run"
         && a["window"]?.GetValue<long>() == b["window"]?.GetValue<long>()
@@ -194,10 +198,12 @@ public sealed class MirrorStack : Element, IRemote
                     request["session"] = session;
                 if (settings is { } kept)
                     request["settings"] = kept.Of().DeepClone();
+                // The server answers in the person's language and formats, which the page shows.
+                request["locale"] = LocaleNow();
                 JsonObject answer;
                 try
                 {
-                    answer = await link.Send(request);
+                    answer = await Answered(request);
                 }
                 catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException or InvalidOperationException)
                 {
@@ -207,7 +213,7 @@ public sealed class MirrorStack : Element, IRemote
                 if (reply is not null)
                     reply.SetResult(answer);
                 else
-                    Follow(answer);
+                    Follow(answer, request);
             }
         }
         finally
@@ -216,10 +222,106 @@ public sealed class MirrorStack : Element, IRemote
         }
     }
 
+    // -- A long engine call ----------------------------------------------------------------
+
+    /// <summary>How often the page asks how far a long call is while a handler's request is out.</summary>
+    internal static TimeSpan PollEvery { get; set; } = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>How far the session's long call is, as the server last said; none while it says nothing.</summary>
+    (long Done, long Total)? progress;
+
+    /// <summary>The bar of the session's long call, over the window while the server says how far it is; none otherwise.</summary>
+    public LongCallBar? CallBar { get; private set; }
+
+    Overlay? callBarOverlay;
+
+    /// <summary>
+    /// The reply to <paramref name="request"/>. While a request that runs a
+    /// handler is out, the page asks the server how far the session's long
+    /// call is: once it says, the bar shows over the window, as on the
+    /// desktop, until the reply comes; its Stop stops the call on the server.
+    /// </summary>
+    async Task<JsonObject> Answered(JsonObject request)
+    {
+        var replied = link.Send(request);
+        if (request["do"]?.GetValue<string>() is not ("run" or "answer" or "close") || session == "")
+            return await replied;
+        try
+        {
+            while (await Task.WhenAny(replied, Task.Delay(PollEvery)) != replied)
+            {
+                JsonObject said;
+                try
+                {
+                    said = await link.Send(new JsonObject { ["do"] = "progress", ["session"] = session });
+                }
+                catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException or InvalidOperationException)
+                {
+                    // Fail safe: a question that is not answered asks again; the request itself goes on.
+                    continue;
+                }
+                if (said["waiting"]?.GetValue<bool>() == true && said["progress"] is JsonArray { Count: 2 } at)
+                {
+                    progress = (at[0]!.GetValue<long>(), at[1]!.GetValue<long>());
+                    ShowCallBar();
+                }
+            }
+            return await replied;
+        }
+        finally
+        {
+            progress = null;
+            HideCallBar();
+        }
+    }
+
+    void ShowCallBar()
+    {
+        if (CallBar is null)
+        {
+            // The bar is known only once it shows, so whoever sees CallBar sees it on the screen.
+            var bar = new LongCallBar(() => progress, StopCall);
+            if (Screen is { } screen)
+            {
+                callBarOverlay = new Overlay(bar, screen.Whole) { Modal = true, Covers = true };
+                screen.Open(callBarOverlay);
+            }
+            CallBar = bar;
+        }
+        Invalidate();
+    }
+
+    void HideCallBar()
+    {
+        if (CallBar is null)
+            return;
+        if (callBarOverlay is { } shown)
+            Screen?.Close(shown);
+        CallBar = null;
+        callBarOverlay = null;
+        Invalidate();
+    }
+
+    /// <summary>The person's Stop: the session's long call ends at its next look.</summary>
+    void StopCall() => _ = Stop();
+
+    async Task Stop()
+    {
+        try
+        {
+            await link.Send(new JsonObject { ["do"] = "stop", ["session"] = session });
+        }
+        catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException or InvalidOperationException)
+        {
+            // Fail safe: the server cannot be reached; the bar's Stop has greyed, the call ends as it does.
+            Console.Error.WriteLine($"the long call's stop did not reach the server: {e.Message}");
+        }
+    }
+
     // -- What the server answered ---------------------------------------------------------
 
     /// <summary>Every open window with its state, and what was said, copied and asked.</summary>
-    void Follow(JsonObject reply)
+    void Follow(JsonObject reply, JsonObject? request = null)
     {
         if (reply["error"]?.GetValue<string>() is { } error)
         {
@@ -229,8 +331,10 @@ public sealed class MirrorStack : Element, IRemote
         }
         session = reply["session"]?.GetValue<string>() ?? session;
         // What a handler changed of the person's settings, which their browser keeps.
+        // Only what the server changed of them: a setting the person changed while the request was out stays.
         if (settings is { } kept && reply["settings"] is JsonObject changed)
-            kept.Apply(changed);
+            kept.Apply(request?["settings"] is JsonObject before ? Changed(before, changed) : changed);
+        var sentFrom = request?["window"]?.GetValue<long>();
         var top = Current;
         var open = new List<long>();
         var openDialogs = new List<long>();
@@ -249,7 +353,12 @@ public sealed class MirrorStack : Element, IRemote
                 mirrors[id] = mirror;
             }
             if (window["state"] is JsonObject state)
+            {
+                // The window that sent its state keeps what the person did while the request was out, where the handler left it as it was.
+                if (id == sentFrom && request?["state"] is JsonObject before)
+                    state = Merged(before, state, Snapshot.Of(mirror));
                 Snapshot.Apply(mirror, state);
+            }
             if (window["dialog"]?.GetValue<bool>() == true)
                 openDialogs.Add(id);
             else
@@ -290,6 +399,44 @@ public sealed class MirrorStack : Element, IRemote
         }
         ShowOver();
         Invalidate();
+    }
+
+    /// <summary>The values of <paramref name="replied"/> that differ from those <paramref name="before"/>.</summary>
+    internal static JsonObject Changed(JsonObject before, JsonObject replied)
+    {
+        var changed = new JsonObject();
+        foreach (var (key, value) in replied)
+        {
+            if (!JsonNode.DeepEquals(before[key], value))
+                changed[key] = value?.DeepClone();
+        }
+        return changed;
+    }
+
+    /// <summary>
+    /// A window's state as the server replied it, except where the handler
+    /// left a value as it was <paramref name="before"/> the request: there the
+    /// window's value <paramref name="now"/> stays, which the person may have
+    /// changed meanwhile. Data field by field, each part's state value by value.
+    /// </summary>
+    internal static JsonObject Merged(JsonObject before, JsonObject replied, JsonObject now)
+    {
+        static JsonObject Level(JsonObject? before, JsonObject replied, JsonObject? now, Func<string, JsonNode?, JsonNode?, JsonNode?, JsonNode?> each)
+        {
+            var merged = new JsonObject();
+            foreach (var (key, value) in replied)
+                merged[key] = each(key, before?[key], value, now?[key])?.DeepClone();
+            return merged;
+        }
+        JsonNode? Leaf(string key, JsonNode? was, JsonNode? replied, JsonNode? now) =>
+            now is not null && JsonNode.DeepEquals(was, replied) ? now : replied;
+        return Level(before, replied, now, (section, wasSection, repliedSection, nowSection) => (section, repliedSection) switch
+        {
+            ("data", JsonObject data) => Level(wasSection as JsonObject, data, nowSection as JsonObject, Leaf),
+            ("parts", JsonObject parts) => Level(wasSection as JsonObject, parts, nowSection as JsonObject, (_, wasPart, repliedPart, nowPart) =>
+                repliedPart is JsonObject part ? Level(wasPart as JsonObject, part, nowPart as JsonObject, Leaf) : repliedPart),
+            _ => repliedSection,
+        });
     }
 
     /// <summary>The window on top shows in place; the page takes its title.</summary>

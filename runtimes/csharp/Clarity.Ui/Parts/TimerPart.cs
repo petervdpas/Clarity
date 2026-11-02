@@ -137,7 +137,8 @@ public sealed class TimerPart : Part
             Stop();
             return;
         }
-        if (ticking || !Enabled)
+        // A tick whose command cannot run now (its handler still runs) is left out, as Avalonia's timer asked CanExecute.
+        if (ticking || !Enabled || !Spec.On("tick").All(c => Host.CanRun(Spec.Name, c)))
             return;
         ticking = true;
         try

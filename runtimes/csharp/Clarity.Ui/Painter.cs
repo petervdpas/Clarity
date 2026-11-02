@@ -18,6 +18,12 @@ public sealed class Painter(SKCanvas canvas, ThemeLook look, Fonts fonts)
     public ThemeLook Look { get; } = look;
     public Fonts Fonts { get; } = fonts;
 
+    /// <summary>A part's style says bold (its <c>weight</c>): every text it draws is bold, as an Avalonia class's FontWeight was.</summary>
+    public bool StyleBold { get; init; }
+
+    /// <summary>A part's style says where its text sits (its <c>align</c>): every text it draws at the left goes there instead.</summary>
+    public TextAlign? StyleAlign { get; init; }
+
     public void Fill(Box box, SKColor color, double radius = 0)
     {
         using var paint = new SKPaint { Color = color, IsAntialias = radius > 0, Style = SKPaintStyle.Fill };
@@ -45,9 +51,12 @@ public sealed class Painter(SKCanvas canvas, ThemeLook look, Fonts fonts)
     {
         if (text.Length == 0)
             return;
+        bold |= StyleBold;
+        if (align == TextAlign.Left && StyleAlign is { } styled)
+            align = styled;
         using var font = Fonts.Font(fontRole, size, bold);
         using var paint = new SKPaint { Color = color, IsAntialias = true };
-        var width = font.MeasureText(text);
+        var width = Fonts.Measure(text, fontRole, size, bold);
         var metrics = font.Metrics;
         var x = align switch
         {
@@ -58,7 +67,8 @@ public sealed class Painter(SKCanvas canvas, ThemeLook look, Fonts fonts)
         var baseline = box.Y + (box.Height - (metrics.Descent - metrics.Ascent)) / 2 - metrics.Ascent;
         Canvas.Save();
         Canvas.ClipRect(box.Rect);
-        Canvas.DrawText(text, (float)x, (float)baseline, SKTextAlign.Left, font, paint);
+        // Characters the role's font lacks are drawn in a fallback font, run by run.
+        Fonts.Draw(Canvas, text, x, baseline, fontRole, size, bold, paint);
         Canvas.Restore();
     }
 

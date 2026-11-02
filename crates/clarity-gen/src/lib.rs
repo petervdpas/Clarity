@@ -689,11 +689,18 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         Backend::C => c::generate(project, settings)?,
         Backend::Cpp => cpp::generate(project, settings)?,
     };
-    files.push(OutFile {
-        path: "README.md".to_string(),
-        text: readme::readme(settings, project),
-        bytes: None,
-    });
+    // A program that writes its own README (C#'s web program: a server and a
+    // browser program) keeps it, with where its data is; the others get the
+    // README of their stack.
+    let general = readme::readme(settings, project);
+    match files.iter_mut().find(|f| f.path == "README.md") {
+        Some(own) => {
+            if let Some(at) = general.find("\n## Data\n") {
+                own.text.push_str(&general[at..]);
+            }
+        }
+        None => files.push(OutFile { path: "README.md".to_string(), text: general, bytes: None }),
+    }
     // The icons the application shows are Lucide's, whose license travels with them.
     if !clarity_spec::icons::used(project).is_empty() {
         files.push(OutFile {
@@ -720,10 +727,19 @@ pub struct Program {
 /// The programs of the project: the program with windows when a target
 /// shows them (the desktop program, or the web program when it is served
 /// to a browser alone), and the command-line program with the `cli` target.
+/// C# with both `desktop` and `web` gives both programs, each in its own
+/// folder: its desktop program cannot serve a browser.
 pub fn programs(project: &Project, settings: &Settings) -> Result<Vec<Program>, Vec<String>> {
     use clarity_project::Target;
     let mut programs = Vec::new();
-    if settings.stack.has_ui() {
+    if settings.stack.backend == Backend::Csharp && settings.stack.has(Target::Desktop) && settings.stack.has(Target::Web) {
+        for target in [Target::Desktop, Target::Web] {
+            let other = if target == Target::Desktop { Target::Web } else { Target::Desktop };
+            let mut alone = settings.clone();
+            alone.stack.targets.retain(|t| *t != other);
+            programs.push(Program { target, files: generate(project, &alone)? });
+        }
+    } else if settings.stack.has_ui() {
         programs.push(Program { target: windowed_target(settings), files: generate(project, settings)? });
     }
     if settings.stack.has(Target::Cli) {

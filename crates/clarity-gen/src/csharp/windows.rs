@@ -14,7 +14,7 @@ use clarity_spec::widgets::{Event, WidgetKind};
 
 use super::HEADER;
 use super::logic::{self, PartInfo, WindowCtx};
-use super::names::{backing, member, pascal, property, string};
+use super::names::{backing, command_method, member, on, pascal, property, string};
 use super::texts::Texts;
 use crate::OutFile;
 
@@ -108,6 +108,8 @@ struct Window<'a> {
     /// The calls with values its parts wire, each with the command that
     /// makes it: `digit(7)` with `Digit7`.
     calls: Vec<(&'a Handler, String)>,
+    /// The members of its parts and data (`RedInk` for a part `redInk`), which a handler's command steps around.
+    members: BTreeSet<String>,
 }
 
 /// The command of a call with values, named after it: `digit(7)` as
@@ -168,9 +170,22 @@ impl<'a> Window<'a> {
         for menu in parts.iter().filter_map(|w| w.menu.as_ref()) {
             commands.extend(all_commands(&menu.items));
         }
+        // The view model's members of its parts and data, which no command may be called.
+        let mut members: BTreeSet<String> = parts.iter().filter_map(|w| w.props.name.as_deref()).map(member).collect();
+        members.extend(commands.iter().filter_map(|c| c.props.name.as_deref()).map(member));
+        members.extend(frame.menu.and_then(|m| m.name.as_deref()).map(member));
+        members.extend(frame.toolbar.and_then(|t| t.name.as_deref()).map(member));
+        if let Some(ribbon) = frame.ribbon {
+            members.extend(ribbon.name.as_deref().map(member));
+            members.extend(ribbon.tabs.iter().flat_map(|t| t.name.iter().chain(t.groups.iter().filter_map(|g| g.name.as_ref()))).map(|n| member(n)));
+        }
+        members.extend([frame.left, frame.right].into_iter().flatten().filter_map(|s| s.props.name.as_deref()).map(member));
+        members.extend(data.iter().map(|(n, _, _)| member(n)));
+        members.extend(values.iter().map(|d| member(&d.name.name)));
         // A command for each call with values, named after it; a name that
-        // is taken already gets a number.
+        // is taken already, by a handler or a part, gets a number.
         let mut taken: BTreeSet<String> = project.files.iter().flat_map(|f| &f.code).flat_map(|b| &b.handlers).map(|h| pascal(&h.name.name)).collect();
+        taken.extend(members.iter().cloned());
         let mut calls = Vec::new();
         for h in crate::wired_calls(page) {
             let base = call_command(h);
@@ -193,6 +208,7 @@ impl<'a> Window<'a> {
             commands,
             texts,
             calls,
+            members,
         }
     }
 
@@ -218,6 +234,19 @@ impl<'a> Window<'a> {
         let (data, field) = bind.split_once('.')?;
         let entity = self.entity_of(data)?;
         Some((entity, entity.field(field)?))
+    }
+
+    /// `Field = ("order", "customer_id")` for an input bound to a required
+    /// field: the data that holds the record and the field's column.
+    fn required_field(&self, widget: &Widget) -> Option<String> {
+        let bind = widget.props.bind.as_deref()?;
+        let (data, field) = bind.split_once('.')?;
+        let entity = self.entity_of(data)?;
+        let column = entity.column_of(entity.field(field)?.name.name.as_str());
+        crate::required_fields(self.project, entity)
+            .iter()
+            .any(|(c, _)| c == column)
+            .then(|| format!("Field = ({}, {})", string(data), string(column)))
     }
 
     /// A binding as the AXAML path: `order.number` as `Order.Number`.
@@ -487,6 +516,12 @@ impl<'a> Window<'a> {
             } else {
                 starts
             };
+            // An input bound to a required field shows why a save refused it (conformance/required.json).
+            let starts = match self.required_field(widget) {
+                Some(field) if starts.is_empty() => format!(" {{ {field} }}"),
+                Some(field) => format!("{}, {field} }}", starts.trim_end_matches('}').trim_end()),
+                None => starts,
+            };
             // A custom part starts with the values written on its line.
             if let Some(declared) = widget.props.part.as_deref().and_then(|k| crate::parts::declaration(self.project, k)) {
                 let mut with = String::new();
@@ -549,14 +584,14 @@ impl<'a> Window<'a> {
             }
         }
         for decl in &own {
-            let method = pascal(&decl.name.name);
+            let method = command_method(&decl.name.name, &self.members);
             match logic::handler(self.project, types, &ctx, decl) {
                 // One that takes values runs through the commands of its calls.
                 Ok(body) if !decl.params.is_empty() => {
                     let _ = writeln!(handlers, "{body}");
                 }
                 Ok(body) => {
-                    let _ = write!(handlers, "    [RelayCommand]\n    void {method}() => Handle(On{method});\n\n{body}\n");
+                    let _ = write!(handlers, "    [RelayCommand]\n    void {method}() => Handle({});\n\n{body}\n", on(&decl.name.name));
                 }
                 Err(problems) => errors.extend(problems.into_iter().map(|e| format!("handler '{}' of {name}: {e}", decl.name.name))),
             }
@@ -571,14 +606,14 @@ impl<'a> Window<'a> {
                 Event::Return => "OnReturn",
                 _ => continue,
             };
-            let _ = write!(events, "    protected override void {hook}() => On{}();\n\n", pascal(&h.handler));
+            let _ = write!(events, "    protected override void {hook}() => {}();\n\n", on(&h.handler));
         }
         // The canvases, drawn anew by their draw handlers after every handler.
         let draws = crate::canvas_draws(self.page);
         if !draws.is_empty() {
             let body: String = draws
                 .iter()
-                .map(|(canvas, handler)| format!("        {c}.BeginDrawing();\n        On{}();\n        {c}.EndDrawing();\n", pascal(handler), c = member(canvas)))
+                .map(|(canvas, handler)| format!("        {c}.BeginDrawing();\n        {}();\n        {c}.EndDrawing();\n", on(handler), c = member(canvas)))
                 .collect();
             let _ = write!(events, "    protected override void Redraw()\n    {{\n{body}    }}\n\n");
         }
@@ -589,7 +624,7 @@ impl<'a> Window<'a> {
             let scope = self.undo_scope(&widget.props);
             for (event, command) in [(Event::Click, "ClickAt"), (Event::Drag, "DragAt"), (Event::Drop, "DropAt"), (Event::Bend, "BendAt")] {
                 let Some(handler) = Self::handler(widget, event) else { continue };
-                let run = format!("Handle(() =>\n    {{\n        {c}.Pointer = at;\n        On{}();\n    }}, [at])", pascal(&handler.handler), c = member(canvas));
+                let run = format!("Handle(() =>\n    {{\n        {c}.Pointer = at;\n        {}();\n    }}, [at])", on(&handler.handler), c = member(canvas));
                 // A drag, a drop and a bend are edits Ctrl+Z takes back (DESIGN 5.29); a drag starts one its drop ends.
                 let run = match (&scope, event) {
                     (Some(scope), Event::Drag | Event::Drop | Event::Bend | Event::Click) => {
@@ -623,7 +658,7 @@ impl<'a> Window<'a> {
                 set.push("Readonly = true".to_string());
             }
             let _ = write!(args, " {{ {} }}", set.join(", "));
-            let changed = Self::handler(widget, Event::Change).map_or("null".to_string(), |h| format!("On{}", pascal(&h.handler)));
+            let changed = Self::handler(widget, Event::Change).map_or("null".to_string(), |h| on(&h.handler));
             let _ = write!(
                 events,
                 "    [RelayCommand]\n    void CanvasAt_{c}(System.Text.Json.Nodes.JsonObject action) => CanvasEvent({c}, {scope}, {args}, action, {changed});\n\n",
@@ -636,7 +671,7 @@ impl<'a> Window<'a> {
             let (Some(wizard), Some(next)) = (&widget.props.name, Self::handler(widget, Event::Next)) else { continue };
             let Some(decl) = own.iter().find(|d| d.name.name == next.handler) else { continue };
             let values: Vec<String> = next.args.iter().zip(&decl.params).map(|(v, p)| logic::literal(self.project, &p.ty, v)).collect();
-            let _ = write!(events, "    public bool Next_{}() => Handle(() => On{}({}));\n\n", member(wizard), pascal(&next.handler), values.join(", "));
+            let _ = write!(events, "    public bool Next_{}() => Handle(() => {}({}));\n\n", member(wizard), on(&next.handler), values.join(", "));
         }
 
         // Windows opened by a click, and the built-in targets.
@@ -686,7 +721,7 @@ impl<'a> Window<'a> {
                     .map(|(i, p)| format!("PartValues.Read<{}>(values, {i})", super::names::value_type(&crate::type_ref_info(self.project, &p.ty))))
                     .collect();
                 // With what it told, so a mirror in a browser runs it on the server (DESIGN 7.6).
-                let _ = write!(cases, "            case {}:\n                Handle(() => On{}({}), [tell, values]);\n                break;\n", string(&wired.tell), pascal(&wired.handler), values.join(", "));
+                let _ = write!(cases, "            case {}:\n                Handle(() => {}({}), [tell, values]);\n                break;\n", string(&wired.tell), on(&wired.handler), values.join(", "));
             }
             let _ = write!(clicks, "    /// <summary>What custom part {name} told.</summary>\n    [Command]\n    public void Told_{}(string tell, System.Text.Json.JsonElement[] values)\n    {{\n        switch (tell)\n        {{\n{cases}        }}\n    }}\n\n", member(name));
         }
@@ -697,8 +732,8 @@ impl<'a> Window<'a> {
             let values: Vec<String> = call.args.iter().zip(&decl.params).map(|(v, p)| logic::literal(self.project, &p.ty, v)).collect();
             let _ = write!(
                 clicks,
-                "    [RelayCommand]\n    void {command}() => Run_{command}();\n\n    public bool Run_{command}() => Handle(() => On{}({}), command: nameof({command}));\n\n",
-                pascal(&call.handler),
+                "    [RelayCommand]\n    void {command}() => Run_{command}();\n\n    public bool Run_{command}() => Handle(() => {}({}), command: nameof({command}));\n\n",
+                on(&call.handler),
                 values.join(", ")
             );
         }

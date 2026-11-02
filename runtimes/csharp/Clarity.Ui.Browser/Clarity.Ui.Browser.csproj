@@ -23,6 +23,8 @@
   <ItemGroup>
     <!-- Skia for WebAssembly, linked into the page's program. -->
     <PackageReference Include="SkiaSharp.NativeAssets.WebAssembly" Version="4.148.0" />
+    <!-- HarfBuzz for WebAssembly, so the page shapes text as the desktop does. -->
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.WebAssembly" Version="14.2.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Clarity.Ui/Clarity.Ui.csproj" />

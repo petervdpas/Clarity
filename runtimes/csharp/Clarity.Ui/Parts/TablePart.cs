@@ -42,7 +42,7 @@ public enum PageButton
 }
 
 [PartKind("table", "tree", "treeTable")]
-public sealed class TablePart : RowsPart, ITakesTyped
+public sealed partial class TablePart : RowsPart, ITakesTyped
 {
     List<TableColumn> columns = [];
     (string Field, bool Desc)? order;
@@ -69,7 +69,7 @@ public sealed class TablePart : RowsPart, ITakesTyped
     abstract record Press;
     sealed record OnRow(int Place) : Press;
     sealed record OnHeader(string Field) : Press;
-    sealed record OnEdge(string Field, double X, double Width) : Press;
+    sealed record OnEdge(string Field, double X, double Width, string Before) : Press;
     sealed record OnPager(PageButton Button) : Press;
 
     /// <summary>The choices of a choice cell, while they show.</summary>
@@ -161,6 +161,7 @@ public sealed class TablePart : RowsPart, ITakesTyped
             if (!(markedFor.Count == Records.Count && markedFor.Zip(Records).All(p => ReferenceEquals(p.First, p.Second))))
             {
                 marked.Clear();
+                focusedCell = null;
                 Stop();
             }
             markedFor = Records;
@@ -332,6 +333,13 @@ public sealed class TablePart : RowsPart, ITakesTyped
         return inner with { Height = HasHeader ? RowHeight(look) : 0 };
     }
 
+    /// <summary>The header's columns as they lie: scrolled sideways with the rows.</summary>
+    Box HeaderRow(ThemeLook look)
+    {
+        var header = Header(look);
+        return header with { X = header.X - Scroller.ScrollX, Width = Math.Max(header.Width, Scroller.ContentWidth) };
+    }
+
     Box Pager(ThemeLook look)
     {
         var inner = Inner(look);
@@ -346,20 +354,30 @@ public sealed class TablePart : RowsPart, ITakesTyped
         return new Box(header.X, header.Bottom, header.Width, Math.Max(0, pager.Y - header.Bottom));
     }
 
-    double WidthOf(TableColumn column) => personWidths.TryGetValue(column.Field, out var w) ? w : column.Width ?? 0;
+    double WidthOf(TableColumn column)
+    {
+        ReadRememberedWidths();
+        return personWidths.TryGetValue(column.Field, out var w) ? w : column.Width ?? 0;
+    }
 
-    /// <summary>Each column's left edge and width: a designed width as it is, a check its own, the others sharing what is left.</summary>
+    /// <summary>
+    /// Each column's left edge and width from the left of <paramref name="row"/>:
+    /// a designed width as it is, a check its own, the others sharing what is
+    /// left of the place the rows show in (at least a little each, so together
+    /// they may be wider and scroll sideways).
+    /// </summary>
     List<(double X, double Width)> Lefts(Box row)
     {
         const double Least = 48;
         var look = LookNow;
+        var room = Body(look).Width;
         var header = look.Part("header", null);
         // A check's column is as wide as its header.
         double CheckWidth(TableColumn c) =>
             Math.Max(56, Math.Ceiling(Measure(c.Label, header.Font ?? "text", header.Size ?? look.Size("text"), header.Bold)) + 4 * look.Padding + 16);
         var fixedWidth = columns.Sum(c => WidthOf(c) > 0 ? WidthOf(c) : c.Kind == CellKind.Bool ? CheckWidth(c) : 0);
         var sharing = columns.Count(c => WidthOf(c) <= 0 && c.Kind != CellKind.Bool);
-        var share = sharing == 0 ? 0 : Math.Max(Least, (row.Width - fixedWidth) / sharing);
+        var share = sharing == 0 ? 0 : Math.Max(Least, (room - fixedWidth) / sharing);
         var x = row.X;
         var lefts = new List<(double, double)>();
         foreach (var column in columns)
@@ -390,10 +408,14 @@ public sealed class TablePart : RowsPart, ITakesTyped
     }
 
     /// <summary>The swatch of the color in a cell of a color column, while it is in sight; none for a cell without a color.</summary>
-    public Box? SwatchBox(int place, string field)
+    public Box? SwatchBox(int place, string field) =>
+        place >= 0 && place < Records.Count && ColorOf(RowFields.Read(Records[place], field)) is not null ? SwatchPlace(place, field) : null;
+
+    /// <summary>Where the swatch of a cell of a color column lies, with a color or without, while it is in sight.</summary>
+    Box? SwatchPlace(int place, string field)
     {
         if (columns.FirstOrDefault(c => c.Field == field) is not { Kind: CellKind.Color } column || place < 0 || place >= Records.Count
-            || ColorOf(RowFields.Read(Records[place], field)) is null || CellBox(place, field) is not { } cell)
+            || CellBox(place, field) is not { } cell)
             return null;
         var look = LookNow;
         var left = column.Edit ? cell.X + 3 + look.Padding * 1.5 : cell.X + look.Padding * 2;
@@ -409,19 +431,28 @@ public sealed class TablePart : RowsPart, ITakesTyped
     /// <summary>Draws the swatch of a color cell, and gives the room its text keeps beside it.</summary>
     double DrawSwatch(Painter painter, int place, TableColumn column)
     {
-        if (column.Kind != CellKind.Color || SwatchBox(place, column.Field) is not { } swatch)
+        if (column.Kind != CellKind.Color)
             return 0;
         var look = painter.Look;
         var radius = Math.Min(2, look.Radius("input"));
-        painter.Fill(swatch, ColorOf(RowFields.Read(Records[place], column.Field))!.Value, radius);
-        painter.Stroke(swatch, look.Color("strong_border"), look.Border, radius);
+        if (SwatchBox(place, column.Field) is { } swatch)
+        {
+            painter.Fill(swatch, ColorOf(RowFields.Read(Records[place], column.Field))!.Value, radius);
+            painter.Stroke(swatch, look.Color("strong_border"), look.Border, radius);
+            return SwatchSide + look.Padding * 1.5;
+        }
+        // An edited cell without a color shows an empty swatch, crossed, which opens the palette all the same.
+        if (!column.Edit || SwatchPlace(place, column.Field) is not { } empty)
+            return 0;
+        painter.Stroke(empty, look.Color("strong_border"), look.Border, radius);
+        Line(painter, empty.X + 2, empty.Bottom - 2, empty.Right - 2, empty.Y + 2, look.Color("muted"));
         return SwatchSide + look.Padding * 1.5;
     }
 
     /// <summary>The box of the header of <paramref name="field"/>; none without a header.</summary>
     public Box? HeaderBox(string field)
     {
-        var header = Header(LookNow);
+        var header = HeaderRow(LookNow);
         var c = columns.FindIndex(c => c.Field == field);
         if (!HasHeader || c < 0)
             return null;
@@ -485,6 +516,13 @@ public sealed class TablePart : RowsPart, ITakesTyped
     protected override Box RowsBox(ThemeLook look) => Body(look);
 
     protected override double RowsHeight(ThemeLook look) => ShownPlaces.Count * RowHeight(look);
+
+    /// <summary>The columns together, when they are wider than the place: the rows then scroll sideways.</summary>
+    protected override double RowsWidth(ThemeLook look, double width)
+    {
+        var total = Lefts(new Box(0, 0, width, 0)).Sum(l => l.Width);
+        return total > width + 0.5 ? total : width;
+    }
 
     // -- What a cell shows and takes --------------------------------------------
 
@@ -586,6 +624,16 @@ public sealed class TablePart : RowsPart, ITakesTyped
                         Screen?.KeyPressed(key);
                     return true;
                 }
+                // Alt+Down opens a date's calendar, a color's palette.
+                if (key.Key == Key.Down && key.Modifiers == Modifiers.Alt && column.Kind is CellKind.Date or CellKind.Color)
+                {
+                    Take();
+                    if (column.Kind == CellKind.Date)
+                        OpenCalendarOf(place, column);
+                    else
+                        OpenPalette(place, column);
+                    return true;
+                }
                 if (key.Key != Key.Escape)
                     return false;
                 Stop();
@@ -599,7 +647,9 @@ public sealed class TablePart : RowsPart, ITakesTyped
                 Take();
         };
         editing = new Editing(place, field, editor);
+        focusedCell = null;
         AddChild(editor);
+        RevealCell(place, field);
         PlaceEditor();
         editor.SelectAll();
         Screen?.Focus(editor);
@@ -607,23 +657,36 @@ public sealed class TablePart : RowsPart, ITakesTyped
     }
 
     /// <summary>
-    /// Tab in a cell's editor: takes its text and types on in the next typed
-    /// cell of the shown rows (the one before with Shift). False past the last,
-    /// so the focus leaves the table as Tab moves it.
+    /// Tab in a cell: takes what was typed and goes on to the next edited
+    /// cell of the shown rows (the one before with Shift), of every kind: a
+    /// typed one is typed into, a check or a choice is the cell the keys work
+    /// on. False past the last, so the focus leaves the table as Tab moves it.
     /// </summary>
     bool TypeOn(int place, string field, bool back)
     {
-        var typed = columns.Where(c => c.Edit && c.Kind is CellKind.Text or CellKind.Number or CellKind.Color or CellKind.Moment).ToList();
-        var cells = ShownPlaces.SelectMany(p => typed.Select(c => (Place: p, Column: c))).ToList();
+        var edited = columns.Where(c => c.Edit).ToList();
+        var cells = ShownPlaces.SelectMany(p => edited.Select(c => (Place: p, Column: c))).ToList();
         var at = cells.FindIndex(c => c.Place == place && c.Column.Field == field);
         var next = at < 0 ? -1 : back ? at - 1 : at + 1;
         Take();
+        focusedCell = null;
         if (next < 0 || next >= cells.Count || Locked)
             return false;
         var (to, column) = cells[next];
-        BeginTyping(to, column);
+        if (column.Kind is CellKind.Bool or CellKind.Choice)
+            FocusCell(to, column.Field);
+        else
+            BeginTyping(to, column);
         return true;
     }
+
+    /// <summary>Where a cell's editor lies in its cell: a moment's time at its right, a date beside its calendar button, else the input.</summary>
+    static Box EditorBox(TableColumn column, Box cell) => column.Kind switch
+    {
+        CellKind.Moment => TimeBox(cell).Inset(3),
+        CellKind.Date => cell.Inset(3) with { Width = Math.Max(0, cell.Width - 6 - CalendarButtonWidth) },
+        _ => cell.Inset(3),
+    };
 
     /// <summary>Places the cell's editor over its input (a moment's time at its right); out of sight it has no place.</summary>
     void PlaceEditor()
@@ -633,8 +696,7 @@ public sealed class TablePart : RowsPart, ITakesTyped
         var box = default(Box);
         if (CellBox(e.Place, e.Field) is { } cell && columns.FirstOrDefault(c => c.Field == e.Field) is { } column)
         {
-            cell = cell with { Height = cell.Height - LookNow.Border };
-            box = (column.Kind == CellKind.Moment ? TimeBox(cell) : cell).Inset(3);
+            box = EditorBox(column, cell with { Height = cell.Height - LookNow.Border });
         }
         e.Editor.Arrange(box);
     }
@@ -693,6 +755,18 @@ public sealed class TablePart : RowsPart, ITakesTyped
                     return;
                 value = day.Date + time;
                 break;
+            case CellKind.Date:
+                // A day as the person writes it (DateInput's typed day); cleared, it is none.
+                if (typed.Trim().Length == 0)
+                    value = null;
+                else if (DatePart.ReadDay(Locale.Formats.Culture, typed) is { } typedDay)
+                    value = typedDay;
+                else
+                {
+                    marked[(e.Place, e.Field)] = typed;
+                    return;
+                }
+                break;
             default:
                 value = typed;
                 if (Same(RowFields.Read(record, e.Field) ?? "", typed))
@@ -706,13 +780,16 @@ public sealed class TablePart : RowsPart, ITakesTyped
         Edit(e.Place, e.Field, value);
     }
 
-    /// <summary>Opens the choices of a choice cell under it.</summary>
-    void OpenChoicesOf(int place, TableColumn column, Box cell)
+    Overlay? choicesOverlay;
+
+    /// <summary>Opens the choices of a choice cell under it; the table keeps the focus and works the list with its keys.</summary>
+    void OpenChoicesOf(int place, TableColumn column)
     {
-        if (Screen is not { } screen || Locked)
+        RevealCell(place, column.Field);
+        if (Screen is not { } screen || Locked || CellBox(place, column.Field) is not { } cell)
             return;
         var height = RowHeight(screen.Look) - 4;
-        var list = new CellChoices(column.Choices, RowFields.Read(Records[place], column.Field), height);
+        var list = new CellChoices(column.Choices, RowFields.Read(Records[place], column.Field), height) { Holder = this };
         var place_ = place;
         Overlay? overlay = null;
         list.Picked = value =>
@@ -724,18 +801,28 @@ public sealed class TablePart : RowsPart, ITakesTyped
         var below = new Box(cell.X, cell.Bottom, Math.Max(cell.Width, 120), CellChoices.HeightFor(column.Choices.Count, height));
         if (below.Bottom > screen.Height && cell.Y - below.Height >= 0)
             below = below with { Y = cell.Y - below.Height };
-        overlay = new Overlay(list, below) { Closed = () => OpenChoices = null };
+        overlay = new Overlay(list, below)
+        {
+            Closed = () =>
+            {
+                OpenChoices = null;
+                choicesOverlay = null;
+            },
+        };
         OpenChoices = list;
+        choicesOverlay = overlay;
         screen.Open(overlay);
+        screen.Focus(this);
     }
 
     /// <summary>The calendar of a date or moment cell, while it is open.</summary>
     public DayCalendar? OpenCalendar { get; private set; }
 
-    /// <summary>Opens the calendar under a date or moment cell: the day picked is its edit (PickDay).</summary>
-    void OpenCalendarOf(int place, TableColumn column, Box cell)
+    /// <summary>Opens the calendar under a date or moment cell: the day picked is its edit (PickDay). The table keeps the focus and works the calendar with its keys.</summary>
+    void OpenCalendarOf(int place, TableColumn column)
     {
-        if (Screen is not { } screen || Locked)
+        RevealCell(place, column.Field);
+        if (Screen is not { } screen || Locked || CellBox(place, column.Field) is not { } cell)
             return;
         var day = RowFields.Read(Records[place], column.Field) switch
         {
@@ -744,7 +831,11 @@ public sealed class TablePart : RowsPart, ITakesTyped
             _ => (DateOnly?)null,
         };
         var field = column.Field;
-        var overlay = DayCalendar.Open(screen, cell, day, picked => PickDay(place, field, picked), closed: () => OpenCalendar = null);
+        var overlay = DayCalendar.Open(screen, cell, day, picked =>
+        {
+            marked.Remove((place, field));
+            PickDay(place, field, picked);
+        }, Locale.Formats.Culture, holder: this, closed: () => OpenCalendar = null);
         OpenCalendar = (DayCalendar)overlay.Content;
     }
 
@@ -756,12 +847,16 @@ public sealed class TablePart : RowsPart, ITakesTyped
     {
         // The focus going to the cell's editor is no leaving.
         if (!focused && (editing is null || Screen?.Focused != editing.Editor))
+        {
             Take();
+            focusedCell = null;
+        }
     }
 
     public override void OnPointerPressed(PointerInput at)
     {
         press = null;
+        focusedCell = null;
         if (!Enabled)
             return;
         var look = LookNow;
@@ -776,23 +871,20 @@ public sealed class TablePart : RowsPart, ITakesTyped
         if (HasHeader && Header(look).Contains(x, y))
         {
             Take();
+            // The line between two headers is grabbed from either side of it, as a DataGrid's grip straddles it.
+            if (EdgeColumnAt(x, y) is { } edge && HeaderBox(edge) is { } edgeBox)
+            {
+                if (at.Clicks == 2)
+                {
+                    DesignedWidths();
+                    return;
+                }
+                press = new OnEdge(edge, x, edgeBox.Width, WidthsWritten());
+                return;
+            }
             foreach (var heading in columns)
                 if (HeaderBox(heading.Field) is { } box && box.Contains(x, y))
-                {
-                    if (Resizable && x >= box.Right - Edge)
-                    {
-                        if (at.Clicks == 2)
-                        {
-                            // The designed widths again.
-                            personWidths.Clear();
-                            Invalidate();
-                            return;
-                        }
-                        press = new OnEdge(heading.Field, x, box.Width);
-                    }
-                    else
-                        press = new OnHeader(heading.Field);
-                }
+                    press = new OnHeader(heading.Field);
             return;
         }
         if (CellAt(x, y) is not { } hit)
@@ -815,12 +907,21 @@ public sealed class TablePart : RowsPart, ITakesTyped
             switch (column.Kind)
             {
                 case CellKind.Bool:
+                    // The check is the cell the keys work on now: Space ticks it again.
+                    focusedCell = (hit.Place, column.Field);
                     Edit(hit.Place, column.Field, RowFields.Read(Records[hit.Place], column.Field) is not true);
                     return;
                 case CellKind.Choice:
-                    OpenChoicesOf(hit.Place, column, hit.Cell);
+                    focusedCell = (hit.Place, column.Field);
+                    OpenChoicesOf(hit.Place, column);
                     return;
-                case CellKind.Text or CellKind.Number or CellKind.Color:
+                case CellKind.Color when PaletteButton(hit.Cell).Contains(x, y):
+                    OpenPalette(hit.Place, column);
+                    return;
+                case CellKind.Date when CalendarButton(hit.Cell).Contains(x, y):
+                    OpenCalendarOf(hit.Place, column);
+                    return;
+                case CellKind.Text or CellKind.Number or CellKind.Color or CellKind.Date:
                     if (editing is null)
                         BeginTyping(hit.Place, column);
                     return;
@@ -828,8 +929,8 @@ public sealed class TablePart : RowsPart, ITakesTyped
                     if (editing is null)
                         BeginTyping(hit.Place, column);
                     return;
-                case CellKind.Moment or CellKind.Date:
-                    OpenCalendarOf(hit.Place, column, hit.Cell);
+                case CellKind.Moment:
+                    OpenCalendarOf(hit.Place, column);
                     return;
             }
         }
@@ -869,6 +970,9 @@ public sealed class TablePart : RowsPart, ITakesTyped
                 if (!DropRow() && RowAt(at.ScreenY) is { } over && over.Place == row.Place)
                     Choose(row.Place);
                 break;
+            case OnEdge edge:
+                KeepWidths(edge.Before);
+                break;
             case OnHeader header when HeaderBox(header.Field) is { } box && box.Contains(at.ScreenX, at.ScreenY):
                 SortBy(header.Field);
                 break;
@@ -887,6 +991,8 @@ public sealed class TablePart : RowsPart, ITakesTyped
 
     public override bool OnKey(KeyInput key)
     {
+        if (CellKeyed(key))
+            return true;
         if (MoveKeyed(key))
             return true;
         if (!Enabled || key.Modifiers != Modifiers.None)
@@ -962,7 +1068,7 @@ public sealed class TablePart : RowsPart, ITakesTyped
         var shown = look.Part("header", null);
         painter.Fill(header, shown.Background ?? look.Color("raised"));
         painter.Fill(header with { Y = header.Bottom - look.Border, Height = look.Border }, look.Color("border"));
-        var lefts = Lefts(header);
+        var lefts = Lefts(HeaderRow(look));
         var pad = look.Padding * 2;
         for (var c = 0; c < columns.Count; c++)
         {
@@ -993,6 +1099,9 @@ public sealed class TablePart : RowsPart, ITakesTyped
             var cell = new Box(lefts[c].X, row.Y, lefts[c].Width, row.Height - look.Border);
             using (painter.Clip(cell))
                 DrawCell(painter, place, columns[c], cell, text, c == 0);
+            // The check or choice the keys work on shows the focus ring.
+            if (Focused && focusedCell is { } f && f.Place == place && f.Field == columns[c].Field)
+                PressLooks.FocusRing(painter, InputOf(columns[c], cell), look.Radius("input"));
         }
     }
 
@@ -1038,6 +1147,13 @@ public sealed class TablePart : RowsPart, ITakesTyped
             case CellKind.Color:
                 DrawInput(painter, cell, Shown(place, column.Field), place, column.Field, true, TextAlign.Left, () => DrawSwatch(painter, place, column));
                 return;
+            case CellKind.Date:
+                // A typed day beside the button that opens its calendar.
+                DrawInput(painter, cell, "", place, column.Field, false, TextAlign.Left);
+                DrawInput(painter, cell, Shown(place, column.Field), place, column.Field, true, TextAlign.Left);
+                var button = CalendarButton(cell);
+                Chevron(painter, button.X + button.Width / 2, button.Y + button.Height / 2, "down", look.Color("muted"));
+                return;
             default:
                 DrawInput(painter, cell, Shown(place, column.Field), place, column.Field, true, column.Kind == CellKind.Number ? TextAlign.Right : TextAlign.Left);
                 return;
@@ -1054,7 +1170,7 @@ public sealed class TablePart : RowsPart, ITakesTyped
         var box = cell.Inset(3);
         if (typed && editing is { } e && e.Place == place && e.Field == field)
         {
-            e.Editor.Arrange(box);
+            PlaceEditor();
             e.Editor.Draw(painter);
             return;
         }
@@ -1171,7 +1287,11 @@ public sealed class TablePart : RowsPart, ITakesTyped
     }
 }
 
-/// <summary>The choices of a choice cell, as a list over the window: a press on one picks it.</summary>
+/// <summary>
+/// The choices of a choice cell, as a list over the window: a press on one
+/// picks it. Its table works it with the keys: the arrows, Home and End move
+/// the marked choice, Enter picks it, and the first letters of a choice go to it.
+/// </summary>
 public sealed class CellChoices : Element
 {
     /// <summary>How many choices show at once; more scroll.</summary>
@@ -1189,6 +1309,65 @@ public sealed class CellChoices : Element
         rows = new ChoiceRows(this);
         View = new ScrollView(rows) { Measure = (width, _) => (width, Choices.Count * itemHeight) };
         AddChild(View);
+        Highlighted = Marked;
+    }
+
+    /// <summary>The part it belongs to, which keeps the focus while the person picks.</summary>
+    public Element? Holder { get; init; }
+
+    /// <summary>The choice marked for Enter: its value's at first, then where the keys or the pointer go; -1 for none.</summary>
+    public int Highlighted { get; private set; }
+
+    /// <summary>Marks the choice <paramref name="by"/> on (back when below 0), within the choices, and scrolls it into view.</summary>
+    public void Move(int by)
+    {
+        if (Choices.Count == 0)
+            return;
+        MoveTo(Highlighted < 0 ? (by > 0 ? by - 1 : Choices.Count + by) : Highlighted + by);
+    }
+
+    void MoveTo(int at)
+    {
+        Highlighted = Math.Clamp(at, 0, Choices.Count - 1);
+        View.ScrollInto(new Box(0, Highlighted * itemHeight, 1, itemHeight));
+        Invalidate();
+    }
+
+    /// <summary>Picks the marked choice; none marked picks nothing.</summary>
+    public void PickMarked()
+    {
+        if (Highlighted >= 0 && Highlighted < Choices.Count)
+            Picked?.Invoke(Choices[Highlighted].Value);
+    }
+
+    /// <summary>How long typed letters add up to one search.</summary>
+    static readonly TimeSpan SeekPause = TimeSpan.FromSeconds(1);
+
+    string sought = "";
+    DateTime soughtAt;
+
+    /// <summary>
+    /// Letters typed while it is open: they add up, while typed close
+    /// together, to the start of a choice's label it goes to; one letter
+    /// typed again and again goes through the choices that start with it.
+    /// </summary>
+    public void Seek(string text, DateTime now)
+    {
+        if (text.Length == 0 || Choices.Count == 0)
+            return;
+        sought = now - soughtAt > SeekPause ? text : sought + text;
+        soughtAt = now;
+        var seek = sought.Distinct().Count() == 1 ? sought[..1] : sought;
+        var start = seek.Length == 1 ? Highlighted + 1 : Math.Max(Highlighted, 0);
+        for (var i = 0; i < Choices.Count; i++)
+        {
+            var at = ((start + i) % Choices.Count + Choices.Count) % Choices.Count;
+            if (Choices[at].Label.StartsWith(seek, StringComparison.CurrentCultureIgnoreCase))
+            {
+                MoveTo(at);
+                return;
+            }
+        }
     }
 
     public IReadOnlyList<Choice> Choices { get; }
@@ -1259,11 +1438,18 @@ public sealed class CellChoices : Element
             return at >= 0 && at < list.Choices.Count ? at : null;
         }
 
-        public override void OnPointerPressed(PointerInput at) => pressedAt = At(at.ScreenY);
+        public override void OnPointerPressed(PointerInput at)
+        {
+            pressedAt = At(at.ScreenY);
+            if (list.Holder is { } holder)
+                Screen?.Focus(holder);
+        }
 
         public override void OnPointerMoved(PointerInput at)
         {
             pointerY = at.ScreenY;
+            if (At(at.ScreenY) is { } over)
+                list.Highlighted = over;
             Invalidate();
         }
 
@@ -1277,7 +1463,7 @@ public sealed class CellChoices : Element
         {
             var look = painter.Look;
             var menu = look.Part("menu", null);
-            var hover = Hovered && pointerY is { } y ? At(y) : null;
+            var hover = list.Highlighted >= 0 ? list.Highlighted : Hovered && pointerY is { } y ? At(y) : null;
             var view = list.View.Bounds;
             var first = Math.Max(0, (int)Math.Floor((view.Y - Bounds.Y) / list.itemHeight));
             var last = Math.Min(list.Choices.Count - 1, (int)Math.Ceiling((view.Bottom - Bounds.Y) / list.itemHeight));

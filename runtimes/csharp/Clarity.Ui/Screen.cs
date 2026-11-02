@@ -48,7 +48,7 @@ public sealed class Screen : IDisposable
         Width = width;
         Height = height;
         Scale = scale <= 0 ? 1 : scale;
-        Root.Arrange(new Box(0, 0, width, height));
+        Root.ArrangeSafely(new Box(0, 0, width, height));
         foreach (var overlay in overlays.Where(o => o.Covers))
             overlay.Place = Whole;
         Invalidate();
@@ -120,7 +120,7 @@ public sealed class Screen : IDisposable
                 continue;
             wakes.Remove(element);
             if (element.Attached && element.Screen == this)
-                element.OnWake();
+                element.Safely(element.OnWake);
         }
         if (tipDue is { } due && due <= now && tipWaiting is { } text)
         {
@@ -143,14 +143,14 @@ public sealed class Screen : IDisposable
         canvas.Save();
         canvas.Scale(Scale);
         canvas.Clear(Look.Color("background"));
-        Root.Arrange(new Box(0, 0, Width, Height));
+        Root.ArrangeSafely(new Box(0, 0, Width, Height));
         var painter = new Painter(canvas, Look, Fonts);
-        Root.Draw(painter);
+        Root.DrawSafely(painter);
         foreach (var overlay in overlays.ToList())
         {
-            overlay.Content.Arrange(overlay.Place);
+            overlay.Content.ArrangeSafely(overlay.Place);
             if (overlay.Content.IsShown)
-                overlay.Content.Draw(painter);
+                overlay.Content.DrawSafely(painter);
         }
         if (Tip is { } tip)
             DrawTip(painter, tip);
@@ -244,7 +244,7 @@ public sealed class Screen : IDisposable
         if (overlay.Covers)
             overlay.Place = Whole;
         overlay.Content.Owner = this;
-        overlay.Content.Arrange(overlay.Place);
+        overlay.Content.ArrangeSafely(overlay.Place);
         overlays.Add(overlay);
         overlay.Content.Attach();
         Invalidate();
@@ -285,13 +285,44 @@ public sealed class Screen : IDisposable
 
     static PointerInput Input(Element e, double x, double y) => new(x, y, x - e.Bounds.X, y - e.Bounds.Y);
 
+    // -- Pointer shape ---------------------------------------------------------
+
+    Cursor cursor;
+
+    /// <summary>The shape the pointer shows now; each host shows it as its system's.</summary>
+    public Cursor Cursor => cursor;
+
+    /// <summary>The pointer's shape changed: the host shows <see cref="Cursor"/>.</summary>
+    public event Action? CursorChanged;
+
+    /// <summary>The shape over a point: of what holds the pointer, else of the deepest element there or one it is in; a disabled one shows the plain pointer.</summary>
+    Cursor ShapeAt(Element? at, double x, double y)
+    {
+        var from = pressed ?? at;
+        if (from is null || !from.EnabledInTree)
+            return Cursor.Default;
+        for (var e = from; e is not null; e = e.Parent)
+            if (e.Safely(() => e.CursorAt(x, y), null) is { } shape)
+                return shape;
+        return Cursor.Default;
+    }
+
+    void Shape(Cursor shape)
+    {
+        if (shape == cursor)
+            return;
+        cursor = shape;
+        CursorChanged?.Invoke();
+    }
+
     public void PointerMoved(double x, double y)
     {
         if (pressed is { } holding)
-            holding.OnPointerMoved(Input(holding, x, y));
+            holding.Safely(() => holding.OnPointerMoved(Input(holding, x, y)));
         var at = At(x, y);
-        if (at is not null && at != pressed)
-            at.OnPointerMoved(Input(at, x, y));
+        if (at is not null && at != pressed && at.EnabledInTree)
+            at.Safely(() => at.OnPointerMoved(Input(at, x, y)));
+        Shape(ShapeAt(at, x, y));
         Rest(pressed is null ? TipOf(at, x, y) : null, x, y);
         if (at == hovered)
             return;
@@ -306,6 +337,8 @@ public sealed class Screen : IDisposable
     public void PointerLeft()
     {
         HideTip();
+        if (pressed is null)
+            Shape(Cursor.Default);
         if (hovered is null)
             return;
         hovered.Hovered = false;
@@ -325,13 +358,55 @@ public sealed class Screen : IDisposable
         PointerMoved(x, y);
         // A press starts no new pause: the tip of what was pressed shows again only once the pointer went elsewhere.
         tipDue = null;
-        if (button != PointerButton.Left || At(x, y) is not { } at)
+        // What is disabled (or in a disabled part) takes no press, no focus and no menu.
+        if (At(x, y) is not { } at || !at.EnabledInTree)
             return;
-        Focus(Taker(at));
+        if (button == PointerButton.Right)
+        {
+            ContextPressed(at, x, y);
+            return;
+        }
+        if (button != PointerButton.Left)
+            return;
+        // Focus by the pointer: what was pressed stays where it is (no scrolling into view), so the release lands on it.
+        Pointing = true;
+        try
+        {
+            Focus(Taker(at));
+        }
+        finally
+        {
+            Pointing = false;
+        }
         pressed = at;
         at.Pressed = true;
-        at.OnPointerPressed(Input(at, x, y) with { Clicks = clicks });
+        at.Safely(() => at.OnPointerPressed(Input(at, x, y) with { Clicks = clicks }));
         Invalidate();
+    }
+
+    /// <summary>Whether the focus moves because of a press of the pointer (not Tab or code): a scrolling window then leaves its scroll alone.</summary>
+    public bool Pointing { get; private set; }
+
+    readonly FrameMenus contextMenus = new();
+
+    /// <summary>The menu a right press opened; none while none is open.</summary>
+    public FrameMenus ContextMenus => contextMenus;
+
+    /// <summary>
+    /// A right press: what takes the focus there takes it (a text box keeps
+    /// its selection for Copy), then the element there, or one it is in,
+    /// gives its menu, which opens at the pointer (a part's <c>menu</c>).
+    /// </summary>
+    void ContextPressed(Element at, double x, double y)
+    {
+        if (Taker(at) is { } taker)
+            Focus(taker);
+        for (var e = at; e is not null; e = e.Parent)
+            if (e.Safely(() => e.ContextMenuAt(x, y), null) is { Count: > 0 } entries)
+            {
+                contextMenus.Open(this, e, entries, new Box(x, y - 1, 0, 0));
+                return;
+            }
     }
 
     public void PointerReleased(double x, double y, PointerButton button)
@@ -340,10 +415,28 @@ public sealed class Screen : IDisposable
             return;
         pressed = null;
         was.Pressed = false;
-        was.OnPointerReleased(Input(was, x, y));
+        was.Safely(() => was.OnPointerReleased(Input(was, x, y)));
         Invalidate();
         if (At(x, y) == was)
-            was.OnClick();
+            was.Safely(was.OnClick);
+        Shape(ShapeAt(At(x, y), x, y));
+    }
+
+    /// <summary>
+    /// The pointer was taken away mid-press: a touch the browser took over,
+    /// or the window lost the focus (Alt+Tab during a drag). What holds it
+    /// lets go without a release and without a click, so a drag in progress
+    /// is dropped, not committed.
+    /// </summary>
+    public void PointerCancelled()
+    {
+        if (pressed is not { } was)
+            return;
+        pressed = null;
+        was.Pressed = false;
+        was.Safely(was.OnPointerCancelled);
+        Invalidate();
+        Shape(Cursor.Default);
     }
 
     /// <summary>
@@ -357,8 +450,11 @@ public sealed class Screen : IDisposable
     public void Wheel(double x, double y, double dx, double dy, Modifiers held = Modifiers.None)
     {
         HideTip();
+        // Shift turns a wheel that only goes up and down sideways, as every system's scrolling does.
+        if (held.HasFlag(Modifiers.Shift) && dx == 0)
+            (dx, dy) = (dy, 0);
         for (var e = At(x, y); e is not null; e = e.Parent)
-            if (e.OnWheel(dx, dy, held))
+            if (e.Safely(() => e.OnWheel(dx, dy, held), false))
             {
                 Invalidate();
                 return;
@@ -369,9 +465,12 @@ public sealed class Screen : IDisposable
     {
         for (Element? e = at; e is not null; e = e.Parent)
             if (e.Focusable)
-                return e;
+                return e.EnabledInTree ? e : null;
         return null;
     }
+
+    /// <summary>The focus moved to the element given (none: nothing has it): a scrolling window shows it.</summary>
+    public event Action<Element?>? FocusChanged;
 
     public void Focus(Element? element)
     {
@@ -383,52 +482,99 @@ public sealed class Screen : IDisposable
         Focused = element;
         if (element is not null)
             element.Focused = true;
-        was?.OnFocusChanged(false);
-        element?.OnFocusChanged(true);
+        was?.Safely(() => was.OnFocusChanged(false));
+        element?.Safely(() => element.OnFocusChanged(true));
+        FocusChanged?.Invoke(element);
         Invalidate();
     }
 
     /// <summary>
-    /// The window's own keys, asked before the part with the focus (a
-    /// button's shortcut, Enter for the default button, Escape for the cancel
-    /// button, Ctrl+Z): true when it took the key. Not asked while a modal
-    /// overlay (a dialog) is on top: its keys are its own.
+    /// The window's own keys, asked once the part with the focus did not
+    /// take the key (a text box keeps Ctrl+C, Ctrl+V and its arrows, as
+    /// Avalonia's controls did before the window's key bindings): a
+    /// button's shortcut, Enter for the default button, Escape for the
+    /// cancel button, Ctrl+Z. True when it took the key. Not asked while a
+    /// modal overlay (a dialog) is on top: its keys are its own. A character
+    /// typed after a key nothing took is asked too, as a key with
+    /// <see cref="KeyInput.Typed"/> (a <c>*</c> shortcut answers Shift+8 on
+    /// any keyboard layout).
     /// </summary>
     public Func<KeyInput, bool>? Keys { get; set; }
 
-    public void KeyPressed(KeyInput key)
+    /// <summary>Whether something took the last key pressed; the character it types is then no shortcut.</summary>
+    bool keyTaken;
+
+    bool ModalOnTop => overlays.Count > 0 && overlays[^1].Modal;
+
+    /// <summary>A key pressed: true when something on the screen took it, so a browser host leaves the rest (F5, Ctrl+R) to the browser.</summary>
+    public bool KeyPressed(KeyInput key)
     {
         HideTip();
+        keyTaken = true;
         // A dialog on top (a modal overlay) hears its keys before the part with the focus.
         if (overlays.Count > 0 && overlays[^1] is { Modal: true, Content: IDialogKeys dialog } && dialog.KeyPressed(key))
         {
             Invalidate();
-            return;
+            return true;
         }
+        var focused = Focused is { } f && f.EnabledInTree ? f : null;
         // Escape closes the overlay on top, unless the part with the focus takes it (a list that closes itself).
         if (key.Key == Key.Escape && overlays.Count > 0 && !overlays[^1].Modal)
         {
-            if (Focused is null || !Focused.OnKey(key))
+            if (focused is null || !focused.Safely(() => focused.OnKey(key), false))
                 Close(overlays[^1]);
-            return;
+            return true;
         }
-        if (Keys is { } keys && !(overlays.Count > 0 && overlays[^1].Modal) && keys(key))
+        if (key.Key == Key.Tab && !key.Control && !key.Modifiers.HasFlag(Modifiers.Alt) && (focused is null || !focused.WantsTab))
+        {
+            MoveFocus(back: key.Shift);
+            return TabOrder().Count > 0;
+        }
+        if (focused is not null && focused.Safely(() => focused.OnKey(key), false))
         {
             Invalidate();
-            return;
+            return true;
         }
-        if (key.Key == Key.Tab && !key.Control && (Focused is null || !Focused.WantsTab))
+        if (Keys is { } keys && !ModalOnTop && keys(key))
         {
-            var root = overlays.Count > 0 && overlays[^1].Modal ? overlays[^1].Content : Root;
-            var takers = root.InOrder().Where(e => e.Focusable && e.ShowsInTree).ToList();
-            if (takers.Count == 0)
-                return;
-            var at = Focused is null ? -1 : takers.IndexOf(Focused);
-            var next = key.Shift ? (at <= 0 ? takers.Count - 1 : at - 1) : (at + 1) % takers.Count;
-            Focus(takers[next]);
-            return;
+            Invalidate();
+            return true;
         }
-        Focused?.OnKey(key);
+        keyTaken = false;
+        return false;
+    }
+
+    /// <summary>
+    /// The elements Tab reaches, in Tab order: those that take the focus,
+    /// show and are enabled, in the order they are drawn (the window's frame
+    /// before its grid), except that a part's <c>taborder</c> sorts it
+    /// among its own: lower first, those without one after, in tree order.
+    /// </summary>
+    public List<Element> TabOrder()
+    {
+        var root = ModalOnTop ? overlays[^1].Content : Root;
+        var takers = root.InOrder().Where(e => e.Focusable && e.ShowsInTree && e.EnabledInTree).ToList();
+        return [.. takers.Select((e, i) => (e, i)).OrderBy(p => IndexOf(p.e) ?? int.MaxValue).ThenBy(p => p.i).Select(p => p.e)];
+    }
+
+    /// <summary>The Tab place of an element: its own, else that of the part it is in (a text box's editor goes by the text box's <c>taborder</c>).</summary>
+    static int? IndexOf(Element element)
+    {
+        for (Element? e = element; e is not null; e = e.Parent)
+            if (e.TabIndex is { } index)
+                return index;
+        return null;
+    }
+
+    /// <summary>The focus goes to the next element in Tab order, or the one before.</summary>
+    public void MoveFocus(bool back = false)
+    {
+        var takers = TabOrder();
+        if (takers.Count == 0)
+            return;
+        var at = Focused is null ? -1 : takers.IndexOf(Focused);
+        var next = back ? (at <= 0 ? takers.Count - 1 : at - 1) : (at + 1) % takers.Count;
+        Focus(takers[next]);
     }
 
     /// <summary>The screen is no longer shown (its window closed): its overlays close and every element leaves it, so what they started stops.</summary>
@@ -453,8 +599,26 @@ public sealed class Screen : IDisposable
             Invalidate();
             return;
         }
-        Focused?.OnKeyUp(key);
+        if (Focused is { } focused)
+            focused.Safely(() => focused.OnKeyUp(key));
     }
 
-    public void TextTyped(string text) => Focused?.OnText(text);
+    /// <summary>
+    /// Text typed: after a key nothing took, a single character is first the
+    /// window's (a character shortcut such as <c>*</c>, matched by what the
+    /// keyboard typed, not where its key is), else the focused part's.
+    /// </summary>
+    public void TextTyped(string text)
+    {
+        var shortcut = !keyTaken && text.Length is 1 or 2 && !char.IsControl(text[0]) && !ModalOnTop && Keys is { } keys
+            && keys(new KeyInput(Key.Other, Modifiers.None) { Typed = text });
+        keyTaken = false;
+        if (shortcut)
+        {
+            Invalidate();
+            return;
+        }
+        if (Focused is { } focused && focused.EnabledInTree)
+            focused.Safely(() => focused.OnText(text));
+    }
 }

@@ -148,7 +148,7 @@ public sealed class EngineCanvasPart : Part
                 return;
             }
             var v = CanvasPart.Whole(Canvas.UnitsWidth, Canvas.UnitsHeight, Bounds.Width, Bounds.Height);
-            CanvasPart.Paint(painter, Bounds, Drawing, v, Canvas.UnitsWidth, Canvas.UnitsHeight, Canvas.Paper, false, _ => null);
+            CanvasPart.Paint(painter, Bounds, Drawing, v, Canvas.UnitsWidth, Canvas.UnitsHeight, Canvas.Paper, false, Canvas.Picture);
         }
     }
 
@@ -179,6 +179,9 @@ public sealed class EngineCanvasPart : Part
         if (Pointing && EnginePoint(at.X, at.Y, true) is { } point)
             loop!.Pointer("up", point.X, point.Y);
     }
+
+    /// <summary>The pointer was taken away mid-press: it is no longer down here, and the engine hears no up, as Avalonia's lost capture did.</summary>
+    public override void OnPointerCancelled() => pointerDown = false;
 
     /// <summary>A key goes down once, however long it repeats; a shortcut with Control, Alt or the command key is the window's, but those keys themselves are held keys.</summary>
     public override bool OnKey(KeyInput key)

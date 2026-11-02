@@ -81,3 +81,28 @@ fn csharp_records_give_their_required_fields() {
     has(&cs, "    public static IReadOnlyList<(string Column, string Label)> Required { get; } = [(\"customer\", \"Customer\"), (\"sheet\", \"Sheet\")];\n");
     assert!(!cs.contains("(\"nickname\", "), "a setting is never saved");
 }
+
+#[test]
+fn csharp_inputs_bound_to_a_required_field_show_why_a_save_refused_it() {
+    let source = "module shop
+
+entity Customer
+    name: text(80), required, label @customerNameLabel
+    city: text(80)
+
+page Card: window
+    data customer: Customer
+    form name customerForm at 1,1 span 12 rows 2 bind customer
+        textbox name nameBox at 1,1 span 6 bind customer.name
+        textbox name cityBox at 1,2 span 6 bind customer.city
+";
+    let project = clarity_spec::load_sources([("shop.clarity", source)]);
+    let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
+    assert!(errors.is_empty(), "{errors:#?}");
+    let mut settings: Settings = starter("Shop", "shop");
+    settings.stack.backend = Backend::Csharp;
+    settings.stack.ui = Ui::Clarity;
+    let cs: String = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}")).iter().map(|f| f.text.clone()).collect();
+    has(&cs, "public PartState NameBox { get; } = new(\"nameBox\") { Field = (\"customer\", \"name\") };");
+    has(&cs, "public PartState CityBox { get; } = new(\"cityBox\");");
+}

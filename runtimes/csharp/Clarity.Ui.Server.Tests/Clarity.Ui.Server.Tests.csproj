@@ -15,6 +15,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
     <!-- Skia's native library, to lay out and draw the mirrors' windows as the browser does. -->
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.148.0" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="14.2.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Clarity.Ui.Server/Clarity.Ui.Server.csproj" />

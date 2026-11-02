@@ -41,7 +41,38 @@ fn run(files: &[SpecFile]) -> (Vec<Diagnostic>, HashMap<String, FileTypes>) {
         types.insert(file.path.clone(), out.types);
     }
     diagnostics.extend(check_command_lines(files));
+    diagnostics.extend(check_window_handlers(files));
     (diagnostics, types)
+}
+
+/// A window's handler has a name of its own: the app's handlers run in every
+/// window too (its frame's commands), so one of the same name would leave a
+/// click unsure which it runs.
+fn check_window_handlers(files: &[SpecFile]) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    let apps: Vec<&str> = files.iter().flat_map(|f| &f.apps).map(|a| a.name.name.as_str()).collect();
+    let app_handlers: Vec<(&str, &str)> = files
+        .iter()
+        .flat_map(|f| &f.code)
+        .filter(|b| apps.contains(&b.name.name.as_str()))
+        .flat_map(|b| b.handlers.iter().map(move |h| (h.name.name.as_str(), b.name.name.as_str())))
+        .collect();
+    for file in files {
+        for block in file.code.iter().filter(|b| file.pages.iter().any(|p| p.name.name == b.name.name)) {
+            for handler in &block.handlers {
+                if let Some((_, app)) = app_handlers.iter().find(|(name, _)| *name == handler.name.name) {
+                    out.push(
+                        Diagnostic::error(
+                            format!("handler '{}' of {} has the name of a handler of the app {app}; give one of them another name", handler.name.name, block.name.name),
+                            handler.name.span,
+                        )
+                        .in_file(&file.path),
+                    );
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Every command line names one command, a group is no command of its

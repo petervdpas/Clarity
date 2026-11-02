@@ -110,12 +110,34 @@ pub fn property(entity: &str, field: &str) -> String {
     if name == entity || RECORD_MEMBERS.contains(&name.as_str()) { format!("{name}_") } else { name }
 }
 
-/// Members every window's ViewModel has, which data or a part cannot be called.
-const VIEW_MODEL_MEMBERS: [&str; 26] = [
-    "Db", "Title", "IsDialog", "Messages", "Say", "Handle", "Open", "Close", "Opened", "Closing", "Returned", "OnOpen", "OnClose", "OnReturn",
-    "QuitApplication", "Selected", "OpenRequested", "CloseRequested", "PropertyChanged", "PropertyChanging",
-    "OnPropertyChanged", "OnPropertyChanging", "SetProperty", "Equals", "GetHashCode", "ToString",
+/// Members every window's ViewModel has (WindowViewModel's public and
+/// protected ones, ObservableObject's and object's), which data, a part or a
+/// handler's command cannot be called. Clarity.Runtime.Tests checks that the
+/// list holds every member WindowViewModel has.
+pub const VIEW_MODEL_MEMBERS: [&str; 57] = [
+    "Answer", "AppSettings", "Ask", "AskRequested", "CanvasEvent", "Changed", "Close", "CloseRequested", "CloseWith", "Closing", "Copy",
+    "CopyRequested", "Db", "DrawAnew", "Edited", "EditOf", "Edits", "Fetched", "FocusedScope", "Handle", "Instance", "IsDialog", "IsMirror",
+    "LongCall", "Messages", "OnClose", "OnOpen", "OnReturn", "Open", "Opened", "OpenRequested", "QuitApplication", "Redraw", "Remote",
+    "Reshow", "Returned", "RunUnconnected", "Say", "Selected", "ShowKeys", "ShowText", "Title", "UndoEdit", "UndoFocused",
+    "WindowSize", "PropertyChanged", "PropertyChanging", "OnPropertyChanged", "OnPropertyChanging", "SetProperty",
+    "SetPropertyAndNotifyOnCompletion", "Equals", "GetHashCode", "ToString", "GetType", "MemberwiseClone", "Finalize",
 ];
+
+/// The method that runs a handler: `saveClicked` as `OnSaveClicked`, never
+/// a member every ViewModel has (`open` is `OnOpen_`, beside the window's own `OnOpen`).
+pub fn on(handler: &str) -> String {
+    let name = format!("On{}", pascal(handler));
+    if VIEW_MODEL_MEMBERS.contains(&name.as_str()) { format!("{name}_") } else { name }
+}
+
+/// The method behind a handler's command (`[RelayCommand] void SaveClicked()`),
+/// never a member every ViewModel has nor one of the window's own (`taken`:
+/// its parts and data): `redInk` beside a part `redInk` is `RedInk_`. The
+/// screen finds the command by the handler's name, then with the `_`.
+pub fn command_method(handler: &str, taken: &std::collections::BTreeSet<String>) -> String {
+    let name = pascal(handler);
+    if VIEW_MODEL_MEMBERS.contains(&name.as_str()) || taken.contains(&name) { format!("{name}_") } else { name }
+}
 
 /// Window data or a part as a member of the window's ViewModel: `orders`
 /// as `Orders`, never a member every ViewModel has.
@@ -217,6 +239,13 @@ mod tests {
         assert_eq!(backing("event"), "_event");
         assert_eq!(member("orders"), "Orders");
         assert_eq!(member("messages"), "Messages_");
+        assert_eq!(member("remote"), "Remote_");
+        assert_eq!(on("saveClicked"), "OnSaveClicked");
+        assert_eq!(on("open"), "OnOpen_");
+        let taken = ["RedInk".to_string()].into_iter().collect();
+        assert_eq!(command_method("redInk", &taken), "RedInk_");
+        assert_eq!(command_method("opened", &taken), "Opened_");
+        assert_eq!(command_method("saveClicked", &taken), "SaveClicked");
     }
 
     #[test]

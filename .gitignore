@@ -10,6 +10,8 @@ obj/
 
 # What Clarity generates and builds for the examples.
 /examples/*/out/
+# The agents' test examples: local only, removed when the C# round is done.
+/examples/agents/
 
 # Settings folders older secrets tests left beside where they ran.
 /clarity-secret-settings-*/

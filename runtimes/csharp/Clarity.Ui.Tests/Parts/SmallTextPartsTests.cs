@@ -88,10 +88,10 @@ public class SmallTextPartsTests
         using var pixels = Shot.Of(screen, 800, 400);
         var across = parts[0].Bounds;
         var line = screen.Look.Color("strong_border");
-        Assert.Equal(line, pixels.GetPixel((int)(across.X + across.Width / 2), (int)(across.Y + across.Height / 2)));
+        Assert.Equal(line, pixels.PixelAt((int)(across.X + across.Width / 2), (int)(across.Y + across.Height / 2)));
         var down = parts[1].Bounds;
-        Assert.Equal(line, pixels.GetPixel((int)(down.X + down.Width / 2), (int)(down.Y + 10)));
-        Assert.Equal(screen.Look.Color("background"), pixels.GetPixel((int)down.X + 1, (int)(down.Y + 10)));
+        Assert.Equal(line, pixels.PixelAt((int)(down.X + down.Width / 2), (int)(down.Y + 10)));
+        Assert.Equal(screen.Look.Color("background"), pixels.PixelAt((int)down.X + 1, (int)(down.Y + 10)));
     }
 
     [Fact]
@@ -106,8 +106,8 @@ public class SmallTextPartsTests
         Assert.Equal("1,200", ((BadgePart)parts[1]).Text);
         using var pixels = Shot.Of(screen, 800, 400);
         var b = parts[0].Bounds;
-        Assert.Equal(screen.Look.Color("accent"), pixels.GetPixel((int)b.X + 4, (int)(b.Y + b.Height / 2)));
+        Assert.Equal(screen.Look.Color("accent"), pixels.PixelAt((int)b.X + 4, (int)(b.Y + b.Height / 2)));
         Assert.True(TextEditorTests.Inked(pixels, b, screen.Look.Color("on_accent")));
-        Assert.Equal(screen.Look.Color("background"), pixels.GetPixel((int)b.Right - 2, (int)(b.Y + b.Height / 2)));
+        Assert.Equal(screen.Look.Color("background"), pixels.PixelAt((int)b.Right - 2, (int)(b.Y + b.Height / 2)));
     }
 }

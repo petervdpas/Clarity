@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window name="Crunch">
+  <Button name="crunchButton" at="1,1" span="3" caption="Crunch" onclick="crunch" />
+</Window>

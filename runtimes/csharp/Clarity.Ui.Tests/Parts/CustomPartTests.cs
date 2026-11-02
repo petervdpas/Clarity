@@ -64,7 +64,7 @@ public class CustomPartTests
         Assert.Same(gauge, screen.At(gauge.Bounds.X + 4, gauge.Bounds.Y + 4));
         // It draws itself.
         using var shot = Shot.Of(screen, 800, 400);
-        Assert.Equal(screen.Look.Color("accent"), shot.GetPixel((int)gauge.Bounds.X + 10, (int)gauge.Bounds.Y + 10));
+        Assert.Equal(screen.Look.Color("accent"), shot.PixelAt((int)gauge.Bounds.X + 10, (int)gauge.Bounds.Y + 10));
     }
 
     [Fact]

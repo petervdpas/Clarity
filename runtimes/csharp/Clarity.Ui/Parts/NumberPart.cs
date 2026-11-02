@@ -71,6 +71,8 @@ public sealed class NumberPart : Part, ITakesTyped
             Marked = () => Bad is not null || State?.HasError == true,
             Entered = Enter,
             KeyFirst = Keyed,
+            // Numbers read from the right, so their digits line up.
+            Align = TextAlign.Right,
         };
         editor.FocusMoved += focused =>
         {
@@ -85,8 +87,8 @@ public sealed class NumberPart : Part, ITakesTyped
         AddChild(editor);
         if (Spec.Kind == "spinbox")
         {
-            Up = new InputSideButton(InputIcon.Up, () => Spin(RangeKey.Up)) { Enabled = () => Enabled };
-            Down = new InputSideButton(InputIcon.Down, () => Spin(RangeKey.Down)) { Enabled = () => Enabled };
+            Up = new InputSideButton(InputIcon.Up, () => Spin(RangeKey.Up)) { Enabled = () => Enabled, Repeats = true };
+            Down = new InputSideButton(InputIcon.Down, () => Spin(RangeKey.Down)) { Enabled = () => Enabled, Repeats = true };
             AddChild(Up);
             AddChild(Down);
             editor.RightInset = ArrowWidth + 2;

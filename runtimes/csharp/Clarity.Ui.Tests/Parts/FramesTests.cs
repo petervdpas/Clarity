@@ -61,6 +61,6 @@ public class FramesTests
         var (screen, _, parts) = Made.Window("""<Panel name="box" at="1,1" span="6" rows="5" caption="Box">""" + List.Replace("EXTRA", "") + "</Panel>", host, width: 808);
         var list = Assert.Single(Below(parts[0]).OfType<ListPart>());
         using var pixels = Shot.Of(screen, 808, 400);
-        Assert.NotEqual(screen.Look.Part("list", null).Border, pixels.GetPixel((int)list.Bounds.X + 30, (int)list.Bounds.Y));
+        Assert.NotEqual(screen.Look.Part("list", null).Border, pixels.PixelAt((int)list.Bounds.X + 30, (int)list.Bounds.Y));
     }
 }

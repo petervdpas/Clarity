@@ -19,6 +19,16 @@ sealed record Ordered : IRecord<Ordered>
     public static Ordered FromValues(long id, object?[] values) => new() { Id = id, Number = Sql.GetText("number", values[0]), Customer = values[1] is long c ? c : null };
 }
 
+/// <summary>A window with a form on an order: its number box and its customer box show the order's fields.</summary>
+sealed class OrderFormViewModel(Db db) : WindowViewModel(db)
+{
+    public Ordered Order { get; set; } = new();
+    public PartState NumberBox { get; } = new("numberBox") { Field = ("order", "number") };
+    public PartState CustomerBox { get; } = new("customerBox") { Field = ("order", "customer_id") };
+    public PartState Other { get; } = new("other");
+    public void SaveClicked() => Handle(() => Db.Save(Order));
+}
+
 public sealed class RequiredTests
 {
     static JsonElement Cases() =>
@@ -76,5 +86,36 @@ public sealed class RequiredTests
         order.Number = "";
         Assert.Throws<RefusedException>(() => db.Save(order));
         Assert.Equal([kept], db.All<Ordered>());
+    }
+
+    [Fact]
+    public void A_refused_required_field_shows_why_at_its_input_and_code_gets_the_refusal()
+    {
+        using var db = Sqlite.Memory();
+        db.Migrate([["CREATE TABLE orders (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer_id INTEGER);"]]);
+        var window = new OrderFormViewModel(db);
+        window.SaveClicked();
+        // The person sees why at the input that shows the field, as a form check shows it; no message beside it.
+        Assert.Equal("Number is required", window.NumberBox.Error);
+        Assert.Equal("fieldRequired", window.NumberBox.ErrorText.Key);
+        Assert.Equal("", window.CustomerBox.Error);
+        Assert.Empty(window.Messages);
+        // The next try clears it, and the next empty field shows at its own input.
+        window.Order.Number = "ORD-1";
+        window.SaveClicked();
+        Assert.Equal("", window.NumberBox.Error);
+        Assert.Equal("Customer is required", window.CustomerBox.Error);
+        window.Order.Customer = 4;
+        window.SaveClicked();
+        Assert.Equal("", window.CustomerBox.Error);
+        Assert.NotEqual(0, window.Order.Id);
+        // Code gets the refusal it can handle: which record, which column.
+        var refused = Assert.Throws<RefusedException>(() => db.Save(new Ordered { Number = "ORD-2" }));
+        Assert.Equal("customer_id", refused.Column);
+        Assert.IsType<Ordered>(refused.Record);
+        // A record no input shows is refused as an error message.
+        window.Order = new Ordered { Number = "ORD-3" };
+        window.Handle(() => db.Save(new Ordered()));
+        Assert.Equal("Number is required", Assert.Single(window.Messages).Text.Show());
     }
 }

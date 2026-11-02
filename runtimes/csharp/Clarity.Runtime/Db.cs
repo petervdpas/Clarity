@@ -317,7 +317,15 @@ public sealed partial class Db : IDisposable
 
     void Write<R>(R record) where R : IRecord<R>
     {
-        Requirements.Check(R.Required, R.ColumnNames, record.ToValues());
+        try
+        {
+            Requirements.Check(R.Required, R.ColumnNames, record.ToValues());
+        }
+        catch (RefusedException refused)
+        {
+            refused.Record = record;
+            throw;
+        }
         if (recording is null)
         {
             WriteRow(record);

@@ -3,8 +3,11 @@
 // on Linux the desktop portal (org.freedesktop.appearance color-scheme), else
 // GNOME's settings; on Windows the registry's AppsUseLightTheme; on macOS the
 // defaults' AppleInterfaceStyle. A program that is missing, slow or says
-// nothing leaves light, so reading it never stops the application. A browser
-// page asks prefers-color-scheme instead (Clarity.Ui.Browser).
+// nothing leaves light, so reading it never stops the application. A change
+// is followed by the system's own event where it gives one (the desktop host
+// listens: the portal's SettingChanged, Windows' registry change), else by
+// reading it every few seconds. A browser page asks prefers-color-scheme
+// instead (Clarity.Ui.Browser).
 
 using System.Diagnostics;
 using System.Text.RegularExpressions;
@@ -66,6 +69,86 @@ public sealed partial class SystemTheme(Func<string, IReadOnlyList<string>, stri
                 busy = 0;
             }
         }, null, every, every);
+    }
+
+    /// <summary>
+    /// Follows the system's choice by its change event: each time
+    /// <paramref name="listen"/>'s event comes, the choice is read again and
+    /// <paramref name="changed"/> hears it when it differs. Where the system
+    /// gives no event (<paramref name="listen"/> gives none, or fails) the
+    /// choice is read every <paramref name="every"/> instead. Listening starts
+    /// away from the caller's thread, so a slow system never holds the
+    /// screen. Disposing it stops.
+    /// </summary>
+    public Following Follow(bool now, Func<Action, IDisposable?> listen, TimeSpan every, Action<bool> changed) =>
+        new(this, now, listen, every, changed);
+
+    /// <summary>The system's choice followed, by its event or, where it has none, by reading it every so often.</summary>
+    public sealed class Following : IDisposable
+    {
+        readonly SystemTheme theme;
+        readonly Action<bool> changed;
+        readonly object gate = new();
+        IDisposable? watching;
+        bool last;
+        bool stopped;
+
+        internal Following(SystemTheme theme, bool now, Func<Action, IDisposable?> listen, TimeSpan every, Action<bool> changed)
+        {
+            this.theme = theme;
+            this.changed = changed;
+            last = now;
+            Started = Task.Run(() =>
+            {
+                IDisposable? heard;
+                try
+                {
+                    heard = listen(Heard);
+                }
+                catch (Exception e) when (e is not OutOfMemoryException)
+                {
+                    // Fail safe: an event that cannot be listened to leaves reading every so often.
+                    Console.Error.WriteLine($"the system's light or dark change cannot be heard: {e.Message}");
+                    heard = null;
+                }
+                lock (gate)
+                {
+                    ByEvent = heard is not null;
+                    watching = heard ?? theme.Watch(last, every, Changed);
+                    if (stopped)
+                        watching.Dispose();
+                }
+            });
+        }
+
+        /// <summary>Done once it listens to the event or reads every so often.</summary>
+        public Task Started { get; }
+
+        /// <summary>Whether it follows the system's event; false while it reads every so often.</summary>
+        public bool ByEvent { get; private set; }
+
+        /// <summary>The system said its choice may have changed: it is read again, off the thread that said it.</summary>
+        void Heard() => Task.Run(() => Changed(theme.Dark()));
+
+        void Changed(bool dark)
+        {
+            lock (gate)
+            {
+                if (stopped || dark == last)
+                    return;
+                last = dark;
+            }
+            changed(dark);
+        }
+
+        public void Dispose()
+        {
+            lock (gate)
+            {
+                stopped = true;
+                watching?.Dispose();
+            }
+        }
     }
 
     /// <summary>The portal's color-scheme: 1 prefers dark, 2 prefers light, 0 says nothing.</summary>

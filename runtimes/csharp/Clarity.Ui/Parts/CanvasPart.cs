@@ -58,6 +58,9 @@ public sealed partial class CanvasPart : Part
             bending = null;
             DrawingChanged();
         }
+        // A paint canvas reads its record's picture as soon as the record changes, not only when drawn.
+        if (Mode == "paint")
+            Painted();
         Invalidate();
     }
 
@@ -253,18 +256,43 @@ public sealed partial class CanvasPart : Part
     /// <summary>Where the pointer was last over it, from its top left; the wheel with Ctrl zooms there.</summary>
     (double X, double Y)? pointerAt;
 
-    /// <summary>The wheel with Ctrl zooms, closer as it turns up, at the pointer; without, it pans.</summary>
+    /// <summary>A wheel notch, in the pixels the screen gives it.</summary>
+    public const double Notch = 50;
+
+    /// <summary>How much closer a wheel notch with Ctrl zooms.</summary>
+    public const double NotchZoom = 1.15;
+
+    /// <summary>The zoom of a wheel turn of <paramref name="dy"/> pixels: 1.15 a notch, closer as it turns up, by how far it turned, so a touchpad's many small turns zoom as smoothly as a wheel.</summary>
+    public static double WheelZoom(double dy) => Math.Pow(NotchZoom, -dy / Notch);
+
+    /// <summary>The wheel with Ctrl (Cmd on macOS) zooms at the pointer, by how far it turned; without, it pans.</summary>
     public override bool OnWheel(double dx, double dy, Modifiers held)
     {
-        if (!Zoom || !held.HasFlag(Modifiers.Control) || dy == 0)
+        if (!Zoom || (held & (Modifiers.Control | Modifiers.Meta)) == 0 || dy == 0)
             return OnWheel(dx, dy);
-        ZoomBy(dy < 0 ? 1.2 : 1 / 1.2, pointerAt?.X, pointerAt?.Y);
+        ZoomBy(WheelZoom(dy), pointerAt?.X, pointerAt?.Y);
         Invalidate();
         return true;
     }
 
+    /// <summary>
+    /// The hand over what a press does something with: a canvas with a click
+    /// handler, its zoom buttons and its toolbar's buttons; the text cursor
+    /// over the text being typed.
+    /// </summary>
+    public override Cursor? CursorAt(double x, double y)
+    {
+        if (!Enabled || Engine is not null)
+            return null;
+        if (ZoomButtonAt(x, y) is not null || (Acts && ToolButtons().Any(b => b.Box.Contains(x, y))))
+            return Cursor.Hand;
+        if (TypingEditor is { } editor && editor.Bounds.Contains(x, y))
+            return Cursor.Text;
+        return Handles("click") && !ReadOnly ? Cursor.Hand : null;
+    }
+
     /// <summary>A zoom button says what it does when the pointer rests on it.</summary>
-    public override string? TooltipAt(double x, double y) => ZoomButtonAt(x, y) is { } button ? ZoomWord(button) : null;
+    public override string? TooltipAt(double x, double y) => ZoomButtonAt(x, y) is { } button ? ZoomWord(button) : base.TooltipAt(x, y);
 
     // -- Links that bend -----------------------------------------------------------
 
@@ -505,18 +533,31 @@ public sealed partial class CanvasPart : Part
             Point("click", point);
     }
 
+    /// <summary>
+    /// The pointer was taken away mid-press (a touch the browser took over,
+    /// the window lost the focus): the gesture is dropped, as Avalonia's
+    /// lost capture reset it. No drop, no bend, no stroke, no shape is sent;
+    /// what was dragged shows where it was.
+    /// </summary>
+    public override void OnPointerCancelled()
+    {
+        pressed = false;
+        moved = false;
+        bendPress = null;
+        bending = null;
+        ModeCancelled();
+        Invalidate();
+    }
+
     // -- Drawing ---------------------------------------------------------------------
 
-    /// <summary>Why the last drawing failed; none when it drew.</summary>
-    public string? Failed { get; private set; }
+    readonly Dictionary<string, PictureArt?> pictures = [];
 
-    readonly Dictionary<string, SKBitmap?> pictures = [];
-
-    /// <summary>A picture of the resources folder by its name, loaded once.</summary>
-    SKBitmap? Picture(string name)
+    /// <summary>A picture of the resources folder by its name, loaded once; an SVG one drawn at the size it is shown.</summary>
+    internal PictureArt? Picture(string name)
     {
         if (!pictures.TryGetValue(name, out var picture))
-            pictures[name] = picture = ImagePart.Picture(name, Host.Resource(name));
+            pictures[name] = picture = PictureArt.Of(name, Host.Resource(name));
         return picture;
     }
 
@@ -533,18 +574,9 @@ public sealed partial class CanvasPart : Part
             base.Draw(painter);
             return;
         }
-        // Fail safe: a drawing that fails says why in its place, and the window works on.
-        try
-        {
-            using (painter.Clip(Bounds))
-                DrawCanvas(painter);
-            Failed = null;
-        }
-        catch (Exception e) when (e is not OutOfMemoryException)
-        {
-            Failed = e.Message;
-            painter.Text(e.Message, Bounds.Inset(6), painter.Look.Color("error"), painter.Look.Size("small"));
-        }
+        // Fail safe: a drawing that fails says why in its place (Element.DrawSafely), and the window works on.
+        using (painter.Clip(Bounds))
+            DrawCanvas(painter);
     }
 
     void DrawCanvas(Painter painter)
@@ -609,9 +641,13 @@ public sealed partial class CanvasPart : Part
     /// else <paramref name="paper"/>, else the theme's panel; the grid goes
     /// after the clear, first when there is none.
     /// </summary>
-    public static void Paint(Painter painter, Box bounds, IReadOnlyList<Shape> shapes, CanvasViewport v, double unitsWidth, double unitsHeight, string paper, bool sheet, Func<string, SKBitmap?> pictures, Action<Painter, double>? grid = null)
+    public static void Paint(Painter painter, Box bounds, IReadOnlyList<Shape> shapes, CanvasViewport v, double unitsWidth, double unitsHeight, string paper, bool sheet, Func<string, PictureArt?> pictures, Action<Painter, double>? grid = null)
     {
         SKPoint At(double x, double y) => new((float)(bounds.X + (x - v.X) * v.Scale), (float)(bounds.Y + (y - v.Y) * v.Scale));
+        // A canvas that shows whole draws only on its units, never on the margins beside them, so a
+        // text near its edge is cut there; a sheet that zooms draws over its whole place.
+        var origin = At(0, 0);
+        using var _ = painter.Clip(sheet ? bounds : new Box(origin.X, origin.Y, unitsWidth * v.Scale, unitsHeight * v.Scale));
         var gridFirst = grid is not null && !shapes.OfType<Shape.Clear>().Any();
         if (gridFirst)
             grid!(painter, v.Scale);
@@ -621,8 +657,7 @@ public sealed partial class CanvasPart : Part
             if (shape is Shape.Clear clear)
             {
                 var color = ColorOf(painter.Look, clear.Color != "" ? clear.Color : paper != "" ? paper : "panel");
-                var start = At(0, 0);
-                painter.Fill(sheet ? bounds : new Box(start.X, start.Y, unitsWidth * v.Scale, unitsHeight * v.Scale), color);
+                painter.Fill(sheet ? bounds : new Box(origin.X, origin.Y, unitsWidth * v.Scale, unitsHeight * v.Scale), color);
                 if (!gridDrawn)
                 {
                     gridDrawn = true;
@@ -648,7 +683,7 @@ public sealed partial class CanvasPart : Part
         canvas.DrawPoints(points.Length == 1 ? SKPointMode.Points : SKPointMode.Polygon, points, paint);
 
     /// <summary>Draws one shape of a drawing, in its units, <paramref name="at"/> giving each unit's pixel.</summary>
-    public static void DrawShape(Painter painter, Shape shape, double scale, Func<double, double, SKPoint> at, Func<string, SKBitmap?> pictures)
+    public static void DrawShape(Painter painter, Shape shape, double scale, Func<double, double, SKPoint> at, Func<string, PictureArt?> pictures)
     {
         var canvas = painter.Canvas;
         var look = painter.Look;
@@ -719,8 +754,7 @@ public sealed partial class CanvasPart : Part
             case Shape.Image image when pictures(image.Picture) is { } picture:
                 {
                     var p = at(image.X, image.Y);
-                    using var drawn = SKImage.FromBitmap(picture);
-                    canvas.DrawImage(drawn, new SKRect(p.X, p.Y, p.X + (float)(image.Width * scale), p.Y + (float)(image.Height * scale)), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+                    picture.Draw(canvas, new SKRect(p.X, p.Y, p.X + (float)(image.Width * scale), p.Y + (float)(image.Height * scale)));
                     break;
                 }
             case Shape.Words words:
@@ -731,12 +765,13 @@ public sealed partial class CanvasPart : Part
                         break;
                     using var font = WordsFont(painter.Fonts, size);
                     using var paint = Fill(words.Color);
-                    var width = font.MeasureText(text);
+                    // Shaped as every text is (Arabic joined, Hebrew right to left), unhinted as the zoom needs.
+                    var width = painter.Fonts.Measure(text, "text", size, false, unhinted: true);
                     var metrics = font.Metrics;
                     var p = at(words.X, words.Y);
                     // Centered on its point down, by its alignment across.
                     var baseline = p.Y - (metrics.Ascent + metrics.Descent) / 2;
-                    canvas.DrawText(text, (float)(p.X - TextLeft(words.Align, width)), baseline, SKTextAlign.Left, font, paint);
+                    painter.Fonts.Draw(canvas, text, p.X - TextLeft(words.Align, width), baseline, "text", size, false, paint, unhinted: true);
                     break;
                 }
             // An object's box draws nothing itself: the shapes after it show it.

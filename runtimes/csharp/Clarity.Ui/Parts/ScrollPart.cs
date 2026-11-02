@@ -14,7 +14,8 @@ public sealed class ScrollPart : ContainerPart
     {
         base.Made();
         Inner = Grid(Spec.Children, Columns);
-        View = new ScrollView(Inner);
+        // Its bar has room of its own beside the parts, so it never covers a part's edge.
+        View = new ScrollView(Inner) { KeepsBarRoom = true };
         AddChild(View);
     }
 

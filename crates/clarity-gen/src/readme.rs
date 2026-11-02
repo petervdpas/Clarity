@@ -113,10 +113,17 @@ pub fn readme(settings: &Settings, project: &clarity_spec::Project) -> String {
                 example(kind)
             )),
             (SourceKind::Sqlite, None) => {
-                out.push_str(&format!(
-                    "- `{}`: the SQLite file `{}`, {owner}; a relative path is taken from the folder the program starts in.",
-                    source.name, source.url
-                ));
+                // The path as the project file gives it. A relative one is in the project's folder, where the
+                // program opens it whatever folder it starts in (clarity_project::build_settings made it whole);
+                // only a program generated from settings that were not built takes it from where it starts.
+                let written = project.sources.iter().find(|s| s.name == source.name).map(|s| s.address.as_str()).filter(|a| !a.is_empty()).unwrap_or(&source.url);
+                let relative = !std::path::Path::new(written).is_absolute();
+                let place = match (relative, std::path::Path::new(&source.url).is_absolute()) {
+                    (true, true) => format!(" in the project's folder, {owner}."),
+                    (true, false) => format!(", {owner}; a relative path is taken from the folder the program starts in."),
+                    (false, _) => format!(", {owner}."),
+                };
+                out.push_str(&format!("- `{}`: the SQLite file `{written}`{place}", source.name));
                 // The C# and Rust runtimes open every SQLite file in the folder CLARITY_DATA names, when it is set.
                 if matches!(backend, Backend::Csharp | Backend::Rust) {
                     out.push_str(" Set the environment variable `CLARITY_DATA` to a folder to open it there instead, under its own file name.");

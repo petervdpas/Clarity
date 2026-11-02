@@ -1,7 +1,8 @@
 // A long engine call (DESIGN 5.12): while a handler's engine call runs, the
-// window keeps drawing and shows how far the call is, as a note at the top
-// right like the messages' (as the web screen shows it): a bar, how much is
-// done, and Stop, which ends the call at its next look. It lies over the
+// window keeps drawing and shows how far the call is, as a note at the
+// bottom right, clear of the messages' notes at the top: a bar, how much is
+// done, and Stop, which ends the call at its next look and then greys, as it
+// can stop it only once. It lies over the
 // whole window, so nothing under it is pressed while the call runs; the
 // window takes no other handler then anyway (LongCall.Waiting).
 
@@ -21,16 +22,25 @@ public sealed class LongCallBar : Element, IDialogKeys
     public LongCallBar(Func<(long Done, long Total)?> now, Action stop)
     {
         this.now = now;
-        Stop = new DialogButton(Locale.Translate("stopCall", "Stop"), accent: false, stop);
+        Stop = new DialogButton(Locale.Translate("stopCall", "Stop"), accent: false, () =>
+        {
+            Stopped = true;
+            stop();
+            Invalidate();
+        })
+        { Usable = () => !Stopped };
         AddChild(Stop);
     }
 
-    /// <summary>The bar of the application's long call, which Stop stops.</summary>
-    public static LongCallBar OfLongCall() => new(() => LongCall.Current, LongCall.Stop);
+    /// <summary>The bar of the windows' long call <paramref name="call"/>, which Stop stops.</summary>
+    public static LongCallBar Of(LongCall call) => new(() => call.Current, call.Stop);
 
     public DialogButton Stop { get; }
 
-    /// <summary>Where the note is, at the top right of the window.</summary>
+    /// <summary>Whether the person pressed Stop: it is then greyed and stops nothing more.</summary>
+    public bool Stopped { get; private set; }
+
+    /// <summary>Where the note is, at the bottom right of the window.</summary>
     public Box Note { get; private set; }
 
     /// <summary>How much is done, 0 to 1; 0 while the call says nothing.</summary>
@@ -44,7 +54,7 @@ public sealed class LongCallBar : Element, IDialogKeys
     {
         if (key.Modifiers != Modifiers.None || key.Key != Key.Escape)
             return false;
-        Stop.OnClick();
+        Stop.Press();
         return true;
     }
 
@@ -53,7 +63,8 @@ public sealed class LongCallBar : Element, IDialogKeys
         Bounds = box;
         var pad = WindowView.ContentPadding;
         var width = Math.Min(Width, Math.Max(160, box.Width - 2 * pad));
-        Note = new Box(box.Right - pad - width, box.Y + pad, width, Height);
+        // At the bottom right, so the window's info notes at the top right stay readable while a call runs.
+        Note = new Box(box.Right - pad - width, box.Bottom - pad - Height, width, Height);
         Stop.Arrange(new Box(Note.Right - 12 - ButtonWidth, Note.Y + (Height - GridLayout.RowHeight) / 2, ButtonWidth, GridLayout.RowHeight));
     }
 

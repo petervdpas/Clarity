@@ -3,7 +3,8 @@
 // The day shows in the person's format and typed text is read the same way
 // (or as 2026-10-20) when the input is left or Enter is pressed; a button at
 // its right opens a calendar under it to pick the day from. A moment has its
-// time beside the day, typed as hh:mm on a 24-hour clock; picking or typing
+// time beside the day, shown as hh:mm on a 24-hour clock as every renderer
+// shows it; typed so, or on the person's clock (9:30 PM); picking or typing
 // a day keeps the time, and an empty moment starts at midnight. Only the
 // person's pick or typed change is a change; the same value again and what
 // code sets are not. Text that is no day or no time is marked and changes
@@ -151,6 +152,7 @@ public sealed partial class DatePart : Part, ITakesTyped
         }
         if (time is null)
             return;
+        // hh:mm on a 24-hour clock, as Avalonia's moment input and every renderer show it (conformance/forms.json).
         var clock = value is { } m ? m.ToString("HH:mm", CultureInfo.InvariantCulture) : "";
         if (clock != shownTime)
         {
@@ -174,14 +176,11 @@ public sealed partial class DatePart : Part, ITakesTyped
         var typed = editor.Text;
         if (Bad is null && typed == shownDay)
             return;
+        // Cleared is no day, required or not, as Avalonia's DateInput had it:
+        // no input refuses an empty value (a text box, a number box neither);
+        // the form's required check marks it on save.
         if (typed.Trim().Length == 0)
         {
-            if (Bound is { } path && Host.Field(path)?.Required == true)
-            {
-                Bad = typed;
-                Invalidate();
-                return;
-            }
             Bad = null;
             Offer(null);
             return;
@@ -205,7 +204,7 @@ public sealed partial class DatePart : Part, ITakesTyped
         var typed = time.Text;
         if (BadTime is null && typed == shownTime)
             return;
-        if (ReadTime(typed) is not { } clock)
+        if (ReadTime(typed, this.FormatsOf()) is not { } clock)
         {
             BadTime = typed;
             Invalidate();
@@ -272,6 +271,9 @@ public sealed partial class DatePart : Part, ITakesTyped
     }
 
     /// <summary>A typed time, h:mm or hh:mm on a 24-hour clock; empty is midnight; none when it is no time.</summary>
+    /// <summary>A typed time on the person's clock (9:30 PM) or a 24-hour one (21:30).</summary>
+    public static TimeSpan? ReadTime(string typed, Formats formats) => formats.ReadClock(typed);
+
     public static TimeSpan? ReadTime(string typed)
     {
         var text = typed.Trim();

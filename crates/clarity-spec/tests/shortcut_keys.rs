@@ -98,3 +98,17 @@ fn the_keys_window_has_clarity_s_own_words() {
     let made = clarity_spec::keyed::make_keys(&[("shop.clarity", SHOP)], &[], "en");
     assert!(words.iter().all(|w| made.order.contains(w)), "{:?}", made.order);
 }
+
+/// A toolbar or ribbon command says where it lives, as the keys window shows
+/// it beside the command's name; a menu item or a window's button says nothing.
+#[test]
+fn toolbar_and_ribbon_commands_say_where_they_live() {
+    use clarity_spec::shortcuts::{KeyPlace, places};
+    let project = load_sources([("shop.clarity", SHOP)]);
+    let places = places(&project);
+    let of = |id: &str| places.iter().find(|(i, _)| i == id).map(|(_, p)| p.clone());
+    assert_eq!(of("copyButton"), Some(KeyPlace::Ribbon { tab: "Home".into(), group: "Edit".into() }));
+    assert_eq!(of("CustomerCard.printButton"), Some(KeyPlace::Toolbar));
+    assert_eq!(of("newItem"), None);
+    assert_eq!(of("CustomerCard.saveButton"), None);
+}

@@ -188,7 +188,7 @@ pub const BUILT_IN_COMMANDS: &[&str] = &["quit", "close", "language", "theme", "
 
 /// The built-in click targets a button in a window can have too; picking
 /// the language or theme is for menus and toolbars.
-pub const BUTTON_COMMANDS: &[&str] = &["quit", "close", "undo", "redo"];
+pub const BUTTON_COMMANDS: &[&str] = &["quit", "close", "keys", "undo", "redo"];
 
 pub fn command_keyword(kind: CommandKind) -> &'static str {
     match kind {

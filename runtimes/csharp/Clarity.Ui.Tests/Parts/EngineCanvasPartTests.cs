@@ -79,7 +79,7 @@ public class EngineCanvasPartTests
         // It asks the screen for every frame while it runs.
         Assert.Equal(1, run.Screen.Animating);
         using var shot = Shot.Of(run.Screen, 320, 200);
-        Assert.Equal(ThemeLook.Clarity(dark: false).Color("accent"), shot.GetPixel(5, 5));
+        Assert.Equal(ThemeLook.Clarity(dark: false).Color("accent"), shot.PixelAt(5, 5));
     }
 
     [Fact]

@@ -80,7 +80,7 @@ public static class Requirements
             if (value is null || value is string { Length: 0 })
             {
                 var shown = label.StartsWith('@') ? Locale.Translate(label[1..]) : label;
-                throw new RefusedException(new Text("{field} is required") { Key = "fieldRequired" }.With("field", Slot.OfText(shown)));
+                throw new RefusedException(new Text("{field} is required") { Key = "fieldRequired" }.With("field", Slot.OfText(shown))) { Column = column };
             }
         }
     }

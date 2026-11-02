@@ -4,14 +4,15 @@
 // 1, is its part's state's Step, so code reads and sets it. Next runs the
 // handler of `on next` on the step shown, then moves one step on, unless the
 // handler refused (the step stays) or set the step itself (that step wins).
-// Back goes one step back and runs nothing. Finish runs `on finish`.
+// Back goes one step back and runs nothing. Finish runs `on finish`. Next
+// and Finish are the window's default button: Enter presses them.
 
 using Clarity.Runtime;
 
 namespace Clarity.Ui;
 
 [PartKind("steps")]
-public sealed class StepsPart : ContainerPart
+public sealed class StepsPart : ContainerPart, IDefaultButton
 {
     readonly List<(PageSpec Page, GridPanel Grid)> steps = [];
     long stepHere = 1;
@@ -70,6 +71,11 @@ public sealed class StepsPart : ContainerPart
         if (Shown(Step, steps.Count) == before && before < steps.Count)
             Step = before + 1;
     }
+
+    /// <summary>Next, or Finish on the last step, is its window's default button: Enter presses it when it shows and can be pressed.</summary>
+    public bool TakesEnter => ShowsInTree && Enabled && (Next.IsShown || Finish.IsShown);
+
+    public void PressDefault() => (Next.IsShown ? Next : Finish).Press();
 
     /// <summary>Back: one step back; nothing runs and what was entered stays.</summary>
     public void GoBack()

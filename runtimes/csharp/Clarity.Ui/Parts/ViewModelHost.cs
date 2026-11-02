@@ -161,14 +161,25 @@ public sealed partial class ViewModelHost : IPartHost, IDisposable
         if (Equals(property.GetValue(owner), converted))
             return;
         void Set() => property.SetValue(owner, converted);
+        // An edit draws the canvases anew as a handler does; else the window is told of the change, to draw them anew.
         if (Scope(part) is { } scope)
             Model.EditOf(part, scope, ends: true, Set);
         else
+        {
             Set();
+            Model.Changed();
+        }
         Shout();
     }
 
-    /// <summary>Where the edits of <paramref name="part"/> are undone: its <c>undoScope</c>, else its own name; none with <c>no undo</c>.</summary>
+    /// <summary>
+    /// Where the edits of <paramref name="part"/> are undone: the
+    /// <c>undoScope</c> the project worked out for it (clarity_spec
+    /// undo_scope: its form or panel, else itself); none for a part the
+    /// markup gives none (an accordion, tabs, a list that only selects, one
+    /// with <c>no undo</c>), as Avalonia's Edits made no edit there. A part
+    /// that is no part of the window's markup (code's own) is its own scope.
+    /// </summary>
     public string? Scope(string? part)
     {
         if (part is null)
@@ -177,7 +188,7 @@ public sealed partial class ViewModelHost : IPartHost, IDisposable
             return part;
         if (spec.Flag("noUndo"))
             return null;
-        return spec.Text("undoScope") ?? part;
+        return spec.Text("undoScope");
     }
 
     /// <summary>A value as the type of the property it goes to: a number from a part's double, an enum from its name.</summary>
@@ -223,7 +234,7 @@ public sealed partial class ViewModelHost : IPartHost, IDisposable
         void Execute()
         {
             if (handler is not null)
-                ran = Model.Handle(handler, null, Pascal(call.Handler));
+                ran = Model.Handle(handler, null, HandlerCommandName(call.Handler));
             else if (withValues is not null)
                 ran = withValues();
             else
@@ -242,7 +253,12 @@ public sealed partial class ViewModelHost : IPartHost, IDisposable
     Action? Handler(string handler)
     {
         var name = Pascal(handler);
-        if (!shape.Handlers.Contains(name) || Named(name) is null)
+        if (HandlerCommand(handler) is null)
+            return null;
+        // The generator steps around a member every view model has: `open` runs OnOpen_.
+        if (!shape.Handlers.Contains(name))
+            name += "_";
+        if (!shape.Handlers.Contains(name))
             return null;
         var method = Model.GetType().GetMethod("On" + name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance, Type.EmptyTypes);
         return method is { ReturnType.Name: "Void" } ? method.CreateDelegate<Action>(Model) : null;
@@ -253,6 +269,7 @@ public sealed partial class ViewModelHost : IPartHost, IDisposable
     {
         if (Scope(part) is { } scope)
             Model.Edited(part, scope);
+        Model.Changed();
         Shout();
     }
 
@@ -260,7 +277,7 @@ public sealed partial class ViewModelHost : IPartHost, IDisposable
     ICommand? Command(HandlerCall call)
     {
         if (call.Args.Count == 0)
-            return Named(Pascal(call.Handler)) ?? Target(call.Handler);
+            return HandlerCommand(call.Handler) ?? Target(call.Handler);
         return CommandOf(call) is { } name ? Named(name) : null;
     }
 
@@ -292,6 +309,18 @@ public sealed partial class ViewModelHost : IPartHost, IDisposable
 
     ICommand? Named(string command) => shape.Commands.GetValueOrDefault(command)?.GetValue(Model) as ICommand;
 
+    /// <summary>
+    /// The command of a handler without values: <c>RedInk</c>, or <c>RedInk_</c>
+    /// where the generator stepped around a part or a member of the same name.
+    /// </summary>
+    ICommand? HandlerCommand(string handler) => Named(HandlerCommandName(handler));
+
+    string HandlerCommandName(string handler)
+    {
+        var name = Pascal(handler);
+        return shape.Commands.ContainsKey(name) ? name : shape.Commands.ContainsKey(name + "_") ? name + "_" : name;
+    }
+
     /// <summary>What a click opens: a window (in place or in a window of its own), or Clarity's own targets.</summary>
     ICommand? Target(string target) => target switch
     {
@@ -310,7 +339,8 @@ public sealed partial class ViewModelHost : IPartHost, IDisposable
     /// </summary>
     void NameCalls(IEnumerable<PartSpec> specs)
     {
-        var taken = new HashSet<string>(shape.Handlers);
+        // A part's state is a member too, so a call is never named as one.
+        var taken = new HashSet<string>(shape.Handlers.Concat(shape.States.Select(p => p.Name)));
         foreach (var spec in All(specs))
             foreach (var call in spec.Handlers.Where(h => h.Args.Count > 0))
             {
@@ -416,8 +446,13 @@ public sealed partial class ViewModelHost : IPartHost, IDisposable
 
     public PartState? State(string? name) => name is not null && states.TryGetValue(name, out var state) ? state : null;
 
+    /// <summary>A part's text: a key in the person's language, braces written doubled in a translation (<c>{{</c>) shown single, as Text.Show shows them.</summary>
     public string Text(string? written) =>
-        written is null ? "" : written.StartsWith('@') ? Locale.Translate(written[1..]) : written;
+        written is null ? "" : written.StartsWith('@') ? Unbraced(Locale.Translate(written[1..])) : written;
+
+    static string Unbraced(string text) => text.Replace("{{", "{").Replace("}}", "}");
+
+    public bool CanRun(string? part, HandlerCall call) => Command(call) is not { } command || command.CanExecute(null);
 
     public IReadOnlyList<Choice> Choices(string path)
     {
@@ -436,8 +471,15 @@ public sealed partial class ViewModelHost : IPartHost, IDisposable
             if (field == "theme")
                 return Choice.ThemesOffered;
         }
+        // Only a reference picks among records: a field whose facts say it refers to
+        // nothing (a count, an amount) has no choices; without facts the field's name decides.
         if (type == typeof(long))
-            return Field(path)?.Refers is { } refers && Named(shape.Choices, refers) is { } referred ? referred : ReferenceChoices(field);
+            return Field(path) switch
+            {
+                { Refers: { } refers } => Named(shape.Choices, refers) ?? ReferenceChoices(field),
+                null => ReferenceChoices(field),
+                _ => [],
+            };
         return [];
     }
 

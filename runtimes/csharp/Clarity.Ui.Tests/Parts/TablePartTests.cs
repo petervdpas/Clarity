@@ -301,11 +301,11 @@ public class TablePartOrderTests
         var table = Assert.IsType<TablePart>(parts[0]);
         using var pixels = Shot.Of(screen, 800, 400);
         var header = table.HeaderBox("hours")!.Value;
-        Assert.Equal(screen.Look.Part("header", null).Background, pixels.GetPixel((int)header.Right - 6, (int)header.Y + 4));
+        Assert.Equal(screen.Look.Part("header", null).Background, pixels.PixelAt((int)header.Right - 6, (int)header.Y + 4));
         host.State("orders")!.SelectedItem = host.Lists["orders"][1];
         using var chosen = Shot.Of(screen, 800, 400);
         var row = table.RowBox(1)!.Value;
-        Assert.Equal(screen.Look.Part("list", "selected").Background, chosen.GetPixel((int)row.Right - 6, (int)(row.Y + row.Height / 2)));
+        Assert.Equal(screen.Look.Part("list", "selected").Background, chosen.PixelAt((int)row.Right - 6, (int)(row.Y + row.Height / 2)));
     }
 }
 
@@ -544,8 +544,7 @@ public class TableCalendarTests
         host.Lists["tasks"] = [task];
         var (screen, _, parts) = Made.Window("""<Table name="tasks" at="1,1" span="12" rows="8" bind="tasks" columns="title, day, due" edit="day, due" />""", host, height: 600);
         var table = (TablePart)parts[0];
-        var cell = table.CellBox(0, "day")!.Value;
-        Cases.Click(screen, cell);
+        Cases.Click(screen, table.CalendarButtonBox(0, "day")!.Value);
         var calendar = Assert.IsType<DayCalendar>(Assert.Single(screen.Overlays).Content);
         Assert.Equal(new DateOnly(2026, 10, 5), calendar.Chosen);
         Cases.Click(screen, calendar.CellOf(new DateOnly(2026, 10, 20))!.Value);

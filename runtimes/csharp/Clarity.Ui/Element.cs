@@ -83,11 +83,29 @@ public abstract class Element
     /// <summary>Whether it takes the focus: pressed, or reached with Tab.</summary>
     public virtual bool Focusable => false;
 
+    /// <summary>Its place in Tab order among those that take the focus (a part's <c>taborder</c>): lower first, none after those with one.</summary>
+    public virtual int? TabIndex => null;
+
     /// <summary>Whether it takes Tab itself (a code editor) instead of Tab moving the focus on.</summary>
     public virtual bool WantsTab => false;
 
     /// <summary>Whether it shows: one hidden takes no focus, no pointer and draws nothing, and neither does anything in it.</summary>
     public virtual bool IsShown => true;
+
+    /// <summary>Whether the person may use it by its own state; a disabled one takes no pointer, focus or keys, and neither does anything in it.</summary>
+    public virtual bool IsEnabled => true;
+
+    /// <summary>Whether the person may use it on its screen: it and every element it is in are enabled (a disabled panel disables its parts).</summary>
+    public bool EnabledInTree
+    {
+        get
+        {
+            for (Element? e = this; e is not null; e = e.Parent)
+                if (!e.IsEnabled)
+                    return false;
+            return true;
+        }
+    }
 
     /// <summary>The room it needs beyond the rows it spans in a grid: a part that holds a grid of its own gives its padding and strip, so the grid inside fits.</summary>
     public virtual double Around => 0;
@@ -122,13 +140,116 @@ public abstract class Element
     /// <summary>Takes its place; a container places its children in it.</summary>
     public virtual void Arrange(Box box) => Bounds = box;
 
-    /// <summary>Draws itself; an element draws the children that show.</summary>
+    /// <summary>Draws itself; an element draws the children that show, each fail-safe.</summary>
     public virtual void Draw(Painter painter)
     {
         foreach (var child in children)
             if (child.IsShown)
-                child.Draw(painter);
+                child.DrawSafely(painter);
     }
+
+    /// <summary>Why its drawing, placing or input failed the last time; none while it works.</summary>
+    public string? Failed { get; private set; }
+
+    /// <summary>
+    /// Draws it, fail-safe: a drawing that fails shows why in its own place,
+    /// in the theme's error color, and the rest of the window draws on (as
+    /// Avalonia's FailSafe did for every view).
+    /// </summary>
+    public void DrawSafely(Painter painter)
+    {
+        // One that could not take its place says why there instead of drawing half placed.
+        if (placingFailed)
+        {
+            DrawFailure(painter);
+            return;
+        }
+        var saved = painter.Canvas.SaveCount;
+        try
+        {
+            Draw(Styled(painter));
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            painter.Canvas.RestoreToCount(saved);
+            Fail("drawing", e);
+            DrawFailure(painter);
+        }
+    }
+
+    /// <summary>The painter it draws with: the window's, or one whose look its style changes (a part's <c>style</c>); it may draw what its style puts under it here.</summary>
+    protected virtual Painter Styled(Painter painter) => painter;
+
+    /// <summary>Takes its place, fail-safe: one that fails to place what it holds keeps the box and says why.</summary>
+    public void ArrangeSafely(Box box)
+    {
+        try
+        {
+            Arrange(box);
+            placingFailed = false;
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            Bounds = box;
+            placingFailed = true;
+            Fail("placing", e);
+        }
+    }
+
+    /// <summary>Whether it failed to take its place the last time it was placed.</summary>
+    bool placingFailed;
+
+    /// <summary>Runs what the person did on it, fail-safe: a part that fails to take a press or a key says why in its place, and the window keeps working.</summary>
+    public T Safely<T>(Func<T> input, T otherwise)
+    {
+        try
+        {
+            return input();
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            Fail("input", e);
+            Invalidate();
+            return otherwise;
+        }
+    }
+
+    /// <summary>As <see cref="Safely{T}(Func{T}, T)"/> for input that answers nothing.</summary>
+    public void Safely(Action input) => Safely(() => { input(); return true; }, false);
+
+    void Fail(string doing, Exception e)
+    {
+        var why = e.InnerException?.Message ?? e.Message;
+        if (Failed != why)
+            Console.Error.WriteLine($"{GetType().Name} failed in {doing}: {why}");
+        Failed = why;
+    }
+
+    /// <summary>Why it failed, in its place: a red outline and the reason in small text.</summary>
+    void DrawFailure(Painter painter)
+    {
+        try
+        {
+            var look = painter.Look;
+            using (painter.Clip(Bounds))
+            {
+                painter.Stroke(Bounds, look.Color("error"), 1, look.Radius("input"));
+                painter.Text($"{GetType().Name}: {Failed}", Bounds.Inset(6), look.Color("error"), look.Size("small"));
+            }
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            Console.Error.WriteLine($"{GetType().Name} could not say why it failed: {e.Message}");
+        }
+    }
+
+    /// <summary>
+    /// The items of its menu for a right press at a point on the screen (a
+    /// part's <c>menu</c>, a text box's Cut, Copy, Paste and Select all);
+    /// none to leave it to the element it is in. The screen opens them as a
+    /// menu at the pointer, and an item runs once the menu closed.
+    /// </summary>
+    public virtual IReadOnlyList<MenuEntry>? ContextMenuAt(double x, double y) => null;
 
     /// <summary>Pressed and released with the main button.</summary>
     public virtual void OnClick() { }
@@ -141,6 +262,13 @@ public abstract class Element
 
     /// <summary>The main button went up after it was pressed on it, wherever the pointer is.</summary>
     public virtual void OnPointerReleased(PointerInput at) { }
+
+    /// <summary>
+    /// The pointer it held was taken away before the button went up (a touch
+    /// the browser took over, the window lost the focus): what the press
+    /// started ends without its release, as Avalonia's lost capture did.
+    /// </summary>
+    public virtual void OnPointerCancelled() { }
 
     /// <summary>The wheel turned over it: true when it took the turn (it scrolls); else its parent may.</summary>
     public virtual bool OnWheel(double dx, double dy) => false;
@@ -165,6 +293,9 @@ public abstract class Element
 
     /// <summary>What it says about the place at a point on the screen when the pointer rests there (a button's name and key); none for nothing.</summary>
     public virtual string? TooltipAt(double x, double y) => null;
+
+    /// <summary>The pointer's shape over a point on the screen (a link's hand, a text box's I-beam); none to leave it to the element it is in.</summary>
+    public virtual Cursor? CursorAt(double x, double y) => null;
 
     /// <summary>The deepest element at a point: the last drawn first. A part may say a point within its place is not its own.</summary>
     internal Element? At(double x, double y)
@@ -254,7 +385,7 @@ public sealed class GridPanel(int columns, double gap = GridLayout.Gap) : Elemen
         var placed = GridLayout.Place(asked, Columns, box.Width, box.Height, gap);
         Content = placed.Content;
         for (var i = 0; i < Children.Count; i++)
-            Children[i].Arrange(placed.Boxes[i].Offset(box.X, box.Y));
+            Children[i].ArrangeSafely(placed.Boxes[i].Offset(box.X, box.Y));
     }
 
     public override void Draw(Painter painter)

@@ -15,10 +15,10 @@ public class DrawingTests
         var screen = new Screen(grid, Look);
         using var pixels = Shot.Of(screen, 400, 200);
         // Column 2 starts at 204; row 2 at 44 and is 36 high.
-        Assert.Equal(Look.Color("accent"), pixels.GetPixel(300, 60));
-        Assert.Equal(Look.Color("background"), pixels.GetPixel(100, 60));
-        Assert.Equal(Look.Color("background"), pixels.GetPixel(300, 20));
-        Assert.Equal(Look.Color("background"), pixels.GetPixel(300, 90));
+        Assert.Equal(Look.Color("accent"), pixels.PixelAt(300, 60));
+        Assert.Equal(Look.Color("background"), pixels.PixelAt(100, 60));
+        Assert.Equal(Look.Color("background"), pixels.PixelAt(300, 20));
+        Assert.Equal(Look.Color("background"), pixels.PixelAt(300, 90));
     }
 
     [Fact]
@@ -27,8 +27,8 @@ public class DrawingTests
         var grid = new GridPanel(columns: 2);
         grid.Add(new Plate("accent"), new GridItem(2, 2, 1, 1, false));
         using var pixels = Shot.Of(new Screen(grid, Look), 800, 400, scale: 2);
-        Assert.Equal(Look.Color("accent"), pixels.GetPixel(600, 120));
-        Assert.Equal(Look.Color("background"), pixels.GetPixel(600, 40));
+        Assert.Equal(Look.Color("accent"), pixels.PixelAt(600, 120));
+        Assert.Equal(Look.Color("background"), pixels.PixelAt(600, 40));
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public class DrawingTests
         var inked = 0;
         for (var y = 0; y < 120; y++)
             for (var x = 0; x < 300; x++)
-                if (pixels.GetPixel(x, y) != background)
+                if (pixels.PixelAt(x, y) != background)
                 {
                     Assert.True(y < 36, $"ink at {x},{y}, below the text's row");
                     inked++;

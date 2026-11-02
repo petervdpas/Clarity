@@ -121,13 +121,13 @@ public class SoundPartTests
         // Still on the screen: it plays on.
         ticks.TickAll();
         Assert.Equal(1, sound.Playing);
-        // Off the screen: it stops at once, and what it is told to play is not heard.
+        // Off the screen: it stops at once; what it is told to play then still plays, as Avalonia's did.
         holder.Take(sound);
         Assert.Equal(0, sound.Playing);
         Assert.Equal(1, output.Stopped);
         host.State("tune")!.Hear("tone", 440L, 0.25m);
-        Assert.Equal(0, sound.Playing);
-        Assert.Single(output.Played);
+        Assert.Equal(1, sound.Playing);
+        Assert.Equal(2, output.Played.Count);
         // Its sounds need no clock of their own.
         Assert.Empty(ticks.Clocks);
     }

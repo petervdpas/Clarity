@@ -9,7 +9,7 @@ license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"
 homepage = "https://github.com/petervdpas/Clarity"
 readme = "README.md"
-keywords = ["clarity", "codegen", "database", "tauri"]
+keywords = ["clarity", "codegen", "database", "desktop"]
 categories = ["database", "development-tools"]
 # The library and its README; the tests read Clarity's shared cases, which
 # live outside the crate.

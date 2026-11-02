@@ -20,6 +20,7 @@ translation nl
     copyText "Kopiëren"
     pasteText "Plakken"
     selectAllText "Alles selecteren"
+    openCalendar "Kalender"
     previousMonth "Vorige maand"
     nextMonth "Volgende maand"
     previousYear "Vorig jaar"

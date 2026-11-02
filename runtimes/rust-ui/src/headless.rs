@@ -620,6 +620,8 @@ pub fn key_named(name: &str) -> Option<Key> {
 /// Runs `program` driven from standard input, answering on standard output,
 /// until a `quit` step or the end of the input.
 pub fn run(program: impl Program, files: AppFiles) -> std::process::ExitCode {
+    // The fonts the project carries come before the system's, as on the desktop.
+    crate::fonts::carry_fallbacks(files.resources);
     let mut driven = Driven::start(Arc::new(program), files);
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();

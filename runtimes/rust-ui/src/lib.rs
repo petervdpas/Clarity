@@ -11,6 +11,7 @@ pub mod dialogs;
 pub mod element;
 pub mod engines;
 pub mod facts;
+pub mod program_facts;
 pub mod files;
 pub mod fonts;
 pub mod frame;
@@ -32,6 +33,7 @@ pub mod system_theme;
 pub mod testing;
 pub mod theme;
 pub mod window;
+pub mod wire;
 pub mod xml;
 
 #[cfg(feature = "desktop")]

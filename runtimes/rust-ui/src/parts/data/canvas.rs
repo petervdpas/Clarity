@@ -19,6 +19,7 @@
 //! its host (`PartHost::pointed`, `acted`).
 
 pub mod engine;
+pub mod drawing;
 mod modes;
 
 pub use modes::{box_of, first_place, painted_with, shape_of, tool_word, with_object_moved, PAINT_TOOLS, VECTOR_TOOLS};
@@ -34,7 +35,7 @@ use skia_safe::{Color, Font, FontHinting, Paint, PaintCap, PaintJoin, PaintStyle
 
 use crate::element::{Cx, Element};
 use crate::geometry::Rect;
-use crate::input::{Modifiers, PointerInput};
+use crate::input::{Cursor, Modifiers, PointerInput};
 use crate::locale;
 use crate::markup::PartSpec;
 use crate::painter::{Painter, TextAlign};
@@ -43,7 +44,7 @@ use crate::picture::Picture;
 use crate::parts::{Part, PartBase, PartHost};
 use crate::theme::{parse_color, ThemeLook};
 
-pub use engine::{EngineCanvasPart, MakeFrames};
+pub use engine::EngineCanvasPart;
 
 /// A canvas's units when it names none, as on every renderer.
 pub const DEFAULT_UNITS: f64 = 100.0;
@@ -111,11 +112,7 @@ impl Shape {
             "ring" => Shape::Ring { x: n("x")?, y: n("y")?, r: n("r")?, color: t("color", "text"), width: or("width", 1.0) },
             "ellipse" => Shape::Ellipse { x: n("x")?, y: n("y")?, rx: n("rx")?, ry: n("ry")?, color: t("color", "text") },
             "text" => {
-                let text = match sent.get("text") {
-                    Some(Value::String(s)) => s.clone(),
-                    Some(other) => serde_json::from_value::<clarity_runtime::ui::Text>(other.clone()).map(|t| t.show()).unwrap_or_default(),
-                    None => String::new(),
-                };
+                let text = sent.get("text").map(crate::locale::shown).unwrap_or_default();
                 Shape::Words { x: n("x")?, y: n("y")?, text, color: t("color", "text"), size: or("size", 10.0), align: t("align", "center") }
             }
             "image" => Shape::Image { x: n("x")?, y: n("y")?, width: n("width")?, height: n("height")?, picture: t("picture", "") },
@@ -353,12 +350,14 @@ pub fn draw_shape(p: &Painter, shape: &Shape, scale: f64, at: &dyn Fn(f64, f64) 
                 return;
             }
             let font = words_font(p.fonts, size);
-            let width = font.measure_str(text, None).0 as f64;
+            // Shaped as every text is (Arabic joined, Hebrew right to left), unhinted as the zoom needs.
+            let shaped = p.fonts.shape_unhinted(text, "text", size, false, true);
+            let width = shaped.width();
             let (_, metrics) = font.metrics();
             let a = at(*x, *y);
             // Centered on its point down, by its alignment across.
             let baseline = a.y - (metrics.ascent + metrics.descent) / 2.0;
-            canvas.draw_str(text, ((a.x as f64 - text_left(align, width)) as f32, baseline), &font, &shape_paint(look, color, None));
+            shaped.draw(canvas, a.x as f64 - text_left(align, width), baseline as f64, &shape_paint(look, color, None), 0.0);
         }
         // An object's box draws nothing itself: the shapes after it show it; a clear is the drawing's.
         _ => {}
@@ -382,6 +381,10 @@ pub fn paint(
     grid: Option<&dyn Fn(&Painter)>,
 ) {
     let at = |x: f64, y: f64| Point::new((bounds.x + (x - v.x) * v.scale) as f32, (bounds.y + (y - v.y) * v.scale) as f32);
+    // A canvas that shows whole draws only on its units, never on the margins beside them, so a
+    // text near its edge is cut there; a sheet that zooms draws over its whole place.
+    let origin = at(0.0, 0.0);
+    let _clip = p.clip(if sheet { bounds } else { Rect::new(origin.x as f64, origin.y as f64, units.0 * v.scale, units.1 * v.scale) });
     let has_clear = shapes.iter().any(|s| matches!(s, Shape::Clear { .. }));
     let mut grid_drawn = grid.is_none();
     if let Some(grid) = grid.filter(|_| !has_clear) {
@@ -449,28 +452,16 @@ pub struct CanvasPart {
     // Whether the drag moves the view, and whether its first run said so yet.
     moves_view: bool,
     decided: bool,
-    /// Why the last drawing failed; none when it drew.
-    failed: RefCell<Option<String>>,
     pictures: RefCell<HashMap<String, Option<Picture>>>,
     modes: modes::ModeState,
 }
 
 /// Makes a canvas: one its code draws, or one an engine beside the screen draws when it `runs` one.
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
-    let engine = spec.text("runs").filter(|r| !r.is_empty()).map(|runs| engine_of(host.as_ref(), runs));
-    make_with(spec, host, engine)
-}
-
-/// The engine beside the screen the window has by that name; none when it has none.
-fn engine_of(host: &dyn PartHost, name: &str) -> Option<MakeFrames> {
-    host.engine(name)
-}
-
-/// Makes a canvas with the engine that draws it given: `Some(None)` for one that `runs` an engine the window has not.
-pub fn make_with(spec: PartSpec, host: Rc<dyn PartHost>, engine: Option<Option<MakeFrames>>) -> Box<dyn Part> {
-    match engine {
-        Some(runs) => Box::new(EngineCanvasPart::new(spec, host, runs)),
-        None => Box::new(CanvasPart::new(spec, host)),
+    if spec.text("runs").is_some_and(|r| !r.is_empty()) {
+        Box::new(EngineCanvasPart::new(spec, host))
+    } else {
+        Box::new(CanvasPart::new(spec, host))
     }
 }
 
@@ -525,7 +516,6 @@ impl CanvasPart {
             moved: false,
             moves_view: false,
             decided: false,
-            failed: RefCell::new(None),
             pictures: RefCell::new(HashMap::new()),
             modes: modes::ModeState::default(),
         }
@@ -575,7 +565,7 @@ impl CanvasPart {
 
     /// Why the last drawing failed; none when it drew.
     pub fn failed(&self) -> Option<String> {
-        self.failed.borrow().clone()
+        self.base.node.failed()
     }
 
     // -- The view ------------------------------------------------------------------
@@ -610,6 +600,7 @@ impl CanvasPart {
         let b = self.base.node.bounds;
         let (ax, ay) = at.unwrap_or((b.width / 2.0, b.height / 2.0));
         self.panned = Some(zoomed(uw, uh, b.width, b.height, self.viewport(), factor, ax, ay));
+        self.place_typing(cx);
         cx.invalidate();
     }
 
@@ -727,7 +718,7 @@ impl CanvasPart {
             if let Some(ran) = self.base.host.pointed(name, event, &at) {
                 return ran;
             }
-            self.base.host.change_state(name, &mut |s| s.pointer = Some(at.clone()));
+            crate::parts::change_state(&*self.base.host, name, |s| s.pointer = Some(at.clone()));
         }
         self.base.fire(event)
     }
@@ -851,9 +842,9 @@ impl Element for CanvasPart {
     }
 
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
-        let _ = cx;
         self.base.node.bounds = area;
         self.heard();
+        self.place_typing(cx);
     }
 
     fn on_wheel(&mut self, dx: f64, dy: f64, held: Modifiers, cx: &mut Cx) -> bool {
@@ -866,6 +857,7 @@ impl Element for CanvasPart {
             return true;
         }
         self.panned = Some(scrolled(self.viewport(), dx, dy));
+        self.place_typing(cx);
         cx.invalidate();
         true
     }
@@ -1019,20 +1011,54 @@ impl Element for CanvasPart {
         }
     }
 
+    /// A drawing that fails says why in its place, in a red outline, and the
+    /// window draws on (the screen draws every element fail-safe).
     fn draw(&self, p: &Painter) {
-        // Fail safe: a drawing that fails says why in its place, and the window works on.
-        let drawn = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _clip = p.clip(self.base.node.bounds);
-            self.draw_canvas(p);
-        }));
-        match drawn {
-            Ok(()) => *self.failed.borrow_mut() = None,
-            Err(panic) => {
-                let why = panic.downcast_ref::<String>().cloned().or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default();
-                p.text(&why, self.base.node.bounds.inset(6.0), p.look.color("error"), p.look.size("small"), "text", false, TextAlign::Left);
-                *self.failed.borrow_mut() = Some(why);
-            }
+        let _clip = p.clip(self.base.node.bounds);
+        self.draw_canvas(p);
+    }
+
+    /// The hand over its zoom buttons, its toolbar's buttons while the person
+    /// may use them and the whole of a canvas they click; the I-beam over the
+    /// text being typed.
+    fn cursor_at(&self, x: f64, y: f64) -> Option<Cursor> {
+        if !self.base.enabled() {
+            return None;
         }
+        if self.zoom_button_at(x, y).is_some() {
+            return Some(Cursor::Hand);
+        }
+        if self.acts() && self.toolbar_drawn().iter().any(|(_, b)| b.contains(x, y)) {
+            return Some(Cursor::Hand);
+        }
+        if self.typing_editor().is_some_and(|e| e.node().bounds.contains(x, y)) {
+            return Some(Cursor::Text);
+        }
+        (self.handles("click") && !self.base.read_only()).then_some(Cursor::Hand)
+    }
+
+    /// The pointer was taken away mid-gesture: a drag, a bend or a shape being
+    /// drawn is dropped, not sent, and what moved shows where it was.
+    fn on_pointer_cancelled(&mut self, cx: &mut Cx) {
+        self.pressed = false;
+        self.moved = false;
+        self.bend_press = None;
+        self.bending = None;
+        self.mode_cancelled();
+        cx.invalidate();
+    }
+
+    /// While a text is typed the keyboard types: an input method composes in it.
+    fn typing(&self) -> bool {
+        self.typing_editor().is_some()
+    }
+
+    fn caret_area(&self) -> Option<Rect> {
+        self.typing_editor().and_then(|e| e.caret_area())
+    }
+
+    fn on_compose(&mut self, composing: Option<crate::element::Composition>, cx: &mut Cx) {
+        self.typing_compose(composing, cx);
     }
 }
 

@@ -1,7 +1,7 @@
 //! The settings each person keeps for themselves (DESIGN 5.17): one JSON
 //! file per application in the folder for application settings of the
-//! person's system (conformance/settings.json, `file`). The screen decides
-//! which kept values still fit; this module only reads and keeps the file.
+//! person's system (conformance/settings.json, `file`). Of what was kept, a
+//! start takes back only what still fits its setting (`fits`, `taken`).
 
 use std::path::PathBuf;
 
@@ -20,6 +20,70 @@ pub fn file_in(os: &str, env: impl Fn(&str) -> Option<String>, program: &str) ->
         _ => set("XDG_CONFIG_HOME").or_else(|| set("HOME").map(|home| format!("{home}/.config")))?,
     };
     Some(format!("{folder}/{program}/settings.json"))
+}
+
+/// A setting as a kept value is checked against it: its type (`text`,
+/// `integer`, `enum`, ...), its lowest and highest number, and the values it
+/// allows (an enum's, the languages, the themes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Setting {
+    pub kind: &'static str,
+    pub min: Option<&'static str>,
+    pub max: Option<&'static str>,
+    pub values: &'static [&'static str],
+}
+
+impl Setting {
+    /// A setting of type `kind` with no range and no values.
+    pub const fn of(kind: &'static str) -> Setting {
+        Setting { kind, min: None, max: None, values: &[] }
+    }
+}
+
+/// Whether a kept value fits its setting (conformance/settings.json, `fits`).
+pub fn fits(setting: &Setting, value: &Value) -> bool {
+    use std::str::FromStr;
+    let (min, max) = (setting.min.and_then(|m| rust_decimal::Decimal::from_str(m).ok()), setting.max.and_then(|m| rust_decimal::Decimal::from_str(m).ok()));
+    let within = |n: rust_decimal::Decimal| min.is_none_or(|m| n >= m) && max.is_none_or(|m| n <= m);
+    let text = value.as_str();
+    match setting.kind {
+        "integer" | "duration" => value.as_i64().is_some_and(|n| within(n.into())),
+        "decimal" | "money" => text.filter(|t| plain_number(t)).and_then(|t| rust_decimal::Decimal::from_str(t).ok()).is_some_and(within),
+        "bool" => value.is_boolean(),
+        "date" => text.is_some_and(|t| shaped(t, "dddd-dd-dd")),
+        "datetime" => text.is_some_and(|t| shaped(t, "dddd-dd-ddTdd:dd") || shaped(t, "dddd-dd-ddTdd:dd:dd")),
+        "enum" | "language" | "theme" => text.is_some_and(|t| setting.values.contains(&t)),
+        "color" => text.is_some_and(|t| t.is_empty() || (t.len() == 7 && t.starts_with('#') && t[1..].bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))),
+        // A reference is kept as the record's id, a whole number above 0.
+        "ref" => value.as_i64().is_some_and(|id| id > 0) && !value.is_f64(),
+        _ => text.is_some(),
+    }
+}
+
+/// `-12` or `3.50`: digits, a dot with digits after it, a minus first.
+fn plain_number(text: &str) -> bool {
+    let digits = text.strip_prefix('-').unwrap_or(text);
+    let (whole, fraction) = match digits.split_once('.') {
+        Some((w, f)) => (w, Some(f)),
+        None => (digits, None),
+    };
+    let all = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    all(whole) && fraction.is_none_or(all)
+}
+
+/// Whether `text` has the shape of `pattern`, where `d` is any digit and
+/// every other character is itself.
+fn shaped(text: &str, pattern: &str) -> bool {
+    text.len() == pattern.len() && text.bytes().zip(pattern.bytes()).all(|(t, p)| if p == b'd' { t.is_ascii_digit() } else { t == p })
+}
+
+/// The kept values a start takes back: only of the settings there are, and
+/// only those that fit (conformance/settings.json, `kept`).
+pub fn taken(settings: &[(&str, Setting)], kept: &Map<String, Value>) -> Map<String, Value> {
+    settings
+        .iter()
+        .filter_map(|(name, setting)| kept.get(*name).filter(|value| fits(setting, value)).map(|value| (name.to_string(), value.clone())))
+        .collect()
 }
 
 /// This machine's system, as the cases name it.

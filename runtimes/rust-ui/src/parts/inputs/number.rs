@@ -6,12 +6,15 @@
 //! is a change, and what code sets is never one. Unbound, or bound to a
 //! value without a format, it keeps the text as typed. A spin box has a
 //! range (conformance/ranges.json): its arrows and keys move it a step, or
-//! ten, and a typed number is kept within the range.
+//! ten, and a typed number is kept within the range. Numbers read from
+//! the right, so their digits line up; an arrow held keeps spinning, after
+//! a pause, as a system's spin box does; the arrows take no focus.
 //!
 //! The part holds its text editor and hands it what the person does; the
 //! part itself takes the focus.
 
 use std::rc::Rc;
+use std::time::Duration;
 
 use clarity_runtime::ranges::{self, Range, RangeKey};
 use serde_json::Value;
@@ -20,7 +23,7 @@ use crate::element::{Cx, Element};
 use crate::geometry::Rect;
 use crate::input::{Key, KeyInput, Modifiers, PointerInput};
 use crate::markup::PartSpec;
-use crate::painter::Painter;
+use crate::painter::{Painter, TextAlign};
 use crate::part_element;
 use crate::parts::inputs::formats::{format_of, formats_of, Exact, FieldFormat, FormatKind};
 use crate::parts::text_box::{InputIcon, InputSideButton};
@@ -29,6 +32,10 @@ use crate::parts::{Part, PartBase, PartHost};
 
 /// How wide a spin box's arrows are.
 const ARROW_WIDTH: f64 = 22.0;
+
+/// How long a held arrow waits before it repeats, and then between repeats.
+pub const REPEAT_DELAY: Duration = Duration::from_millis(300);
+pub const REPEAT_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Which of a spin box's arrows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,6 +89,9 @@ impl NumberPart {
         let base = PartBase::new(spec, host);
         let mut editor = TextEditor::new(false);
         editor.placeholder = base.spec.text("placeholder").map(|p| base.host.text(Some(p)));
+        // Numbers read from the right, so their digits line up.
+        editor.align = TextAlign::Right;
+        editor.undoes = !base.spec.flag("noUndo");
         let spin = base.spec.kind == "spinbox";
         let (up, down) = if spin {
             editor.right_inset = ARROW_WIDTH + 2.0;
@@ -166,7 +176,7 @@ impl NumberPart {
     /// The editor follows what code set: enabled, read-only, marked.
     fn refresh(&mut self) {
         let state = self.base.state();
-        self.editor.enabled = state.as_ref().and_then(|s| s.enabled).unwrap_or(true);
+        self.editor.enabled = self.base.enabled();
         self.editor.read_only = self.base.read_only();
         self.editor.marked = self.bad.is_some() || state.and_then(|s| s.error).is_some_and(|e| !e.show().is_empty());
     }
@@ -246,7 +256,7 @@ impl NumberPart {
         if let Some(path) = self.base.bound().map(str::to_string) {
             self.base.host.write(name.as_deref().unwrap_or(""), &path, next);
         } else if let Some(name) = name {
-            self.base.host.change_state(&name, &mut |s| s.text = Some(text.clone()));
+            crate::parts::change_state(&*self.base.host, &name, |s| s.text = Some(text.clone()));
             self.base.host.edited(&name);
         } else {
             self.own = text;
@@ -330,10 +340,14 @@ impl Element for NumberPart {
         }
     }
 
+    /// An arrow pressed spins at once, and again after a pause while it is held.
     fn on_pointer_pressed(&mut self, at: PointerInput, cx: &mut Cx) {
         self.ready();
+        self.pointer = Some((at.screen_x, at.screen_y));
         self.pressing = self.arrow_at(at.screen_x, at.screen_y);
-        if self.pressing.is_some() {
+        if let Some(arrow) = self.pressing {
+            self.spin(if arrow == Arrow::Up { RangeKey::Up } else { RangeKey::Down });
+            cx.wake(self.base.node.id(), cx.now() + REPEAT_DELAY);
             cx.invalidate();
             return;
         }
@@ -352,13 +366,40 @@ impl Element for NumberPart {
         }
     }
 
-    fn on_pointer_released(&mut self, at: PointerInput, cx: &mut Cx) {
+    fn on_pointer_released(&mut self, _at: PointerInput, cx: &mut Cx) {
         self.editor.released();
-        let Some(arrow) = self.pressing.take() else { return };
-        if self.arrow_at(at.screen_x, at.screen_y) != Some(arrow) {
+        if self.pressing.take().is_some() {
+            cx.invalidate();
+        }
+    }
+
+    fn cursor_at(&self, x: f64, y: f64) -> Option<crate::input::Cursor> {
+        if self.arrow_at(x, y).is_some() {
+            return None;
+        }
+        self.editor.cursor_at(x, y)
+    }
+
+    fn context_menu_at(&self, _x: f64, _y: f64) -> Option<Vec<crate::frame::menus::MenuEntry>> {
+        self.editor.menu(self.base.node.id())
+    }
+
+    fn on_pointer_cancelled(&mut self, cx: &mut Cx) {
+        self.editor.released();
+        self.pressing = None;
+        cx.invalidate();
+    }
+
+    /// Held on an arrow: it spins again, and wakes for the next time; let go or moved off it stops.
+    fn on_wake(&mut self, cx: &mut Cx) {
+        self.ready();
+        self.editor.run_menu_asked(cx);
+        let Some(arrow) = self.pressing else { return };
+        if !self.base.node.pressed || self.pointer.and_then(|(x, y)| self.arrow_at(x, y)) != Some(arrow) || !self.base.enabled() {
             return;
         }
         self.spin(if arrow == Arrow::Up { RangeKey::Up } else { RangeKey::Down });
+        cx.wake(self.base.node.id(), cx.now() + REPEAT_INTERVAL);
         cx.invalidate();
     }
 

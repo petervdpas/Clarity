@@ -90,6 +90,9 @@ fn the_project_chooses_compiled_or_interpreted_engines() {
 fn the_program_watches_a_long_call() {
     let text = all(&files(Backend::Rust, Ui::Clarity));
     assert!(text.contains("    fn watches(&self) -> bool {\n        true\n    }"));
-    assert!(text.contains("    fn watched(&self, watch: &program::Watch, run: &mut dyn FnMut()) {"));
+    assert!(text.contains("    fn start_watch(&self, id: u64) {\n        clarity_runtime::engine::start_watch(id)\n    }"));
+    assert!(text.contains("    fn watch_progress(&self, id: u64) -> Option<(i64, i64)> {"));
+    assert!(text.contains("    fn stop_watch(&self, id: u64) {"));
+    assert!(text.contains("    fn end_watch(&self, id: u64) {"));
     assert!(!text.contains("tauri"));
 }

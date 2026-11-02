@@ -893,7 +893,8 @@ fn the_runtime_decides_what_the_persons_action_does() {
         // A part's options are the runtime's parameters (DESIGN 1.7): a readonly part's change is taken back.
         // The program (DESIGN 7.9) calls the runtime.
         assert!(main.contains(&format!("    fn {command}(&self, state: WindowState, ")), "{command} in\n{main}");
-        let call = if readonly { format!("clarity_runtime::edits::guarded(state, readonly, None, None, |state| drawn(db, state), |state| {call})") } else { call.to_string() };
+        // A wizard's Next and Finish run handlers, whose refused save shows at its input.
+        let call = if readonly { format!("clarity_runtime::edits::guarded(state, readonly, None, None, |state| drawn(db, state), |state| {call})") } else { format!("shown_at_input(db, state, |state| {call})") };
         assert!(main.contains(&format!("window_reply(&sent, locked(self, |db| {call}))")), "{command} calls\n{call}\nin\n{main}");
     }
     // Canvas modes (DESIGN 5.31): the runtime applies the person's action and runs on change as one edit.
@@ -902,7 +903,7 @@ fn the_runtime_decides_what_the_persons_action_does() {
     // The shown rows (DESIGN 1.7): every window reply fills the views; a view event is no edit and not watched.
     assert!(main.contains("clarity_runtime::views::replied(sent, &mut reply)"), "{main}");
     assert!(main.contains("        let sent = clarity_runtime::views::Sent::view_event(&state);\n        window_reply(&sent, locked(self, |db| clarity_runtime::views::event(state, part, &action, |state| drawn(db, state))))"), "{main}");
-    assert!(main.contains("let sent = clarity_runtime::views::Sent::of(&state);\n        window_reply(&sent, locked(self, |db| clarity_runtime::stepped(db, || dispatch(db, state, handler))))"), "{main}");
+    assert!(main.contains("let sent = clarity_runtime::views::Sent::of(&state);\n        window_reply(&sent, locked(self, |db| shown_at_input(db, state, |state| clarity_runtime::stepped(db, || dispatch(db, state, handler)))))"), "{main}");
     let mut settings = shop();
     settings.stack.targets = vec![Target::Web];
     let web = generate(&project, &settings).unwrap();

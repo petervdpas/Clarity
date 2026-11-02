@@ -1,15 +1,19 @@
 //! How a toolbar's and a ribbon's buttons are measured and drawn: in the
 //! button look, an icon beside the caption or, large, above it; a line for
-//! a separator.
+//! a separator. Each button is an element of its region (`FrameButton`).
 
-use crate::element::Cx;
+use std::rc::Rc;
+
+use crate::element::{Cx, Element, Node};
 use crate::geometry::Rect;
+use crate::input::{Key, KeyInput, Modifiers, PointerInput};
 use crate::markup::CommandSpec;
 use crate::painter::{Painter, TextAlign};
 use crate::parts::containers::icon::draw_icon;
 use crate::parts::PartHost;
 
-use super::rules;
+use super::menus::MenuOwner;
+use super::{rules, WindowFrame};
 
 pub const SEPARATOR_WIDTH: f64 = 9.0;
 pub const LARGE_HEIGHT: f64 = 58.0;
@@ -65,4 +69,94 @@ pub fn draw(p: &Painter, host: &dyn PartHost, item: &CommandSpec, area: Rect, la
         x += SMALL_ICON + 6.0;
     }
     p.text(&caption, Rect::new(x, area.y, area.right() - x, area.height), color, size, "text", false, TextAlign::Left);
+}
+
+/// A button of a toolbar or a ribbon as an element of its region, so it
+/// takes the pointer, the focus (Tab reaches it) and Enter or Space, as
+/// Avalonia's buttons did: each runs its item; it shows the focus ring
+/// while it has the focus. A separator is a line that takes no focus. One
+/// code hid shows nowhere (its region does not place it), one it disabled
+/// is greyed and passed over by Tab; a disabled region's buttons take nothing.
+pub struct FrameButton {
+    node: Node,
+    frame: Rc<WindowFrame>,
+    item: CommandSpec,
+    large: bool,
+    region: Option<String>,
+    owner: MenuOwner,
+    placed: bool,
+}
+
+impl FrameButton {
+    /// The button of `item` in the region named `region`; `owner` is what a menu it opens belongs to.
+    pub fn new(frame: Rc<WindowFrame>, item: CommandSpec, large: bool, region: Option<String>, owner: MenuOwner) -> FrameButton {
+        FrameButton { node: Node::new(), frame, item, large, region, owner, placed: false }
+    }
+
+    pub fn item(&self) -> &CommandSpec {
+        &self.item
+    }
+
+    /// What a menu it opens belongs to: its region and its place there.
+    pub fn owner(&self) -> MenuOwner {
+        self.owner
+    }
+
+    /// Its region placed it at `area` this time, or left it out (none).
+    pub fn place(&mut self, area: Option<Rect>, cx: &mut Cx) {
+        self.placed = area.is_some();
+        if let Some(area) = area {
+            self.arrange(area, cx);
+        }
+    }
+
+    /// Clicked, or Enter or Space: it runs, unless it or its region is disabled.
+    pub fn press(&mut self, cx: &mut Cx) {
+        let host = self.frame.host().clone();
+        if rules::is_separator(&self.item) || !rules::takes(host.as_ref(), self.region.as_deref()) || !rules::takes(host.as_ref(), self.item.text("name")) {
+            return;
+        }
+        let item = self.item.clone();
+        self.frame.run(&item, self.node.bounds, self.owner, cx);
+    }
+}
+
+impl Element for FrameButton {
+    crate::element_node!();
+
+    fn is_shown(&self) -> bool {
+        self.placed
+    }
+
+    fn is_enabled(&self) -> bool {
+        rules::takes(self.frame.host().as_ref(), self.item.text("name"))
+    }
+
+    fn focusable(&self) -> bool {
+        !rules::is_separator(&self.item)
+    }
+
+    fn on_click(&mut self, cx: &mut Cx) {
+        self.press(cx);
+    }
+
+    fn on_key(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
+        if !matches!(key.key, Key::Enter | Key::Space) || key.modifiers != Modifiers::NONE || rules::is_separator(&self.item) {
+            return false;
+        }
+        self.press(cx);
+        true
+    }
+
+    fn on_pointer_moved(&mut self, _at: PointerInput, cx: &mut Cx) {
+        cx.invalidate();
+    }
+
+    fn draw(&self, p: &Painter) {
+        let b = self.node.bounds;
+        draw(p, self.frame.host().as_ref(), &self.item, b, self.large, self.node.hovered, self.node.pressed && self.node.hovered);
+        if self.node.focused {
+            p.focus_ring(b, p.look.radius("button"));
+        }
+    }
 }

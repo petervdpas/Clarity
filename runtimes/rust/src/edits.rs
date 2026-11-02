@@ -1,9 +1,9 @@
 //! The edit bus (DESIGN 5.29): per open window, the record of the person's
 //! edits, kept here in the runtime, not in the screen. Each edit is a message
 //! with the part, its scope (its form or panel, or the part itself), what it
-//! changed (each name of the window's data, `#parts.<name>` for a part's
-//! own text or tick, and the names of what code set on parts, with its value
-//! before and after) and the database steps
+//! changed (each name of the window's data, each setting on its own,
+//! `#parts.<name>` for a part's own text or tick, and the names of what code
+//! set on parts, with its value before and after) and the database steps
 //! its handler made. The screen sends an edit when the person ends one, and
 //! Ctrl+Z or Ctrl+Y as an undo; the runtime takes the steps back or does them
 //! again and answers with the window's state as it was. Every runtime keeps
@@ -141,6 +141,12 @@ fn buses() -> std::sync::MutexGuard<'static, HashMap<u64, EditBus>> {
 /// `#parts.<name>.values.<value>` (conformance/edit-bus.json, `states`).
 const PART_STATE: &str = "#parts.";
 
+/// The window's settings among its data, as the screen keeps them.
+const SETTINGS: &str = "settings";
+
+/// One setting among the data an edit compares: `#settings.<name>`.
+const SETTING: &str = "#settings.";
+
 /// The part fields code sets that an edit compares, each by its own name.
 const CODE_SET: [&str; 5] = ["caption", "visible", "enabled", "readonly", "error"];
 
@@ -179,6 +185,13 @@ fn set_code_set(part: &mut PartState, field: &str, value: Option<&Value>) {
 /// tick, what code set on each part and each custom part's values.
 pub fn edit_data(state: &WindowState) -> Map<String, Value> {
     let mut data = state.data.clone();
+    // Each setting is compared on its own, so an undo takes back only the
+    // setting its edit changed, and keeps one changed since in another scope.
+    if let Some(Value::Object(settings)) = data.remove(SETTINGS) {
+        for (name, value) in settings {
+            data.insert(format!("{SETTING}{name}"), value);
+        }
+    }
     for (name, part) in &state.parts {
         let mut own = Map::new();
         if let Some(text) = &part.text {
@@ -215,6 +228,12 @@ pub fn with_edit_data(mut state: WindowState, data: Map<String, Value>) -> Windo
         part.values = None;
     }
     for (name, value) in data {
+        if let Some(setting) = name.strip_prefix(SETTING) {
+            if let Value::Object(settings) = state.data.entry(SETTINGS).or_insert_with(|| Value::Object(Map::new())) {
+                settings.insert(setting.to_string(), value);
+            }
+            continue;
+        }
         let Some(rest) = name.strip_prefix(PART_STATE) else {
             state.data.insert(name, value);
             continue;

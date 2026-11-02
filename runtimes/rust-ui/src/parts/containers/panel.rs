@@ -48,6 +48,11 @@ impl PanelPart {
         self.base.node.children_mut()[0].as_any_mut().downcast_mut::<Page>().expect("a panel holds its page")
     }
 
+    /// Whether a list, table or tree in it shows no border of its own: every container frames what it holds.
+    pub fn frames_parts(&self) -> bool {
+        true
+    }
+
     /// The grid of its parts.
     pub fn inner(&self) -> &GridPanel {
         self.page().grid()
@@ -74,7 +79,7 @@ impl PanelPart {
         }
         let folded = !self.is_folded();
         match self.base.name() {
-            Some(name) if self.base.state().is_some() => self.base.host.change_state(name, &mut |s| s.folded = Some(folded)),
+            Some(name) if self.base.state().is_some() => crate::parts::change_state(&*self.base.host, name, |s| s.folded = Some(folded)),
             _ => self.folded_here = folded,
         }
         // Folded, what it holds takes no pointer from now on, not only once it is laid out again.
@@ -117,7 +122,7 @@ impl Element for PanelPart {
             let pad = self.look.get().padding;
             Rect::new(area.x, area.y + header + pad, area.width, (area.height - header - 2.0 * pad).max(0.0))
         };
-        self.base.node.children_mut()[0].arrange(inner, cx);
+        element::arrange_safely(self.base.node.children_mut()[0].as_mut(), inner, cx);
     }
 
     fn on_pointer_pressed(&mut self, at: PointerInput, _cx: &mut Cx) {

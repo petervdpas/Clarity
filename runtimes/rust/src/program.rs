@@ -1,17 +1,15 @@
 //! The program a generated application is (DESIGN 7.9): everything its screen
 //! asks of it, as one trait in plain Rust types. The generated code
-//! implements it once, on a struct over its databases. The webview's commands
-//! (Tauri on the desktop, the web server's commands in a browser) are thin
-//! calls into it, and Clarity.UI calls it in the program's own process, with
-//! no webview and no JSON between them.
+//! implements it once, on a struct over its databases. Clarity.UI calls it in
+//! the program's own process on the desktop, with no JSON between them; the
+//! web server's commands in a browser are thin calls into it.
 //!
 //! What goes wrong is [`Text`]: a refusal keeps its slots, which the screen
 //! fills in the format of the person using the application; any other error
-//! or a panic is its message as plain text. On the wire it is the same JSON
-//! the webview always had.
+//! or a panic is its message as plain text. On the web server's wire it is
+//! JSON.
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use serde_json::{Map, Value};
 
@@ -134,25 +132,6 @@ pub struct StepPress {
     pub finish: Option<String>,
 }
 
-/// How far a long engine call is (done of total).
-pub type Progress = Arc<dyn Fn(i64, i64) + Send + Sync>;
-
-/// How the screen watches a handler's long engine calls (DESIGN 5.12).
-#[derive(Clone)]
-pub struct Watch {
-    /// Told each report, done of total; none to drop them.
-    pub progress: Option<Progress>,
-    /// Set to stop the call at its next look.
-    pub stop: Arc<AtomicBool>,
-}
-
-impl Watch {
-    /// Whether Stop was pressed.
-    pub fn stopped(&self) -> bool {
-        self.stop.load(Ordering::SeqCst)
-    }
-}
-
 /// Everything the screen of a generated application asks of it. Each call
 /// that answers a [`Reply`] gives the window's state as the program leaves
 /// it: what each table, tree and chart shows filled in, and its edits on the
@@ -247,28 +226,66 @@ pub trait Program: Send + Sync + 'static {
         false
     }
 
-    /// Runs `run` with the program's long engine calls watched: their
-    /// progress goes to `watch`, and its stop flag stops them.
-    fn watched(&self, watch: &Watch, run: &mut dyn FnMut()) {
-        let _ = watch;
-        run()
+    /// Watches the long engine calls this thread makes from now on as watch
+    /// `id` (a number the screen picks), until `end_watch`: the screen calls
+    /// it on the thread that runs the handler, just before the handler.
+    fn start_watch(&self, id: u64) {
+        let _ = id;
     }
 
-    /// What the program knows of its fields and types (DESIGN 7.9): each
-    /// field's label, format and range, and the type of each window's
-    /// values, which the screen's parts read beside the values. A program
-    /// that carries none knows none.
-    fn facts(&self) -> &'static crate::fields::Facts {
-        &crate::fields::Facts::EMPTY
+    /// How far the long call of watch `id` is, done of total, as it last
+    /// said; none while it said nothing. The screen asks a few times a second.
+    fn watch_progress(&self, id: u64) -> Option<(i64, i64)> {
+        let _ = id;
+        None
     }
 
-    /// A new instance of the engine beside the screen `name` (DESIGN 5.12)
-    /// for one canvas that runs it: its frames, or why it could not start;
-    /// none when the program has no engine of that name. The runtime's
-    /// `engine::ScreenEngine` runs a generated program's.
-    fn screen_engine(&self, name: &str) -> Option<std::result::Result<Box<dyn crate::screen::Frames>, String>> {
+    /// The person pressed Stop: the call of watch `id` ends at its next look.
+    /// A Stop that comes before `start_watch` holds once it starts.
+    fn stop_watch(&self, id: u64) {
+        let _ = id;
+    }
+
+    /// The handler of watch `id` ended: its calls are watched no more and the
+    /// watch is forgotten. Calling it again does nothing.
+    fn end_watch(&self, id: u64) {
+        let _ = id;
+    }
+
+    /// What the program knows of its fields and types (DESIGN 7.9), as
+    /// plain JSON (`fields::Facts::to_json`): each field's label, format and
+    /// range, and the type of each window's values, which the screen's parts
+    /// read beside the values. A program that carries none gives null.
+    fn facts_json(&self) -> Value {
+        Value::Null
+    }
+
+    /// Opens a new instance of the engine beside the screen `name` (DESIGN
+    /// 5.12) for one canvas that runs it: its number, or why it could not
+    /// start; none when the program has no engine of that name. The program
+    /// keeps the instance (`screen::Instances`) until `engine_close`.
+    fn engine_open(&self, name: &str) -> Option<std::result::Result<u64, String>> {
         let _ = name;
         None
+    }
+
+    /// The pointer and keys instance `id` takes.
+    fn engine_hears(&self, id: u64) -> crate::screen::Hears {
+        let _ = id;
+        crate::screen::Hears::default()
+    }
+
+    /// One frame of instance `id`: the input since the last, then `ms`, the
+    /// milliseconds since the last frame. It may run on any thread, never on
+    /// two at once for one instance.
+    fn engine_frame(&self, id: u64, ms: f64, input: Vec<crate::screen::ScreenInput>) -> std::result::Result<crate::screen::Drawn, String> {
+        let _ = (id, ms, input);
+        Err(crate::screen::GONE.to_string())
+    }
+
+    /// Ends instance `id`: the canvas left its screen. Closing one that is gone does nothing.
+    fn engine_close(&self, id: u64) {
+        let _ = id;
     }
 }
 
@@ -291,10 +308,21 @@ pub fn guarded<T>(db: &Mutex<Db>, run: impl FnOnce(&Db) -> Result<T>) -> Answer<
     }
 }
 
-/// An error as the screen shows it: a refusal its own text, anything else its message.
+/// An error as the screen shows it: a refusal its own text; a value or a
+/// record that is not there, or still used, in Clarity's own words by a
+/// literal key (translated where the project has them); anything else its
+/// message. The message (`to_string`) stays the English of the shared cases.
 pub fn said(err: &Error) -> Text {
+    use crate::ui::Slot;
     match err {
-        Error::Refused(text) => text.clone(),
+        Error::Refused(text) | Error::Required { text, .. } => text.clone(),
+        Error::Outside { position, count } => Text::keyed("itemOutsideList", "There is no item {position} in a list of {count}")
+            .with("position", Slot::integer(*position, None))
+            .with("count", Slot::integer(*count as i64, None)),
+        Error::NotFound { table, id: Some(id) } => {
+            Text::keyed("recordNotThere", "There is no {table} with id {id}").with("table", Slot::text(*table)).with("id", Slot::integer(*id, None))
+        }
+        Error::InUse { table, .. } => Text::keyed("recordStillUsed", "This {table} is still used by other records").with("table", Slot::text(*table)),
         other => Text::plain(other.to_string()),
     }
 }

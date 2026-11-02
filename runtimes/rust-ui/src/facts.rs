@@ -280,33 +280,6 @@ pub fn format_written(kind: &str, scale: Option<u64>, format: Option<&str>) -> O
     Some(written)
 }
 
-/// The facts of a field as the generated program carries them (`Program::facts`), as the parts read them.
-pub fn from_program(facts: clarity_runtime::fields::FieldFacts) -> FieldFacts {
-    use clarity_runtime::fields::FormatKind;
-    let format = facts.format.map(|f| {
-        let kind = match f.kind {
-            FormatKind::Integer => "integer",
-            FormatKind::Decimal => "decimal",
-            FormatKind::Money => "money",
-            FormatKind::Date => "date",
-            FormatKind::DateTime => "dateTime",
-            FormatKind::Duration => "duration",
-        };
-        format_written(kind, f.scale.map(u64::from), f.format).unwrap_or_default()
-    });
-    FieldFacts {
-        label: facts.label.to_string(),
-        format,
-        required: facts.required,
-        min: facts.min.map(str::to_string),
-        max: facts.max.map(str::to_string),
-        refers: facts.refers.map(str::to_string),
-        parent: facts.parent.map(str::to_string),
-        color: facts.color,
-        help: None,
-    }
-}
-
 /// A label as shown: a key (`@red`) by its value in the language shown, else as written; empty, the value itself.
 pub fn shown(label: &str, value: &str) -> String {
     if label.is_empty() {

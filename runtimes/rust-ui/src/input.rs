@@ -96,21 +96,56 @@ pub struct PointerInput {
     pub clicks: u32,
 }
 
+/// The shape of the mouse pointer over a place: each host shows it as its system's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Cursor {
+    #[default]
+    Default,
+    /// Something that runs when clicked: a link, a canvas command.
+    Hand,
+    /// Text the person types or selects in.
+    Text,
+    /// An edge dragged left or right: a sidebar, a splitter, a column.
+    ResizeLeftRight,
+    /// An edge dragged up or down.
+    ResizeUpDown,
+    Move,
+    Crosshair,
+    NotAllowed,
+}
+
 /// A key going down or up, with the keys held.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct KeyInput {
     pub key: Key,
     pub modifiers: Modifiers,
+    /// The character the key typed on the person's keyboard, for a key the
+    /// screen asks the window's character shortcuts with (`key` is then
+    /// `Other`); none for a key press.
+    pub typed: Option<char>,
+    /// The key's own name, from the host, for a key Clarity.UI has no `Key`
+    /// for (F13, Pause, PrintScreen); `key` is then `Other`.
+    pub name: Option<&'static str>,
 }
 
 impl KeyInput {
     pub fn new(key: Key, modifiers: Modifiers) -> KeyInput {
-        KeyInput { key, modifiers }
+        KeyInput { key, modifiers, typed: None, name: None }
     }
 
     /// The key alone, nothing held.
     pub fn plain(key: Key) -> KeyInput {
-        KeyInput { key, modifiers: Modifiers::NONE }
+        KeyInput { key, modifiers: Modifiers::NONE, typed: None, name: None }
+    }
+
+    /// A character typed after a key nothing took, as the window's character shortcuts hear it (`*` from Shift+8).
+    pub fn typed(character: char) -> KeyInput {
+        KeyInput { key: Key::Other, modifiers: Modifiers::NONE, typed: Some(character), name: None }
+    }
+
+    /// A key Clarity.UI has no `Key` for, by the name its host gives it (`F13`), with the keys held.
+    pub fn named(name: &'static str, modifiers: Modifiers) -> KeyInput {
+        KeyInput { key: Key::Other, modifiers, typed: None, name: Some(name) }
     }
 
     pub fn shift(&self) -> bool {

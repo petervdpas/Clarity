@@ -4,15 +4,19 @@
 //! with its button and back, and lets a maximizable one fill the window and
 //! give it back. Whether it is folded and whether it fills the window are
 //! its part state (`collapsed`, `maximized`), so code reads and sets them;
-//! an unnamed sidebar keeps them itself.
+//! an unnamed sidebar keeps them itself. Folding leaves whether it fills the
+//! window as it was, as Avalonia's did: shown again, it fills it again. Its
+//! buttons take the focus and say what they do; its edge shows the resize
+//! pointer.
 
 use std::rc::Rc;
 
 use skia_safe::Color;
 
-use crate::element::{Cx, Element, GridPanel, Node};
+use crate::element::{draw_children, Cx, Element, GridPanel, Node};
 use crate::geometry::Rect;
-use crate::input::{Modifiers, PointerInput};
+use crate::input::{Cursor, Key, KeyInput, Modifiers, PointerInput};
+use crate::locale;
 use crate::painter::{Painter, TextAlign};
 use crate::parts;
 
@@ -26,19 +30,12 @@ pub const BUTTONS_HEIGHT: f64 = 24.0;
 /// How wide the edge the person drags is.
 pub const EDGE_WIDTH: f64 = 6.0;
 
-#[derive(Clone, Copy, PartialEq)]
-enum Pressed {
-    Fold,
-    Fill,
-}
-
 pub struct FrameSidebar {
     node: Node,
     frame: Rc<WindowFrame>,
     left: bool,
     dragged: Option<f64>,
     dragging: Option<(f64, f64)>,
-    pressed_on: Option<Pressed>,
     pointer: Option<(f64, f64)>,
 }
 
@@ -55,8 +52,11 @@ impl FrameSidebar {
         let shows = frame.clone();
         let holder = Showing::new(Box::new(grid), move || !shows.collapsed(left));
         let mut node = Node::new();
+        // As Avalonia's header: the fill button, then the fold button, then its parts, in Tab order.
+        node.add(Box::new(SidebarButton { node: Node::new(), frame: frame.clone(), left, fills: true }));
+        node.add(Box::new(SidebarButton { node: Node::new(), frame: frame.clone(), left, fills: false }));
         node.add(Box::new(holder));
-        FrameSidebar { node, frame, left, dragged: None, dragging: None, pressed_on: None, pointer: None }
+        FrameSidebar { node, frame, left, dragged: None, dragging: None, pointer: None }
     }
 
     pub fn sidebar(&self) -> &SidebarSpec {
@@ -69,8 +69,13 @@ impl FrameSidebar {
 
     /// Its parts' grid.
     pub fn grid(&self) -> &GridPanel {
-        let holder = self.node.children()[0].as_any().downcast_ref::<Showing>().expect("a sidebar holds its parts");
+        let holder = self.node.children()[2].as_any().downcast_ref::<Showing>().expect("a sidebar holds its parts");
         holder.child().as_any().downcast_ref::<GridPanel>().expect("a sidebar's parts are on a grid")
+    }
+
+    /// Its fill and fold buttons, the fill button first.
+    pub fn buttons(&self) -> Vec<&SidebarButton> {
+        self.node.children().iter().filter_map(|c| c.as_any().downcast_ref::<SidebarButton>()).collect()
     }
 
     pub fn collapsed(&self) -> bool {
@@ -117,7 +122,7 @@ impl FrameSidebar {
         Rect::new(if self.collapsed() { inner.x } else { x }, inner.y, BUTTONS_HEIGHT, BUTTONS_HEIGHT)
     }
 
-    /// Folds it to its strip or shows it again; folded, it no longer fills the window.
+    /// Folds it to its strip or shows it again; whether it fills the window stays as it was, folded it does not show.
     pub fn fold(&mut self, folded: bool, cx: &mut Cx) {
         self.frame.fold(self.left, folded);
         cx.invalidate();
@@ -175,18 +180,25 @@ impl Element for FrameSidebar {
         self.node.bounds = area;
         let inner = area.inset(PADDING);
         let top = if self.has_buttons() { BUTTONS_HEIGHT + 6.0 } else { 0.0 };
-        self.node.children_mut()[0].arrange(Rect::new(inner.x, inner.y + top, inner.width, (inner.height - top).max(0.0)), cx);
+        let (fill, fold) = (self.fill_button(), self.fold_button());
+        for child in self.node.children_mut().iter_mut() {
+            let place = match child.as_any().downcast_ref::<SidebarButton>() {
+                Some(button) if button.fills => fill.unwrap_or_default(),
+                Some(_) => fold.unwrap_or_default(),
+                None => Rect::new(inner.x, inner.y + top, inner.width, (inner.height - top).max(0.0)),
+            };
+            child.arrange(place, cx);
+        }
+    }
+
+    /// Over its edge, while the person may drag it, the pointer shows it resizes.
+    fn cursor_at(&self, x: f64, y: f64) -> Option<Cursor> {
+        self.edge().filter(|e| e.contains(x, y)).map(|_| Cursor::ResizeLeftRight)
     }
 
     fn on_pointer_pressed(&mut self, at: PointerInput, _cx: &mut Cx) {
-        let (x, y) = (at.screen_x, at.screen_y);
-        self.pressed_on = None;
-        if self.edge().is_some_and(|e| e.contains(x, y)) {
-            self.dragging = Some((x, self.width()));
-        } else if self.fold_button().is_some_and(|b| b.contains(x, y)) {
-            self.pressed_on = Some(Pressed::Fold);
-        } else if self.fill_button().is_some_and(|b| b.contains(x, y)) {
-            self.pressed_on = Some(Pressed::Fill);
+        if self.edge().is_some_and(|e| e.contains(at.screen_x, at.screen_y)) {
+            self.dragging = Some((at.screen_x, self.width()));
         }
     }
 
@@ -203,20 +215,6 @@ impl Element for FrameSidebar {
         self.dragging = None;
     }
 
-    fn on_click(&mut self, cx: &mut Cx) {
-        match self.pressed_on.take() {
-            Some(Pressed::Fold) => {
-                let folded = self.collapsed();
-                self.fold(!folded, cx);
-            }
-            Some(Pressed::Fill) => {
-                let filling = self.maximized();
-                self.fill(!filling, cx);
-            }
-            None => {}
-        }
-    }
-
     fn on_wheel(&mut self, _dx: f64, _dy: f64, _held: Modifiers, _cx: &mut Cx) -> bool {
         true
     }
@@ -229,21 +227,94 @@ impl Element for FrameSidebar {
         if let Some(edge) = self.edge().filter(|e| over(&self.node, self.pointer, *e) || self.dragging.is_some()) {
             p.fill(edge, look.color("accent_soft"), 0.0);
         }
+        let _clip = p.clip(b);
+        draw_children(&self.node, p);
+    }
+}
+
+/// A sidebar's fold or fill button: a click, Enter or Space folds it (or
+/// shows it again) or lets it fill the window (or gives the window back).
+/// It takes the focus, shows the focus ring, and says what it does.
+pub struct SidebarButton {
+    node: Node,
+    frame: Rc<WindowFrame>,
+    left: bool,
+    fills: bool,
+}
+
+impl SidebarButton {
+    /// Whether it is the fill button; else the fold button.
+    pub fn fills(&self) -> bool {
+        self.fills
+    }
+
+    fn sidebar(&self) -> &SidebarSpec {
+        self.frame.sidebar(self.left).expect("a sidebar has its spec")
+    }
+
+    fn press(&mut self, cx: &mut Cx) {
+        if self.fills {
+            self.frame.fill(self.left, !self.frame.maximized(self.left));
+        } else {
+            self.frame.fold(self.left, !self.frame.collapsed(self.left));
+        }
+        cx.invalidate();
+    }
+}
+
+impl Element for SidebarButton {
+    crate::element_node!();
+
+    /// The fold button shows on a sidebar that folds; the fill button on one that fills the window, while it is not folded.
+    fn is_shown(&self) -> bool {
+        if self.fills { self.sidebar().maximizable && !self.frame.collapsed(self.left) } else { self.sidebar().collapsible }
+    }
+
+    fn focusable(&self) -> bool {
+        true
+    }
+
+    fn on_click(&mut self, cx: &mut Cx) {
+        self.press(cx);
+    }
+
+    fn on_key(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
+        if !matches!(key.key, Key::Enter | Key::Space) || key.modifiers != Modifiers::NONE {
+            return false;
+        }
+        self.press(cx);
+        true
+    }
+
+    fn tooltip_at(&self, _x: f64, _y: f64) -> Option<String> {
+        Some(match (self.fills, self.frame.maximized(self.left), self.frame.collapsed(self.left)) {
+            (true, true, _) => locale::translate("sidebarGiveBack", "Give the window back"),
+            (true, false, _) => locale::translate("sidebarFill", "Fill the window"),
+            (false, _, true) => locale::translate("sidebarShow", "Show the sidebar"),
+            (false, _, false) => locale::translate("sidebarFold", "Fold the sidebar away"),
+        })
+    }
+
+    fn on_pointer_moved(&mut self, _at: PointerInput, cx: &mut Cx) {
+        cx.invalidate();
+    }
+
+    fn draw(&self, p: &Painter) {
+        let look = p.look;
+        let b = self.node.bounds;
         let text = look.color("frame_text");
+        let hover = self.node.hovered;
         // The fold button points the way the sidebar goes; the fill button shows the arrows out, or in while it fills.
-        if let Some(fold) = self.fold_button() {
-            let mark = if self.left != self.collapsed() { "\u{2039}" } else { "\u{203A}" };
-            Self::button(p, fold, mark, over(&self.node, self.pointer, fold), text);
-        }
-        if let Some(fill) = self.fill_button() {
-            let hover = over(&self.node, self.pointer, fill);
-            Self::button(p, fill, "", hover, text);
+        if self.fills {
+            FrameSidebar::button(p, b, "", hover, text);
             let mark = look.part("button", if hover { Some("hover") } else { None }).text.unwrap_or(text);
-            fill_mark(p, fill, self.maximized(), mark);
+            fill_mark(p, b, self.frame.maximized(self.left), mark);
+        } else {
+            let mark = if self.left != self.frame.collapsed(self.left) { "\u{2039}" } else { "\u{203A}" };
+            FrameSidebar::button(p, b, mark, hover, text);
         }
-        if !self.collapsed() {
-            let _clip = p.clip(b);
-            crate::element::draw_children(&self.node, p);
+        if self.node.focused {
+            p.focus_ring(b, look.radius("button"));
         }
     }
 }

@@ -51,6 +51,12 @@ impl InputsHost {
         self.inner.fields.borrow_mut().insert(path.to_string(), facts);
     }
 
+    /// Changes the state of the part `name`, as code does, and tells the parts.
+    /// Its own, so it goes before `PartHost::set_state`, which replaces a state whole.
+    pub fn set_state(&self, name: &str, change: impl FnOnce(&mut PartState)) {
+        self.inner.set_state(name, change)
+    }
+
     /// The person's language and currency.
     pub fn use_formats(&self, language: &str, currency: Option<&str>) {
         *self.formats.borrow_mut() = Formats { language: Some(language.to_string()), currency: currency.map(str::to_string) };
@@ -83,8 +89,8 @@ impl PartHost for InputsHost {
         self.inner.state(name)
     }
 
-    fn change_state(&self, name: &str, change: &mut dyn FnMut(&mut PartState)) {
-        self.inner.change_state(name, change)
+    fn set_state(&self, name: &str, state: PartState) {
+        crate::parts::PartHost::set_state(&self.inner, name, state)
     }
 
     fn run(&self, part: Option<&str>, call: &HandlerCall) -> bool {

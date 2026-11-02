@@ -1,8 +1,10 @@
 //! A file part (U1c), the same as on every stack: the name of a record's
-//! file, or that it has none, with buttons to open it in the program the
-//! system uses for its kind, save a copy of it, choose another and remove
-//! it, named in Clarity's own words. A stored file is fetched only to open
-//! it or save a copy. Choosing and removing are changes, each running its
+//! file (cut off with an ellipsis when it is too long), or that it has none,
+//! with buttons to choose another, open it in the program the system uses
+//! for its kind, save a copy of it and remove it, in that order, named in
+//! Clarity's own words. A saved copy says where it went: the place the
+//! person chose on the desktop, the Downloads folder in a browser. A stored
+//! file is fetched only to open it or save a copy. Choosing and removing are changes, each running its
 //! change handlers; opening and saving a copy are not. A read-only one
 //! neither chooses nor removes.
 //!
@@ -10,10 +12,10 @@
 //! screen's thread (`Cx::later`); what was chosen comes back to the part
 //! (`Element::on_later`).
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
-use clarity_runtime::picture::Picture;
-use clarity_runtime::record_file::{clean_name, RecordFile};
+use crate::wire::{clean_name, FieldContent, FieldFile};
 use clarity_runtime::ui::{Level, Text};
 use serde_json::Value;
 
@@ -65,18 +67,18 @@ impl Facts {
     }
 
     /// The record's file; none when it has none.
-    fn file(&self) -> Option<RecordFile> {
+    fn file(&self) -> Option<FieldFile> {
         let value = self.host.read(self.bound()?)?;
-        serde_json::from_value(value).ok()
+        FieldFile::read(&value)
     }
 
     /// The bytes of a field's file: new ones as they are, a stored one or one of the store fetched through the window.
-    pub fn bytes_of(&self, content: &Picture) -> Option<Vec<u8>> {
+    pub fn bytes_of(&self, content: &FieldContent) -> Option<Vec<u8>> {
         let bind = self.bound()?;
         match content {
-            Picture::New(bytes) => Some(bytes.clone()),
-            Picture::Stored => self.host.fetch(bind, None),
-            Picture::InStore(path) => self.host.fetch(bind, Some(path)),
+            FieldContent::New(bytes) => Some(bytes.clone()),
+            FieldContent::Stored => self.host.fetch(bind, None),
+            FieldContent::InStore(path) => self.host.fetch(bind, Some(path)),
         }
     }
 
@@ -93,7 +95,7 @@ impl Facts {
     fn open_it(&self) {
         let Some(file) = self.file() else { return };
         if let Some(bytes) = self.bytes_of(&file.content) {
-            self.host.files().show(&file.name, &bytes);
+            crate::files::system().show(&file.name, &bytes);
         }
     }
 
@@ -101,7 +103,7 @@ impl Facts {
     fn save_copy(&self, cx: &mut Cx) {
         let Some(file) = self.file() else { return };
         let Some(bytes) = self.bytes_of(&file.content) else { return };
-        let picker = self.host.files();
+        let picker = crate::files::system();
         let title = locale::translate("saveFileCopy", "Save a copy");
         cx.later(self.part, move || Asked::Saved(picker.save_file(&title, &file.name, &bytes)));
     }
@@ -111,7 +113,7 @@ impl Facts {
         if self.read_only() || !self.enabled() {
             return;
         }
-        let picker = self.host.files();
+        let picker = crate::files::system();
         let title = locale::translate("chooseFile", "Choose a file");
         cx.later(self.part, move || Asked::Chosen(picker.open_file(&title, None)));
     }
@@ -129,17 +131,30 @@ pub struct FilePart {
     name_box: Rect,
     /// Where the last copy saved went.
     saved: Option<String>,
+    /// The name as it was drawn last.
+    drawn_name: RefCell<String>,
 }
 
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
     Box::new(FilePart::new(spec, host))
 }
 
-/// Its buttons, by the order they were added.
-const OPEN: usize = 0;
-const SAVE: usize = 1;
-const CHOOSE: usize = 2;
+/// Its buttons, by the order they were added: the order they read, which is the Tab order too.
+const CHOOSE: usize = 0;
+const OPEN: usize = 1;
+const SAVE: usize = 2;
 const REMOVE: usize = 3;
+
+/// What a saved copy says: the place chosen (a whole path, on the desktop),
+/// else that it is in the Downloads folder (a browser's download).
+pub fn saved_where(place: &str) -> String {
+    let path = std::path::Path::new(place);
+    if path.is_absolute() || path.has_root() {
+        locale::fill(&locale::translate("fileCopySavedAt", "A copy is saved as {place}"), "place", place)
+    } else {
+        locale::translate("fileCopySaved", "A copy is in your Downloads folder")
+    }
+}
 
 impl FilePart {
     pub fn new(spec: PartSpec, host: Rc<dyn PartHost>) -> FilePart {
@@ -155,14 +170,14 @@ impl FilePart {
         let save = ContainerButton::new(|| locale::translate("saveFileCopy", "Save a copy"), move |cx| saving.save_copy(cx)).shows(f(|f| f.file().is_some())).usable(f(Facts::enabled));
         let choose = ContainerButton::new(|| locale::translate("chooseFile", "Choose a file"), move |cx| choosing.choose(cx)).shows(f(|f| !f.read_only())).usable(f(Facts::enabled));
         let remove = ContainerButton::new(|| locale::translate("removeFile", "Remove the file"), move |_| removing.remove()).shows(f(|f| !f.read_only())).usable(f(|f| f.enabled() && f.file().is_some()));
-        for button in [open, save, choose, remove] {
+        for button in [choose, open, save, remove] {
             base.node.add(Box::new(button));
         }
-        FilePart { base, facts, name_box: Rect::default(), saved: None }
+        FilePart { base, facts, name_box: Rect::default(), saved: None, drawn_name: RefCell::new(String::new()) }
     }
 
     /// The record's file; none when it has none.
-    pub fn file(&self) -> Option<RecordFile> {
+    pub fn file(&self) -> Option<FieldFile> {
         self.facts.file()
     }
 
@@ -204,6 +219,11 @@ impl FilePart {
         self.name_box
     }
 
+    /// The name as it was drawn last: cut off with an ellipsis where it is wider than its place.
+    pub fn drawn_name(&self) -> String {
+        self.drawn_name.borrow().clone()
+    }
+
     /// Where the last copy saved went; none before one was.
     pub fn saved(&self) -> Option<&str> {
         self.saved.as_deref()
@@ -214,8 +234,8 @@ impl FilePart {
         if self.facts.read_only() || self.facts.bound().is_none() {
             return;
         }
-        let file = RecordFile { name: clean_name(chosen), content: Picture::New(bytes) };
-        self.facts.write(serde_json::to_value(file).unwrap_or(Value::Null));
+        let file = FieldFile { name: clean_name(chosen), content: FieldContent::New(bytes) };
+        self.facts.write(file.value());
         self.facts.fire("change");
     }
 
@@ -237,7 +257,8 @@ impl Element for FilePart {
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
         self.base.node.bounds = area;
         let mut right = area.right();
-        for index in [REMOVE, CHOOSE, SAVE, OPEN] {
+        // From the right: Remove, Save a copy, Open, Choose; so they read Choose, Open, Save a copy, Remove.
+        for index in [REMOVE, SAVE, OPEN, CHOOSE] {
             let button = &mut self.base.node.children_mut()[index];
             let shown = button.is_shown();
             let width = if shown { button.as_any().downcast_ref::<ContainerButton>().map(|b| b.width_for(cx)).unwrap_or(0.0).min((right - area.x).max(0.0)) } else { 0.0 };
@@ -256,7 +277,10 @@ impl Element for FilePart {
         let look = p.look;
         let _dimmed = p.dimmed(self.facts.enabled());
         let empty = self.is_empty();
-        p.plain_text(&self.shown(), self.name_box.inset(look.padding()), look.color(if empty { "muted" } else { "text" }), look.size("text"));
+        let place = self.name_box.inset(look.padding());
+        let drawn = p.fit(&self.shown(), place.width, look.size("text"), "text", false);
+        p.plain_text(&drawn, place, look.color(if empty { "muted" } else { "text" }), look.size("text"));
+        *self.drawn_name.borrow_mut() = drawn;
         crate::element::draw_children(&self.base.node, p);
     }
 
@@ -265,8 +289,8 @@ impl Element for FilePart {
         match *asked {
             Asked::Chosen(Some(chosen)) => self.take(&chosen.name, chosen.bytes),
             Asked::Saved(Some(place)) => {
+                self.base.host.say(Level::Info, Text::plain(saved_where(&place)));
                 self.saved = Some(place);
-                self.base.host.say(Level::Info, Text::plain(locale::translate("fileCopySaved", "A copy is in your Downloads folder")));
             }
             _ => {}
         }

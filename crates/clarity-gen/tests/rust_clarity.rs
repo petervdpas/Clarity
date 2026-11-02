@@ -197,7 +197,7 @@ fn the_program_carries_the_facts_of_its_fields() {
     has(facts, "(\"Status\", &[\"open\", \"paid\"])");
     let main = file(&files, "src/main.rs");
     has(main, "mod facts;\n");
-    has(main, "    fn facts(&self) -> &'static clarity_runtime::fields::Facts {\n        &facts::FACTS\n    }\n");
+    has(main, "    fn facts_json(&self) -> Value {\n        facts::FACTS.to_json()\n    }\n");
 }
 
 

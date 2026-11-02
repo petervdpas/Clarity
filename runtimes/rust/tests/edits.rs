@@ -2,7 +2,7 @@
 
 use clarity_runtime::edits::EditBus;
 use clarity_runtime::Error;
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 
 fn object(value: &Value) -> Map<String, Value> {
     value.as_object().cloned().unwrap_or_default()
@@ -98,4 +98,32 @@ fn an_undo_puts_back_what_code_set_on_parts_as_every_runtime_does() {
             }
         }
     }
+}
+
+/// A part bound to a setting edits the settings, and Ctrl+Z gives back only
+/// the setting its edit changed: each scope its own (C# SettingsUndoTests).
+#[test]
+fn a_setting_a_part_changed_is_taken_back() {
+    use clarity_runtime::edits::{edit_data, with_edit_data};
+    let mut bus = EditBus::default();
+    let mut now = clarity_runtime::ui::WindowState::new("Prefs", object(&json!({ "name": "Ada", "settings": { "id": 0, "compact": false, "theme": "Light" } })));
+    bus.reset(&edit_data(&now));
+    now.data["settings"]["compact"] = json!(true);
+    bus.edit("compactBox", "compactBox", &edit_data(&now), &[]);
+    now.data["settings"]["theme"] = json!("Dark");
+    bus.edit("themeBox", "settingsForm", &edit_data(&now), &[]);
+    let mut undo = |now: clarity_runtime::ui::WindowState, scope: &str, back: bool| {
+        let after = bus.undo(scope, &edit_data(&now), back, |_, _| Ok(())).unwrap().unwrap();
+        with_edit_data(now, after)
+    };
+    let settings = |now: &clarity_runtime::ui::WindowState| (now.data["settings"]["compact"].clone(), now.data["settings"]["theme"].clone());
+    now = undo(now, "compactBox", true);
+    assert_eq!(settings(&now), (json!(false), json!("Dark")));
+    now = undo(now, "settingsForm", true);
+    assert_eq!(settings(&now), (json!(false), json!("Light")));
+    now = undo(now, "compactBox", false);
+    assert_eq!(settings(&now), (json!(true), json!("Light")));
+    // The window's own data was never part of these edits, and the settings keep their number.
+    assert_eq!(now.data["name"], json!("Ada"));
+    assert_eq!(now.data["settings"]["id"], json!(0));
 }

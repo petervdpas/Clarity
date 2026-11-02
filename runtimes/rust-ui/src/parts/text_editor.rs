@@ -7,24 +7,49 @@
 //! copied out.
 //!
 //! It is an element of its own, and the parts that edit text (text box,
-//! memo, password, later number and spin box) hold one and hand it what the
+//! memo, password, number and spin box) hold one and hand it what the
 //! person does. Places in the text are counted in characters (Unicode
 //! scalar values), never in bytes.
+//!
+//! Its right-click menu has Cut, Copy, Paste and Select all. Ctrl+Z takes
+//! back its own typing first, while it has the focus; once its text is
+//! taken (it is left, or set), Ctrl+Z goes on to the window's edits. Text is
+//! shaped as it is drawn (`Fonts::shape`): Arabic joined, Hebrew right to
+//! left, and the arrow keys move the way they point where directions mix.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 use skia_safe::{Color, Paint};
 
 use crate::element::{Cx, Element, Node};
 use crate::element_node;
-use crate::fonts::Fonts;
+use crate::fonts::{Fonts, ShapedText};
+use crate::frame::menus::MenuEntry;
 use crate::geometry::Rect;
-use crate::input::{Key, KeyInput, PointerInput, Modifiers};
+use crate::input::{Cursor, Key, KeyInput, PointerInput, Modifiers};
 use crate::painter::{Painter, TextAlign};
 use crate::theme::ThemeLook;
 
-/// The dot a password shows for each character.
-const DOT: char = '\u{2022}';
+/// What a password shows for each character.
+const DOT: char = '*';
+
+/// What the right-click menu asked for; it is done when the editor wakes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MenuAsk {
+    Cut,
+    Copy,
+    Paste,
+    SelectAll,
+}
+
+/// The text, caret and selection as they were before one step of typing.
+#[derive(Debug, Clone, PartialEq)]
+struct Typed {
+    chars: Vec<char>,
+    caret: usize,
+    anchor: usize,
+}
 
 /// One line as drawn: where it starts and ends in the text, without the line break that ends it.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -34,9 +59,11 @@ struct Line {
 }
 
 /// The lines, how high each is, and where each place of the text is across its line.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct Laid {
     lines: Vec<Line>,
+    /// Each line shaped as it is drawn, so the caret and the pointer land on its letters.
+    shapes: Vec<Rc<ShapedText>>,
     height: f64,
     across: Vec<f64>,
     // What it was laid out for: the width inside, the text size, the font and the text's version.
@@ -76,6 +103,16 @@ pub struct TextEditor {
     pub entered: Option<Box<dyn FnMut() -> bool>>,
     /// A key, before it does what it does here: true when the holder took it.
     pub key_first: Option<Box<dyn FnMut(KeyInput) -> bool>>,
+    /// How many characters the person may type at most; none: any number. Text set from elsewhere is not cut.
+    pub max_length: Option<usize>,
+    /// Whether Ctrl+Z takes back its typing: not in a part with `no undo`, whose holder sets it false.
+    pub undoes: bool,
+    undo: Vec<Typed>,
+    redo: Vec<Typed>,
+    /// Whether the last step was typing characters, which the next typed character joins.
+    typing: bool,
+    /// What its right-click menu asked for, done when it wakes.
+    menu_asked: Rc<Cell<Option<MenuAsk>>>,
     edits: u64,
     version: u64,
     scroll_x: f64,
@@ -121,6 +158,12 @@ impl TextEditor {
             takes_tab: false,
             entered: None,
             key_first: None,
+            max_length: None,
+            undoes: true,
+            undo: Vec::new(),
+            redo: Vec::new(),
+            typing: false,
+            menu_asked: Rc::new(Cell::new(None)),
             edits: 0,
             version: 0,
             scroll_x: 0.0,
@@ -168,6 +211,8 @@ impl TextEditor {
         self.caret = self.chars.len();
         self.anchor = self.caret;
         self.version += 1;
+        // Text set from elsewhere is no typing to take back.
+        self.forget_typing();
         // With the focus the caret shows at its end; else it shows from its start.
         self.follow = self.node.focused;
         if !self.node.focused {
@@ -196,7 +241,12 @@ impl TextEditor {
         self.edits
     }
 
-    /// A password: each character shows as a dot, and it is not copied or cut.
+    /// What is drawn for the text: the text itself, or a `*` for each character of a password.
+    pub fn shown(&self) -> String {
+        self.shown_chars().into_iter().collect()
+    }
+
+    /// A password: each character shows as a `*`, and it is not copied or cut.
     pub fn password(&self) -> bool {
         self.password
     }
@@ -251,13 +301,63 @@ impl TextEditor {
         self.moved(cx);
     }
 
-    /// Puts `typed` where the selection is, as the person typed it.
+    // -- Its own undo -------------------------------------------------------
+
+    /// Whether it has typing of its own to take back (true) or to do again (false).
+    pub fn can_undo(&self, back: bool) -> bool {
+        if back { !self.undo.is_empty() } else { !self.redo.is_empty() }
+    }
+
+    /// The text is taken or set: its typing is no longer its own to take back.
+    pub fn forget_typing(&mut self) {
+        self.undo.clear();
+        self.redo.clear();
+        self.typing = false;
+    }
+
+    /// Keeps the text as it is now as a step to take back; typed characters in a row are one step, a word at a time.
+    fn remember(&mut self, typed: bool, added: &[char]) {
+        let joins = typed && self.typing && !self.undo.is_empty() && !added.iter().any(|c| c.is_whitespace());
+        if !joins {
+            self.undo.push(Typed { chars: self.chars.clone(), caret: self.caret, anchor: self.anchor });
+        }
+        self.redo.clear();
+        self.typing = typed;
+    }
+
+    /// Takes back (`back`) or does again one step of its own typing; false when it has none.
+    pub fn undo_typing(&mut self, back: bool, cx: &mut Cx) -> bool {
+        let step = if back { self.undo.pop() } else { self.redo.pop() };
+        let Some(step) = step else {
+            return false;
+        };
+        let now = Typed { chars: self.chars.clone(), caret: self.caret, anchor: self.anchor };
+        if back { self.redo.push(now) } else { self.undo.push(now) }
+        self.chars = step.chars;
+        self.caret = step.caret.min(self.chars.len());
+        self.anchor = step.anchor.min(self.chars.len());
+        self.typing = false;
+        self.changed(cx);
+        true
+    }
+
+    /// Puts `typed` where the selection is.
     fn insert(&mut self, typed: &str, cx: &mut Cx) {
-        let clean = self.clean(typed);
+        self.insert_typed(typed, false, cx);
+    }
+
+    /// Puts `typed` where the selection is; `typed_now` when the person typed it (not pasted), so it joins the step before.
+    fn insert_typed(&mut self, typed: &str, typed_now: bool, cx: &mut Cx) {
+        let mut clean = self.clean(typed);
         let (start, end) = self.selection();
+        if let Some(most) = self.max_length {
+            let room = most.saturating_sub(self.chars.len() - (end - start));
+            clean.truncate(room);
+        }
         if clean.is_empty() && start == end {
             return;
         }
+        self.remember(typed_now && start == end, &clean);
         let count = clean.len();
         self.chars.splice(start..end, clean);
         self.caret = start + count;
@@ -266,6 +366,7 @@ impl TextEditor {
     }
 
     fn delete_selection(&mut self, cx: &mut Cx) {
+        self.remember(false, &[]);
         let (start, end) = self.selection();
         self.chars.drain(start..end);
         self.caret = start;
@@ -274,6 +375,7 @@ impl TextEditor {
     }
 
     fn move_to(&mut self, place: usize, extend: bool, cx: &mut Cx) {
+        self.typing = false;
         self.caret = place.min(self.chars.len());
         if !extend {
             self.anchor = self.caret;
@@ -345,27 +447,15 @@ impl TextEditor {
         }
         let command = key.control() || key.meta();
         let shift = key.shift();
-        let (start, end) = self.selection();
+        let alt = key.modifiers.has(Modifiers::ALT);
         let len = self.chars.len();
         match key.key {
             Key::Left => {
-                let to = if command {
-                    self.word_before(self.caret)
-                } else if self.anchor != self.caret && !shift {
-                    start
-                } else {
-                    self.before(self.caret)
-                };
+                let to = self.sideways(true, command, shift, cx);
                 self.move_to(to, shift, cx);
             }
             Key::Right => {
-                let to = if command {
-                    self.word_after(self.caret)
-                } else if self.anchor != self.caret && !shift {
-                    end
-                } else {
-                    self.after(self.caret)
-                };
+                let to = self.sideways(false, command, shift, cx);
                 self.move_to(to, shift, cx);
             }
             Key::Home => {
@@ -421,27 +511,12 @@ impl TextEditor {
                 self.select_all();
                 self.moved(cx);
             }
-            Key::C if command => {
-                if start != end && !self.password {
-                    let selected = self.selected_text();
-                    cx.clipboard().set_text(&selected);
-                }
-            }
-            Key::X if command => {
-                if start != end && !self.password && self.editable() {
-                    let selected = self.selected_text();
-                    cx.clipboard().set_text(&selected);
-                    self.delete_selection(cx);
-                }
-            }
-            Key::V if command => {
-                if self.editable() {
-                    let pasted = cx.clipboard().get_text().unwrap_or_default();
-                    if !pasted.is_empty() {
-                        self.insert(&pasted, cx);
-                    }
-                }
-            }
+            Key::C if command => self.copy(cx),
+            Key::X if command => self.cut(cx),
+            Key::V if command => self.paste(cx),
+            // Its own typing first; with none left, the key goes on to the window's edits.
+            Key::Z if command && !alt => return self.undoes && self.undo_typing(!shift, cx),
+            Key::Y if command && !alt => return self.undoes && self.undo_typing(false, cx),
             _ => return false,
         }
         true
@@ -455,7 +530,121 @@ impl TextEditor {
         // Keys that type no character (Backspace, Escape) come as keys.
         let printable: String = typed.chars().filter(|c| !c.is_control() || *c == '\t' || (self.multiline && *c == '\n')).collect();
         if !printable.is_empty() {
-            self.insert(&printable, cx);
+            self.insert_typed(&printable, true, cx);
+        }
+    }
+
+    fn copy(&mut self, cx: &mut Cx) {
+        if self.caret != self.anchor && !self.password {
+            let selected = self.selected_text();
+            cx.clipboard().set_text(&selected);
+        }
+    }
+
+    fn cut(&mut self, cx: &mut Cx) {
+        if self.caret != self.anchor && !self.password && self.editable() {
+            let selected = self.selected_text();
+            cx.clipboard().set_text(&selected);
+            self.delete_selection(cx);
+        }
+    }
+
+    fn paste(&mut self, cx: &mut Cx) {
+        if self.editable() {
+            let pasted = cx.clipboard().get_text().unwrap_or_default();
+            if !pasted.is_empty() {
+                self.insert(&pasted, cx);
+            }
+        }
+    }
+
+    /// Does what its right-click menu asked for: Cut, Copy, Paste or Select all.
+    pub fn run_menu_asked(&mut self, cx: &mut Cx) {
+        match self.menu_asked.take() {
+            Some(MenuAsk::Cut) => self.cut(cx),
+            Some(MenuAsk::Copy) => self.copy(cx),
+            Some(MenuAsk::Paste) => self.paste(cx),
+            Some(MenuAsk::SelectAll) => {
+                self.select_all();
+                self.moved(cx);
+            }
+            None => {}
+        }
+    }
+
+    /// A right press: Cut, Copy, Paste and Select all, in the person's
+    /// language, each usable when it can do something. What is picked is
+    /// done when `wake` (the editor, or the part that holds it) wakes,
+    /// which the menu asks for; it then calls `run_menu_asked`.
+    pub fn menu(&self, wake: crate::element::ElementId) -> Option<Vec<MenuEntry>> {
+        if !self.enabled || !self.takes_focus {
+            return None;
+        }
+        let selected = self.caret != self.anchor && !self.password;
+        let entry = |caption: String, enabled: bool, ask: MenuAsk| {
+            let asked = self.menu_asked.clone();
+            MenuEntry {
+                caption,
+                enabled,
+                run: Some(Rc::new(move || asked.set(Some(ask)))),
+                wake: Some(wake),
+                ..MenuEntry::default()
+            }
+        };
+        Some(vec![
+            entry(crate::locale::translate("cutText", "Cut"), selected && self.editable(), MenuAsk::Cut),
+            entry(crate::locale::translate("copyText", "Copy"), selected, MenuAsk::Copy),
+            entry(crate::locale::translate("pasteText", "Paste"), self.editable(), MenuAsk::Paste),
+            entry(crate::locale::translate("selectAllText", "Select all"), !self.chars.is_empty(), MenuAsk::SelectAll),
+        ])
+    }
+
+    /// Where Left or Right takes the caret. In text of one direction a
+    /// character back or on. Where Hebrew or Arabic is on the caret's line,
+    /// the place next to it as the line shows, so Left goes left in text
+    /// that runs right to left; a word at a time goes the paragraph's way.
+    fn sideways(&self, to_left: bool, command: bool, shift: bool, cx: &Cx) -> usize {
+        let (start, end) = self.selection();
+        let laid = self.layout(cx.fonts(), cx.look());
+        let n = line_of(&laid, self.caret);
+        let shape = &laid.shapes[n];
+        if !shape.has_right_to_left() {
+            return if to_left {
+                if command {
+                    self.word_before(self.caret)
+                } else if self.caret > 0 && self.anchor != self.caret && !shift {
+                    start
+                } else {
+                    self.before(self.caret)
+                }
+            } else if command {
+                self.word_after(self.caret)
+            } else if self.anchor != self.caret && !shift {
+                end
+            } else {
+                self.after(self.caret)
+            };
+        }
+        if command {
+            return if to_left != shape.right_to_left() { self.word_before(self.caret) } else { self.word_after(self.caret) };
+        }
+        if self.anchor != self.caret && !shift {
+            // The selection gives way at its end on that side.
+            return if (laid.across[start] < laid.across[end]) == to_left { start } else { end };
+        }
+        let line = laid.lines[n];
+        let step = shape.step(self.caret - line.start, !to_left);
+        if step != self.caret - line.start {
+            return line.start + step;
+        }
+        // At the line's edge: on to the next line from its end, back to the line before from its start.
+        let onward = to_left == shape.right_to_left();
+        if onward && self.caret == line.end {
+            self.after(self.caret)
+        } else if !onward && self.caret == line.start {
+            self.before(self.caret)
+        } else {
+            self.caret
         }
     }
 
@@ -517,6 +706,8 @@ impl TextEditor {
         self.dragging = false;
         if !focused {
             self.composing = None;
+            // Left, its text is taken: from then on Ctrl+Z takes back the window's edit of it.
+            self.forget_typing();
         }
         cx.invalidate();
     }
@@ -549,7 +740,7 @@ impl TextEditor {
     }
 
     /// What is drawn for the text: the text itself, or a dot for each character of a password.
-    fn shown(&self) -> Vec<char> {
+    fn shown_chars(&self) -> Vec<char> {
         if self.password { vec![DOT; self.chars.len()] } else { self.chars.clone() }
     }
 
@@ -563,29 +754,36 @@ impl TextEditor {
             }
         }
         let font = fonts.font("text", size, false);
-        let shown = self.shown();
-        // Where each place is from the start of the text, as each character's width adds up.
+        let shown = self.shown_chars();
+        let text: String = shown.iter().collect();
+        // The text shaped as drawn (Arabic joined, Hebrew right to left): each character's width, in the text's order.
+        let whole = fonts.shape(&text, "text", size, false);
         let mut from = vec![0.0; shown.len() + 1];
-        let mut widths: std::collections::HashMap<char, f64> = std::collections::HashMap::new();
-        let mut one = [0u8; 4];
         for (i, c) in shown.iter().enumerate() {
-            let w = if *c == '\n' {
-                0.0
-            } else {
-                *widths.entry(*c).or_insert_with(|| font.measure_str(c.encode_utf8(&mut one), None).0 as f64)
-            };
+            let w = if *c == '\n' || i >= whole.len() { 0.0 } else { whole.right_of(i) - whole.left_of(i) };
             from[i + 1] = from[i] + w;
         }
         let lines = if self.multiline { wrap(&shown, &from, width) } else { vec![Line { start: 0, end: shown.len() }] };
+        // Each line shaped as it is drawn, so the caret and the pointer land on its letters.
+        let shapes: Vec<Rc<ShapedText>> = lines
+            .iter()
+            .map(|l| {
+                if l.start == 0 && l.end == shown.len() {
+                    whole.clone()
+                } else {
+                    fonts.shape(&shown[l.start..l.end].iter().collect::<String>(), "text", size, false)
+                }
+            })
+            .collect();
         // Across is measured from the start of each place's own line.
         let mut across = vec![0.0; shown.len() + 1];
-        for line in &lines {
+        for (n, line) in lines.iter().enumerate() {
             for i in line.start..=line.end {
-                across[i] = from[i] - from[line.start];
+                across[i] = shapes[n].caret_x(i - line.start);
             }
         }
         let (spacing, _) = font.metrics();
-        let laid = Laid { lines, height: spacing as f64, across, width, size, font: font_name, version: self.version };
+        let laid = Laid { lines, shapes, height: spacing as f64, across, width, size, font: font_name, version: self.version };
         *self.laid.borrow_mut() = Some(laid.clone());
         laid
     }
@@ -610,7 +808,7 @@ impl TextEditor {
         if to as usize >= laid.lines.len() {
             return self.chars.len();
         }
-        nearest(&laid, laid.lines[to as usize], laid.across[self.caret])
+        nearest(&laid, to as usize, laid.across[self.caret])
     }
 
     /// The place nearest a point, from its top left.
@@ -623,16 +821,16 @@ impl TextEditor {
         } else {
             0
         };
-        let across = x - (inner.x - b.x) + self.scroll_x - self.align_shift(&laid, laid.lines[line], inner);
-        nearest(&laid, laid.lines[line], across)
+        let across = x - (inner.x - b.x) + self.scroll_x - self.align_shift(&laid, line, inner);
+        nearest(&laid, line, across)
     }
 
     /// How far a line moves right for its alignment, when it fits.
-    fn align_shift(&self, laid: &Laid, line: Line, inner: Rect) -> f64 {
+    fn align_shift(&self, laid: &Laid, line: usize, inner: Rect) -> f64 {
         if self.align == TextAlign::Left || self.multiline {
             return 0.0;
         }
-        let spare = inner.width - laid.across[line.end];
+        let spare = inner.width - laid.shapes[line].width();
         if spare <= 0.0 {
             0.0
         } else if self.align == TextAlign::Right {
@@ -662,7 +860,7 @@ impl TextEditor {
             self.scroll_y = self.scroll_y.clamp(0.0, most);
             self.scroll_x = 0.0;
         } else {
-            let full = laid.across[self.chars.len()];
+            let full = laid.shapes[0].width();
             let most = (full - inner.width + 1.0).max(0.0);
             if self.follow {
                 let x = laid.across[self.caret];
@@ -728,7 +926,7 @@ impl TextEditor {
                 let mut muted = Paint::default();
                 muted.set_color(fade(look.color("muted"), faded));
                 muted.set_anti_alias(true);
-                let width = font.measure_str(placeholder, None).0 as f64;
+                let width = p.fonts.measure(placeholder, "text", size, false);
                 let x = if self.align == TextAlign::Left || self.multiline {
                     inner.x
                 } else if self.align == TextAlign::Right {
@@ -736,48 +934,57 @@ impl TextEditor {
                 } else {
                     inner.x + (inner.width - width) / 2.0
                 };
-                p.canvas.draw_str(placeholder, (x as f32, baseline(0) as f32), &font, &muted);
+                p.fonts.draw(p.canvas, placeholder, x, baseline(0), "text", size, false, &muted);
             }
         }
 
-        let shown = self.shown();
         let (start, end) = self.selection();
         for (i, line) in laid.lines.iter().enumerate() {
             let top = top_of(i);
             if top + laid.height < inner.y || top > inner.bottom() {
                 continue;
             }
-            let left = inner.x - self.scroll_x + self.align_shift(&laid, *line, inner);
-            // The selection behind the text, while it has the focus.
+            let left = inner.x - self.scroll_x + self.align_shift(&laid, i, inner);
+            let shape = &laid.shapes[i];
+            // The selection behind the text, while it has the focus: one stretch, or more where directions mix.
             if node.focused && start != end && start <= line.end && end >= line.start {
-                let from = laid.across[start.max(line.start)];
-                let mut to = laid.across[end.min(line.end)];
-                // A selected line break shows as a little space.
-                if end > line.end && line.end < self.chars.len() {
-                    to += size / 3.0;
+                let from = start.max(line.start) - line.start;
+                let to = end.min(line.end) - line.start;
+                let mut spans = shape.spans(from, to);
+                if spans.is_empty() {
+                    spans.push((shape.caret_x(from), shape.caret_x(from)));
                 }
-                p.fill(Rect::new(left + from, top, (to - from).max(1.0), laid.height), look.color("selection"), 0.0);
+                // A selected line break shows as a little space, at the line's end.
+                if end > line.end && line.end < self.chars.len() {
+                    if shape.right_to_left() {
+                        spans[0].0 -= size / 3.0;
+                    } else if let Some(last) = spans.last_mut() {
+                        last.1 += size / 3.0;
+                    }
+                }
+                for (a, b) in spans {
+                    p.fill(Rect::new(left + a, top, (b - a).max(1.0), laid.height), look.color("selection"), 0.0);
+                }
             }
             if line.end > line.start {
-                let part: String = shown[line.start..line.end].iter().collect();
-                p.canvas.draw_str(&part, (left as f32, baseline(i) as f32), &font, &paint);
+                shape.draw(p.canvas, left, baseline(i), &paint, 0.0);
             }
         }
 
         if node.focused && self.enabled {
             let line = line_of(&laid, self.caret);
-            let mut x = inner.x - self.scroll_x + self.align_shift(&laid, laid.lines[line], inner) + laid.across[self.caret];
+            let mut x = inner.x - self.scroll_x + self.align_shift(&laid, line, inner) + laid.across[self.caret];
             let top = top_of(line);
             // What an input method composes shows at the caret on a plate of its own, underlined, the marked part stronger.
             if let Some(composing) = &self.composing {
-                let width = font.measure_str(&composing.text, None).0 as f64;
+                let width = p.fonts.measure(&composing.text, "text", size, false);
                 let place = Rect::new(x, top, width, laid.height);
                 p.fill(place, look.color("input"), 0.0);
-                p.canvas.draw_str(&composing.text, (x as f32, baseline(line) as f32), &font, &paint);
+                p.fonts.draw(p.canvas, &composing.text, x, baseline(line), "text", size, false, &paint);
                 p.fill(Rect::new(x, top + laid.height - 2.0, width, 1.0), text_color, 0.0);
                 if let Some((from, to)) = composing.marked.filter(|(f, t)| f < t && *t <= composing.text.len()) {
-                    let at = font.measure_str(&composing.text[..from], None).0 as f64;
-                    let wide = font.measure_str(&composing.text[from..to], None).0 as f64;
+                    let at = p.fonts.measure(&composing.text[..from], "text", size, false);
+                    let wide = p.fonts.measure(&composing.text[from..to], "text", size, false);
                     p.fill(Rect::new(x + at, top + laid.height - 2.0, wide, 2.0), text_color, 0.0);
                 }
                 x += width;
@@ -797,17 +1004,9 @@ fn line_of(laid: &Laid, place: usize) -> usize {
     laid.lines.iter().rposition(|l| l.start <= place).unwrap_or(0)
 }
 
-fn nearest(laid: &Laid, line: Line, x: f64) -> usize {
-    let mut best = line.start;
-    for i in line.start..=line.end {
-        if (laid.across[i] - x).abs() < (laid.across[best] - x).abs() {
-            best = i;
-        }
-        if laid.across[i] > x {
-            break;
-        }
-    }
-    best
+/// The place on a line nearest `x` across it, on its shaped letters.
+fn nearest(laid: &Laid, line: usize, x: f64) -> usize {
+    laid.lines[line].start + laid.shapes[line].place_at(x)
 }
 
 /// Lines of at most `width`: each paragraph broken after the last space that
@@ -894,5 +1093,17 @@ impl Element for TextEditor {
 
     fn on_text(&mut self, text: &str, cx: &mut Cx) {
         self.typed(text, cx);
+    }
+
+    fn on_wake(&mut self, cx: &mut Cx) {
+        self.run_menu_asked(cx);
+    }
+
+    fn cursor_at(&self, _x: f64, _y: f64) -> Option<Cursor> {
+        (self.enabled && self.takes_focus).then_some(Cursor::Text)
+    }
+
+    fn context_menu_at(&self, _x: f64, _y: f64) -> Option<Vec<MenuEntry>> {
+        self.menu(self.node.id())
     }
 }

@@ -84,12 +84,21 @@ pub trait PartHost {
     /// The state of the part named `name`, which code sets; none for a part without a name.
     fn state(&self, name: Option<&str>) -> Option<PartState>;
 
-    /// Changes the state of the part named `name` (an unbound part's own text or tick).
-    fn change_state(&self, name: &str, change: &mut dyn FnMut(&mut PartState));
+    /// The part named `name` has this state now (an unbound part's own text
+    /// or tick, an accordion's open section): plain data, as every language's
+    /// host gives it. A part changes one with `parts::change_state`.
+    fn set_state(&self, name: &str, state: PartState);
 
     /// Runs a handler of `part`, or opens the window a click targets; true
     /// when it ran and did not refuse.
     fn run(&self, part: Option<&str>, call: &HandlerCall) -> bool;
+
+    /// Whether a handler of `part` can run now (C# IPartHost.CanRun, a command's
+    /// CanExecute): a timer leaves a tick out when it cannot.
+    fn can_run(&self, part: Option<&str>, call: &HandlerCall) -> bool {
+        let _ = (part, call);
+        true
+    }
 
     /// A text as written in the project, in the language shown: `@saveCaption` by its key, else as it is.
     fn text(&self, written: Option<&str>) -> String;
@@ -183,11 +192,6 @@ pub trait PartHost {
         designed.filter(|d| !d.is_empty()).map(|d| vec![d.to_string()]).unwrap_or_default()
     }
 
-    /// The file dialogs the host made (the system's on the desktop); asked off the screen's thread through `Cx::later`.
-    fn files(&self) -> std::sync::Arc<dyn crate::files::FilePicker> {
-        crate::files::system()
-    }
-
     /// What code told the custom part `part` since the last time (`arena.restart(2)`), in order; taken, so each is heard once.
     fn hears(&self, part: &str) -> Vec<clarity_runtime::ui::Hear> {
         let _ = part;
@@ -205,16 +209,45 @@ pub trait PartHost {
         let _ = (part, place);
     }
 
-    /// How a canvas that `runs` engine `name` gets a new instance of it; none when the host has no engines (a test).
-    fn engine(&self, name: &str) -> Option<crate::parts::data::canvas::engine::MakeFrames> {
+    /// Starts a new instance of the engine beside the screen `name` for a
+    /// canvas that `runs` it: its number, or why it could not start; none
+    /// when the host has no engines (a test). The host keeps the instance
+    /// (`crate::engines::Engines`) until `engine_stop`.
+    fn engine_start(&self, name: &str) -> Option<Result<u64, String>> {
         let _ = name;
         None
     }
 
-    /// The program's long work, run off the screen's thread so the window keeps drawing: none when the host runs none (a test).
-    fn program(&self) -> Option<std::sync::Arc<dyn clarity_runtime::program::Program>> {
+    /// The pointer and keys engine instance `id` takes.
+    fn engine_hears(&self, id: u64) -> crate::parts::data::canvas::engine::Hears {
+        let _ = id;
+        crate::parts::data::canvas::engine::Hears::default()
+    }
+
+    /// Starts the next frame of engine instance `id`: the input since the
+    /// last, then `ms`, the milliseconds since the last frame. What it draws
+    /// comes through `engine_drawn`, at once or on a later turn.
+    fn engine_frame(&self, id: u64, ms: f64, input: Vec<crate::parts::data::canvas::engine::ScreenInput>) {
+        let _ = (id, ms, input);
+    }
+
+    /// The frame of engine instance `id` that finished since the last ask:
+    /// its shapes and tells, or why the engine stopped; none while it runs.
+    fn engine_drawn(&self, id: u64) -> Option<Result<crate::parts::data::canvas::engine::Drawn, String>> {
+        let _ = id;
         None
     }
+
+    /// Ends engine instance `id`: its canvas left the screen or went.
+    fn engine_stop(&self, id: u64) {
+        let _ = id;
+    }
+
+    /// The name of the window the parts are in (`Main`); none when the host has no window (a test).
+    fn window_name(&self) -> Option<String> {
+        None
+    }
+
 }
 
 /// What every part has: its node, its spec and its host.
@@ -248,9 +281,16 @@ impl PartBase {
         self.spec.flag("readonly") || self.state().and_then(|s| s.readonly).unwrap_or(false)
     }
 
-    /// Whether the person may use it.
-    pub fn enabled(&self) -> bool {
+    /// Its own state's enabled; `enabled` also asks the parts it is in.
+    pub fn own_enabled(&self) -> bool {
         self.state().and_then(|s| s.enabled).unwrap_or(true)
+    }
+
+    /// Whether the person may use it: it and every part it is in are
+    /// enabled (a disabled form disables its buttons), as the screen last
+    /// saw its tree.
+    pub fn enabled(&self) -> bool {
+        self.own_enabled() && !self.node.within_disabled()
     }
 
     /// The path in the window's data it binds: `order.status`; none unbound.
@@ -286,6 +326,14 @@ impl PartBase {
     pub fn pick(&self, item: &CommandSpec) {
         pick(self.host.as_ref(), self.spec.name(), item);
     }
+}
+
+/// Changes the state of the part named `name` over its host: reads it,
+/// changes it and gives it back with `PartHost::set_state`.
+pub fn change_state(host: &dyn PartHost, name: &str, change: impl FnOnce(&mut PartState)) {
+    let mut state = host.state(Some(name)).unwrap_or_default();
+    change(&mut state);
+    host.set_state(name, state);
 }
 
 /// A menu's item picked: its handler runs, or the window its `opens` names opens.
@@ -325,6 +373,121 @@ pub trait Part: Element {
     fn set_corners(&mut self, corners: crate::painter::Corners) {
         let _ = corners;
     }
+
+    /// Whether it draws its `style` itself (a button, a badge); any other part has it from `style_of`.
+    fn draws_own_style(&self) -> bool {
+        false
+    }
+}
+
+/// The items of a part's menu as they show over `host`: hidden ones left
+/// out, disabled ones greyed, sub menus under their item; picking one runs
+/// its handler or opens its window.
+pub fn menu_entries(host: &Rc<dyn PartHost>, part: Option<&str>, items: &[CommandSpec]) -> Vec<crate::frame::menus::MenuEntry> {
+    use crate::frame::{menus::MenuEntry, rules};
+    let mut entries = Vec::new();
+    for item in items {
+        let name = item.text("name");
+        if !rules::shows(host.as_ref(), name) {
+            continue;
+        }
+        if rules::is_separator(item) {
+            entries.push(MenuEntry::line());
+            continue;
+        }
+        let sub = menu_entries(host, part, &item.items);
+        let run: Option<Rc<dyn Fn()>> = if sub.is_empty() {
+            let (host, part, item) = (host.clone(), part.map(str::to_string), item.clone());
+            Some(Rc::new(move || pick(host.as_ref(), part.as_deref(), &item)))
+        } else {
+            None
+        };
+        entries.push(MenuEntry {
+            caption: host.text(item.text("caption")),
+            icon: item.text("icon").filter(|i| !i.is_empty()).and_then(|i| host.icon_path(i)),
+            key: item.text("shortcut").filter(|k| !k.is_empty()).map(str::to_string),
+            checked: rules::checked(host.as_ref(), name),
+            enabled: rules::takes(host.as_ref(), name),
+            separator: false,
+            items: sub,
+            run,
+            ..MenuEntry::default()
+        });
+    }
+    entries
+}
+
+/// A part's `menu`, as a context menu at the pointer: hidden items left
+/// out, disabled ones greyed, as the menu's and each item's state says. A
+/// split button's menu is its dropdown, not a context menu.
+pub fn designed_menu(part: &dyn Part) -> Option<Vec<crate::frame::menus::MenuEntry>> {
+    let base = part.base();
+    let menu = base.spec.menu.as_ref().filter(|m| !m.items.is_empty())?;
+    if base.spec.flag("split") {
+        return None;
+    }
+    let host = base.host.as_ref();
+    let named = menu.name.as_deref();
+    if !crate::frame::rules::shows(host, named) || !crate::frame::rules::takes(host, named) {
+        return None;
+    }
+    let entries = menu_entries(&base.host, base.spec.name(), &menu.items);
+    (!entries.iter().all(|e| e.separator)).then_some(entries)
+}
+
+thread_local! {
+    /// The looks of the styles drawn, by the look they lie over and the style's name.
+    static STYLED: RefCell<HashMap<(u64, String), (std::sync::Arc<crate::theme::ThemeLook>, Rc<crate::fonts::Fonts>)>> = RefCell::new(HashMap::new());
+}
+
+/// A part's `style` (a style of the theme): the style's fill and border
+/// under it, drawn here, and its text color, size, font, weight and align
+/// as the look of everything it draws. None for a part without one.
+pub fn style_of(base: &PartBase, p: &Painter) -> Option<crate::painter::StyledLook> {
+    let name = base.spec.text("style").filter(|s| !s.is_empty())?;
+    let style = p.look.style(name);
+    let bounds = base.node.bounds;
+    let radius = style.radius.map(|r| r as f64).unwrap_or_else(|| p.look.radius("input"));
+    if let Some(fill) = style.background {
+        p.fill(bounds, fill, radius);
+    }
+    if let Some(border) = style.border {
+        p.stroke(bounds, border, p.look.border(), radius);
+    }
+    // The style's weight and align reach every text the part draws.
+    let align = match style.align.as_deref() {
+        Some("center") => Some(TextAlign::Center),
+        Some("right" | "end") => Some(TextAlign::Right),
+        Some("left" | "start") => Some(TextAlign::Left),
+        _ => None,
+    };
+    let bold = style.bold();
+    if style.text.is_none() && style.size.is_none() && style.font.is_none() {
+        return (bold || align.is_some()).then_some(crate::painter::StyledLook { look: None, bold, align });
+    }
+    let key = (p.look.serial(), name.to_string());
+    let look = STYLED.with(|styled| {
+        if let Some(kept) = styled.borrow().get(&key) {
+            return kept.clone();
+        }
+        let hex = |c: skia_safe::Color| format!("#{:02x}{:02x}{:02x}{:02x}", c.r(), c.g(), c.b(), c.a());
+        let mut own = Map::new();
+        if let Some(text) = style.text {
+            // The style's foreground is every text of the part, a label's muted one too.
+            own.insert("colors".into(), serde_json::json!({ "text": hex(text), "muted": hex(text) }));
+        }
+        if let Some(size) = style.size {
+            own.insert("sizes".into(), serde_json::json!({ "text": size, "heading": size }));
+        }
+        if let Some(font) = &style.font {
+            own.insert("fonts".into(), serde_json::json!({ "text": font }));
+        }
+        let look = p.look.over_this(&Value::Object(own).to_string());
+        let fonts = Rc::new(crate::fonts::Fonts::new(look.clone()));
+        styled.borrow_mut().insert(key, (look.clone(), fonts.clone()));
+        (look, fonts)
+    });
+    Some(crate::painter::StyledLook { look: Some(look), bold, align })
 }
 
 /// Writes the methods every part's element has the same way, for a struct with a field `base`: its node, and that code may hide it.

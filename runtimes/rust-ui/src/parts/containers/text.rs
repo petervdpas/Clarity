@@ -6,8 +6,6 @@
 
 use std::rc::Rc;
 
-use serde_json::Value;
-
 use crate::element::{Cx, Element};
 use crate::geometry::Rect;
 use crate::input::Modifiers;
@@ -15,8 +13,6 @@ use crate::markup::PartSpec;
 use crate::painter::{Painter, TextAlign};
 use crate::part_element;
 use crate::parts::containers::small::shown_value;
-use crate::parts::data::rows;
-use crate::parts::inputs::formats::{format_of, formats_of};
 use crate::parts::text_editor::TextEditor;
 use crate::parts::{Part, PartBase, PartHost};
 
@@ -43,24 +39,9 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
 impl TextPart {
     /// What it shows: its bound value as the person reads it; empty unbound or without a value.
     pub fn text(&self) -> String {
-        let Some(path) = self.base.bound() else {
-            return String::new();
-        };
-        let host = self.base.host.as_ref();
-        let value = host.read(path);
-        match value.as_ref() {
-            None | Some(Value::Null) | Some(Value::Bool(_)) => shown_value(host, path, value.as_ref()),
-            Some(value) => {
-                let choices = host.choices(path);
-                if !choices.is_empty() {
-                    return shown_value(host, path, Some(value));
-                }
-                let formats = formats_of(host);
-                match format_of(host, path) {
-                    Some(format) => formats.show(&format, value),
-                    None => rows::shown_formatted(value, None, &formats),
-                }
-            }
+        match self.base.bound() {
+            Some(path) => shown_value(self.base.host.as_ref(), path, self.base.host.read(path).as_ref()),
+            None => String::new(),
         }
     }
 

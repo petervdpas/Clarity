@@ -2,7 +2,7 @@
 //! 5.28): the app's frame once, under Everywhere, then each window's own
 //! frame commands and named buttons, with the keys the design gives them.
 
-use clarity_spec::shortcuts::{KeyCommand, KeyLayer, catalog};
+use clarity_spec::shortcuts::{KeyCommand, KeyLayer, KeyPlace, catalog};
 use clarity_spec::load_sources;
 
 const SHOP: &str = "module shop
@@ -48,7 +48,7 @@ code CustomerCard
 ";
 
 fn command(id: &str, name: &str, caption: &str, keys: &[&str]) -> KeyCommand {
-    KeyCommand { id: id.into(), name: name.into(), caption: Some(caption.into()), keys: keys.iter().map(|k| k.to_string()).collect() }
+    KeyCommand { id: id.into(), name: name.into(), caption: Some(caption.into()), keys: keys.iter().map(|k| k.to_string()).collect(), place: None }
 }
 
 #[test]
@@ -67,7 +67,7 @@ fn every_named_command_that_does_something_is_listed_by_where_it_is_active() {
                     command("newItem", "newItem", "New", &["Ctrl+N"]),
                     command("keysItem", "keysItem", "Keys", &[]),
                     command("quitItem", "quitItem", "Quit", &["Ctrl+Q"]),
-                    command("copyButton", "copyButton", "Copy", &["Ctrl+Shift+C"]),
+                    KeyCommand { place: Some(KeyPlace::Ribbon { tab: "Home".into(), group: "Edit".into() }), ..command("copyButton", "copyButton", "Copy", &["Ctrl+Shift+C"]) },
                 ],
             },
             // A window's own: its frame's commands, then its buttons, also those inside a panel.
@@ -75,7 +75,7 @@ fn every_named_command_that_does_something_is_listed_by_where_it_is_active() {
                 id: "CustomerCard".into(),
                 title: Some("Customer".into()),
                 commands: vec![
-                    command("CustomerCard.printButton", "printButton", "Print", &[]),
+                    KeyCommand { place: Some(KeyPlace::Toolbar), ..command("CustomerCard.printButton", "printButton", "Print", &[]) },
                     command("CustomerCard.saveButton", "saveButton", "Save", &["Ctrl+S"]),
                     command("CustomerCard.closeButton", "closeButton", "Close", &[]),
                 ],
@@ -103,7 +103,7 @@ fn the_keys_window_has_clarity_s_own_words() {
 /// it beside the command's name; a menu item or a window's button says nothing.
 #[test]
 fn toolbar_and_ribbon_commands_say_where_they_live() {
-    use clarity_spec::shortcuts::{KeyPlace, places};
+    use clarity_spec::shortcuts::places;
     let project = load_sources([("shop.clarity", SHOP)]);
     let places = places(&project);
     let of = |id: &str| places.iter().find(|(i, _)| i == id).map(|(_, p)| p.clone());
@@ -111,4 +111,15 @@ fn toolbar_and_ribbon_commands_say_where_they_live() {
     assert_eq!(of("CustomerCard.printButton"), Some(KeyPlace::Toolbar));
     assert_eq!(of("newItem"), None);
     assert_eq!(of("CustomerCard.saveButton"), None);
+}
+
+/// The model's keys catalog carries each command's place as every keys
+/// window reads it: `"toolbar"`, or the ribbon's tab and group; none for the others.
+#[test]
+fn the_catalog_writes_each_command_s_place_for_the_keys_window() {
+    let project = load_sources([("shop.clarity", SHOP)]);
+    let written = serde_json::to_value(catalog(&project)).unwrap();
+    assert_eq!(written[0]["commands"][3]["place"], serde_json::json!({"tab": "Home", "group": "Edit"}));
+    assert_eq!(written[1]["commands"][0]["place"], serde_json::json!("toolbar"));
+    assert!(written[0]["commands"][0].get("place").is_none());
 }

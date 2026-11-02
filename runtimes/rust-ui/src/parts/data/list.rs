@@ -105,7 +105,7 @@ impl ListPart {
                 match self.choices.get(f).filter(|c| !c.is_empty()) {
                     Some(choices) => rows::shown_of(&value, choices),
                     None => {
-                        let format = if value.is_number() { self.base.bound().and_then(|b| format_of(host, &rows::column_path(b, f))) } else { None };
+                        let format = if value.is_number() || value.is_string() { self.base.bound().and_then(|b| format_of(host, &rows::column_path(b, f))) } else { None };
                         rows::shown_formatted(&value, format.as_ref(), &formats)
                     }
                 }
@@ -318,7 +318,7 @@ impl Element for ListPart {
 
     fn on_pointer_moved(&mut self, at: PointerInput, cx: &mut Cx) {
         self.rows.pointer = Some((at.screen_x, at.screen_y));
-        if self.rows.scroller.drag(at.screen_y) {
+        if self.rows.scroller.drag(at.screen_x, at.screen_y) {
             cx.invalidate();
             return;
         }
@@ -351,8 +351,15 @@ impl Element for ListPart {
         }
     }
 
-    fn on_wheel(&mut self, _dx: f64, dy: f64, _held: Modifiers, cx: &mut Cx) -> bool {
-        let moved = self.rows.scroller.wheel(dy);
+    /// The pointer was taken away mid press: a row drag in progress is dropped, nothing moved.
+    fn on_pointer_cancelled(&mut self, cx: &mut Cx) {
+        self.pressed = None;
+        self.rows.cancel();
+        cx.invalidate();
+    }
+
+    fn on_wheel(&mut self, dx: f64, dy: f64, held: Modifiers, cx: &mut Cx) -> bool {
+        let moved = self.rows.scroller.wheel_both(dx, dy, held);
         if moved {
             cx.invalidate();
         }

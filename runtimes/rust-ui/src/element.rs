@@ -8,7 +8,7 @@
 //! through the `Cx` its handlers get.
 
 use std::any::Any;
-use std::cell::{RefCell, RefMut};
+use std::cell::{Cell, RefCell, RefMut};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -17,7 +17,7 @@ use std::time::Instant;
 use crate::fonts::Fonts;
 use crate::geometry::Rect;
 use crate::grid::{self, GridItem};
-use crate::input::{KeyInput, Modifiers, PointerInput};
+use crate::input::{Cursor, KeyInput, Modifiers, PointerInput};
 use crate::overlay::{Clipboard, Overlay};
 use crate::painter::{Painter, TextAlign};
 use crate::theme::ThemeLook;
@@ -37,6 +37,12 @@ pub struct Node {
     pub pressed: bool,
     pub focused: bool,
     attached: bool,
+    /// Why its drawing, placing or input failed the last time; none while it works.
+    failed: RefCell<Option<String>>,
+    /// Whether it failed to take its place the last time it was placed.
+    placing_failed: Cell<bool>,
+    /// Whether an element it is in is disabled, as the screen last saw its tree.
+    within_disabled: Cell<bool>,
 }
 
 impl Default for Node {
@@ -55,6 +61,9 @@ impl Node {
             pressed: false,
             focused: false,
             attached: false,
+            failed: RefCell::new(None),
+            placing_failed: Cell::new(false),
+            within_disabled: Cell::new(false),
         }
     }
 
@@ -93,6 +102,16 @@ impl Node {
     /// Whether it is on a screen: its tree is the screen's, or an overlay's on it.
     pub fn attached(&self) -> bool {
         self.attached
+    }
+
+    /// Why its drawing, placing or input failed the last time; none while it works.
+    pub fn failed(&self) -> Option<String> {
+        self.failed.borrow().clone()
+    }
+
+    /// Whether an element it is in is disabled (a disabled panel disables its parts), as the screen last saw its tree.
+    pub fn within_disabled(&self) -> bool {
+        self.within_disabled.get()
     }
 }
 
@@ -250,6 +269,59 @@ pub trait Element: Any {
         true
     }
 
+    /// Whether the person may use it by its own state; a disabled one takes
+    /// no pointer, focus or keys, and neither does anything in it. A part
+    /// asks its state.
+    fn is_enabled(&self) -> bool {
+        self.as_part().is_none_or(|p| p.base().own_enabled())
+    }
+
+    /// The order Tab goes through its children, by their places among them
+    /// (the window's frame before its grid, wherever the frame is docked);
+    /// none for the order they are drawn in.
+    fn tab_children(&self) -> Option<Vec<usize>> {
+        None
+    }
+
+    /// Its place in Tab order among those that take the focus (a part's
+    /// `taborder`): lower first, none after those with one.
+    fn tab_index(&self) -> Option<i64> {
+        self.as_part().and_then(|p| p.base().spec.number("tabOrder")).map(|n| n as i64)
+    }
+
+    /// The pointer's shape over a point on the screen (a link's hand, a text
+    /// box's I-beam); none to leave it to the element it is in.
+    fn cursor_at(&self, x: f64, y: f64) -> Option<Cursor> {
+        let _ = (x, y);
+        None
+    }
+
+    /// The items of its menu for a right press at a point on the screen (a
+    /// part's `menu`, a text box's Cut, Copy, Paste and Select all); none to
+    /// leave it to the element it is in. The screen opens them as a menu at
+    /// the pointer, and an item runs once the menu closed.
+    fn context_menu_at(&self, x: f64, y: f64) -> Option<Vec<crate::frame::menus::MenuEntry>> {
+        let _ = (x, y);
+        self.as_part().and_then(crate::parts::designed_menu)
+    }
+
+    /// The look it draws with: the window's, or one its style changes (a
+    /// part's `style`); it may draw what its style puts under it here. None
+    /// for the window's own.
+    fn styled(&self, painter: &Painter) -> Option<crate::painter::StyledLook> {
+        let part = self.as_part()?;
+        if part.draws_own_style() {
+            return None;
+        }
+        crate::parts::style_of(part.base(), painter)
+    }
+
+    /// Its type's own name, as a failure says which element failed.
+    fn type_name(&self) -> &'static str {
+        let full = std::any::type_name::<Self>();
+        full.rsplit("::").next().unwrap_or(full)
+    }
+
     /// The room it needs beyond the rows it spans in a grid.
     fn around(&self) -> f64 {
         0.0
@@ -289,6 +361,13 @@ pub trait Element: Any {
     /// The main button went up after it was pressed on it, wherever the pointer is.
     fn on_pointer_released(&mut self, at: PointerInput, cx: &mut Cx) {
         let _ = (at, cx);
+    }
+
+    /// The pointer it held was taken away before the button went up (the
+    /// window lost the focus mid-drag): what the press started ends without
+    /// its release and without a click.
+    fn on_pointer_cancelled(&mut self, cx: &mut Cx) {
+        let _ = cx;
     }
 
     /// The wheel turned over it with keys `held`: true when it took the turn; else its parent may.
@@ -362,6 +441,13 @@ pub trait Element: Any {
         let _ = cx;
     }
 
+    /// As the screen's root, the focus moved to `focused` (none: nothing has
+    /// it); `pointing` when a press of the pointer moved it, not Tab or code.
+    /// A scrolling window shows the part with the focus, unless pointing.
+    fn focus_moved(&mut self, focused: Option<ElementId>, pointing: bool, cx: &mut Cx) {
+        let _ = (focused, pointing, cx);
+    }
+
     /// Whether it is an input the person types in: a letter is then its, not a shortcut's.
     fn typing(&self) -> bool {
         false
@@ -430,13 +516,121 @@ macro_rules! element_node {
     };
 }
 
-/// Draws the children of a node that show, in order.
+/// Draws the children of a node that show, in order, each fail-safe.
 pub fn draw_children(node: &Node, painter: &Painter) {
     for child in node.children() {
         if child.is_shown() {
-            child.draw(painter);
+            draw_safely(child.as_ref(), painter);
         }
     }
+}
+
+/// What a panic carried, as a sentence: its message, else that it failed.
+pub fn panic_text(panic: &(dyn Any + Send)) -> String {
+    panic
+        .downcast_ref::<String>()
+        .cloned()
+        .or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string()))
+        .unwrap_or_else(|| crate::locale::translate("elementFailedUnknown", "it failed"))
+}
+
+/// It failed in `doing`: it keeps why, and says so once on the error output.
+fn fail(element: &dyn Element, doing: &str, why: String) {
+    let node = element.node();
+    if node.failed.borrow().as_deref() != Some(why.as_str()) {
+        eprintln!("{} failed in {doing}: {why}", element.type_name());
+    }
+    *node.failed.borrow_mut() = Some(why);
+}
+
+/// Draws it, fail-safe: a drawing that fails shows why in its own place, in
+/// the theme's error color, and the rest of the window draws on. Its style,
+/// when it has one, is the look it draws in.
+pub fn draw_safely(element: &dyn Element, painter: &Painter) {
+    // One that could not take its place says why there instead of drawing half placed.
+    if element.node().placing_failed.get() {
+        draw_failure(element, painter);
+        return;
+    }
+    let saved = painter.canvas.save_count();
+    let drawn = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match element.styled(painter) {
+        Some(styled) => element.draw(&styled.painter(painter)),
+        None => element.draw(painter),
+    }));
+    if let Err(panic) = drawn {
+        painter.canvas.restore_to_count(saved);
+        fail(element, "drawing", panic_text(panic.as_ref()));
+        draw_failure(element, painter);
+    }
+}
+
+/// Takes its place, fail-safe: one that fails to place what it holds keeps the place and says why.
+pub fn arrange_safely(element: &mut dyn Element, area: Rect, cx: &mut Cx) {
+    let placed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| element.arrange(area, cx)));
+    match placed {
+        Ok(()) => element.node().placing_failed.set(false),
+        Err(panic) => {
+            element.node_mut().bounds = area;
+            element.node().placing_failed.set(true);
+            fail(element, "placing", panic_text(panic.as_ref()));
+        }
+    }
+}
+
+/// Runs what the person did on it, fail-safe: an element that fails to take
+/// a press or a key says why in its place, and the window keeps working;
+/// `otherwise` is what it gives then.
+pub fn safely<R>(element: &mut dyn Element, cx: &mut Cx, otherwise: R, input: impl FnOnce(&mut dyn Element, &mut Cx) -> R) -> R {
+    let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| input(&mut *element, &mut *cx)));
+    match ran {
+        Ok(given) => given,
+        Err(panic) => {
+            fail(element, "input", panic_text(panic.as_ref()));
+            cx.invalidate();
+            otherwise
+        }
+    }
+}
+
+/// As `safely`, for what reads an element and changes nothing (its cursor, its menu).
+pub fn safely_read<R>(element: &dyn Element, otherwise: R, read: impl FnOnce(&dyn Element) -> R) -> R {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| read(element))) {
+        Ok(given) => given,
+        Err(panic) => {
+            fail(element, "input", panic_text(panic.as_ref()));
+            otherwise
+        }
+    }
+}
+
+/// Why it failed, in its place: a red outline and the reason in small text.
+fn draw_failure(element: &dyn Element, p: &Painter) {
+    let shown = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let bounds = element.node().bounds;
+        let why = element.node().failed().unwrap_or_default();
+        let _clip = p.clip(bounds);
+        p.stroke(bounds, p.look.color("error"), 1.0, p.look.radius("input"));
+        p.text(&format!("{}: {why}", element.type_name()), bounds.inset(6.0), p.look.color("error"), p.look.size("small"), "text", false, TextAlign::Left);
+    }));
+    if let Err(panic) = shown {
+        eprintln!("{} could not say why it failed: {}", element.type_name(), panic_text(panic.as_ref()));
+    }
+}
+
+/// Marks for each element of a tree whether an element it is in is
+/// disabled, so a part in a disabled panel draws and takes nothing as one.
+pub fn mark_enabled(element: &dyn Element, within_disabled: bool) {
+    element.node().within_disabled.set(within_disabled);
+    let disabled = within_disabled || !element.is_enabled();
+    for child in element.node().children() {
+        mark_enabled(child.as_ref(), disabled);
+    }
+}
+
+/// Whether the person may use it on its screen: it and every element it is
+/// in are enabled, as the screen last saw its tree.
+pub fn enabled_in_tree(element: &dyn Element) -> bool {
+    element.is_enabled() && !element.node().within_disabled.get()
 }
 
 /// The element of that id in a tree (itself included); none when it is not there.
@@ -504,22 +698,32 @@ pub fn in_order(root: &dyn Element) -> Vec<&dyn Element> {
     all
 }
 
-/// The ids of the elements that take the focus and show, in the order they are drawn: what Tab goes through.
+/// The ids of the elements Tab reaches, in Tab order: those that take the
+/// focus, show and are enabled, in the order they are drawn, except that a
+/// `taborder` sorts one among them: lower first, those without one after,
+/// in tree order. One without its own goes by that of the part it is in (a
+/// text box's editor by the text box's).
 pub fn focus_takers(root: &dyn Element) -> Vec<ElementId> {
-    fn walk(e: &dyn Element, out: &mut Vec<ElementId>) {
+    fn walk(e: &dyn Element, index: Option<i64>, enabled: bool, out: &mut Vec<(Option<i64>, ElementId)>) {
         if !e.is_shown() {
             return;
         }
-        if e.focusable() {
-            out.push(e.node().id());
+        let enabled = enabled && e.is_enabled();
+        let index = e.tab_index().or(index);
+        if e.focusable() && enabled {
+            out.push((index, e.node().id()));
         }
-        for child in e.node().children() {
-            walk(child.as_ref(), out);
+        let children = e.node().children();
+        let order = e.tab_children().unwrap_or_else(|| (0..children.len()).collect());
+        for child in order.into_iter().filter_map(|i| children.get(i)) {
+            walk(child.as_ref(), index, enabled, out);
         }
     }
     let mut out = Vec::new();
-    walk(root, &mut out);
-    out
+    walk(root, None, true, &mut out);
+    // A stable sort keeps the tree order among those of the same place.
+    out.sort_by_key(|(index, _)| index.unwrap_or(i64::MAX));
+    out.into_iter().map(|(_, id)| id).collect()
 }
 
 /// The first element of type `T` in a tree (itself included) that `where_` holds for.
@@ -680,7 +884,7 @@ impl Element for GridPanel {
         let placed = grid::place(&self.asked(), self.columns, area.width, area.height, self.gap);
         self.content = placed.content;
         for (child, place) in self.node.children_mut().iter_mut().zip(placed.boxes) {
-            child.arrange(place.offset(area.x, area.y), cx);
+            arrange_safely(child.as_mut(), place.offset(area.x, area.y), cx);
         }
     }
 

@@ -39,12 +39,41 @@ const KEYS_WIDTH: f64 = 120.0;
 const COLUMN_GAP: f64 = 6.0;
 const MOST_HIGH: f64 = 640.0;
 
-/// A command a key can run: its id among the person's keys, its caption as written, and the keys its design gives it.
+/// A command a key can run: its id among the person's keys, its caption as
+/// written, the keys its design gives it, and where it lives when that is
+/// the toolbar or a ribbon, shown beside its name.
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeyCommandInfo {
     pub id: String,
     pub caption: String,
     pub keys: Vec<String>,
+    pub place: Option<KeyPlace>,
+}
+
+/// Where a toolbar or ribbon command lives: the toolbar, or a ribbon's tab and group as written.
+#[derive(Debug, Clone, PartialEq)]
+pub enum KeyPlace {
+    Toolbar,
+    Ribbon { tab: String, group: String },
+}
+
+impl KeyPlace {
+    /// As its window shows it: Toolbar, or the tab and group (Home, Edit).
+    pub fn shown(&self) -> String {
+        match self {
+            KeyPlace::Toolbar => locale::translate("keysToolbar", "Toolbar"),
+            KeyPlace::Ribbon { tab, group } => format!("{}, {}", shown(tab), shown(group)),
+        }
+    }
+
+    /// A place as the model writes it: `"toolbar"`, or `{"tab": "Home", "group": "Edit"}`.
+    fn read(written: &Value) -> Option<KeyPlace> {
+        match written {
+            Value::String(s) if s.eq_ignore_ascii_case("toolbar") => Some(KeyPlace::Toolbar),
+            Value::Object(o) => Some(KeyPlace::Ribbon { tab: o.get("tab")?.as_str()?.to_string(), group: o.get("group")?.as_str()?.to_string() }),
+            _ => None,
+        }
+    }
 }
 
 /// The commands of one place: the app's frame (`id` empty, no title) or a window.
@@ -80,7 +109,12 @@ pub fn catalog(model: &str) -> Vec<KeyLayerInfo> {
                 .flatten()
                 .map(|c| {
                     let name = c["name"].as_str().unwrap_or_default();
-                    KeyCommandInfo { id: c["id"].as_str().unwrap_or_default().to_string(), caption: c["caption"].as_str().unwrap_or(name).to_string(), keys: strings(&c["keys"]) }
+                    KeyCommandInfo {
+                        id: c["id"].as_str().unwrap_or_default().to_string(),
+                        caption: c["caption"].as_str().unwrap_or(name).to_string(),
+                        keys: strings(&c["keys"]),
+                        place: KeyPlace::read(&c["place"]),
+                    }
                 })
                 .collect(),
         })
@@ -112,10 +146,16 @@ fn refusal(why: &str, key: &str) -> String {
     locale::fill(&text, "key", key)
 }
 
-/// A key pressed as Clarity writes keys (`Ctrl+Shift+N`); none for a key Clarity.UI does not know.
+/// A key pressed as Clarity writes keys (`Ctrl+Shift+N`); none for a key
+/// Clarity.UI does not know, a character typed, or a modifier on its own
+/// (Ctrl going down before the K of Ctrl+K).
 pub fn written(key: KeyInput) -> Option<String> {
+    if key.typed.is_some() {
+        return None;
+    }
     let name = match key.key {
-        Key::Other | Key::Shift | Key::Control | Key::Alt => return None,
+        Key::Other => own_name(key.name)?.to_string(),
+        Key::Shift | Key::Control | Key::Alt => return None,
         k if Key::LETTERS.contains(&k) => ((b'A' + Key::LETTERS.iter().position(|l| *l == k)? as u8) as char).to_string(),
         k if Key::DIGITS.contains(&k) => ((b'0' + Key::DIGITS.iter().position(|d| *d == k)? as u8) as char).to_string(),
         k if Key::FUNCTIONS.contains(&k) => format!("F{}", Key::FUNCTIONS.iter().position(|f| *f == k)? + 1),
@@ -151,6 +191,12 @@ pub fn written(key: KeyInput) -> Option<String> {
     Some(held.join("+"))
 }
 
+/// A host's name of a key as a shortcut can name it: one word of letters
+/// and digits that names no key Clarity.UI has (`F13`); none otherwise.
+fn own_name(name: Option<&str>) -> Option<&str> {
+    name.filter(|n| n.len() > 1 && n.chars().all(|c| c.is_ascii_alphanumeric()) && crate::shortcuts::key_of(n) == Key::Other)
+}
+
 /// What the keys window shows and does, shared with its buttons.
 pub struct KeysState {
     layers: Vec<KeyLayerInfo>,
@@ -184,6 +230,19 @@ impl KeysState {
             Some(title) => shown(title),
             None if layer.id.is_empty() => locale::translate("keysEverywhere", "Everywhere"),
             None => layer.id.clone(),
+        }
+    }
+
+    /// What the message line says while nothing happens: how the window works, so no empty band sits under the heading.
+    fn hint() -> String {
+        locale::translate("keysHint", "Change gives a command a new key; Reset gives it its own key back")
+    }
+
+    /// A command's name as its row shows it, with where it lives after it.
+    fn row_name(&self, c: &KeyCommandInfo) -> String {
+        match &c.place {
+            Some(place) => format!("{} {}", self.name_of(&c.id), place.shown()),
+            None => self.name_of(&c.id),
         }
     }
 
@@ -353,6 +412,12 @@ impl KeysWindow {
         self.state.borrow().person.clone()
     }
 
+    /// The person's keys changed elsewhere: it shows them now (keeping is the changer's).
+    pub fn set_person(&mut self, person: PersonKeys, cx: &mut Cx) {
+        self.state.borrow_mut().person = person;
+        cx.invalidate();
+    }
+
     /// A button: its role and, for a row's, its command.
     pub fn button(&self, role: Role, command: Option<&str>) -> &Push {
         self.node
@@ -366,14 +431,11 @@ impl KeysWindow {
     /// Every text it shows now, in order: for the tests, and for a reader.
     pub fn says(&self) -> Vec<String> {
         let state = self.state.borrow();
-        let mut said = vec![title()];
-        if let Some(message) = state.message() {
-            said.push(message);
-        }
+        let mut said = vec![title(), state.message().unwrap_or_else(KeysState::hint)];
         for layer in &state.layers {
             said.push(KeysState::place_name(layer));
             for c in &layer.commands {
-                said.push(state.name_of(&c.id));
+                said.push(state.row_name(c));
                 said.push(state.keys_text(c));
             }
         }
@@ -511,6 +573,14 @@ impl Element for KeysWindow {
         let mut y = view.y - self.scroll;
         p.text(&title(), Rect::new(x, y, width, HEADING_HEIGHT), look.color("text"), look.size("heading"), "heading", true, TextAlign::Left);
         y += HEADING_HEIGHT + GAP;
+        if state.message().is_none() {
+            for (i, line) in wrap(&KeysState::hint(), width, p.fonts, size).iter().enumerate() {
+                if (i as f64 + 1.0) * LINE > MESSAGE_HEIGHT {
+                    break;
+                }
+                p.text(line, Rect::new(x, y + i as f64 * LINE, width, LINE), look.color("muted"), size, "text", false, TextAlign::Left);
+            }
+        }
         if let Some(message) = state.message() {
             let room = if state.swap.is_none() { MESSAGE_HEIGHT } else { MESSAGE_HEIGHT - ROW_HEIGHT - 4.0 };
             for (i, line) in wrap(&message, width, p.fonts, size).iter().enumerate() {
@@ -534,7 +604,16 @@ impl Element for KeysWindow {
                 let keys_x = change.x - COLUMN_GAP - KEYS_WIDTH;
                 let name_x = x + GROUP_PAD;
                 let capturing = state.capturing.as_deref() == Some(c.id.as_str());
-                p.text(&state.name_of(&c.id), Rect::new(name_x, row_y, (keys_x - COLUMN_GAP - name_x).max(0.0), ROW_HEIGHT), look.color("text"), size, "text", capturing, TextAlign::Left);
+                let name = state.name_of(&c.id);
+                let name_width = (keys_x - COLUMN_GAP - name_x).max(0.0);
+                p.text(&name, Rect::new(name_x, row_y, name_width, ROW_HEIGHT), look.color("text"), size, "text", capturing, TextAlign::Left);
+                // Where it lives, muted after its name: Toolbar, or a ribbon's tab and group.
+                if let Some(place) = &c.place {
+                    let after = p.fonts.measure(&name, "text", size, capturing) + COLUMN_GAP;
+                    if after < name_width {
+                        p.text(&place.shown(), Rect::new(name_x + after, row_y, name_width - after, ROW_HEIGHT), look.color("muted"), size, "text", false, TextAlign::Left);
+                    }
+                }
                 let tone = if state.keys_of(c).is_empty() { "muted" } else { "text" };
                 p.text(&state.keys_text(c), Rect::new(keys_x, row_y, KEYS_WIDTH, ROW_HEIGHT), look.color(tone), size, "text", false, TextAlign::Left);
                 row_y += ROW_HEIGHT + ROW_GAP;
@@ -568,6 +647,9 @@ impl Element for KeysWindow {
             return false;
         }
         self.scroll = (self.scroll + dy).clamp(0.0, most);
+        // Its buttons move with it at once, so one scrolled away takes no press.
+        let area = self.node.bounds;
+        self.arrange(area, cx);
         cx.invalidate();
         true
     }

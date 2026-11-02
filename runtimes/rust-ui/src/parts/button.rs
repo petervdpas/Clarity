@@ -300,4 +300,8 @@ impl Part for ButtonPart {
     fn set_corners(&mut self, corners: crate::painter::Corners) {
         self.corners = corners;
     }
+
+    fn draws_own_style(&self) -> bool {
+        true
+    }
 }

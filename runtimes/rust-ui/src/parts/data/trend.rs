@@ -1,8 +1,10 @@
 //! A trend (DESIGN 5.26), the same as on the web: the last values of one
-//! number, taken every so many seconds while its window shows, drawn as
-//! Clarity's line chart with the newest at the right. It takes a value when
-//! it is first laid out to be drawn, and asks the screen to wake it when the
-//! next is due (`Cx::wake`), so it draws once a second rather than every frame.
+//! number, taken every so many seconds while its window is open (hidden
+//! too, so its history has no gap), drawn as Clarity's line chart with the
+//! newest at the right. It takes a value when it is first laid out to be
+//! drawn (hidden: when it joins the screen), and asks the screen to wake it
+//! when the next is due (`Cx::wake`), so it draws once a second rather than
+//! every frame.
 
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -64,6 +66,17 @@ impl TrendPart {
         }
     }
 
+    /// Takes the value when the next is due, and asks the screen to wake it for the one after.
+    fn sample(&mut self, cx: &mut Cx) {
+        let now = cx.now();
+        let every = Duration::from_secs_f64(self.every());
+        if self.last_taken.is_none_or(|last| now.saturating_duration_since(last) >= every) {
+            self.take();
+            self.last_taken = Some(now);
+            cx.wake(self.base.node.id(), now + every);
+        }
+    }
+
     fn shown(&self) -> Vec<ChartShown> {
         let values: Vec<Value> = self.history.iter().map(|v| Value::from(*v)).collect();
         chart::numbers_shown(&values, 0)
@@ -81,21 +94,26 @@ impl Element for TrendPart {
     /// Laid out to be drawn: a value is taken when the next is due, and the screen wakes it for the one after.
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
         self.base.node.bounds = area;
-        if !self.base.shown() {
-            return;
-        }
-        let now = cx.now();
-        let every = Duration::from_secs_f64(self.every());
-        if self.last_taken.is_none_or(|last| now.saturating_duration_since(last) >= every) {
-            self.take();
-            self.last_taken = Some(now);
-            cx.wake(self.base.node.id(), now + every);
+        if self.base.shown() {
+            self.sample(cx);
         }
     }
 
-    /// The next value is due: it draws again, and laying it out takes it.
+    /// On its screen it starts taking values at once, shown or hidden, as Avalonia's trend did while its window was open.
+    fn on_attached(&mut self, cx: &mut Cx) {
+        if !self.base.shown() {
+            self.sample(cx);
+        }
+    }
+
+    /// The next value is due: shown, it draws again and laying it out takes
+    /// it; hidden, it takes it now, so its history has no gap when it shows again.
     fn on_wake(&mut self, cx: &mut Cx) {
-        cx.invalidate();
+        if self.base.shown() {
+            cx.invalidate();
+        } else {
+            self.sample(cx);
+        }
     }
 
     fn on_pointer_moved(&mut self, at: PointerInput, cx: &mut Cx) {

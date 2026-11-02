@@ -74,7 +74,8 @@ pub const FILE_KEYS: [(&str, &str); 7] = [
 pub const TEXT_EDIT_KEYS: [(&str, &str); 4] = [("cutText", "Cut"), ("copyText", "Copy"), ("pasteText", "Paste"), ("selectAllText", "Select all")];
 /// Clarity's words of the calendar a date input opens: its buttons by month,
 /// year and decade, and the heading that shows more at once.
-pub const CALENDAR_KEYS: [(&str, &str); 7] = [
+pub const CALENDAR_KEYS: [(&str, &str); 8] = [
+    ("openCalendar", "Calendar"),
     ("previousMonth", "Previous month"),
     ("nextMonth", "Next month"),
     ("previousYear", "Previous year"),
@@ -82,6 +83,16 @@ pub const CALENDAR_KEYS: [(&str, &str); 7] = [
     ("previousDecade", "Previous decade"),
     ("nextDecade", "Next decade"),
     ("calendarZoomOut", "Show more"),
+];
+/// Clarity's words of the desktop host when it cannot start or draws in
+/// software, and of the system theme it follows.
+pub const DESKTOP_KEYS: [(&str, &str); 6] = [
+    ("desktopFailed", "something went wrong"),
+    ("desktopNoContext", "OpenGL {version} is not there: {why}"),
+    ("desktopNoGl", "this system gives no OpenGL to draw a window with: {why}"),
+    ("desktopNoSoftware", "this OpenGL can show nothing Clarity draws"),
+    ("desktopSoftware", "Clarity draws in software"),
+    ("systemThemeNotHeard", "the system's light or dark change cannot be heard: {why}"),
 ];
 /// Clarity's words of a tags part bound to a list field: the place a new
 /// item is typed or picked, and the button that removes one.
@@ -218,6 +229,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&SIDEBAR_KEYS)
         .chain(&RUNTIME_ERROR_KEYS)
         .chain(&ENGINE_ERROR_KEYS)
+        .chain(&DESKTOP_KEYS)
 }
 
 /// The key a text names, without its `@`; none for a text written as it is.

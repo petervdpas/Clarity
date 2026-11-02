@@ -1569,13 +1569,15 @@ pub fn emit_windows(
                     DataKind::List { entity } => format!("Vec<{}>", entity.name),
                     DataKind::Value { ty, .. } => value_type(&type_ref_info(project, ty)),
                 };
-                format!("    pub {}: {ty},\n", ident(&d.name.name))
+                super::names::struct_field(&d.name.name, &ty)
             })
             .collect();
         let loads: String = data
             .iter()
             .map(|d| {
                 let value = match &d.of {
+                    // The settings are what the person kept, each value that still fits.
+                    DataKind::Record { entity } if project.entity(&entity.name).is_some_and(|e| e.settings) => "crate::kept_settings()".to_string(),
                     DataKind::Record { entity } => format!("{}::default()", entity.name),
                     DataKind::List { entity } => format!("db.all::<{}>()?", entity.name),
                     DataKind::Value { ty, default: Some(value) } => literal(project, ty, value),

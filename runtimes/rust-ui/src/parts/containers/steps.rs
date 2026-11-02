@@ -38,7 +38,7 @@ impl Wizard {
 
     fn set_step(&self, step: i64) {
         match self.spec.name() {
-            Some(name) if self.host.state(Some(name)).is_some() => self.host.change_state(name, &mut |s| s.step = Some(step)),
+            Some(name) if self.host.state(Some(name)).is_some() => crate::parts::change_state(&*self.host, name, |s| s.step = Some(step)),
             _ => self.step_here.set(step),
         }
     }
@@ -174,7 +174,7 @@ impl Element for StepsPart {
             let page = child.as_any_mut().downcast_mut::<Page>().expect("a wizard's page");
             page.shown = i + 1 == shown;
             if page.shown {
-                page.arrange(page_area, cx);
+                crate::element::arrange_safely(page, page_area, cx);
             }
         }
         // The buttons on the right, the last one at the edge.
@@ -182,12 +182,12 @@ impl Element for StepsPart {
         for at in [2, 1, 0] {
             let button = children[count + at].as_any_mut().downcast_mut::<ContainerButton>().expect("a wizard's button");
             if !button.is_shown() {
-                button.arrange(Rect::new(right, area.bottom() - Self::BUTTONS_HEIGHT, 0.0, Self::BUTTONS_HEIGHT), cx);
+                crate::element::arrange_safely(button, Rect::new(right, area.bottom() - Self::BUTTONS_HEIGHT, 0.0, Self::BUTTONS_HEIGHT), cx);
                 continue;
             }
             let width = button.width_for(cx).max(80.0);
             right -= width;
-            button.arrange(Rect::new(right, area.bottom() - Self::BUTTONS_HEIGHT, width, Self::BUTTONS_HEIGHT), cx);
+            crate::element::arrange_safely(button, Rect::new(right, area.bottom() - Self::BUTTONS_HEIGHT, width, Self::BUTTONS_HEIGHT), cx);
             right -= 2.0 * pad;
         }
     }

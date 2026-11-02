@@ -19,6 +19,7 @@ translation en
     copyText "Copy"
     pasteText "Paste"
     selectAllText "Select all"
+    openCalendar "Calendar"
     previousMonth "Previous month"
     nextMonth "Next month"
     previousYear "Previous year"

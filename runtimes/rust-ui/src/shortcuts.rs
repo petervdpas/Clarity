@@ -112,8 +112,23 @@ pub fn key_of(word: &str) -> Key {
 /// Whether `shortcut` is the key pressed; `typing` says the focus is in an input the person types in.
 pub fn matches(shortcut: &str, key: &KeyInput, typing: bool) -> bool {
     let (modifiers, word) = parts(shortcut.trim());
+    // A character typed: a symbol shortcut without Ctrl, Alt or Meta answers what the keyboard typed, wherever its key is.
+    if let Some(character) = key.typed {
+        let mut chars = word.chars();
+        let one = match (chars.next(), chars.next()) {
+            (Some(c), None) => Some(c),
+            _ => None,
+        };
+        return !typing
+            && one.is_some_and(|c| !c.is_ascii_alphanumeric() && c == character)
+            && modifiers.iter().all(|m| m.eq_ignore_ascii_case("Shift"));
+    }
     let wanted = key_of(word);
-    if wanted == Key::Other || wanted != key.key {
+    // A key Clarity.UI has no Key for answers by the name its host gives it (F13, Pause).
+    if wanted == Key::Other && !(key.key == Key::Other && key.name.is_some_and(|n| n.eq_ignore_ascii_case(word))) {
+        return false;
+    }
+    if wanted != key.key {
         return false;
     }
     let held = |name: &str| modifiers.iter().any(|m| m.eq_ignore_ascii_case(name));

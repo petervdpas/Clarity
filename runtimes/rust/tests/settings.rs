@@ -46,3 +46,30 @@ fn a_folder_setting_is_where_every_runtime_puts_a_store() {
         assert_eq!(found, c["folder"].as_str().unwrap(), "{c}");
     }
 }
+
+/// A setting of a case as the runtime describes it. The cases are read once
+/// and live as long as the test, so their names and values can be static.
+fn setting_of(s: &Value) -> clarity_runtime::settings::Setting {
+    let text = |v: &Value| -> Option<&'static str> { v.as_str().map(|s| &*Box::leak(s.to_string().into_boxed_str())) };
+    let values: Vec<&'static str> = ["values", "languages", "themes"].iter().filter_map(|k| s[*k].as_array()).flatten().filter_map(text).collect();
+    clarity_runtime::settings::Setting { kind: text(&s["type"]).unwrap(), min: text(&s["min"]), max: text(&s["max"]), values: Box::leak(values.into_boxed_slice()) }
+}
+
+#[test]
+fn a_kept_value_fits_its_setting_as_on_every_stack() {
+    let cases: Value = serde_json::from_str(include_str!("../../../conformance/settings.json")).unwrap();
+    for c in cases["fits"].as_array().unwrap() {
+        assert_eq!(clarity_runtime::settings::fits(&setting_of(&c["setting"]), &c["value"]), c["fits"].as_bool().unwrap(), "{c}");
+    }
+}
+
+#[test]
+fn a_start_takes_back_only_the_kept_values_that_still_fit() {
+    let cases: Value = serde_json::from_str(include_str!("../../../conformance/settings.json")).unwrap();
+    for c in cases["kept"].as_array().unwrap() {
+        let settings: Vec<(&str, clarity_runtime::settings::Setting)> =
+            c["settings"].as_object().unwrap().iter().map(|(name, s)| (&*Box::leak(name.clone().into_boxed_str()), setting_of(s))).collect();
+        let taken = clarity_runtime::settings::taken(&settings, c["kept"].as_object().unwrap());
+        assert_eq!(Value::Object(taken), c["takes"], "{c}");
+    }
+}

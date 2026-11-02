@@ -1,5 +1,5 @@
 //! The Rust command-line program (DESIGN 5.20): a crate of its own in
-//! `out/cli`, on the runtime crate without Tauri, with the project's
+//! `out/cli`, on the runtime crate without Clarity.UI, with the project's
 //! records, actions and commands, and a main that reads the command line
 //! and runs the command it names.
 
@@ -163,7 +163,7 @@ fn main_rs(project: &Project, settings: &Settings, databases: &[(String, crate::
                 .map(|f| format!("    if !data.settings.{field}.is_empty() {{\n        clarity_runtime::i18n::set_language(Some(&data.settings.{field}));\n    }}\n", field = ident(&f.name.name)))
                 .unwrap_or_default();
             (
-                format!("/// What every command has as data of its own: the settings (DESIGN 5.17).\npub struct CommandData {{\n    pub settings: modules::{module}::Settings,\n}}\n\n/// The settings kept, each one that still fits; the others have their default.\nfn kept_settings() -> modules::{module}::Settings {{\n    let kept = clarity_runtime::settings::read(PROGRAM);\n    let mut values = serde_json::to_value(modules::{module}::Settings::default()).unwrap_or_default();\n    for (name, value) in kept {{\n        let mut tried = values.clone();\n        tried[&name] = value;\n        if serde_json::from_value::<modules::{module}::Settings>(tried.clone()).is_ok() {{\n            values = tried;\n        }}\n    }}\n    serde_json::from_value(values).unwrap_or_default()\n}}\n"),
+                format!("/// What every command has as data of its own: the settings (DESIGN 5.17).\npub struct CommandData {{\n    pub settings: modules::{module}::Settings,\n}}\n\n/// The settings kept, each one that still fits; the others have their default.\nfn kept_settings() -> modules::{module}::Settings {{\n    modules::{module}::Settings::from_kept(&clarity_runtime::settings::read(PROGRAM))\n}}\n"),
                 "    let mut data = CommandData { settings: kept_settings() };\n    let before = serde_json::to_value(&data.settings).unwrap_or_default();\n".to_string(),
                 "    // A command that changed a setting keeps it, as a window does.\n    let after = serde_json::to_value(&data.settings).unwrap_or_default();\n    if after != before && let serde_json::Value::Object(mut values) = after {\n        values.remove(\"id\");\n        if let Err(err) = clarity_runtime::settings::keep(PROGRAM, &values) {\n            eprintln!(\"{err}\");\n        }\n    }\n".to_string(),
                 language,

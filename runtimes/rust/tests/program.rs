@@ -3,10 +3,8 @@
 // it; what goes wrong is text the screen shows, the same on both.
 
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
-use clarity_runtime::program::{self, Answer, Program, Started, Watch};
+use clarity_runtime::program::{self, Answer, Program, Started};
 use clarity_runtime::ui::{RefOption, Reply, Text, Ui, WindowState};
 use clarity_runtime::{Db, Error};
 use serde_json::{Map, Value};
@@ -102,12 +100,67 @@ fn a_program_answers_its_screen_in_plain_types() {
     // What a program leaves out has its default: connected, and calls not watched.
     assert!(program.connect().is_ok());
     assert!(!program.watches());
-    let mut ran = false;
-    program.watched(&Watch { progress: None, stop: Arc::new(AtomicBool::new(false)) }, &mut || ran = true);
-    assert!(ran);
-    let stop = Arc::new(AtomicBool::new(false));
-    stop.store(true, Ordering::SeqCst);
-    assert!(Watch { progress: None, stop }.stopped());
+    program.start_watch(1);
+    program.stop_watch(1);
+    assert_eq!(None, program.watch_progress(1));
+    program.end_watch(1);
+    // It carries no facts and has no engine beside the screen.
+    assert_eq!(Value::Null, program.facts_json());
+    assert!(program.engine_open("Sky").is_none());
+    assert!(program.engine_frame(1, 0.0, Vec::new()).is_err());
+    program.engine_close(1);
+}
+
+/// An engine beside the screen that counts its frames.
+struct Counting(i64);
+
+impl clarity_runtime::screen::Frames for Counting {
+    fn hears(&self) -> clarity_runtime::screen::Hears {
+        clarity_runtime::screen::Hears { pointer: true, keys: false }
+    }
+    fn frame(&mut self, ms: f64, input: &[clarity_runtime::screen::ScreenInput]) -> Result<clarity_runtime::screen::Drawn, String> {
+        self.0 += 1;
+        Ok(clarity_runtime::screen::Drawn { shapes: vec![serde_json::json!({"frames": self.0, "ms": ms, "input": input.len()})], tells: Vec::new() })
+    }
+}
+
+#[test]
+fn a_program_keeps_its_engines_beside_the_screen_by_number() {
+    let instances = clarity_runtime::screen::Instances::new();
+    let first = instances.open(Box::new(Counting(0)));
+    let second = instances.open(Box::new(Counting(10)));
+    assert_ne!(first, second);
+    assert!(instances.hears(first).pointer);
+    let drawn = instances.frame(first, 16.0, &[clarity_runtime::screen::ScreenInput::Key { kind: "down".into(), name: "a".into() }]).unwrap();
+    assert_eq!(serde_json::json!({"frames": 1, "ms": 16.0, "input": 1}), drawn.shapes[0]);
+    assert_eq!(serde_json::json!(11), instances.frame(second, 0.0, &[]).unwrap().shapes[0]["frames"]);
+    instances.close(first);
+    // One closed is gone: its frames fail and it hears nothing; closing it again does nothing.
+    assert_eq!(Err(clarity_runtime::screen::GONE.to_string()), instances.frame(first, 0.0, &[]));
+    assert!(!instances.hears(first).pointer);
+    instances.close(first);
+    assert_eq!(1, instances.count());
+}
+
+#[test]
+fn a_programs_facts_go_to_the_screen_as_plain_json() {
+    use clarity_runtime::fields::{Facts, FieldFacts, FieldFormat, FormatKind};
+    static FACTS: Facts = Facts {
+        windows: &[("Main", &[("orders", "list<Order>")])],
+        records: &[("Order", &[("total", "money")])],
+        fields: &[(
+            "Order.total",
+            FieldFacts { label: "@totalLabel", format: Some(FieldFormat { kind: FormatKind::DateTime, scale: Some(2), format: None }), required: true, min: Some("0"), max: None, refers: None, parent: None, color: false },
+        )],
+        enums: &[("Status", &["open", "done"])],
+    };
+    let json = FACTS.to_json();
+    assert_eq!("list<Order>", json["windows"]["Main"]["orders"]);
+    assert_eq!("money", json["records"]["Order"]["total"]);
+    assert_eq!(serde_json::json!({"kind": "dateTime", "scale": 2, "format": null}), json["fields"]["Order.total"]["format"]);
+    assert_eq!(serde_json::json!(true), json["fields"]["Order.total"]["required"]);
+    assert_eq!("0", json["fields"]["Order.total"]["min"]);
+    assert_eq!(serde_json::json!(["open", "done"]), json["enums"]["Status"]);
 }
 
 #[test]

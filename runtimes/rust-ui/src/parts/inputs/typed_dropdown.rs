@@ -116,7 +116,7 @@ impl TypeAheadPart {
     }
 
     fn usable(&self) -> bool {
-        self.base.enabled() && !self.base.read_only() && self.base.bound().is_some()
+        self.base.enabled() && !self.base.read_only() && (self.base.bound().is_some() || self.base.name().is_some())
     }
 
     /// What the host offers for its field.
@@ -128,8 +128,15 @@ impl TypeAheadPart {
     }
 
     /// The value it has; none for none.
+    /// Unbound and named, it keeps what was typed in its state's text.
     fn value(&self) -> Value {
-        self.base.bound().and_then(|p| self.base.host.read(p)).unwrap_or(Value::Null)
+        match self.base.bound() {
+            Some(path) => self.base.host.read(path).unwrap_or(Value::Null),
+            None => match self.base.state().and_then(|s| s.text).filter(|t| !t.is_empty()) {
+                Some(text) => Value::String(text),
+                None => Value::Null,
+            },
+        }
     }
 
     /// The records a search can point at, without the empty choice for none.
@@ -203,7 +210,7 @@ impl TypeAheadPart {
     /// The editor follows what code set: enabled, read-only, marked with an error.
     fn refresh(&mut self) {
         let state = self.base.state();
-        self.editor.enabled = state.as_ref().and_then(|s| s.enabled).unwrap_or(true);
+        self.editor.enabled = self.base.enabled();
         self.editor.read_only = self.base.read_only();
         self.editor.marked = state.and_then(|s| s.error).is_some_and(|e| !e.show().is_empty());
     }
@@ -260,8 +267,15 @@ impl TypeAheadPart {
     }
 
     fn write(&mut self, value: Value) {
-        let Some(path) = self.base.bound().map(str::to_string) else { return };
-        self.base.host.write(self.base.name().unwrap_or(""), &path, value);
+        match (self.base.bound().map(str::to_string), self.base.name().map(str::to_string)) {
+            (Some(path), name) => self.base.host.write(name.as_deref().unwrap_or(""), &path, value),
+            (None, Some(name)) => {
+                let text = choice_list::text_of(&value);
+                crate::parts::change_state(&*self.base.host, &name, |s| s.text = Some(text.clone()));
+                self.base.host.edited(&name);
+            }
+            (None, None) => return,
+        }
         self.base.fire("change");
     }
 
@@ -370,8 +384,20 @@ impl Element for TypeAheadPart {
                 if self.list.is_none() {
                     self.fill(true, cx);
                 }
+                // As C#: the mark goes round, from the last row to the first and back.
                 if let Some((_, state)) = self.list.as_ref() {
-                    state.borrow_mut().move_by(if key.key == Key::Down { 1 } else { -1 });
+                    let mut st = state.borrow_mut();
+                    let count = st.count();
+                    if count > 0 {
+                        let down = key.key == Key::Down;
+                        st.highlighted = Some(match st.highlighted {
+                            None if down => 0,
+                            None => count - 1,
+                            Some(at) if down => (at + 1) % count,
+                            Some(at) => (at + count - 1) % count,
+                        });
+                        st.reveal();
+                    }
                     cx.invalidate();
                 }
                 return true;
@@ -385,9 +411,9 @@ impl Element for TypeAheadPart {
                     }
                     return true;
                 }
-                // Enter takes the text; the form it is in, or the window's default button, does the rest.
+                // Enter with no row marked takes the text, and stays here: the form does not submit.
                 self.take(cx);
-                return false;
+                return true;
             }
             Key::Escape if self.list.is_some() => {
                 self.close(cx);

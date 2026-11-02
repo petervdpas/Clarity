@@ -11,8 +11,10 @@ const KEYWORDS: [&str; 50] = [
     "box", "do", "final", "macro", "override", "priv", "typeof", "unsized", "virtual", "yield",
 ];
 
-/// Names the generated code uses itself.
-const TAKEN: [&str; 3] = ["db", "Ok", "Err"];
+/// Names the generated code uses itself: a handler's database, window data
+/// (`w`) and parts (`ui`), and the results; a Clarity name of one of them
+/// gets a `_`, so a value or a parameter never hides them.
+const TAKEN: [&str; 5] = ["db", "w", "ui", "Ok", "Err"];
 
 /// A Clarity name as a Rust identifier.
 pub fn ident(name: &str) -> String {
@@ -23,6 +25,15 @@ pub fn ident(name: &str) -> String {
     } else {
         name.to_string()
     }
+}
+
+/// A field of a generated struct named `name` in Clarity: `pub name: ty`,
+/// with the Clarity name kept for the screen where the Rust name had to
+/// step around one the generated code uses (`w` as `w_`).
+pub fn struct_field(name: &str, ty: &str) -> String {
+    let rust = ident(name);
+    let renamed = if rust != name && !rust.starts_with("r#") { format!("#[serde(rename = {name:?})]\n    ") } else { String::new() };
+    format!("    {renamed}pub {rust}: {ty},\n")
 }
 
 /// `CustomerKind` and `My shop` as `customer_kind` and `my_shop`.
@@ -93,6 +104,10 @@ mod tests {
         assert_eq!(snake("2026 plan"), "app_2026_plan");
         assert_eq!(ident("type"), "r#type");
         assert_eq!(ident("db"), "db_");
+        assert_eq!(ident("w"), "w_");
+        assert_eq!(ident("ui"), "ui_");
+        assert_eq!(struct_field("ui", "i64"), "    #[serde(rename = \"ui\")]\n    pub ui_: i64,\n");
+        assert_eq!(struct_field("type", "i64"), "    pub r#type: i64,\n");
         assert_eq!(ident("self"), "self_");
         assert_eq!(ident("total"), "total");
     }

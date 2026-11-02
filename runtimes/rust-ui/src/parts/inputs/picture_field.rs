@@ -13,7 +13,7 @@
 
 use std::rc::Rc;
 
-use clarity_runtime::picture::{kind_of, Picture};
+use crate::wire::{is_picture, FieldContent};
 use serde_json::Value;
 use skia_safe::{Image, PathEffect, SamplingOptions, FilterMode, MipmapMode, Paint, PaintStyle};
 
@@ -86,7 +86,7 @@ impl PictureFieldPart {
             if !can_load(&loading) {
                 return;
             }
-            let picker = loading.host.files();
+            let picker = crate::files::system();
             let title = locale::translate("loadPicture", "Load a picture");
             let filter = FileFilter { name: title.clone(), patterns: PATTERNS.iter().map(|p| p.to_string()).collect() };
             cx.later(loading.part, move || Loaded(picker.open_file(&title, Some(&filter)).map(|c| c.bytes)));
@@ -103,7 +103,7 @@ impl PictureFieldPart {
     }
 
     /// The field's picture; none when it has none.
-    pub fn value(&self) -> Option<Picture> {
+    pub fn value(&self) -> Option<FieldContent> {
         value_of(&self.facts)
     }
 
@@ -164,11 +164,11 @@ impl PictureFieldPart {
         if !self.can_load() || self.facts.bound().is_none() {
             return false;
         }
-        self.problem = kind_of(&bytes).is_none();
+        self.problem = !is_picture(&bytes);
         if self.problem {
             return false;
         }
-        self.facts.write(serde_json::to_value(Picture::New(bytes)).unwrap_or(Value::Null));
+        self.facts.write(FieldContent::New(bytes).value());
         true
     }
 
@@ -181,8 +181,8 @@ impl PictureFieldPart {
     }
 }
 
-fn value_of(facts: &Facts) -> Option<Picture> {
-    serde_json::from_value(facts.host.read(facts.bound()?)?).ok()
+fn value_of(facts: &Facts) -> Option<FieldContent> {
+    FieldContent::read(&facts.host.read(facts.bound()?)?)
 }
 
 fn can_load(facts: &Facts) -> bool {

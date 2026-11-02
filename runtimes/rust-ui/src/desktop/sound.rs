@@ -12,11 +12,20 @@ use rodio::{DeviceSinkBuilder, MixerDeviceSink, Player, Source};
 
 use crate::parts::sound::{Playing, SoundOutput};
 
-/// The speakers, once opened.
-#[derive(Default)]
+/// What opens the speakers: the system's default output, or a test's.
+pub type OpenSpeakers = Box<dyn Fn() -> Result<MixerDeviceSink, String>>;
+
+/// The speakers, once opened: made, not opened, so no device is asked for until a sound plays.
 pub struct Speakers {
+    open: OpenSpeakers,
     sink: RefCell<Option<MixerDeviceSink>>,
     failed: RefCell<bool>,
+}
+
+impl Default for Speakers {
+    fn default() -> Speakers {
+        Speakers::with(Box::new(|| DeviceSinkBuilder::open_default_sink().map_err(|why| why.to_string())))
+    }
 }
 
 struct Played(Option<Player>);
@@ -64,17 +73,27 @@ pub fn read_wav(file: &[u8]) -> Option<(u16, u32, Vec<f32>)> {
 }
 
 impl Speakers {
+    /// Speakers that `open` opens the first time a sound plays.
+    pub fn with(open: OpenSpeakers) -> Speakers {
+        Speakers { open, sink: RefCell::new(None), failed: RefCell::new(false) }
+    }
+
+    /// Whether the speakers did not open: sounds play nothing, and they are not asked for again.
+    pub fn failed(&self) -> bool {
+        *self.failed.borrow()
+    }
+
     /// Runs `act` with the speakers, opening them the first time; none when the computer has none.
-    fn with<R>(&self, act: impl FnOnce(&MixerDeviceSink) -> R) -> Option<R> {
+    fn with_sink<R>(&self, act: impl FnOnce(&MixerDeviceSink) -> R) -> Option<R> {
         if self.sink.borrow().is_none() && !*self.failed.borrow() {
-            match DeviceSinkBuilder::open_default_sink() {
+            match (self.open)() {
                 Ok(mut sink) => {
                     sink.log_on_drop(false);
                     *self.sink.borrow_mut() = Some(sink);
                 }
                 Err(why) => {
                     *self.failed.borrow_mut() = true;
-                    eprintln!("{}", crate::locale::fill(&crate::locale::translate("soundNoSpeakers", "sounds cannot play: {why}"), "why", &why.to_string()));
+                    eprintln!("{}", crate::locale::fill(&crate::locale::translate("soundNoSpeakers", "sounds cannot play: {why}"), "why", &why));
                 }
             }
         }
@@ -89,7 +108,7 @@ impl SoundOutput for Speakers {
             return Box::new(Played(None));
         };
         let (Some(channels), Some(rate)) = (NonZero::new(channels), NonZero::new(rate)) else { return Box::new(Played(None)) };
-        let player = self.with(|sink| {
+        let player = self.with_sink(|sink| {
             let player = Player::connect_new(sink.mixer());
             let buffer = SamplesBuffer::new(channels, rate, samples);
             if repeat {

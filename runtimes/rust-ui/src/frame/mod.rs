@@ -192,18 +192,20 @@ impl WindowFrame {
         [true, false].into_iter().find(|left| self.sidebar_shows(*left) && self.maximized(*left))
     }
 
-    /// Folds the sidebar there to its strip or shows it again; folded, it no longer fills the window.
+    /// Folds the sidebar there to its strip or shows it again; whether it
+    /// fills the window stays as it was (folded it does not show), as
+    /// Avalonia's did: shown again, it fills the window again.
     pub fn fold(&self, left: bool, folded: bool) {
         let Some(sidebar) = self.sidebar(left) else { return };
         if !sidebar.collapsible {
             return;
         }
         match sidebar.name.clone() {
-            Some(name) => self.host.change_state(&name, &mut |s| {
-                s.collapsed = Some(folded);
-                s.maximized = Some(false);
-            }),
-            None => self.own_side(left).set((folded, false)),
+            Some(name) => crate::parts::change_state(&*self.host, &name, |s| s.collapsed = Some(folded)),
+            None => {
+                let (_, filling) = self.own_side(left).get();
+                self.own_side(left).set((folded, filling));
+            }
         }
     }
 
@@ -214,7 +216,7 @@ impl WindowFrame {
             return;
         }
         match sidebar.name.clone() {
-            Some(name) => self.host.change_state(&name, &mut |s| s.maximized = Some(filling)),
+            Some(name) => crate::parts::change_state(&*self.host, &name, |s| s.maximized = Some(filling)),
             None => {
                 let (folded, _) = self.own_side(left).get();
                 self.own_side(left).set((folded, filling));
@@ -279,6 +281,7 @@ impl WindowFrame {
                 separator: false,
                 items: sub,
                 run,
+                wake: None,
             });
         }
         entries

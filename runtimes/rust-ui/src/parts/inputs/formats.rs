@@ -576,6 +576,17 @@ impl Formats {
     pub fn month_name(&self, month: u32) -> &'static str {
         self.locale.months[(month.clamp(1, 12) - 1) as usize]
     }
+
+    /// The abbreviated name of a month (1 to 12), as the year view of a
+    /// calendar shows it (C# AbbreviatedMonthNames): `Oct`, `mrt`; a language
+    /// without short names (Japanese) gives the whole name.
+    pub fn short_month_name(&self, month: u32) -> &'static str {
+        let at = (month.clamp(1, 12) - 1) as usize;
+        match SHORT_MONTHS.iter().find(|(first, _)| *first == self.locale.months[0]) {
+            Some((_, names)) => names[at],
+            None => self.locale.months[at],
+        }
+    }
 }
 
 /// A value as its own text: a text as it is, anything else as JSON writes it.
@@ -669,3 +680,14 @@ pub fn days_in(year: i32, month: u32) -> Option<u32> {
         _ => return None,
     })
 }
+
+/// The short names of the months as a year view shows them, by the
+/// language's name of January; a language not here shows the whole name.
+const SHORT_MONTHS: [(&str, [&str; 12]); 6] = [
+    ("January", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]),
+    ("januari", ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]),
+    ("Januar", ["Jan.", "Feb.", "M\u{e4}rz", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sept.", "Okt.", "Nov.", "Dez."]),
+    ("janvier", ["janv.", "f\u{e9}vr.", "mars", "avr.", "mai", "juin", "juil.", "ao\u{fb}t", "sept.", "oct.", "nov.", "d\u{e9}c."]),
+    ("enero", ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"]),
+    ("gennaio", ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"]),
+];

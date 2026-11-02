@@ -6,6 +6,7 @@
 
 pub mod canvas;
 pub mod chart;
+pub mod groups;
 pub mod list;
 pub mod rows;
 pub mod table;

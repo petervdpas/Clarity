@@ -87,8 +87,18 @@ pub struct ProgramHost {
     running: RefCell<Option<Rc<Running>>>,
     /// What the window closes with (`close with value`), for the handler that asked for it.
     result: RefCell<Option<Value>>,
-    /// The texts the handlers put in text values, shown again in another language.
-    shown: RefCell<BTreeMap<String, Text>>,
+    /// The texts the handlers put in text values, and what each showed:
+    /// shown again in another language while the value still shows it.
+    shown: RefCell<BTreeMap<String, (Text, String)>>,
+    /// The engines beside the screen its canvases run, by number.
+    engines: crate::engines::Engines,
+    /// What the program knows of its fields and types, read from its JSON once.
+    program_facts: std::cell::OnceCell<crate::program_facts::ProgramFacts>,
+}
+
+/// A translation's text with its braces written double shown single (`{{name}}` is `{name}`).
+fn unbraced(text: &str) -> String {
+    text.replace("{{", "{").replace("}}", "}")
 }
 
 /// Every part of a window's tree by its name: in panels, pages and all.
@@ -110,7 +120,7 @@ impl ProgramHost {
         let mut specs = BTreeMap::new();
         named(parts, &mut specs);
         let facts = ModelFacts::of(files.model);
-        ProgramHost { program, files, state: RefCell::new(state), specs, changes: Cell::new(0), effects: RefCell::new(Vec::new()), pending: RefCell::new(None), focused_scope: RefCell::new(None), facts, hears: RefCell::new(Vec::new()), running: RefCell::new(None), result: RefCell::new(None), shown: RefCell::new(BTreeMap::new()) }
+        ProgramHost { program, files, state: RefCell::new(state), specs, changes: Cell::new(0), effects: RefCell::new(Vec::new()), pending: RefCell::new(None), focused_scope: RefCell::new(None), facts, hears: RefCell::new(Vec::new()), running: RefCell::new(None), result: RefCell::new(None), shown: RefCell::new(BTreeMap::new()), engines: crate::engines::Engines::new(), program_facts: std::cell::OnceCell::new() }
     }
 
     /// The host shares what the program's windows share: the person's keys, and whether a long call runs.
@@ -120,6 +130,11 @@ impl ProgramHost {
 
     fn running(&self) -> Option<Rc<Running>> {
         self.running.borrow().clone()
+    }
+
+    /// What the program knows of its fields and types (`Program::facts_json`), read once.
+    fn program_facts(&self) -> &crate::program_facts::ProgramFacts {
+        self.program_facts.get_or_init(|| crate::program_facts::ProgramFacts::read(&self.program.facts_json()))
     }
 
     /// The number of the open window, its own while it is open.
@@ -142,13 +157,20 @@ impl ProgramHost {
         self.running().is_some_and(|r| r.calling())
     }
 
-    /// The texts the handlers put in text values show again, in the language shown now.
+    /// The texts the handlers put in text values show again, in the language
+    /// shown now; a value changed since keeps what it is (C# SaidTextTests).
     pub fn reshow(&self) {
-        let shown = self.shown.borrow().clone();
+        let mut shown = self.shown.borrow_mut();
         let mut state = self.state.borrow_mut();
-        for (name, text) in shown {
-            state.data.insert(name, Value::from(text.show()));
-        }
+        shown.retain(|name, (text, was)| {
+            if state.data.get(name.as_str()) != Some(&Value::from(was.as_str())) {
+                return false;
+            }
+            *was = text.show();
+            state.data.insert(name.clone(), Value::from(was.as_str()));
+            true
+        });
+        drop(shown);
         drop(state);
         self.changed();
     }
@@ -184,12 +206,16 @@ impl ProgramHost {
         self.changes.set(self.changes.get() + 1);
     }
 
-    /// Where the edits of `part` are undone: its `undoScope`, else its own name; none with `no undo`.
+    /// Where the edits of `part` are undone: the `undoScope` the project
+    /// worked out for it (its form or panel, else itself); none for a part
+    /// the markup gives none (an accordion, tabs, a list that only selects,
+    /// one with `no undo`), so what the person does there is no edit. A part
+    /// that is no part of the window's markup (code's own) is its own scope.
     pub fn scope(&self, part: &str) -> Option<String> {
         match self.specs.get(part) {
             None => Some(part.to_string()),
             Some(spec) if spec.flag("noUndo") => None,
-            Some(spec) => Some(spec.text("undoScope").filter(|s| !s.is_empty()).unwrap_or(part).to_string()),
+            Some(spec) => spec.text("undoScope").filter(|s| !s.is_empty()).map(str::to_string),
         }
     }
 
@@ -203,8 +229,9 @@ impl ProgramHost {
         let mut state = reply.state;
         // The texts the handler put in text values show in the person's language.
         for (name, text) in &reply.shown {
-            state.data.insert(name.clone(), Value::from(text.show()));
-            self.shown.borrow_mut().insert(name.clone(), text.clone());
+            let showing = text.show();
+            state.data.insert(name.clone(), Value::from(showing.as_str()));
+            self.shown.borrow_mut().insert(name.clone(), (text.clone(), showing));
         }
         *self.state.borrow_mut() = state;
         self.hears.borrow_mut().extend(reply.hears);
@@ -215,17 +242,19 @@ impl ProgramHost {
         if let Some(copy) = reply.copy {
             effects.push(Effect::Copy(copy.show()));
         }
-        for open in reply.open {
-            effects.push(Effect::Open(open.window, open.with));
-        }
-        for ask in reply.asks {
-            effects.push(Effect::Ask(ask));
-        }
+        // A handler that closes its window and opens others closes first
+        // (conformance/windows.json): what it opens goes on the window below.
         if reply.close {
             if reply.result.is_some() {
                 *self.result.borrow_mut() = reply.result;
             }
             effects.push(Effect::Close);
+        }
+        for open in reply.open {
+            effects.push(Effect::Open(open.window, open.with));
+        }
+        for ask in reply.asks {
+            effects.push(Effect::Ask(ask));
         }
         drop(effects);
         self.changed();
@@ -342,9 +371,18 @@ impl PartHost for ProgramHost {
         Some(self.state.borrow().parts.get(name).cloned().unwrap_or_default())
     }
 
-    fn change_state(&self, name: &str, change: &mut dyn FnMut(&mut PartState)) {
-        change(self.state.borrow_mut().parts.entry(name.to_string()).or_default());
+    fn set_state(&self, name: &str, state: PartState) {
+        self.state.borrow_mut().parts.insert(name.to_string(), state);
         self.changed();
+    }
+
+    fn window_name(&self) -> Option<String> {
+        Some(self.window())
+    }
+
+    /// While a long call runs, no other handler can.
+    fn can_run(&self, _part: Option<&str>, _call: &HandlerCall) -> bool {
+        !self.calling()
     }
 
     fn run(&self, part: Option<&str>, call: &HandlerCall) -> bool {
@@ -382,7 +420,7 @@ impl PartHost for ProgramHost {
         }
         // A click that names a popover of this window opens it (C#'s `Show_<popover>`).
         if call.args.is_empty() && self.specs.get(&call.handler).is_some_and(|spec| spec.kind == "popover") {
-            self.change_state(&call.handler, &mut |s| s.visible = Some(true));
+            crate::parts::change_state(self, &call.handler, |s| s.visible = Some(true));
             return true;
         }
         // A click that names a window opens it.
@@ -430,14 +468,21 @@ impl PartHost for ProgramHost {
         self.answered(self.program.dispatch_event(state, &call.written()))
     }
 
+    /// A written text as shown: a translation's key (`@hello`) in the
+    /// person's language, its braces written double shown single; plain text as written.
     fn text(&self, written: Option<&str>) -> String {
         match written {
             None => String::new(),
             Some(w) => match w.strip_prefix('@') {
-                Some(key) => clarity_runtime::i18n::value(key).unwrap_or_else(|| key.to_string()),
+                Some(key) => unbraced(&clarity_runtime::i18n::value(key).unwrap_or_else(|| key.to_string())),
                 None => w.to_string(),
             },
         }
+    }
+
+    /// An address a link opens goes to the host's opener (the system's program for it on the desktop).
+    fn open_address(&self, address: &str) {
+        super::address::open_with_host(address);
     }
 
     fn resource(&self, name: &str) -> Option<Vec<u8>> {
@@ -460,14 +505,14 @@ impl PartHost for ProgramHost {
     /// The type as the generated program's facts give it (`list<Order>`, `money`, an enum's name), else as its model says.
     fn type_of(&self, path: &str) -> Option<String> {
         let window = self.window();
-        self.program.facts().type_of(&window, path).map(str::to_string).or_else(|| self.facts.type_of(&window, path))
+        self.program_facts().type_of(&window, path).map(str::to_string).or_else(|| self.facts.type_of(&window, path))
     }
 
     /// The field's facts as the generated program carries them, else as its model says.
     fn field(&self, path: &str) -> Option<FieldFacts> {
         let window = self.window();
         let model = self.facts.field(&window, path);
-        match self.program.facts().field(&window, path).map(crate::facts::from_program) {
+        match self.program_facts().field(&window, path) {
             // The program's facts carry no help; the model's do.
             Some(mut facts) => {
                 facts.help = model.and_then(|m| m.help);
@@ -502,7 +547,7 @@ impl PartHost for ProgramHost {
                 if !labelled.is_empty() {
                     return labelled;
                 }
-                self.program.facts().enum_values(name).iter().map(|v| Choice { value: Value::from(*v), label: v.to_string(), cells: None }).collect()
+                self.program_facts().enum_values(name).iter().map(|v| Choice { value: Value::from(v.as_str()), label: v.clone(), cells: None }).collect()
             }
             "language" => offers(crate::choices::languages()),
             "theme" => offers(crate::choices::themes()),
@@ -603,10 +648,6 @@ impl PartHost for ProgramHost {
         theirs
     }
 
-    fn program(&self) -> Option<Arc<dyn Program>> {
-        Some(self.program.clone())
-    }
-
     /// The canvas's handler of `event` runs with where the pointer was, kept
     /// in the part's state; a drag, a drop or a bend is one edit of its undo
     /// scope, as a change is. None when the canvas has no handler for it.
@@ -686,9 +727,25 @@ impl PartHost for ProgramHost {
         self.answered(self.program.answer_event(state, handler, values.to_vec()));
     }
 
-    /// A new instance of the program's engine `name` for each canvas that runs it.
-    fn engine(&self, name: &str) -> Option<crate::parts::data::canvas::engine::MakeFrames> {
-        Some(crate::engines::make_frames(self.program.clone(), name))
+    /// A new instance of the program's engine `name` for each canvas that runs it, its frames on a thread of their own.
+    fn engine_start(&self, name: &str) -> Option<Result<u64, String>> {
+        Some(crate::engines::ProgramFrames::open(self.program.clone(), name).map(|frames| self.engines.start(Box::new(frames))))
+    }
+
+    fn engine_hears(&self, id: u64) -> crate::parts::data::canvas::engine::Hears {
+        self.engines.hears(id)
+    }
+
+    fn engine_frame(&self, id: u64, ms: f64, input: Vec<crate::parts::data::canvas::engine::ScreenInput>) {
+        self.engines.frame(id, ms, input)
+    }
+
+    fn engine_drawn(&self, id: u64) -> Option<Result<crate::parts::data::canvas::engine::Drawn, String>> {
+        self.engines.drawn(id)
+    }
+
+    fn engine_stop(&self, id: u64) {
+        self.engines.stop(id)
     }
 
     /// The person's keys where they set their own and the project lets them, else the design's.

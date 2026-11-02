@@ -118,13 +118,71 @@ fn from_sql(field: &Field) -> &'static str {
     }
 }
 
+/// How the settings are checked against what was kept, and the settings a
+/// start takes back: each kept value that still fits, the others at their
+/// default.
+fn settings_kept(project: &Project, entity: &Entity) -> String {
+    let name = &entity.name.name;
+    let bound = |l: &Option<Literal>| match l {
+        Some(Literal::Number(n)) => format!("Some({n:?})"),
+        _ => "None".to_string(),
+    };
+    let languages: Vec<String> = project.translations.keys().map(|l| format!("{l:?}")).collect();
+    let described: String = entity
+        .fields
+        .iter()
+        .map(|f| {
+            let (tag, values) = match &f.ty {
+                FieldType::Enum { name } => {
+                    let names: Vec<String> = project.enums().find(|e| e.name.name == name.name).map(|e| e.variants.iter().map(|v| format!("{:?}", v.name.name)).collect()).unwrap_or_default();
+                    ("enum", names.join(", "))
+                }
+                FieldType::Language => ("language", languages.join(", ")),
+                // The themes are offered by the screen; a kept theme it does not offer shows the first.
+                FieldType::Theme | FieldType::Secret | FieldType::Text { .. } => ("text", String::new()),
+                FieldType::DateTime => ("datetime", String::new()),
+                other => (clarity_spec::widgets::field_type_tag(other), String::new()),
+            };
+            format!(
+                "        ({:?}, clarity_runtime::settings::Setting {{ kind: {tag:?}, min: {}, max: {}, values: &[{values}] }}),\n",
+                f.name.name,
+                bound(&f.modifiers.min),
+                bound(&f.modifiers.max)
+            )
+        })
+        .collect();
+    format!(
+        "impl {name} {{
+    /// Each setting, as a kept value is checked against it.
+    pub const DESCRIBED: &'static [(&'static str, clarity_runtime::settings::Setting)] = &[
+{described}    ];
+
+    /// The settings a start takes back from `kept`: each value that still
+    /// fits its setting; the others have their default.
+    pub fn from_kept(kept: &serde_json::Map<String, serde_json::Value>) -> {name} {{
+        let mut values = serde_json::to_value({name}::default()).unwrap_or_default();
+        for (setting, value) in clarity_runtime::settings::taken(Self::DESCRIBED, kept) {{
+            let mut tried = values.clone();
+            tried[&setting] = value;
+            if serde_json::from_value::<{name}>(tried.clone()).is_ok() {{
+                values = tried;
+            }}
+        }}
+        serde_json::from_value(values).unwrap_or_default()
+    }}
+}}
+
+"
+    )
+}
+
 fn record(project: &Project, entity: &Entity) -> String {
     let name = &entity.name.name;
     let mut out = format!(
         "#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]\npub struct {name} {{\n    pub id: Id,\n"
     );
     for field in &entity.fields {
-        out.push_str(&format!("    pub {}: {},\n", ident(&field.name.name), field_type(&field.ty)));
+        out.push_str(&super::names::struct_field(&field.name.name, &field_type(&field.ty)));
     }
     out.push_str("}\n\n");
 
@@ -133,8 +191,10 @@ fn record(project: &Project, entity: &Entity) -> String {
         out.push_str(&format!("            {}: {},\n", ident(&field.name.name), default_value(project, field)));
     }
     out.push_str("        }\n    }\n}\n\n");
-    // The settings are kept per person, never in a database.
+    // The settings are kept per person, never in a database: a start takes
+    // back of what was kept only what still fits (conformance/settings.json).
     if entity.settings {
+        out.push_str(&settings_kept(project, entity));
         return out;
     }
 

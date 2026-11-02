@@ -4,7 +4,7 @@
 
 use std::ffi::c_void;
 
-use super::{Ask, Kind};
+use super::{Ask, Kind, SystemWindow};
 
 type Hresult = i32;
 
@@ -89,15 +89,17 @@ fn failed(hr: Hresult) -> bool {
 }
 
 /// The path the person chose; none when they chose none; an error when the dialog could not show.
-pub fn choose(ask: &Ask) -> Result<Option<String>, String> {
+pub fn choose(ask: &Ask, owner: Option<SystemWindow>) -> Result<Option<String>, String> {
     let ask = ask.clone();
-    std::thread::spawn(move || unsafe { show(&ask) }).join().map_err(|_| "the file dialog stopped".to_string())?
+    // The window it belongs to, which takes no input meanwhile.
+    let owner = owner.map(|o| o.win32).unwrap_or(0);
+    std::thread::spawn(move || unsafe { show(&ask, owner) }).join().map_err(|_| "the file dialog stopped".to_string())?
 }
 
-unsafe fn show(ask: &Ask) -> Result<Option<String>, String> {
+unsafe fn show(ask: &Ask, owner: isize) -> Result<Option<String>, String> {
     unsafe {
         let init = CoInitializeEx(std::ptr::null_mut(), COINIT_APARTMENTTHREADED);
-        let result = dialog(ask);
+        let result = dialog(ask, owner);
         if !failed(init) {
             CoUninitialize();
         }
@@ -105,7 +107,7 @@ unsafe fn show(ask: &Ask) -> Result<Option<String>, String> {
     }
 }
 
-unsafe fn dialog(ask: &Ask) -> Result<Option<String>, String> {
+unsafe fn dialog(ask: &Ask, owner: isize) -> Result<Option<String>, String> {
     unsafe {
         let class = if ask.kind == Kind::Save { CLSID_SAVE } else { CLSID_OPEN };
         let mut made: *mut c_void = std::ptr::null_mut();
@@ -135,7 +137,7 @@ unsafe fn dialog(ask: &Ask) -> Result<Option<String>, String> {
                 let specs = [FilterSpec { name: name.as_ptr(), spec: spec.as_ptr() }];
                 (vtbl.set_file_types)(made, 1, specs.as_ptr());
             }
-            let shown = (vtbl.show)(made, std::ptr::null_mut());
+            let shown = (vtbl.show)(made, owner as *mut c_void);
             if shown == CANCELLED {
                 return Ok(None);
             }

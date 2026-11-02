@@ -116,6 +116,20 @@ impl<'a> CustomCx<'a> {
     }
 }
 
+/// A value that came in, read as the type its declaration gives (a number
+/// as `i64`, a text as `String`): as it is, else a text read as that type
+/// (`"5"` as 5); none when it is neither.
+pub fn value_as<T: serde::de::DeserializeOwned>(value: &Value) -> Option<T> {
+    if let Ok(read) = serde_json::from_value::<T>(value.clone()) {
+        return Some(read);
+    }
+    match value {
+        Value::String(text) => serde_json::from_str::<T>(text.trim()).ok(),
+        Value::Number(n) => n.as_f64().filter(|f| f.fract() == 0.0).and_then(|f| serde_json::from_value::<T>(Value::from(f as i64)).ok()),
+        _ => None,
+    }
+}
+
 /// Whether a handler is wired to `tell` on the part's line: `tells='[{"tell":"reached","handler":"..."}]'`.
 fn wired(spec: &PartSpec, tell: &str) -> bool {
     let wired = match spec.json("tells") {
@@ -280,6 +294,11 @@ impl CustomPlace {
         self.inner.as_ref().and_then(|p| (p.as_ref() as &dyn std::any::Any).downcast_ref::<T>())
     }
 
+    /// The part it holds, as its own type, to change; none when it holds none of that type.
+    pub fn inner_mut<T: CustomPart>(&mut self) -> Option<&mut T> {
+        self.inner.as_mut().and_then(|p| (p.as_mut() as &mut dyn std::any::Any).downcast_mut::<T>())
+    }
+
     /// Runs `act` on the part it holds with its context; none when it holds none.
     fn with<R>(&mut self, cx: &mut Cx, act: impl FnOnce(&mut dyn CustomPart, &mut CustomCx) -> R) -> Option<R> {
         let id = self.base.node.id();
@@ -359,15 +378,9 @@ impl Element for CustomPlace {
         let bounds = self.base.node.bounds;
         match &self.inner {
             Some(part) => {
-                // A part that fails to draw says why in its place, and the rest of the window goes on.
-                let drawn = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    let _clip = p.clip(bounds);
-                    part.draw(p, bounds);
-                }));
-                if drawn.is_err() {
-                    let why = locale::translate("customPartFailed", "this part could not draw");
-                    p.text(&why, bounds.inset(6.0), p.look.color("error"), p.look.size("small"), "text", false, TextAlign::Left);
-                }
+                // A part that fails to draw fails its place: the screen draws it fail-safe (element::draw_safely), which says why there.
+                let _clip = p.clip(bounds);
+                part.draw(p, bounds);
             }
             None => {
                 p.stroke(bounds, p.look.color("error"), 1.0, p.look.radius("input"));

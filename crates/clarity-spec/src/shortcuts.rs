@@ -22,7 +22,8 @@ pub struct KeyLayer {
 }
 
 /// A command a key can run: its id as the person's keys keep it, its part
-/// name, its caption as written, and the keys the design gives it.
+/// name, its caption as written, the keys the design gives it, and where it
+/// lives when that is the toolbar or a ribbon.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -31,6 +32,9 @@ pub struct KeyCommand {
     pub name: String,
     pub caption: Option<String>,
     pub keys: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(type = "\"toolbar\" | { tab: string, group: string }", optional)]
+    pub place: Option<KeyPlace>,
 }
 
 /// Every place with commands a key can run, the app's frame first, then the
@@ -59,6 +63,10 @@ pub fn catalog(project: &Project) -> Vec<KeyLayer> {
             layers.push(KeyLayer { id: page.name.name.clone(), title: page.title.clone(), commands });
         }
     }
+    let places = places(project);
+    for command in layers.iter_mut().flat_map(|l| l.commands.iter_mut()) {
+        command.place = places.iter().find(|(id, _)| *id == command.id).map(|(_, place)| place.clone());
+    }
     layers
 }
 
@@ -69,6 +77,22 @@ pub fn catalog(project: &Project) -> Vec<KeyLayer> {
 pub enum KeyPlace {
     Toolbar,
     Ribbon { tab: String, group: String },
+}
+
+/// `"toolbar"`, or `{"tab": ..., "group": ...}` for a ribbon's, as every keys window reads it.
+impl Serialize for KeyPlace {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        match self {
+            KeyPlace::Toolbar => serializer.serialize_str("toolbar"),
+            KeyPlace::Ribbon { tab, group } => {
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("tab", tab)?;
+                map.serialize_entry("group", group)?;
+                map.end()
+            }
+        }
+    }
 }
 
 /// The place of each toolbar and ribbon command the catalog lists, by its id.
@@ -108,7 +132,7 @@ fn frame_commands(frame: &Frame, prefix: &str, out: &mut Vec<KeyCommand>) {
                 && (p.on_click.is_some() || p.handler.is_some())
                 && let Some(name) = &p.name
             {
-                out.push(KeyCommand { id: format!("{prefix}{name}"), name: name.clone(), caption: p.caption.clone(), keys: p.shortcut.iter().cloned().collect() });
+                out.push(KeyCommand { id: format!("{prefix}{name}"), name: name.clone(), caption: p.caption.clone(), keys: p.shortcut.iter().cloned().collect(), place: None });
             }
             walk(&c.items, prefix, out);
         }
@@ -135,7 +159,7 @@ fn buttons(widgets: &[Widget], prefix: &str, out: &mut Vec<KeyCommand>) {
             && does
             && let Some(name) = &p.name
         {
-            out.push(KeyCommand { id: format!("{prefix}{name}"), name: name.clone(), caption: p.caption.clone(), keys: p.shortcut.iter().cloned().collect() });
+            out.push(KeyCommand { id: format!("{prefix}{name}"), name: name.clone(), caption: p.caption.clone(), keys: p.shortcut.iter().cloned().collect(), place: None });
         }
         buttons(&w.children, prefix, out);
         for page in &w.pages {

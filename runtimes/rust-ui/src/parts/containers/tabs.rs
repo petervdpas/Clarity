@@ -39,7 +39,7 @@ impl Shared {
 
     fn set_tab(&self, tab: i64) {
         match self.part.name() {
-            Some(name) if self.part.state().is_some() => self.part.host.change_state(name, &mut |s| s.tab = Some(tab)),
+            Some(name) if self.part.state().is_some() => crate::parts::change_state(&*self.part.host, name, |s| s.tab = Some(tab)),
             _ => self.here.set(tab),
         }
     }
@@ -145,7 +145,7 @@ impl Element for TabsPart {
         let mut x = area.x;
         for child in self.base.node.children_mut()[..count].iter_mut() {
             let width = child.as_any().downcast_ref::<TabButton>().map(|t| t.width_for(cx)).unwrap_or(0.0);
-            child.arrange(Rect::new(x, area.y, width, STRIP_HEIGHT), cx);
+            element::arrange_safely(child.as_mut(), Rect::new(x, area.y, width, STRIP_HEIGHT), cx);
             x += width + 2.0;
         }
         let place = Rect::new(area.x, area.y + STRIP_HEIGHT + 2.0 * look.padding, area.width, (area.height - STRIP_HEIGHT - 4.0 * look.padding).max(0.0));
@@ -155,7 +155,7 @@ impl Element for TabsPart {
                 page.shown = shown;
             }
             if shown {
-                child.arrange(place, cx);
+                element::arrange_safely(child.as_mut(), place, cx);
             }
         }
     }

@@ -99,6 +99,13 @@ impl SoundPart {
         self.playing.len()
     }
 
+    /// What code told it since it last heard, at once: the window stack asks
+    /// this of a parked window's sounds, so a sound told to play while its
+    /// window is covered plays then, as on every stack.
+    pub fn hear_now(&mut self) {
+        self.hear_all();
+    }
+
     /// What code told it since it last heard: each in order.
     fn hear_all(&mut self) {
         let Some(name) = self.base.name().map(str::to_string) else { return };
@@ -131,10 +138,9 @@ impl SoundPart {
         }
     }
 
+    /// Plays, also while its window is parked: what was told plays when it was told.
     fn start(&mut self, file: Vec<u8>, repeat: bool) {
-        if self.base.node.attached() {
-            self.playing.push(output().play(file, self.volume as f32 / 100.0, repeat));
-        }
+        self.playing.push(output().play(file, self.volume as f32 / 100.0, repeat));
     }
 
     /// Stops everything it plays.

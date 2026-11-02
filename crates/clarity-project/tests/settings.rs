@@ -213,7 +213,7 @@ fn rust_draws_its_desktop_with_clarity_ui_only() {
     let only = parse(&SHOP.replace("    stack csharp desktop", "    stack rust cli")).unwrap();
     assert_eq!(only.stack.ui, Ui::Clarity);
     // C# still has no other UI to name.
-    assert!(parse(&SHOP.replace("    stack csharp desktop", "    stack csharp webview desktop")).unwrap_err().contains("webview"));
+    assert!(parse(&SHOP.replace("    stack csharp desktop", "    stack csharp webview desktop")).unwrap_err().contains("C# draws its windows with Clarity.UI and names no UI"));
 }
 
 // Rust's web target is the server whose browser page is the shared web

@@ -16,6 +16,7 @@ use crate::locale;
 use crate::markup::PartSpec;
 use crate::painter::{Painter, TextAlign};
 use crate::part_element;
+use crate::parts::inputs::formats::{format_of, formats_of};
 use crate::parts::{Part, PartBase, PartHost};
 
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
@@ -28,8 +29,10 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
     }
 }
 
-/// A value as the person reads it: yes or no in their language, an offered
-/// value by its label, a list as its items, anything else as written.
+/// A value as the person reads it: yes or no in their language, a list as
+/// each of its items shown, a number or date in the person's format when
+/// its field or type has one, an offered value by its label, anything else
+/// as written.
 pub fn shown_value(host: &dyn PartHost, path: &str, value: Option<&Value>) -> String {
     match value {
         None | Some(Value::Null) => String::new(),
@@ -40,10 +43,19 @@ pub fn shown_value(host: &dyn PartHost, path: &str, value: Option<&Value>) -> St
                 locale::translate("no", "No")
             }
         }
-        Some(value) => match host.choices(path).into_iter().find(|c| &c.value == value) {
-            Some(choice) => choice.label,
-            None => plain(value),
-        },
+        // A list field shows each item as one is shown, joined.
+        Some(Value::Array(items)) => items.iter().map(|item| shown_value(host, path, Some(item))).collect::<Vec<_>>().join(", "),
+        Some(value) => {
+            if let Some(format) = format_of(host, path).filter(|_| value.as_str() != Some("")) {
+                return formats_of(host).show(&format, value);
+            }
+            match host.choices(path).into_iter().find(|c| &c.value == value) {
+                Some(choice) => choice.label,
+                // A number whose type the host does not say is still shown in the person's format.
+                None if value.is_number() => crate::parts::data::rows::shown_formatted(value, None, &formats_of(host)),
+                None => plain(value),
+            }
+        }
     }
 }
 
@@ -159,6 +171,10 @@ impl Element for BadgePart {
 impl Part for BadgePart {
     fn base(&self) -> &PartBase {
         &self.base
+    }
+
+    fn draws_own_style(&self) -> bool {
+        true
     }
 }
 

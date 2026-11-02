@@ -11,7 +11,7 @@ use crate::element::{Cx, Element, Node};
 use crate::fonts::Fonts;
 use crate::geometry::Rect;
 use crate::grid::ROW_HEIGHT;
-use crate::input::{Key, KeyInput, PointerInput};
+use crate::input::{Cursor, Key, KeyInput, PointerInput};
 use crate::locale;
 use crate::painter::{Painter, TextAlign};
 use crate::window::view::CONTENT_PADDING;
@@ -46,7 +46,7 @@ pub struct NoteList {
     placed: Vec<(Rect, Rect)>,
 }
 
-const NOTE_WIDTH: f64 = 360.0;
+const NOTE_WIDTH: f64 = 420.0;
 const LINE: f64 = 20.0;
 
 impl NoteList {
@@ -119,6 +119,16 @@ impl Element for NoteList {
 
     fn hit(&self, x: f64, y: f64) -> bool {
         self.placed.iter().any(|(note, _)| note.contains(x, y))
+    }
+
+    /// A note's x says what it does.
+    fn tooltip_at(&self, x: f64, y: f64) -> Option<String> {
+        self.placed.iter().any(|(_, close)| close.contains(x, y)).then(|| locale::translate("dismiss", "Dismiss"))
+    }
+
+    /// A note's x shows the hand: a press there closes the note.
+    fn cursor_at(&self, x: f64, y: f64) -> Option<Cursor> {
+        self.placed.iter().any(|(_, close)| close.contains(x, y)).then_some(Cursor::Hand)
     }
 
     fn on_pointer_pressed(&mut self, at: PointerInput, cx: &mut Cx) {

@@ -86,9 +86,15 @@ impl PopoverPart {
         // It lies under the part its `for` names, as the screen last laid that part out; else at its own place.
         let anchor = self.base.spec.text("for").filter(|f| !f.is_empty()).and_then(|f| cx.part_place(f));
         let place = Self::place(anchor.map(|(_, at)| at), self.base.node.bounds, self.size(cx.look()), cx.whole());
+        let moved = self.place.get() != place;
         self.place.set(place);
-        if self.opened.get().is_some() {
-            return;
+        if let Some(open) = self.opened.get() {
+            if !moved {
+                return;
+            }
+            // The part it is for moved (or was laid out only now): it opens again at its new place; its state stays visible.
+            self.opened.set(None);
+            cx.close(open);
         }
         let grid = container::grid_of(&self.base.spec.children, container::columns_of(&self.base.spec), GAP, &self.base.host);
         let mut frame = PopoverFrame { node: Node::new(), place: self.place.clone() };
@@ -100,7 +106,7 @@ impl PopoverPart {
         overlay.closed = Some(Box::new(move || {
             // Closed by a press outside or Escape: its state hears it is no longer visible.
             if opened.take().is_some() {
-                host.change_state(&name, &mut |s| s.visible = Some(false));
+                crate::parts::change_state(&*host, &name, |s| s.visible = Some(false));
             }
         }));
         self.opened.set(Some(cx.open(overlay)));
@@ -177,7 +183,7 @@ impl Element for PopoverFrame {
         self.node.bounds = place;
         let look = LookNow::of(cx.look());
         let inner = place.inset(2.0 * look.padding + look.border);
-        self.node.children_mut()[0].arrange(inner, cx);
+        crate::element::arrange_safely(self.node.children_mut()[0].as_mut(), inner, cx);
     }
 
     fn draw(&self, p: &Painter) {

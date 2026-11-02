@@ -30,6 +30,7 @@ pub mod parts;
 pub mod ranges;
 pub mod record_file;
 pub mod reorder;
+pub mod required;
 pub mod screen;
 #[cfg(feature = "secrets")]
 pub mod secrets;
@@ -80,7 +81,7 @@ pub fn at_mut<T>(list: &mut [T], position: i64) -> Result<&mut T> {
 }
 
 fn outside(position: i64, len: usize) -> Error {
-    Error::Value(format!("there is no item {position} in a list of {len}"))
+    Error::Outside { position, count: len }
 }
 
 /// `round(value, places)` in code: at most `places` decimals, rounded half
@@ -164,9 +165,15 @@ pub enum Error {
     Refused(ui::Text),
     /// An engine could not load, or failed while it ran (DESIGN 5.11).
     Engine(String),
-    /// A value in code that does not fit where it is used: a position
-    /// outside its list, a highest number below 1 (conformance/lists.json).
+    /// A value in code that does not fit where it is used: a highest
+    /// number below 1, JSON that does not fit (conformance/lists.json).
     Value(String),
+    /// `xs[i]` with no item `position` in a list of `count` (conformance/lists.json).
+    Outside { position: i64, count: usize },
+    /// A save refused a record whose required field is empty: the record's
+    /// table and id, the field's column, and why in Clarity's own words. A
+    /// window shows it at the input bound to that field (crate::required).
+    Required { table: &'static str, id: Id, column: String, text: ui::Text },
 }
 
 /// Why an undo is refused: what it would take back was changed since, in
@@ -181,17 +188,26 @@ pub fn undo_changed_since() -> ui::Text {
 /// empty one is refused in Clarity's own words, with its label in the
 /// person's language (conformance/required.json).
 pub fn check_required(required: &[(&str, &str)], columns: &[&str], values: &[SqlValue]) -> Result<()> {
-    for (column, label) in required {
+    match first_required_empty(required, columns, values) {
+        Some((_, text)) => Err(Error::Refused(text)),
+        None => Ok(()),
+    }
+}
+
+/// The first `required` field that is empty in `values`, with its column and
+/// why in Clarity's own words; none when every one has a value.
+fn first_required_empty(required: &[(&str, &str)], columns: &[&str], values: &[SqlValue]) -> Option<(String, ui::Text)> {
+    required.iter().find_map(|(column, label)| {
         let value = columns.iter().position(|c| c == column).and_then(|at| values.get(at));
-        if matches!(value, None | Some(SqlValue::Null)) || matches!(value, Some(SqlValue::Text(t)) if t.is_empty()) {
+        let empty = matches!(value, None | Some(SqlValue::Null)) || matches!(value, Some(SqlValue::Text(t)) if t.is_empty());
+        empty.then(|| {
             let shown = match label.strip_prefix('@') {
                 Some(key) => i18n::text(key),
                 None => label.to_string(),
             };
-            return Err(Error::Refused(ui::Text::keyed("fieldRequired", "{field} is required").with("field", ui::Slot::text(shown))));
-        }
-    }
-    Ok(())
+            (column.to_string(), ui::Text::keyed("fieldRequired", "{field} is required").with("field", ui::Slot::text(shown)))
+        })
+    })
 }
 
 /// Why the databases did not open, as the person reads it (DESIGN 5.27,
@@ -215,8 +231,9 @@ impl fmt::Display for Error {
             Error::Invalid(what) => write!(f, "invalid value: {what}"),
             Error::Storage(what) => write!(f, "storage: {what}"),
             Error::NotKept(setting) => write!(f, "storage: the secret setting {setting} is not kept yet: the settings name the connection"),
-            Error::Refused(what) => f.write_str(&what.show()),
+            Error::Refused(what) | Error::Required { text: what, .. } => f.write_str(&what.show()),
             Error::Engine(what) | Error::Value(what) => f.write_str(what),
+            Error::Outside { position, count } => write!(f, "there is no item {position} in a list of {count}"),
         }
     }
 }
@@ -668,7 +685,10 @@ impl Db {
     }
 
     fn store<R: Record>(&self, record: &mut R) -> Result<()> {
-        check_required(R::REQUIRED, R::COLUMNS, &record.to_values())?;
+        // A refusal says which record and column, so a window shows it at the input bound to it.
+        if let Some((column, text)) = first_required_empty(R::REQUIRED, R::COLUMNS, &record.to_values()) {
+            return Err(Error::Required { table: R::TABLE, id: record.id(), column, text });
+        }
         let recording = self.history.borrow().recording.is_some();
         let before = if recording && record.id() != 0 { self.row(R::SOURCE, R::TABLE, R::KEY, R::COLUMNS, record.id())? } else { None };
         self.store_row(record)?;

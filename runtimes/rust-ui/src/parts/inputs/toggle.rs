@@ -54,7 +54,7 @@ impl TogglePart {
         if let Some(path) = self.base.bound().map(str::to_string) {
             self.base.host.write(name.as_deref().unwrap_or(""), &path, Value::Bool(next));
         } else if let Some(name) = name {
-            self.base.host.change_state(&name, &mut |s| s.checked = Some(next));
+            crate::parts::change_state(&*self.base.host, &name, |s| s.checked = Some(next));
             self.base.host.edited(&name);
         } else {
             self.kept = next;
@@ -128,5 +128,10 @@ impl Part for TogglePart {
 
     fn press(&mut self, cx: &mut Cx) {
         self.flip(cx);
+    }
+
+    /// In a button group, only its outer corners are round.
+    fn set_corners(&mut self, corners: Corners) {
+        self.corners = corners;
     }
 }

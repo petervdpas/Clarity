@@ -71,7 +71,9 @@ fn rust_records_give_their_required_fields() {
     let rust = generated(Backend::Rust);
     has(&rust, "    const REQUIRED: &'static [(&'static str, &'static str)] = &[(\"name\", \"@customerNameLabel\")];\n");
     has(&rust, "    const REQUIRED: &'static [(&'static str, &'static str)] = &[(\"customer\", \"Customer\"), (\"sheet\", \"Sheet\")];\n");
-    assert!(!rust.contains("(\"nickname\", "), "a setting is never saved");
+    // The facts still list the setting's type; no REQUIRED list names it.
+    let saved: Vec<&str> = rust.lines().filter(|l| l.contains("REQUIRED") && l.contains("(\"nickname\", ")).collect();
+    assert!(saved.is_empty(), "a setting is never saved: {saved:#?}");
 }
 
 #[test]

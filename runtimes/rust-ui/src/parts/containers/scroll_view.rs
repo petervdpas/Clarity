@@ -163,11 +163,11 @@ impl ScrollView {
         let across_shows = s.max_x() > 0.0;
         let content = Rect::new(area.x - s.x.get(), area.y - s.y.get(), s.content_width.get(), s.content_height.get());
         let children = self.node.children_mut();
-        children[0].arrange(content, cx);
+        crate::element::arrange_safely(children[0].as_mut(), content, cx);
         let down = Rect::new(area.right() - BAR_THICKNESS, area.y, BAR_THICKNESS, area.height - if across_shows { BAR_THICKNESS } else { 0.0 });
-        children[1].arrange(down, cx);
+        crate::element::arrange_safely(children[1].as_mut(), down, cx);
         let across = Rect::new(area.x, area.bottom() - BAR_THICKNESS, area.width - if down_shows { BAR_THICKNESS } else { 0.0 }, BAR_THICKNESS);
-        children[2].arrange(across, cx);
+        crate::element::arrange_safely(children[2].as_mut(), across, cx);
     }
 }
 

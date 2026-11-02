@@ -52,6 +52,14 @@ impl LookValues {
 pub struct ThemeLook {
     own: Value,
     under: Option<Arc<ThemeLook>>,
+    /// Its own number, by which what is kept for it (a style's look) knows it.
+    serial: u64,
+}
+
+static NEXT_LOOK: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+fn next_look() -> u64 {
+    NEXT_LOOK.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 /// A color as a theme writes it: `#rrggbb`, `#rgb` or `#rrggbbaa`.
@@ -76,12 +84,23 @@ impl ThemeLook {
         static LIGHT: OnceLock<Arc<ThemeLook>> = OnceLock::new();
         static DARK: OnceLock<Arc<ThemeLook>> = OnceLock::new();
         let (cell, text) = if dark { (&DARK, CLARITY_DARK) } else { (&LIGHT, CLARITY_LIGHT) };
-        cell.get_or_init(|| Arc::new(ThemeLook { own: serde_json::from_str(text).unwrap_or(Value::Null), under: None })).clone()
+        cell.get_or_init(|| Arc::new(ThemeLook { own: serde_json::from_str(text).unwrap_or(Value::Null), under: None, serial: next_look() })).clone()
     }
 
     /// A project's theme, resolved by Clarity, over `under`; one that is no JSON leaves everything to `under`.
     pub fn over(resolved: &str, under: Arc<ThemeLook>) -> Arc<ThemeLook> {
-        Arc::new(ThemeLook { own: serde_json::from_str(resolved).unwrap_or(Value::Null), under: Some(under) })
+        Arc::new(ThemeLook { own: serde_json::from_str(resolved).unwrap_or(Value::Null), under: Some(under), serial: next_look() })
+    }
+
+    /// `resolved` over this look, as one of its own: a part's style over the window's look.
+    pub fn over_this(&self, resolved: &str) -> Arc<ThemeLook> {
+        let this = Arc::new(ThemeLook { own: self.own.clone(), under: self.under.clone(), serial: next_look() });
+        ThemeLook::over(resolved, this)
+    }
+
+    /// Its own number, the same for as long as it lives.
+    pub fn serial(&self) -> u64 {
+        self.serial
     }
 
     pub fn dark(&self) -> bool {

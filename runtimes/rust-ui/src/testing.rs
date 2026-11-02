@@ -29,16 +29,16 @@ impl Shot {
         self.surface.height()
     }
 
-    /// The color of the pixel at `x`, `y`.
+    /// The color of the pixel at `x`, `y`; one past the edge fails the test.
     pub fn pixel(&mut self, x: i32, y: i32) -> Color {
         let pixmap = self.surface.peek_pixels().expect("a raster surface has its pixels");
-        pixmap.get_color((x, y))
+        pixel_at(&pixmap, x, y)
     }
 
-    /// Whether any pixel of a place differs from `color`.
+    /// Whether any pixel of a place differs from `color`; a place past the edge fails the test.
     pub fn any_not(&mut self, x: i32, y: i32, width: i32, height: i32, color: Color) -> bool {
         let pixmap = self.surface.peek_pixels().expect("a raster surface has its pixels");
-        (y..y + height).any(|py| (x..x + width).any(|px| pixmap.get_color((px, py)) != color))
+        (y..y + height).any(|py| (x..x + width).any(|px| pixel_at(&pixmap, px, py) != color))
     }
 
     /// The picture as PNG.
@@ -54,6 +54,15 @@ impl Shot {
         }
         std::fs::write(path, self.png())
     }
+}
+
+/// The color of the pixel at `x`, `y` of `pixels`: the one way tests read a
+/// pixel. One past the edge fails the test with where it was, instead of
+/// reading memory that is not the picture's.
+pub fn pixel_at(pixels: &skia_safe::Pixmap, x: i32, y: i32) -> Color {
+    let (width, height) = (pixels.width(), pixels.height());
+    assert!(x >= 0 && y >= 0 && x < width && y < height, "the pixel {x},{y} is past the edge of a picture of {width} by {height}");
+    pixels.get_color((x, y))
 }
 
 /// Whether two colors are near: each channel within `by`.
@@ -79,8 +88,6 @@ pub struct TestHost {
     pub changed: std::cell::Cell<u64>,
     /// The chosen row of each list, table or tree, by its part's name.
     pub selected: std::cell::RefCell<std::collections::BTreeMap<String, usize>>,
-    /// The file dialogs the parts get; none picks nothing.
-    pub files: std::cell::RefCell<Option<std::sync::Arc<dyn crate::files::FilePicker>>>,
     /// What code told custom parts, waiting to be heard.
     pub hears: std::cell::RefCell<Vec<clarity_runtime::ui::Hear>>,
     /// What custom parts and engines told, each as `part tell values`.
@@ -89,6 +96,8 @@ pub struct TestHost {
     pub resources: std::cell::RefCell<std::collections::BTreeMap<String, Vec<u8>>>,
     /// The keys the person set for commands, by the command (`Main.save`).
     pub keys: std::cell::RefCell<std::collections::BTreeMap<String, Vec<String>>>,
+    /// Handlers that cannot run now (C# TestHost.CannotRun), by name.
+    pub cannot_run: std::cell::RefCell<std::collections::BTreeSet<String>>,
     /// The SVG paths of the icons the program carries, by name.
     pub icons: std::cell::RefCell<std::collections::BTreeMap<String, String>>,
 }
@@ -143,9 +152,13 @@ impl crate::parts::PartHost for TestHost {
         Some(self.states.borrow_mut().entry(name.to_string()).or_default().clone())
     }
 
-    fn change_state(&self, name: &str, change: &mut dyn FnMut(&mut clarity_runtime::ui::PartState)) {
-        change(self.states.borrow_mut().entry(name.to_string()).or_default());
+    fn set_state(&self, name: &str, state: clarity_runtime::ui::PartState) {
+        self.states.borrow_mut().insert(name.to_string(), state);
         self.change();
+    }
+
+    fn can_run(&self, _part: Option<&str>, call: &crate::markup::HandlerCall) -> bool {
+        !self.cannot_run.borrow().contains(&call.handler)
     }
 
     /// Logs the run; a handler named in `refusing` refuses.
@@ -206,10 +219,6 @@ impl crate::parts::PartHost for TestHost {
             None => self.selected.borrow_mut().remove(part),
         };
         self.change();
-    }
-
-    fn files(&self) -> std::sync::Arc<dyn crate::files::FilePicker> {
-        self.files.borrow().clone().unwrap_or_else(|| std::sync::Arc::new(crate::files::NoFilePicker))
     }
 
     fn hears(&self, part: &str) -> Vec<clarity_runtime::ui::Hear> {

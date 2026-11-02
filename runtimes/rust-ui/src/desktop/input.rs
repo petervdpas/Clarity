@@ -7,8 +7,8 @@ use winit::keyboard::{Key as Logical, KeyCode, ModifiersState, NamedKey, Physica
 
 use crate::input::{Key, Modifiers};
 
-/// How far one notch of the wheel scrolls, in the screen's units.
-pub const LINE: f64 = 40.0;
+/// How far a notch of the wheel scrolls, in the screen's units; a browser's line is the same.
+pub const WHEEL_NOTCH: f64 = 50.0;
 
 /// Clarity.UI's key of a key of the keyboard. What the key writes comes
 /// first, so a shortcut is the letter or symbol the person sees on it (the
@@ -208,11 +208,11 @@ pub fn typed_text(text: Option<&str>, held: Modifiers) -> Option<String> {
 
 /// A turn of the wheel in the screen's units, as `Screen::wheel` takes it:
 /// a positive `dy` shows what is further down, a positive `dx` what is
-/// further right. A notch is `LINE`; a touchpad's pixels are the system's,
+/// further right. A notch is `WHEEL_NOTCH`; a touchpad's pixels are the system's,
 /// divided by the window's `scale`.
 pub fn wheel_of(delta: MouseScrollDelta, scale: f64) -> (f64, f64) {
     match delta {
-        MouseScrollDelta::LineDelta(x, y) => (-(x as f64) * LINE, -(y as f64) * LINE),
+        MouseScrollDelta::LineDelta(x, y) => (-(x as f64) * WHEEL_NOTCH, -(y as f64) * WHEEL_NOTCH),
         MouseScrollDelta::PixelDelta(at) => {
             let scale = if scale > 0.0 { scale } else { 1.0 };
             (-at.x / scale, -at.y / scale)

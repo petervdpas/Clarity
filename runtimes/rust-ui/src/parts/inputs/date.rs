@@ -3,7 +3,8 @@
 //! The day shows in the person's format and typed text is read the same way
 //! (or as 2026-10-20) when the input is left or Enter is pressed; a button at
 //! its right opens a calendar under it to pick the day from. A moment has its
-//! time beside the day, typed as hh:mm on a 24-hour clock; picking or typing
+//! time beside the day, typed as hh:mm on a 24-hour clock (or 9:30 PM, shown
+//! again as 21:30); picking or typing
 //! a day keeps the time, and an empty moment starts at midnight. Only the
 //! person's pick or typed change is a change; the same value again and what
 //! code sets are not. Text that is no day or no time is marked and changes
@@ -67,18 +68,34 @@ impl At {
     }
 }
 
-/// A typed time, h:mm or hh:mm on a 24-hour clock; empty is midnight; none when it is no time.
+/// A typed time of day: 21:30 (or 21.30), or on a 12-hour clock 9:30 PM
+/// (am and pm, with or without dots, in any case); empty is midnight; none
+/// when it is no time.
 pub fn read_time(typed: &str) -> Option<(u32, u32)> {
     let text = typed.trim();
     if text.is_empty() {
         return Some((0, 0));
     }
-    let (hours, minutes) = text.split_once(':')?;
+    let at = text.find([':', '.'])?;
+    let hours = &text[..at];
+    let rest = &text[at + 1..];
+    let minutes: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    let half = rest[minutes.len()..].trim().trim_end_matches('.').replace('.', "");
     let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
-    if !digits(hours) || hours.len() > 2 || !digits(minutes) || minutes.len() != 2 {
+    if !digits(hours) || hours.len() > 2 || minutes.len() != 2 {
         return None;
     }
-    let (h, m): (u32, u32) = (hours.parse().ok()?, minutes.parse().ok()?);
+    let (mut h, m): (u32, u32) = (hours.parse().ok()?, minutes.parse().ok()?);
+    if !half.is_empty() {
+        let pm = half.eq_ignore_ascii_case("pm");
+        if !pm && !half.eq_ignore_ascii_case("am") {
+            return None;
+        }
+        if !(1..=12).contains(&h) {
+            return None;
+        }
+        h = h % 12 + if pm { 12 } else { 0 };
+    }
     (h < 24 && m < 60).then_some((h, m))
 }
 
@@ -209,12 +226,8 @@ impl Core {
         if self.bad.is_none() && self.shown_day.as_deref() == Some(typed.as_str()) {
             return;
         }
+        // As Avalonia's DateInput: no input refuses an empty value, required or not; the form says it is missing on save.
         if typed.trim().is_empty() {
-            let required = self.bound().and_then(|p| self.host.field(p)).is_some_and(|f| f.required);
-            if required {
-                self.bad = Some(typed);
-                return;
-            }
             self.bad = None;
             self.offer(None);
             return;
@@ -278,7 +291,7 @@ impl Core {
             self.host.write(name.as_deref().unwrap_or(""), &path, stored.map(Value::String).unwrap_or(Value::Null));
         } else if let Some(name) = name {
             let text = stored.unwrap_or_default();
-            self.host.change_state(&name, &mut |s| s.text = Some(text.clone()));
+            crate::parts::change_state(&*self.host, &name, |s| s.text = Some(text.clone()));
             self.host.edited(&name);
         } else {
             self.own = stored.unwrap_or_default();
@@ -493,26 +506,30 @@ impl Element for CalendarButton {
     }
 
     fn draw(&self, p: &Painter) {
-        let look = p.look;
         let enabled = self.core.borrow().usable();
-        let b = self.node.bounds;
-        if enabled && (self.node.hovered || self.node.pressed) {
-            p.fill(b, look.color(if self.node.pressed { "accent_soft" } else { "raised" }), look.radius("input"));
-        }
-        let mut pen = Paint::default();
-        pen.set_color(look.color(if enabled { "text" } else { "muted" }));
-        pen.set_anti_alias(true);
-        pen.set_style(PaintStyle::Stroke);
-        pen.set_stroke_width(1.4);
-        pen.set_stroke_cap(PaintCap::Round);
-        let cx = (b.x + b.width / 2.0) as f32;
-        let cy = (b.y + b.height / 2.0) as f32;
-        let canvas = p.canvas;
-        canvas.draw_round_rect(skia_safe::Rect::new(cx - 6.0, cy - 5.0, cx + 6.0, cy + 6.0), 1.5, 1.5, &pen);
-        canvas.draw_line((cx - 6.0, cy - 1.0), (cx + 6.0, cy - 1.0), &pen);
-        canvas.draw_line((cx - 3.0, cy - 7.0), (cx - 3.0, cy - 4.0), &pen);
-        canvas.draw_line((cx + 3.0, cy - 7.0), (cx + 3.0, cy - 4.0), &pen);
+        draw_calendar_sheet(p, self.node.bounds, enabled, self.node.hovered, self.node.pressed);
     }
+}
+
+/// The button that opens a calendar, drawn: a calendar sheet, its ground raised while the pointer is on it.
+pub fn draw_calendar_sheet(p: &Painter, b: Rect, enabled: bool, hovered: bool, pressed: bool) {
+    let look = p.look;
+    if enabled && (hovered || pressed) {
+        p.fill(b, look.color(if pressed { "accent_soft" } else { "raised" }), look.radius("input"));
+    }
+    let mut pen = Paint::default();
+    pen.set_color(look.color(if enabled { "text" } else { "muted" }));
+    pen.set_anti_alias(true);
+    pen.set_style(PaintStyle::Stroke);
+    pen.set_stroke_width(1.4);
+    pen.set_stroke_cap(PaintCap::Round);
+    let cx = (b.x + b.width / 2.0) as f32;
+    let cy = (b.y + b.height / 2.0) as f32;
+    let canvas = p.canvas;
+    canvas.draw_round_rect(skia_safe::Rect::new(cx - 6.0, cy - 5.0, cx + 6.0, cy + 6.0), 1.5, 1.5, &pen);
+    canvas.draw_line((cx - 6.0, cy - 1.0), (cx + 6.0, cy - 1.0), &pen);
+    canvas.draw_line((cx - 3.0, cy - 7.0), (cx - 3.0, cy - 4.0), &pen);
+    canvas.draw_line((cx + 3.0, cy - 7.0), (cx + 3.0, cy - 4.0), &pen);
 }
 
 pub struct DatePart {

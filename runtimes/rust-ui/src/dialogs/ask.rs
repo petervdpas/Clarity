@@ -1,7 +1,9 @@
 //! A question a handler asks: `ask ... then handler(values)` (DESIGN 5.14),
 //! in Clarity's own dialog over the window, never a dialog of the system:
 //! the question, the input its form needs (a text box, a number box in the
-//! value's format, or a dropdown of its choices) and OK and Cancel. OK or
+//! value's format, a date input for a day or a moment, or a dropdown of its
+//! choices) and OK and Cancel. An empty text answers an empty text. The
+//! dialog is as wide as its question, 320 to 520, wrapped beyond. OK or
 //! Enter answers, and the window runs the handler the answer goes to;
 //! Cancel or Escape runs nothing. A question for a dialog window of the
 //! application is no question here: the window stack opens that window.
@@ -25,7 +27,9 @@ use crate::painter::{Painter, TextAlign};
 use crate::parts::{self, Choice, FieldFacts, Formats, PartHost};
 use crate::window::messages::wrap;
 
-const WIDTH: f64 = 440.0;
+/// How narrow and how wide the dialog is: as wide as its question, wrapped beyond the widest.
+pub const MIN_WIDTH: f64 = 320.0;
+pub const MAX_WIDTH: f64 = 520.0;
 const LINE: f64 = 20.0;
 const BUTTON_WIDTH: f64 = 104.0;
 
@@ -79,6 +83,19 @@ pub fn answer_values(ask: &Ask, answer: Option<Value>) -> Vec<Value> {
     values
 }
 
+/// The kinds of value picked in a date input: a day, or a moment.
+fn is_date(ty: &str) -> bool {
+    matches!(ty, "date" | "datetime" | "dateTime" | "moment")
+}
+
+/// What the input's value answers: nothing typed in a text answers an empty text, not nothing.
+fn answer_of(form: &AskForm, has_choices: bool, value: Option<Value>) -> Option<Value> {
+    match (form, value) {
+        (AskForm::Value { ty, .. }, None | Some(Value::Null)) if ty == "text" && !has_choices => Some(Value::from("")),
+        (_, value) => value,
+    }
+}
+
 /// Whether `value` answers the question: a choice or a number needs one; text may be empty; a yes needs nothing.
 pub fn answerable(form: &AskForm, value: Option<&Value>) -> bool {
     match form {
@@ -112,6 +129,9 @@ impl AskDialog {
                 "Dropdown"
             } else if is_number(ty) {
                 "Number"
+            } else if is_date(ty) {
+                // A day picks a day, a moment a day and its time, as the answer's handler expects.
+                "Date"
             } else {
                 "Textbox"
             };
@@ -123,10 +143,11 @@ impl AskDialog {
             }
         }
         let answered: Answered = Rc::new(RefCell::new(None));
+        let has_choices = choices.is_some();
         let ok_press = {
             let (host, answered, ask) = (host.clone(), answered.clone(), ask.clone());
             Rc::new(move |cx: &mut Cx| {
-                let value = host.value.borrow().clone();
+                let value = answer_of(&ask.form, has_choices, host.value.borrow().clone());
                 if answerable(&ask.form, value.as_ref()) {
                     *answered.borrow_mut() = Some(answer_values(&ask, value));
                     cx.close(dialog);
@@ -171,9 +192,12 @@ impl AskDialog {
         }
     }
 
-    /// What the input holds now; none for a yes.
+    /// What the input holds now (an empty text for nothing typed in a text); none for a yes.
     pub fn value(&self) -> Option<Value> {
-        self.host.value.borrow().clone()
+        if !self.has_input {
+            return None;
+        }
+        answer_of(&self.ask.form, !self.host.choices.is_empty(), self.host.value.borrow().clone())
     }
 
     /// Where the dialog itself is, in the middle of the window.
@@ -203,7 +227,8 @@ impl Element for AskDialog {
 
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
         self.node.bounds = area;
-        let width = WIDTH.min((area.width - 32.0).max(200.0));
+        let question = cx.fonts().measure(&self.ask.question.show(), "text", cx.look().size("text"), false) + 40.0;
+        let width = question.clamp(MIN_WIDTH, MAX_WIDTH).min((area.width - 32.0).max(200.0));
         let inner = width - 40.0;
         let lines = self.lines(inner, cx.fonts(), cx.look().size("text")).len() as f64;
         let input_room = if self.has_input { ROW_HEIGHT + 16.0 } else { 0.0 };
@@ -280,7 +305,7 @@ impl PartHost for AskHost {
         None
     }
 
-    fn change_state(&self, _name: &str, _change: &mut dyn FnMut(&mut PartState)) {}
+    fn set_state(&self, _name: &str, _state: PartState) {}
 
     fn run(&self, _part: Option<&str>, _call: &HandlerCall) -> bool {
         true
@@ -295,7 +320,7 @@ impl PartHost for AskHost {
     }
 
     fn type_of(&self, path: &str) -> Option<String> {
-        if path == PATH { self.ty.clone().filter(|t| is_number(t) || matches!(t.as_str(), "date" | "datetime" | "text")) } else { None }
+        if path == PATH { self.ty.clone().filter(|t| is_number(t) || is_date(t) || t == "text") } else { None }
     }
 
     fn field(&self, path: &str) -> Option<FieldFacts> {

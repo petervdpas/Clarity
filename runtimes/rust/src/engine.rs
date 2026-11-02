@@ -118,6 +118,59 @@ pub fn watching<T>(watch: &Watch, run: impl FnOnce() -> T) -> T {
     run()
 }
 
+/// A watch the screen knows by its number (`Program::start_watch`): how far
+/// its call last said it is, and its Stop.
+#[derive(Clone, Default)]
+struct Numbered {
+    said: Arc<Mutex<Option<(i64, i64)>>>,
+    stop: Arc<std::sync::atomic::AtomicBool>,
+}
+
+/// The watches of the handlers running now, by the screen's numbers.
+static NUMBERED: Mutex<std::collections::BTreeMap<u64, Numbered>> = Mutex::new(std::collections::BTreeMap::new());
+
+fn numbered<T>(run: impl FnOnce(&mut std::collections::BTreeMap<u64, Numbered>) -> T) -> T {
+    run(&mut NUMBERED.lock().unwrap_or_else(|p| p.into_inner()))
+}
+
+/// Watches the engine calls this thread makes from now on as watch `id`,
+/// until `end_watch`, as `Program::start_watch` does for a generated
+/// program: the screen then asks `watch_progress` and stops it by number.
+pub fn start_watch(id: u64) {
+    let watched = numbered(|all| all.entry(id).or_default().clone());
+    let said = watched.said.clone();
+    let watch = Watch {
+        progress: Some(Arc::new(move |done, total| {
+            *said.lock().unwrap_or_else(|p| p.into_inner()) = Some((done, total));
+        })),
+        stop: watched.stop,
+    };
+    CURRENT.with(|c| *c.borrow_mut() = Some(watch));
+}
+
+/// How far the call of watch `id` last said it is; none while it said nothing.
+pub fn watch_progress(id: u64) -> Option<(i64, i64)> {
+    numbered(|all| all.get(&id).and_then(|w| *w.said.lock().unwrap_or_else(|p| p.into_inner())))
+}
+
+/// Stops the call of watch `id` at its next look; one stopped before it started stops once it does.
+pub fn stop_watch(id: u64) {
+    numbered(|all| all.entry(id).or_default().stop.store(true, std::sync::atomic::Ordering::SeqCst));
+}
+
+/// Forgets watch `id`; on the thread it watched, its calls are watched no more.
+pub fn end_watch(id: u64) {
+    let gone = numbered(|all| all.remove(&id));
+    if let Some(gone) = gone {
+        CURRENT.with(|c| {
+            let mine = c.borrow().as_ref().is_some_and(|w| Arc::ptr_eq(&w.stop, &gone.stop));
+            if mine {
+                *c.borrow_mut() = None;
+            }
+        });
+    }
+}
+
 /// What a call's store holds: its memory limit and the state of its services.
 struct Data {
     limits: StoreLimits,

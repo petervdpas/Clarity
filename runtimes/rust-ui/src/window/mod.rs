@@ -17,6 +17,7 @@
 //! made again, so its texts show in it. When the databases did not open,
 //! what keeps the connection shows first (DESIGN 5.27).
 
+pub mod address;
 pub mod host;
 pub mod messages;
 pub mod paths;
@@ -24,19 +25,19 @@ pub mod view;
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use clarity_runtime::keys::PersonKeys;
-use clarity_runtime::program::{Answer, Program, Unconnected, Watch};
+use clarity_runtime::program::{Answer, Program, Unconnected};
 use clarity_runtime::ui::{Ask, AskForm, Level, Message, Reply, Text, WindowState};
 use serde_json::{Map, Value};
 
 use crate::app_files::AppFiles;
 use crate::dialogs::ask::{self, Answered, AskDialog};
 use crate::dialogs::keys::{self, KeysWindow};
-use crate::dialogs::long_call::{LongCallBar, Said};
-use crate::dialogs::over::{dialog_size, DialogOverlay};
+use crate::dialogs::long_call::LongCallBar;
+use crate::dialogs::over::DialogOverlay;
 use crate::element::{self, Cx, Element, ElementId, Node};
 use crate::facts::ModelFacts;
 use crate::geometry::Rect;
@@ -189,8 +190,11 @@ struct Unconnecting {
     settings: Map<String, Value>,
 }
 
-/// What a long call gives back on the screen's thread.
-struct LongDone(Answer<Reply>);
+/// What a long call gives back on the screen's thread, and the number of its watch.
+struct LongDone(Answer<Reply>, u64);
+
+/// The number of the next long call's watch (`Program::start_watch`), unique in the process.
+static NEXT_WATCH: AtomicU64 = AtomicU64::new(1);
 
 /// The windows of a program, the one on top shown: the root of a desktop window's screen.
 pub struct WindowStack {
@@ -375,7 +379,10 @@ impl WindowStack {
         let top = self.stack.first().map(|s| s.host.window());
         let size = top.as_deref().and_then(|w| self.running.facts.window(w)).and_then(|w| w.size);
         if self.dialog {
-            return self.view().map(|v| dialog_size(v, size));
+            // Measured in the program's own look, as the view shows in it.
+            let look = self.running.files.look(false);
+            let fonts = crate::fonts::Fonts::new(look.clone());
+            return self.view().map(|v| crate::dialogs::over::dialog_size_in(v, size, &fonts, &look));
         }
         if self.opener.is_some() {
             return size;
@@ -745,34 +752,28 @@ impl WindowStack {
         if self.long.is_some() {
             return;
         }
-        let said: Said = Arc::new(Mutex::new(None));
-        let stop = Arc::new(AtomicBool::new(false));
-        let bar = cx.open(Overlay::dialog(Box::new(LongCallBar::new(said.clone(), stop.clone()))));
+        // The program knows the call's watch by number: the bar asks it how far the call is and stops it by that number.
+        let watch = NEXT_WATCH.fetch_add(1, Ordering::SeqCst);
+        let program = self.running.program.clone();
+        let (asks, stops) = (program.clone(), program.clone());
+        let bar = LongCallBar::watching(Rc::new(move || asks.watch_progress(watch)), Rc::new(move || stops.stop_watch(watch)));
+        let bar = cx.open(Overlay::dialog(Box::new(bar)));
         self.running.calling.set(true);
         self.long = Some((host.clone(), bar));
-        let program = self.running.program.clone();
         let state = host.state_now();
-        let progress = said.clone();
-        let watch = Watch { progress: Some(Arc::new(move |done, total| {
-            if let Ok(mut at) = progress.lock() {
-                *at = Some((done, total));
-            }
-        })), stop };
         cx.later(self.node.id(), move || {
-            let mut answer = None;
-            let mut job = Some((call, state));
-            program.watched(&watch, &mut || {
-                if let Some((call, state)) = job.take() {
-                    answer = Some(call.run(program.as_ref(), state));
-                }
-            });
-            LongDone(answer.unwrap_or_else(|| Err(Text::plain("the handler did not run"))))
+            program.start_watch(watch);
+            let answer = call.run(program.as_ref(), state);
+            program.end_watch(watch);
+            LongDone(answer, watch)
         });
     }
 
     /// Makes every window's view again, as in another language; a dialog over the window makes its own.
     fn remake(&mut self, cx: &mut Cx) {
         let files = self.running.files;
+        // The part with the focus keeps it in the window made again, so the next Tab goes on from it.
+        let focused = cx.focused().and_then(|f| self.view().and_then(|v| part_of(v, f)));
         let count = self.stack.len();
         for i in 0..count {
             let host = self.stack[i].host.clone();
@@ -789,6 +790,15 @@ impl WindowStack {
         }
         for dialog in &self.dialogs {
             dialog.host.reshow();
+        }
+        if let Some(name) = focused {
+            let again = self.view().and_then(|view| {
+                let part = element::in_order(view).into_iter().find(|e| e.as_part().and_then(|p| p.base().spec.name()) == Some(name.as_str()))?;
+                element::focus_takers(part).into_iter().next()
+            });
+            if again.is_some() {
+                cx.focus(again);
+            }
         }
         cx.invalidate();
     }
@@ -821,6 +831,10 @@ impl Element for WindowStack {
     }
 
     fn after_event(&mut self, cx: &mut Cx) {
+        // A stack whose desktop window closed hears nothing more: no language, no replies.
+        if self.ended {
+            return;
+        }
         // The language changed: the program hears it, and every window is made again.
         let language = crate::choices::language();
         if language != self.language {
@@ -849,6 +863,12 @@ impl Element for WindowStack {
             if !effects.is_empty() {
                 self.take(Some(host), effects, cx);
                 cx.invalidate();
+            }
+        }
+        // A parked window's sounds hear what code told them at once (as C# SoundPart.Hear).
+        for shown in &mut self.stack {
+            if let Some(view) = shown.parked.as_mut() {
+                hear_parked_sounds(view.as_mut());
             }
         }
         // The windows' values changed: the screen draws them again.
@@ -889,6 +909,8 @@ impl Element for WindowStack {
     /// A long call ended: its bar goes, and its reply is the window's.
     fn on_later(&mut self, done: crate::later::Done, cx: &mut Cx) {
         let Ok(done) = done.downcast::<LongDone>() else { return };
+        // A Stop pressed as the call ended is forgotten with its watch.
+        self.running.program.end_watch(done.1);
         self.running.calling.set(false);
         if let Some((host, bar)) = self.long.take() {
             cx.close(bar);
@@ -967,4 +989,15 @@ fn part_of(root: &dyn Element, focused: ElementId) -> Option<String> {
 /// Keys the stack takes itself, for a host that wires them by hand: none beyond `window_key` yet.
 pub fn plain(key: Key) -> KeyInput {
     KeyInput::new(key, Modifiers::NONE)
+}
+
+/// Every sound of a parked view hears what code told it since it last heard.
+fn hear_parked_sounds(view: &mut dyn Element) {
+    if let Some(sound) = view.as_any_mut().downcast_mut::<crate::parts::sound::SoundPart>() {
+        sound.hear_now();
+        return;
+    }
+    for child in view.node_mut().children_mut().iter_mut() {
+        hear_parked_sounds(child.as_mut());
+    }
 }

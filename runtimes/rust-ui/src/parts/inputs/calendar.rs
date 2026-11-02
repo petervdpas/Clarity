@@ -6,6 +6,13 @@
 //! opens it under its input; another part (tags of days, a table's date
 //! cell) opens it the same way.
 //!
+//! As Avalonia's Calendar, it zooms out: a click on the title (or Ctrl+Up)
+//! shows the year's twelve months, and again the decade's years with one
+//! before and one after. A click on a year shows its months, a click on a
+//! month its days; Enter or Ctrl+Down does that for the marked one. In those
+//! views the buttons and Page Up and Page Down turn a year or a decade, the
+//! arrows move the mark by one, Up and Down by a row.
+//!
 //! The calendar is the overlay's element (`DayCalendar`) and a handle to
 //! what it shows (`Calendar`), which the part that opened it keeps: the part
 //! hands it its keys while it keeps the focus, and reads the picked day when
@@ -113,6 +120,22 @@ impl Day {
     }
 }
 
+/// The year and decade views hold three rows of four.
+const ACROSS: i64 = 4;
+
+/// What a calendar shows: a month's days, a year's months or a decade's years.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum View {
+    Month,
+    Year,
+    Decade,
+}
+
+/// The short name of a month (1 to 12) in the person's language: `Oct`, `mrt`.
+pub fn short_month(formats: &Formats, month: u32) -> String {
+    formats.short_month_name(month).to_string()
+}
+
 /// The words a calendar shows in the person's language: the weekdays'
 /// short names from the first day of the week, and the month's title.
 #[derive(Debug, Clone)]
@@ -130,6 +153,10 @@ impl Words {
     fn title(&self, month: Day) -> String {
         self.formats.month_title(month.year, month.month)
     }
+
+    fn short_month(&self, month: u32) -> String {
+        short_month(&self.formats, month)
+    }
 }
 
 /// What a calendar shows, shared by its element and the part that opened it.
@@ -141,7 +168,16 @@ struct State {
     words: Words,
     picked: Option<Day>,
     hovered: Option<Day>,
+    title_hovered: bool,
+    view: View,
     bounds: Rect,
+}
+
+impl State {
+    /// The first year of the decade it shows (2020 for 2026).
+    fn decade_start(&self) -> i32 {
+        self.day.year - self.day.year.rem_euclid(10)
+    }
 }
 
 /// What a key did to a calendar.
@@ -149,9 +185,9 @@ struct State {
 pub enum Keyed {
     /// It was no key of the calendar's.
     Not,
-    /// It moved the marked day or turned the month.
+    /// It moved the marked day, turned the month or showed another view.
     Moved,
-    /// Enter or Space picked the marked day: the calendar closes, and its picked day is this one.
+    /// Enter or Space picked the marked day of the month view: the calendar closes, and its picked day is this one.
     Picked(Day),
     /// Escape: the calendar closes without a pick.
     Closed,
@@ -174,6 +210,8 @@ impl Calendar {
             words: Words::of(formats),
             picked: None,
             hovered: None,
+            title_hovered: false,
+            view: View::Month,
             bounds: Rect::default(),
         })))
     }
@@ -208,10 +246,64 @@ impl Calendar {
         s.today = today;
     }
 
-    /// The month's name and year, in the person's language.
+    /// What it shows now: the days of a month, the months of a year or the years of a decade.
+    pub fn view(&self) -> View {
+        self.0.borrow().view
+    }
+
+    /// The month's name and year in the person's language; in the year view the year; in the decade view the decade as 2020-2029.
     pub fn title(&self) -> String {
         let s = self.0.borrow();
-        s.words.title(s.month)
+        match s.view {
+            View::Year => s.day.year.to_string(),
+            View::Decade => format!("{}-{}", s.decade_start(), s.decade_start() + 9),
+            View::Month => s.words.title(s.month),
+        }
+    }
+
+    /// The name a year or decade view shows for the month or year of `day`: the language's short month name, or the year.
+    pub fn name_of(&self, day: Day) -> String {
+        let s = self.0.borrow();
+        match s.view {
+            View::Decade => day.year.to_string(),
+            _ => s.words.short_month(day.month),
+        }
+    }
+
+    /// What its buttons do in the view it shows, in the person's language.
+    pub fn previous_name(&self) -> String {
+        match self.view() {
+            View::Year => locale::translate("previousYear", "Previous year"),
+            View::Decade => locale::translate("previousDecade", "Previous decade"),
+            View::Month => previous_name(),
+        }
+    }
+
+    pub fn next_name(&self) -> String {
+        match self.view() {
+            View::Year => locale::translate("nextYear", "Next year"),
+            View::Decade => locale::translate("nextDecade", "Next decade"),
+            View::Month => next_name(),
+        }
+    }
+
+    /// What a click on the title does, while there is a wider view to show.
+    pub fn zoom_out_name() -> String {
+        locale::translate("calendarZoomOut", "Show more")
+    }
+
+    /// What it says at a point: its buttons what they turn, the title that it shows more while it can.
+    pub fn tooltip_at(&self, x: f64, y: f64) -> Option<String> {
+        if self.previous().contains(x, y) {
+            return Some(self.previous_name());
+        }
+        if self.next().contains(x, y) {
+            return Some(self.next_name());
+        }
+        if self.title_box().contains(x, y) && self.view() != View::Decade {
+            return Some(Self::zoom_out_name());
+        }
+        None
     }
 
     /// The weekdays' short names, from the first day of the week.
@@ -242,6 +334,38 @@ impl Calendar {
         Rect::new(b.right() - PAD - (HEAD - 4.0), b.y + PAD + 2.0, HEAD - 4.0, HEAD - 4.0)
     }
 
+    /// The title between the buttons: a click shows the wider view.
+    pub fn title_box(&self) -> Rect {
+        let (previous, next, b) = (self.previous(), self.next(), self.bounds());
+        Rect::new(previous.right(), b.y + PAD, (next.x - previous.right()).max(0.0), HEAD)
+    }
+
+    /// The year and decade views' cells, under the title where the month's weekdays and days are.
+    fn wide_cell(&self, place: i64) -> Rect {
+        let b = self.bounds();
+        let (width, height) = (7.0 * CELL_WIDTH / ACROSS as f64, (WEEK_ROW + 6.0 * CELL_HEIGHT) / 3.0);
+        Rect::new(b.x + PAD + (place % ACROSS) as f64 * width, b.y + PAD + HEAD + (place / ACROSS) as f64 * height, width, height)
+    }
+
+    /// The place (0 to 11) of a day's month or year in the year or decade view; none when that view does not show it.
+    fn place_of(&self, day: Day) -> Option<i64> {
+        let s = self.0.borrow();
+        match s.view {
+            View::Year if day.year == s.day.year => Some(day.month as i64 - 1),
+            View::Decade if day.year >= s.decade_start() - 1 && day.year <= s.decade_start() + 10 => Some((day.year - s.decade_start() + 1) as i64),
+            _ => None,
+        }
+    }
+
+    /// The first day of the month or year at a place of the year or decade view.
+    fn at_place(&self, place: i64) -> Day {
+        let s = self.0.borrow();
+        match s.view {
+            View::Year => Day { year: s.day.year, month: place as u32 + 1, day: 1 },
+            _ => Day { year: s.decade_start() - 1 + place as i32, month: 1, day: 1 },
+        }
+    }
+
     /// The first day of its grid: the start of the week the month starts in.
     fn grid_start(&self) -> Day {
         let s = self.0.borrow();
@@ -249,8 +373,11 @@ impl Calendar {
         s.month.add_days(-(back as i64))
     }
 
-    /// Where a day's cell is; none when its grid does not show it.
+    /// Where a day's cell is (in the year view its month's, in the decade view its year's); none when the view does not show it.
     pub fn cell_of(&self, day: Day) -> Option<Rect> {
+        if self.view() != View::Month {
+            return self.place_of(day).map(|place| self.wide_cell(place));
+        }
         let at = day.number() - self.grid_start().number();
         if !(0..42).contains(&at) {
             return None;
@@ -259,9 +386,18 @@ impl Calendar {
         Some(Rect::new(b.x + PAD + (at % 7) as f64 * CELL_WIDTH, b.y + PAD + HEAD + WEEK_ROW + (at / 7) as f64 * CELL_HEIGHT, CELL_WIDTH, CELL_HEIGHT))
     }
 
-    /// The day at a point; none outside its grid.
+    /// The day at a point (in the year view a month's first day, in the decade view a year's); none outside its grid.
     fn day_at(&self, x: f64, y: f64) -> Option<Day> {
         let b = self.bounds();
+        if self.view() != View::Month {
+            let (width, height) = (7.0 * CELL_WIDTH / ACROSS as f64, (WEEK_ROW + 6.0 * CELL_HEIGHT) / 3.0);
+            let across = ((x - b.x - PAD) / width).floor();
+            let down = ((y - b.y - PAD - HEAD) / height).floor();
+            if !(0.0..ACROSS as f64).contains(&across) || !(0.0..=2.0).contains(&down) {
+                return None;
+            }
+            return Some(self.at_place(down as i64 * ACROSS + across as i64));
+        }
         let col = ((x - b.x - PAD) / CELL_WIDTH).floor();
         let row = ((y - b.y - PAD - HEAD - WEEK_ROW) / CELL_HEIGHT).floor();
         if !(0.0..=6.0).contains(&col) || !(0.0..=5.0).contains(&row) {
@@ -284,6 +420,46 @@ impl Calendar {
         s.month = s.day.first_of_month();
     }
 
+    /// Turns one step of the view it shows: a month, a year or a decade.
+    pub fn step(&self, way: i32) {
+        let months = match self.view() {
+            View::Year => 12,
+            View::Decade => 120,
+            View::Month => 1,
+        };
+        self.turn(way * months);
+    }
+
+    /// Moves the mark in the year or decade view by `places` months or years.
+    fn move_wide(&self, places: i32) {
+        self.turn(places * if self.view() == View::Decade { 12 } else { 1 });
+    }
+
+    /// Shows the wider view: the year from a month, the decade from a year.
+    pub fn zoom_out(&self) {
+        let mut s = self.0.borrow_mut();
+        s.view = match s.view {
+            View::Month => View::Year,
+            _ => View::Decade,
+        };
+        s.hovered = None;
+    }
+
+    /// Shows the narrower view on `at`: a year's months, a month's days. The marked day keeps its number where it can.
+    pub fn zoom_in(&self, at: Day) {
+        let mut s = self.0.borrow_mut();
+        if s.view == View::Month {
+            return;
+        }
+        let year = at.year;
+        let month = if s.view == View::Year { at.month } else { s.day.month };
+        let last = days_in(year, month).unwrap_or(28);
+        s.day = Day { year, month, day: s.day.day.min(last) };
+        s.month = s.day.first_of_month();
+        s.view = if s.view == View::Decade { View::Year } else { View::Month };
+        s.hovered = None;
+    }
+
     /// Picks `day`: its opener reads it once the calendar closed.
     pub fn pick(&self, day: Day) {
         self.0.borrow_mut().picked = Some(day);
@@ -291,8 +467,27 @@ impl Calendar {
 
     /// A key, from the calendar or from the part that keeps the focus while it is open.
     pub fn keyed(&self, key: KeyInput) -> Keyed {
-        if !key.modifiers.is_empty() {
-            return Keyed::Not;
+        if key.control() && key.key == Key::Up {
+            self.zoom_out();
+            return Keyed::Moved;
+        }
+        if key.control() && key.key == Key::Down {
+            self.zoom_in(self.day());
+            return Keyed::Moved;
+        }
+        if self.view() != View::Month {
+            match key.key {
+                Key::Left => self.move_wide(-1),
+                Key::Right => self.move_wide(1),
+                Key::Up => self.move_wide(-(ACROSS as i32)),
+                Key::Down => self.move_wide(ACROSS as i32),
+                Key::PageUp => self.step(-1),
+                Key::PageDown => self.step(1),
+                Key::Enter | Key::Space => self.zoom_in(self.day()),
+                Key::Escape => return Keyed::Closed,
+                _ => return Keyed::Not,
+            }
+            return Keyed::Moved;
         }
         let (day, month) = (self.day(), self.month());
         match key.key {
@@ -330,6 +525,7 @@ pub fn below(whole: Rect, under: Rect) -> Rect {
 enum Press {
     Previous,
     Next,
+    Title,
     On(Day),
 }
 
@@ -383,6 +579,42 @@ impl DayCalendar {
         (id, calendar)
     }
 
+    /// The year view's months or the decade view's years in three rows of
+    /// four: the chosen one filled in the accent, the marked one in the
+    /// selection, the current one ringed. The years outside the decade are muted.
+    fn draw_wide(&self, p: &Painter, text: Color, muted: Color, radius: f64) {
+        let look = p.look;
+        let size = look.size("text");
+        let view = self.calendar.view();
+        let (chosen, day, today, hovered) = {
+            let s = self.calendar.0.borrow();
+            (s.chosen, s.day, s.today, s.hovered)
+        };
+        for place in 0..12 {
+            let at = self.calendar.at_place(place);
+            let cell = self.calendar.wide_cell(place).inset(3.0);
+            let same = |d: Day| if view == View::Year { d.year == at.year && d.month == at.month } else { d.year == at.year };
+            let is_chosen = chosen.is_some_and(same);
+            let mut color = if view == View::Decade && (place == 0 || place == 11) { muted } else { text };
+            if is_chosen {
+                p.fill(cell, look.color("accent"), radius);
+                color = look.color("on_accent");
+            } else if same(day) {
+                p.fill(cell, look.color("selection"), radius);
+            } else if hovered.is_some_and(same) {
+                p.fill(cell, look.color("raised"), radius);
+            }
+            if is_chosen && same(day) {
+                p.stroke(cell, look.color("focus"), 2.0, radius);
+            }
+            let current = same(today);
+            if current {
+                p.stroke(cell.inset(1.0), look.color(if is_chosen { "on_accent" } else { "accent" }), 1.0, radius);
+            }
+            p.text(&self.calendar.name_of(at), cell, color, size, "text", current, TextAlign::Center);
+        }
+    }
+
     fn chevron(p: &Painter, area: Rect, way: f32, color: Color) {
         let mut pen = Paint::default();
         pen.set_color(color);
@@ -430,6 +662,8 @@ impl Element for DayCalendar {
             Some(Press::Previous)
         } else if self.calendar.next().contains(x, y) {
             Some(Press::Next)
+        } else if self.calendar.title_box().contains(x, y) {
+            Some(Press::Title)
         } else {
             self.calendar.day_at(x, y).map(Press::On)
         };
@@ -440,12 +674,14 @@ impl Element for DayCalendar {
 
     fn on_click(&mut self, cx: &mut Cx) {
         match self.pressed_on.take() {
-            Some(Press::Previous) => self.calendar.turn(-1),
-            Some(Press::Next) => self.calendar.turn(1),
-            Some(Press::On(day)) => {
+            Some(Press::Previous) => self.calendar.step(-1),
+            Some(Press::Next) => self.calendar.step(1),
+            Some(Press::Title) => self.calendar.zoom_out(),
+            Some(Press::On(day)) if self.calendar.view() == View::Month => {
                 self.calendar.pick(day);
                 cx.close(self.node.id());
             }
+            Some(Press::On(day)) => self.calendar.zoom_in(day),
             None => {}
         }
         cx.invalidate();
@@ -453,21 +689,17 @@ impl Element for DayCalendar {
 
     fn on_pointer_moved(&mut self, at: PointerInput, cx: &mut Cx) {
         let day = self.calendar.day_at(at.screen_x, at.screen_y);
+        let on_title = self.calendar.title_box().contains(at.screen_x, at.screen_y);
         let mut s = self.calendar.0.borrow_mut();
-        if s.hovered != day {
+        if s.hovered != day || s.title_hovered != on_title {
             s.hovered = day;
+            s.title_hovered = on_title;
             cx.invalidate();
         }
     }
 
     fn tooltip_at(&self, x: f64, y: f64) -> Option<String> {
-        if self.calendar.previous().contains(x, y) {
-            return Some(previous_name());
-        }
-        if self.calendar.next().contains(x, y) {
-            return Some(next_name());
-        }
-        None
+        self.calendar.tooltip_at(x, y)
     }
 
     fn draw(&self, p: &Painter) {
@@ -481,10 +713,22 @@ impl Element for DayCalendar {
         p.fill(b, plain.background.unwrap_or_else(|| look.color("panel")), radius);
 
         let (previous, next) = (self.calendar.previous(), self.calendar.next());
-        let title = Rect::new(previous.right(), b.y + PAD, next.x - previous.right(), HEAD);
+        let title = self.calendar.title_box();
+        let view = self.calendar.view();
+        {
+            let s = self.calendar.0.borrow();
+            if view != View::Decade && s.hovered.is_none() && s.title_hovered {
+                p.fill(title, look.color("raised"), radius);
+            }
+        }
         p.text(&self.calendar.title(), title, text, size, "text", true, TextAlign::Center);
         Self::chevron(p, previous, -1.0, text);
         Self::chevron(p, next, 1.0, text);
+        if view != View::Month {
+            self.draw_wide(p, text, muted, radius);
+            p.stroke(b, plain.border.unwrap_or_else(|| look.color("border")), look.border(), radius);
+            return;
+        }
 
         for (i, name) in self.calendar.weekdays().iter().enumerate() {
             p.text(name, Rect::new(b.x + PAD + i as f64 * CELL_WIDTH, b.y + PAD + HEAD, CELL_WIDTH, WEEK_ROW), muted, small, "text", false, TextAlign::Center);

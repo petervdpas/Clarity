@@ -30,6 +30,8 @@ pub struct MenuEntry {
     pub separator: bool,
     pub items: Vec<MenuEntry>,
     pub run: Option<Rc<dyn Fn()>>,
+    /// An element that wakes (its `on_wake` runs) once the item ran: a `run` has no context, so the element does the rest there.
+    pub wake: Option<ElementId>,
 }
 
 impl MenuEntry {
@@ -48,11 +50,15 @@ impl std::fmt::Debug for MenuEntry {
 /// What an open menu belongs to: the region it opened from and the place of its item there.
 pub type MenuOwner = (ElementId, usize);
 
+/// What the person going sideways in an open menu does (a menu bar opens the menu beside): -1 left, 1 right.
+pub type Beside = Rc<dyn Fn(i64, &mut Cx)>;
+
 #[derive(Default)]
 struct MenuState {
     /// The menus open now, the first menu first: each list's id and the entry of the menu below it opened from.
     open: Vec<(ElementId, Option<usize>)>,
     owner: Option<MenuOwner>,
+    beside: Option<Beside>,
 }
 
 /// The menus open over a window: one menu and the flyouts of its sub menus,
@@ -82,6 +88,24 @@ impl FrameMenus {
 
     /// Opens `entries` below `under` for `owner`; a press on `anchor` goes to what opened it.
     pub fn open(&self, owner: MenuOwner, entries: Vec<MenuEntry>, under: Rect, anchor: Option<ElementId>, cx: &mut Cx) {
+        self.open_with(owner, entries, under, anchor, false, cx);
+    }
+
+    /// Opens a menu as `open` does, its first item marked: opened by a key.
+    pub fn open_marked(&self, owner: MenuOwner, entries: Vec<MenuEntry>, under: Rect, anchor: Option<ElementId>, cx: &mut Cx) {
+        self.open_with(owner, entries, under, anchor, true, cx);
+    }
+
+    /// In the menus open now, Left and Right (where no sub menu takes them) do `beside`; it goes once they all close.
+    pub fn set_beside(&self, beside: Beside) {
+        self.0.borrow_mut().beside = Some(beside);
+    }
+
+    fn beside(&self) -> Option<Beside> {
+        self.0.borrow().beside.clone()
+    }
+
+    fn open_with(&self, owner: MenuOwner, entries: Vec<MenuEntry>, under: Rect, anchor: Option<ElementId>, marked: bool, cx: &mut Cx) {
         self.close_all(cx);
         let whole = cx.whole();
         let (width, height) = FrameMenuList::size_of(&entries, cx.fonts(), cx.look().size("text"));
@@ -90,7 +114,10 @@ impl FrameMenus {
         if y + height > whole.height && under.y - 1.0 - height >= 0.0 {
             y = under.y - 1.0 - height;
         }
-        let list = FrameMenuList::new(self.clone(), entries, 0);
+        let mut list = FrameMenuList::new(self.clone(), entries, 0);
+        if marked {
+            list.marked = list.entries.iter().position(|e| !e.separator);
+        }
         let id = list.node.id();
         self.0.borrow_mut().owner = Some(owner);
         self.add(list, Rect::new(x, y, width, height), anchor, None, cx);
@@ -141,6 +168,7 @@ impl FrameMenus {
             let gone = state.open.split_off(at).into_iter().map(|(id, _)| id).rev().collect();
             if state.open.is_empty() {
                 state.owner = None;
+                state.beside = None;
             }
             gone
         };
@@ -159,6 +187,10 @@ impl FrameMenus {
         if let Some(run) = &entry.run {
             run();
         }
+        if let Some(id) = entry.wake {
+            cx.wake(id, cx.now());
+        }
+
     }
 
     /// A menu closed from outside (a press elsewhere, Escape): every other menu goes too.
@@ -169,6 +201,7 @@ impl FrameMenus {
                 return;
             }
             state.owner = None;
+            state.beside = None;
             state.open.drain(..).map(|(i, _)| i).filter(|i| *i != id).collect()
         };
         for other in others.into_iter().rev() {
@@ -332,6 +365,11 @@ impl Element for FrameMenuList {
                 self.menus.close_from(self.level, cx);
                 cx.focus(below);
             }
+            // In a menu bar's menu, Left and Right open the menu beside it on the bar.
+            Key::Left | Key::Right => match self.menus.beside() {
+                Some(beside) => beside(if key.key == Key::Right { 1 } else { -1 }, cx),
+                None => return false,
+            },
             _ => return false,
         }
         true
@@ -352,6 +390,8 @@ impl Element for FrameMenuList {
                 continue;
             }
             let lit = self.marked == Some(i) && entry.enabled;
+            // A disabled entry is greyed as a disabled button is: muted and dimmed.
+            let _dimmed = p.dimmed(entry.enabled);
             let values = if lit { look.part("menu", Some("hover")) } else { menu.clone() };
             if lit {
                 p.fill(row, values.background.unwrap_or_else(|| look.color("accent_soft")), look.radius("button"));

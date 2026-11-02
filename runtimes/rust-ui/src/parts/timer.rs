@@ -107,7 +107,9 @@ impl Element for TimerPart {
             self.next = None;
             return;
         }
-        if self.base.enabled() {
+        // A tick whose handler cannot run now is left out, as C# TimerPart does.
+        let can = self.base.spec.on("tick").all(|call| self.base.host.can_run(self.base.name(), call));
+        if self.base.enabled() && can {
             self.ticks += 1;
             self.base.fire("tick");
             cx.invalidate();

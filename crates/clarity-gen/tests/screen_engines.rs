@@ -107,14 +107,17 @@ fn a_clarity_engine_beside_the_screen_is_carried_compiled() {
 
 /// Rust on Clarity.UI carries the engine's file in the program and gives
 /// each canvas that runs it an instance of its own through the runtime's
-/// `ScreenEngine`, answered by `Program::screen_engine`.
+/// `ScreenEngine`, opened by `Program::engine_open` and kept by number.
 #[test]
 fn rust_on_clarity_ui_gives_each_canvas_an_instance_of_its_engine() {
     let files = files(Backend::Rust, Ui::Clarity);
     assert!(files.iter().any(|f| f.path == "engines/screen.wasm" && f.bytes.is_some()));
     let main = file(&files, "src/main.rs");
     assert!(
-        main.contains("    fn screen_engine(&self, name: &str) -> Option<std::result::Result<Box<dyn clarity_runtime::screen::Frames>, String>> {\n        let made = match name {\n            \"Screen\" => clarity_runtime::engine::ScreenEngine::load(\"Screen\", include_bytes!(\"../engines/screen.wasm\"), &[\"log\"], true, clarity_runtime::engine::Limits { seconds: 1, megabytes: 256 }),\n            _ => return None,\n        };\n        Some(made.map(|engine| Box::new(engine) as Box<dyn clarity_runtime::screen::Frames>))\n    }\n"),
+        main.contains("    fn engine_open(&self, name: &str) -> Option<std::result::Result<u64, String>> {\n        let made = match name {\n            \"Screen\" => clarity_runtime::engine::ScreenEngine::load(\"Screen\", include_bytes!(\"../engines/screen.wasm\"), &[\"log\"], true, clarity_runtime::engine::Limits { seconds: 1, megabytes: 256 }),\n            _ => return None,\n        };\n        Some(made.map(|engine| SCREEN_ENGINES.open(Box::new(engine))))\n    }\n")
+            && main.contains("static SCREEN_ENGINES: clarity_runtime::screen::Instances = clarity_runtime::screen::Instances::new();\n")
+            && main.contains("    fn engine_frame(&self, id: u64, ms: f64, input: Vec<clarity_runtime::screen::ScreenInput>) -> std::result::Result<clarity_runtime::screen::Drawn, String> {\n        SCREEN_ENGINES.frame(id, ms, &input)\n    }\n")
+            && main.contains("    fn engine_close(&self, id: u64) {\n        SCREEN_ENGINES.close(id)\n    }\n"),
         "{main}"
     );
     // The runtime's engines run it, though the backend loads none.

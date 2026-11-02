@@ -16,16 +16,17 @@
 
 use std::cell::RefCell;
 
-use clarity_runtime::picture::Picture;
+use crate::wire::FieldContent;
 use serde_json::{json, Map, Value};
 use skia_safe::{surfaces, AlphaType, BlendMode, Color, ColorType, EncodedImageFormat, Image, ImageInfo, Paint, PaintCap, PaintJoin, PaintStyle, PathEffect, Point, SamplingOptions};
 
 use super::{color_of, draw_shape, polyline, CanvasPart, Shape, Viewport, STILL};
-use crate::element::Cx;
+use crate::element::{Cx, Element};
 use crate::geometry::Rect;
 use crate::input::{Key, KeyInput, Modifiers, PointerInput};
 use crate::locale;
 use crate::painter::{Painter, TextAlign};
+use crate::parts::text_editor::TextEditor;
 
 /// The tools of each mode, in the order its toolbar shows them.
 pub const PAINT_TOOLS: [&str; 2] = ["pen", "eraser"];
@@ -67,21 +68,28 @@ struct Sketching {
     moved: bool,
 }
 
+/// A bound field's value and the record it is in.
+type PaintedFor = (Option<Value>, Option<Value>);
+
 /// What a canvas keeps of what the person does on it with a mode.
 #[derive(Default)]
 pub(super) struct ModeState {
     dragging: Option<Dragging>,
     /// The record of each place of the drawing a drag started on, to find it again when the drawing is drawn anew.
     shown_objects: Vec<Value>,
-    /// The picture painted on, and the field's value it was read from (or the last stroke left).
-    painted: RefCell<Option<(Option<Value>, Option<Image>)>>,
+    /// The picture painted on, and the field's value and its record it was read for (or the last stroke left):
+    /// every stored picture is the same value, so another record reads its own.
+    painted: RefCell<Option<(PaintedFor, Option<Image>)>>,
     /// The stroke being painted, in units.
     stroke: Option<Vec<(f64, f64)>>,
     /// The drawing's shapes as the runtime reads its SVG, read once for each text.
     vector: RefCell<Option<(String, Vec<Map<String, Value>>)>>,
     sketching: Option<Sketching>,
-    /// Where a text is being typed, in units, and what was typed so far.
-    typing: Option<((f64, f64), String)>,
+    /// Where a text is being typed, in units, and the text input it is typed in
+    /// (a caret that moves, a selection, the clipboard, as in every text box).
+    typing: Option<((f64, f64), TextEditor)>,
+    /// Its toolbar's buttons as last drawn, on the screen.
+    toolbar: RefCell<Vec<(&'static str, Rect)>>,
     /// The shape chosen of a canvas without a name, its place in the drawing from 0; a named one's is the window's.
     chosen: Option<usize>,
 }
@@ -260,8 +268,13 @@ impl CanvasPart {
     }
 
     /// The text typed with the text tool so far; none while no text is being typed.
-    pub fn typing(&self) -> Option<&str> {
-        self.modes.typing.as_ref().map(|(_, t)| t.as_str())
+    pub fn typing(&self) -> Option<String> {
+        self.modes.typing.as_ref().map(|(_, editor)| editor.text())
+    }
+
+    /// The text input the text tool types in; none while no text is being typed.
+    pub fn typing_editor(&self) -> Option<&TextEditor> {
+        self.modes.typing.as_ref().map(|(_, editor)| editor)
     }
 
     fn act(&self, action: Value) {
@@ -288,11 +301,20 @@ impl CanvasPart {
             .collect()
     }
 
+    /// Its toolbar's buttons as last drawn, on the screen; none before it was drawn.
+    pub fn toolbar_drawn(&self) -> Vec<(&'static str, Rect)> {
+        self.modes.toolbar.borrow().clone()
+    }
+
     fn draw_toolbar(&self, p: &Painter) {
         let look = p.look;
         let in_hand = self.tool_in_hand();
-        for (tool, place) in self.tool_buttons(p.fonts, look) {
-            let chosen = tool == in_hand;
+        let usable = self.acts();
+        let buttons = self.tool_buttons(p.fonts, look);
+        *self.modes.toolbar.borrow_mut() = buttons.clone();
+        for (tool, place) in buttons {
+            // The tool in hand shows in the accent only while the person may use it.
+            let chosen = usable && tool == in_hand;
             p.fill(place, look.color(if chosen { "accent" } else { "panel" }), look.radius("button"));
             p.stroke(place, look.color("border"), look.border(), look.radius("button"));
             p.text(&tool_word(tool), place, look.color(if chosen { "on_accent" } else { "text" }), look.size("small"), "text", false, TextAlign::Center);
@@ -334,21 +356,40 @@ impl CanvasPart {
 
     /// The picture of the bound image field, read again when the field holds another.
     fn painted(&self) -> Option<Image> {
-        let value = self.base.bound().and_then(|path| self.base.host.read(path));
+        let now = self.painted_for();
         if let Some((from, image)) = self.modes.painted.borrow().as_ref() {
-            if *from == value {
+            if *from == now {
                 return image.clone();
             }
         }
-        // Fail safe: a picture that does not load leaves the canvas blank to paint on.
-        let bytes = match value.clone().map(serde_json::from_value::<Picture>) {
-            Some(Ok(Picture::New(bytes))) => Some(bytes),
-            Some(Ok(Picture::Stored)) => self.base.bound().and_then(|bind| self.base.host.fetch(bind, None)),
+        // A stored picture, or one of the field's file store, is fetched before
+        // it is painted on (as a picture field fetches it), so a stroke never
+        // sends a blank picture over the one the record has.
+        let bind = self.base.bound();
+        let bytes = match now.0.as_ref().map(FieldContent::read) {
+            Some(Some(FieldContent::New(bytes))) => Some(bytes),
+            Some(Some(FieldContent::Stored)) => bind.and_then(|b| self.base.host.fetch(b, None)),
+            Some(Some(FieldContent::InStore(path))) => bind.and_then(|b| self.base.host.fetch(b, Some(&path))),
             _ => None,
         };
-        let image = bytes.and_then(|b| Image::from_encoded(skia_safe::Data::new_copy(&b)));
-        *self.modes.painted.borrow_mut() = Some((value, image.clone()));
+        // Fail safe: a picture that does not load leaves the canvas blank to paint on.
+        let image = bytes.and_then(|b| {
+            let image = Image::from_encoded(skia_safe::Data::new_copy(&b));
+            if image.is_none() {
+                eprintln!("{}: its picture did not load", self.base.name().unwrap_or("canvas"));
+            }
+            image
+        });
+        *self.modes.painted.borrow_mut() = Some((now, image.clone()));
         image
+    }
+
+    /// The bound field's value and the record it is in.
+    fn painted_for(&self) -> PaintedFor {
+        let Some(bind) = self.base.bound() else { return (None, None) };
+        let value = self.base.host.read(bind);
+        let record = bind.rfind('.').filter(|d| *d > 0).and_then(|d| self.base.host.read(&bind[..d]));
+        (value, record)
     }
 
     /// The size of the picture painted on: the picture's own, else the canvas's units.
@@ -371,10 +412,9 @@ impl CanvasPart {
         let scaled: Vec<(f64, f64)> = points.iter().map(|(x, y)| (x * sx, y * sy)).collect();
         let bytes = painted_with(self.painted().as_ref(), width, height, &scaled, self.tool_in_hand(), color_of(cx.look(), &self.ink()), self.brush() * sx);
         // Shown as painted at once; the field's picture follows from the runtime.
-        let value = self.base.bound().and_then(|path| self.base.host.read(path));
-        *self.modes.painted.borrow_mut() = Some((value, Image::from_encoded(skia_safe::Data::new_copy(&bytes))));
+        *self.modes.painted.borrow_mut() = Some((self.painted_for(), Image::from_encoded(skia_safe::Data::new_copy(&bytes))));
         cx.invalidate();
-        let stroke = serde_json::to_value(Picture::New(bytes)).unwrap_or(Value::Null);
+        let stroke = FieldContent::New(bytes).value();
         self.act(json!({ "stroke": stroke }));
     }
 
@@ -389,7 +429,7 @@ impl CanvasPart {
             }
         }
         let (uw, uh) = self.units();
-        let (_, shapes) = clarity_runtime::canvas::drawing_shapes(&svg, [uw as i64, uh as i64]);
+        let (_, shapes) = super::drawing::drawing_shapes(&svg, [uw as i64, uh as i64]);
         *self.modes.vector.borrow_mut() = Some((svg, shapes.clone()));
         shapes
     }
@@ -426,13 +466,75 @@ impl CanvasPart {
 
     fn start_typing(&mut self, unit: (f64, f64), cx: &mut Cx) {
         self.end_typing(true, cx);
-        self.modes.typing = Some((unit, String::new()));
+        let mut editor = TextEditor::new(false);
+        editor.placeholder = Some(locale::translate("canvasText", "The text"));
+        // The canvas keeps the keyboard and hands the input its keys and text.
+        editor.focus_moved(true, cx);
+        self.modes.typing = Some((unit, editor));
+        self.place_typing(cx);
         cx.invalidate();
+    }
+
+    /// The box the text being typed takes on the screen, where it goes.
+    fn typing_box(&self, cx: &Cx) -> Option<Rect> {
+        let ((x, y), editor) = self.modes.typing.as_ref()?;
+        let point = self.at(self.viewport(), *x, *y);
+        let size = cx.look().size("text");
+        let width = (cx.fonts().measure(&editor.text(), "text", size, false) + 24.0).max(160.0);
+        let height = (size * 2.0).max(28.0);
+        Some(Rect::new(point.x as f64, point.y as f64 - height / 2.0, width, height))
+    }
+
+    /// Places the text input where its text goes, as wide as the text needs.
+    pub(super) fn place_typing(&mut self, cx: &Cx) {
+        if let Some(place) = self.typing_box(cx) {
+            if let Some((_, editor)) = self.modes.typing.as_mut() {
+                editor.place(place, cx);
+            }
+        }
+    }
+
+    /// A press in the text input moves its caret; true when it was in it.
+    pub(super) fn typing_pressed(&mut self, at: PointerInput, cx: &mut Cx) -> bool {
+        let Some((_, editor)) = self.modes.typing.as_mut() else { return false };
+        let place = editor.node().bounds;
+        if !place.contains(at.screen_x, at.screen_y) {
+            return false;
+        }
+        let b = self.base.node.bounds;
+        let inside = PointerInput { x: at.x - (place.x - b.x), y: at.y - (place.y - b.y), ..at };
+        editor.node_mut().pressed = true;
+        editor.pressed(inside, cx);
+        true
+    }
+
+    /// An input method composes in the text being typed.
+    pub(super) fn typing_compose(&mut self, composing: Option<crate::element::Composition>, cx: &mut Cx) {
+        if let Some((_, editor)) = self.modes.typing.as_mut() {
+            editor.compose(composing, cx);
+        }
+    }
+
+    /// A press that went to the text input selects as it moves and ends as it is let go; true when it was one.
+    fn typing_dragged(&mut self, at: PointerInput, released: bool, cx: &mut Cx) -> bool {
+        let b = self.base.node.bounds;
+        let Some((_, editor)) = self.modes.typing.as_mut().filter(|(_, e)| e.node().pressed) else { return false };
+        let place = editor.node().bounds;
+        let inside = PointerInput { x: at.x - (place.x - b.x), y: at.y - (place.y - b.y), ..at };
+        if released {
+            editor.released();
+            editor.node_mut().pressed = false;
+        } else {
+            editor.dragged(inside, cx);
+        }
+        true
     }
 
     /// Places the text typed (`place`) or drops it.
     pub fn end_typing(&mut self, place: bool, cx: &mut Cx) {
-        let Some((at, text)) = self.modes.typing.take() else { return };
+        let Some((at, mut editor)) = self.modes.typing.take() else { return };
+        editor.focus_moved(false, cx);
+        let text = editor.text();
         cx.invalidate();
         if place && !text.trim().is_empty() {
             let size = as_value((self.brush() * 4.0).max(10.0));
@@ -441,26 +543,24 @@ impl CanvasPart {
     }
 
     pub(super) fn mode_text(&mut self, text: &str, cx: &mut Cx) {
-        if let Some((_, typed)) = self.modes.typing.as_mut() {
-            typed.push_str(text);
+        if let Some((_, editor)) = self.modes.typing.as_mut() {
+            editor.typed(text, cx);
+            self.place_typing(cx);
             cx.invalidate();
         }
     }
 
     pub(super) fn mode_key(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
-        if let Some((_, typed)) = self.modes.typing.as_mut() {
-            return match key.key {
-                Key::Enter | Key::Escape => {
-                    self.end_typing(key.key == Key::Enter, cx);
-                    true
-                }
-                Key::Backspace => {
-                    typed.pop();
-                    cx.invalidate();
-                    true
-                }
-                _ => false,
-            };
+        if let Some((_, editor)) = self.modes.typing.as_mut() {
+            // Enter places the text, Escape drops it; every other key is the text input's.
+            if matches!(key.key, Key::Enter | Key::Escape) {
+                self.end_typing(key.key == Key::Enter, cx);
+                return true;
+            }
+            let took = editor.key(key, cx);
+            self.place_typing(cx);
+            cx.invalidate();
+            return took;
         }
         // Delete deletes the chosen shape of a vector canvas.
         if !self.acts() || self.mode() != "vector" || !matches!(key.key, Key::Delete | Key::Backspace) || key.modifiers != Modifiers::NONE {
@@ -478,11 +578,14 @@ impl CanvasPart {
         if !self.acts() {
             return false;
         }
+        if self.typing_pressed(at, cx) {
+            return true;
+        }
         let buttons = self.tool_buttons(cx.fonts(), cx.look());
         if let Some((tool, _)) = buttons.iter().find(|(_, place)| place.contains(at.screen_x, at.screen_y)) {
             if let Some(name) = self.base.name() {
                 let tool = tool.to_string();
-                self.base.host.change_state(name, &mut |s| s.tool = Some(tool.clone()));
+                crate::parts::change_state(&*self.base.host, name, |s| s.tool = Some(tool.clone()));
             }
             cx.invalidate();
             return true;
@@ -520,6 +623,9 @@ impl CanvasPart {
     }
 
     pub(super) fn mode_moved(&mut self, at: PointerInput, cx: &mut Cx) -> bool {
+        if self.typing_dragged(at, false, cx) {
+            return true;
+        }
         if let Some(d) = self.modes.dragging {
             if !d.moved && ((at.x - d.at.0).powi(2) + (at.y - d.at.1).powi(2)).sqrt() < STILL {
                 return true;
@@ -546,7 +652,9 @@ impl CanvasPart {
     }
 
     pub(super) fn mode_released(&mut self, at: PointerInput, cx: &mut Cx) -> bool {
-        let _ = at;
+        if self.typing_dragged(at, true, cx) {
+            return true;
+        }
         if let Some(d) = self.modes.dragging.take() {
             if d.moved {
                 if let Some(Shape::Object { record, .. }) = self.drawing().get(d.place) {
@@ -580,6 +688,13 @@ impl CanvasPart {
             return true;
         }
         false
+    }
+
+    /// The pointer was taken away: a drag, a stroke or a shape being drawn is dropped, not sent.
+    pub(super) fn mode_cancelled(&mut self) {
+        self.modes.dragging = None;
+        self.modes.stroke = None;
+        self.modes.sketching = None;
     }
 
     // -- drawing ----------------------------------------------------------------------
@@ -640,16 +755,9 @@ impl CanvasPart {
                         draw_shape(p, &preview, v.scale, &at, &pictures);
                     }
                 }
-                if let Some(((x, y), typed)) = &self.modes.typing {
-                    // The text being typed, where it goes, with its caret.
-                    let point = at(*x, *y);
-                    let size = p.look.size("text");
-                    let width = (p.fonts.measure(typed, "text", size, false) + 12.0).max(160.0);
-                    let field = Rect::new(point.x as f64, point.y as f64 - size, width, size * 2.0);
-                    p.fill(field, p.look.color("input"), p.look.radius("input"));
-                    p.stroke(field, p.look.color("accent"), p.look.border(), p.look.radius("input"));
-                    let (shown, color) = if typed.is_empty() { (locale::translate("canvasText", "The text"), "muted") } else { (format!("{typed}|"), "text") };
-                    p.text(&shown, field.inset(4.0), p.look.color(color), size, "text", false, TextAlign::Left);
+                if let Some((_, editor)) = &self.modes.typing {
+                    // The text being typed, in its input where it goes.
+                    crate::element::draw_safely(editor, p);
                 }
             }
             _ => {}

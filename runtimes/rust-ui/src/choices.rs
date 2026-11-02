@@ -145,6 +145,32 @@ fn keep(c: &mut Chosen, key: &str, value: &str) {
     }
 }
 
+/// A value kept under `key` (`columns.Main.grid`), from this run or an earlier one; none when none was kept.
+pub fn kept(key: &str) -> Option<String> {
+    with(|c| c.kept.get(key).cloned())
+}
+
+/// Keeps `value` under `key` for the next start, beside the other choices
+/// (read, changed and written back); with no folder, for this run only.
+pub fn keep_value(key: &str, value: &str) {
+    with(|c| keep(c, key, value));
+}
+
+/// Forgets the value kept under `key`, for this run and the next start.
+pub fn forget(key: &str) {
+    with(|c| {
+        c.kept.remove(key);
+        let Some(folder) = c.folder.clone() else { return };
+        let file = folder.join("choices.json");
+        let mut all = read_kept(&file);
+        if all.remove(key).is_some() {
+            if let Ok(text) = serde_json::to_string_pretty(&all) {
+                let _ = std::fs::write(&file, text);
+            }
+        }
+    });
+}
+
 /// How often the language or theme changed: what shows them reads them again when it moved.
 pub fn changes() -> u64 {
     with(|c| c.changes)

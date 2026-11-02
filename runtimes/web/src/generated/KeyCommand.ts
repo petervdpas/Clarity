@@ -2,6 +2,7 @@
 
 /**
  * A command a key can run: its id as the person's keys keep it, its part
- * name, its caption as written, and the keys the design gives it.
+ * name, its caption as written, the keys the design gives it, and where it
+ * lives when that is the toolbar or a ribbon.
  */
-export type KeyCommand = { id: string, name: string, caption: string | null, keys: Array<string>, };
+export type KeyCommand = { id: string, name: string, caption: string | null, keys: Array<string>, place?: "toolbar" | { tab: string, group: string }, };

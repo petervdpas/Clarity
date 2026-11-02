@@ -25,23 +25,41 @@ pub use over::DialogOverlay;
 /// What a dialog's button does when it is pressed.
 pub type Pressed = Rc<dyn Fn(&mut Cx)>;
 
+/// Whether a dialog's button can be pressed now (Stop once pressed cannot).
+pub type Usable = Rc<dyn Fn() -> bool>;
+
 /// A dialog's button: OK in the accent's color, the others in the button's;
-/// it takes the focus by Tab, and Enter or Space presses it.
+/// it takes the focus by Tab, and Enter or Space presses it. One that cannot
+/// be pressed now is greyed and takes nothing.
 pub struct DialogButton {
     node: Node,
     pub text: String,
     accent: bool,
     pressed: Pressed,
+    usable: Option<Usable>,
 }
 
 impl DialogButton {
     pub fn new(text: String, accent: bool, pressed: Pressed) -> DialogButton {
-        DialogButton { node: Node::new(), text, accent, pressed }
+        DialogButton { node: Node::new(), text, accent, pressed, usable: None }
     }
 
-    /// Presses it, as a click does.
+    /// The same button, pressed only while `usable` says it can be.
+    pub fn usable_while(mut self, usable: Usable) -> DialogButton {
+        self.usable = Some(usable);
+        self
+    }
+
+    /// Whether it can be pressed now.
+    pub fn usable(&self) -> bool {
+        self.usable.as_ref().is_none_or(|u| u())
+    }
+
+    /// Presses it, as a click does, while it can be.
     pub fn press(&mut self, cx: &mut Cx) {
-        (self.pressed)(cx);
+        if self.usable() {
+            (self.pressed)(cx);
+        }
     }
 }
 
@@ -50,6 +68,10 @@ impl Element for DialogButton {
 
     fn focusable(&self) -> bool {
         true
+    }
+
+    fn is_enabled(&self) -> bool {
+        self.usable()
     }
 
     fn on_click(&mut self, cx: &mut Cx) {
@@ -65,6 +87,7 @@ impl Element for DialogButton {
     }
 
     fn draw(&self, p: &Painter) {
+        let _dimmed = p.dimmed(self.usable());
         let look = p.look;
         let state = if self.node.pressed { Some("pressed") } else if self.node.hovered { Some("hover") } else { None };
         let values = look.part("button", state);

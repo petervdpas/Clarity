@@ -21,6 +21,31 @@ pub struct Painter<'a> {
     pub canvas: &'a Canvas,
     pub look: &'a ThemeLook,
     pub fonts: &'a Fonts,
+    /// A part's style says bold (its `weight`): every text it draws is bold.
+    pub style_bold: bool,
+    /// A part's style says where its text sits (its `align`): every text it draws at the left goes there instead.
+    pub style_align: Option<TextAlign>,
+}
+
+/// The look a part's style gives what it draws: a look of its own (the
+/// style's text color, size and font over the window's), and the style's
+/// weight and align.
+pub struct StyledLook {
+    /// The style's look and its fonts; none to keep the window's.
+    pub look: Option<(std::sync::Arc<ThemeLook>, std::rc::Rc<Fonts>)>,
+    pub bold: bool,
+    pub align: Option<TextAlign>,
+}
+
+impl StyledLook {
+    /// The painter of this look on the canvas of `under`.
+    pub fn painter<'b>(&'b self, under: &Painter<'b>) -> Painter<'b> {
+        let (look, fonts) = match &self.look {
+            Some((look, fonts)) => (look.as_ref(), fonts.as_ref()),
+            None => (under.look, under.fonts),
+        };
+        Painter { canvas: under.canvas, look, fonts, style_bold: self.bold || under.style_bold, style_align: self.align.or(under.style_align) }
+    }
 }
 
 /// The corners of a push that are round: all of them, or only the outer ones of a joined group.
@@ -48,7 +73,7 @@ impl Drop for Restore<'_> {
 
 impl<'a> Painter<'a> {
     pub fn new(canvas: &'a Canvas, look: &'a ThemeLook, fonts: &'a Fonts) -> Painter<'a> {
-        Painter { canvas, look, fonts }
+        Painter { canvas, look, fonts, style_bold: false, style_align: None }
     }
 
     fn paint(color: Color, style: PaintStyle, antialias: bool) -> Paint {
@@ -97,9 +122,14 @@ impl<'a> Painter<'a> {
         if text.is_empty() {
             return;
         }
+        let bold = bold || self.style_bold;
+        let align = match (align, self.style_align) {
+            (TextAlign::Left, Some(styled)) => styled,
+            _ => align,
+        };
         let font = self.fonts.font(role, size, bold);
         let paint = Self::paint(color, PaintStyle::Fill, true);
-        let width = font.measure_str(text, None).0 as f64;
+        let width = self.fonts.measure(text, role, size, bold);
         let (_, metrics) = font.metrics();
         let x = match align {
             TextAlign::Center => area.x + (area.width - width) / 2.0,
@@ -110,7 +140,8 @@ impl<'a> Painter<'a> {
         let descent = metrics.descent as f64;
         let baseline = area.y + (area.height - (descent - ascent)) / 2.0 - ascent;
         let _clip = self.clip(area);
-        self.canvas.draw_str(text, (x as f32, baseline as f32), &font, &paint);
+        // Characters the role's font lacks are drawn in a fallback font, run by run.
+        self.fonts.draw(self.canvas, text, x, baseline, role, size, bold, &paint);
     }
 
     /// A line of text in the theme's text font, left, not bold: the plain case of `text`.

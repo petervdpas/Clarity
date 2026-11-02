@@ -8,7 +8,6 @@ use crate::geometry::Rect;
 use crate::markup::PartSpec;
 use crate::painter::{Corners, Painter};
 use crate::part_element;
-use crate::parts::button::ButtonPart;
 use crate::parts::{Part, PartBase, PartHost};
 
 use super::container;
@@ -25,8 +24,9 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
     let count = order.len();
     for (at, (_, index)) in order.into_iter().enumerate() {
         let corners = Corners { left: at == 0, right: at + 1 == count };
-        if let Some(push) = grid.node_mut().children_mut()[index].as_any_mut().downcast_mut::<ButtonPart>() {
-            push.corners = corners;
+        // A button or a toggle rounds only the corners it is given; any other part lets them go.
+        if let Some(push) = grid.node_mut().children_mut()[index].as_part_mut() {
+            push.set_corners(corners);
         }
     }
     let mut base = PartBase::new(spec, host);
@@ -46,7 +46,7 @@ impl Element for ButtonsPart {
 
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
         self.base.node.bounds = area;
-        self.base.node.children_mut()[0].arrange(area, cx);
+        element::arrange_safely(self.base.node.children_mut()[0].as_mut(), area, cx);
     }
 
     fn draw(&self, p: &Painter) {

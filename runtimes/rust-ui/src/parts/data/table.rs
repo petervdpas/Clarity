@@ -11,10 +11,15 @@
 //! drawn, and they scroll under the header. A cell is typed into with
 //! Clarity.UI's text editor, which the table holds over the cell; Tab types
 //! on in the next cell. A choice cell opens its choices over the window.
+//! How the keys reach every kind of cell, a date's calendar, a color's
+//! palette and what the table says where the pointer rests: `reach`.
 
-use std::cell::Cell;
+mod reach;
+
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use clarity_runtime::reorder::{DropAt, Move};
 use clarity_runtime::tables::{self, Paged, TableOrder};
@@ -85,7 +90,8 @@ impl PageButton {
 enum Press {
     Row(usize),
     Header(String),
-    Edge(String, f64, f64),
+    /// A header edge: its column, where the press went down, the column's width then, and the widths as kept then.
+    Edge(String, f64, f64, String),
     Pager(PageButton),
     Bar,
     Editor,
@@ -98,12 +104,22 @@ struct Editing {
     editor: TextEditor,
 }
 
-/// The choices of a choice cell while they show: the overlay's id, the cell, and what was picked.
+/// The choices of a choice cell while they show: the overlay's id, the cell,
+/// what was picked, and the choice the keys mark.
 struct OpenChoices {
     overlay: ElementId,
     place: usize,
     field: String,
     picked: Rc<Cell<Option<usize>>>,
+    marks: Rc<RefCell<ChoiceMarks>>,
+}
+
+/// The palette of a color cell while it shows: the overlay's id, the cell, and the color picked.
+struct OpenPalette {
+    overlay: ElementId,
+    place: usize,
+    field: String,
+    picked: Rc<RefCell<Option<String>>>,
 }
 
 /// How far from a header's right edge a press takes the edge.
@@ -127,6 +143,11 @@ pub struct TablePart {
     editing: Option<Editing>,
     press: Option<Press>,
     choices: Option<OpenChoices>,
+    palette: Option<OpenPalette>,
+    /// The check or choice the keys work on, reached with Tab or a press; none for none.
+    focused_cell: Option<(usize, String)>,
+    /// Whether the widths the person left before were read.
+    widths_read: bool,
     /// The calendar of a date or moment cell while it is open: its overlay, the cell, and the calendar.
     calendar: Option<(ElementId, usize, String, Calendar)>,
     look: Measures,
@@ -151,6 +172,9 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         editing: None,
         press: None,
         choices: None,
+        palette: None,
+        focused_cell: None,
+        widths_read: false,
         calendar: None,
         look: Measures::default(),
         widths: HashMap::new(),
@@ -320,6 +344,8 @@ impl TablePart {
             return;
         }
         let field = self.columns[column].field.clone();
+        self.reveal_cell(place, &field);
+        let cell = self.cell_box(place, &field).unwrap_or(cell);
         let day = rows::value_of(&self.rows.records[place], &field).as_str().and_then(Day::parse);
         let me = self.base.node.id();
         let (id, calendar) = DayCalendar::open(cx, cell, day, &self.formats, None, Some(me), Some(me));
@@ -410,6 +436,7 @@ impl TablePart {
 
     /// Reads the records again when the window's values changed; what was typed into other records is gone.
     fn sync(&mut self) {
+        self.read_remembered_widths();
         if self.rows.read(&self.base) {
             self.read_columns();
         }
@@ -617,6 +644,12 @@ impl TablePart {
         Rect { height: if self.has_header() { self.row_height() } else { 0.0 }, ..self.inner() }
     }
 
+    /// The header's columns as they lie: scrolled sideways with the rows.
+    fn header_row(&self) -> Rect {
+        let header = self.header();
+        Rect { x: header.x - self.rows.scroller.scrolled_x(), width: header.width.max(self.rows.scroller.content_width), ..header }
+    }
+
     fn pager(&self) -> Rect {
         let inner = self.inner();
         let height = if self.page_size().is_some() { self.row_height() } else { 0.0 };
@@ -629,10 +662,13 @@ impl TablePart {
         Rect::new(header.x, header.bottom(), header.width, (pager.y - header.bottom()).max(0.0))
     }
 
+    /// Places the rows' scroll place: as high as the rows shown, as wide as the columns when they are wider.
     fn place_rows(&mut self) {
         let content = self.shown_places().len() as f64 * self.row_height();
         let body = self.body();
-        self.rows.scroller.place(body, content);
+        let total: f64 = self.lefts(0.0).iter().map(|l| l.1).sum();
+        let width = if total > body.width + 0.5 { total } else { body.width };
+        self.rows.scroller.place_wide(body, content, width);
     }
 
     fn width_of(&self, column: &TableColumn) -> f64 {
@@ -645,8 +681,12 @@ impl TablePart {
         56f64.max(label.ceil() + 4.0 * self.look.padding + 16.0)
     }
 
-    /// Each column's left edge and width: a designed width as it is, a check its own, the others sharing what is left.
-    fn lefts(&self, row: Rect) -> Vec<(f64, f64)> {
+    /// Each column's left edge and width from `left`: a designed width as it
+    /// is, a check its own, the others sharing what is left of the place the
+    /// rows show in (at least a little each, so together they may be wider
+    /// and scroll sideways).
+    fn lefts(&self, left: f64) -> Vec<(f64, f64)> {
+        let room = self.body().width;
         const LEAST: f64 = 48.0;
         let fixed: f64 = self
             .columns
@@ -662,8 +702,8 @@ impl TablePart {
             })
             .sum();
         let sharing = self.columns.iter().filter(|c| self.width_of(c) <= 0.0 && c.kind != CellKind::Bool).count();
-        let share = if sharing == 0 { 0.0 } else { LEAST.max((row.width - fixed) / sharing as f64) };
-        let mut x = row.x;
+        let share = if sharing == 0 { 0.0 } else { LEAST.max((room - fixed) / sharing as f64) };
+        let mut x = left;
         let mut lefts = Vec::with_capacity(self.columns.len());
         for column in &self.columns {
             let width = if self.width_of(column) > 0.0 {
@@ -694,14 +734,20 @@ impl TablePart {
     pub fn cell_box(&self, place: usize, field: &str) -> Option<Rect> {
         let c = self.column_index(field)?;
         let row = self.row_box(place)?;
-        let (x, width) = self.lefts(row)[c];
+        let (x, width) = self.lefts(row.x)[c];
         Some(Rect::new(x, row.y, width, row.height))
     }
 
     /// The swatch of the color in a cell of a color column, while it is in sight; none for a cell without a color.
     pub fn swatch_box(&self, place: usize, field: &str) -> Option<Rect> {
-        let column = self.columns.iter().find(|c| c.field == field && c.kind == CellKind::Color)?;
         color_of(&rows::value_of(self.rows.records.get(place)?, field))?;
+        self.swatch_place(place, field)
+    }
+
+    /// Where the swatch of a cell of a color column lies, with a color or without, while it is in sight.
+    fn swatch_place(&self, place: usize, field: &str) -> Option<Rect> {
+        let column = self.columns.iter().find(|c| c.field == field && c.kind == CellKind::Color)?;
+        self.rows.records.get(place)?;
         let cell = self.cell_box(place, field)?;
         let pad = self.look.padding;
         let left = if column.edit { cell.x + 3.0 + pad * 1.5 } else { cell.x + pad * 2.0 };
@@ -715,7 +761,7 @@ impl TablePart {
         }
         let header = self.header();
         let c = self.column_index(field)?;
-        let (x, width) = self.lefts(header)[c];
+        let (x, width) = self.lefts(self.header_row().x)[c];
         Some(Rect::new(x, header.y, width, header.height))
     }
 
@@ -761,7 +807,7 @@ impl TablePart {
 
     fn cell_at(&self, x: f64, y: f64) -> Option<(usize, usize, Rect)> {
         let (place, row) = self.row_at(y)?;
-        let lefts = self.lefts(row);
+        let lefts = self.lefts(row.x);
         lefts.iter().enumerate().find(|(_, (lx, w))| x >= *lx && x < lx + w).map(|(c, (lx, w))| (place, c, Rect::new(*lx, row.y, *w, row.height)))
     }
 
@@ -799,6 +845,11 @@ impl TablePart {
             },
             // An edited moment shows its day beside its time; the time is what is typed.
             CellKind::Moment => moment_of(value).map(|m| m.format("%H:%M").to_string()).unwrap_or_default(),
+            // An edited day is typed as the person writes a day.
+            CellKind::Date => match day_of(value) {
+                Some(d) => self.formats.show(&FieldFormat::new(FormatKind::Date), &Value::from(d.format("%Y-%m-%d").to_string())),
+                None => rows::shown_text(value),
+            },
             _ => rows::shown_text(value),
         }
     }
@@ -867,22 +918,24 @@ impl TablePart {
         editor.takes_focus = false;
         editor.select_all();
         editor.focus_moved(true, cx);
+        self.focused_cell = None;
+        self.reveal_cell(place, &column.field);
         self.editing = Some(Editing { place, field: column.field, editor });
         self.place_editor(cx);
         cx.focus(Some(self.base.node.id()));
         cx.invalidate();
     }
 
-    /// Tab in a cell's editor: takes its text and types on in the next typed
-    /// cell of the shown rows (the one before with Shift). False past the last.
-    fn type_on(&mut self, back: bool, cx: &mut Cx) -> bool {
-        let Some((place, field)) = self.editing.as_ref().map(|e| (e.place, e.field.clone())) else { return false };
-        let typed: Vec<usize> = (0..self.columns.len())
-            .filter(|c| self.columns[*c].edit && matches!(self.columns[*c].kind, CellKind::Text | CellKind::Number | CellKind::Color | CellKind::Moment))
-            .collect();
-        let cells: Vec<(usize, usize)> = self.shown_places().into_iter().flat_map(|p| typed.iter().map(move |c| (p, *c))).collect();
+    /// Tab in a cell: takes what was typed and goes on to the next edited
+    /// cell of the shown rows (the one before with Shift), of every kind: a
+    /// typed one is typed into, a check or a choice is the cell the keys work
+    /// on. False past the last, so the focus leaves the table as Tab moves it.
+    fn type_on(&mut self, place: usize, field: &str, back: bool, cx: &mut Cx) -> bool {
+        let edited: Vec<usize> = (0..self.columns.len()).filter(|c| self.columns[*c].edit).collect();
+        let cells: Vec<(usize, usize)> = self.shown_places().into_iter().flat_map(|p| edited.iter().map(move |c| (p, *c))).collect();
         let at = cells.iter().position(|(p, c)| *p == place && self.columns[*c].field == field);
         self.take(cx);
+        self.focused_cell = None;
         let next = match at {
             None => return false,
             Some(at) if back => match at.checked_sub(1) {
@@ -895,7 +948,12 @@ impl TablePart {
             return false;
         }
         let (to, column) = cells[next];
-        self.begin_typing(to, column, cx);
+        if matches!(self.columns[column].kind, CellKind::Bool | CellKind::Choice) {
+            let field = self.columns[column].field.clone();
+            self.focus_cell(to, &field, cx);
+        } else {
+            self.begin_typing(to, column, cx);
+        }
         true
     }
 
@@ -905,7 +963,7 @@ impl TablePart {
         let mut area = Rect::default();
         if let (Some(cell), Some(column)) = (self.cell_box(place, &field), self.columns.iter().find(|c| c.field == field)) {
             let cell = Rect { height: cell.height - self.look.border, ..cell };
-            area = if column.kind == CellKind::Moment { time_box(cell) } else { cell }.inset(3.0);
+            area = editor_box(column, cell);
         }
         let marked = self.marked(place, &field);
         if let Some(e) = self.editing.as_mut() {
@@ -950,6 +1008,20 @@ impl TablePart {
                     }
                 }
             }
+            CellKind::Date => {
+                // A day as the person writes it; cleared, it is none.
+                if typed.trim().is_empty() {
+                    Value::Null
+                } else {
+                    match self.formats.read_date(&typed).and_then(|(y, m, d)| NaiveDate::from_ymd_opt(y, m, d)) {
+                        Some(day) => Value::from(day.format("%Y-%m-%d").to_string()),
+                        None => {
+                            self.marked.insert(key, typed);
+                            return;
+                        }
+                    }
+                }
+            }
             CellKind::Moment => {
                 let Some((h, m)) = time_typed(&typed) else {
                     if !typed.trim().is_empty() {
@@ -981,10 +1053,14 @@ impl TablePart {
             return;
         }
         let column = self.columns[column].clone();
+        self.reveal_cell(place, &column.field);
+        let cell = self.cell_box(place, &column.field).unwrap_or(cell);
         let height = self.row_height() - 4.0;
         let value = rows::value_of(&self.rows.records[place], &column.field);
         let picked = Rc::new(Cell::new(None));
-        let list = CellChoices::new(column.choices.clone(), value, height, picked.clone());
+        let me = self.base.node.id();
+        let list = CellChoices::new(column.choices.clone(), value, height, picked.clone(), Some(me));
+        let marks = list.marks.clone();
         let mut below = Rect::new(cell.x, cell.bottom(), cell.width.max(120.0), CellChoices::height_for(column.choices.len(), height));
         if below.bottom() > cx.whole().height && cell.y - below.height >= 0.0 {
             below.y = cell.y - below.height;
@@ -992,7 +1068,8 @@ impl TablePart {
         let mut overlay = Overlay::new(Box::new(list), below);
         overlay.opener = Some(self.base.node.id());
         let id = cx.open(overlay);
-        self.choices = Some(OpenChoices { overlay: id, place, field: column.field, picked });
+        self.choices = Some(OpenChoices { overlay: id, place, field: column.field, picked, marks });
+        cx.focus(Some(me));
     }
 
     /// Where an edited cell's input takes a press: a switch or a check with a little room around it, else the input inside the cell's margin.
@@ -1028,7 +1105,7 @@ impl TablePart {
         let shown = look.part("header", None);
         p.fill(header, shown.background.unwrap_or_else(|| look.color("raised")), 0.0);
         p.fill(Rect { y: header.bottom() - look.border(), height: look.border(), ..header }, look.color("border"), 0.0);
-        let lefts = self.lefts(header);
+        let lefts = self.lefts(self.header_row().x);
         let pad = look.padding() * 2.0;
         let size = shown.size.map(|s| s as f64).unwrap_or_else(|| look.size("text"));
         let font = shown.font.clone().unwrap_or_else(|| "text".to_string());
@@ -1078,11 +1155,17 @@ impl TablePart {
     fn draw_row(&self, p: &Painter, place: usize, row: Rect, state: Option<&str>) {
         let look = p.look;
         let text = rows::draw_row_back(p, row, state).text.unwrap_or_else(|| look.color("text"));
-        let lefts = self.lefts(row);
+        let lefts = self.lefts(row.x);
         for (c, column) in self.columns.iter().enumerate() {
             let cell = Rect::new(lefts[c].0, row.y, lefts[c].1, row.height - look.border());
-            let _clip = p.clip(cell);
-            self.draw_cell(p, place, column, cell, text, c == 0);
+            {
+                let _clip = p.clip(cell);
+                self.draw_cell(p, place, column, cell, text, c == 0);
+            }
+            // The check or choice the keys work on shows the focus ring.
+            if self.base.node.focused && self.focused_cell.as_ref().is_some_and(|(fp, ff)| *fp == place && *ff == column.field) {
+                p.focus_ring(Self::input_of(column, cell), look.radius("input"));
+            }
         }
     }
 
@@ -1122,11 +1205,11 @@ impl TablePart {
                 self.draw_input(p, time, &self.shown(place, &column.field), place, &column.field, true, TextAlign::Center, 0.0);
             }
             CellKind::Date => {
-                let day = match day_of(&value) {
-                    Some(d) => self.formats.show(&FieldFormat::new(FormatKind::Date), &Value::from(d.format("%Y-%m-%d").to_string())),
-                    None => String::new(),
-                };
-                self.draw_input(p, cell, &day, place, &column.field, false, TextAlign::Left, 0.0);
+                // A typed day beside the button that opens its calendar.
+                self.draw_input(p, cell, "", place, &column.field, false, TextAlign::Left, 0.0);
+                self.draw_input(p, cell, &self.shown(place, &column.field), place, &column.field, true, TextAlign::Left, 0.0);
+                let button = calendar_button(cell);
+                chevron(p, button.x + button.width / 2.0, button.y + button.height / 2.0, "down", look.color("muted"));
             }
             CellKind::Choice => {
                 self.draw_input(p, cell, &self.shown(place, &column.field), place, &column.field, false, TextAlign::Left, 0.0);
@@ -1152,10 +1235,16 @@ impl TablePart {
         if column.kind != CellKind::Color {
             return 0.0;
         }
-        let Some(swatch) = self.swatch_box(place, &column.field) else { return 0.0 };
-        let Some(color) = color_of(&rows::value_of(&self.rows.records[place], &column.field)) else { return 0.0 };
         let look = p.look;
         let radius = look.radius("input").min(2.0);
+        let color = color_of(&rows::value_of(&self.rows.records[place], &column.field));
+        let (Some(swatch), Some(color)) = (self.swatch_box(place, &column.field), color) else {
+            // An edited cell without a color shows an empty swatch, crossed, which opens the palette all the same.
+            let Some(empty) = self.swatch_place(place, &column.field).filter(|_| column.edit) else { return 0.0 };
+            p.stroke(empty, look.color("strong_border"), look.border(), radius);
+            line(p, empty.x + 2.0, empty.bottom() - 2.0, empty.right() - 2.0, empty.y + 2.0, look.color("muted"));
+            return SWATCH + look.padding() * 1.5;
+        };
         p.fill(swatch, color, radius);
         p.stroke(swatch, look.color("strong_border"), look.border(), radius);
         SWATCH + look.padding() * 1.5
@@ -1210,6 +1299,26 @@ impl TablePart {
         if let Some(text) = self.pager_text_box() {
             p.text(&paged.text(), text, look.color("text"), look.size("text"), "text", false, TextAlign::Center);
         }
+    }
+}
+
+/// How wide the button of a date cell is that opens its calendar.
+const CALENDAR_BUTTON: f64 = 24.0;
+
+/// The button at the right of a date cell's input, which opens its calendar.
+fn calendar_button(cell: Rect) -> Rect {
+    Rect::new(cell.right() - 3.0 - CALENDAR_BUTTON, cell.y + 3.0, CALENDAR_BUTTON, (cell.height - 6.0).max(0.0))
+}
+
+/// Where a cell's editor lies in its cell: a moment's time at its right, a date beside its calendar button, else the input.
+fn editor_box(column: &TableColumn, cell: Rect) -> Rect {
+    match column.kind {
+        CellKind::Moment => time_box(cell).inset(3.0),
+        CellKind::Date => {
+            let input = cell.inset(3.0);
+            Rect { width: (cell.width - 6.0 - CALENDAR_BUTTON).max(0.0), ..input }
+        }
+        _ => cell.inset(3.0),
     }
 }
 
@@ -1287,9 +1396,19 @@ impl Element for TablePart {
         self.base.enabled()
     }
 
-    /// While a cell is typed into, Tab types on in the next one.
+    /// While a cell has the keys, Tab goes on to the next cell, and from the last out of the table.
     fn wants_tab(&self) -> bool {
-        self.editing.is_some()
+        self.editing.is_some() || self.focused_cell.is_some() || self.choices.is_some()
+    }
+
+    /// The page bar's buttons and a tree row's toggle say what a press does, in Clarity's words.
+    fn tooltip_at(&self, x: f64, y: f64) -> Option<String> {
+        self.tip_at(x, y)
+    }
+
+    /// A header edge resizes; a page button that works and a toggle are pressed.
+    fn cursor_at(&self, x: f64, y: f64) -> Option<crate::input::Cursor> {
+        self.pointer_shape(x, y)
     }
 
     fn typing(&self) -> bool {
@@ -1352,6 +1471,7 @@ impl Element for TablePart {
     fn on_pointer_pressed(&mut self, at: PointerInput, cx: &mut Cx) {
         self.sync();
         self.press = None;
+        self.focused_cell = None;
         if !self.base.enabled() {
             return;
         }
@@ -1362,18 +1482,19 @@ impl Element for TablePart {
         }
         if self.has_header() && self.header().contains(x, y) {
             self.take(cx);
+            // The line between two headers is grabbed from either side of it, as a grid's grip straddles it.
+            if let Some((field, b)) = self.edge_column_at(x, y) {
+                if at.clicks == 2 {
+                    self.designed_widths();
+                    self.place_editor(cx);
+                    cx.invalidate();
+                    return;
+                }
+                self.press = Some(Press::Edge(field, x, b.width, self.widths_written()));
+                return;
+            }
             for column in self.columns.clone() {
-                let Some(b) = self.header_box(&column.field).filter(|b| b.contains(x, y)) else { continue };
-                if self.resizable() && x >= b.right() - EDGE {
-                    if at.clicks == 2 {
-                        // The designed widths again.
-                        self.person_widths.clear();
-                        self.place_editor(cx);
-                        cx.invalidate();
-                        return;
-                    }
-                    self.press = Some(Press::Edge(column.field.clone(), x, b.width));
-                } else {
+                if self.header_box(&column.field).is_some_and(|b| b.contains(x, y)) {
                     self.press = Some(Press::Header(column.field.clone()));
                 }
             }
@@ -1411,16 +1532,27 @@ impl Element for TablePart {
         if column.edit && !self.locked() && Self::input_of(&column, cell).contains(x, y) {
             match column.kind {
                 CellKind::Bool => {
+                    // The check is the cell the keys work on now: Space ticks it again.
+                    self.focused_cell = Some((place, column.field.clone()));
                     let on = rows::value_of(&self.rows.records[place], &column.field) == Value::Bool(true);
                     self.edit(place, &column.field, Value::Bool(!on));
                     cx.invalidate();
                     return;
                 }
                 CellKind::Choice => {
+                    self.focused_cell = Some((place, column.field.clone()));
                     self.open_choices_of(place, c, cell, cx);
                     return;
                 }
-                CellKind::Text | CellKind::Number | CellKind::Color => {
+                CellKind::Color if self.palette_button(cell).contains(x, y) => {
+                    self.open_palette(place, &column.field, cx);
+                    return;
+                }
+                CellKind::Date if calendar_button(cell).contains(x, y) => {
+                    self.open_calendar_of(place, c, cell, cx);
+                    return;
+                }
+                CellKind::Text | CellKind::Number | CellKind::Color | CellKind::Date => {
                     if self.editing.is_none() {
                         self.begin_typing(place, c, cx);
                     }
@@ -1432,7 +1564,7 @@ impl Element for TablePart {
                     }
                     return;
                 }
-                CellKind::Moment | CellKind::Date => {
+                CellKind::Moment => {
                     self.open_calendar_of(place, c, cell, cx);
                     return;
                 }
@@ -1450,7 +1582,7 @@ impl Element for TablePart {
     fn on_pointer_moved(&mut self, at: PointerInput, cx: &mut Cx) {
         self.rows.pointer = Some((at.screen_x, at.screen_y));
         match self.press.clone() {
-            Some(Press::Edge(field, x, width)) if self.base.node.pressed => {
+            Some(Press::Edge(field, x, width, _)) if self.base.node.pressed => {
                 self.person_widths.insert(field.clone(), (width + at.screen_x - x).clamp(32.0, 2000.0));
                 // The other columns keep the widths they show.
                 for other in self.columns.clone() {
@@ -1468,7 +1600,7 @@ impl Element for TablePart {
                 self.rows.drag_to(at, over, tree);
             }
             Some(Press::Bar) => {
-                self.rows.scroller.drag(at.screen_y);
+                self.rows.scroller.drag(at.screen_x, at.screen_y);
                 self.place_editor(cx);
             }
             Some(Press::Editor) => {
@@ -1495,6 +1627,7 @@ impl Element for TablePart {
                     self.choose(place, cx);
                 }
             }
+            Some(Press::Edge(_, _, _, before)) => self.keep_widths(&before),
             Some(Press::Header(field)) => {
                 if self.header_box(&field).is_some_and(|b| b.contains(at.screen_x, at.screen_y)) {
                     self.sort_by(&field);
@@ -1524,9 +1657,17 @@ impl Element for TablePart {
         }
     }
 
-    /// The wheel anywhere over the part (its header too) scrolls the rows.
-    fn on_wheel(&mut self, _dx: f64, dy: f64, _held: Modifiers, cx: &mut Cx) -> bool {
-        let moved = self.rows.scroller.wheel(dy);
+    /// The pointer was taken away mid press: a row drag or a header edge drag ends where it is, and the later release does nothing.
+    fn on_pointer_cancelled(&mut self, cx: &mut Cx) {
+        self.press = None;
+        self.rows.cancel();
+        cx.invalidate();
+    }
+
+    /// The wheel anywhere over the part (its header too) scrolls the rows,
+    /// sideways too when it turns that way or Shift is held.
+    fn on_wheel(&mut self, dx: f64, dy: f64, held: Modifiers, cx: &mut Cx) -> bool {
+        let moved = self.rows.scroller.wheel_both(dx, dy, held);
         if moved {
             self.place_editor(cx);
             cx.invalidate();
@@ -1537,18 +1678,33 @@ impl Element for TablePart {
     fn on_focus_changed(&mut self, focused: bool, cx: &mut Cx) {
         if !focused {
             self.take(cx);
+            self.focused_cell = None;
         }
         cx.invalidate();
     }
 
     fn on_key(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
         self.sync();
-        if self.editing.is_some() {
+        if let Some((place, field)) = self.editing.as_ref().map(|e| (e.place, e.field.clone())) {
             let plain = key.modifiers == Modifiers::NONE;
+            let kind = self.columns.iter().find(|c| c.field == field).map(|c| c.kind);
             match key.key {
                 Key::Tab if plain || key.modifiers == Modifiers::SHIFT => {
                     // Past the last cell, the focus leaves the table as Tab moves it.
-                    return self.type_on(key.shift(), cx);
+                    return self.type_on(place, &field, key.shift(), cx);
+                }
+                // Alt+Down opens a date's calendar, a color's palette.
+                Key::Down if key.modifiers == Modifiers::ALT && matches!(kind, Some(CellKind::Date | CellKind::Color)) => {
+                    self.take(cx);
+                    if kind == Some(CellKind::Date) {
+                        if let (Some(c), Some(cell)) = (self.column_index(&field), self.cell_box(place, &field)) {
+                            self.open_calendar_of(place, c, cell, cx);
+                        }
+                    } else {
+                        self.open_palette(place, &field, cx);
+                    }
+                    cx.invalidate();
+                    return true;
                 }
                 Key::Escape => {
                     self.stop(cx);
@@ -1564,6 +1720,10 @@ impl Element for TablePart {
                     return took;
                 }
             }
+        }
+        if self.cell_keyed(key, cx) {
+            cx.invalidate();
+            return true;
         }
         let (was_move, mv) = self.rows.key_move(&self.base, key);
         if was_move {
@@ -1602,6 +1762,12 @@ impl Element for TablePart {
     }
 
     fn on_text(&mut self, text: &str, cx: &mut Cx) {
+        // Letters typed while a choice cell's list is open go to the choice that starts with them.
+        if let Some(open) = &self.choices {
+            open.marks.borrow_mut().seek(text, cx.now());
+            cx.invalidate();
+            return;
+        }
         if let Some(e) = self.editing.as_mut() {
             e.editor.typed(text, cx);
             cx.invalidate();
@@ -1611,7 +1777,17 @@ impl Element for TablePart {
     fn on_overlay_closed(&mut self, overlay: ElementId, cx: &mut Cx) {
         if let Some((_, place, field, calendar)) = self.calendar.take_if(|c| c.0 == overlay) {
             if let Some(day) = calendar.take_picked().and_then(|d| NaiveDate::from_ymd_opt(d.year, d.month, d.day)) {
+                self.marked.remove(&(place, field.clone()));
                 self.pick_day(place, &field, day);
+            }
+            cx.invalidate();
+            return;
+        }
+        if let Some(open) = self.palette.take_if(|p| p.overlay == overlay) {
+            let color = open.picked.borrow_mut().take();
+            if let Some(color) = color {
+                self.marked.remove(&(open.place, open.field.clone()));
+                self.edit(open.place, &open.field, Value::from(color));
             }
             cx.invalidate();
             return;
@@ -1636,7 +1812,76 @@ impl Part for TablePart {
     }
 }
 
-/// The choices of a choice cell, as a list over the window: a press on one picks it.
+/// The choice of a choice cell's list the keys mark, shared by the list
+/// and its table (which keeps the focus and works the list with its keys).
+#[derive(Debug, Default)]
+pub struct ChoiceMarks {
+    labels: Vec<String>,
+    /// The choice marked for Enter: its value's at first, then where the keys or the pointer go.
+    pub highlighted: Option<usize>,
+    /// Whether the marked choice still has to be scrolled into view.
+    reveal: bool,
+    sought: String,
+    sought_at: Option<Instant>,
+}
+
+/// How long typed letters add up to one search.
+const SEEK_PAUSE: Duration = Duration::from_secs(1);
+
+impl ChoiceMarks {
+    /// Marks the choice `by` on (back when below 0), within the choices.
+    pub fn move_by(&mut self, by: i64) {
+        let count = self.labels.len() as i64;
+        if count == 0 {
+            return;
+        }
+        let at = match self.highlighted {
+            None if by > 0 => by - 1,
+            None => count + by,
+            Some(h) => h as i64 + by,
+        };
+        self.move_to(at);
+    }
+
+    fn move_to(&mut self, at: i64) {
+        let count = self.labels.len() as i64;
+        self.highlighted = Some(at.clamp(0, count - 1) as usize);
+        self.reveal = true;
+    }
+
+    /// Letters typed while it is open: they add up, while typed close
+    /// together, to the start of a choice's label it goes to; one letter
+    /// typed again and again goes through the choices that start with it.
+    pub fn seek(&mut self, text: &str, now: Instant) {
+        if text.is_empty() || self.labels.is_empty() {
+            return;
+        }
+        let fresh = self.sought_at.is_none_or(|at| now.saturating_duration_since(at) > SEEK_PAUSE);
+        if fresh {
+            self.sought = text.to_string();
+        } else {
+            self.sought.push_str(text);
+        }
+        self.sought_at = Some(now);
+        let lower = self.sought.to_lowercase();
+        let mut letters = lower.chars();
+        let first = letters.next();
+        let seek = if letters.all(|c| Some(c) == first) { first.map(String::from).unwrap_or_default() } else { lower };
+        let count = self.labels.len() as i64;
+        let start = if seek.chars().count() == 1 { self.highlighted.map_or(0, |h| h as i64 + 1) } else { self.highlighted.map_or(0, |h| h as i64) };
+        for i in 0..count {
+            let at = (start + i).rem_euclid(count);
+            if self.labels[at as usize].to_lowercase().starts_with(&seek) {
+                self.move_to(at);
+                return;
+            }
+        }
+    }
+}
+
+/// The choices of a choice cell, as a list over the window: a press on one
+/// picks it. Its table works it with the keys: the arrows, Home and End move
+/// the marked choice, Enter picks it, and the first letters of a choice go to it.
 pub struct CellChoices {
     node: Node,
     choices: Vec<Choice>,
@@ -1644,6 +1889,9 @@ pub struct CellChoices {
     item_height: f64,
     scroller: Scroller,
     picked: Rc<Cell<Option<usize>>>,
+    marks: Rc<RefCell<ChoiceMarks>>,
+    /// The part it belongs to, which keeps the focus while the person picks.
+    holder: Option<ElementId>,
     pressed_at: Option<usize>,
     pointer_y: Option<f64>,
     revealed: bool,
@@ -1653,8 +1901,22 @@ impl CellChoices {
     /// How many choices show at once; more scroll.
     pub const MOST_SHOWN: usize = 8;
 
-    fn new(choices: Vec<Choice>, value: Value, item_height: f64, picked: Rc<Cell<Option<usize>>>) -> CellChoices {
-        CellChoices { node: Node::new(), choices, value, item_height, scroller: Scroller::default(), picked, pressed_at: None, pointer_y: None, revealed: false }
+    fn new(choices: Vec<Choice>, value: Value, item_height: f64, picked: Rc<Cell<Option<usize>>>, holder: Option<ElementId>) -> CellChoices {
+        let marked = choices.iter().position(|c| rows::same(&c.value, &value));
+        let marks = ChoiceMarks { labels: choices.iter().map(|c| c.label.clone()).collect(), highlighted: marked, ..ChoiceMarks::default() };
+        CellChoices {
+            node: Node::new(),
+            choices,
+            value,
+            item_height,
+            scroller: Scroller::default(),
+            picked,
+            marks: Rc::new(RefCell::new(marks)),
+            holder,
+            pressed_at: None,
+            pointer_y: None,
+            revealed: false,
+        }
     }
 
     /// How high it is for `count` choices of `item_height`: at most `MOST_SHOWN`, with its border.
@@ -1681,6 +1943,11 @@ impl CellChoices {
         self.choices.iter().position(|c| rows::same(&c.value, &self.value))
     }
 
+    /// The choice marked for Enter: its value's at first, then where the keys or the pointer go; none for none.
+    pub fn highlighted(&self) -> Option<usize> {
+        self.marks.borrow().highlighted
+    }
+
     fn at(&self, y: f64) -> Option<usize> {
         self.scroller.index_at(y, self.item_height, self.choices.len())
     }
@@ -1699,6 +1966,14 @@ impl Element for CellChoices {
                 self.scroller.scroll_into(marked as f64 * self.item_height, self.item_height);
             }
         }
+        // The choice the keys went to comes into view.
+        let mut marks = self.marks.borrow_mut();
+        if marks.reveal && area.height > 0.0 {
+            marks.reveal = false;
+            if let Some(at) = marks.highlighted {
+                self.scroller.scroll_into(at as f64 * self.item_height, self.item_height);
+            }
+        }
     }
 
     fn draw(&self, p: &Painter) {
@@ -1708,7 +1983,7 @@ impl Element for CellChoices {
         p.fill(self.node.bounds, menu.background.unwrap_or_else(|| look.color("panel")), radius);
         {
             let _clip = p.clip(self.scroller.bounds);
-            let hover = if self.node.hovered { self.pointer_y.and_then(|y| self.at(y)) } else { None };
+            let hover = self.highlighted().or_else(|| if self.node.hovered { self.pointer_y.and_then(|y| self.at(y)) } else { None });
             let (first, end) = self.scroller.in_sight(self.item_height, self.choices.len());
             for i in first..end {
                 let item = self.item_box(i);
@@ -1728,6 +2003,9 @@ impl Element for CellChoices {
     }
 
     fn on_pointer_pressed(&mut self, at: PointerInput, cx: &mut Cx) {
+        if self.holder.is_some() {
+            cx.focus(self.holder);
+        }
         if self.scroller.press(at.screen_x, at.screen_y) {
             self.pressed_at = None;
             cx.invalidate();
@@ -1738,7 +2016,10 @@ impl Element for CellChoices {
 
     fn on_pointer_moved(&mut self, at: PointerInput, cx: &mut Cx) {
         self.pointer_y = Some(at.screen_y);
-        self.scroller.drag(at.screen_y);
+        if let Some(over) = self.at(at.screen_y) {
+            self.marks.borrow_mut().highlighted = Some(over);
+        }
+        self.scroller.drag(at.screen_x, at.screen_y);
         cx.invalidate();
     }
 
@@ -1753,8 +2034,8 @@ impl Element for CellChoices {
         }
     }
 
-    fn on_wheel(&mut self, _dx: f64, dy: f64, _held: Modifiers, cx: &mut Cx) -> bool {
-        let moved = self.scroller.wheel(dy);
+    fn on_wheel(&mut self, dx: f64, dy: f64, held: Modifiers, cx: &mut Cx) -> bool {
+        let moved = self.scroller.wheel_both(dx, dy, held);
         if moved {
             cx.invalidate();
         }

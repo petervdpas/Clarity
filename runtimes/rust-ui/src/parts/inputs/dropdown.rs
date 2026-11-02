@@ -3,8 +3,13 @@
 //! below it (above when there is no room below). Only the person picking
 //! another choice is a change; what code sets is not. Its choices are an
 //! enum's values or the records a reference can point at (an empty one
-//! first), as the host offers them. Up, Down, Page Up, Page Down, Home and
-//! End move through the open list, Enter or Space picks, Escape closes it.
+//! first), as the host offers them; the settings language and theme offer
+//! the project's languages and themes. As Avalonia's ComboBox: closed, Up
+//! and Down pick the choice before or after at once, Home and End the first
+//! and last, and a typed letter jumps to the next choice it starts; Enter,
+//! Space, F4 and Alt+Down open the list. Up, Down, Page Up, Page Down, Home
+//! and End move through the open list, a letter marks, Enter or Space
+//! picks, Escape closes it.
 //!
 //! A dropdown marked `typed` or `search` is one of the variants of the
 //! typed dropdown module; `make` makes the variant that fits, else this one.
@@ -32,6 +37,20 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
     Box::new(DropdownPart::new(spec, host))
 }
 
+/// The choices of a part bound to `bound`: the host's, else the project's languages or themes for those settings.
+pub fn offered_for(host: &dyn PartHost, bound: Option<&str>) -> Vec<Choice> {
+    let offered = choices::offered_for(host, bound);
+    if !offered.is_empty() {
+        return offered;
+    }
+    let as_choices = |offers: Vec<crate::choices::Offer>| offers.into_iter().map(|o| Choice { value: Value::from(o.name), label: o.label, cells: None }).collect();
+    match bound {
+        Some("settings.language") => as_choices(crate::choices::languages()),
+        Some("settings.theme") => as_choices(crate::choices::themes()),
+        _ => Vec::new(),
+    }
+}
+
 /// A plain dropdown of choices.
 pub struct DropdownPart {
     base: PartBase,
@@ -44,9 +63,9 @@ impl DropdownPart {
         DropdownPart { base: PartBase::new(spec, host), list: None }
     }
 
-    /// What it offers: the host's choices of its bound field.
+    /// What it offers: the host's choices of its bound field, or the settings' languages and themes.
     pub fn choices(&self) -> Vec<Choice> {
-        choices::offered_for(self.base.host.as_ref(), self.base.bound())
+        offered_for(self.base.host.as_ref(), self.base.bound())
     }
 
     /// Its value; none unbound.
@@ -141,11 +160,31 @@ impl Element for DropdownPart {
 
     fn on_key(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
         if self.list.is_none() {
-            if matches!(key.key, Key::Down | Key::Up | Key::Enter | Key::Space) && key.modifiers.is_empty() && self.usable() {
+            if !self.usable() || key.control() {
+                return false;
+            }
+            let alt = key.alt();
+            if matches!(key.key, Key::Enter | Key::Space | Key::F4) || (alt && matches!(key.key, Key::Down | Key::Up)) {
                 self.open(cx);
                 return true;
             }
-            return false;
+            if alt {
+                return false;
+            }
+            let count = self.choices().len();
+            if count == 0 {
+                return false;
+            }
+            let now = self.chosen();
+            let at = match key.key {
+                Key::Down => now.map_or(0, |n| (n + 1).min(count - 1)),
+                Key::Up => now.map_or(0, |n| n.saturating_sub(1)),
+                Key::Home => 0,
+                Key::End => count - 1,
+                _ => return false,
+            };
+            self.pick(at, cx);
+            return true;
         }
         let count = self.list.as_ref().map(|(_, s)| s.borrow().count() as i64).unwrap_or(0);
         match key.key {
@@ -166,6 +205,36 @@ impl Element for DropdownPart {
             _ => return false,
         }
         true
+    }
+
+    /// A typed letter: the next choice whose label starts with it, picked when the list is closed, marked when it is open.
+    fn on_text(&mut self, text: &str, cx: &mut Cx) {
+        let typed = text.trim().to_lowercase();
+        if !self.usable() || typed.is_empty() {
+            return;
+        }
+        let choices = self.choices();
+        let from = match self.list.as_ref() {
+            Some((_, state)) => state.borrow().highlighted,
+            None => self.chosen(),
+        };
+        let count = choices.len();
+        for step in 1..=count {
+            let at = (from.map_or(count - 1, |f| f) + step) % count;
+            if !choices[at].label.to_lowercase().starts_with(&typed) {
+                continue;
+            }
+            match self.list.as_ref() {
+                Some((_, state)) => {
+                    let mut s = state.borrow_mut();
+                    s.highlighted = Some(at);
+                    s.reveal();
+                    cx.invalidate();
+                }
+                None => self.pick(at, cx),
+            }
+            return;
+        }
     }
 
     fn on_focus_changed(&mut self, focused: bool, cx: &mut Cx) {

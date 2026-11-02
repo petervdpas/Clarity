@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use crate::element::{draw_children, Cx, Element, GridPanel, Node};
 use crate::geometry::Rect;
-use crate::input::PointerInput;
+use crate::input::{Cursor, PointerInput};
 use crate::markup::{PageSpec, PartSpec};
 use crate::painter::Painter;
 use crate::part_element;
@@ -157,13 +157,13 @@ impl Element for SplitterPart {
         for child in self.base.node.children_mut().iter_mut() {
             if child.as_any().is::<Divider>() {
                 let place = if vertical { Rect::new(area.x, at, area.width, Self::DIVIDER_THICKNESS) } else { Rect::new(at, area.y, Self::DIVIDER_THICKNESS, area.height) };
-                child.arrange(place, cx);
+                crate::element::arrange_safely(child.as_mut(), place, cx);
                 at += Self::DIVIDER_THICKNESS;
                 continue;
             }
             let length = (room * shares.get(pane).copied().unwrap_or(0.0)).max(0.0);
             let place = if vertical { Rect::new(area.x, at, area.width, length) } else { Rect::new(at, area.y, length, area.height) };
-            child.arrange(place.inset(pad), cx);
+            crate::element::arrange_safely(child.as_mut(), place.inset(pad), cx);
             at += length;
             pane += 1;
         }
@@ -203,6 +203,11 @@ struct Divider {
 
 impl Element for Divider {
     crate::element_node!();
+
+    /// Over a divider the pointer shows the way it drags.
+    fn cursor_at(&self, _x: f64, _y: f64) -> Option<Cursor> {
+        Some(if self.split.vertical { Cursor::ResizeUpDown } else { Cursor::ResizeLeftRight })
+    }
 
     fn on_pointer_pressed(&mut self, at: PointerInput, _cx: &mut Cx) {
         self.grab = if self.split.vertical { at.y } else { at.x };

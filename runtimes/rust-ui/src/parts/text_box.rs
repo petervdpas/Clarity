@@ -35,6 +35,8 @@ pub enum InputIcon {
     Copy,
     Up,
     Down,
+    /// Three dots: a folder part's button that opens the system's picker.
+    More,
 }
 
 /// A small flat button inside an input's right edge: a password's eye and
@@ -91,6 +93,13 @@ impl InputSideButton {
                 canvas.draw_line((cx - 4.0, cy - 2.0), (cx, cy + 2.0), &pen);
                 canvas.draw_line((cx, cy + 2.0), (cx + 4.0, cy - 2.0), &pen);
             }
+            InputIcon::More => {
+                let mut dot = pen.clone();
+                dot.set_style(PaintStyle::Fill);
+                for i in -1..=1 {
+                    canvas.draw_circle((cx + i as f32 * 5.0, cy), 1.5, &dot);
+                }
+            }
         }
     }
 }
@@ -135,6 +144,8 @@ impl TextBoxPart {
         let base = PartBase::new(spec, host);
         let mut editor = TextEditor::new(base.spec.kind == "memo");
         editor.placeholder = base.spec.text("placeholder").map(|p| base.host.text(Some(p)));
+        // Ctrl+Z takes back its typing, unless the part has `no undo`.
+        editor.undoes = !base.spec.flag("noUndo");
         let password = base.spec.kind == "password";
         editor.set_password(password);
         let (eye, copy) = if password {
@@ -204,7 +215,7 @@ impl TextBoxPart {
     /// The editor follows what code set: enabled, read-only, marked with an error.
     fn refresh(&mut self) {
         let state = self.base.state();
-        self.editor.enabled = state.as_ref().and_then(|s| s.enabled).unwrap_or(true);
+        self.editor.enabled = self.base.enabled();
         self.editor.read_only = self.base.read_only();
         self.editor.marked = state.and_then(|s| s.error).is_some_and(|e| !e.show().is_empty());
     }
@@ -231,7 +242,7 @@ impl TextBoxPart {
         if let Some(path) = self.base.bound().map(str::to_string) {
             self.base.host.write(name.as_deref().unwrap_or(""), &path, Value::String(typed));
         } else if let Some(name) = name {
-            self.base.host.change_state(&name, &mut |s| s.text = Some(typed.clone()));
+            crate::parts::change_state(&*self.base.host, &name, |s| s.text = Some(typed.clone()));
             self.base.host.edited(&name);
         } else {
             self.own = typed;
@@ -381,6 +392,22 @@ impl Element for TextBoxPart {
 
     fn caret_area(&self) -> Option<crate::geometry::Rect> {
         self.editor.caret_area()
+    }
+
+    fn cursor_at(&self, x: f64, y: f64) -> Option<crate::input::Cursor> {
+        if self.side_at(x, y).is_some() {
+            return None;
+        }
+        self.editor.cursor_at(x, y)
+    }
+
+    fn context_menu_at(&self, _x: f64, _y: f64) -> Option<Vec<crate::frame::menus::MenuEntry>> {
+        self.editor.menu(self.base.node.id())
+    }
+
+    fn on_wake(&mut self, cx: &mut Cx) {
+        self.ready();
+        self.editor.run_menu_asked(cx);
     }
 }
 

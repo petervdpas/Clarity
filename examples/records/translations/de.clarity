@@ -186,6 +186,7 @@ translation de
     copyText "Kopieren"
     pasteText "Einfügen"
     selectAllText "Alles auswählen"
+    openCalendar "Kalender"
     previousMonth "Vorheriger Monat"
     nextMonth "Nächster Monat"
     previousYear "Vorheriges Jahr"

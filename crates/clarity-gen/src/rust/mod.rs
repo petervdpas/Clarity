@@ -225,7 +225,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         files.push(text("src/facts.rs", facts_rs(project)));
         let main_text = main_text
             .replacen("mod modules;\n", "mod modules;\nmod facts;\n", 1)
-            .replacen("impl Program for App {\n", &format!("impl Program for App {{\n    fn facts(&self) -> &'static clarity_runtime::fields::Facts {{\n        &facts::FACTS\n    }}\n\n{}", screen_engine_fn(project)), 1);
+            .replacen("impl Program for App {\n", &format!("{}impl Program for App {{\n    fn facts_json(&self) -> Value {{\n        facts::FACTS.to_json()\n    }}\n\n{}", screen_engines_static(project), screen_engine_fn(project)), 1);
         files.push(text("src/main.rs", main_text));
     } else {
         files.push(text("src/main.rs", main_text));
@@ -235,9 +235,20 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     Ok(files)
 }
 
+/// Where the program keeps the engines beside the screen its canvases
+/// opened, by number (`clarity_runtime::screen::Instances`). Empty without
+/// such engines.
+fn screen_engines_static(project: &Project) -> String {
+    if crate::screen_engines(project).is_empty() {
+        return String::new();
+    }
+    "/// The engines beside the screen the canvases opened, by number.\nstatic SCREEN_ENGINES: clarity_runtime::screen::Instances = clarity_runtime::screen::Instances::new();\n\n".to_string()
+}
+
 /// The program's answer to a canvas that runs an engine beside the screen
-/// (DESIGN 5.12): a new instance of it from its file, carried in the
-/// program; none for a name it has no engine of. Empty without such engines.
+/// (DESIGN 5.12): a new instance of it from its file, kept in the program by
+/// number, its frames and its end by that number; none for a name it has no
+/// engine of. Empty without such engines.
 fn screen_engine_fn(project: &Project) -> String {
     let engines = crate::screen_engines(project);
     if engines.is_empty() {
@@ -258,7 +269,7 @@ fn screen_engine_fn(project: &Project) -> String {
         })
         .collect();
     format!(
-        "    fn screen_engine(&self, name: &str) -> Option<std::result::Result<Box<dyn clarity_runtime::screen::Frames>, String>> {{\n        let made = match name {{\n{arms}            _ => return None,\n        }};\n        Some(made.map(|engine| Box::new(engine) as Box<dyn clarity_runtime::screen::Frames>))\n    }}\n\n"
+        "    fn engine_open(&self, name: &str) -> Option<std::result::Result<u64, String>> {{\n        let made = match name {{\n{arms}            _ => return None,\n        }};\n        Some(made.map(|engine| SCREEN_ENGINES.open(Box::new(engine))))\n    }}\n\n    fn engine_hears(&self, id: u64) -> clarity_runtime::screen::Hears {{\n        SCREEN_ENGINES.hears(id)\n    }}\n\n    fn engine_frame(&self, id: u64, ms: f64, input: Vec<clarity_runtime::screen::ScreenInput>) -> std::result::Result<clarity_runtime::screen::Drawn, String> {{\n        SCREEN_ENGINES.frame(id, ms, &input)\n    }}\n\n    fn engine_close(&self, id: u64) {{\n        SCREEN_ENGINES.close(id)\n    }}\n\n"
     )
 }
 
@@ -563,7 +574,7 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     let watches = project.files.iter().flat_map(|f| &f.engines).any(|e| e.uses.iter().any(|u| u.name == clarity_spec::code::check::PROGRESS));
     // The program watches its long calls for any screen: Clarity.UI shows the bar with Stop itself.
     let watched_impl = if watches {
-        "\n    fn watches(&self) -> bool {\n        true\n    }\n\n    fn watched(&self, watch: &program::Watch, run: &mut dyn FnMut()) {\n        let watch = clarity_runtime::engine::Watch { progress: watch.progress.clone(), stop: watch.stop.clone() };\n        clarity_runtime::engine::watching(&watch, || run());\n    }\n"
+        "\n    fn watches(&self) -> bool {\n        true\n    }\n\n    fn start_watch(&self, id: u64) {\n        clarity_runtime::engine::start_watch(id)\n    }\n\n    fn watch_progress(&self, id: u64) -> Option<(i64, i64)> {\n        clarity_runtime::engine::watch_progress(id)\n    }\n\n    fn stop_watch(&self, id: u64) {\n        clarity_runtime::engine::stop_watch(id)\n    }\n\n    fn end_watch(&self, id: u64) {\n        clarity_runtime::engine::end_watch(id)\n    }\n"
     } else {
         ""
     };
@@ -640,6 +651,19 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         .map(|(name, sql, at)| format!("({name:?}, {}, {at:?})", sql.runtime()))
         .collect::<Vec<_>>()
         .join(", ");
+    // The settings a window shows are what the person kept, each value that
+    // still fits; a browser's settings are its own, so the web program starts
+    // from the defaults.
+    let kept_settings = match project.files.iter().find_map(|f| f.entities.iter().find(|e| e.settings).map(|e| (f, e))) {
+        Some((file, entity)) => {
+            let module = file.module.as_ref().map(|m| snake(&m.name)).unwrap_or_default();
+            let ty = format!("modules::{module}::{}", entity.name.name);
+            let body = if clarity_run.is_some() { format!("{ty}::from_kept(&{read})") } else { format!("{ty}::default()") };
+            format!("\n/// The settings a window starts with: each kept value that still fits.\nfn kept_settings() -> {ty} {{\n    {body}\n}}\n")
+        }
+        None => String::new(),
+    };
+    let required_inputs = required_inputs(project);
     let module_of = |name: &str| {
         project
             .files
@@ -850,7 +874,7 @@ const MODEL: &str = include_str!("model.json");
 const MAIN_WINDOW: &str = {main_window:?};
 /// The program's name, which names the folder its settings are kept in.
 const PROGRAM: &str = {program:?};
-{secrets_const}
+{secrets_const}{kept_settings}
 /// The database of each data source: its kind, and its file or connection
 /// (`env:NAME` reads it from that environment variable when the
 /// application starts).
@@ -979,6 +1003,23 @@ fn locked<T>(app: &App, run: impl FnOnce(&Db) -> Result<T>) -> Answer<T> {{
     program::guarded(&app.0, run)
 }}
 
+/// The inputs of each window bound to a required field: where a save that
+/// refused that field shows why (conformance/required.json).
+#[allow(unused_imports)]
+fn required_inputs(window: &str) -> &'static [clarity_runtime::required::Bound] {{
+    use clarity_runtime::required::Bound;
+    match window {{
+{required_inputs}        _ => &[],
+    }}
+}}
+
+/// Runs a handler; a save it made that refused a required field shows why
+/// at the input bound to it, the window drawn as it was.
+fn shown_at_input(db: &Db, state: WindowState, run: impl FnOnce(WindowState) -> Result<Reply>) -> Result<Reply> {{
+    let bound = required_inputs(&state.window);
+    clarity_runtime::required::shown_at_input(state, bound, run, |state| drawn(db, state))
+}}
+
 /// A window's reply: what each table, tree and chart shows is filled in
 /// (DESIGN 1.7), and its edits start there (DESIGN 5.29): what a handler
 /// changed is never the person's edit. `sent` is what the screen sent.
@@ -1033,13 +1074,13 @@ impl Program for App {{
     fn dispatch_event(&self, state: WindowState, handler: &str) -> Answer<Reply> {{
         // One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
         let sent = clarity_runtime::views::Sent::of(&state);
-        window_reply(&sent, locked(self, |db| clarity_runtime::stepped(db, || dispatch(db, state, handler))))
+        window_reply(&sent, locked(self, |db| shown_at_input(db, state, |state| clarity_runtime::stepped(db, || dispatch(db, state, handler)))))
     }}
 
     fn edit_event(&self, state: WindowState, edit: program::Edit) -> Answer<Reply> {{
         let program::Edit {{ handler, part, scope, ends, readonly, path, editable }} = edit;
         let sent = clarity_runtime::views::Sent::of(&state);
-        window_reply(&sent, locked(self, |db| clarity_runtime::edits::guarded(state, readonly, path.as_deref(), editable.as_deref(), |state| drawn(db, state), |state| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| handled(db, state, handler.as_deref())))))
+        window_reply(&sent, locked(self, |db| shown_at_input(db, state, |state| clarity_runtime::edits::guarded(state, readonly, path.as_deref(), editable.as_deref(), |state| drawn(db, state), |state| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| handled(db, state, handler.as_deref()))))))
     }}
 
     fn undo_edit(&self, state: WindowState, scope: &str, back: bool) -> Answer<Reply> {{
@@ -1074,7 +1115,7 @@ impl Program for App {{
     fn step_event(&self, state: WindowState, step: program::StepPress) -> Answer<Reply> {{
         let program::StepPress {{ part, button, steps, next, finish }} = step;
         let sent = clarity_runtime::views::Sent::of(&state);
-        window_reply(&sent, locked(self, |db| clarity_runtime::steps::event(db, state, &part, button, steps, next.as_deref(), finish.as_deref(), |state, handler| dispatch(db, state, handler), |state| drawn(db, state))))
+        window_reply(&sent, locked(self, |db| shown_at_input(db, state, |state| clarity_runtime::steps::event(db, state, &part, button, steps, next.as_deref(), finish.as_deref(), |state, handler| dispatch(db, state, handler), |state| drawn(db, state)))))
     }}
 
     fn view_event(&self, state: WindowState, part: &str, action: Map<String, Value>) -> Answer<Reply> {{
@@ -1084,7 +1125,7 @@ impl Program for App {{
 
     fn answer_event(&self, state: WindowState, handler: &str, values: Vec<Value>) -> Answer<Reply> {{
         let sent = clarity_runtime::views::Sent::of(&state);
-        window_reply(&sent, locked(self, |db| answer_to(db, state, handler, values)))
+        window_reply(&sent, locked(self, |db| shown_at_input(db, state, |state| answer_to(db, state, handler, values))))
     }}
 
     fn ref_options(&self, entity: &str) -> Answer<Vec<RefOption>> {{
@@ -1312,3 +1353,46 @@ fn serve_main(address: &str, ui: &[String]) -> String {
     )
 }
 
+/// Each window's inputs bound to a required field, as the arms of
+/// `required_inputs`: the part, the data that holds the record, its table
+/// and the field's column (conformance/required.json).
+fn required_inputs(project: &Project) -> String {
+    use clarity_spec::model::Widget;
+    fn walk<'a>(widgets: &'a [Widget], out: &mut Vec<&'a Widget>) {
+        for widget in widgets {
+            out.push(widget);
+            walk(&widget.children, out);
+            for page in &widget.pages {
+                walk(&page.children, out);
+            }
+        }
+    }
+    let mut arms = String::new();
+    for page in project.files.iter().flat_map(|f| &f.pages) {
+        let mut widgets = Vec::new();
+        walk(&page.widgets, &mut widgets);
+        for sidebar in &page.frame.sidebars {
+            walk(&sidebar.widgets, &mut widgets);
+        }
+        if let Some(footer) = &page.frame.footer {
+            walk(&footer.widgets, &mut widgets);
+        }
+        let bound: Vec<String> = widgets
+            .iter()
+            .filter_map(|w| {
+                let part = w.props.name.as_deref()?;
+                let (data, field) = w.props.bind.as_deref()?.split_once('.')?;
+                let entity = project.entity(page.data.iter().find(|d| d.name.name == data)?.entity()?.name.as_str())?;
+                let column = entity.column_of(entity.field(field)?.name.name.as_str());
+                crate::required_fields(project, entity)
+                    .iter()
+                    .any(|(c, _)| c == column)
+                    .then(|| format!("Bound {{ part: {part:?}, data: {data:?}, table: {:?}, column: {column:?} }}", entity.table_name()))
+            })
+            .collect();
+        if !bound.is_empty() {
+            let _ = writeln!(arms, "        {:?} => &[{}],", page.name.name, bound.join(", "));
+        }
+    }
+    arms
+}

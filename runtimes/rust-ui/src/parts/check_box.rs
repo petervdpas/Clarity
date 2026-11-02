@@ -1,8 +1,9 @@
 //! The checkbox and the switch (DESIGN 7.9, conformance/forms.json): a box
 //! with a tick, or a track with a knob, and the caption beside it. Its value
 //! is bound, else kept in its state's `checked`. Only the person ticking it
-//! is a change; what code sets is not. A read-only one cannot be ticked.
-//! As the shared screen draws them.
+//! is a change; what code sets is not. A click, Space or Enter ticks it; a
+//! switch's knob can also be dragged to the other side. A read-only one
+//! cannot be ticked and is no Tab stop. As the C# version draws them.
 
 use std::rc::Rc;
 
@@ -11,7 +12,7 @@ use skia_safe::{Color, Paint, PaintCap, PaintStyle};
 
 use crate::element::{Cx, Element};
 use crate::geometry::Rect;
-use crate::input::{Key, KeyInput};
+use crate::input::{Key, KeyInput, Modifiers, PointerInput};
 use crate::markup::PartSpec;
 use crate::painter::{Painter, TextAlign};
 use crate::part_element;
@@ -27,10 +28,15 @@ pub struct CheckPart {
     base: PartBase,
     /// What an unbound part without a name keeps.
     kept: bool,
+    /// Where a press on a switch's track started, while its knob may be dragged.
+    drag_from: Option<f64>,
+    /// How far the knob was dragged, and whether far enough to be a drag.
+    drag_by: f64,
+    dragged: bool,
 }
 
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
-    Box::new(CheckPart { base: PartBase::new(spec, host), kept: false })
+    Box::new(CheckPart { base: PartBase::new(spec, host), kept: false, drag_from: None, drag_by: 0.0, dragged: false })
 }
 
 impl CheckPart {
@@ -61,13 +67,18 @@ impl CheckPart {
         if let Some(path) = self.base.bound().map(str::to_string) {
             self.base.host.write(name.as_deref().unwrap_or(""), &path, Value::Bool(next));
         } else if let Some(name) = name {
-            self.base.host.change_state(&name, &mut |s| s.checked = Some(next));
+            crate::parts::change_state(&*self.base.host, &name, |s| s.checked = Some(next));
             self.base.host.edited(&name);
         } else {
             self.kept = next;
         }
         self.base.fire("change");
         cx.invalidate();
+    }
+
+    /// Where the knob's left edge is, on or off, before a drag moves it.
+    fn knob_left(&self, on: bool) -> f64 {
+        self.mark().x + if on { TRACK_WIDTH - TRACK_HEIGHT } else { 0.0 } + 2.0
     }
 
     /// Where the box or the track is.
@@ -98,15 +109,57 @@ impl Element for CheckPart {
     part_element!();
 
     fn focusable(&self) -> bool {
-        self.base.enabled()
+        self.base.enabled() && !self.base.read_only()
+    }
+
+    fn on_pointer_pressed(&mut self, at: PointerInput, _cx: &mut Cx) {
+        self.dragged = false;
+        self.drag_by = 0.0;
+        let movable = self.is_switch() && self.base.enabled() && !self.base.read_only();
+        self.drag_from = (movable && self.mark().contains(at.screen_x, at.screen_y)).then_some(at.screen_x);
+    }
+
+    fn on_pointer_moved(&mut self, at: PointerInput, cx: &mut Cx) {
+        let Some(from) = self.drag_from else { return };
+        if !self.base.node.pressed {
+            return;
+        }
+        self.drag_by = at.screen_x - from;
+        if self.drag_by.abs() > 3.0 {
+            self.dragged = true;
+        }
+        cx.invalidate();
+    }
+
+    fn on_pointer_released(&mut self, _at: PointerInput, cx: &mut Cx) {
+        if self.drag_from.take().is_none() || !self.dragged {
+            return;
+        }
+        let on = self.is_checked();
+        let knob = self.knob_left(on) + self.drag_by + (TRACK_HEIGHT - 4.0) / 2.0;
+        if (knob > self.mark().x + TRACK_WIDTH / 2.0) != on {
+            self.tick(cx);
+        }
+        cx.invalidate();
+    }
+
+    fn on_pointer_cancelled(&mut self, cx: &mut Cx) {
+        self.drag_from = None;
+        self.dragged = false;
+        cx.invalidate();
     }
 
     fn on_click(&mut self, cx: &mut Cx) {
+        // A drag of the knob already decided.
+        if self.dragged {
+            self.dragged = false;
+            return;
+        }
         self.tick(cx);
     }
 
     fn on_key(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
-        if key.key != Key::Space {
+        if !matches!(key.key, Key::Space | Key::Enter) || key.control() || key.modifiers.has(Modifiers::ALT) {
             return false;
         }
         self.tick(cx);
@@ -122,8 +175,10 @@ impl Element for CheckPart {
         let mark = self.mark();
         if self.is_switch() {
             p.fill(mark, look.color(if on { "accent" } else { "strong_border" }), TRACK_HEIGHT / 2.0);
-            let shift = if on { TRACK_WIDTH - TRACK_HEIGHT } else { 0.0 };
-            let knob = Rect::new(mark.x + shift + 2.0, mark.y + 2.0, TRACK_HEIGHT - 4.0, TRACK_HEIGHT - 4.0);
+            // While it is dragged the knob follows the pointer, within the track.
+            let moved = if self.drag_from.is_some() && self.dragged { self.drag_by } else { 0.0 };
+            let left = (self.knob_left(on) + moved).clamp(mark.x + 2.0, mark.right() - TRACK_HEIGHT + 2.0);
+            let knob = Rect::new(left, mark.y + 2.0, TRACK_HEIGHT - 4.0, TRACK_HEIGHT - 4.0);
             p.fill(knob, look.color("panel"), knob.height / 2.0);
         } else {
             let radius = look.radius("input").min(4.0);

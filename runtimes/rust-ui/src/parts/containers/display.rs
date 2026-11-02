@@ -198,9 +198,7 @@ impl Element for DisplayPart {
     fn draw(&self, p: &Painter) {
         let bounds = self.base.node.bounds;
         let look = p.look;
-        let radius = look.radius("input");
-        p.fill(bounds, look.color("raised"), radius);
-        p.stroke(bounds, look.color("border"), look.border(), radius);
+        // No background or frame of its own: its segments lie over what is behind it.
         let cells = cells(&self.text(), self.digits());
         let (left, top, scale) = fit(bounds, cells.len());
         if scale <= 0.0 {

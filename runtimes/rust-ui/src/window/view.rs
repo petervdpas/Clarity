@@ -3,8 +3,10 @@
 //! when the window is smaller than its rows. Around the parts is the
 //! window's frame (its menu bar, toolbar, ribbon, sidebars and footer, its
 //! own or its app's). The window's own keys are here too: a part's
-//! shortcut, a frame command's or one of a part's menu's items, Enter for
-//! its default button (or a form's submit) and Escape for its cancel button.
+//! shortcut, a frame command's or one of a part's menu's items, F10 and Alt
+//! alone for the menu bar, Enter for its default button (or a form's
+//! submit, or a wizard's Next or Finish) and Escape for its cancel button.
+//! The frame comes before the grid in Tab order, as it is docked around it.
 
 use std::rc::Rc;
 
@@ -12,9 +14,11 @@ use crate::element::{self, Cx, Element, ElementId, GridPanel, Node};
 use crate::frame::{self, Access, FrameFooter, FrameMenuBar, FrameRibbon, FrameSidebar, FrameSpec, FrameToolbar, Showing, ShownFrame, WindowFrame};
 use crate::geometry::Rect;
 use crate::grid::ROW_HEIGHT;
-use crate::input::{Key, KeyInput, Modifiers};
+use crate::input::{Key, KeyInput, Modifiers, PointerInput};
 use crate::markup::{CommandSpec, WindowSpec};
 use crate::painter::{Painter, TextAlign};
+use crate::parts::containers::container::ContainerButton;
+use crate::parts::containers::steps::StepsPart;
 use crate::parts::{self, PartHost};
 use crate::shortcuts;
 use crate::xml::XmlElement;
@@ -34,6 +38,9 @@ pub struct WindowView {
     /// How far the window's content is scrolled down, and how far it can be.
     pub scroll_y: f64,
     pub max_scroll_y: f64,
+    /// Where the pointer took the bar's thumb, and how far the window was scrolled then.
+    drag_from: Option<(f64, f64)>,
+    hover_x: f64,
 }
 
 /// A part that may answer a key: where it is, its name and what its markup says of keys.
@@ -44,6 +51,7 @@ struct Keyed {
     button: bool,
     default: bool,
     cancel: bool,
+    steps: bool,
     menu: Vec<CommandSpec>,
 }
 
@@ -63,7 +71,7 @@ impl WindowView {
         let body = Showing::new(Box::new(grid), move || filling.filling().is_none());
         let mut node = Node::new();
         node.add(Box::new(body));
-        let mut view = WindowView { node, host, own_frame: spec.frame.clone(), frame, name: spec.name.clone(), problem: None, scroll_y: 0.0, max_scroll_y: 0.0 };
+        let mut view = WindowView { node, host, own_frame: spec.frame.clone(), frame, name: spec.name.clone(), problem: None, scroll_y: 0.0, max_scroll_y: 0.0, drag_from: None, hover_x: 0.0 };
         view.add_regions();
         view
     }
@@ -87,15 +95,14 @@ impl WindowView {
         if let Some(cx) = cx.as_deref_mut() {
             self.frame.menus().close_all(cx);
         }
-        // The regions go; the body stays, as the first child.
+        // The regions go; the body stays, as the last child.
         while self.node.children().len() > 1 {
-            let last = self.node.children().len() - 1;
             match cx.as_deref_mut() {
                 Some(cx) => {
-                    self.node.remove(last, cx);
+                    self.node.remove(0, cx);
                 }
                 None => {
-                    self.node.children_mut().pop();
+                    self.node.children_mut().remove(0);
                 }
             }
         }
@@ -104,15 +111,21 @@ impl WindowView {
         let frame = WindowFrame::new(self.host.clone(), shown, self.name.clone());
         let filling = frame.clone();
         self.frame = frame;
-        let body = self.node.children_mut()[0].as_any_mut().downcast_mut::<Showing>().expect("a window view holds its body");
-        body.set_shows(move || filling.filling().is_none());
+        self.body_mut().set_shows(move || filling.filling().is_none());
         self.add_regions();
     }
 
+    /// The frame's regions go before the body: they come first in Tab order, as they are docked around the grid.
     fn add_regions(&mut self) {
-        for region in frame::regions(&self.frame) {
-            self.node.add(region);
+        for (at, region) in frame::regions(&self.frame).into_iter().enumerate() {
+            self.node.children_mut().insert(at, region);
         }
+    }
+
+    /// The frame's regions, in the order they are drawn.
+    fn regions(&self) -> &[Box<dyn Element>] {
+        let children = self.node.children();
+        &children[..children.len() - 1]
     }
 
     /// A window whose markup could not be read: it says why in its place.
@@ -131,7 +144,11 @@ impl WindowView {
     }
 
     fn body(&self) -> &Showing {
-        self.node.children()[0].as_any().downcast_ref::<Showing>().expect("a window view holds its body")
+        self.node.children().last().and_then(|c| c.as_any().downcast_ref::<Showing>()).expect("a window view holds its body")
+    }
+
+    fn body_mut(&mut self) -> &mut Showing {
+        self.node.children_mut().last_mut().and_then(|c| c.as_any_mut().downcast_mut::<Showing>()).expect("a window view holds its body")
     }
 
     fn grid(&self) -> &GridPanel {
@@ -157,6 +174,11 @@ impl WindowView {
 
     fn open_by_letter(&mut self, letter: char, cx: &mut Cx) -> bool {
         self.region_mut::<FrameMenuBar>(|_| true).is_some_and(|bar| bar.open_by_letter(letter, cx))
+    }
+
+    /// The menu bar takes the focus with its first top item marked: false when there is none, or it shows nothing.
+    pub fn focus_menu_bar(&mut self, cx: &mut Cx) -> bool {
+        self.region_mut::<FrameMenuBar>(|_| true).is_some_and(|bar| bar.focus_first(cx))
     }
 
     /// The menu bar's access letters before any other use of a key: Alt
@@ -195,13 +217,18 @@ impl WindowView {
         }
     }
 
-    /// A key let go: Alt let go alone keeps the access letters for a plain letter, after another key it hides them.
+    /// A key let go: Alt let go alone keeps the access letters for a plain
+    /// letter and puts the focus on the menu bar, its first menu marked, as
+    /// a desktop menu bar does; after another key it hides them.
     pub fn key_up(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
         if key.key != Key::Alt {
             return false;
         }
         match self.frame.access() {
-            Access::Held { used: false } => self.frame.set_access(Access::Kept),
+            Access::Held { used: false } => {
+                self.frame.set_access(Access::Kept);
+                self.focus_menu_bar(cx);
+            }
             Access::Held { used: true } => self.frame.set_access(Access::Off),
             _ => return false,
         }
@@ -250,8 +277,49 @@ impl WindowView {
 
     /// How high the window's rows and its frame's regions are with no spare height: what a window that names no height needs.
     pub fn content_height(&self, width: f64) -> f64 {
-        let (high, wide) = self.frame.room(&self.node.children()[1..]);
+        let (high, wide) = self.frame.room(self.regions());
         self.grid().content_for((width - wide - 2.0 * CONTENT_PADDING).max(0.0), 0.0) + 2.0 * CONTENT_PADDING + high
+    }
+
+    /// Where the scroll bar runs: the padding at the window's right, beside the content.
+    fn track(&self) -> Rect {
+        let inside = self.inside();
+        Rect::new(self.node.bounds.right() - CONTENT_PADDING, inside.y, CONTENT_PADDING, inside.height)
+    }
+
+    /// The part of the bar that says what shows: as long as the share shown, where it shows.
+    pub fn thumb(&self) -> Rect {
+        let inside = self.inside();
+        let content = self.grid().content.max(1.0);
+        let height = (inside.height * inside.height / content).max(16.0);
+        let at = if self.max_scroll_y <= 0.0 { 0.0 } else { self.scroll_y / self.max_scroll_y };
+        Rect::new(self.node.bounds.right() - CONTENT_PADDING / 2.0 - 2.0, inside.y + (inside.height - height) * at, 4.0, height)
+    }
+
+    /// Scrolls the window's content to `y`, within what it can; true when it moved.
+    pub fn scroll_to(&mut self, y: f64, cx: &mut Cx) -> bool {
+        let to = y.clamp(0.0, self.max_scroll_y);
+        if to == self.scroll_y {
+            return false;
+        }
+        self.scroll_y = to;
+        if self.node.bounds.width > 0.0 {
+            let bounds = self.node.bounds;
+            self.arrange(bounds, cx);
+        }
+        cx.invalidate();
+        true
+    }
+
+    /// One page down (1) or up (-1): the height shown, less a row, as PageDown does.
+    pub fn page(&mut self, by: f64, cx: &mut Cx) -> bool {
+        let step = ROW_HEIGHT.max(self.inside().height - ROW_HEIGHT);
+        self.scroll_to(self.scroll_y + by * step, cx)
+    }
+
+    /// How wide its sidebars are where they show, as designed or dragged (folded, a strip), even while one fills the window.
+    pub fn sidebars_width(&self) -> f64 {
+        [true, false].into_iter().filter(|left| self.frame.sidebar_shows(*left)).filter_map(|left| self.sidebar(left)).map(|s| s.wanted()).sum()
     }
 
     /// The parts that show and take clicks, in the order they are drawn: the window's own, then its sidebars' and footer's.
@@ -271,6 +339,7 @@ impl WindowView {
                         button: spec.kind == "button",
                         default: spec.flag("default"),
                         cancel: spec.flag("cancel"),
+                        steps: e.as_any().is::<StepsPart>(),
                         menu: spec.menu.as_ref().map(|m| all_items(&m.items)).unwrap_or_default(),
                     });
                 }
@@ -280,8 +349,9 @@ impl WindowView {
             }
         }
         let mut out = Vec::new();
-        for child in self.node.children() {
-            walk(child.as_ref(), &mut out);
+        walk(self.body(), &mut out);
+        for region in self.regions() {
+            walk(region.as_ref(), &mut out);
         }
         out
     }
@@ -323,7 +393,9 @@ impl WindowView {
                 return true;
             }
         }
-        for (item, app) in frame::rules::keyed(self.frame.shown(), self.host.as_ref()) {
+        // While a menu of the frame is open, its commands wait for it to close, as a desktop menu's do.
+        let commands = if self.frame.menus().is_open() { Vec::new() } else { frame::rules::keyed(self.frame.shown(), self.host.as_ref()) };
+        for (item, app) in commands {
             if self.frame.keys_of(&item, app).iter().any(|k| shortcuts::matches(k, &key, typing)) {
                 element::take_typed_from(self, focused, cx);
                 let frame = self.frame.clone();
@@ -340,6 +412,10 @@ impl WindowView {
                 }
             }
         }
+        // F10 puts the focus on the menu bar, once no shortcut took it.
+        if key.typed.is_none() && key.key == Key::F10 && key.modifiers == Modifiers::NONE && self.focus_menu_bar(cx) {
+            return true;
+        }
         // Alt with a top item's access letter opens its menu, once no shortcut took the key.
         if key.modifiers == Modifiers::ALT {
             if let Some(letter) = frame::rules::access_char(key.key) {
@@ -347,6 +423,11 @@ impl WindowView {
                     return true;
                 }
             }
+        }
+        // PageUp and PageDown that the part with the focus left scroll the window a page.
+        if !elsewhere && key.typed.is_none() && key.modifiers == Modifiers::NONE && matches!(key.key, Key::PageUp | Key::PageDown) && self.max_scroll_y > 0.0 {
+            self.page(if key.key == Key::PageDown { 1.0 } else { -1.0 }, cx);
+            return true;
         }
         if elsewhere || key.modifiers != Modifiers::NONE || !matches!(key.key, Key::Enter | Key::Escape) {
             return false;
@@ -374,11 +455,30 @@ impl WindowView {
                 element::take_typed_from(self, focused, cx);
                 self.press(pressed.id, cx);
             }
+            // A wizard's Next or Finish is the default button of its step.
+            None if key.key == Key::Enter => {
+                if let Some(wizard) = keyed.iter().find(|p| p.steps && self.default_of(p.id).is_some()) {
+                    element::take_typed_from(self, focused, cx);
+                    if let Some(button) = self.default_of(wizard.id) {
+                        if let Some(b) = element::find_mut(self, button).and_then(|e| e.as_any_mut().downcast_mut::<ContainerButton>()) {
+                            b.press(cx);
+                        }
+                    }
+                }
+            }
             // Escape without a cancel button is left to the dialog the window is in, which closes as its close does.
             None if key.key == Key::Escape => return false,
             None => {}
         }
         true
+    }
+}
+
+impl WindowView {
+    /// The button Enter presses in the wizard of that id: its Next, or on its last step its Finish; none when neither shows or can be pressed.
+    fn default_of(&self, wizard: ElementId) -> Option<ElementId> {
+        let steps = element::find(self, wizard)?.as_any().downcast_ref::<StepsPart>()?;
+        [steps.next(), steps.finish()].into_iter().find(|b| b.is_shown() && b.is_usable()).map(|b| b.node().id())
     }
 }
 
@@ -398,13 +498,14 @@ impl Element for WindowView {
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
         self.node.bounds = area;
         let frame = self.frame.clone();
-        frame.arrange(&mut self.node.children_mut()[1..], area, cx);
+        let regions = self.node.children().len() - 1;
+        frame.arrange(&mut self.node.children_mut()[..regions], area, cx);
         let inside = self.inside();
         let content = self.grid().content_for(inside.width, inside.height);
         self.max_scroll_y = (content - inside.height).max(0.0);
         self.scroll_y = self.scroll_y.clamp(0.0, self.max_scroll_y);
         let place = if self.max_scroll_y > 0.0 { Rect::new(inside.x, inside.y - self.scroll_y, inside.width, content) } else { inside };
-        let body = self.node.children_mut()[0].as_any_mut().downcast_mut::<Showing>().expect("a window view holds its body");
+        let body = self.body_mut();
         body.node_mut().bounds = inside;
         body.child_mut().arrange(place, cx);
     }
@@ -418,29 +519,74 @@ impl Element for WindowView {
         }
         let content = self.grid().content;
         if self.max_scroll_y > 0.0 && content > 0.0 && shows {
-            // A thin bar at the right says how much of the content shows, and where.
-            let shown = inside.height / content;
-            let bar = Rect::new(self.frame.body().right() - CONTENT_PADDING / 2.0 - 2.0, inside.y + inside.height * (self.scroll_y / content), 4.0, (inside.height * shown).max(16.0));
-            p.fill(bar, p.look.color("strong_border"), 2.0);
+            // A bar at the right says how much of the content shows, and where; it is wider while the pointer is on it or drags it.
+            let (thumb, track) = (self.thumb(), self.track());
+            let wide = self.drag_from.is_some() || (self.node.hovered && self.hover_x >= track.x);
+            let bar = if wide { Rect::new(track.x + 2.0, thumb.y, track.width - 4.0, thumb.height) } else { thumb };
+            p.fill(bar, p.look.color(if wide { "muted" } else { "strong_border" }), bar.width / 2.0);
         }
         if let Some(problem) = &self.problem {
             p.text(problem, Rect::new(inside.x, inside.y, inside.width, ROW_HEIGHT), p.look.color("error"), p.look.size("text"), "text", false, TextAlign::Left);
         }
-        for region in &self.node.children()[1..] {
+        for region in self.regions() {
             if region.is_shown() {
-                region.draw(p);
+                element::draw_safely(region.as_ref(), p);
             }
         }
     }
 
     fn on_wheel(&mut self, _dx: f64, dy: f64, _held: Modifiers, cx: &mut Cx) -> bool {
-        let to = (self.scroll_y + dy).clamp(0.0, self.max_scroll_y);
-        if to == self.scroll_y {
-            return false;
+        self.scroll_to(self.scroll_y + dy, cx)
+    }
+
+    /// A press on the bar: on what shows it drags it, above or below it pages there, as a scroll bar does.
+    fn on_pointer_pressed(&mut self, at: PointerInput, cx: &mut Cx) {
+        self.drag_from = None;
+        if self.max_scroll_y <= 0.0 || !self.body().is_shown() || !self.track().contains(at.screen_x, at.screen_y) {
+            return;
         }
-        self.scroll_y = to;
+        let thumb = self.thumb();
+        if at.screen_y < thumb.y {
+            self.page(-1.0, cx);
+        } else if at.screen_y > thumb.bottom() {
+            self.page(1.0, cx);
+        } else {
+            self.drag_from = Some((at.screen_y, self.scroll_y));
+        }
+    }
+
+    fn on_pointer_moved(&mut self, at: PointerInput, cx: &mut Cx) {
+        self.hover_x = at.screen_x;
+        if let (Some((from_y, from_scroll)), true) = (self.drag_from, self.node.pressed) {
+            let room = (self.inside().height - self.thumb().height).max(1.0);
+            self.scroll_to(from_scroll + (at.screen_y - from_y) * self.max_scroll_y / room, cx);
+        } else if self.max_scroll_y > 0.0 {
+            cx.invalidate();
+        }
+    }
+
+    fn on_pointer_released(&mut self, _at: PointerInput, cx: &mut Cx) {
+        self.drag_from = None;
         cx.invalidate();
-        true
+    }
+
+    /// The focus moved: a part of the window's grid that is out of sight
+    /// scrolls into view, as Avalonia's ScrollViewer brought it; not when a
+    /// press of the pointer moved it (a part half out of view stays put).
+    fn focus_moved(&mut self, focused: Option<ElementId>, pointing: bool, cx: &mut Cx) {
+        let Some(focused) = focused.filter(|_| !pointing && self.max_scroll_y > 0.0) else { return };
+        let grid = self.grid().node().id();
+        let Some(ids) = element::chain(self, focused) else { return };
+        let Some(at) = ids.iter().position(|i| *i == grid) else { return };
+        // A part in a part (a text box's editor) shows with the part it is in, up to the window's grid.
+        let outer = ids[at + 1..].iter().filter_map(|i| element::find(self, *i)).find(|e| e.as_part().is_some()).or_else(|| element::find(self, focused));
+        let Some(place) = outer.map(|e| e.node().bounds) else { return };
+        let inside = self.inside();
+        if place.y < inside.y || place.height > inside.height {
+            self.scroll_to(self.scroll_y - (inside.y - place.y), cx);
+        } else if place.bottom() > inside.bottom() {
+            self.scroll_to(self.scroll_y + (place.bottom() - inside.bottom()), cx);
+        }
     }
 
     fn window_key(&mut self, key: KeyInput, cx: &mut Cx) -> bool {

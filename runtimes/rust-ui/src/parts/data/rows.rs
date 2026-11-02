@@ -109,6 +109,11 @@ pub fn shown_formatted(value: &Value, format: Option<&FieldFormat>, formats: &Fo
             formats.show(format, value)
         }
         Value::Array(items) => items.iter().map(|i| shown_formatted(i, None, formats)).collect::<Vec<_>>().join(", "),
+        // A decimal or money value the program sends as its text (`"12"`, as a
+        // runtime's exact decimal is written) shows in its format: 12.00 for money.
+        Value::String(s) if format.is_some_and(|f| matches!(f.kind, FormatKind::Money | FormatKind::Decimal | FormatKind::Integer)) && s.trim().parse::<f64>().is_ok() => {
+            formats.show(format.expect("a number's format"), value)
+        }
         _ => shown_text(value),
     }
 }
@@ -116,18 +121,23 @@ pub fn shown_formatted(value: &Value, format: Option<&FieldFormat>, formats: &Fo
 // -- Scrolling --------------------------------------------------------------
 
 /// The rows' own place, which scrolls: the wheel turns it, and a bar at its
-/// right shows how much is in view and moves it (as C# ScrollView).
+/// right shows how much is in view and moves it (as C# ScrollView). Rows
+/// wider together than the place (a table's columns) scroll sideways too,
+/// with a bar along its bottom.
 #[derive(Debug, Clone, Default)]
 pub struct Scroller {
     /// Where the rows show on the screen.
     pub bounds: Rect,
     /// How high all the rows are together.
     pub content: f64,
+    /// How wide the rows are: as wide as the place, unless they are wider.
+    pub content_width: f64,
     scroll_y: f64,
+    scroll_x: f64,
     /// Where on the thumb the pointer holds it; none while it holds no thumb.
     grab: Option<f64>,
-    /// Whether a press went down on the bar.
-    holding: bool,
+    /// The bar a press went down on: none, down (`Some(false)`) or across (`Some(true)`).
+    holding: Option<bool>,
 }
 
 impl Scroller {
@@ -141,16 +151,33 @@ impl Scroller {
         self.scroll_y
     }
 
+    /// How far the rows are scrolled sideways, from the left.
+    pub fn scrolled_x(&self) -> f64 {
+        self.scroll_x
+    }
+
     /// How far the rows scroll at most.
     pub fn max(&self) -> f64 {
         (self.content - self.bounds.height).max(0.0)
     }
 
-    /// Takes its place for rows of `content` height; what is scrolled stays within it.
+    /// How far the rows scroll sideways at most.
+    pub fn max_x(&self) -> f64 {
+        (self.content_width - self.bounds.width).max(0.0)
+    }
+
+    /// Takes its place for rows of `content` height, as wide as the place; what is scrolled stays within it.
     pub fn place(&mut self, bounds: Rect, content: f64) {
+        self.place_wide(bounds, content, bounds.width);
+    }
+
+    /// Takes its place for rows of `content` height and `width`: wider than the place, they scroll sideways.
+    pub fn place_wide(&mut self, bounds: Rect, content: f64, width: f64) {
         self.bounds = bounds;
         self.content = content.max(0.0);
+        self.content_width = width.max(bounds.width);
         self.scroll_y = self.scroll_y.clamp(0.0, self.max());
+        self.scroll_x = self.scroll_x.clamp(0.0, self.max_x());
     }
 
     /// Scrolls to `y`, within what it scrolls; true when it moved.
@@ -160,9 +187,25 @@ impl Scroller {
         self.scroll_y != was
     }
 
+    /// Scrolls sideways to `x`, within what it scrolls; true when it moved.
+    pub fn scroll_x_to(&mut self, x: f64) -> bool {
+        let was = self.scroll_x;
+        self.scroll_x = x.clamp(0.0, self.max_x());
+        self.scroll_x != was
+    }
+
     /// The wheel turned: true when it scrolled.
     pub fn wheel(&mut self, dy: f64) -> bool {
         self.scroll_to(self.scroll_y + dy)
+    }
+
+    /// The wheel turned both ways, with the keys `held`: with Shift a wheel
+    /// that turns only up and down scrolls sideways. True when it scrolled.
+    pub fn wheel_both(&mut self, dx: f64, dy: f64, held: Modifiers) -> bool {
+        let (dx, dy) = if held.has(Modifiers::SHIFT) && dx == 0.0 { (dy, 0.0) } else { (dx, dy) };
+        let across = self.scroll_x_to(self.scroll_x + dx);
+        let down = self.scroll_to(self.scroll_y + dy);
+        across || down
     }
 
     /// Scrolls as little as it takes to show the place from `top` down `height`, in the content.
@@ -176,77 +219,129 @@ impl Scroller {
         self.scroll_to(y);
     }
 
+    /// Scrolls sideways as little as it takes to show the place from `left` across `width`, in the content.
+    pub fn scroll_into_x(&mut self, left: f64, width: f64) {
+        let mut x = self.scroll_x;
+        if left + width > x + self.bounds.width {
+            x = left + width - self.bounds.width;
+        }
+        if left < x {
+            x = left;
+        }
+        self.scroll_x_to(x);
+    }
+
     /// The top of the content on the screen.
     pub fn content_top(&self) -> f64 {
         self.bounds.y - self.scroll_y
     }
 
+    /// The left of the content on the screen.
+    pub fn content_left(&self) -> f64 {
+        self.bounds.x - self.scroll_x
+    }
+
     /// Its bar, while the rows scroll.
     pub fn bar(&self) -> Option<Rect> {
-        (self.max() > 0.0).then(|| Rect::new(self.bounds.right() - Self::BAR, self.bounds.y, Self::BAR, self.bounds.height))
+        let short = if self.max_x() > 0.0 { Self::BAR } else { 0.0 };
+        (self.max() > 0.0).then(|| Rect::new(self.bounds.right() - Self::BAR, self.bounds.y, Self::BAR, (self.bounds.height - short).max(0.0)))
     }
 
-    fn thumb_length(&self) -> f64 {
-        let track = self.bounds.height;
-        if self.content <= 0.0 { track } else { track.min(Self::LEAST_THUMB.max(track * track / self.content)) }
+    /// Its bar along the bottom, while the rows scroll sideways.
+    pub fn bar_across(&self) -> Option<Rect> {
+        let short = if self.max() > 0.0 { Self::BAR } else { 0.0 };
+        (self.max_x() > 0.0).then(|| Rect::new(self.bounds.x, self.bounds.bottom() - Self::BAR, (self.bounds.width - short).max(0.0), Self::BAR))
     }
 
-    fn thumb_at(&self) -> f64 {
-        let max = self.max();
-        if max <= 0.0 { 0.0 } else { (self.bounds.height - self.thumb_length()) * self.scroll_y / max }
+    /// The track's length, the content's and how far it scrolls, of the bar down or across.
+    fn measures(&self, across: bool) -> (f64, f64, f64, f64) {
+        match (across, self.bar(), self.bar_across()) {
+            (false, Some(b), _) => (b.height, self.content, self.max(), self.scroll_y),
+            (true, _, Some(b)) => (b.width, self.content_width, self.max_x(), self.scroll_x),
+            _ => (0.0, 0.0, 0.0, 0.0),
+        }
     }
 
-    /// A press at a point: on the bar it takes the thumb, or moves a place's
-    /// height toward the press; true when it was on the bar.
+    fn thumb_length(&self, across: bool) -> f64 {
+        let (track, content, _, _) = self.measures(across);
+        if content <= 0.0 { track } else { track.min(Self::LEAST_THUMB.max(track * track / content)) }
+    }
+
+    fn thumb_at(&self, across: bool) -> f64 {
+        let (track, _, max, scrolled) = self.measures(across);
+        if max <= 0.0 { 0.0 } else { (track - self.thumb_length(across)) * scrolled / max }
+    }
+
+    /// A press at a point: on a bar it takes the thumb, or moves a place's
+    /// length toward the press; true when it was on a bar.
     pub fn press(&mut self, x: f64, y: f64) -> bool {
-        let Some(bar) = self.bar().filter(|b| b.contains(x, y)) else { return false };
-        self.holding = true;
-        let along = y - bar.y;
-        let at = self.thumb_at();
-        if along >= at && along < at + self.thumb_length() {
+        let (across, bar) = match (self.bar().filter(|b| b.contains(x, y)), self.bar_across().filter(|b| b.contains(x, y))) {
+            (Some(b), _) => (false, b),
+            (None, Some(b)) => (true, b),
+            _ => return false,
+        };
+        self.holding = Some(across);
+        let along = if across { x - bar.x } else { y - bar.y };
+        let at = self.thumb_at(across);
+        if along >= at && along < at + self.thumb_length(across) {
             self.grab = Some(along - at);
         } else {
             self.grab = None;
-            let page = self.bounds.height;
-            self.scroll_to(self.scroll_y + if along < at { -page } else { page });
+            if across {
+                let page = self.bounds.width;
+                self.scroll_x_to(self.scroll_x + if along < at { -page } else { page });
+            } else {
+                let page = self.bounds.height;
+                self.scroll_to(self.scroll_y + if along < at { -page } else { page });
+            }
         }
         true
     }
 
-    /// The pointer moved while it holds the bar: the thumb follows; true when it holds it.
-    pub fn drag(&mut self, y: f64) -> bool {
-        if !self.holding {
-            return false;
-        }
+    /// The pointer moved while it holds a bar: the thumb follows; true when it holds one.
+    pub fn drag(&mut self, x: f64, y: f64) -> bool {
+        let Some(across) = self.holding else { return false };
         if let Some(grab) = self.grab {
-            let travel = self.bounds.height - self.thumb_length();
-            let at = y - self.bounds.y - grab;
-            self.scroll_to(if travel <= 0.0 { 0.0 } else { at / travel * self.max() });
+            let (track, _, max, _) = self.measures(across);
+            let travel = track - self.thumb_length(across);
+            let at = if across { x - self.bounds.x } else { y - self.bounds.y } - grab;
+            let to = if travel <= 0.0 { 0.0 } else { at / travel * max };
+            if across {
+                self.scroll_x_to(to);
+            } else {
+                self.scroll_to(to);
+            }
         }
         true
     }
 
-    /// The press ended: true when it was on the bar.
+    /// The press ended: true when it was on a bar.
     pub fn release(&mut self) -> bool {
-        let was = self.holding;
-        self.holding = false;
+        let was = self.holding.is_some();
+        self.holding = None;
         self.grab = None;
         was
     }
 
-    /// Draws its thumb, while the rows scroll.
+    /// Draws its thumbs, while the rows scroll.
     pub fn draw(&self, p: &Painter, hovered: bool) {
-        let Some(bar) = self.bar() else { return };
-        let thumb = Rect::new(bar.x + 2.0, bar.y + self.thumb_at(), bar.width - 4.0, self.thumb_length());
-        let color = if self.holding || hovered { "muted" } else { "strong_border" };
-        p.fill(thumb, p.look.color(color), thumb.width / 2.0);
+        if let Some(bar) = self.bar() {
+            let thumb = Rect::new(bar.x + 2.0, bar.y + self.thumb_at(false), bar.width - 4.0, self.thumb_length(false));
+            let color = if self.holding == Some(false) || hovered { "muted" } else { "strong_border" };
+            p.fill(thumb, p.look.color(color), thumb.width / 2.0);
+        }
+        if let Some(bar) = self.bar_across() {
+            let thumb = Rect::new(bar.x + self.thumb_at(true), bar.y + 2.0, self.thumb_length(true), bar.height - 4.0);
+            let color = if self.holding == Some(true) || hovered { "muted" } else { "strong_border" };
+            p.fill(thumb, p.look.color(color), thumb.height / 2.0);
+        }
     }
 
     // Rows that are each `pitch` apart, the first at the top of the content.
 
     /// The box on the screen of the row at `index` in the content, in sight or not.
     pub fn row_on_screen(&self, index: usize, pitch: f64, height: f64) -> Rect {
-        Rect::new(self.bounds.x, self.content_top() + index as f64 * pitch, self.bounds.width, height)
+        Rect::new(self.content_left(), self.content_top() + index as f64 * pitch, self.content_width.max(self.bounds.width), height)
     }
 
     /// The box on the screen of the row at `index`; none while it is scrolled out of sight.
@@ -464,13 +559,22 @@ impl Rows {
         }
     }
 
+    /// The pointer was taken away mid press: a drag in progress is dropped, its mark gone, nothing moved.
+    pub fn cancel(&mut self) {
+        self.pressed_row = None;
+        self.dragging = false;
+        self.drop = None;
+        self.scroller.release();
+    }
+
     /// Alt and an arrow key move the chosen row: the move, or none (the bool says whether the key was one of those).
     pub fn key_move(&self, base: &PartBase, key: KeyInput) -> (bool, Option<Move>) {
         if !Self::moves(base) {
             return (false, None);
         }
-        let Some(k) = move_key(key) else { return (false, None) };
-        (true, self.chosen(base).map(|row| Move::Key { row, key: k }))
+        // Without a chosen row the keys pass on, as they do without `reorder`.
+        let (Some(k), Some(row)) = (move_key(key), self.chosen(base)) else { return (false, None) };
+        (true, Some(Move::Key { row, key: k }))
     }
 
     /// A move of a row: each record gets its number (and in a tree its

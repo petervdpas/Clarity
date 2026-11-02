@@ -2,7 +2,7 @@
 //! the values: each entity field's label, format, whether it is required, its
 //! range and what it refers to, keyed "Entity.field", and the type of each
 //! value of a window's data. The generated program carries them as one static
-//! table, [`Facts`], which `Program::facts` gives; the parts of Clarity.UI
+//! table, [`Facts`], which `Program::facts_json` gives as plain JSON; the parts of Clarity.UI
 //! find a field by its path in a window's data, as the C# host does.
 
 /// How a field's values are shown and read: its kind of value, the decimals
@@ -135,6 +135,56 @@ impl Facts {
     /// The values of the enum `name`, as written; none for a name that is no enum.
     pub fn enum_values(&self, name: &str) -> &'static [&'static str] {
         find(self.enums, name).unwrap_or(&[])
+    }
+}
+
+impl FormatKind {
+    /// Its name as conformance/formats.json writes it.
+    pub fn name(self) -> &'static str {
+        match self {
+            FormatKind::Integer => "integer",
+            FormatKind::Decimal => "decimal",
+            FormatKind::Money => "money",
+            FormatKind::Date => "date",
+            FormatKind::DateTime => "dateTime",
+            FormatKind::Duration => "duration",
+        }
+    }
+}
+
+impl FieldFacts {
+    /// As plain JSON: `{"label", "format": {"kind", "scale", "format"}, "required", "min", "max", "refers", "parent", "color"}`.
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "label": self.label,
+            "format": self.format.map(|f| serde_json::json!({"kind": f.kind.name(), "scale": f.scale, "format": f.format})),
+            "required": self.required,
+            "min": self.min,
+            "max": self.max,
+            "refers": self.refers,
+            "parent": self.parent,
+            "color": self.color,
+        })
+    }
+}
+
+fn typed_json(typed: Typed) -> serde_json::Value {
+    serde_json::Value::Object(typed.iter().map(|(name, ty)| (name.to_string(), serde_json::Value::from(*ty))).collect())
+}
+
+impl Facts {
+    /// As plain JSON, the shape a screen of any language reads: `{"windows":
+    /// {"Main": {"orders": "list<Order>"}}, "records": {"Order": {"total":
+    /// "money"}}, "fields": {"Order.total": FieldFacts::to_json}, "enums":
+    /// {"Status": ["open", "done"]}}`.
+    pub fn to_json(&self) -> serde_json::Value {
+        let named = |table: &'static [(&'static str, Typed)]| serde_json::Value::Object(table.iter().map(|(name, typed)| (name.to_string(), typed_json(typed))).collect());
+        serde_json::json!({
+            "windows": named(self.windows),
+            "records": named(self.records),
+            "fields": serde_json::Value::Object(self.fields.iter().map(|(key, facts)| (key.to_string(), facts.to_json())).collect()),
+            "enums": serde_json::Value::Object(self.enums.iter().map(|(name, values)| (name.to_string(), serde_json::Value::from(values.to_vec()))).collect()),
+        })
     }
 }
 

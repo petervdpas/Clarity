@@ -8,7 +8,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
 
-use super::{Ask, Kind};
+use super::{Ask, Kind, SystemWindow};
 
 /// A value of a D-Bus message, as far as the dialog needs them.
 #[derive(Debug, Clone, PartialEq)]
@@ -293,7 +293,7 @@ pub fn method_call(serial: u32, destination: &str, path: &str, interface: &str, 
 }
 
 /// Reads the next whole message from the bus.
-fn read_message(stream: &mut impl Read) -> Option<Message> {
+pub(crate) fn read_message(stream: &mut impl Read) -> Option<Message> {
     let mut fixed = [0u8; 16];
     stream.read_exact(&mut fixed).ok()?;
     if fixed[0] != b'l' {
@@ -326,7 +326,7 @@ fn read_message(stream: &mut impl Read) -> Option<Message> {
 }
 
 /// The session bus's socket, by the address the session gives.
-fn connect() -> Result<UnixStream, String> {
+pub(crate) fn connect() -> Result<UnixStream, String> {
     let address = std::env::var("DBUS_SESSION_BUS_ADDRESS").ok().filter(|a| !a.is_empty()).or_else(|| std::env::var("XDG_RUNTIME_DIR").ok().map(|d| format!("unix:path={d}/bus"))).ok_or("there is no D-Bus session")?;
     for one in address.split(';') {
         let Some(rest) = one.strip_prefix("unix:") else { continue };
@@ -346,7 +346,7 @@ fn connect() -> Result<UnixStream, String> {
 }
 
 /// Logs in on the bus as the person running the program (EXTERNAL, by their user id).
-fn login(stream: &mut UnixStream) -> Result<(), String> {
+pub(crate) fn login(stream: &mut UnixStream) -> Result<(), String> {
     use std::os::unix::fs::MetadataExt;
     let uid = std::fs::metadata("/proc/self").map(|m| m.uid()).map_err(|e| e.to_string())?;
     let hex: String = uid.to_string().bytes().map(|b| format!("{b:02x}")).collect();
@@ -416,7 +416,7 @@ pub fn unescape(path: &str) -> String {
 /// The path the person chose in the portal's dialog, or none when they chose
 /// none; an error when there is no bus or no portal on it (then the next
 /// way is tried).
-pub fn choose(ask: &Ask) -> Result<Option<String>, String> {
+pub fn choose(ask: &Ask, owner: Option<SystemWindow>) -> Result<Option<String>, String> {
     let mut stream = connect()?;
     login(&mut stream)?;
     let bus = "org.freedesktop.DBus";
@@ -425,7 +425,9 @@ pub fn choose(ask: &Ask) -> Result<Option<String>, String> {
     stream.write_all(&method_call(2, bus, "/org/freedesktop/DBus", bus, "AddMatch", "s", &[Dbus::Str(rule.into())])).map_err(|e| e.to_string())?;
     let token = format!("clarity{}", std::process::id());
     let member = if ask.kind == Kind::Save { "SaveFile" } else { "OpenFile" };
-    let args = [Dbus::Str(String::new()), Dbus::Str(ask.title.clone()), options(ask, &token)];
+    // The parent window, an X11 window as the portal names it; none on Wayland, whose handles winit does not export.
+    let parent = owner.map(|o| o.portal()).unwrap_or_default();
+    let args = [Dbus::Str(parent), Dbus::Str(ask.title.clone()), options(ask, &token)];
     stream
         .write_all(&method_call(3, "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop", "org.freedesktop.portal.FileChooser", member, "ssa{sv}", &args))
         .map_err(|e| e.to_string())?;

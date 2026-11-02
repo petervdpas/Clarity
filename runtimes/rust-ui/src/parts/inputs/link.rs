@@ -91,6 +91,11 @@ impl Element for LinkPart {
         self.follow(cx);
     }
 
+    /// The pointer is a hand over a link it can follow.
+    fn cursor_at(&self, _x: f64, _y: f64) -> Option<crate::input::Cursor> {
+        Some(if self.base.enabled() { crate::input::Cursor::Hand } else { crate::input::Cursor::Default })
+    }
+
     fn on_key(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
         if key.key != Key::Enter {
             return false;

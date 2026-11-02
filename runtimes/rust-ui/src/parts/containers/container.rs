@@ -49,6 +49,13 @@ pub fn is_inside() -> bool {
     FRAMING.with(|f| f.get() > 0)
 }
 
+/// Whether `part` is inside a container that frames it, so a list, table or
+/// tree draws no border of its own; on the window and in a sidebar it keeps
+/// one. A container marks each part it makes as inside (`grid_of`).
+pub fn is_inside_part(part: &dyn crate::parts::Part) -> bool {
+    part.base().spec.flag("inside")
+}
+
 /// How many columns a container's own grids have: as many as it spans.
 pub fn columns_of(spec: &PartSpec) -> i64 {
     spec.number("width").map(|w| w as i64).unwrap_or(1).max(1)
@@ -196,7 +203,7 @@ impl Element for Page {
 
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
         self.node.bounds = area;
-        self.content_mut().arrange(area, cx);
+        crate::element::arrange_safely(self.content_mut(), area, cx);
     }
 
     fn draw(&self, p: &Painter) {

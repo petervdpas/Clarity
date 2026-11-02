@@ -9,7 +9,7 @@
 //! it in `Element::on_later`:
 //!
 //! ```ignore
-//! let picker = self.base.host.files();
+//! let picker = crate::files::system();
 //! cx.later(self.node().id(), move || picker.open_file(&title, filter.as_ref()));
 //! // ... later, in on_later: done.downcast::<Option<ChosenFile>>()
 //! ```

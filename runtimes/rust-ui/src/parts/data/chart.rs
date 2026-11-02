@@ -1,6 +1,6 @@
 //! A chart (U1c), the same as on the web (conformance/charts.json): the rows
 //! of the list it binds grouped by a field, each group counted, summed or
-//! averaged (the runtime's `charts::groups`), drawn as bars or a line on an
+//! averaged (`groups::groups`), drawn as bars or a line on an
 //! axis in steps of 1, 2, 2.5 or 5 times a power of ten, or as the slices of
 //! a pie in the palette's colors with a legend beside it. Bound to a list of
 //! numbers instead (DESIGN 5.26), it draws them as they are, the last
@@ -11,8 +11,8 @@
 
 use std::rc::Rc;
 
-use clarity_runtime::charts::{self, ChartRow};
-use serde_json::{Map, Value};
+use super::groups::{self as charts, ChartRow};
+use serde_json::Value;
 use skia_safe::canvas::PointMode;
 use skia_safe::{Color, Paint, PaintCap, PaintJoin, PaintStyle};
 
@@ -296,7 +296,8 @@ fn draw_axis(p: &Painter, place: Rect, shape: ChartShape, groups: &[ChartShown],
     let mut t = s.bottom;
     while t <= s.top + s.step / 1e6 {
         let y = plot.y(t).round() + 0.5;
-        let line = paint(look.color(if t == 0.0 { "strong_border" } else { "border" }), true, 1.0);
+        // The axis lines as Avalonia drew them: muted, the zero line 1 pixel, the others thin.
+        let line = paint(look.color("muted"), true, if t == 0.0 { 1.0 } else { 0.4 });
         p.canvas.draw_line((plot.left as f32, y as f32), ((plot.left + plot.width) as f32, y as f32), &line);
         p.text(&number_text(t), Rect::new(place.x, plot.y(t) - 8.0, LEFT - 6.0, 16.0), look.color("muted"), small, "text", false, TextAlign::Right);
         t = ((t + s.step) * 1e12).round() / 1e12;
@@ -379,11 +380,9 @@ pub fn read_number(value: Option<&Value>) -> Option<f64> {
     n.is_finite().then_some(n)
 }
 
-/// The numbers of a list as a chart shows them: its last `points` (all for 0), each that is a number (the runtime's `views::numbers_of`).
+/// The numbers of a list as a chart shows them: its last `points` (all for 0), each that is a number (`groups::numbers_of`).
 pub fn numbers_shown(numbers: &[Value], points: usize) -> Vec<ChartShown> {
-    let mut data = Map::new();
-    data.insert("numbers".to_string(), Value::Array(numbers.to_vec()));
-    clarity_runtime::views::numbers_of(&data, "numbers", points)
+    charts::numbers_of(numbers, points)
         .into_iter()
         .map(|v| ChartShown { label: String::new(), value: v, text: number_text(v) })
         .collect()
@@ -517,7 +516,12 @@ impl ChartPart {
         }
         // A reference groups, and orders, by the text of the record it names.
         let reference = !choices.is_empty() && kind != "enum" && kind != "bool";
-        let named = |id: &Value| choices.iter().find(|c| same(&c.value, id)).map(|c| Value::from(c.label.clone())).unwrap_or(Value::Null);
+        // A record its choices do not name yet (read before it was added) still counts, by its id.
+        let named = |id: &Value| match choices.iter().find(|c| same(&c.value, id)) {
+            Some(choice) => Value::from(choice.label.clone()),
+            None if id.is_null() => Value::Null,
+            None => Value::from(label_of(id)),
+        };
         let chart_rows: Vec<ChartRow> = rows
             .iter()
             .map(|r| {

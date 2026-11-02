@@ -22,7 +22,7 @@ pub struct ScrollPart {
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
     let grid = container::grid_of(&spec.children, container::columns_of(&spec), GAP, &host);
     let mut base = PartBase::new(spec, host);
-    base.node.add(Box::new(ScrollView::new(Box::new(grid))));
+    base.node.add(Box::new(ScrollView::new(Box::new(grid)).keeping_bar_room()));
     Box::new(ScrollPart { base })
 }
 
@@ -42,7 +42,7 @@ impl Element for ScrollPart {
 
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
         self.base.node.bounds = area;
-        self.base.node.children_mut()[0].arrange(area, cx);
+        element::arrange_safely(self.base.node.children_mut()[0].as_mut(), area, cx);
     }
 
     fn draw(&self, p: &Painter) {

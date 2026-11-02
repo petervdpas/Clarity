@@ -48,7 +48,7 @@ impl Shared {
 
     fn set_open(&self, open: i64) {
         match self.part.name() {
-            Some(name) if self.part.state().is_some() => self.part.host.change_state(name, &mut |s| s.open = Some(open)),
+            Some(name) if self.part.state().is_some() => crate::parts::change_state(&*self.part.host, name, |s| s.open = Some(open)),
             _ => self.here.set(open),
         }
     }
@@ -135,13 +135,13 @@ impl Element for AccordionPart {
             if let Some(header) = children[i].as_any_mut().downcast_mut::<ContainerButton>() {
                 header.chevron = Some(on);
             }
-            children[i].arrange(Rect::new(area.x, y, area.width, SECTION_HEIGHT), cx);
+            element::arrange_safely(children[i].as_mut(), Rect::new(area.x, y, area.width, SECTION_HEIGHT), cx);
             y += SECTION_HEIGHT + BETWEEN;
             if let Some(page) = children[count + i].as_any_mut().downcast_mut::<Page>() {
                 page.shown = on;
             }
             if on {
-                children[count + i].arrange(Rect::new(area.x, y + 2.0 * pad - BETWEEN, area.width, room), cx);
+                element::arrange_safely(children[count + i].as_mut(), Rect::new(area.x, y + 2.0 * pad - BETWEEN, area.width, room), cx);
                 y += room + 4.0 * pad;
             }
         }

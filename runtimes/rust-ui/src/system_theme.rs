@@ -4,9 +4,13 @@
 //! desktop portal (org.freedesktop.appearance color-scheme), else GNOME's
 //! settings; on Windows the registry's AppsUseLightTheme; on macOS the
 //! defaults' AppleInterfaceStyle. A program that is missing, slow or says
-//! nothing leaves light, so reading it never stops the application.
+//! nothing leaves light, so reading it never stops the application. A
+//! change is followed by the system's own event where it gives one (the
+//! desktop host listens: the portal's SettingChanged on Linux, the registry's
+//! change on Windows), else by reading it every few seconds (`follow`).
 
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 /// The system a program runs on, as far as its light or dark is read.
@@ -147,4 +151,134 @@ pub fn watch_with(now: bool, every: Duration, ask: impl Fn() -> bool + Send + 's
         }
     });
     Watch { stop }
+}
+
+/// What the system's change event calls each time its light or dark may have changed.
+pub type Heard = Arc<dyn Fn() + Send + Sync>;
+
+/// Listening to the system's change event; dropping it stops listening.
+pub type Listening = Box<dyn Send>;
+
+/// Starts listening to the system's change event, calling what it is given
+/// each time; none where the system has none, an error where it cannot be
+/// listened to now (no bus).
+pub type Listen = Box<dyn FnOnce(Heard) -> Result<Option<Listening>, String> + Send>;
+
+/// The system's choice followed (see [`follow`]): by its event or, where it
+/// has none, by reading it every so often. Dropping it stops.
+pub struct Following {
+    shared: Arc<FollowShared>,
+}
+
+struct FollowShared {
+    state: Mutex<FollowState>,
+    started: Condvar,
+    ask: Box<dyn Fn() -> bool + Send + Sync>,
+    changed: Box<dyn Fn(bool) + Send + Sync>,
+}
+
+#[derive(Default)]
+struct FollowState {
+    last: bool,
+    started: bool,
+    stopped: bool,
+    by_event: bool,
+    listening: Option<Listening>,
+    watching: Option<Watch>,
+}
+
+impl FollowShared {
+    /// The choice read again differs from the last one: it is told once.
+    fn changed(&self, dark: bool) {
+        {
+            let Ok(mut state) = self.state.lock() else { return };
+            if state.stopped || dark == state.last {
+                return;
+            }
+            state.last = dark;
+        }
+        (self.changed)(dark);
+    }
+}
+
+impl Following {
+    /// Waits until it listens to the event or reads every so often, at most `timeout`; whether it started.
+    pub fn wait_started(&self, timeout: Duration) -> bool {
+        let Ok(state) = self.shared.state.lock() else { return false };
+        match self.shared.started.wait_timeout_while(state, timeout, |s| !s.started) {
+            Ok((state, _)) => state.started,
+            Err(_) => false,
+        }
+    }
+
+    /// Whether it follows the system's event; false while it reads every so often (or has not started).
+    pub fn by_event(&self) -> bool {
+        self.shared.state.lock().map(|s| s.by_event).unwrap_or(false)
+    }
+}
+
+impl Drop for Following {
+    fn drop(&mut self) {
+        let (listening, watching) = match self.shared.state.lock() {
+            Ok(mut state) => {
+                state.stopped = true;
+                (state.listening.take(), state.watching.take())
+            }
+            Err(_) => (None, None),
+        };
+        drop(listening);
+        drop(watching);
+    }
+}
+
+/// Follows the system's choice by its change event: each time `listen`'s
+/// event comes, the choice is read again (`ask`, off the thread that said
+/// it) and `changed` hears it when it differs from the last. Where the
+/// system gives no event (`listen` gives none, or fails) the choice is read
+/// every `every` instead. Listening starts on a thread of its own, so a slow
+/// system never holds the screen.
+pub fn follow(now: bool, ask: impl Fn() -> bool + Send + Sync + 'static, listen: Listen, every: Duration, changed: impl Fn(bool) + Send + Sync + 'static) -> Following {
+    let shared = Arc::new(FollowShared { state: Mutex::new(FollowState { last: now, ..FollowState::default() }), started: Condvar::new(), ask: Box::new(ask), changed: Box::new(changed) });
+    let starting = shared.clone();
+    std::thread::spawn(move || {
+        let weak = Arc::downgrade(&starting);
+        let heard: Heard = Arc::new(move || {
+            let Some(shared) = weak.upgrade() else { return };
+            // Read again off the thread that said it, which may be the bus's.
+            std::thread::spawn(move || {
+                let dark = (shared.ask)();
+                shared.changed(dark);
+            });
+        });
+        let listening = match listen(heard) {
+            Ok(listening) => listening,
+            Err(why) => {
+                // Fail safe: an event that cannot be listened to leaves reading every so often.
+                eprintln!("{}", crate::locale::fill(&crate::locale::translate("systemThemeNotHeard", "the system's light or dark change cannot be heard: {why}"), "why", &why));
+                None
+            }
+        };
+        let Ok(mut state) = starting.state.lock() else { return };
+        state.by_event = listening.is_some();
+        match listening {
+            Some(listening) => state.listening = Some(listening),
+            None => {
+                let weak = Arc::downgrade(&starting);
+                let asking = Arc::downgrade(&starting);
+                let last = state.last;
+                state.watching = Some(watch_with(last, every, move || asking.upgrade().map(|s| (s.ask)()).unwrap_or(last), move |dark| {
+                    if let Some(shared) = weak.upgrade() {
+                        shared.changed(dark);
+                    }
+                }));
+            }
+        }
+        if state.stopped {
+            state.listening = None;
+            state.watching = None;
+        }
+        state.started = true;
+        starting.started.notify_all();
+    });
+    Following { shared }
 }

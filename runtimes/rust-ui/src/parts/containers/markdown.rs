@@ -19,7 +19,7 @@ use skia_safe::{Paint, PaintStyle};
 use crate::element::{Cx, Element};
 use crate::fonts::Fonts;
 use crate::geometry::Rect;
-use crate::input::{Modifiers, PointerInput};
+use crate::input::{Cursor, Modifiers, PointerInput};
 use crate::markup::PartSpec;
 use crate::painter::Painter;
 use crate::part_element;
@@ -188,6 +188,7 @@ impl Flow<'_> {
         let mut y = y;
         // A word may be made of pieces of spans that look different ("then" and "."): it moves to a new line as a whole.
         let mut word: Vec<Piece> = Vec::new();
+        let first = runs.len();
         for span in spans {
             let span_font = if span.code { "mono" } else { font };
             let span_bold = bold || span.bold;
@@ -200,6 +201,15 @@ impl Flow<'_> {
             }
         }
         self.place(runs, &mut word, &mut x, &mut y);
+        // A paragraph whose first strong letter is Hebrew or Arabic reads from
+        // the right (C# MarkdownLayout): each line's words mirrored in its room.
+        let text: String = spans.iter().map(|s| s.text.as_str()).collect();
+        if crate::fonts::bidi::paragraph_level(&text) == 1 {
+            for run in &mut runs[first..] {
+                let shown = run.place.width - self.trailing_space(&run.text, &run.font, run.bold);
+                run.place.x = self.left + self.right - run.place.x - shown;
+            }
+        }
         y + line_height(self.size)
     }
 }
@@ -368,10 +378,8 @@ impl MarkdownPart {
         }
         for run in &self.laid.runs {
             let place = run.place.offset(page.x, page.y);
-            let mut font = p.fonts.font(&run.font, run.size, run.bold);
-            if run.italic {
-                font.set_skew_x(-0.2);
-            }
+            let font = p.fonts.font(&run.font, run.size, run.bold);
+            let skew = if run.italic { -0.2 } else { 0.0 };
             let color = if run.link.is_some() { look.color("accent") } else { look.color("text") };
             let mut paint = Paint::default();
             paint.set_color(color);
@@ -383,12 +391,12 @@ impl MarkdownPart {
             if text.is_empty() {
                 continue;
             }
-            let width = font.measure_str(text, None).0 as f64;
+            let width = p.fonts.measure(text, &run.font, run.size, run.bold);
             let in_block = self.laid.code_boxes.iter().any(|c| c.contains(run.place.x, run.place.y + 1.0));
             if run.code && !in_block {
                 p.fill(Rect::new(place.x - 1.0, place.y + 1.0, width + 2.0, place.height - 2.0), shade, 3.0);
             }
-            p.canvas.draw_str(text, (place.x as f32, baseline as f32), &font, &paint);
+            p.fonts.draw_slanted(p.canvas, text, place.x, baseline, &run.font, run.size, run.bold, &paint, skew);
             if run.link.is_some() {
                 p.fill(Rect::new(place.x, (baseline + 2.0).round(), width, 1.0), color, 0.0);
             }
@@ -429,6 +437,12 @@ impl Element for MarkdownPart {
         self.scroll_y = to;
         cx.invalidate();
         true
+    }
+
+    /// Over a link the pointer is the hand, over its text the arrow.
+    fn cursor_at(&self, x: f64, y: f64) -> Option<Cursor> {
+        let b = self.base.node.bounds;
+        (self.base.enabled() && self.laid.link_at(x - b.x, y - b.y + self.scroll_y).is_some()).then_some(Cursor::Hand)
     }
 
     fn on_pointer_pressed(&mut self, at: PointerInput, _cx: &mut Cx) {

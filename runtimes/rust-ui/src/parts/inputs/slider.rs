@@ -1,6 +1,7 @@
 //! The slider (DESIGN 7.9, conformance/ranges.json): a number between its
 //! lowest and highest value (its bound field's range when the part writes
-//! none, else 0 and 100). Dragged, it takes the nearest step when let go;
+//! none, else 0 and 100). Dragged, its thumb snaps to the steps and it
+//! takes the nearest step when let go;
 //! its keys move a step, ten, or to an end. Only a value that differs is a
 //! change. Bound, it changes the field (a whole number, or exact text for
 //! the rest); unbound, its state's text. As the shared screen draws it.
@@ -88,6 +89,12 @@ impl SliderPart {
         low + part * (high - low)
     }
 
+    /// The nearest step to the value at a point across it: where a dragged thumb shows.
+    fn snapped(&self, screen_x: f64) -> f64 {
+        let at = self.at(screen_x);
+        ranges::dragged(&format!("{at}"), &self.range()).map(|s| number(&s)).unwrap_or(at)
+    }
+
     fn usable(&self) -> bool {
         self.base.enabled() && !self.base.read_only()
     }
@@ -132,7 +139,7 @@ impl SliderPart {
             let text = if whole { Exact::parse(&next).map(|e| e.rounded(0).text()).unwrap_or(next) } else { next };
             match name {
                 Some(name) => {
-                    self.base.host.change_state(&name, &mut |s| s.text = Some(text.clone()));
+                    crate::parts::change_state(&*self.base.host, &name, |s| s.text = Some(text.clone()));
                     self.base.host.edited(&name);
                 }
                 None => self.kept = text,
@@ -153,7 +160,7 @@ impl Element for SliderPart {
         if !self.usable() {
             return;
         }
-        self.dragging = Some(self.at(at.screen_x));
+        self.dragging = Some(self.snapped(at.screen_x));
         cx.invalidate();
     }
 
@@ -161,7 +168,13 @@ impl Element for SliderPart {
         if !self.base.node.pressed || self.dragging.is_none() {
             return;
         }
-        self.dragging = Some(self.at(at.screen_x));
+        // The thumb snaps to the steps while it is dragged, as it will when let go.
+        self.dragging = Some(self.snapped(at.screen_x));
+        cx.invalidate();
+    }
+
+    fn on_pointer_cancelled(&mut self, cx: &mut Cx) {
+        self.dragging = None;
         cx.invalidate();
     }
 

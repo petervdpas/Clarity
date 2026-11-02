@@ -1,0 +1,12 @@
+{
+  "collapsed": "bool",
+  "collapsible": "bool",
+  "columns": "number",
+  "max": "number",
+  "maximizable": "bool",
+  "min": "number",
+  "name": "text",
+  "resizable": "bool",
+  "side": "json",
+  "width": "number"
+}

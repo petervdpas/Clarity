@@ -47,7 +47,7 @@ How to make applications with Clarity, one topic per page. Start with [What Clar
 
 ## Stacks
 
-- [Rust with Tauri](stacks.rust.md): How Clarity turns a project into a Rust desktop program with Tauri and the web renderer, what you need to install, and how to build it.
+- [Rust with Clarity.UI or Tauri](stacks.rust.md): How Clarity turns a project into a Rust desktop program, drawn by Clarity.UI or shown by Tauri with the web renderer, what you need to install, and how to build it.
 - [C# with Clarity.UI](stacks.csharp.md): How Clarity turns a project into a C# desktop program whose windows Clarity.UI draws, what you need to install, and how to build it.
 - [Go with Wails](stacks.go.md): How Clarity turns a project into a Go desktop program with Wails v3 and the web renderer, what you need to install, and how to build it.
 - [C with a webview](stacks.c.md): How Clarity turns a project into a C17 desktop program that shows the web renderer in a webview, what you need to install, and how to build it with CMake.

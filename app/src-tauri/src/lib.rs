@@ -1034,6 +1034,8 @@ mod tests {
         assert!(settings_change(&file, &version, &settings).unwrap().is_none(), "nothing changed");
         assert!(settings_change(&file, "stale", &settings).unwrap_err().contains("changed on disk"));
 
+        // Go has no Clarity.UI yet; Rust and C# have.
+        settings.stack.backend = Backend::Go;
         settings.stack.ui = Ui::Clarity;
         assert!(settings_change(&file, &version, &settings).unwrap_err().contains("C#"));
 

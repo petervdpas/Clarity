@@ -98,7 +98,9 @@ fn the_app_handles_its_databases_not_opening() {
     assert!(rust.contains("const CONNECTION_WINDOW: Option<&str> = Some(\"Main\");"));
     assert!(rust.contains("clarity_runtime::ui::answer(value(0)?)?"));
     // Why, in Clarity's own words the project translates.
-    assert!(rust.contains("serde_json::to_value(clarity_runtime::unconnected_reason(&err))"));
+    assert!(rust.contains("Some(clarity_runtime::unconnected_reason(&err))"));
+    // The program opens them again when the person has kept their connection.
+    assert!(rust.contains("    fn connect(&self) -> Answer<()> {\n        let db = open_databases().map_err(|err| clarity_runtime::unconnected_reason(&err))?;"));
     // The title bar's close goes to the screen, which connects again.
     assert!(rust.contains("tauri::WindowEvent::CloseRequested { api, .. }"));
     assert!(rust.contains("window.clarityCloseRequested && window.clarityCloseRequested()"));

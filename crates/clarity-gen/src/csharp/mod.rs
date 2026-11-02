@@ -15,7 +15,7 @@ mod model;
 mod names;
 pub(crate) use names::value_type as value_type_of;
 mod texts;
-mod themes;
+pub(crate) mod themes;
 mod web;
 mod windows;
 

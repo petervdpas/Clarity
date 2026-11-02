@@ -20,20 +20,28 @@ pub fn theme_file(theme: &ThemeDecl, dark: bool) -> String {
     format!("Themes/{}.{}.json", theme.class.trim_start_matches("theme-"), if dark { "dark" } else { "light" })
 }
 
-/// Each offered theme for light and dark mode, and `AppThemes`, which tells
-/// the runtime the themes offered. Without any, Clarity's own is offered.
-pub fn theme_files(project: &Project, namespace: &str) -> Vec<OutFile> {
-    let themes = offered(project);
-    let mut files: Vec<OutFile> = themes
+/// Each offered theme for light and dark mode as Clarity resolves it, as
+/// Clarity.UI reads it on every language: `<folder>/night-owl.light.json`
+/// and `.dark.json`, the theme the application starts with first. Without
+/// any, none: Clarity.UI carries Clarity's own.
+pub(crate) fn resolved_files(project: &Project, folder: &str) -> Vec<OutFile> {
+    offered(project)
         .iter()
         .flat_map(|theme| {
             [false, true].map(|dark| OutFile {
-                path: theme_file(theme, dark),
+                path: format!("{folder}/{}", theme_file(theme, dark).trim_start_matches("Themes/")),
                 text: serde_json::to_string_pretty(&clarity_spec::themes::resolve(theme, dark)).expect("a theme writes as JSON") + "\n",
                 bytes: None,
             })
         })
-        .collect();
+        .collect()
+}
+
+/// Each offered theme for light and dark mode, and `AppThemes`, which tells
+/// the runtime the themes offered. Without any, Clarity's own is offered.
+pub fn theme_files(project: &Project, namespace: &str) -> Vec<OutFile> {
+    let themes = offered(project);
+    let mut files = resolved_files(project, "Themes");
     let built_in = clarity_spec::themes::built_in();
     let names: Vec<String> = if themes.is_empty() { vec![&built_in] } else { themes }
         .iter()

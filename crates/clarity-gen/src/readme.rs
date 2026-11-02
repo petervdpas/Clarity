@@ -47,7 +47,9 @@ pub fn readme(settings: &Settings, calls_out: bool) -> String {
     );
 
     out.push_str("\n## What you need\n\n");
-    for need in tools::requirements(backend) {
+    // Clarity.UI draws in the system's own window: no webview to install.
+    let clarity_ui = backend == Backend::Rust && settings.stack.ui == clarity_project::Ui::Clarity;
+    for need in tools::requirements(backend).into_iter().filter(|need| !(clarity_ui && need.contains("WebKitGTK"))) {
         out.push_str(&format!("- {need}\n"));
     }
     if calls_out && matches!(backend, Backend::C | Backend::Cpp) {
@@ -62,7 +64,13 @@ pub fn readme(settings: &Settings, calls_out: bool) -> String {
             crate::csharp::runtime_version()
         ));
     }
-    if backend == Backend::Rust {
+    if clarity_ui {
+        out.push_str(&format!(
+            "\nClarity's runtime and Clarity.UI come as the crates clarity-runtime ({}) and clarity-ui ({}), which the first build fetches from crates.io; clarity-ui's first build also downloads Skia's prebuilt library for the system. To build on the crates in Clarity's repository instead, while working on them, write `.cargo/config.toml` in this folder:\n\n    [patch.crates-io]\n    clarity-runtime = {{ path = \"<Clarity>/runtimes/rust\" }}\n    clarity-ui = {{ path = \"<Clarity>/runtimes/rust-ui\" }}\n\nClarity keeps .cargo when it writes the project again; remove it to build on the published crates.\n",
+            crate::rust::runtime_version(),
+            crate::rust::ui_version()
+        ));
+    } else if backend == Backend::Rust {
         out.push_str(&format!(
             "\nClarity's runtime comes as the crate clarity-runtime ({}), with a feature for each database the project uses, which the first build fetches from crates.io. To build on the runtime in Clarity's repository instead, while working on it, write `.cargo/config.toml` in this folder:\n\n    [patch.crates-io]\n    clarity-runtime = {{ path = \"<Clarity>/runtimes/rust\" }}\n\nClarity keeps .cargo when it writes the project again; remove it to build on the published crate.\n",
             crate::rust::runtime_version()

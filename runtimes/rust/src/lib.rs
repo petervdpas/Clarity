@@ -19,6 +19,7 @@ pub mod i18n;
 pub mod json;
 pub mod list_fields;
 pub mod picture;
+pub mod program;
 pub mod query;
 #[cfg(feature = "parts")]
 pub mod parts;
@@ -109,20 +110,7 @@ pub fn stepped(db: &Db, run: impl FnOnce() -> Result<ui::Reply>) -> Result<ui::R
 /// shows (a refusal its own text); a panic, as on a list index out of range,
 /// becomes an error too, and the database stays usable for the next handler.
 pub fn run_guarded<T>(db: &std::sync::Mutex<Db>, run: impl FnOnce(&Db) -> Result<T>) -> std::result::Result<T, serde_json::Value> {
-    let db = db.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&db))) {
-        Ok(Ok(value)) => Ok(value),
-        Ok(Err(Error::Refused(text))) => Err(serde_json::to_value(text).unwrap_or_default()),
-        Ok(Err(other)) => Err(serde_json::Value::from(other.to_string())),
-        Err(panic) => {
-            let why = panic
-                .downcast_ref::<String>()
-                .cloned()
-                .or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string()))
-                .unwrap_or_else(|| "the handler stopped".to_string());
-            Err(serde_json::Value::from(why))
-        }
-    }
+    program::guarded(db, run).map_err(|said| serde_json::to_value(said).unwrap_or_default())
 }
 
 /// `sin(degrees)` in code, rounded to 10 decimals (conformance/drawing.json).

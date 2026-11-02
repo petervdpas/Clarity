@@ -47,6 +47,17 @@ pub fn runtime_version() -> &'static str {
     &RUNTIME_MANIFEST[start..start + end]
 }
 
+/// Clarity.UI's crate manifest, which names its version.
+const UI_MANIFEST: &str = include_str!("../../../../runtimes/rust-ui/Cargo.toml");
+
+/// The version of the crate clarity-ui a project on Clarity.UI requires: the
+/// one in this repository.
+pub fn ui_version() -> &'static str {
+    let start = UI_MANIFEST.find("\nversion = \"").expect("clarity-ui's manifest sets its version") + "\nversion = \"".len();
+    let end = UI_MANIFEST[start..].find('"').expect("the version is closed");
+    &UI_MANIFEST[start..start + end]
+}
+
 /// Lints that generated code does not follow, because names come from the
 /// project as the developer wrote them.
 const ALLOW: &str = "#![allow(non_camel_case_types, non_snake_case, unused_parens, unused_mut, unused_variables, unused_imports, dead_code, unreachable_code, clippy::all)]\n";
@@ -86,12 +97,28 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let mut errors = Vec::new();
     // A program served to a browser alone has no desktop window, and nothing of Tauri.
     let desktop = settings.stack.has(clarity_project::Target::Desktop);
+    // `stack rust desktop`: Clarity.UI draws the windows in the program's own process (DESIGN 7.9), no Tauri.
+    let clarity = settings.stack.ui == clarity_project::Ui::Clarity;
+    if clarity {
+        let mut refused = Vec::new();
+        if settings.stack.has(clarity_project::Target::Web) {
+            refused.push("the web target of Rust on Clarity.UI is not generated yet; write stack rust webview web for the shared web screen".to_string());
+        }
+        if !rust_parts.is_empty() {
+            refused.push("custom parts of Rust on Clarity.UI are not generated yet; write stack rust webview desktop to use them".to_string());
+        }
+        if !refused.is_empty() {
+            return Err(refused);
+        }
+    }
+    let tauri = desktop && !clarity;
     let mut files = vec![
         text(
             "Cargo.toml",
             cargo_toml(
                 &crate_name,
-                desktop,
+                tauri,
+                clarity,
                 project.uses_part(clarity_spec::widgets::WidgetKind::Folder),
                 &features,
                 &rust_parts.iter().map(|p| (parts::package_of(project, &p.name.name), p.name.name.clone())).collect::<Vec<_>>(),
@@ -101,7 +128,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         text("src/model.json", crate::web::model_json(project)),
     ];
     // Tauri's build script, settings and icons are the desktop window's.
-    if desktop {
+    if tauri {
         files.push(text("build.rs", format!("{HEADER}\nfn main() {{\n    tauri_build::build()\n}}\n")));
         files.push(text("tauri.conf.json", tauri_conf(&clarity_project::title(settings), &crate_name, crate::window_size(project, &main_window))));
         files.push(OutFile {
@@ -115,8 +142,13 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             bytes: Some(std::borrow::Cow::Borrowed(ICON_ICO)),
         });
     }
-    // Clarity's screen, the themes, the resources and the windows as markup (DESIGN 7.8), in ui/.
-    files.extend(crate::web::renderer_files(project));
+    if clarity {
+        // The windows and app frames as markup, the themes and the texts, which Clarity.UI reads (DESIGN 7.9).
+        files.extend(clarity_files(project));
+    } else {
+        // Clarity's screen, the themes, the resources and the windows as markup (DESIGN 7.8), in ui/.
+        files.extend(crate::web::renderer_files(project));
+    }
 
     let mut modules = Vec::new();
     let mut owners: Vec<Owner> = Vec::new();
@@ -175,15 +207,56 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     // The screen's files, which a web server serves from the program itself.
     let ui: Vec<String> = files.iter().filter_map(|f| f.path.strip_prefix("ui/").map(String::from)).collect();
-    let (main_text, desktop_text) = split_desktop(&main_rs(project, settings, &owners, &databases, &main_window, &ui));
-    // Everything of Tauri is in the desktop module; a program served to a browser alone has none.
-    if settings.stack.has(clarity_project::Target::Desktop) {
+    let clarity_run = clarity.then(|| clarity_run(project, settings, &files, &main_window));
+    let (main_text, desktop_text) = split_desktop(&main_rs(project, settings, &owners, &databases, &main_window, &ui, clarity_run.as_deref()));
+    // Everything of Tauri is in the desktop module; a program served to a browser alone, or on Clarity.UI, has none.
+    if tauri {
         files.push(text("src/main.rs", main_text.replacen("mod modules;\n", "mod modules;\nmod desktop;\n", 1)));
         files.push(text("src/desktop.rs", format!("{HEADER}//! The desktop window: Tauri's commands, which call what the program\n//! answers in main.rs, its windows of their own and custom parts.\n\nuse super::*;\n{desktop_text}")));
     } else {
         files.push(text("src/main.rs", main_text));
     }
     Ok(files)
+}
+
+/// The files of a program on Clarity.UI (DESIGN 7.9), beside its code: the
+/// windows and app frames as `.cxaml` (the same markup the shared screen and
+/// C# read) and the themes the project offers as Clarity resolves them. The
+/// program carries them, with the model, whose translations Clarity.UI loads.
+fn clarity_files(project: &Project) -> Vec<OutFile> {
+    let mut files: Vec<OutFile> = crate::web_windows::window_files(project)
+        .into_iter()
+        .chain(crate::web_windows::app_files(project))
+        .map(|file| OutFile { path: file.path.replace("ui/windows/", "windows/").replace("ui/apps/", "apps/"), ..file })
+        .collect();
+    files.extend(crate::csharp::themes::resolved_files(project, "themes"));
+    files.extend(crate::web::resource_files(project, "resources"));
+    files
+}
+
+/// The lines that start Clarity.UI: the program's files, embedded, and main's
+/// last line, which opens the main window and runs until the last one closes.
+fn clarity_run(project: &Project, settings: &Settings, files: &[OutFile], main_window: &str) -> String {
+    let embedded = |folder: &str, extension: &str| -> String {
+        let found: Vec<String> = files
+            .iter()
+            .filter_map(|f| f.path.strip_prefix(&format!("{folder}/")).and_then(|n| n.strip_suffix(extension)).map(|name| format!("({name:?}, include_str!(\"../{}\"))", f.path)))
+            .collect();
+        found.join(", ")
+    };
+    // The themes in the order the project offers them, light before dark.
+    let themes: Vec<String> = crate::csharp::themes::resolved_files(project, "themes")
+        .iter()
+        .filter_map(|f| f.path.strip_prefix("themes/").and_then(|n| n.strip_suffix(".json")).map(|name| format!("({name:?}, include_str!(\"../{}\"))", f.path)))
+        .collect();
+    let (width, height) = crate::window_size(project, main_window);
+    format!(
+        "    clarity_ui::desktop::run(app, FILES)\n//~files\n\n/// The windows, app frames, themes and model Clarity.UI draws from, in the program, and the main window's title and size.\nconst FILES: clarity_ui::AppFiles = clarity_ui::AppFiles {{\n    windows: &[{windows}],\n    apps: &[{apps}],\n    themes: &[{themes}],\n    model: MODEL,\n    title: {title:?},\n    width: {width}.0,\n    height: {height}.0,\n}};\n",
+        title = clarity_project::title(settings),
+        windows = embedded("windows", ".cxaml"),
+        apps = embedded("apps", ".cxaml"),
+        themes = themes.join(", "),
+    )
 }
 
 /// The engines of the application (DESIGN 5.11): each loaded once from its
@@ -245,11 +318,15 @@ fn main_window(project: &Project) -> Option<String> {
 
 /// The manifest of the application, with the runtime features of the
 /// databases its data sources are.
-fn cargo_toml(name: &str, desktop: bool, folders: bool, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)]) -> String {
+/// `desktop`: Tauri's desktop window; `clarity`: Clarity.UI's in its place.
+#[allow(clippy::too_many_arguments)]
+fn cargo_toml(name: &str, desktop: bool, clarity: bool, folders: bool, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)]) -> String {
     // Tauri, for the desktop window; a program served to a browser alone has none.
     let (tauri, build) = if desktop { ("tauri = { version = \"2\", features = [] }\n", "[build-dependencies]\ntauri-build = { version = \"2\", features = [] }\n\n") } else { ("", "") };
     // Tauri's dialogs, for the folder part's button that opens the system's folder picker.
     let tauri = if desktop && folders { format!("{tauri}tauri-plugin-dialog = \"2\"\n") } else { tauri.to_string() };
+    // Clarity.UI, which draws the windows with Skia in the system's own window (DESIGN 7.9).
+    let tauri = if clarity { format!("{tauri}clarity-ui = \"{}\"\n", ui_version()) } else { tauri };
     let features = features.iter().map(|f| format!("{f:?}")).collect::<Vec<_>>().join(", ");
     // Each custom part's crate, and the webview's GTK window, which the parts draw in, as Tauri's own GTK crates give it.
     let crates: String = parts.iter().map(|(package, part)| format!("{package} = {{ path = \"parts/{part}\" }}\n")).collect();
@@ -303,7 +380,12 @@ fn display_field(entity: &clarity_spec::model::Entity) -> Option<String> {
         .map(|f| ident(&f.name.name))
 }
 
-fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str, ui: &[String]) -> String {
+/// The program's main.rs: the program (`App`, which implements the runtime's
+/// `Program`), and Tauri's commands, which call it, between `//~desktop` and
+/// `//~end` lines. With `clarity_run`, the lines that start Clarity.UI, main
+/// starts that in place of Tauri.
+#[allow(clippy::too_many_arguments)]
+fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str, ui: &[String], clarity_run: Option<&str>) -> String {
     // An engine that says how far a long call is (DESIGN 5.12): handlers run off
     // the screen's thread, so the window keeps painting its bar, and Stop reaches the call.
     let watches = project.files.iter().flat_map(|f| &f.engines).any(|e| e.uses.iter().any(|u| u.name == clarity_spec::code::check::PROGRESS));
@@ -321,6 +403,12 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         ("", "tauri::State<App>", "", "", "", "", "")
     };
     let watched_fn = if watches { WATCHED } else { "" };
+    // The program watches its long calls for any screen: Clarity.UI shows the bar with Stop itself.
+    let watched_impl = if watches {
+        "\n    fn watches(&self) -> bool {\n        true\n    }\n\n    fn watched(&self, watch: &program::Watch, run: &mut dyn FnMut()) {\n        let watch = clarity_runtime::engine::Watch { progress: watch.progress.clone(), stop: watch.stop.clone() };\n        clarity_runtime::engine::watching(&watch, || run());\n    }\n"
+    } else {
+        ""
+    };
     // The folder part's button opens the system's folder picker, from Tauri's dialog plugin.
     let folders = project.uses_part(clarity_spec::widgets::WidgetKind::Folder);
     let (choose_folder_fn, choose_folder_command, dialog_plugin) = if folders {
@@ -348,42 +436,58 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     };
     // A database that connects with a secret setting (DESIGN 5.27): when it
     // cannot open at start, the screen shows the window that keeps it first.
-    let (start_command, open_db, connecting_manage, connect_command) = match crate::unconnected(project) {
+    // A database that connects with a secret setting (DESIGN 5.27): when it
+    // cannot open at start, the screen shows the window that keeps it first.
+    let started_fn = "/// The model and the main window, which the screen starts from; when the\n/// databases did not open, what to show first and why.\nfn started(app: &App) -> Value {\n    let started = app.started();\n    let mut start = serde_json::json!({ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": started.main });\n    if let Some(unconnected) = started.unconnected {\n        start[\"unconnected\"] = serde_json::json!({ \"handler\": unconnected.handler, \"window\": unconnected.window, \"problem\": unconnected.problem });\n    }\n    start\n}\n\n//~desktop\n#[tauri::command]\nfn start(app: tauri::State<App>) -> Value {\n    started(&app)\n}\n//~end\n";
+    let (app_struct, start_command, open_db, app_new, started_unconnected, connect_fn, connect_command) = match crate::unconnected(project) {
         None => (
-            "/// The model and the main window, which the screen starts from.\nfn started() -> Value {\n    serde_json::json!({ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": MAIN_WINDOW })\n}\n\n//~desktop\n#[tauri::command]\nfn start() -> Value {\n    started()\n}\n//~end\n".to_string(),
+            "/// The program: its databases, which every call shares.\nstruct App(Mutex<Db>);\n".to_string(),
+            started_fn.to_string(),
             "    let db = open_databases().expect(\"cannot open the databases\");\n".to_string(),
+            "    let app = App(Mutex::new(db));\n",
+            "None".to_string(),
             String::new(),
             "",
         ),
         Some(unconnected) => (
             format!(
-                "/// What the screen shows when the databases did not open (DESIGN 5.27): the app's\n/// `on unconnected` handler, or else the window that keeps a secret connection.\nconst UNCONNECTED_HANDLER: Option<&str> = {:?};\nconst CONNECTION_WINDOW: Option<&str> = {:?};\n\n/// Why the databases did not open: none once they have.\nstruct Connecting(Mutex<Option<Value>>);\n\n/// The model and the main window; when the databases did not open, what to show\n/// first and why.\nfn started(connecting: &Connecting) -> Value {{\n    let problem = connecting.0.lock().ok().and_then(|p| p.clone());\n    let mut start = serde_json::json!({{ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": MAIN_WINDOW }});\n    if let Some(problem) = problem {{\n        start[\"unconnected\"] = serde_json::json!({{ \"handler\": UNCONNECTED_HANDLER, \"window\": CONNECTION_WINDOW, \"problem\": problem }});\n    }}\n    start\n}}\n\n//~desktop\n#[tauri::command]\nfn start(connecting: tauri::State<Connecting>) -> Value {{\n    started(&connecting)\n}}\n//~end\n\n/// Opens the databases again, as when the person has kept their connection.\nfn connected(app: &App, connecting: &Connecting) -> Answer<()> {{\n    let db = open_databases().map_err(|err| serde_json::to_value(clarity_runtime::unconnected_reason(&err)).unwrap_or_default())?;\n    *app.0.lock().map_err(|_| Value::from(\"the database is not available\"))? = db;\n    if let Ok(mut problem) = connecting.0.lock() {{\n        *problem = None;\n    }}\n    Ok(())\n}}\n\n//~desktop\n#[tauri::command]\nfn connect(app: tauri::State<App>, connecting: tauri::State<Connecting>) -> Answer<()> {{\n    connected(&app, &connecting)\n}}\n\n/// Whether the databases are still not open.\nfn unconnected(window: &tauri::Window) -> bool {{\n    use tauri::Manager;\n    window.state::<Connecting>().0.lock().map(|p| p.is_some()).unwrap_or(false)\n}}\n//~end\n",
+                "/// What the screen shows when the databases did not open (DESIGN 5.27): the app's\n/// `on unconnected` handler, or else the window that keeps a secret connection.\nconst UNCONNECTED_HANDLER: Option<&str> = {:?};\nconst CONNECTION_WINDOW: Option<&str> = {:?};\n\n/// The program: its databases, which every call shares, and why they did not\n/// open: none once they have.\nstruct App(Mutex<Db>, Mutex<Option<Text>>);\n",
                 unconnected.handler.as_ref().map(|(_, h)| h.as_str()),
                 unconnected.window.as_deref()
             ),
-            "    // Until they open, the windows work on an empty database in memory.\n    let (db, problem) = match open_databases() {\n        Ok(db) => (db, None),\n        Err(err) => (Db::memory().expect(\"cannot open a database in memory\"), Some(serde_json::to_value(clarity_runtime::unconnected_reason(&err)).unwrap_or_default())),\n    };\n".to_string(),
-            "\n        .manage(Connecting(Mutex::new(problem)))".to_string(),
+            format!("{started_fn}\n//~desktop\n#[tauri::command]\nfn connect(app: tauri::State<App>) -> Answer<()> {{\n    app.connect()\n}}\n\n/// Whether the databases are still not open.\nfn unconnected(window: &tauri::Window) -> bool {{\n    use tauri::Manager;\n    window.state::<App>().1.lock().map(|p| p.is_some()).unwrap_or(false)\n}}\n//~end\n"),
+            "    // Until they open, the windows work on an empty database in memory.\n    let (db, problem) = match open_databases() {\n        Ok(db) => (db, None),\n        Err(err) => (Db::memory().expect(\"cannot open a database in memory\"), Some(clarity_runtime::unconnected_reason(&err))),\n    };\n".to_string(),
+            "    let app = App(Mutex::new(db), Mutex::new(problem));\n",
+            "self.1.lock().ok().and_then(|problem| problem.clone()).map(|problem| program::Unconnected { handler: UNCONNECTED_HANDLER.map(String::from), window: CONNECTION_WINDOW.map(String::from), problem })".to_string(),
+            "\n    /// Opens the databases again, as when the person has kept their connection.\n    fn connect(&self) -> Answer<()> {\n        let db = open_databases().map_err(|err| clarity_runtime::unconnected_reason(&err))?;\n        *self.0.lock().map_err(|_| Text::plain(\"the database is not available\"))? = db;\n        if let Ok(mut problem) = self.1.lock() {\n            *problem = None;\n        }\n        Ok(())\n    }\n".to_string(),
             "\n            connect,",
         ),
     };
     // The web target (DESIGN 7.3): the commands a browser sends, answered by
     // what the desktop commands call; and main serving them by the targets.
     let unconnected = crate::unconnected(project).is_some();
-    let serve_web = serve_main(unconnected, &clarity_project::serve_address(settings), ui);
+    let serve_web = serve_main(&clarity_project::serve_address(settings), ui);
     let targets = &settings.stack.targets;
-    // The desktop window is the desktop module's (desktop.rs), which holds everything of Tauri.
-    let (problem_param, desktop_call) = if unconnected { (", problem: Option<Value>", "    desktop::run(db, problem);\n") } else { ("", "    desktop::run(db);\n") };
+    // The desktop window is the desktop module's (desktop.rs), which holds everything of Tauri;
+    // on Clarity.UI it is the crate clarity-ui's, in the program's own process.
+    // Clarity.UI's start is main's last line; its files' constant follows main.
+    let (clarity_run, files_const) = match clarity_run.map(|run| run.split_once("//~files\n").unwrap_or((run, ""))) {
+        Some((run, files)) => (Some(run), files),
+        None => (None, ""),
+    };
+    let desktop_call = match clarity_run {
+        Some(run) => run.to_string(),
+        None => "    desktop::run(app);\n".to_string(),
+    };
     let (web_start, desktop_call) = match (targets.contains(&clarity_project::Target::Web), targets.contains(&clarity_project::Target::Desktop)) {
-        (true, false) => (serve_web, ""),
+        (true, false) => (serve_web, String::new()),
         (true, true) => (
             format!("    // --serve runs it as a web server, for a browser, in place of its window.\n    if std::env::args().any(|a| a == \"--serve\") {{\n{}        return;\n    }}\n", serve_web.replace("\n    ", "\n        ").replacen("    ", "        ", 1)),
             desktop_call,
         ),
         _ => (String::new(), desktop_call),
     };
-    let settings_commands = format!(
-        "/// The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.\n#[tauri::command]\nfn read_settings() -> Map<String, Value> {{\n    {read}\n}}\n\n/// Keeps the person's settings, as the screen has them now.\n#[tauri::command]\nfn keep_settings(settings: Map<String, Value>) -> Answer<()> {{\n    {keep}.map_err(|err| Value::from(err.to_string()))\n}}"
-    );
+    let settings_commands = "/// The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.\n#[tauri::command]\nfn read_settings(app: tauri::State<App>) -> Map<String, Value> {\n    app.read_settings()\n}\n\n/// Keeps the person's settings, as the screen has them now.\n#[tauri::command]\nfn keep_settings(app: tauri::State<App>, settings: Map<String, Value>) -> Answer<()> {\n    app.keep_settings(settings)\n}";
     // An engine whose file does not fit its declaration stops the application at start, not at its first call.
     let (engines_mod, check_engines, close_engines) = if crate::engines(project).is_empty() {
         ("", "", "    let _ = instance;\n")
@@ -394,7 +498,10 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
             "    engines::close_window(instance);\n",
         )
     };
-    let served = served_rs(unconnected, close_engines);
+    // The web server's commands; a program on Clarity.UI has none.
+    let served = if clarity_run.is_some() { String::new() } else { served_rs(unconnected) };
+    // On Clarity.UI main answers what the window's host ends with.
+    let main_returns = if clarity_run.is_some() { " -> std::process::ExitCode" } else { "" };
     // A second desktop window only where the design marks a target `in new window`.
     let apart = clarity_spec::frame::opens_new_windows(project);
     // Custom parts drawn by native libraries (DESIGN 6.5): the shell's side of the part host.
@@ -616,7 +723,8 @@ mod modules;
 {engines_mod}{parts_mod}
 use std::sync::Mutex;
 
-use clarity_runtime::ui::{{RefOption, Reply, Ui, WindowState, from_data, to_data}};
+use clarity_runtime::program::{{self, Answer, Program}};
+use clarity_runtime::ui::{{RefOption, Reply, Text, Ui, WindowState, from_data, to_data}};
 use clarity_runtime::{{Db, Dialect, Error, Result}};
 use serde_json::{{Map, Value}};
 
@@ -634,8 +742,7 @@ const DATABASES: &[(&str, Dialect, &str)] = &[{databases}];
 /// fields kept as files (`env:NAME` reads it from that environment variable).
 const STORES: &[(&str, &str)] = &[{stores}];
 
-struct App(Mutex<Db>);
-
+{app_struct}
 /// A window's state when it opens, with `with` filled in.
 fn open(db: &Db, window: &str, with: Map<String, Value>) -> Result<Reply> {{
     let mut data = match window {{
@@ -747,14 +854,12 @@ fn picture_of(db: &Db, entity: &str, id: i64, field: &str) -> Result<Option<Vec<
     }}
 }}
 
-/// What a command answers: its result, or what went wrong as the screen
-/// shows it. A refusal keeps its slots, so the screen fills them in the
-/// format of the person using the application.
-type Answer<T> = std::result::Result<T, Value>;
-
+/// Runs a call on the database. What goes wrong is what the screen shows: a
+/// refusal keeps its slots, so the screen fills them in the format of the
+/// person using the application.
 fn locked<T>(app: &App, run: impl FnOnce(&Db) -> Result<T>) -> Answer<T> {{
     // Fail safe: an error or a panic is what the screen shows, and the database stays usable.
-    clarity_runtime::run_guarded(&app.0, run)
+    program::guarded(&app.0, run)
 }}
 
 /// A window's reply: what each table, tree and chart shows is filled in
@@ -762,7 +867,7 @@ fn locked<T>(app: &App, run: impl FnOnce(&Db) -> Result<T>) -> Answer<T> {{
 /// changed is never the person's edit. `sent` is what the screen sent.
 fn window_reply(sent: &clarity_runtime::views::Sent, answer: Answer<Reply>) -> Answer<Reply> {{
     let mut reply = answer?;
-    clarity_runtime::views::replied(sent, &mut reply).map_err(|err| Value::from(err.to_string()))?;
+    clarity_runtime::views::replied(sent, &mut reply).map_err(|err| Text::plain(err.to_string()))?;
     clarity_runtime::edits::replied(&reply);
     Ok(reply)
 }}
@@ -780,40 +885,147 @@ fn open_databases() -> Result<Db> {{
 {folder_stores}    Ok(db)
 }}
 
+/// What the screen asks of the program, the same for Tauri's commands, the
+/// web server's and Clarity.UI (DESIGN 7.9).
+impl Program for App {{
+    fn started(&self) -> program::Started {{
+        program::Started {{ main: MAIN_WINDOW.to_string(), unconnected: {started_unconnected} }}
+    }}
+
+    fn start_app(&self) -> Answer<Reply> {{
+        window_reply(&clarity_runtime::views::Sent::none(), locked(self, |db| on_event(db, WindowState::new("", Map::new()), "start")))
+    }}
+
+    fn open_window(&self, window: &str, with: Map<String, Value>) -> Answer<Reply> {{
+        window_reply(&clarity_runtime::views::Sent::none(), locked(self, |db| open(db, window, with)))
+    }}
+
+    fn close_window(&self, state: WindowState) -> Answer<Reply> {{
+        let instance = state.instance;
+        let reply = locked(self, |db| on_event(db, state, "close"))?;
+        // The window has closed: what it had of an engine goes, and its edits.
+        clarity_runtime::edits::closed(instance);
+    {close_engines}        Ok(reply)
+    }}
+
+    fn return_to(&self, state: WindowState) -> Answer<Reply> {{
+        let sent = clarity_runtime::views::Sent::of(&state);
+        window_reply(&sent, locked(self, |db| on_event(db, state, "return")))
+    }}
+
+    fn dispatch_event(&self, state: WindowState, handler: &str) -> Answer<Reply> {{
+        // One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
+        let sent = clarity_runtime::views::Sent::of(&state);
+        window_reply(&sent, locked(self, |db| clarity_runtime::stepped(db, || dispatch(db, state, handler))))
+    }}
+
+    fn edit_event(&self, state: WindowState, edit: program::Edit) -> Answer<Reply> {{
+        let program::Edit {{ handler, part, scope, ends, readonly, path, editable }} = edit;
+        let sent = clarity_runtime::views::Sent::of(&state);
+        window_reply(&sent, locked(self, |db| clarity_runtime::edits::guarded(state, readonly, path.as_deref(), editable.as_deref(), |state| drawn(db, state), |state| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| handled(db, state, handler.as_deref())))))
+    }}
+
+    fn undo_edit(&self, state: WindowState, scope: &str, back: bool) -> Answer<Reply> {{
+        let sent = clarity_runtime::views::Sent::of(&state);
+        window_reply(&sent, locked(self, |db| clarity_runtime::edits::undo(db, state, scope, back, |state| drawn(db, state))))
+    }}
+
+    fn reorder_event(&self, state: WindowState, reorder: program::Reorder) -> Answer<Reply> {{
+        let program::Reorder {{ part, scope, list, by, parent, moved, handler, readonly }} = reorder;
+        let sent = clarity_runtime::views::Sent::of(&state);
+        window_reply(&sent, locked(self, |db| clarity_runtime::edits::guarded(state, readonly, None, None, |state| drawn(db, state), |state| clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &moved, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))
+    }}
+
+    fn item_event(&self, state: WindowState, item: program::ItemEdit) -> Answer<Reply> {{
+        let program::ItemEdit {{ part, scope, path, item, values, typed, handler, readonly }} = item;
+        let sent = clarity_runtime::views::Sent::of(&state);
+        window_reply(&sent, locked(self, |db| clarity_runtime::edits::guarded(state, readonly, None, None, |state| drawn(db, state), |state| clarity_runtime::list_fields::event(db, state, &part, &path, item, &values, &typed, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))
+    }}
+
+    fn range_event(&self, state: WindowState, range: program::RangeEdit) -> Answer<Reply> {{
+        let program::RangeEdit {{ part, scope, path, range, whole, moved, handler, readonly }} = range;
+        let sent = clarity_runtime::views::Sent::of(&state);
+        window_reply(&sent, locked(self, |db| clarity_runtime::edits::guarded(state, readonly, None, None, |state| drawn(db, state), |state| clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &moved, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))
+    }}
+
+    fn canvas_event(&self, state: WindowState, canvas: program::CanvasEdit) -> Answer<Reply> {{
+        let program::CanvasEdit {{ canvas, action, scope, handler, readonly }} = canvas;
+        let sent = clarity_runtime::views::Sent::of(&state);
+        window_reply(&sent, locked(self, |db| clarity_runtime::edits::guarded(state, readonly, None, None, |state| drawn(db, state), |state| clarity_runtime::canvas::event(db, state, &canvas, &action, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))
+    }}
+
+    fn step_event(&self, state: WindowState, step: program::StepPress) -> Answer<Reply> {{
+        let program::StepPress {{ part, button, steps, next, finish }} = step;
+        let sent = clarity_runtime::views::Sent::of(&state);
+        window_reply(&sent, locked(self, |db| clarity_runtime::steps::event(db, state, &part, button, steps, next.as_deref(), finish.as_deref(), |state, handler| dispatch(db, state, handler), |state| drawn(db, state))))
+    }}
+
+    fn view_event(&self, state: WindowState, part: &str, action: Map<String, Value>) -> Answer<Reply> {{
+        let sent = clarity_runtime::views::Sent::view_event(&state);
+        window_reply(&sent, locked(self, |db| clarity_runtime::views::event(state, part, &action, |state| drawn(db, state))))
+    }}
+
+    fn answer_event(&self, state: WindowState, handler: &str, values: Vec<Value>) -> Answer<Reply> {{
+        let sent = clarity_runtime::views::Sent::of(&state);
+        window_reply(&sent, locked(self, |db| answer_to(db, state, handler, values)))
+    }}
+
+    fn ref_options(&self, entity: &str) -> Answer<Vec<RefOption>> {{
+        locked(self, |db| options(db, entity))
+    }}
+
+    fn field_values(&self, entity: &str, field: &str) -> Answer<Vec<String>> {{
+        locked(self, |db| values_of(db, entity, field))
+    }}
+
+    fn find_options(&self, kind: &str, entity: &str, field: Option<&str>, show: &[String], typed: &str) -> Answer<Value> {{
+        locked(self, |db| clarity_runtime::dropdown_options::find(kind, show, typed, || values_of(db, entity, field.unwrap_or_default()), || options(db, entity)))
+    }}
+
+    fn field_bytes(&self, entity: &str, id: i64, field: &str) -> Answer<Option<Vec<u8>>> {{
+        locked(self, |db| picture_of(db, entity, id, field))
+    }}
+
+    fn store_file(&self, store: &str, path: &str) -> Answer<Vec<u8>> {{
+        locked(self, |db| db.store_file(store, path))
+    }}
+
+    fn read_settings(&self) -> Map<String, Value> {{
+        {read}
+    }}
+
+    fn keep_settings(&self, settings: Map<String, Value>) -> Answer<()> {{
+        {keep}.map_err(|err| Text::plain(err.to_string()))
+    }}
+{connect_fn}{watched_impl}}}
+
 //~desktop
 #[tauri::command]
 {asynced}fn open_window(app: {app_state}{watch_params}, window: String, with: Map<String, Value>) -> Answer<Reply> {{
-    window_reply(&clarity_runtime::views::Sent::none(), {watching}locked(&app, |db| open(db, &window, with)){watched_end})
+    {watching}app.open_window(&window, with){watched_end}
 }}
 
 /// Runs a window's `on close` before the screen closes it.
 #[tauri::command]
 {asynced}fn close_window(app: {app_state}{watch_params}, state: WindowState) -> Answer<Reply> {{
-    let instance = state.instance;
-    let reply = {watching}locked(&app, |db| on_event(db, state, "close")){watched_end}?;
-    // The window has closed: what it had of an engine goes, and its edits.
-    clarity_runtime::edits::closed(instance);
-{close_engines}    Ok(reply)
+    {watching}app.close_window(state){watched_end}
 }}
 
 /// Runs a window's `on return` when it is on top again.
 #[tauri::command]
 {asynced}fn return_to(app: {app_state}{watch_params}, state: WindowState) -> Answer<Reply> {{
-    let sent = clarity_runtime::views::Sent::of(&state);
-    window_reply(&sent, {watching}locked(&app, |db| on_event(db, state, "return")){watched_end})
+    {watching}app.return_to(state){watched_end}
 }}
 
 /// Runs the app's `on start`, before its main window opens.
 #[tauri::command]
 {asynced}fn start_app(app: {app_state}{watch_params}) -> Answer<Reply> {{
-    window_reply(&clarity_runtime::views::Sent::none(), {watching}locked(&app, |db| on_event(db, WindowState::new("", Map::new()), "start")){watched_end})
+    {watching}app.start_app(){watched_end}
 }}
 
 #[tauri::command]
 {asynced}fn dispatch_event(app: {app_state}{watch_params}, state: WindowState, handler: String) -> Answer<Reply> {{
-    // One undo step (DESIGN 5.29): the reply carries its id when the handler changed the database.
-    let sent = clarity_runtime::views::Sent::of(&state);
-    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::stepped(db, || dispatch(db, state, &handler))){watched_end})
+    {watching}app.dispatch_event(state, &handler){watched_end}
 }}
 
 /// The person ended an edit of a part (DESIGN 5.29): its handler, if any, runs
@@ -824,16 +1036,15 @@ fn open_databases() -> Result<Db> {{
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 {asynced}fn edit_event(app: {app_state}{watch_params}, state: WindowState, handler: Option<String>, part: String, scope: String, ends: bool, readonly: Option<bool>, path: Option<String>, editable: Option<Vec<String>>) -> Answer<Reply> {{
-    let sent = clarity_runtime::views::Sent::of(&state);
-    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), path.as_deref(), editable.as_deref(), |state| drawn(db, state), |state| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| handled(db, state, handler.as_deref())))){watched_end})
+    let edit = program::Edit {{ handler, part, scope, ends, readonly: readonly.unwrap_or_default(), path, editable }};
+    {watching}app.edit_event(state, edit){watched_end}
 }}
 
 /// Ctrl+Z (`back`) or Ctrl+Y on a scope: its last edit taken back or done
 /// again from the window's record, with its database steps (DESIGN 5.29).
 #[tauri::command]
 fn undo_edit(app: tauri::State<App>, state: WindowState, scope: String, back: bool) -> Answer<Reply> {{
-    let sent = clarity_runtime::views::Sent::of(&state);
-    window_reply(&sent, locked(&app, |db| clarity_runtime::edits::undo(db, state, &scope, back, |state| drawn(db, state))))
+    app.undo_edit(state, &scope, back)
 }}
 
 /// A row moved by a drag or a key (DESIGN 1.7): the runtime gives the list
@@ -841,17 +1052,16 @@ fn undo_edit(app: tauri::State<App>, state: WindowState, scope: String, back: bo
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 {asynced}fn reorder_event(app: {app_state}{watch_params}, state: WindowState, part: String, scope: Option<String>, list: String, by: String, parent: Option<String>, r#move: clarity_runtime::reorder::Move, handler: Option<String>, readonly: Option<bool>) -> Answer<Reply> {{
-    let sent = clarity_runtime::views::Sent::of(&state);
-    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &r#move, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))){watched_end})
+    let reorder = program::Reorder {{ part, scope, list, by, parent, moved: r#move, handler, readonly: readonly.unwrap_or_default() }};
+    {watching}app.reorder_event(state, reorder){watched_end}
 }}
 
 /// An item typed for a list field (DESIGN 1.7): added, kept once, or refused.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 {asynced}fn item_event(app: {app_state}{watch_params}, state: WindowState, part: String, scope: Option<String>, path: String, item: clarity_runtime::list_fields::ItemKind, values: Option<Vec<String>>, typed: String, handler: Option<String>, readonly: Option<bool>) -> Answer<Reply> {{
-    let values = values.unwrap_or_default();
-    let sent = clarity_runtime::views::Sent::of(&state);
-    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::list_fields::event(db, state, &part, &path, item, &values, &typed, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))){watched_end})
+    let item = program::ItemEdit {{ part, scope, path, item, values: values.unwrap_or_default(), typed, handler, readonly: readonly.unwrap_or_default() }};
+    {watching}app.item_event(state, item){watched_end}
 }}
 
 /// A key, a drag or typed text on a slider or spin box (DESIGN 1.7): the
@@ -860,9 +1070,9 @@ fn undo_edit(app: tauri::State<App>, state: WindowState, scope: String, back: bo
 #[allow(clippy::too_many_arguments)]
 {asynced}fn range_event(app: {app_state}{watch_params}, state: WindowState, part: String, scope: Option<String>, path: String, min: Option<String>, max: Option<String>, step: String, whole: bool, key: Option<clarity_runtime::ranges::RangeKey>, at: Option<String>, typed: Option<String>, handler: Option<String>, readonly: Option<bool>) -> Answer<Reply> {{
     let range = clarity_runtime::ranges::Range {{ min, max, step }};
-    let mv = clarity_runtime::ranges::RangeMove::of(key, at, typed).map_err(|err| Value::from(err.to_string()))?;
-    let sent = clarity_runtime::views::Sent::of(&state);
-    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &mv, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))){watched_end})
+    let moved = clarity_runtime::ranges::RangeMove::of(key, at, typed).map_err(|err| Text::plain(err.to_string()))?;
+    let range = program::RangeEdit {{ part, scope, path, range, whole, moved, handler, readonly: readonly.unwrap_or_default() }};
+    {watching}app.range_event(state, range){watched_end}
 }}
 
 /// The person's action on a canvas (DESIGN 5.31): the runtime applies it,
@@ -872,8 +1082,8 @@ fn undo_edit(app: tauri::State<App>, state: WindowState, scope: String, back: bo
 #[allow(clippy::too_many_arguments)]
 {asynced}fn canvas_event(app: {app_state}{watch_params}, state: WindowState, part: String, scope: Option<String>, mode: String, list: Option<String>, at: Option<[String; 2]>, path: Option<String>, units: Option<[i64; 2]>, grid: Option<i64>, snap: Option<bool>, action: Map<String, Value>, handler: Option<String>, readonly: Option<bool>) -> Answer<Reply> {{
     let canvas = clarity_runtime::canvas::CanvasArgs {{ part, mode, list: list.unwrap_or_default(), at, path: path.unwrap_or_default(), units, grid: grid.unwrap_or_default(), snap: snap.unwrap_or_default(), readonly: false }};
-    let sent = clarity_runtime::views::Sent::of(&state);
-    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::canvas::event(db, state, &canvas, &action, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))){watched_end})
+    let canvas = program::CanvasEdit {{ canvas, action, scope, handler, readonly: readonly.unwrap_or_default() }};
+    {watching}app.canvas_event(state, canvas){watched_end}
 }}
 
 /// Next, Back or Finish on a wizard (DESIGN 1.7): the runtime runs its
@@ -881,79 +1091,77 @@ fn undo_edit(app: tauri::State<App>, state: WindowState, scope: String, back: bo
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 {asynced}fn step_event(app: {app_state}{watch_params}, state: WindowState, part: String, button: clarity_runtime::steps::StepButton, steps: i64, next: Option<String>, finish: Option<String>) -> Answer<Reply> {{
-    let sent = clarity_runtime::views::Sent::of(&state);
-    window_reply(&sent, {watching}locked(&app, |db| clarity_runtime::steps::event(db, state, &part, button, steps, next.as_deref(), finish.as_deref(), |state, handler| dispatch(db, state, handler), |state| drawn(db, state))){watched_end})
+    let step = program::StepPress {{ part, button, steps, next, finish }};
+    {watching}app.step_event(state, step){watched_end}
 }}
 
 /// The person sorted, turned a page, or opened or closed a tree row (DESIGN
 /// 1.7): that view changes, and the window is answered. Never an edit.
 #[tauri::command]
 fn view_event(app: tauri::State<App>, state: WindowState, part: String, action: Map<String, Value>) -> Answer<Reply> {{
-    let sent = clarity_runtime::views::Sent::view_event(&state);
-    window_reply(&sent, locked(&app, |db| clarity_runtime::views::event(state, &part, &action, |state| drawn(db, state))))
+    app.view_event(state, &part, action)
 }}
 
 /// The answer to a question a handler asked: runs the handler it goes to.
 #[tauri::command]
 {asynced}fn answer_event(app: {app_state}{watch_params}, state: WindowState, handler: String, values: Vec<Value>) -> Answer<Reply> {{
-    let sent = clarity_runtime::views::Sent::of(&state);
-    window_reply(&sent, {watching}locked(&app, |db| answer_to(db, state, &handler, values)){watched_end})
+    {watching}app.answer_event(state, &handler, values){watched_end}
 }}
 
 {watched_fn}
 
 #[tauri::command]
 fn ref_options(app: tauri::State<App>, entity: String) -> Answer<Vec<RefOption>> {{
-    locked(&app, |db| options(db, &entity))
+    app.ref_options(&entity)
 }}
 
 #[tauri::command]
 fn field_values(app: tauri::State<App>, entity: String, field: String) -> Answer<Vec<String>> {{
-    locked(&app, |db| values_of(db, &entity, &field))
+    app.field_values(&entity, &field)
 }}
 
 /// What a dropdown offers for typed text (DESIGN 1.7): a field's values, or
 /// the records of an entity with the fields it shows.
 #[tauri::command]
 fn find_options(app: tauri::State<App>, kind: String, entity: String, field: Option<String>, show: Option<Vec<String>>, typed: String) -> Answer<Value> {{
-    locked(&app, |db| clarity_runtime::dropdown_options::find(&kind, &show.unwrap_or_default(), &typed, || values_of(db, &entity, field.as_deref().unwrap_or_default()), || options(db, &entity)))
+    app.find_options(&kind, &entity, field.as_deref(), &show.unwrap_or_default(), &typed)
 }}
 
 /// A picture of a record, fetched on its own, as the page shows it.
 #[tauri::command]
 fn picture(app: tauri::State<App>, entity: String, id: i64, field: String) -> Answer<Option<String>> {{
-    locked(&app, |db| picture_of(db, &entity, id, &field)?.map(|bytes| clarity_runtime::picture::data_url(&bytes)).transpose())
+    app.field_bytes(&entity, id, &field)?.map(|bytes| clarity_runtime::picture::data_url(&bytes).map_err(|err| program::said(&err))).transpose()
 }}
 
 /// The file of a `file` field of a record, fetched on its own, as base64.
 #[tauri::command]
 fn file_data(app: tauri::State<App>, entity: String, id: i64, field: String) -> Answer<Option<String>> {{
-    locked(&app, |db| Ok(picture_of(db, &entity, id, &field)?.map(|bytes| clarity_runtime::record_file::data(&bytes))))
+    Ok(app.field_bytes(&entity, id, &field)?.map(|bytes| clarity_runtime::record_file::data(&bytes)))
 }}
 
 {choose_folder_fn}/// Opens a file in the program the system uses for its kind.
 #[tauri::command]
 fn open_file(name: String, data: String) -> Answer<()> {{
     let bytes = decoded(&data)?;
-    clarity_runtime::record_file::open(&name, &bytes).map_err(|err| Value::from(err.to_string()))
+    clarity_runtime::record_file::open(&name, &bytes).map_err(|err| Text::plain(err.to_string()))
 }}
 
 /// Saves a copy of a file in the person's Downloads folder; where it went.
 #[tauri::command]
 fn save_file(name: String, data: String) -> Answer<String> {{
     let bytes = decoded(&data)?;
-    clarity_runtime::record_file::save_copy(&name, &bytes).map(|file| file.display().to_string()).map_err(|err| Value::from(err.to_string()))
+    clarity_runtime::record_file::save_copy(&name, &bytes).map(|file| file.display().to_string()).map_err(|err| Text::plain(err.to_string()))
 }}
 
 fn decoded(data: &str) -> Answer<Vec<u8>> {{
-    clarity_runtime::record_file::from_data(data).map_err(|err| Value::from(err.to_string()))
+    clarity_runtime::record_file::from_data(data).map_err(|err| Text::plain(err.to_string()))
 }}
 
 /// A file of a store, as the page shows it: a picture linked from a file
 /// before its record is saved.
 #[tauri::command]
 fn store_file(app: tauri::State<App>, store: String, path: String) -> Answer<String> {{
-    locked(&app, |db| clarity_runtime::picture::data_url(&db.store_file(&store, &path)?))
+    clarity_runtime::picture::data_url(&app.store_file(&store, &path)?).map_err(|err| program::said(&err))
 }}
 
 /// A line of an engine beside the screen, into the application's log: the
@@ -1001,9 +1209,9 @@ fn set_title(window: tauri::WebviewWindow, title: String) {{
 }}
 {apart_code}{parts_code}
 /// Shows the application's desktop window and runs until it closes.
-pub(crate) fn run(db: Db{problem_param}) {{
+pub(crate) fn run(app: App) {{
 {parts_start}    tauri::Builder::default()
-        .manage(App(Mutex::new(db))){connecting_manage}{apart_manage}{window_events}{parts_manage}{dialog_plugin}{stopping_manage}
+        .manage(app){apart_manage}{window_events}{parts_manage}{dialog_plugin}{stopping_manage}
         .invoke_handler(tauri::generate_handler![
             start,
             start_app,
@@ -1041,11 +1249,11 @@ pub(crate) fn run(db: Db{problem_param}) {{
 }}
 //~end
 
-fn main() {{
+fn main(){main_returns} {{
 {check_engines}    // Text code makes is translated from the model's translations.
     clarity_runtime::i18n::load(MODEL);
-{open_db}{web_start}{desktop_call}}}
-"#
+{open_db}{app_new}{web_start}{desktop_call}}}
+{files_const}"#
     )
 }
 
@@ -1103,7 +1311,7 @@ struct Apart(Mutex<(u32, std::collections::HashMap<String, (String, Map<String, 
 #[tauri::command]
 fn open_apart(handle: tauri::AppHandle, opener: tauri::WebviewWindow, apart: tauri::State<Apart>, window: String, with: Map<String, Value>, width: Option<f64>, height: Option<f64>) -> Answer<()> {
     let label = {
-        let mut open = apart.0.lock().map_err(|_| Value::from("the windows are not available"))?;
+        let mut open = apart.0.lock().map_err(|_| Text::plain("the windows are not available"))?;
         open.0 += 1;
         let label = format!("apart-{}", open.0);
         open.1.insert(label.clone(), (window, with, opener.label().to_string()));
@@ -1114,7 +1322,7 @@ fn open_apart(handle: tauri::AppHandle, opener: tauri::WebviewWindow, apart: tau
         .inner_size(width.unwrap_or({width}.0), height.unwrap_or({height}.0))
         .devtools(false)
         .build()
-        .map_err(|err| Value::from(err.to_string()))?;
+        .map_err(|err| Text::plain(err.to_string()))?;
     Ok(())
 }
 
@@ -1330,23 +1538,19 @@ pub const SOURCES: &[(&str, &[&[&str]])] = &[
 }
 
 /// The commands a browser sends to the web server (DESIGN 7.3), each
-/// answered by what its desktop command calls. What a browser does itself
-/// (its title, links, files and the person's settings) never comes here,
-/// and custom parts and windows of their own are the desktop's.
-fn served_rs(unconnected: bool, close_engines: &str) -> String {
-    let (connecting, start, connect) = if unconnected {
-        (", connecting: &Connecting", "started(connecting)", "        \"connect\" => given(connected(app, connecting)),\n")
-    } else {
-        ("", "started()", "")
-    };
+/// answered by the program, as its desktop command is. What a browser does
+/// itself (its title, links, files and the person's settings) never comes
+/// here, and custom parts and windows of their own are the desktop's.
+fn served_rs(unconnected: bool) -> String {
+    let connect = if unconnected { "        \"connect\" => given(app.connect()),\n" } else { "" };
     format!(
         r#"
-/// A command a browser sends to the web server (DESIGN 7.3), answered by what
-/// its desktop command calls: `{{"value": ...}}` or `{{"error": ...}}`.
+/// A command a browser sends to the web server (DESIGN 7.3), answered by the
+/// program: `{{"value": ...}}` or `{{"error": ...}}`.
 #[allow(dead_code)]
-fn served(app: &App{connecting}, command: &str, args: Value) -> Value {{
+fn served(app: &App, command: &str, args: Value) -> Value {{
     fn arg<T: serde::de::DeserializeOwned>(args: &Value, name: &str) -> Answer<T> {{
-        serde_json::from_value(args.get(name).cloned().unwrap_or(Value::Null)).map_err(|err| Value::from(format!("{{name}}: {{err}}")))
+        serde_json::from_value(args.get(name).cloned().unwrap_or(Value::Null)).map_err(|err| Text::plain(format!("{{name}}: {{err}}")))
     }}
     fn given<T: serde::Serialize>(answer: Answer<T>) -> Value {{
         match answer {{
@@ -1355,122 +1559,89 @@ fn served(app: &App{connecting}, command: &str, args: Value) -> Value {{
         }}
     }}
     match command {{
-        "start" => given(Ok({start})),
-{connect}        "start_app" => given(window_reply(&clarity_runtime::views::Sent::none(), locked(app, |db| on_event(db, WindowState::new("", Map::new()), "start")))),
+        "start" => given(Ok(started(app))),
+{connect}        "start_app" => given(app.start_app()),
         "open_window" => given((|| {{
             let (window, with): (String, Map<String, Value>) = (arg(&args, "window")?, arg(&args, "with")?);
-            window_reply(&clarity_runtime::views::Sent::none(), locked(app, |db| open(db, &window, with)))
+            app.open_window(&window, with)
         }})()),
-        "close_window" => given((|| {{
-            let state: WindowState = arg(&args, "state")?;
-            let instance = state.instance;
-            let reply = locked(app, |db| on_event(db, state, "close"))?;
-            clarity_runtime::edits::closed(instance);
-{close_engines}            Ok(reply)
-        }})()),
-        "return_to" => given((|| {{
-            let state: WindowState = arg(&args, "state")?;
-            let sent = clarity_runtime::views::Sent::of(&state);
-            window_reply(&sent, locked(app, |db| on_event(db, state, "return")))
-        }})()),
+        "close_window" => given((|| app.close_window(arg(&args, "state")?))()),
+        "return_to" => given((|| app.return_to(arg(&args, "state")?))()),
         "dispatch_event" => given((|| {{
             let (state, handler): (WindowState, String) = (arg(&args, "state")?, arg(&args, "handler")?);
-            let sent = clarity_runtime::views::Sent::of(&state);
-            window_reply(&sent, locked(app, |db| clarity_runtime::stepped(db, || dispatch(db, state, &handler))))
+            app.dispatch_event(state, &handler)
         }})()),
         "edit_event" => given((|| {{
-            let (state, handler, part, scope, ends): (WindowState, Option<String>, String, String, bool) =
-                (arg(&args, "state")?, arg(&args, "handler")?, arg(&args, "part")?, arg(&args, "scope")?, arg(&args, "ends")?);
             let readonly: Option<bool> = arg(&args, "readonly")?;
-            let (path, editable): (Option<String>, Option<Vec<String>>) = (arg(&args, "path")?, arg(&args, "editable")?);
-            let sent = clarity_runtime::views::Sent::of(&state);
-            window_reply(&sent, locked(app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), path.as_deref(), editable.as_deref(), |state| drawn(db, state), |state| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| handled(db, state, handler.as_deref())))))
+            let edit = program::Edit {{ handler: arg(&args, "handler")?, part: arg(&args, "part")?, scope: arg(&args, "scope")?, ends: arg(&args, "ends")?, readonly: readonly.unwrap_or_default(), path: arg(&args, "path")?, editable: arg(&args, "editable")? }};
+            app.edit_event(arg(&args, "state")?, edit)
         }})()),
         "undo_edit" => given((|| {{
             let (state, scope, back): (WindowState, String, bool) = (arg(&args, "state")?, arg(&args, "scope")?, arg(&args, "back")?);
-            let sent = clarity_runtime::views::Sent::of(&state);
-            window_reply(&sent, locked(app, |db| clarity_runtime::edits::undo(db, state, &scope, back, |state| drawn(db, state))))
+            app.undo_edit(state, &scope, back)
         }})()),
         "reorder_event" => given((|| {{
-            let (state, part, scope, list, by, parent): (WindowState, String, Option<String>, String, String, Option<String>) =
-                (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "scope")?, arg(&args, "list")?, arg(&args, "by")?, arg(&args, "parent")?);
-            let (r#move, handler): (clarity_runtime::reorder::Move, Option<String>) = (arg(&args, "move")?, arg(&args, "handler")?);
             let readonly: Option<bool> = arg(&args, "readonly")?;
-            let sent = clarity_runtime::views::Sent::of(&state);
-            window_reply(&sent, locked(app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &r#move, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))
+            let reorder = program::Reorder {{ part: arg(&args, "part")?, scope: arg(&args, "scope")?, list: arg(&args, "list")?, by: arg(&args, "by")?, parent: arg(&args, "parent")?, moved: arg(&args, "move")?, handler: arg(&args, "handler")?, readonly: readonly.unwrap_or_default() }};
+            app.reorder_event(arg(&args, "state")?, reorder)
         }})()),
         "item_event" => given((|| {{
-            let (state, part, scope, path): (WindowState, String, Option<String>, String) = (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "scope")?, arg(&args, "path")?);
-            let (item, values, typed, handler): (clarity_runtime::list_fields::ItemKind, Option<Vec<String>>, String, Option<String>) =
-                (arg(&args, "item")?, arg(&args, "values")?, arg(&args, "typed")?, arg(&args, "handler")?);
-            let values = values.unwrap_or_default();
+            let values: Option<Vec<String>> = arg(&args, "values")?;
             let readonly: Option<bool> = arg(&args, "readonly")?;
-            let sent = clarity_runtime::views::Sent::of(&state);
-            window_reply(&sent, locked(app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::list_fields::event(db, state, &part, &path, item, &values, &typed, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))
+            let item = program::ItemEdit {{ part: arg(&args, "part")?, scope: arg(&args, "scope")?, path: arg(&args, "path")?, item: arg(&args, "item")?, values: values.unwrap_or_default(), typed: arg(&args, "typed")?, handler: arg(&args, "handler")?, readonly: readonly.unwrap_or_default() }};
+            app.item_event(arg(&args, "state")?, item)
         }})()),
         "range_event" => given((|| {{
-            let (state, part, scope, path, whole): (WindowState, String, Option<String>, String, bool) =
-                (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "scope")?, arg(&args, "path")?, arg(&args, "whole")?);
             let range = clarity_runtime::ranges::Range {{ min: arg(&args, "min")?, max: arg(&args, "max")?, step: arg(&args, "step")? }};
-            let mv = clarity_runtime::ranges::RangeMove::of(arg(&args, "key")?, arg(&args, "at")?, arg(&args, "typed")?).map_err(|err| Value::from(err.to_string()))?;
-            let handler: Option<String> = arg(&args, "handler")?;
+            let moved = clarity_runtime::ranges::RangeMove::of(arg(&args, "key")?, arg(&args, "at")?, arg(&args, "typed")?).map_err(|err| Text::plain(err.to_string()))?;
             let readonly: Option<bool> = arg(&args, "readonly")?;
-            let sent = clarity_runtime::views::Sent::of(&state);
-            window_reply(&sent, locked(app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &mv, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))
+            let range = program::RangeEdit {{ part: arg(&args, "part")?, scope: arg(&args, "scope")?, path: arg(&args, "path")?, range, whole: arg(&args, "whole")?, moved, handler: arg(&args, "handler")?, readonly: readonly.unwrap_or_default() }};
+            app.range_event(arg(&args, "state")?, range)
         }})()),
         "canvas_event" => given((|| {{
-            let (state, part, scope, mode, action, handler): (WindowState, String, Option<String>, String, Map<String, Value>, Option<String>) =
-                (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "scope")?, arg(&args, "mode")?, arg(&args, "action")?, arg(&args, "handler")?);
             let (list, path, grid, snap): (Option<String>, Option<String>, Option<i64>, Option<bool>) = (arg(&args, "list")?, arg(&args, "path")?, arg(&args, "grid")?, arg(&args, "snap")?);
-            let canvas = clarity_runtime::canvas::CanvasArgs {{ part, mode, list: list.unwrap_or_default(), at: arg(&args, "at")?, path: path.unwrap_or_default(), units: arg(&args, "units")?, grid: grid.unwrap_or_default(), snap: snap.unwrap_or_default(), readonly: false }};
+            let canvas = clarity_runtime::canvas::CanvasArgs {{ part: arg(&args, "part")?, mode: arg(&args, "mode")?, list: list.unwrap_or_default(), at: arg(&args, "at")?, path: path.unwrap_or_default(), units: arg(&args, "units")?, grid: grid.unwrap_or_default(), snap: snap.unwrap_or_default(), readonly: false }};
             let readonly: Option<bool> = arg(&args, "readonly")?;
-            let sent = clarity_runtime::views::Sent::of(&state);
-            window_reply(&sent, locked(app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::canvas::event(db, state, &canvas, &action, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))
+            let canvas = program::CanvasEdit {{ canvas, action: arg(&args, "action")?, scope: arg(&args, "scope")?, handler: arg(&args, "handler")?, readonly: readonly.unwrap_or_default() }};
+            app.canvas_event(arg(&args, "state")?, canvas)
         }})()),
         "step_event" => given((|| {{
-            let (state, part, button, steps, next, finish): (WindowState, String, clarity_runtime::steps::StepButton, i64, Option<String>, Option<String>) =
-                (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "button")?, arg(&args, "steps")?, arg(&args, "next")?, arg(&args, "finish")?);
-            let sent = clarity_runtime::views::Sent::of(&state);
-            window_reply(&sent, locked(app, |db| clarity_runtime::steps::event(db, state, &part, button, steps, next.as_deref(), finish.as_deref(), |state, handler| dispatch(db, state, handler), |state| drawn(db, state))))
+            let step = program::StepPress {{ part: arg(&args, "part")?, button: arg(&args, "button")?, steps: arg(&args, "steps")?, next: arg(&args, "next")?, finish: arg(&args, "finish")? }};
+            app.step_event(arg(&args, "state")?, step)
         }})()),
         "view_event" => given((|| {{
             let (state, part, action): (WindowState, String, Map<String, Value>) = (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "action")?);
-            let sent = clarity_runtime::views::Sent::view_event(&state);
-            window_reply(&sent, locked(app, |db| clarity_runtime::views::event(state, &part, &action, |state| drawn(db, state))))
+            app.view_event(state, &part, action)
         }})()),
         "answer_event" => given((|| {{
             let (state, handler, values): (WindowState, String, Vec<Value>) = (arg(&args, "state")?, arg(&args, "handler")?, arg(&args, "values")?);
-            let sent = clarity_runtime::views::Sent::of(&state);
-            window_reply(&sent, locked(app, |db| answer_to(db, state, &handler, values)))
+            app.answer_event(state, &handler, values)
         }})()),
-        "ref_options" => given((|| {{
-            let entity: String = arg(&args, "entity")?;
-            locked(app, |db| options(db, &entity))
-        }})()),
+        "ref_options" => given((|| app.ref_options(&arg::<String>(&args, "entity")?))()),
         "field_values" => given((|| {{
             let (entity, field): (String, String) = (arg(&args, "entity")?, arg(&args, "field")?);
-            locked(app, |db| values_of(db, &entity, &field))
+            app.field_values(&entity, &field)
         }})()),
         "find_options" => given((|| {{
             let (kind, entity, field, show, typed): (String, String, Option<String>, Option<Vec<String>>, String) =
                 (arg(&args, "kind")?, arg(&args, "entity")?, arg(&args, "field")?, arg(&args, "show")?, arg(&args, "typed")?);
-            locked(app, |db| clarity_runtime::dropdown_options::find(&kind, &show.unwrap_or_default(), &typed, || values_of(db, &entity, field.as_deref().unwrap_or_default()), || options(db, &entity)))
+            app.find_options(&kind, &entity, field.as_deref(), &show.unwrap_or_default(), &typed)
         }})()),
         "picture" => given((|| {{
             let (entity, id, field): (String, i64, String) = (arg(&args, "entity")?, arg(&args, "id")?, arg(&args, "field")?);
-            locked(app, |db| picture_of(db, &entity, id, &field)?.map(|bytes| clarity_runtime::picture::data_url(&bytes)).transpose())
+            app.field_bytes(&entity, id, &field)?.map(|bytes| clarity_runtime::picture::data_url(&bytes).map_err(|err| program::said(&err))).transpose()
         }})()),
         "file_data" => given((|| {{
             let (entity, id, field): (String, i64, String) = (arg(&args, "entity")?, arg(&args, "id")?, arg(&args, "field")?);
-            locked(app, |db| Ok(picture_of(db, &entity, id, &field)?.map(|bytes| clarity_runtime::record_file::data(&bytes))))
+            Ok(app.field_bytes(&entity, id, &field)?.map(|bytes| clarity_runtime::record_file::data(&bytes)))
         }})()),
         "store_file" => given((|| {{
             let (store, path): (String, String) = (arg(&args, "store")?, arg(&args, "path")?);
-            locked(app, |db| clarity_runtime::picture::data_url(&db.store_file(&store, &path)?))
+            clarity_runtime::picture::data_url(&app.store_file(&store, &path)?).map_err(|err| program::said(&err))
         }})()),
         "set_language" => given((|| {{
             let language: Option<String> = arg(&args, "language")?;
-            clarity_runtime::i18n::set_language(language.as_deref());
+            app.set_language(language.as_deref());
             Ok(Value::Null)
         }})()),
         "log_line" => given((|| {{
@@ -1487,12 +1658,11 @@ fn served(app: &App{connecting}, command: &str, args: Value) -> Value {{
 
 /// main as a web server: the renderer's files from what Tauri embeds, the
 /// commands answered by `served`.
-fn serve_main(unconnected: bool, address: &str, ui: &[String]) -> String {
-    let (connecting, given) = if unconnected { ("    let connecting = Connecting(Mutex::new(problem));\n", ", &connecting") } else { ("", "") };
+fn serve_main(address: &str, ui: &[String]) -> String {
     // The screen's files, in the program itself.
     let arms: String = ui.iter().map(|path| format!("            {path:?} => Some(include_bytes!(\"../ui/{path}\").to_vec()),\n")).collect();
     format!(
-        "    let app = App(Mutex::new(db));\n{connecting}    let files = |path: &str| -> Option<Vec<u8>> {{\n        match path {{\n{arms}            _ => None,\n        }}\n    }};\n    let args: Vec<String> = std::env::args().collect();\n    if let Err(err) = clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args, {address:?}), &files, &mut |command, args| served(&app{given}, command, args)) {{\n        eprintln!(\"{{PROGRAM}}: {{err}}\");\n        std::process::exit(1);\n    }}\n"
+        "    let files = |path: &str| -> Option<Vec<u8>> {{\n        match path {{\n{arms}            _ => None,\n        }}\n    }};\n    let args: Vec<String> = std::env::args().collect();\n    if let Err(err) = clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args, {address:?}), &files, &mut |command, args| served(&app, command, args)) {{\n        eprintln!(\"{{PROGRAM}}: {{err}}\");\n        std::process::exit(1);\n    }}\n"
     )
 }
 

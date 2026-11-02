@@ -6,7 +6,9 @@
 use crate::dialect::Dialect;
 use crate::{Error, Id, Result, SqlValue};
 
-/// Why a statement failed.
+/// Why a statement failed. Only a database's driver makes one, so a build
+/// with no database feature (Clarity.UI's own tests) has none.
+#[cfg_attr(not(any(feature = "sqlite", feature = "postgres", feature = "mysql", feature = "mssql")), allow(dead_code))]
 pub(crate) enum Failure {
     /// A reference between records would no longer fit: a record that is
     /// referred to, or a reference to a record that does not exist.
@@ -40,6 +42,7 @@ pub(crate) trait Driver: Send {
 }
 
 /// The statement that records migration step `version`.
+#[cfg_attr(not(any(feature = "sqlite", feature = "postgres", feature = "mysql", feature = "mssql")), allow(dead_code))]
 pub(crate) fn applied(version: usize) -> String {
     format!("INSERT INTO clarity_schema (version) VALUES ({version})")
 }
@@ -65,6 +68,7 @@ pub(crate) fn location(text: &str) -> Result<String> {
 
 /// Connects to the database of a data source.
 pub(crate) fn open(dialect: Dialect, at: &str) -> Result<Box<dyn Driver>> {
+    #[cfg_attr(not(any(feature = "sqlite", feature = "postgres", feature = "mysql", feature = "mssql")), allow(unused_variables))]
     let at = location(at)?;
     match dialect {
         #[cfg(feature = "sqlite")]

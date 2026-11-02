@@ -26,6 +26,7 @@ pub mod web_windows;
 pub use csharp::runtime_version as csharp_runtime_version;
 pub use go::runtime_version as go_runtime_version;
 pub use rust::runtime_version as rust_runtime_version;
+pub use rust::ui_version as rust_ui_version;
 pub use rust::migration_sql;
 pub use web::{APP_CLASS, base_css, theme_css, theme_file};
 

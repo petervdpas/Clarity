@@ -295,7 +295,7 @@ fn writable(folder: &Path) -> bool {
 pub fn generates(backend: Backend, ui: Ui) -> bool {
     matches!(
         (backend, ui),
-        (Backend::Rust, Ui::Webview) | (Backend::Go, Ui::Webview) | (Backend::Csharp, Ui::Clarity) | (Backend::C, Ui::Webview) | (Backend::Cpp, Ui::Webview)
+        (Backend::Rust, Ui::Webview) | (Backend::Rust, Ui::Clarity) | (Backend::Go, Ui::Webview) | (Backend::Csharp, Ui::Clarity) | (Backend::C, Ui::Webview) | (Backend::Cpp, Ui::Webview)
     )
 }
 
@@ -433,7 +433,8 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
                 None => missing.push((RUST.to_string(), RUST_GUIDE)),
             }
             // Tauri draws with WebKitGTK on Linux, and builds against its development files.
-            if cfg!(target_os = "linux") && probe.run("pkg-config", &["--exists", "webkit2gtk-4.1"]).is_none() {
+            // Clarity.UI draws with Skia instead, whose prebuilt library cargo downloads.
+            if ui == Ui::Webview && cfg!(target_os = "linux") && probe.run("pkg-config", &["--exists", "webkit2gtk-4.1"]).is_none() {
                 missing.push((WEBKIT.to_string(), WEBKIT_GUIDE));
             }
         }

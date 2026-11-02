@@ -26,7 +26,7 @@ use clarity_spec::lexer::{Token, TokenKind, lex, quote};
 use crate::{
     AUTH_KINDS, Auth, BACKENDS, DEFAULT_OUT, DataSource, FileStore, Paging, PagingKind, SOURCE_KINDS, Settings, Stack, TARGETS, Target, UIS, Ui, auth_word, currency_problem,
     language_problem,
-    backend_word, source_word, target_word, ui_word, usual_ui,
+    backend_uis, backend_word, source_word, target_word, ui_word, usual_ui,
 };
 
 /// One line of the project file.
@@ -328,8 +328,30 @@ pub fn parse(text: &str) -> Result<Settings, String> {
             "stack" => {
                 once(stack.is_some())?;
                 let words: Vec<&str> = a.iter().map(|t| word(t).unwrap_or("")).collect();
-                // `stack go cli`: a program without a window names no UI.
-                if words.get(1) == Some(&target_word(Target::Cli)) {
+                // A backend that draws with Clarity.UI takes it unnamed: `stack csharp desktop`,
+                // `stack rust desktop`. A UI it also offers is still named: `stack rust webview desktop`.
+                let unnamed = match words.first().map(|b| pick(line, "backend", "backends", &BACKENDS, backend_word, b)).transpose()? {
+                    Some(backend) => {
+                        let uis = backend_uis(backend);
+                        let named = words.get(1).is_some_and(|w| uis.iter().any(|ui| *ui != Ui::Clarity && ui_word(*ui) == *w));
+                        (uis.contains(&Ui::Clarity) && !named).then_some(backend)
+                    }
+                    None => None,
+                };
+                if let Some(backend) = unnamed {
+                    // Clarity.UI is not named: the targets follow the language.
+                    let targets = words[1..]
+                        .iter()
+                        .map(|t| pick(line, "target", "targets", &TARGETS, target_word, t))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    if targets.is_empty() {
+                        return Err(format!("line {line}: the stack needs at least one target, like: stack {} desktop", backend_word(backend)));
+                    }
+                    // A program without a window keeps the backend's usual UI, as `stack rust cli` always did.
+                    let ui = if targets.iter().all(|t| *t == Target::Cli) { usual_ui(backend) } else { Ui::Clarity };
+                    stack = Some(Stack { backend, ui, targets });
+                } else if words.get(1) == Some(&target_word(Target::Cli)) {
+                    // `stack go cli`: a program without a window names no UI.
                     let backend = pick(line, "backend", "backends", &BACKENDS, backend_word, words[0])?;
                     let targets = words[1..]
                         .iter()
@@ -341,18 +363,6 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                         ));
                     }
                     stack = Some(Stack { backend, ui: usual_ui(backend), targets });
-                } else if let Some(backend) = words.first().map(|b| pick(line, "backend", "backends", &BACKENDS, backend_word, b)).transpose()?
-                    && usual_ui(backend) == Ui::Clarity
-                {
-                    // Clarity.UI is not named: the targets follow the language.
-                    let targets = words[1..]
-                        .iter()
-                        .map(|t| pick(line, "target", "targets", &TARGETS, target_word, t))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    if targets.is_empty() {
-                        return Err(format!("line {line}: the stack needs at least one target, like: stack csharp desktop"));
-                    }
-                    stack = Some(Stack { backend, ui: Ui::Clarity, targets });
                 } else {
                     let (Some(backend), Some(ui), targets) = (words.first(), words.get(1), words.get(2..).unwrap_or(&[]))
                     else {
@@ -518,15 +528,7 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
 
     // The lines of the new file, in their canonical order.
     let stack = &settings.stack;
-    let mut stack_line = format!("stack {}", backend_word(stack.backend));
-    if stack.names_ui() {
-        stack_line.push(' ');
-        stack_line.push_str(ui_word(stack.ui));
-    }
-    for target in &stack.targets {
-        stack_line.push(' ');
-        stack_line.push_str(target_word(*target));
-    }
+    let stack_line = crate::stack_line(stack);
     let mut lines: Vec<(String, usize, String)> = vec![("project".into(), 0, format!("project {}", settings.name))];
     if let Some(title) = &settings.title {
         lines.push(("title".into(), 1, format!("title {}", quote(title))));

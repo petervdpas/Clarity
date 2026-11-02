@@ -1,20 +1,41 @@
-# Rust with Tauri
+# Rust with Clarity.UI or Tauri
 
-How Clarity turns a project into a Rust desktop program with Tauri and the web renderer, what you need to install, and how to build it.
+How Clarity turns a project into a Rust program, drawn by Clarity.UI or by the shared web screen in Tauri, what you need to install, and how to build it.
 
 ## Choosing the stack
 
 Name the stack in the project file, or pick it on the Project tab:
 
 ```clarity
-stack rust webview desktop
+stack rust desktop
 ```
 
-The backend is Rust, the UI is Clarity's web renderer, and the shell is Tauri 2. See [The project file](project.file.md).
+Without a UI word, Rust draws its windows with Clarity.UI, as C# does. Clarity.UI is Clarity's own UI framework: it draws the windows itself with Skia, and every stack gets its own version of it (see [C# with Clarity.UI](stacks.csharp.md)). The Rust version is in progress. It opens the main window with its title and size and draws the first parts; a part it does not draw yet shows its kind in its place until it arrives. The web target of Rust on Clarity.UI comes later: `stack rust web` is refused for now.
 
-## What is generated
+Name `webview` to keep the shared web screen, in a Tauri window or in a browser:
 
-Clarity writes a Cargo project into the output folder (`out` by default):
+```clarity
+stack rust webview desktop
+stack rust webview web
+```
+
+The rest of this page is about the shared web screen, unless it says Clarity.UI. See [The project file](project.file.md).
+
+## What is generated with Clarity.UI
+
+With `stack rust desktop` Clarity writes a Cargo project without Tauri:
+
+- `Cargo.toml`: the package, on the crates `clarity-runtime` (the window model, records, queries and migrations) and `clarity-ui` (the drawing, with Skia, in the system's own window).
+- `src/modules/<module>.rs`: one Rust module per Clarity module, as for the web screen.
+- `windows/<Window>.cxaml` and `apps/<App>.cxaml`: each window and each app frame as markup, the same markup the web screen and C# read.
+- `themes/<theme>.light.json` and `.dark.json`: each theme the project offers, as Clarity resolves it. Without any, Clarity.UI shows Clarity's own.
+- `src/main.rs`: the program, which answers what the windows ask of it (the runtime's `Program`); it opens and migrates the databases and starts `clarity_ui::desktop` with the files above and the model with its translations, which it carries in itself.
+
+Cargo downloads Skia's prebuilt library on the first build; nothing is built from Skia's source.
+
+## What is generated with the web screen
+
+With `stack rust webview desktop` Clarity writes a Cargo project into the output folder (`out` by default):
 
 - `Cargo.toml`, `build.rs` and `tauri.conf.json`: the package, Tauri's build step and the window settings.
 - `src/modules/<module>.rs`: one Rust module per Clarity module, with its records, enums, functions, actions, windows and handlers. `src/modules.rs` declares them.
@@ -38,6 +59,8 @@ To build on the runtime in Clarity's repository instead (while you work on the r
 clarity-runtime = { path = "<Clarity>/runtimes/rust" }
 ```
 
+With Clarity.UI, add the drawing crate beside it: `clarity-ui = { path = "<Clarity>/runtimes/rust-ui" }`.
+
 Clarity keeps the `.cargo` folder when it writes the project again. Remove it to build on the published crate.
 
 A project with an [engine](code.engines.md) also turns on the crate's `engines` feature, which runs engines with wasmi.
@@ -45,9 +68,9 @@ A project with an [engine](code.engines.md) also turns on the crate's `engines` 
 ## What to install
 
 - Rust with cargo, from https://rustup.rs
-- On Linux, the WebKitGTK development files and pkg-config (Debian and Ubuntu: `libwebkit2gtk-4.1-dev`; see https://tauri.app/start/prerequisites/)
+- For the web screen on Linux, the WebKitGTK development files and pkg-config (Debian and Ubuntu: `libwebkit2gtk-4.1-dev`; see https://tauri.app/start/prerequisites/)
 
-Clarity checks for these itself: run `clarity tools`, or look at Build tools on the Project tab.
+Clarity.UI needs nothing more: cargo downloads Skia's prebuilt library. Clarity checks for these itself: run `clarity tools`, or look at Build tools on the Project tab.
 
 Step by step, with the commands for Windows, Linux and macOS: [Setting up the build tools](setup.tools.md).
 
@@ -64,7 +87,7 @@ The release program is `target/release/<name>` (with `.exe` on Windows), where `
 
 ## Windows on screen
 
-The application has one desktop window. `open` shows a window in place, on top of the one that opened it, and `close` goes back to the one below. A dialog opens on top of its window in the same desktop window. A click target marked `in new window` opens a second Tauri window. See [Windows](design.windows.md).
+The application has one desktop window. `open` shows a window in place, on top of the one that opened it, and `close` goes back to the one below. A dialog opens on top of its window in the same desktop window. With the web screen, a click target marked `in new window` opens a second Tauri window. See [Windows](design.windows.md).
 
 ## The same on every stack
 

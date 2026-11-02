@@ -38,7 +38,8 @@ fn the_rust_app_reads_and_keeps_the_settings_and_never_stores_them() {
     let code = generated(Backend::Rust, Ui::Webview);
     has(&code, "pub struct Settings {");
     has(&code, "pub settings: Settings,");
-    has(&code, "fn read_settings() -> Map<String, Value>");
+    has(&code, "fn read_settings(app: tauri::State<App>) -> Map<String, Value>");
+    has(&code, "    fn read_settings(&self) -> Map<String, Value> {\n        clarity_runtime::settings::read(PROGRAM)\n    }");
     has(&code, "clarity_runtime::settings::keep(PROGRAM, &settings)");
     has(&code, "            read_settings,\n            keep_settings,");
     lacks(&code, "impl Record for Settings");

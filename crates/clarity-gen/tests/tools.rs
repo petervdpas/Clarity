@@ -54,6 +54,22 @@ fn rust_needs_cargo_and_on_linux_webkitgtk() {
     }
 }
 
+/// Rust on Clarity.UI draws with Skia, whose prebuilt library cargo
+/// downloads: it needs cargo and no WebKitGTK, Tauri CLI or Node.
+#[test]
+fn rust_on_clarity_ui_needs_only_cargo() {
+    let bare = check(Backend::Rust, Ui::Clarity, &Machine::default());
+    assert!(bare.generated);
+    assert_eq!(bare.missing.len(), 1, "{:?}", bare.missing);
+    assert!(bare.missing[0].contains("https://rustup.rs"), "{:?}", bare.missing);
+    let ready = check(Backend::Rust, Ui::Clarity, &Machine::default().with("cargo", "--version", "cargo 1.91.0\n"));
+    assert!(ready.ready(), "{:?}", ready.missing);
+    assert_eq!(ready.found, ["cargo 1.91.0"]);
+    let all = clarity_gen::tools::check_all(&Machine::default());
+    assert!(all.iter().any(|s| s.backend == Backend::Rust && s.ui == Ui::Clarity));
+    assert!(clarity_gen::tools::report(&all).contains("Rust with Clarity.UI: missing Rust with cargo"));
+}
+
 #[test]
 fn csharp_needs_the_dotnet_sdk_the_project_targets() {
     let old = Machine::default().with("dotnet", "--list-sdks", "8.0.426 [/usr/share/dotnet/sdk]\n9.0.319 [/usr/share/dotnet/sdk]\n");
@@ -318,7 +334,7 @@ fn every_missing_tool_points_at_the_manual() {
         assert!(anchors.iter().any(|a| a == heading), "the setup page has no heading #{heading}: {anchors:?}");
     }
     // A machine without anything misses every tool, each with its part of the page.
-    for (backend, ui) in [(Backend::Rust, Ui::Webview), (Backend::Csharp, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Webview), (Backend::Rust, Ui::Clarity), (Backend::Csharp, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview)] {
         let bare = check(backend, ui, &Machine::default());
         assert_eq!(bare.missing.len(), bare.guides.len(), "{backend:?}: {:?} {:?}", bare.missing, bare.guides);
         assert!(bare.guides.iter().all(|g| guide_headings().contains(g)), "{:?}", bare.guides);
@@ -377,7 +393,7 @@ fn the_webassembly_tools_install_asks_the_system_where_it_must() {
 /// stack's own tools (DESIGN 7.8).
 #[test]
 fn no_stack_needs_node() {
-    for (backend, ui) in [(Backend::Rust, Ui::Webview), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Webview), (Backend::Rust, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
         let check = check(backend, ui, &Machine::default());
         assert!(!check.missing.iter().any(|m| m.contains("Node") || m.contains("npm")), "{backend:?}: {:?}", check.missing);
         assert!(!clarity_gen::tools::requirements(backend).iter().any(|r| r.contains("Node")), "{backend:?}");

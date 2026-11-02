@@ -174,8 +174,58 @@ fn problems_of(change: impl FnOnce(&mut Settings)) -> Vec<String> {
 
 #[test]
 fn a_native_toolkit_needs_its_backend() {
-    let problems = problems_of(|s| s.stack.backend = Backend::Rust);
-    assert_eq!(problems, ["Clarity.UI is a UI for the C# backend, not for Rust"]);
+    let problems = problems_of(|s| s.stack.backend = Backend::Go);
+    assert_eq!(problems, ["Clarity.UI is a UI for the C# and Rust backends, not for Go"]);
+}
+
+// Rust draws with Clarity.UI when the stack line names no UI, as C# does,
+// and keeps the shared web screen when it names webview (DESIGN 7.9, G8).
+#[test]
+fn rust_takes_clarity_ui_unnamed_and_the_web_renderer_named() {
+    let clarity = SHOP.replace("    stack csharp desktop", "    stack rust desktop");
+    let settings = parse(&clarity).unwrap();
+    assert_eq!(
+        settings.stack,
+        Stack { backend: Backend::Rust, ui: Ui::Clarity, targets: vec![Target::Desktop] }
+    );
+    assert_eq!(validate(&settings), Vec::<String>::new());
+    assert_eq!(write(Some(&clarity), &settings).unwrap(), clarity);
+
+    let webview = SHOP.replace("    stack csharp desktop", "    stack rust webview desktop web");
+    let settings = parse(&webview).unwrap();
+    assert_eq!(
+        settings.stack,
+        Stack { backend: Backend::Rust, ui: Ui::Webview, targets: vec![Target::Desktop, Target::Web] }
+    );
+    assert_eq!(validate(&settings), Vec::<String>::new());
+    assert_eq!(write(Some(&webview), &settings).unwrap(), webview);
+
+    // A command line program beside the window, in either order.
+    let cli = parse(&SHOP.replace("    stack csharp desktop", "    stack rust cli desktop")).unwrap();
+    assert_eq!((cli.stack.ui, cli.stack.targets), (Ui::Clarity, vec![Target::Cli, Target::Desktop]));
+    // A program without a window keeps the usual UI, as before.
+    let only = parse(&SHOP.replace("    stack csharp desktop", "    stack rust cli")).unwrap();
+    assert_eq!(only.stack.ui, Ui::Webview);
+    // C# still has no other UI to name.
+    assert!(parse(&SHOP.replace("    stack csharp desktop", "    stack csharp webview desktop")).unwrap_err().contains("webview"));
+}
+
+// The web target of Rust on Clarity.UI is not generated yet.
+#[test]
+fn the_web_target_of_rust_on_clarity_ui_is_refused() {
+    for (line, written) in [("stack rust web", "stack rust webview web"), ("stack rust desktop web", "stack rust webview desktop web")] {
+        let settings = parse(&SHOP.replace("stack csharp desktop", line)).unwrap();
+        assert_eq!(settings.stack.ui, Ui::Clarity);
+        assert_eq!(
+            validate(&settings),
+            [format!("the web target of Rust on Clarity.UI is not generated yet; write {written} for the shared web screen")]
+        );
+    }
+    let webview = parse(&SHOP.replace("stack csharp desktop", "stack rust webview web")).unwrap();
+    assert_eq!(validate(&webview), Vec::<String>::new());
+    // C# on Clarity.UI has its web target.
+    let csharp = parse(&SHOP.replace("stack csharp desktop", "stack csharp desktop web")).unwrap();
+    assert_eq!(validate(&csharp), Vec::<String>::new());
 }
 
 // Clarity.UI is never named in the stack line: after the language come the targets.
@@ -369,10 +419,13 @@ fn loads_a_project_file() {
 fn the_catalog_offers_every_backend_and_a_ui_for_each() {
     let catalog = catalog();
     assert_eq!(catalog.backends.len(), 5);
-    assert!(catalog.backends.iter().all(|b| b.uis.len() == 1));
     let csharp = catalog.backends.iter().find(|b| b.id == Backend::Csharp).unwrap();
     assert_eq!(csharp.uis, [Ui::Clarity]);
-    assert!(catalog.backends.iter().filter(|b| b.id != Backend::Csharp).all(|b| b.uis == [Ui::Webview]));
+    // Rust offers both; the shared web screen stays its usual one while Clarity.UI in Rust is in progress.
+    let rust = catalog.backends.iter().find(|b| b.id == Backend::Rust).unwrap();
+    assert_eq!(rust.uis, [Ui::Webview, Ui::Clarity]);
+    assert_eq!(catalog.starter.ui, Ui::Webview);
+    assert!(catalog.backends.iter().filter(|b| ![Backend::Csharp, Backend::Rust].contains(&b.id)).all(|b| b.uis == [Ui::Webview]));
     assert_eq!(catalog.sources.len(), 5);
 }
 

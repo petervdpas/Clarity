@@ -1,0 +1,404 @@
+//! The parts of a window (DESIGN 7.9): elements made from their spec in the
+//! window's markup, which read and change the window's values through their
+//! host. Each kind of part is a module of its own; `make` finds it by its
+//! kind's name, and a kind not drawn yet shows that in its place.
+
+pub mod button;
+pub mod check_box;
+pub mod heading;
+pub mod label;
+pub mod text_box;
+pub mod text_editor;
+
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+
+use clarity_runtime::ui::{Level, PartState, Text};
+use serde_json::{Map, Value};
+
+use crate::element::{Element, Node};
+use crate::grid::{GridItem, ROW_HEIGHT};
+use crate::locale;
+use crate::markup::{CommandSpec, HandlerCall, PartSpec};
+use crate::painter::{Painter, TextAlign};
+
+/// What a dropdown or a radio group offers: a value and its label, and for a search dropdown the texts of the fields it shows.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Choice {
+    pub value: Value,
+    pub label: String,
+    pub cells: Option<Vec<String>>,
+}
+
+/// What the application knows of a field: its label, format, whether it is required, its range, what it refers to.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct FieldFacts {
+    pub label: String,
+    pub format: Option<String>,
+    pub required: bool,
+    pub min: Option<String>,
+    pub max: Option<String>,
+    pub refers: Option<String>,
+    pub parent: Option<String>,
+    pub color: bool,
+}
+
+/// The person's formats for numbers and dates: their language and currency.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Formats {
+    pub language: Option<String>,
+    pub currency: Option<String>,
+}
+
+/// What a part reads and changes: the window's values, as the host makes
+/// them reachable. A value is named by its path in the window's data, as the
+/// markup binds it: `order.status`, `tasks[1].done`.
+pub trait PartHost {
+    /// The value at `path`; none when there is none.
+    fn read(&self, path: &str) -> Option<Value>;
+
+    /// The records of a list at `path`: a table's, a list's, a chart's rows.
+    fn rows(&self, path: &str) -> Vec<Value> {
+        match self.read(path) {
+            Some(Value::Array(rows)) => rows,
+            _ => Vec::new(),
+        }
+    }
+
+    /// The person changed the value at `path` in `part`: one edit, which Ctrl+Z takes back.
+    fn write(&self, part: &str, path: &str, value: Value);
+
+    /// The person changed what an unbound part keeps in its own state (its
+    /// text, its tick): one edit of `part`, which Ctrl+Z takes back.
+    fn edited(&self, part: &str);
+
+    /// The state of the part named `name`, which code sets; none for a part without a name.
+    fn state(&self, name: Option<&str>) -> Option<PartState>;
+
+    /// Changes the state of the part named `name` (an unbound part's own text or tick).
+    fn change_state(&self, name: &str, change: &mut dyn FnMut(&mut PartState));
+
+    /// Runs a handler of `part`, or opens the window a click targets; true
+    /// when it ran and did not refuse.
+    fn run(&self, part: Option<&str>, call: &HandlerCall) -> bool;
+
+    /// A text as written in the project, in the language shown: `@saveCaption` by its key, else as it is.
+    fn text(&self, written: Option<&str>) -> String;
+
+    /// The type of the value at `path`, by its name: an enum offers its values, a record its fields.
+    fn type_of(&self, path: &str) -> Option<String> {
+        let _ = path;
+        None
+    }
+
+    /// What a dropdown or radio group bound to `path` offers.
+    fn choices(&self, path: &str) -> Vec<Choice> {
+        let _ = path;
+        Vec::new()
+    }
+
+    /// What the dropdown `part` bound to `path` offers: a typed one its field's values, a search one its records.
+    fn offered(&self, part: &PartSpec, path: &str) -> Vec<Choice> {
+        let _ = part;
+        self.choices(path)
+    }
+
+    /// What the application knows of the field at `path`; none for a value that is no entity's field.
+    fn field(&self, path: &str) -> Option<FieldFacts> {
+        let _ = path;
+        None
+    }
+
+    /// The person's formats for numbers and dates.
+    fn formats(&self) -> Formats {
+        Formats::default()
+    }
+
+    /// Opens an address in the system's program for it: a web page in the browser.
+    fn open_address(&self, address: &str) {
+        let _ = address;
+    }
+
+    /// A file of the application's resources by its name (`logo.png`); none when it carries none.
+    fn resource(&self, name: &str) -> Option<Vec<u8>> {
+        let _ = name;
+        None
+    }
+
+    /// The SVG path of one of the icons the application carries, by its name; none when it carries none.
+    fn icon_path(&self, name: &str) -> Option<String> {
+        let _ = name;
+        None
+    }
+
+    /// How often the window's values changed: parts that keep something of them read them again when it moved.
+    fn changes(&self) -> u64;
+
+    /// The stored file of the record's field `bind`, or of the field's store at `store_path`; none when there is none.
+    fn fetch(&self, bind: &str, store_path: Option<&str>) -> Option<Vec<u8>> {
+        let _ = (bind, store_path);
+        None
+    }
+
+    /// Says something to the person among the window's messages.
+    fn say(&self, level: Level, text: Text) {
+        let _ = (level, text);
+    }
+
+    /// Runs the handler of `event` of canvas `part` with where it was; none when the window has no command for it.
+    fn pointed(&self, part: &str, event: &str, at: &Map<String, Value>) -> Option<bool> {
+        let _ = (part, event, at);
+        None
+    }
+
+    /// Applies what the person did on a canvas with a mode as one edit; none when the window has no command for it.
+    fn acted(&self, part: &str, action: &Map<String, Value>) -> Option<bool> {
+        let _ = (part, action);
+        None
+    }
+
+    /// A canvas's engine or a custom part told the window `tell`: the handler wired to it runs with the values.
+    fn told(&self, part: &str, tell: &str, values: &[Value]) {
+        let _ = (part, tell, values);
+    }
+
+    /// The path the part named `part` of this window binds; none when it binds none.
+    fn bound_of(&self, part: &str) -> Option<String> {
+        let _ = part;
+        None
+    }
+
+    /// The keys command `command` answers: the person's, where they set their own, else `designed`.
+    fn keys_of(&self, command: &str, designed: Option<&str>) -> Vec<String> {
+        let _ = command;
+        designed.filter(|d| !d.is_empty()).map(|d| vec![d.to_string()]).unwrap_or_default()
+    }
+}
+
+/// What every part has: its node, its spec and its host.
+pub struct PartBase {
+    pub node: Node,
+    pub spec: PartSpec,
+    pub host: Rc<dyn PartHost>,
+}
+
+impl PartBase {
+    pub fn new(spec: PartSpec, host: Rc<dyn PartHost>) -> PartBase {
+        PartBase { node: Node::new(), spec, host }
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        self.spec.name()
+    }
+
+    /// Its state, which code sets by its name.
+    pub fn state(&self) -> Option<PartState> {
+        self.host.state(self.spec.name())
+    }
+
+    /// Whether it shows: code may hide it.
+    pub fn shown(&self) -> bool {
+        self.state().and_then(|s| s.visible).unwrap_or(true)
+    }
+
+    /// Whether the person may only look: marked read-only in its markup, or made read-only by code.
+    pub fn read_only(&self) -> bool {
+        self.spec.flag("readonly") || self.state().and_then(|s| s.readonly).unwrap_or(false)
+    }
+
+    /// Whether the person may use it.
+    pub fn enabled(&self) -> bool {
+        self.state().and_then(|s| s.enabled).unwrap_or(true)
+    }
+
+    /// The path in the window's data it binds: `order.status`; none unbound.
+    pub fn bound(&self) -> Option<&str> {
+        self.spec.text("bind").filter(|b| !b.is_empty())
+    }
+
+    /// Its caption as shown: as code set it in its state, else as written, translated; none when it has none.
+    pub fn caption(&self) -> Option<String> {
+        if let Some(caption) = self.state().and_then(|s| s.caption) {
+            if caption.key.is_some() || !caption.text.is_empty() {
+                return Some(caption.show());
+            }
+        }
+        self.spec.text("caption").map(|written| self.host.text(Some(written)))
+    }
+
+    /// Runs its handlers of `event`; a click also opens the window its `opens` names. False when one refused.
+    pub fn fire(&self, event: &str) -> bool {
+        let mut ran = true;
+        for call in self.spec.on(event) {
+            ran &= self.host.run(self.spec.name(), call);
+        }
+        if event == "click" {
+            if let Some(target) = self.spec.text("onClick").filter(|t| !t.is_empty()) {
+                ran &= self.host.run(self.spec.name(), &HandlerCall::new("click", target, Vec::new()));
+            }
+        }
+        ran
+    }
+
+    /// The person picked an item of its menu: the item's handler runs, or the window it opens opens.
+    pub fn pick(&self, item: &CommandSpec) {
+        pick(self.host.as_ref(), self.spec.name(), item);
+    }
+}
+
+/// A menu's item picked: its handler runs, or the window its `opens` names opens.
+pub fn pick(host: &dyn PartHost, part: Option<&str>, item: &CommandSpec) {
+    if let Some(handler) = item.text("handler").filter(|h| !h.is_empty()) {
+        host.run(part, &crate::markup::handler_of("click", handler));
+    }
+    if let Some(target) = item.text("onClick").filter(|t| !t.is_empty()) {
+        host.run(part, &HandlerCall::new("click", target, Vec::new()));
+    }
+}
+
+/// A part: an element with its spec and host.
+pub trait Part: Element {
+    fn base(&self) -> &PartBase;
+
+    /// Whether its rows share the window's spare height (a table, a list).
+    fn grows(&self) -> bool {
+        false
+    }
+
+    /// Clicked by a key: a button's shortcut, Enter for the default button. A part pressed by a key as a click on it does.
+    fn press(&mut self, cx: &mut crate::element::Cx) {
+        self.on_click(cx);
+    }
+}
+
+/// Writes the methods every part's element has the same way, for a struct with a field `base`: its node, and that code may hide it.
+#[macro_export]
+macro_rules! part_element {
+    () => {
+        fn node(&self) -> &$crate::element::Node {
+            &self.base.node
+        }
+        fn node_mut(&mut self) -> &mut $crate::element::Node {
+            &mut self.base.node
+        }
+        fn as_any(&self) -> &dyn ::std::any::Any {
+            self
+        }
+        fn as_any_mut(&mut self) -> &mut dyn ::std::any::Any {
+            self
+        }
+        fn is_shown(&self) -> bool {
+            self.base.shown()
+        }
+        fn as_part(&self) -> Option<&dyn $crate::parts::Part> {
+            Some(self)
+        }
+        fn as_part_mut(&mut self) -> Option<&mut dyn $crate::parts::Part> {
+            Some(self)
+        }
+    };
+}
+
+/// Makes the part of a kind from its spec and host.
+pub type MakePart = fn(PartSpec, Rc<dyn PartHost>) -> Box<dyn Part>;
+
+/// The kinds Clarity.UI draws, each with the module that makes it.
+const DRAWN: [(&str, MakePart); 8] = [
+    ("label", label::make),
+    ("heading", heading::make),
+    ("button", button::make),
+    ("textbox", text_box::make),
+    ("memo", text_box::make),
+    ("password", text_box::make),
+    ("checkbox", check_box::make),
+    ("switch", check_box::make),
+];
+
+thread_local! {
+    static ADDED: RefCell<HashMap<String, MakePart>> = RefCell::new(HashMap::new());
+}
+
+/// Adds a part of a kind of its own (a program's custom part), or one drawn in place of Clarity.UI's.
+pub fn register(kind: &str, make: MakePart) {
+    ADDED.with(|added| added.borrow_mut().insert(kind.to_string(), make));
+}
+
+/// The kinds Clarity.UI draws now, its own and those added.
+pub fn drawn() -> Vec<String> {
+    let mut kinds: Vec<String> = DRAWN.iter().map(|(k, _)| k.to_string()).collect();
+    ADDED.with(|added| kinds.extend(added.borrow().keys().cloned()));
+    kinds.sort();
+    kinds.dedup();
+    kinds
+}
+
+fn maker(kind: &str) -> Option<MakePart> {
+    ADDED.with(|added| added.borrow().get(kind).copied()).or_else(|| DRAWN.iter().find(|(k, _)| *k == kind).map(|(_, m)| *m))
+}
+
+/// The part of `spec`: its kind's own part; a kind not drawn yet, or one that
+/// fails as it is made, shows that in its place.
+pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
+    let Some(make) = maker(&spec.kind) else {
+        return Box::new(MissingPart::new(spec, host, None));
+    };
+    let (kept_spec, kept_host) = (spec.clone(), host.clone());
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| make(spec, host))) {
+        Ok(part) => part,
+        Err(panic) => {
+            let why = panic.downcast_ref::<String>().cloned().or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default();
+            Box::new(MissingPart::new(kept_spec, kept_host, Some(why)))
+        }
+    }
+}
+
+/// An element as a part of a window, when it is one.
+pub fn as_part(element: &dyn Element) -> Option<&dyn Part> {
+    element.as_part()
+}
+
+/// The place in a grid of a part made from `spec`.
+pub fn place_of(part: &dyn Part) -> GridItem {
+    part.base().spec.place(part.grows())
+}
+
+/// A kind of part Clarity.UI does not draw yet, or one that failed: which kind, and why, in its place.
+pub struct MissingPart {
+    base: PartBase,
+    /// Why it failed; none for a kind not drawn yet.
+    pub why: Option<String>,
+}
+
+impl MissingPart {
+    pub fn new(spec: PartSpec, host: Rc<dyn PartHost>, why: Option<String>) -> MissingPart {
+        MissingPart { base: PartBase::new(spec, host), why }
+    }
+
+    /// What it says in its place.
+    pub fn says(&self) -> String {
+        let kind = &self.base.spec.kind;
+        match &self.why {
+            None => locale::fill(&locale::translate("partNotDrawn", "{kind}: not drawn yet"), "kind", kind),
+            Some(why) => locale::fill(&locale::fill(&locale::translate("partFailed", "{kind}: {why}"), "kind", kind), "why", why),
+        }
+    }
+}
+
+impl Element for MissingPart {
+    part_element!();
+
+    fn draw(&self, p: &Painter) {
+        let bounds = self.base.node.bounds;
+        let line = p.look.color(if self.why.is_none() { "border" } else { "error" });
+        p.stroke(bounds, line, 1.0, p.look.radius("input"));
+        let row = crate::geometry::Rect { height: bounds.height.min(ROW_HEIGHT), ..bounds };
+        p.text(&self.says(), row.inset(6.0), p.look.color(if self.why.is_none() { "muted" } else { "error" }), p.look.size("small"), "text", false, TextAlign::Left);
+    }
+}
+
+impl Part for MissingPart {
+    fn base(&self) -> &PartBase {
+        &self.base
+    }
+}

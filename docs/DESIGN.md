@@ -244,7 +244,7 @@ theme Shop
 
 **Every stack, in its own idiom.** All of this is the transpiler's job: the project says what, and each stack gets it the way a developer of that stack would write it. There are two renderers, and each feature is done only when both have it:
 
-- **The web renderer**, for Rust with Tauri, Go with Wails, C and C++ with webview, C# with a webview, and the web target.
+- **The web renderer**, for Rust with Tauri, Go with Wails, C and C++ with webview, and their web target.
 - **Clarity.UI**, for C# (section 7.9): on the desktop, and in the browser through WebAssembly.
 
 | | Web renderer | C# with Clarity.UI |
@@ -1823,7 +1823,7 @@ Decided with the user on 2026-10-29: C++ gets a native toolkit, wxWidgets, in pl
 
 **A stack is a language and Clarity.UI.** There are five stacks, one per language: `stack rust`, `stack go`, `stack c`, `stack cpp` and `stack csharp`, each with `desktop` or `web` (`stack go webview`). The UI framework is always Clarity.UI, so the stack line no longer names one.
 
-**Desktop and web.** Every version does both. On the desktop it draws into the system's own window. On the web the same program is compiled to WebAssembly and draws into the page's canvas with Skia's WebAssembly build: the same code, parts and pixels as on the desktop. Each language uses its own WebAssembly route: .NET's for C#, Rust's `wasm32` target, Go's `GOOS=js`, and for C and C++ a WebAssembly compiler. A tool that is not on the stack yet (such as Emscripten for C and C++) is asked about before it is added.
+**Desktop and web.** Every version does both. On the desktop it draws into the system's own window. On the web the same program is compiled to WebAssembly and draws into the page's canvas with Skia: the same code, parts and pixels as on the desktop. Each language has its own route there (see "Routes per language" below). A tool that is not on the stack yet (such as Emscripten for C and C++) is asked about before it is added.
 
 **Custom controls.** Each version has its own way to define a custom control, in its own language: an element that draws itself, lays out its children and takes input, as the built-in parts do. It works the same in all five: the same shape (place, draw, hear the person, values in and out, tells), the same `.cxaml` element for using it, the same designer properties. It replaces how custom parts reach the screen today on each stack (DESIGN 5.19 and 6.5). Custom parts stay libraries in the stack's own language.
 
@@ -1848,7 +1848,19 @@ Decided with the user on 2026-10-29: C++ gets a native toolkit, wxWidgets, in pl
 
 **Avalonia removed (done 2026-11-02).** Its three projects are gone and the window model is in `Clarity.Runtime`. The stack's UI word is `webview` for the shared screen; Clarity.UI is never named (`stack csharp desktop`). The C# generator writes the view models, the windows and app frames as `.cxaml`, the themes as resolved JSON (`Themes/*.light.json`, `*.dark.json`) and a `Program.cs` that starts the runtime (language, theme, settings, keys, databases) and opens the main window through `Clarity.Ui.Desktop` with its title and size. Not generated then on C#: drawing the parts, the unconnected window and the web target; all three came with G7c and G7d the same day. The every-part project and the modelling example build without warnings.
 
-**What it draws with.** Skia, in all five: SkiaSharp in C#, skia-safe in Rust, Skia in C++, and its C interface in C and in Go (cgo). The same base gives the same pixels on every stack.
+**What it draws with.** Skia, in all five, always from prebuilt binaries: building Skia from source takes hours and more memory than a laptop has, so no stack builds it. Skia has no maintained C interface of its own (its old one was dropped), so C and Go use SkiaSharp's native library, a C interface over the same Skia that C# draws with. The same base gives the same pixels on every stack.
+
+**Routes per language.**
+
+| Language | Skia | Window and OpenGL | Sound | Window model to Clarity.UI | Web |
+|---|---|---|---|---|---|
+| C# | SkiaSharp (NuGet) | Silk.NET | SoundFlow | the view models | .NET's WebAssembly, SkiaSharp's WebAssembly build (done) |
+| Rust | skia-safe, its prebuilt binaries | winit and glutin | rodio | the runtime's `Program` trait | Emscripten (`wasm32-unknown-emscripten`), or CanvasKit through `web-sys` without Emscripten; decided in G8d |
+| Go | libSkiaSharp's C interface through cgo (the Go webview stack needs cgo already) | GLFW or SDL through cgo | miniaudio (malgo) | an interface | Go's WebAssembly cannot link C code, so the browser program draws through CanvasKit, Skia's own prebuilt WebAssembly build, called with `syscall/js` |
+| C | libSkiaSharp's C interface | GLFW or SDL | miniaudio | a struct of function pointers | Emscripten |
+| C++ | Skia's own C++ interface, prebuilt static libraries per system (such as JetBrains' skia-pack) | GLFW or SDL | miniaudio | an abstract class | Emscripten |
+
+Every library in this table is asked about before a stack adds it, as skia-safe, winit, glutin and rodio were for Rust (2026-11-02). Each route gets the same check before its round starts: the prebuilt Skia downloads and links on Linux, Windows and macOS.
 
 **One contract, five versions.**
 
@@ -1893,6 +1905,14 @@ Decided with the user on 2026-10-29: C++ gets a native toolkit, wxWidgets, in pl
   - Still open: engines beside the screen on the C# web target; Ctrl+Z in a browser's mirror (undo is the server's) and the keys window there; a trimmed Release build of the browser program, and the web target on Windows and macOS, untried; the generated application of a web project still references `Clarity.Runtime.Engines`, which a browser cannot run; a reference's choices come in the order of their records, as on the web screen and in conformance/dropdown-options.json (by their shown text would need a rule for every stack); a press on an edited cell's input chooses no row, as on the web, so a row of a table whose every column is edited is chosen beside its inputs.
 - G7e, **checks**: the every-part project and the examples on the C# version, desktop and web.
 - Then the same for Rust, Go, C and C++.
+
+**Slices, Rust (G8, started 2026-11-02).** The Rust version is the crate `clarity-ui` in `runtimes/rust-ui`, released on its own like `clarity-runtime`. It follows the C# version module by module (C# is the reference now, as Avalonia was for C#) and passes the same conformance cases. It draws with skia-safe; the system's window comes from winit, OpenGL from glutin, sound from rodio (the user's choice, 2026-11-02); the system's file pickers are written in the crate (the portal on Linux, Win32, macOS), as the C# version writes them. `stack rust desktop` is Clarity.UI; `stack rust webview desktop` keeps the shared screen until the Rust version does all of it.
+
+- **The window model stays the runtime's.** What a generated Rust program answers the webview today (open a window, run a handler, an edit, close, return to, an answer, a reference's options, a field's values, a picture) becomes a trait of `clarity-runtime`, `Program`, which the generated code implements once. The Tauri commands call it, and Clarity.UI calls it in the program's own process, with no webview and no JSON between them. The state of a window is the runtime's `WindowState`, its replies `Reply`; undo stays the runtime's record.
+- G8a, **the base**: the crate with the drawing core (painter, fonts with Inter carried, the theme's look from the same resolved theme JSON as C#, the grid from `conformance/grid-layout.json`, elements, the screen with the pointer, keys, focus, overlays and the frame clock, shortcut keys), the `.cxaml` reader, the part contract (`PartHost`, parts found by their kind, a part that is missing says so in its place), the first parts (label, heading, button, text box, check box), tests on Skia's raster surface, and the desktop host on winit and glutin. Beside it: the `Program` trait in the runtime, and the generator writing a `stack rust desktop` project on Clarity.UI (windows and app frames as `.cxaml`, themes, the program starting `clarity_ui::desktop`).
+- G8b, **every part and the window**: the rest of the catalog, the frame's regions, dialogs, questions, the keys window, the long-call bar, the unconnected window, sound, file pickers, custom parts as a `CustomPart` trait (above).
+- G8c, **the examples live**: the Rust examples on Clarity.UI, under a virtual display.
+- G8d, **the web target**: decided later, between Emscripten (Skia's Rust bindings build for the browser only through it, a tool to ask about first) and CanvasKit called through `web-sys` (no new compiler, the drawing goes through a JavaScript bridge).
 
 ## 8. The designer
 

@@ -540,10 +540,10 @@ action check(order: Order, rate: decimal)
 fn a_refusal_reaches_the_screen_with_its_slots() {
     let files = files();
     let main = &program(&files);
-    assert!(main.contains("type Answer<T> = std::result::Result<T, Value>;"), "{main}");
-    // The runtime's guard gives a refusal with its slots, and any other error or a panic as text (runtimes/rust/tests/fail_safe.rs).
-    assert!(main.contains("clarity_runtime::run_guarded(&app.0, run)"), "{main}");
-    assert!(main.contains("fn dispatch_event(app: tauri::State<App>, state: WindowState, handler: String) -> Answer<Reply> {"), "{main}");
+    // What goes wrong is the runtime's text: a refusal with its slots, any other error or a panic plainly (runtimes/rust/tests/program.rs).
+    assert!(main.contains("use clarity_runtime::program::{self, Answer, Program};"), "{main}");
+    assert!(main.contains("program::guarded(&app.0, run)"), "{main}");
+    assert!(main.contains("fn dispatch_event(app: tauri::State<App>, state: WindowState, handler: String) -> Answer<Reply> {\n    app.dispatch_event(state, &handler)\n}"), "{main}");
 }
 
 #[test]
@@ -920,7 +920,7 @@ fn the_web_target_serves_the_renderer() {
     let has = |text: &str, expected: &str| assert!(text.contains(expected), "expected\n{expected}\nin\n{text}");
     let desktop = main_of(vec![Target::Desktop]);
     assert!(!desktop.contains("clarity_runtime::serve::serve("), "a desktop program serves nothing");
-    has(&desktop, "    desktop::run(db);\n");
+    has(&desktop, "    let app = App(Mutex::new(db));\n    desktop::run(app);\n");
     let web = main_of(vec![Target::Web]);
     has(&web, "clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args, \"127.0.0.1:8080\"), &files, &mut |command, args| served(&app, command, args))");
     has(&web, "        \"open_window\" => given((|| {");
@@ -936,8 +936,8 @@ fn the_web_target_serves_the_renderer() {
         assert!(!files.iter().any(|f| f.path == path), "{path}");
     }
     let both = main_of(vec![Target::Desktop, Target::Web]);
-    has(&both, "    if std::env::args().any(|a| a == \"--serve\") {\n        let app = App(Mutex::new(db));\n");
-    has(&both, "        return;\n    }\n    desktop::run(db);\n");
+    has(&both, "    let app = App(Mutex::new(db));\n    // --serve runs it as a web server, for a browser, in place of its window.\n    if std::env::args().any(|a| a == \"--serve\") {\n        let files = ");
+    has(&both, "        return;\n    }\n    desktop::run(app);\n");
 }
 
 /// Backend drives frontend (DESIGN 1.7): the screen sends the person's
@@ -948,16 +948,18 @@ fn the_runtime_decides_what_the_persons_action_does() {
     let project = load_sources([("sales.clarity", SALES)]);
     let main = program(&files());
     for (command, readonly, call) in [
-        ("reorder_event", true, "clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &r#move, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
+        ("reorder_event", true, "clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &moved, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
         ("item_event", true, "clarity_runtime::list_fields::event(db, state, &part, &path, item, &values, &typed, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
-        ("range_event", true, "clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &mv, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
+        ("range_event", true, "clarity_runtime::ranges::event(db, state, &part, &path, &range, whole, &moved, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
         ("step_event", false, "clarity_runtime::steps::event(db, state, &part, button, steps, next.as_deref(), finish.as_deref(), |state, handler| dispatch(db, state, handler), |state| drawn(db, state))"),
     ] {
         assert!(main.contains(&format!("fn {command}(app: tauri::State<App>, state: WindowState, part: String")), "{command} in\n{main}");
         assert!(main.contains(&format!("            {command},\n")), "{command} is registered");
         // A part's options are the runtime's parameters (DESIGN 1.7): a readonly part's change is taken back.
-        let call = if readonly { format!("clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| {call})") } else { call.to_string() };
-        assert!(main.contains(&format!("window_reply(&sent, locked(&app, |db| {call}))")), "{command} calls\n{call}\nin\n{main}");
+        // The command is a thin call into the program (DESIGN 7.9), which calls the runtime.
+        assert!(main.contains(&format!("    app.{command}(state, ")), "{command} calls the program in\n{main}");
+        let call = if readonly { format!("clarity_runtime::edits::guarded(state, readonly, None, None, |state| drawn(db, state), |state| {call})") } else { call.to_string() };
+        assert!(main.contains(&format!("window_reply(&sent, locked(self, |db| {call}))")), "{command} calls\n{call}\nin\n{main}");
         if readonly {
             assert!(main.contains(&format!("fn {command}(")) && main.contains("readonly: Option<bool>"), "{command} takes readonly");
         }
@@ -965,16 +967,16 @@ fn the_runtime_decides_what_the_persons_action_does() {
     // Canvas modes (DESIGN 5.31): the runtime applies the person's action and runs on change as one edit.
     assert!(main.contains("fn canvas_event(app: tauri::State<App>, state: WindowState, part: String, scope: Option<String>, mode: String, list: Option<String>, at: Option<[String; 2]>, path: Option<String>, units: Option<[i64; 2]>, grid: Option<i64>, snap: Option<bool>, action: Map<String, Value>, handler: Option<String>, readonly: Option<bool>) -> Answer<Reply> {"), "{main}");
     assert!(main.contains("let canvas = clarity_runtime::canvas::CanvasArgs { part, mode, list: list.unwrap_or_default(), at, path: path.unwrap_or_default(), units, grid: grid.unwrap_or_default(), snap: snap.unwrap_or_default(), readonly: false };"), "{main}");
-    assert!(main.contains("window_reply(&sent, locked(&app, |db| clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), None, None, |state| drawn(db, state), |state| clarity_runtime::canvas::event(db, state, &canvas, &action, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))"), "{main}");
+    assert!(main.contains("window_reply(&sent, locked(self, |db| clarity_runtime::edits::guarded(state, readonly, None, None, |state| drawn(db, state), |state| clarity_runtime::canvas::event(db, state, &canvas, &action, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state)))))"), "{main}");
     assert!(main.contains("            canvas_event,\n"), "canvas_event is registered");
     assert!(main.contains("fn edit_event(app: tauri::State<App>, state: WindowState, handler: Option<String>, part: String, scope: String, ends: bool, readonly: Option<bool>, path: Option<String>, editable: Option<Vec<String>>) -> Answer<Reply> {"), "{main}");
-    assert!(main.contains("clarity_runtime::edits::guarded(state, readonly.unwrap_or_default(), path.as_deref(), editable.as_deref(), |state| drawn(db, state), |state| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| handled(db, state, handler.as_deref())))"), "{main}");
+    assert!(main.contains("clarity_runtime::edits::guarded(state, readonly, path.as_deref(), editable.as_deref(), |state| drawn(db, state), |state| clarity_runtime::edits::edit(db, state, &part, &scope, ends, |state| handled(db, state, handler.as_deref())))"), "{main}");
     // The shown rows (DESIGN 1.7): every window reply fills the views; a view event is no edit and not watched.
     assert!(main.contains("clarity_runtime::views::replied(sent, &mut reply)"), "{main}");
     assert!(main.contains("fn view_event(app: tauri::State<App>, state: WindowState, part: String, action: Map<String, Value>) -> Answer<Reply> {"), "{main}");
-    assert!(main.contains("    let sent = clarity_runtime::views::Sent::view_event(&state);\n    window_reply(&sent, locked(&app, |db| clarity_runtime::views::event(state, &part, &action, |state| drawn(db, state))))"), "{main}");
+    assert!(main.contains("        let sent = clarity_runtime::views::Sent::view_event(&state);\n        window_reply(&sent, locked(self, |db| clarity_runtime::views::event(state, part, &action, |state| drawn(db, state))))"), "{main}");
     assert!(main.contains("            view_event,\n"));
-    assert!(main.contains("let sent = clarity_runtime::views::Sent::of(&state);\n    window_reply(&sent, locked(&app, |db| clarity_runtime::stepped(db, || dispatch(db, state, &handler))))"), "{main}");
+    assert!(main.contains("let sent = clarity_runtime::views::Sent::of(&state);\n        window_reply(&sent, locked(self, |db| clarity_runtime::stepped(db, || dispatch(db, state, handler))))"), "{main}");
     assert!(main.contains("fn find_options(app: tauri::State<App>, kind: String, entity: String, field: Option<String>, show: Option<Vec<String>>, typed: String) -> Answer<Value> {"), "{main}");
     assert!(main.contains("            find_options,\n"));
     let mut settings = shop();
@@ -985,8 +987,9 @@ fn the_runtime_decides_what_the_persons_action_does() {
         assert!(web.contains(&format!("        \"{command}\" => given((|| {{")), "{command} served in\n{web}");
     }
     assert_eq!(web.matches("let readonly: Option<bool> = arg(&args, \"readonly\")?;").count(), 5, "{web}");
-    assert!(web.contains("let (path, editable): (Option<String>, Option<Vec<String>>) = (arg(&args, \"path\")?, arg(&args, \"editable\")?);"), "{web}");
-    assert!(web.contains("clarity_runtime::dropdown_options::find(&kind, &show.unwrap_or_default(), &typed, || values_of(db, &entity, field.as_deref().unwrap_or_default()), || options(db, &entity))"), "{web}");
+    assert!(web.contains("path: arg(&args, \"path\")?, editable: arg(&args, \"editable\")? };"), "{web}");
+    assert!(web.contains("app.find_options(&kind, &entity, field.as_deref(), &show.unwrap_or_default(), &typed)"), "{web}");
+    assert!(web.contains("clarity_runtime::dropdown_options::find(kind, show, typed, || values_of(db, entity, field.unwrap_or_default()), || options(db, entity))"), "{web}");
 }
 
 /// A canvas with a mode (DESIGN 5.31): handlers read and set its tool, brush

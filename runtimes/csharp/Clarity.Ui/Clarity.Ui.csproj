@@ -31,6 +31,8 @@
     <!-- Clarity's own theme as Clarity resolves it, and the font for where the system has none. -->
     <EmbeddedResource Include="Themes/*.json" LogicalName="Clarity.Ui.Themes.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Fonts/*.ttf" LogicalName="Clarity.Ui.Fonts.%(Filename)%(Extension)" />
+    <!-- The catalog of parts: each kind's defaults and how each field is read, as Rust writes them for every screen. -->
+    <EmbeddedResource Include="../../web/src/generated/part-defaults.json;../../web/src/generated/part-fields.json;../../web/src/generated/command-defaults.json;../../web/src/generated/command-fields.json" LogicalName="Clarity.Ui.Catalog.%(Filename)%(Extension)" />
     <None Include="Fonts/Inter-LICENSE.txt" Pack="true" PackagePath="assets/" />
   </ItemGroup>
   <ItemGroup>

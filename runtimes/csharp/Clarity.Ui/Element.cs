@@ -34,6 +34,32 @@ public abstract class Element
     /// <summary>Whether it takes the focus: pressed, or reached with Tab.</summary>
     public virtual bool Focusable => false;
 
+    /// <summary>Whether it takes Tab itself (a code editor) instead of Tab moving the focus on.</summary>
+    public virtual bool WantsTab => false;
+
+    /// <summary>Whether it shows: one hidden takes no focus, no pointer and draws nothing, and neither does anything in it.</summary>
+    public virtual bool IsShown => true;
+
+    /// <summary>Whether it shows on its screen: it and every element it is in show.</summary>
+    public bool ShowsInTree
+    {
+        get
+        {
+            for (Element? e = this; e is not null; e = e.Parent)
+                if (!e.IsShown)
+                    return false;
+            return true;
+        }
+    }
+
+    /// <summary>The look of its screen, or Clarity's light one before it is on a screen.</summary>
+    public ThemeLook LookNow => Screen?.Look ?? ThemeLook.Clarity(dark: false);
+
+    /// <summary>The fonts of its screen, or those of Clarity's light look before it is on a screen.</summary>
+    public Fonts FontsNow => Screen?.Fonts ?? lightFonts.Value;
+
+    static readonly Lazy<Fonts> lightFonts = new(() => new Fonts(ThemeLook.Clarity(dark: false)));
+
     public bool Hovered { get; internal set; }
     public bool Pressed { get; internal set; }
     public bool Focused { get; internal set; }
@@ -44,14 +70,31 @@ public abstract class Element
     /// <summary>Takes its place; a container places its children in it.</summary>
     public virtual void Arrange(Box box) => Bounds = box;
 
+    /// <summary>Draws itself; an element draws the children that show.</summary>
     public virtual void Draw(Painter painter)
     {
         foreach (var child in children)
-            child.Draw(painter);
+            if (child.IsShown)
+                child.Draw(painter);
     }
 
     /// <summary>Pressed and released with the main button.</summary>
     public virtual void OnClick() { }
+
+    /// <summary>The main button went down on it; it holds the pointer until the button goes up.</summary>
+    public virtual void OnPointerPressed(PointerInput at) { }
+
+    /// <summary>The pointer moved over it, or anywhere while it holds the pointer (<see cref="Pressed"/>).</summary>
+    public virtual void OnPointerMoved(PointerInput at) { }
+
+    /// <summary>The main button went up after it was pressed on it, wherever the pointer is.</summary>
+    public virtual void OnPointerReleased(PointerInput at) { }
+
+    /// <summary>The wheel turned over it: true when it took the turn (it scrolls); else its parent may.</summary>
+    public virtual bool OnWheel(double dx, double dy) => false;
+
+    /// <summary>It got or lost the focus.</summary>
+    public virtual void OnFocusChanged(bool focused) { }
 
     /// <summary>A key, while it has the focus; true when it took the key.</summary>
     public virtual bool OnKey(KeyInput key) => false;
@@ -59,10 +102,10 @@ public abstract class Element
     /// <summary>Text typed while it has the focus.</summary>
     public virtual void OnText(string text) { }
 
-    /// <summary>The deepest element at a point: the last drawn first.</summary>
+    /// <summary>The deepest element at a point: the last drawn first. A part may say a point within its place is not its own.</summary>
     internal Element? At(double x, double y)
     {
-        if (!Bounds.Contains(x, y))
+        if (!IsShown || !Bounds.Contains(x, y))
             return null;
         for (var i = children.Count - 1; i >= 0; i--)
             if (children[i].At(x, y) is { } inside)
@@ -70,13 +113,22 @@ public abstract class Element
         return this;
     }
 
-    internal IEnumerable<Element> InOrder()
+    /// <summary>It and every element in it, in the order they are drawn: a parent before its children.</summary>
+    public IEnumerable<Element> InOrder()
     {
         yield return this;
         foreach (var child in children)
             foreach (var inner in child.InOrder())
                 yield return inner;
     }
+}
+
+/// <summary>Finding elements in a tree.</summary>
+public static class Elements
+{
+    /// <summary>The first element of type <typeparamref name="T"/> in <paramref name="root"/> (itself included) that <paramref name="where"/> holds for; none when there is none.</summary>
+    public static T? Find<T>(this Element root, Func<T, bool>? where = null) where T : Element =>
+        root.InOrder().OfType<T>().FirstOrDefault(e => where?.Invoke(e) ?? true);
 }
 
 /// <summary>A filled place in a color role of the theme, with the radius of a radius role.</summary>

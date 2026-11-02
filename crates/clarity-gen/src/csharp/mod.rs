@@ -169,6 +169,7 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
         files.push(OutFile { path, ..file });
     }
     files.push(text("Labels.cs", labels_cs(project, &name)));
+    files.push(text("Fields.cs", fields_cs(project, &name)));
     if !clarity_spec::icons::used(project).is_empty() {
         files.push(text("Icons.cs", icons_cs(project, &name)));
     }
@@ -514,6 +515,65 @@ public static partial class Labels
 }}
 "
     )
+}
+
+/// The facts of every field of every entity, which Clarity.UI's parts read
+/// beside the values (DESIGN 7.9): `Fields.All["Order.total"]`, keyed by the
+/// entity's type name and the field as Clarity writes it.
+fn fields_cs(project: &Project, name: &str) -> String {
+    use clarity_spec::model::Literal;
+    let literal = |value: &Option<Literal>| match value {
+        Some(Literal::Number(v) | Literal::Str(v) | Literal::Ident(v)) => string(v),
+        Some(Literal::Bool(b)) => string(&b.to_string()),
+        None => "null".to_string(),
+    };
+    let mut lines = String::new();
+    for entity in project.entities() {
+        let parent = tree_parent(entity).map_or("null".to_string(), |p| string(p));
+        for field in &entity.fields {
+            let refers = match &field.ty {
+                FieldType::Ref { entity } => string(&entity.name),
+                _ => "null".to_string(),
+            };
+            lines.push_str(&format!(
+                "        [{key}] = new({label}, {format}, Required: {required}, Min: {min}, Max: {max}, Refers: {refers}, Parent: {parent}),\n",
+                key = string(&format!("{}.{}", entity.name.name, field.name.name)),
+                label = string(&field.label),
+                format = field_format(field).unwrap_or_else(|| "null".to_string()),
+                required = field.modifiers.required,
+                min = literal(&field.modifiers.min),
+                max = literal(&field.modifiers.max),
+            ));
+        }
+    }
+    format!(
+        "{HEADER}
+using Clarity.Runtime;
+
+namespace {name};
+
+/// <summary>The facts of every field of every entity, keyed \"Entity.field\": its label, format, whether it is required, its range, what it refers to and, for records that make a tree, the field naming a record's parent.</summary>
+public static class Fields
+{{
+    public static readonly IReadOnlyDictionary<string, FieldFacts> All = new Dictionary<string, FieldFacts>
+    {{
+{lines}    }};
+}}
+"
+    )
+}
+
+/// The field naming a record's parent, for an entity whose records make a
+/// tree: one with a list of its own kind (what a tree's `children` names),
+/// arranged through its one reference to its own kind.
+fn tree_parent(entity: &clarity_spec::model::Entity) -> Option<&str> {
+    let own = |e: &clarity_spec::model::Ident| e.name == entity.name.name;
+    let has_list = entity.fields.iter().any(|f| matches!(&f.ty, FieldType::List { item } if own(item)));
+    let mut parents = entity.fields.iter().filter(|f| matches!(&f.ty, FieldType::Ref { entity } if own(entity)));
+    match (has_list, parents.next(), parents.next()) {
+        (true, Some(parent), None) => Some(&parent.name.name),
+        _ => None,
+    }
 }
 
 /// The icons the application shows, from Clarity's Lucide set (ISC license):

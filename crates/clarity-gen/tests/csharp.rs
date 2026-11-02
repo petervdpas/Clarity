@@ -102,6 +102,7 @@ fn writes_a_complete_dotnet_project_on_the_runtime_packages() {
         paths,
         [
             "AppThemes.cs",
+            "Fields.cs",
             "Labels.cs",
             "Modules/Sales.cs",
             "Program.cs",

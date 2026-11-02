@@ -16,7 +16,7 @@ fn the_calculator_s_window_is_markup_in_clarity_s_words() {
     let markup = clarity_gen::web_windows::window_markup(page);
     for line in [
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
-        "<Window name=\"Main\">",
+        "<Window name=\"Main\" columns=\"4\">",
         "  <Display name=\"screen\" at=\"1,1\" span=\"4\" rows=\"2\" bind=\"shown\" digits=\"12\" style=\"display\" />",
         "  <Button name=\"clearKey\" at=\"1,3\" span=\"1\" caption=\"@clearKeyCaption\" key=\"Escape\" onclick=\"clear\" />",
         "  <Button name=\"digit7\" at=\"1,4\" span=\"1\" caption=\"7\" key=\"7\" onclick=\"digit(7)\" />",
@@ -80,4 +80,37 @@ fn the_screen_reads_the_catalog_s_defaults_and_the_fields_types() {
     }
     let fields: serde_json::Value = serde_json::from_str(&wanted[2].1).unwrap();
     assert_eq!((fields["caption"].as_str(), fields["digits"].as_str(), fields["cards"].as_str(), fields["order"].as_str()), (Some("text"), Some("number"), Some("bool"), Some("json")));
+}
+
+/// Where each part's edits are undone (DESIGN 5.29), as the project works it
+/// out, goes into the markup, so a screen that reads the markup alone (C# on
+/// Clarity.UI) has it: a field in a panel undoes with the panel, a part outside
+/// one with itself, and a part with `no undo` has none.
+#[test]
+fn a_part_s_undo_scope_is_in_the_markup() {
+    let source = "module m\n\nentity Note\n    title: text\n\npage Main: window\n    data note: Note\n    panel name notePanel at 1,1 span 12 rows 3\n        textbox name titleInput at 1,1 span 6 bind note.title\n    textbox name loose at 1,4 span 6 bind note.title\n    textbox name plain at 1,5 span 6 bind note.title no undo\n";
+    let project = clarity_spec::keyed::load_keyed([("m.clarity", source)], &[], "en");
+    assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::diagnostic::Severity::Error), "{:#?}", project.diagnostics);
+    let page = project.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == "Main").unwrap();
+    let markup = clarity_gen::web_windows::window_markup(page);
+    for line in [
+        "<Textbox name=\"titleInput\" at=\"1,1\" span=\"6\" bind=\"note.title\" undoScope=\"notePanel\" />",
+        "<Textbox name=\"loose\" at=\"1,4\" span=\"6\" bind=\"note.title\" undoScope=\"loose\" />",
+        "<Textbox name=\"plain\" at=\"1,5\" span=\"6\" bind=\"note.title\" noUndo=\"true\" />",
+    ] {
+        assert!(markup.contains(line), "{line}\nin\n{markup}");
+    }
+}
+
+/// A window's grid has its columns on the root element when they are not
+/// the twelve every window starts with.
+#[test]
+fn a_window_s_columns_are_on_its_root_when_not_twelve() {
+    let source = "module m\n\npage Main: window\n    grid 6 columns\n    label \"Hello\" name hello at 1,1 span 6\n\npage Other: window\n    label \"Hello\" name hello at 1,1 span 6\n";
+    let (file, diagnostics) = clarity_spec::parser::parse(source, "m.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    let six = clarity_gen::web_windows::window_markup(&file.pages[0]);
+    assert!(six.contains("<Window name=\"Main\" columns=\"6\">"), "{six}");
+    let twelve = clarity_gen::web_windows::window_markup(&file.pages[1]);
+    assert!(twelve.contains("<Window name=\"Other\">"), "{twelve}");
 }

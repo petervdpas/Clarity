@@ -1,7 +1,10 @@
 // A screen of Clarity.UI on a browser page's canvas (DESIGN 7.9): the same
 // program as on the desktop, compiled to WebAssembly. Skia draws the screen
 // into pixels when it changed, on the page's next frame, at the page's pixel
-// scale; clarity-ui.js puts them on the canvas and sends what the person does.
+// scale, and on every frame while something animates; clarity-ui.js puts
+// them on the canvas and sends what the person does: the pointer, the wheel,
+// keys and typed text, to the same screen methods the desktop sends them to
+// (the window's own keys included, which the screen asks first).
 
 using System.Runtime.InteropServices.JavaScript;
 using System.Runtime.Versioning;
@@ -74,6 +77,9 @@ public static partial class BrowserCanvas
         using (var canvas = new SKCanvas(pixels))
             screen.Draw(canvas);
         Present(new Span<byte>((void*)pixels.GetPixels(), pixels.ByteCount), width, height);
+        // Something animates (a busy indicator): the next frame is drawn too.
+        if (screen.Animating > 0)
+            Want();
     }
 
     [JSExport]
@@ -87,6 +93,10 @@ public static partial class BrowserCanvas
 
     [JSExport]
     internal static void PointerReleased(double x, double y, int button) => screen?.PointerReleased(x, y, (PointerButton)button);
+
+    /// <summary>The wheel turned, in the page's pixels, down and right positive (a wheel event's deltas).</summary>
+    [JSExport]
+    internal static void Wheel(double x, double y, double dx, double dy) => screen?.Wheel(x, y, dx, dy);
 
     [JSExport]
     internal static void KeyPressed(string key, int modifiers) => screen?.KeyPressed(new KeyInput(WebKeys.Of(key), (Modifiers)modifiers));
@@ -118,6 +128,8 @@ public static class WebKeys
         ['F', .. var n] when int.TryParse(n, out var f) && f is >= 1 and <= 12 => Key.F1 + (f - 1),
         [var c] when char.IsAsciiLetter(c) => Key.A + (char.ToUpperInvariant(c) - 'A'),
         [var c] when char.IsAsciiDigit(c) => Key.D0 + (c - '0'),
+        // A symbol is its character, from the keyboard or the number pad.
+        [var c] when Shortcuts.Symbols.TryGetValue(c, out var symbol) => symbol,
         _ => Key.Other,
     };
 }

@@ -683,11 +683,17 @@ impl<'a> Window<'a> {
             }
             let _ = write!(clicks, "    /// <summary>What custom part {name} told.</summary>\n    [Command]\n    public void Told_{}(string tell, System.Text.Json.JsonElement[] values)\n    {{\n        switch (tell)\n        {{\n{cases}        }}\n    }}\n\n", member(name));
         }
-        // The calls with values its parts wire, a command each.
+        // The calls with values its parts wire, a command each, and its Run_,
+        // which the screen runs to hear whether the handler refused.
         for (call, command) in &self.calls {
             let Some(decl) = own.iter().find(|d| d.name.name == call.handler) else { continue };
             let values: Vec<String> = call.args.iter().zip(&decl.params).map(|(v, p)| logic::literal(self.project, &p.ty, v)).collect();
-            let _ = write!(clicks, "    [RelayCommand]\n    void {command}() => Handle(() => On{}({}));\n\n", pascal(&call.handler), values.join(", "));
+            let _ = write!(
+                clicks,
+                "    [RelayCommand]\n    void {command}() => Run_{command}();\n\n    public bool Run_{command}() => Handle(() => On{}({}), command: nameof({command}));\n\n",
+                pascal(&call.handler),
+                values.join(", ")
+            );
         }
         if quit {
             clicks.push_str("    [RelayCommand]\n    void Quit_() => Handle(QuitApplication);\n\n");

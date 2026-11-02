@@ -381,9 +381,13 @@ fn a_click_passes_values_to_its_handler() {
     has(vm, "    void OnDigit(long d)\n");
     has(vm, "    void OnScale(decimal by, string word, OrderStatus status)\n");
     has(vm, "        OnDigit(3L);\n");
-    has(vm, "    [RelayCommand]\n    void Digit7() => Handle(() => OnDigit(7L));");
-    has(vm, "    [RelayCommand]\n    void Digit1() => Handle(() => OnDigit(1L));");
-    has(vm, "    [RelayCommand]\n    void Scale0_5HalfApproved() => Handle(() => OnScale(0.5m, \"half\", OrderStatus.Approved));");
+    // The command runs the call; Run_ runs it for the screen and says whether the handler refused.
+    has(vm, "    [RelayCommand]\n    void Digit7() => Run_Digit7();\n\n    public bool Run_Digit7() => Handle(() => OnDigit(7L), command: nameof(Digit7));");
+    has(vm, "    [RelayCommand]\n    void Digit1() => Run_Digit1();\n\n    public bool Run_Digit1() => Handle(() => OnDigit(1L), command: nameof(Digit1));");
+    has(
+        vm,
+        "    [RelayCommand]\n    void Scale0_5HalfApproved() => Run_Scale0_5HalfApproved();\n\n    public bool Run_Scale0_5HalfApproved() => Handle(() => OnScale(0.5m, \"half\", OrderStatus.Approved), command: nameof(Scale0_5HalfApproved));",
+    );
     // A handler that takes values is only run with them.
     assert!(!vm.contains("void Digit() =>"), "{vm}");
 }
@@ -514,3 +518,41 @@ fn a_window_made_as_a_mirror_loads_nothing() {
     has(vm, "    public OrderFormViewModel(Db? db) : base(db)\n    {\n        if (IsMirror)\n            return;\n");
 }
 
+
+const GENRES: &str = "module music
+
+entity Genre
+    name: text(40), required
+    parent: ref Genre
+    children: list<Genre>
+    rank: integer, min 1, max 10
+    share: decimal(5, 2), format percent
+
+page Genres: window
+    data genres: list<Genre>
+    treetable name genreTree at 1,1 span 12 rows 8 bind genres children children columns name
+";
+
+/// The facts of every field of every entity (DESIGN 7.9), which Clarity.UI's
+/// parts read beside the values: label, format, required, range, what a
+/// reference refers to, and for records that make a tree their parent field.
+#[test]
+fn every_field_s_facts_are_in_fields() {
+    let fields = file(&files(), "Fields.cs").to_string();
+    has(&fields, "using Clarity.Runtime;");
+    has(&fields, "public static class Fields\n{");
+    has(&fields, "public static readonly IReadOnlyDictionary<string, FieldFacts> All = new Dictionary<string, FieldFacts>\n    {");
+    has(&fields, "[\"Order.total\"] = new(\"@orderTotalLabel\", new FieldFormat(FormatKind.Money), Required: false, Min: null, Max: null, Refers: null, Parent: null),");
+    has(&fields, "[\"Order.customer\"] = new(\"@orderCustomerLabel\", null, Required: false, Min: null, Max: null, Refers: \"Customer\", Parent: null),");
+    has(&fields, "[\"Order.ordered_on\"] = new(\"@orderOrderedOnLabel\", new FieldFormat(FormatKind.Date), Required: false,");
+    has(&fields, "[\"Customer.name\"] = new(\"@customerNameLabel\", null, Required: true,");
+
+    let project = load_keyed([("music.clarity", GENRES)], &[], "en");
+    assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::diagnostic::Severity::Error), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|errors| panic!("{errors:#?}"));
+    let fields = file(&files, "Fields.cs");
+    has(fields, "[\"Genre.name\"] = new(\"@genreNameLabel\", null, Required: true, Min: null, Max: null, Refers: null, Parent: \"parent\"),");
+    has(fields, "[\"Genre.parent\"] = new(\"@genreParentLabel\", null, Required: false, Min: null, Max: null, Refers: \"Genre\", Parent: \"parent\"),");
+    has(fields, "[\"Genre.rank\"] = new(\"@genreRankLabel\", new FieldFormat(FormatKind.Integer), Required: false, Min: \"1\", Max: \"10\", Refers: null, Parent: \"parent\"),");
+    has(fields, "[\"Genre.share\"] = new(\"@genreShareLabel\", new FieldFormat(FormatKind.Decimal, 2, \"percent\"), Required: false,");
+}

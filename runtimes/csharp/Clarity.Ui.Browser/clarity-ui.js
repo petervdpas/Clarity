@@ -49,6 +49,12 @@ export async function start(id) {
   });
   canvas.addEventListener("pointerup", (e) => program.PointerReleased(...at(e), buttons.indexOf(buttons[e.button] ?? "left")));
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+  // The wheel in the page's pixels: a line is 40, a page the canvas's height, as the desktop turns a notch.
+  canvas.addEventListener("wheel", (e) => {
+    const unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? canvas.getBoundingClientRect().height : 1;
+    program.Wheel(...at(e), e.deltaX * unit, e.deltaY * unit);
+    e.preventDefault();
+  }, { passive: false });
   canvas.addEventListener("keydown", (e) => {
     program.KeyPressed(e.key, modifiers(e));
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) program.TextTyped(e.key);

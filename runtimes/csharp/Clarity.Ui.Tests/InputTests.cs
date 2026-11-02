@@ -9,7 +9,9 @@ sealed class Probe : Element
     public int Clicks;
     public string Typed = "";
     public List<Key> Keys = [];
+    public List<bool> FocusSeen = [];
     public override bool Focusable => true;
+    public override void OnFocusChanged(bool focused) => FocusSeen.Add(focused);
     public override void OnClick() => Clicks++;
     public override void OnText(string text) => Typed += text;
     public override bool OnKey(KeyInput key)

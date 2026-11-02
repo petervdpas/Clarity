@@ -102,6 +102,9 @@ public sealed class ThemeLook
         return state is null ? plain : Look("parts", $"{kind}:{state}").Over(plain);
     }
 
+    /// <summary>Only what a kind of part's state sets itself (its hover, its pressed), without its plain look under it; nothing without a state.</summary>
+    public LookValues PartOwn(string kind, string? state) => state is null ? LookValues.None : Look("parts", $"{kind}:{state}");
+
     /// <summary>A style of the theme: <c>style primary background accent</c>.</summary>
     public LookValues Style(string name) => Look("styles", name);
 }

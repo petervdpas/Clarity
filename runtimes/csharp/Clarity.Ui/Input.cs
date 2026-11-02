@@ -29,7 +29,12 @@ public enum Key
     F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
     A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
     D0, D1, D2, D3, D4, D5, D6, D7, D8, D9,
+    // The symbols, from the keyboard or the number pad alike: the pad's + is Plus too.
+    Plus, Minus, Multiply, Slash, Period, Comma, Equal, Semicolon, Quote, Backslash, BracketLeft, BracketRight, Backquote,
 }
+
+/// <summary>Where the pointer is, on the screen and from the element's top left, and the keys held.</summary>
+public readonly record struct PointerInput(double ScreenX, double ScreenY, double X, double Y, Modifiers Modifiers = Modifiers.None, int Clicks = 1);
 
 public readonly record struct KeyInput(Key Key, Modifiers Modifiers)
 {

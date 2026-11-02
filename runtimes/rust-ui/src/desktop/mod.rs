@@ -1,22 +1,29 @@
-//! The desktop host (DESIGN 7.9): a screen in a window of the system's own
-//! (winit), drawn by Skia through OpenGL (glutin) when it changed, at the
-//! window's own scale. What the person does with the pointer, the wheel and
-//! keys goes to the screen in its units (logical pixels). The theme follows
-//! the system's light or dark, at start and when it changes. The window
-//! wakes at the time an element asked for and draws every frame while one
+//! The desktop host (DESIGN 7.9): each screen in a window of the system's
+//! own (winit), drawn by Skia through OpenGL (glutin) when it changed, at
+//! the window's own scale. What the person does with the pointer, the wheel,
+//! keys and an input method goes to its screen in its units (logical
+//! pixels). The theme follows the system's light or dark, at start and when
+//! it changes. A window wakes at the time an element asked for, when work
+//! off the screen's thread is done, and draws every frame while one
 //! animates; otherwise it waits.
 //!
-//! `run` shows a generated program (its `WindowStack`); `show` shows any
-//! screen. Both end when the window closes, or when the program's last
-//! window closed.
+//! `run` shows a generated program: its windows open in place in their
+//! desktop window, while a dialog, the keys window and a target marked `in
+//! new window` get a desktop window of their own, each its own screen and
+//! OpenGL surface. A dialog's window is sized to the dialog, and the window
+//! under it takes no input while it is open. `show` shows any screen. Both
+//! end when the program's own windows closed.
 
 mod clipboard;
+pub mod files;
 pub mod input;
+pub mod sound;
 
 use std::ffi::CString;
 use std::num::NonZeroU32;
 use std::process::ExitCode;
-use std::sync::Arc;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use glutin::config::{Config, ConfigTemplateBuilder, GlConfig};
@@ -27,20 +34,23 @@ use glutin_winit::{DisplayBuilder, GlWindow};
 use skia_safe::gpu::{self, backend_render_targets, gl::FramebufferInfo, DirectContext, SurfaceOrigin};
 use skia_safe::{ColorType, Surface};
 use winit::application::ApplicationHandler;
-use winit::dpi::{LogicalSize, PhysicalSize};
-use winit::event::{ElementState, MouseButton, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
+use winit::event::{ElementState, Ime, MouseButton, WindowEvent};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::raw_window_handle::HasWindowHandle;
 use winit::window::{Theme, Window, WindowAttributes, WindowId};
 
 use clarity_runtime::program::Program;
 
 use crate::app_files::AppFiles;
+use crate::dialogs::keys::{self, KeysWindow};
+use crate::element::Composition;
+use crate::geometry::Rect;
 use crate::input::{KeyInput, Modifiers, PointerButton, PressCounter};
 use crate::locale::{fill, translate};
 use crate::screen::Screen;
 use crate::theme::ThemeLook;
-use crate::window::WindowStack;
+use crate::window::{Apart, ApartClosed, Running, WindowStack};
 
 use self::input::{key_of, modifiers_of, typed_text, wheel_of};
 
@@ -80,32 +90,40 @@ impl ShowOptions {
     }
 }
 
-/// Runs a generated program on Clarity.UI: its windows in one desktop window,
-/// in its look for the system's light or dark. Ends when the window closes or
-/// the program's last window closed.
+/// Runs a generated program on Clarity.UI: its windows in desktop windows,
+/// in its look for the system's light or dark. Ends when its own windows
+/// closed or it quit.
 pub fn run(program: impl Program, files: AppFiles) -> ExitCode {
+    // The language and theme the person chose in an earlier run, kept beside the program's settings.
+    let kept = clarity_runtime::settings::file(files.title).and_then(|f| f.parent().map(|p| p.to_path_buf()));
+    crate::choices::start(&files, kept);
+    crate::files::set_system(Arc::new(self::files::SystemFilePicker));
+    crate::parts::sound::set_output(Rc::new(self::sound::Speakers::default()));
     let stack = WindowStack::start(Arc::new(program), files);
+    // Dialogs, the keys window and new windows get desktop windows of their own.
+    stack.running().set_apart(true);
     let title = stack.title();
     let (width, height) = stack.wanted_size().unwrap_or(STANDARD_SIZE);
-    let screen = Screen::new(Box::new(stack), files.look(false));
-    show(screen, ShowOptions::new(title).size(width, height).following(move |dark| files.look(dark)))
+    let screen = Screen::new(Box::new(stack), crate::choices::look(&files, false));
+    show(screen, ShowOptions::new(title).size(width, height).following(move |dark| crate::choices::look(&files, dark)))
 }
 
 /// Shows a screen in a desktop window until the window closes (or, for a
-/// program's `WindowStack`, until its last window closed).
-pub fn show(mut screen: Screen, options: ShowOptions) -> ExitCode {
-    if let Some(system) = clipboard::SystemClipboard::open() {
-        screen.set_clipboard(Box::new(system));
-    }
-    let event_loop = match EventLoop::new() {
+/// program's `WindowStack`, until its own windows closed).
+pub fn show(screen: Screen, mut options: ShowOptions) -> ExitCode {
+    let event_loop = match EventLoop::<Wake>::with_user_event().build() {
         Ok(event_loop) => event_loop,
         Err(why) => return failed(&why.to_string()),
     };
-    let mut host = Host::new(screen, options);
+    let looks: Option<Rc<dyn Fn(bool) -> Arc<ThemeLook>>> = options.looks.take().map(Rc::from);
+    let mut host = Host::new(event_loop.create_proxy(), looks);
+    host.add(screen, options.title.clone(), (options.width, options.height), None, false);
     let ran = event_loop.run_app(&mut host);
-    host.screen.dispose();
-    // Skia's context goes before the window it draws in.
-    host.shown = None;
+    for win in host.wins.iter_mut() {
+        win.screen.dispose();
+        // Skia's context goes before the window it draws in.
+        win.shown = None;
+    }
     match (ran, host.failure) {
         (_, Some(why)) => failed(&why),
         (Err(why), None) => failed(&why.to_string()),
@@ -118,6 +136,10 @@ fn failed(why: &str) -> ExitCode {
     eprintln!("{}", fill(&translate("desktopWindowFailed", "The window could not show: {why}"), "why", why));
     ExitCode::FAILURE
 }
+
+/// What wakes the host from outside its loop: work off a screen's thread is done.
+#[derive(Debug, Clone, Copy)]
+struct Wake;
 
 /// The window as it shows: the system's window, its OpenGL surface and
 /// context, and Skia's context and surface over them.
@@ -134,23 +156,27 @@ struct Shown {
 impl Drop for Shown {
     fn drop(&mut self) {
         // Some drivers crash when Skia frees its resources after the context went.
+        let _ = self.gl_context.make_current(&self.gl_surface);
         self.skia.release_resources_and_abandon();
     }
 }
 
 impl Shown {
-    /// Opens the window with an OpenGL context and Skia over it.
-    fn open(event_loop: &ActiveEventLoop, options: &ShowOptions) -> Result<Shown, String> {
-        let attributes = WindowAttributes::default()
-            .with_title(options.title.clone())
-            .with_inner_size(LogicalSize::new(options.width.max(1.0), options.height.max(1.0)));
-        let template = ConfigTemplateBuilder::new().with_alpha_size(8);
-        // The config with the fewest samples: Skia smooths edges itself.
-        let (window, config) = DisplayBuilder::new()
-            .with_window_attributes(Some(attributes))
-            .build(event_loop, template, |configs| configs.reduce(|a, b| if b.num_samples() < a.num_samples() { b } else { a }).expect("the system offers an OpenGL config"))
-            .map_err(|why| why.to_string())?;
-        let window = window.ok_or_else(|| translate("desktopNoWindow", "the system made no window"))?;
+    /// Opens the window with an OpenGL context and Skia over it; the first
+    /// window finds the config every later one uses.
+    fn open(event_loop: &ActiveEventLoop, attributes: WindowAttributes, config: Option<&Config>) -> Result<Shown, String> {
+        let (window, config) = match config {
+            Some(config) => (glutin_winit::finalize_window(event_loop, attributes, config).map_err(|why| why.to_string())?, config.clone()),
+            None => {
+                let template = ConfigTemplateBuilder::new().with_alpha_size(8);
+                // The config with the fewest samples: Skia smooths edges itself.
+                let (window, config) = DisplayBuilder::new()
+                    .with_window_attributes(Some(attributes))
+                    .build(event_loop, template, |configs| configs.reduce(|a, b| if b.num_samples() < a.num_samples() { b } else { a }).expect("the system offers an OpenGL config"))
+                    .map_err(|why| why.to_string())?;
+                (window.ok_or_else(|| translate("desktopNoWindow", "the system made no window"))?, config)
+            }
+        };
         let handle = window.window_handle().map_err(|why| why.to_string())?.as_raw();
         let display = config.display();
         // OpenGL first, else OpenGL ES, which some systems have alone.
@@ -177,6 +203,8 @@ impl Shown {
         .ok_or_else(|| translate("desktopNoOpenGl", "OpenGL has not what Skia needs"))?;
         let mut skia = gpu::direct_contexts::make_gl(interface, None).ok_or_else(|| translate("desktopNoSkia", "Skia could not draw with OpenGL"))?;
         let surface = Self::surface_of(&mut skia, &config, window.inner_size())?;
+        // Input methods compose in it (the person types Chinese, Japanese, accents).
+        window.set_ime_allowed(true);
         Ok(Shown { surface, gl_surface, skia, gl_context, config, window })
     }
 
@@ -196,29 +224,130 @@ impl Shown {
     }
 }
 
-/// The screen in its desktop window, and what the window gave last.
-struct Host {
+/// One desktop window: its screen, the system's window once it shows, the
+/// window it was opened over, and what its input gave last.
+struct Win {
+    /// Its own number, by which the windows opened over it know it.
+    key: u64,
     screen: Screen,
-    options: ShowOptions,
     shown: Option<Shown>,
-    failure: Option<String>,
     title: String,
-    dark: Option<bool>,
+    size: (f64, f64),
+    /// The window it was opened over; none for the program's own.
+    owner: Option<u64>,
+    /// The window it was opened over takes no input while it is open.
+    modal: bool,
     held: Modifiers,
     pointer: (f64, f64),
     presses: PressCounter,
+    caret: Option<Rect>,
+}
+
+/// Every desktop window, and what they share.
+struct Host {
+    wins: Vec<Win>,
+    looks: Option<Rc<dyn Fn(bool) -> Arc<ThemeLook>>>,
+    waker: crate::later::Waker,
+    config: Option<Config>,
+    failure: Option<String>,
+    dark: Option<bool>,
     started: Instant,
+    next_key: u64,
 }
 
 impl Host {
-    fn new(screen: Screen, options: ShowOptions) -> Host {
-        let title = options.title.clone();
-        Host { screen, options, shown: None, failure: None, title, dark: None, held: Modifiers::NONE, pointer: (0.0, 0.0), presses: PressCounter::new(), started: Instant::now() }
+    fn new(proxy: EventLoopProxy<Wake>, looks: Option<Rc<dyn Fn(bool) -> Arc<ThemeLook>>>) -> Host {
+        let proxy = Mutex::new(proxy);
+        let waker: crate::later::Waker = Arc::new(move || {
+            if let Ok(proxy) = proxy.lock() {
+                let _ = proxy.send_event(Wake);
+            }
+        });
+        Host { wins: Vec::new(), looks, waker, config: None, failure: None, dark: None, started: Instant::now(), next_key: 1 }
+    }
+
+    /// A screen in a desktop window of its own, shown once the loop runs; over `owner` when given.
+    fn add(&mut self, mut screen: Screen, title: String, size: (f64, f64), owner: Option<u64>, modal: bool) {
+        if let Some(system) = clipboard::SystemClipboard::open() {
+            screen.set_clipboard(Box::new(system));
+        }
+        if let Some(looks) = &self.looks {
+            let looks = looks.clone();
+            screen.follow(Box::new(move |dark| looks(dark)));
+        }
+        if let Some(dark) = self.dark {
+            screen.set_dark(dark);
+        }
+        screen.set_waker(self.waker.clone());
+        let key = self.next_key;
+        self.next_key += 1;
+        self.wins.push(Win { key, screen, shown: None, title, size, owner, modal, held: Modifiers::NONE, pointer: (0.0, 0.0), presses: PressCounter::new(), caret: None });
+    }
+
+    fn index_of(&self, id: WindowId) -> Option<usize> {
+        self.wins.iter().position(|w| w.shown.as_ref().is_some_and(|s| s.window.id() == id))
+    }
+
+    fn index_by_key(&self, key: u64) -> Option<usize> {
+        self.wins.iter().position(|w| w.key == key)
+    }
+
+    /// Whether a window of its own is open over it as a dialog: it takes no input.
+    fn blocked(&self, i: usize) -> bool {
+        let key = self.wins[i].key;
+        self.wins.iter().any(|w| w.owner == Some(key) && w.modal)
+    }
+
+    /// Shows the windows not shown yet; a window opened over another lies in its middle.
+    fn open_waiting(&mut self, event_loop: &ActiveEventLoop) {
+        for i in 0..self.wins.len() {
+            if self.wins[i].shown.is_some() {
+                continue;
+            }
+            let win = &self.wins[i];
+            let mut attributes = WindowAttributes::default()
+                .with_title(win.title.clone())
+                .with_inner_size(LogicalSize::new(win.size.0.max(120.0), win.size.1.max(80.0)))
+                .with_resizable(!win.modal);
+            let over = win.owner.and_then(|o| self.index_by_key(o)).and_then(|o| self.wins[o].shown.as_ref());
+            if let Some(over) = over {
+                if let Ok(at) = over.window.outer_position() {
+                    let scale = over.scale();
+                    let there = over.window.outer_size();
+                    let x = at.x as f64 + (there.width as f64 - win.size.0 * scale) / 2.0;
+                    let y = at.y as f64 + (there.height as f64 - win.size.1 * scale) / 2.0;
+                    attributes = attributes.with_position(PhysicalPosition::new(x.max(0.0) as i32, y.max(0.0) as i32));
+                }
+            }
+            match Shown::open(event_loop, attributes, self.config.as_ref()) {
+                Ok(shown) => {
+                    if self.config.is_none() {
+                        self.config = Some(shown.config.clone());
+                        let theme = shown.window.theme().or_else(|| event_loop.system_theme());
+                        self.wins[i].shown = Some(shown);
+                        self.follow_theme(theme);
+                    } else {
+                        self.wins[i].shown = Some(shown);
+                    }
+                    self.fit(i);
+                    if let Some(shown) = &self.wins[i].shown {
+                        shown.window.request_redraw();
+                    }
+                }
+                Err(why) => {
+                    self.failure = Some(why);
+                    event_loop.exit();
+                    return;
+                }
+            }
+        }
     }
 
     /// The screen takes the window's size in its units, at the window's scale.
-    fn fit(&mut self) {
-        let Some(shown) = self.shown.as_mut() else { return };
+    fn fit(&mut self, i: usize) {
+        let win = &mut self.wins[i];
+        let Some(shown) = win.shown.as_mut() else { return };
+        let _ = shown.gl_context.make_current(&shown.gl_surface);
         let size = shown.window.inner_size();
         if let (Some(w), Some(h)) = (NonZeroU32::new(size.width), NonZeroU32::new(size.height)) {
             shown.gl_surface.resize(&shown.gl_context, w, h);
@@ -231,53 +360,153 @@ impl Host {
             }
         }
         let scale = shown.scale();
-        self.screen.resize(size.width.max(1) as f64 / scale, size.height.max(1) as f64 / scale, scale as f32);
+        win.screen.resize(size.width.max(1) as f64 / scale, size.height.max(1) as f64 / scale, scale as f32);
     }
 
-    /// The look for the system's light or dark, when it changed.
+    /// The look for the system's light or dark, when it changed: every window follows it.
     fn follow_theme(&mut self, theme: Option<Theme>) {
         let dark = theme == Some(Theme::Dark);
         if self.dark == Some(dark) {
             return;
         }
         self.dark = Some(dark);
-        if let Some(looks) = &self.options.looks {
-            self.screen.show(looks(dark));
+        for win in self.wins.iter_mut() {
+            win.screen.set_dark(dark);
         }
     }
 
-    /// The program's title in the window's bar, and the end once its last window closed.
-    fn follow_stack(&mut self, event_loop: &ActiveEventLoop) {
-        let Some((title, ended)) = self.screen.act_root::<WindowStack, _>(|stack, _| (stack.title(), stack.ended())) else { return };
-        if ended {
-            event_loop.exit();
-            return;
-        }
-        if title != self.title {
-            if let Some(shown) = &self.shown {
-                shown.window.set_title(&title);
-            }
-            self.title = title;
-        }
-    }
-
-    fn draw(&mut self) {
-        let Some(shown) = self.shown.as_mut() else { return };
+    fn draw(&mut self, i: usize) {
+        let win = &mut self.wins[i];
+        let Some(shown) = win.shown.as_mut() else { return };
         if let Err(why) = shown.gl_context.make_current(&shown.gl_surface) {
             self.failure = Some(why.to_string());
             return;
         }
-        self.screen.draw(shown.surface.canvas());
+        win.screen.draw(shown.surface.canvas());
         // A frame that did not reach OpenGL is left out, not shown half drawn.
         if shown.skia.flush_and_submit().is_ok() {
             let _ = shown.gl_surface.swap_buffers(&shown.gl_context);
         }
     }
 
+    /// Closes a desktop window, the windows opened over it first; what it
+    /// shows hears its `on close` unless it ended by itself, and the window
+    /// that opened it is told.
+    fn close(&mut self, key: u64) {
+        let children: Vec<u64> = self.wins.iter().filter(|w| w.owner == Some(key)).map(|w| w.key).collect();
+        for child in children {
+            self.close(child);
+        }
+        let Some(i) = self.index_by_key(key) else { return };
+        let closed = self.wins[i].screen.act_root::<WindowStack, _>(|stack, cx| {
+            if !stack.ended() {
+                stack.closing(cx);
+            }
+            stack.take_closed()
+        });
+        let mut win = self.wins.remove(i);
+        win.screen.dispose();
+        drop(win.shown.take());
+        if let Some(Some(closed)) = closed {
+            self.tell_opener(closed);
+        }
+    }
+
+    /// A window of its own closed: the window that opened it is told.
+    fn tell_opener(&mut self, closed: ApartClosed) {
+        for win in self.wins.iter_mut() {
+            let holds = win.screen.act_root::<WindowStack, _>(|stack, _| stack.holds(closed.opener)).unwrap_or(false);
+            if holds {
+                win.screen.act_root::<WindowStack, _>(move |stack, cx| stack.apart_closed(closed, cx));
+                return;
+            }
+        }
+    }
+
+    /// What each program's stack asks of its desktop window: its title, windows of their own, its end.
+    fn follow_stacks(&mut self, event_loop: &ActiveEventLoop) {
+        let mut i = 0;
+        while i < self.wins.len() {
+            let key = self.wins[i].key;
+            // The keys window closes once the person closed it.
+            let keys_done = self.wins[i].screen.root().as_any().downcast_ref::<KeysWindow>().is_some_and(|k| k.done());
+            if keys_done {
+                self.close(key);
+                continue;
+            }
+            let asked = self.wins[i].screen.act_root::<WindowStack, _>(|stack, _| (stack.title(), stack.ended(), stack.quitting(), stack.take_aparts(), stack.take_closed(), stack.running().clone()));
+            let Some((title, ended, quitting, aparts, closed, running)) = asked else {
+                i += 1;
+                continue;
+            };
+            if quitting {
+                event_loop.exit();
+                return;
+            }
+            if let Some(closed) = closed {
+                self.tell_opener(closed);
+            }
+            if ended {
+                self.close(key);
+                continue;
+            }
+            if title != self.wins[i].title {
+                if let Some(shown) = &self.wins[i].shown {
+                    shown.window.set_title(&title);
+                }
+                self.wins[i].title = title;
+            }
+            for apart in aparts {
+                self.open_apart(apart, &running, key);
+            }
+            i += 1;
+        }
+        // The program's own windows closed: it ends.
+        if !self.wins.iter().any(|w| w.owner.is_none()) {
+            event_loop.exit();
+        }
+    }
+
+    /// Opens what a stack asked for in a desktop window of its own, over the window it came from.
+    fn open_apart(&mut self, apart: Apart, running: &Rc<Running>, owner: u64) {
+        let look = self.looks.as_ref().map(|l| l(self.dark.unwrap_or(false))).unwrap_or_else(|| ThemeLook::clarity(false));
+        match apart {
+            Apart::Window(request) => {
+                let modal = request.dialog;
+                let stack = WindowStack::apart(running.clone(), request);
+                let title = stack.title();
+                let size = stack.wanted_size().unwrap_or(STANDARD_SIZE);
+                self.add(Screen::new(Box::new(stack), look), title, size, Some(owner), modal);
+            }
+            Apart::Keys => {
+                if self.wins.iter().any(|w| w.screen.root().as_any().is::<KeysWindow>()) {
+                    return;
+                }
+                let window = Running::keys_window(running, true);
+                let size = window.wanted();
+                self.add(Screen::new(Box::new(window), look), keys::title(), size, Some(owner), true);
+            }
+        }
+    }
+
     /// The pointer's place in the screen's units.
-    fn at(&self, x: f64, y: f64) -> (f64, f64) {
-        let scale = self.shown.as_ref().map(Shown::scale).unwrap_or(1.0);
+    fn at(&self, i: usize, x: f64, y: f64) -> (f64, f64) {
+        let scale = self.wins[i].shown.as_ref().map(Shown::scale).unwrap_or(1.0);
         (x / scale, y / scale)
+    }
+
+    /// The input method's window lies by the caret of the part that types.
+    fn place_ime(&mut self) {
+        for win in self.wins.iter_mut() {
+            let caret = win.screen.caret_area();
+            if caret == win.caret {
+                continue;
+            }
+            win.caret = caret;
+            if let (Some(caret), Some(shown)) = (caret, &win.shown) {
+                shown.window.set_ime_cursor_area(LogicalPosition::new(caret.x, caret.y), LogicalSize::new(caret.width.max(1.0), caret.height.max(1.0)));
+            }
+        }
     }
 }
 
@@ -290,71 +519,104 @@ fn button_of(button: MouseButton) -> Option<PointerButton> {
     }
 }
 
-impl ApplicationHandler for Host {
+/// Whether an event is the person's input, which a window under a dialog of its own does not take.
+fn is_input(event: &WindowEvent) -> bool {
+    matches!(
+        event,
+        WindowEvent::CursorMoved { .. } | WindowEvent::MouseInput { .. } | WindowEvent::MouseWheel { .. } | WindowEvent::KeyboardInput { .. } | WindowEvent::Ime(_)
+    )
+}
+
+impl ApplicationHandler<Wake> for Host {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.shown.is_some() {
-            return;
-        }
-        match Shown::open(event_loop, &self.options) {
-            Ok(shown) => {
-                let theme = shown.window.theme().or_else(|| event_loop.system_theme());
-                self.shown = Some(shown);
-                self.follow_theme(theme);
-                self.fit();
-                if let Some(shown) = &self.shown {
-                    shown.window.request_redraw();
-                }
-            }
-            Err(why) => {
-                self.failure = Some(why);
-                event_loop.exit();
-            }
+        self.open_waiting(event_loop);
+    }
+
+    /// Work off a screen's thread is done: what it gave goes to its element.
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: Wake) {
+        for win in self.wins.iter_mut() {
+            win.screen.take_later();
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+        let Some(i) = self.index_of(id) else { return };
+        if self.blocked(i) && (is_input(&event) || matches!(event, WindowEvent::CloseRequested)) {
+            // A window with a dialog of its own open over it stays, and takes nothing.
+            return;
+        }
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => self.fit(),
-            WindowEvent::ThemeChanged(theme) => self.follow_theme(Some(theme)),
-            WindowEvent::RedrawRequested => self.draw(),
-            WindowEvent::ModifiersChanged(modifiers) => self.held = modifiers_of(modifiers.state()),
-            WindowEvent::Focused(false) => self.held = Modifiers::NONE,
-            WindowEvent::CursorMoved { position, .. } => {
-                let (x, y) = self.at(position.x, position.y);
-                self.pointer = (x, y);
-                self.screen.pointer_moved(x, y);
+            WindowEvent::CloseRequested => {
+                let key = self.wins[i].key;
+                // The program's main window closing ends the program.
+                if self.wins[i].owner.is_none() && self.wins.iter().filter(|w| w.owner.is_none()).count() == 1 {
+                    let owned: Vec<u64> = self.wins.iter().map(|w| w.key).collect();
+                    for key in owned.into_iter().rev() {
+                        self.close(key);
+                    }
+                    event_loop.exit();
+                    return;
+                }
+                self.close(key);
             }
-            WindowEvent::CursorLeft { .. } => self.screen.pointer_left(),
+            WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => self.fit(i),
+            WindowEvent::ThemeChanged(theme) => self.follow_theme(Some(theme)),
+            WindowEvent::RedrawRequested => self.draw(i),
+            WindowEvent::ModifiersChanged(modifiers) => self.wins[i].held = modifiers_of(modifiers.state()),
+            WindowEvent::Focused(false) => self.wins[i].held = Modifiers::NONE,
+            WindowEvent::CursorMoved { position, .. } => {
+                let (x, y) = self.at(i, position.x, position.y);
+                let win = &mut self.wins[i];
+                win.pointer = (x, y);
+                win.screen.pointer_moved(x, y);
+            }
+            WindowEvent::CursorLeft { .. } => self.wins[i].screen.pointer_left(),
             WindowEvent::MouseInput { state, button, .. } => {
                 let Some(button) = button_of(button) else { return };
-                let (x, y) = self.pointer;
+                let elapsed = self.started.elapsed().as_millis() as i64;
+                let win = &mut self.wins[i];
+                let (x, y) = win.pointer;
                 match state {
                     // The window gives only presses: a double or triple click is counted here.
                     ElementState::Pressed => {
-                        let clicks = self.presses.press(x, y, button, self.started.elapsed().as_millis() as i64);
-                        self.screen.pointer_pressed_with(x, y, button, clicks, self.held);
+                        let clicks = win.presses.press(x, y, button, elapsed);
+                        win.screen.pointer_pressed_with(x, y, button, clicks, win.held);
                     }
-                    ElementState::Released => self.screen.pointer_released(x, y, button),
+                    ElementState::Released => win.screen.pointer_released(x, y, button),
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                let scale = self.shown.as_ref().map(Shown::scale).unwrap_or(1.0);
+                let scale = self.wins[i].shown.as_ref().map(Shown::scale).unwrap_or(1.0);
                 let (dx, dy) = wheel_of(delta, scale);
-                let (x, y) = self.pointer;
-                self.screen.wheel(x, y, dx, dy, self.held);
+                let win = &mut self.wins[i];
+                let (x, y) = win.pointer;
+                win.screen.wheel(x, y, dx, dy, win.held);
             }
             // Keys the system repeats for a key held as the window got the focus are not the person's.
             WindowEvent::KeyboardInput { event, is_synthetic: false, .. } => {
-                let key = KeyInput::new(key_of(&event.logical_key, event.physical_key), self.held);
+                let win = &mut self.wins[i];
+                let key = KeyInput::new(key_of(&event.logical_key, event.physical_key), win.held);
                 match event.state {
                     ElementState::Pressed => {
-                        self.screen.key_pressed(key);
-                        if let Some(text) = typed_text(event.text.as_deref(), self.held) {
-                            self.screen.text_typed(&text);
+                        win.screen.key_pressed(key);
+                        if let Some(text) = typed_text(event.text.as_deref(), win.held) {
+                            win.screen.text_typed(&text);
                         }
                     }
-                    ElementState::Released => self.screen.key_released(key),
+                    ElementState::Released => win.screen.key_released(key),
+                }
+            }
+            // An input method composes text, then commits it as typed text.
+            WindowEvent::Ime(ime) => {
+                let screen = &mut self.wins[i].screen;
+                match ime {
+                    Ime::Preedit(text, cursor) if !text.is_empty() => screen.compose(Some(Composition { text, marked: cursor })),
+                    Ime::Preedit(..) | Ime::Disabled => screen.compose(None),
+                    Ime::Commit(text) => {
+                        screen.compose(None);
+                        screen.text_typed(&text);
+                    }
+                    Ime::Enabled => {}
                 }
             }
             _ => {}
@@ -366,20 +628,31 @@ impl ApplicationHandler for Host {
             event_loop.exit();
             return;
         }
+        self.follow_stacks(event_loop);
+        self.open_waiting(event_loop);
+        self.place_ime();
         let now = Instant::now();
-        if self.screen.next_wake().is_some_and(|at| at <= now) {
-            self.screen.wake_due(now);
-        }
-        self.follow_stack(event_loop);
-        let animating = self.screen.animating() > 0;
-        if self.screen.take_redraw() || animating {
-            if let Some(shown) = &self.shown {
-                shown.window.request_redraw();
+        let mut animating = false;
+        let mut next: Option<Instant> = None;
+        for win in self.wins.iter_mut() {
+            if win.screen.next_wake().is_some_and(|at| at <= now) {
+                win.screen.wake_due(now);
             }
+            let moving = win.screen.animating() > 0;
+            animating |= moving;
+            if win.screen.take_redraw() || moving {
+                if let Some(shown) = &win.shown {
+                    shown.window.request_redraw();
+                }
+            }
+            // The next wake-up is asked for anew on every turn, so a changed time needs nothing more.
+            win.screen.take_wakes_changed();
+            next = match (next, win.screen.next_wake()) {
+                (Some(a), Some(b)) => Some(a.min(b)),
+                (a, b) => a.or(b),
+            };
         }
-        // The next wake-up is asked for anew on every turn, so a changed time needs nothing more.
-        self.screen.take_wakes_changed();
-        let flow = match self.screen.next_wake() {
+        let flow = match next {
             Some(at) if !animating => ControlFlow::WaitUntil(at),
             _ => ControlFlow::Wait,
         };

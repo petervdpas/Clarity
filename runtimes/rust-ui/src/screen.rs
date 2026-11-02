@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use skia_safe::Canvas;
 
-use crate::element::{self, Cx, Element, ElementId, Request};
+use crate::element::{self, Composition, Cx, Element, ElementId, Request};
 use crate::fonts::Fonts;
 use crate::geometry::Rect;
 use crate::input::{Key, KeyInput, Modifiers, PointerButton, PointerInput};
@@ -37,6 +37,9 @@ pub struct Tooltip {
 /// The window's own keys, asked before the part with the focus; true when it took the key.
 pub type KeysHook = Box<dyn FnMut(KeyInput, &mut Cx) -> bool>;
 
+/// The look for the system's light (false) or dark (true), in the theme the person chose (`choices`).
+pub type LooksFor = Box<dyn Fn(bool) -> Arc<ThemeLook>>;
+
 pub struct Screen {
     root: Box<dyn Element>,
     look: Arc<ThemeLook>,
@@ -58,6 +61,11 @@ pub struct Screen {
     tip_waiting: Option<String>,
     tip_due: Option<Instant>,
     tip_point: (f64, f64),
+    later: crate::later::Queue,
+    places: Rc<RefCell<HashMap<String, (ElementId, Rect)>>>,
+    looks: Option<LooksFor>,
+    dark: bool,
+    choices_seen: u64,
     /// The time now, as the screen's clock tells it; a test sets its own.
     pub now: Box<dyn Fn() -> Instant>,
 }
@@ -86,6 +94,11 @@ impl Screen {
             tip_waiting: None,
             tip_due: None,
             tip_point: (0.0, 0.0),
+            later: crate::later::Queue::new(),
+            places: Rc::default(),
+            looks: None,
+            dark: false,
+            choices_seen: crate::choices::changes(),
             now: Box::new(Instant::now),
         };
         let mut cx = screen.cx();
@@ -218,6 +231,7 @@ impl Screen {
         let mut cx = self.cx();
         self.root.arrange(whole, &mut cx);
         self.settle(cx);
+        self.keep_places();
         self.redraw = true;
     }
 
@@ -226,6 +240,82 @@ impl Screen {
         self.fonts = Rc::new(Fonts::new(look.clone()));
         self.look = look;
         self.redraw = true;
+    }
+
+    /// The screen shows in the look `looks` gives for the system's light or
+    /// dark, in the theme the person chose; it shows again when either changes.
+    pub fn follow(&mut self, looks: LooksFor) {
+        self.show(looks(self.dark));
+        self.looks = Some(looks);
+        self.choices_seen = crate::choices::changes();
+    }
+
+    /// The system shows dark (or light): a screen that follows the looks shows the theme's other mode.
+    pub fn set_dark(&mut self, dark: bool) {
+        self.dark = dark;
+        if let Some(looks) = &self.looks {
+            let look = looks(dark);
+            self.show(look);
+        }
+    }
+
+    /// Whether the system shows dark, as the host last said.
+    pub fn dark(&self) -> bool {
+        self.dark
+    }
+
+    /// The person chose another theme or language: the screen follows it.
+    fn follow_choices(&mut self) {
+        let now = crate::choices::changes();
+        if now == self.choices_seen {
+            return;
+        }
+        self.choices_seen = now;
+        if let Some(looks) = &self.looks {
+            let look = looks(self.dark);
+            self.show(look);
+        }
+        self.redraw = true;
+    }
+
+    // -- Work off the screen's thread --------------------------------------------
+
+    /// The host is woken by `waker` when work off the screen's thread is done; it then calls `take_later`.
+    pub fn set_waker(&self, waker: crate::later::Waker) {
+        self.later.set_waker(waker);
+    }
+
+    /// What work off the screen's thread gave goes to the elements that asked for it; true when something came.
+    pub fn take_later(&mut self) -> bool {
+        let done = self.later.take();
+        if done.is_empty() {
+            return false;
+        }
+        let mut cx = self.cx();
+        for (id, given) in done {
+            if let Some(e) = self.element_mut(id) {
+                e.on_later(given, &mut cx);
+            }
+        }
+        cx.invalidate();
+        self.settle(cx);
+        true
+    }
+
+    /// How much work off the screen's thread still runs.
+    pub fn later_running(&self) -> usize {
+        self.later.running()
+    }
+
+    /// Waits for the work off the screen's thread and gives what it gave: a test's way to finish it.
+    pub fn finish_later(&mut self) {
+        for _ in 0..8 {
+            self.later.wait(Duration::from_secs(10));
+            self.take_later();
+            if self.later.running() == 0 {
+                break;
+            }
+        }
     }
 
     pub fn draw(&mut self, canvas: &Canvas) {
@@ -237,6 +327,7 @@ impl Screen {
         let mut cx = self.cx();
         self.root.arrange(whole, &mut cx);
         self.settle(cx);
+        self.keep_places();
         let mut cx = self.cx();
         for overlay in self.overlays.iter_mut() {
             overlay.content.arrange(overlay.place, &mut cx);
@@ -271,7 +362,25 @@ impl Screen {
     // -- What elements ask -------------------------------------------------------
 
     fn cx(&self) -> Cx {
-        Cx::new(self.look.clone(), self.fonts.clone(), self.clipboard.clone(), (self.now)(), self.whole(), self.focused)
+        Cx::new(self.look.clone(), self.fonts.clone(), self.clipboard.clone(), (self.now)(), self.whole(), self.focused).with_places(self.places.clone())
+    }
+
+    /// Keeps where each shown named part of the window is, once it is laid out (`Cx::part_place`).
+    fn keep_places(&mut self) {
+        let mut places = HashMap::new();
+        fn walk(e: &dyn Element, into: &mut HashMap<String, (ElementId, Rect)>) {
+            if !e.is_shown() {
+                return;
+            }
+            if let Some(name) = e.as_part().and_then(|p| p.base().spec.name()) {
+                into.entry(name.to_string()).or_insert((e.node().id(), e.node().bounds));
+            }
+            for child in e.node().children() {
+                walk(child.as_ref(), into);
+            }
+        }
+        walk(self.root.as_ref(), &mut places);
+        *self.places.borrow_mut() = places;
     }
 
     /// Runs `act` on the element of that id with the screen's context, and does what it asked; none when it is not there.
@@ -308,6 +417,7 @@ impl Screen {
                     element::attach_all(overlay.content.as_mut(), &mut cx);
                 }
                 if cx.requests.is_empty() && !cx.redraw {
+                    self.follow_choices();
                     break;
                 }
                 continue;
@@ -328,6 +438,7 @@ impl Screen {
                             self.animating.remove(&id);
                         }
                     }
+                    Request::Later(id, work) => self.later.start(id, work),
                 }
             }
         }
@@ -672,7 +783,16 @@ impl Screen {
                 return;
             }
         }
-        let wants_tab = self.focused.and_then(|f| self.element(f)).is_some_and(|e| e.wants_tab());
+        let mut wants_tab = self.focused.and_then(|f| self.element(f)).is_some_and(|e| e.wants_tab());
+        // A part that takes Tab itself but lets it go (past a table's last cell) has the focus move on as Tab does.
+        if wants_tab && key.key == Key::Tab && !key.control() {
+            let took = self.focused.and_then(|f| self.element_mut(f)).is_some_and(|e| e.on_key(key, &mut cx));
+            if took {
+                self.settle(cx);
+                return;
+            }
+            wants_tab = false;
+        }
         if key.key == Key::Tab && !key.control() && !wants_tab {
             let takers = match self.overlays.last() {
                 Some(top) if top.modal => element::focus_takers(top.content.as_ref()),
@@ -715,6 +835,23 @@ impl Screen {
             e.on_text(text, &mut cx);
         }
         self.settle(cx);
+    }
+
+    /// An input method composes text (none: it stopped): the part with the
+    /// focus shows it at its caret. What it commits comes as `text_typed`.
+    pub fn compose(&mut self, composing: Option<Composition>) {
+        let mut cx = self.cx();
+        if let Some(e) = self.focused.and_then(|f| self.element_mut(f)) {
+            e.on_compose(composing, &mut cx);
+        }
+        cx.invalidate();
+        self.settle(cx);
+    }
+
+    /// Where the caret of the part with the focus is, in the screen's units:
+    /// an input method shows its window by it; none when no part types.
+    pub fn caret_area(&self) -> Option<Rect> {
+        self.focused.and_then(|f| self.element(f)).and_then(|e| e.caret_area())
     }
 
     /// The screen is no longer shown: its overlays close and every element leaves it, so what they started stops.

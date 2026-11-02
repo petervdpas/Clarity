@@ -103,6 +103,7 @@ pub enum Request {
     Close(ElementId),
     Wake(ElementId, Instant),
     Animate(ElementId, bool),
+    Later(ElementId, crate::later::Work),
 }
 
 /// What an element's handlers reach of the screen: its look, fonts,
@@ -114,13 +115,27 @@ pub struct Cx {
     now: Instant,
     whole: Rect,
     focused: Option<ElementId>,
+    places: Rc<RefCell<std::collections::HashMap<String, (ElementId, Rect)>>>,
     pub(crate) requests: Vec<Request>,
     pub(crate) redraw: bool,
 }
 
 impl Cx {
     pub(crate) fn new(look: Arc<ThemeLook>, fonts: Rc<Fonts>, clipboard: Rc<RefCell<Box<dyn Clipboard>>>, now: Instant, whole: Rect, focused: Option<ElementId>) -> Cx {
-        Cx { look, fonts, clipboard, now, whole, focused, requests: Vec::new(), redraw: false }
+        Cx { look, fonts, clipboard, now, whole, focused, places: Rc::default(), requests: Vec::new(), redraw: false }
+    }
+
+    /// The places of the window's named parts as the screen last laid them out.
+    pub(crate) fn with_places(mut self, places: Rc<RefCell<std::collections::HashMap<String, (ElementId, Rect)>>>) -> Cx {
+        self.places = places;
+        self
+    }
+
+    /// The id and place of the shown part named `name` in the window, as the
+    /// screen last laid it out (a popover lies under the part its `for`
+    /// names); none for no such part.
+    pub fn part_place(&self, name: &str) -> Option<(ElementId, Rect)> {
+        self.places.borrow().get(name).copied()
     }
 
     /// A context of no screen, in Clarity's light look: for an element used on its own, as in a test.
@@ -194,6 +209,23 @@ impl Cx {
         self.requests.push(Request::Animate(element, on));
         self.redraw = true;
     }
+
+    /// Runs `work` off the screen's thread (a file dialog, a long handler);
+    /// what it gives comes back to `element` on the screen's thread, in its
+    /// `on_later`, once it is done. The screen goes on drawing meanwhile.
+    pub fn later<T: Send + 'static>(&mut self, element: ElementId, work: impl FnOnce() -> T + Send + 'static) {
+        let work: crate::later::Work = Box::new(move || Box::new(work()) as crate::later::Done);
+        self.requests.push(Request::Later(element, work));
+    }
+}
+
+/// Text an input method is composing, not typed yet: shown at the caret,
+/// underlined, with the part of it the method marks.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Composition {
+    pub text: String,
+    /// The marked part, in bytes of `text`; none for none.
+    pub marked: Option<(usize, usize)>,
 }
 
 /// An element: it takes its place, draws itself and takes what the person does.
@@ -353,6 +385,23 @@ pub trait Element: Any {
     /// An overlay it opened closed.
     fn on_overlay_closed(&mut self, overlay: ElementId, cx: &mut Cx) {
         let _ = (overlay, cx);
+    }
+
+    /// What work it started with `Cx::later` gave, back on the screen's thread.
+    fn on_later(&mut self, done: crate::later::Done, cx: &mut Cx) {
+        let _ = (done, cx);
+    }
+
+    /// An input method composes text in it while it has the focus (none: the
+    /// composing ended); what it commits comes as typed text (`on_text`).
+    fn on_compose(&mut self, composing: Option<Composition>, cx: &mut Cx) {
+        let _ = (composing, cx);
+    }
+
+    /// Where its caret is on the screen, while it has the focus and takes
+    /// typed text: an input method shows its window by it. None for none.
+    fn caret_area(&self) -> Option<Rect> {
+        None
     }
 }
 

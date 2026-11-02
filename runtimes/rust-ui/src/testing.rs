@@ -77,6 +77,20 @@ pub struct TestHost {
     pub edits: std::cell::RefCell<Vec<String>>,
     pub opened: std::cell::RefCell<Vec<String>>,
     pub changed: std::cell::Cell<u64>,
+    /// The chosen row of each list, table or tree, by its part's name.
+    pub selected: std::cell::RefCell<std::collections::BTreeMap<String, usize>>,
+    /// The file dialogs the parts get; none picks nothing.
+    pub files: std::cell::RefCell<Option<std::sync::Arc<dyn crate::files::FilePicker>>>,
+    /// What code told custom parts, waiting to be heard.
+    pub hears: std::cell::RefCell<Vec<clarity_runtime::ui::Hear>>,
+    /// What custom parts and engines told, each as `part tell values`.
+    pub told: std::cell::RefCell<Vec<String>>,
+    /// The files of the program's resources, by name.
+    pub resources: std::cell::RefCell<std::collections::BTreeMap<String, Vec<u8>>>,
+    /// The keys the person set for commands, by the command (`Main.save`).
+    pub keys: std::cell::RefCell<std::collections::BTreeMap<String, Vec<String>>>,
+    /// The SVG paths of the icons the program carries, by name.
+    pub icons: std::cell::RefCell<std::collections::BTreeMap<String, String>>,
 }
 
 impl TestHost {
@@ -164,6 +178,50 @@ impl crate::parts::PartHost for TestHost {
 
     fn bound_of(&self, part: &str) -> Option<String> {
         self.binds.borrow().get(part).cloned()
+    }
+
+    fn selected(&self, part: &str) -> Option<usize> {
+        self.selected.borrow().get(part).copied()
+    }
+
+    fn resource(&self, name: &str) -> Option<Vec<u8>> {
+        self.resources.borrow().get(name).cloned()
+    }
+
+    fn icon_path(&self, name: &str) -> Option<String> {
+        self.icons.borrow().get(name).cloned()
+    }
+
+    /// The person's keys where they set their own for `command`, else the designed one.
+    fn keys_of(&self, command: &str, designed: Option<&str>) -> Vec<String> {
+        if let Some(own) = self.keys.borrow().get(command) {
+            return own.clone();
+        }
+        designed.filter(|d| !d.is_empty()).map(|d| vec![d.to_string()]).unwrap_or_default()
+    }
+
+    fn select(&self, part: &str, place: Option<usize>) {
+        match place {
+            Some(place) => self.selected.borrow_mut().insert(part.to_string(), place),
+            None => self.selected.borrow_mut().remove(part),
+        };
+        self.change();
+    }
+
+    fn files(&self) -> std::sync::Arc<dyn crate::files::FilePicker> {
+        self.files.borrow().clone().unwrap_or_else(|| std::sync::Arc::new(crate::files::NoFilePicker))
+    }
+
+    fn hears(&self, part: &str) -> Vec<clarity_runtime::ui::Hear> {
+        let mut hears = self.hears.borrow_mut();
+        let (theirs, others): (Vec<_>, Vec<_>) = hears.drain(..).partition(|h| h.part == part);
+        *hears = others;
+        theirs
+    }
+
+    fn told(&self, part: &str, tell: &str, values: &[serde_json::Value]) {
+        let values: Vec<String> = values.iter().map(|v| v.to_string()).collect();
+        self.told.borrow_mut().push(format!("{part} {tell} {}", values.join(" ")).trim_end().to_string());
     }
 }
 

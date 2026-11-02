@@ -6,16 +6,25 @@
 //! `clarity_runtime::program::Program`.
 
 pub mod app_files;
+pub mod choices;
+pub mod dialogs;
 pub mod element;
+pub mod engines;
+pub mod facts;
+pub mod files;
 pub mod fonts;
+pub mod frame;
 pub mod geometry;
 pub mod grid;
 pub mod input;
+pub mod later;
 pub mod locale;
 pub mod markup;
+pub mod melodies;
 pub mod overlay;
 pub mod painter;
 pub mod parts;
+pub mod picture;
 pub mod screen;
 pub mod shortcuts;
 pub mod testing;

@@ -12,12 +12,15 @@ pub mod dropdown_options;
 pub mod edits;
 #[cfg(feature = "engines")]
 pub mod engine;
+pub mod fields;
 pub mod files;
 #[cfg(feature = "http")]
 pub mod http;
 pub mod i18n;
 pub mod json;
+pub mod keys;
 pub mod list_fields;
+pub mod markdown;
 pub mod picture;
 pub mod program;
 pub mod query;
@@ -26,6 +29,7 @@ pub mod parts;
 pub mod ranges;
 pub mod record_file;
 pub mod reorder;
+pub mod screen;
 #[cfg(feature = "secrets")]
 pub mod secrets;
 pub mod serve;

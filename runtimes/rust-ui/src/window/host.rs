@@ -6,16 +6,20 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
+use std::rc::Rc;
 use std::sync::Arc;
 
-use clarity_runtime::program::{Answer, Edit, Program};
-use clarity_runtime::ui::{Level, Message, PartState, Reply, Text, WindowState};
+use clarity_runtime::canvas::CanvasArgs;
+use clarity_runtime::program::{Answer, CanvasEdit, Edit, Program};
+use clarity_runtime::ui::{Ask, Hear, Level, Message, PartState, Reply, Text, WindowState};
 use serde_json::{Map, Value};
 
 use crate::app_files::AppFiles;
 use crate::markup::{HandlerCall, PartSpec};
-use crate::parts::PartHost;
+use crate::facts::ModelFacts;
+use crate::parts::{Choice, FieldFacts, Formats, PartHost};
 use crate::window::paths;
+use crate::window::Running;
 
 /// What a reply asks of the screen, for the window stack to do.
 #[derive(Debug, Clone, PartialEq)]
@@ -28,6 +32,33 @@ pub enum Effect {
     Close,
     /// Text to put on the clipboard.
     Copy(String),
+    /// A question to ask in Clarity's own dialog, or a dialog window to open for its answer.
+    Ask(Ask),
+    /// Clarity's keys window opens (the built-in target `keys`).
+    Keys,
+    /// The program ends (the built-in target `quit`).
+    Quit,
+    /// A handler to run off the screen's thread, its program's long calls watched.
+    Call(Call),
+}
+
+/// A handler that runs off the screen's thread, with the window's state as it was when it started.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Call {
+    /// A handler of the window, as Clarity writes its call.
+    Dispatch(String),
+    /// The handler an answer goes to, with its values.
+    Answer(String, Vec<Value>),
+}
+
+impl Call {
+    /// Runs it on `program` with `state`.
+    pub fn run(self, program: &dyn Program, state: WindowState) -> Answer<Reply> {
+        match self {
+            Call::Dispatch(handler) => program.dispatch_event(state, &handler),
+            Call::Answer(handler, values) => program.answer_event(state, &handler, values),
+        }
+    }
 }
 
 /// The edit the person made that is not sent yet: the part and its undo scope.
@@ -45,6 +76,16 @@ pub struct ProgramHost {
     changes: Cell<u64>,
     effects: RefCell<Vec<Effect>>,
     pending: RefCell<Option<Pending>>,
+    /// The undo scope of the part that had the focus last, which `-> undo` and `-> redo` act on.
+    focused_scope: RefCell<Option<String>>,
+    facts: Arc<ModelFacts>,
+    hears: RefCell<Vec<Hear>>,
+    /// What the windows of the program share: the person's keys, whether a long call runs.
+    running: RefCell<Option<Rc<Running>>>,
+    /// What the window closes with (`close with value`), for the handler that asked for it.
+    result: RefCell<Option<Value>>,
+    /// The texts the handlers put in text values, shown again in another language.
+    shown: RefCell<BTreeMap<String, Text>>,
 }
 
 /// Every part of a window's tree by its name: in panels, pages and all.
@@ -65,7 +106,60 @@ impl ProgramHost {
     pub fn new(program: Arc<dyn Program>, files: AppFiles, state: WindowState, parts: &[PartSpec]) -> ProgramHost {
         let mut specs = BTreeMap::new();
         named(parts, &mut specs);
-        ProgramHost { program, files, state: RefCell::new(state), specs, changes: Cell::new(0), effects: RefCell::new(Vec::new()), pending: RefCell::new(None) }
+        let facts = ModelFacts::of(files.model);
+        ProgramHost { program, files, state: RefCell::new(state), specs, changes: Cell::new(0), effects: RefCell::new(Vec::new()), pending: RefCell::new(None), focused_scope: RefCell::new(None), facts, hears: RefCell::new(Vec::new()), running: RefCell::new(None), result: RefCell::new(None), shown: RefCell::new(BTreeMap::new()) }
+    }
+
+    /// The host shares what the program's windows share: the person's keys, and whether a long call runs.
+    pub fn set_running(&self, running: Rc<Running>) {
+        *self.running.borrow_mut() = Some(running);
+    }
+
+    fn running(&self) -> Option<Rc<Running>> {
+        self.running.borrow().clone()
+    }
+
+    /// The number of the open window, its own while it is open.
+    pub fn instance(&self) -> u64 {
+        self.state.borrow().instance
+    }
+
+    /// What the window closed with (`close with value`); taken once.
+    pub fn take_result(&self) -> Option<Value> {
+        self.result.borrow_mut().take()
+    }
+
+    /// Whether handlers run off the screen's thread, with the bar of a long call.
+    fn long(&self) -> bool {
+        self.running().is_some_and(|r| r.program.watches())
+    }
+
+    /// Whether a long call runs now: no other handler runs meanwhile.
+    fn calling(&self) -> bool {
+        self.running().is_some_and(|r| r.calling())
+    }
+
+    /// The texts the handlers put in text values show again, in the language shown now.
+    pub fn reshow(&self) {
+        let shown = self.shown.borrow().clone();
+        let mut state = self.state.borrow_mut();
+        for (name, text) in shown {
+            state.data.insert(name, Value::from(text.show()));
+        }
+        drop(state);
+        self.changed();
+    }
+
+    /// The answer to a question this window asked: the handler it goes to runs with `values`.
+    pub fn answer(&self, handler: &str, values: Vec<Value>) {
+        self.flush();
+        if self.long() {
+            self.effects.borrow_mut().push(Effect::Call(Call::Answer(handler.to_string(), values)));
+            self.changed();
+            return;
+        }
+        let state = self.state_now();
+        self.answered(self.program.answer_event(state, handler, values));
     }
 
     /// The window's state now.
@@ -107,8 +201,10 @@ impl ProgramHost {
         // The texts the handler put in text values show in the person's language.
         for (name, text) in &reply.shown {
             state.data.insert(name.clone(), Value::from(text.show()));
+            self.shown.borrow_mut().insert(name.clone(), text.clone());
         }
         *self.state.borrow_mut() = state;
+        self.hears.borrow_mut().extend(reply.hears);
         let mut effects = self.effects.borrow_mut();
         if !reply.messages.is_empty() {
             effects.push(Effect::Say(reply.messages));
@@ -119,7 +215,13 @@ impl ProgramHost {
         for open in reply.open {
             effects.push(Effect::Open(open.window, open.with));
         }
+        for ask in reply.asks {
+            effects.push(Effect::Ask(ask));
+        }
         if reply.close {
+            if reply.result.is_some() {
+                *self.result.borrow_mut() = reply.result;
+            }
             effects.push(Effect::Close);
         }
         drop(effects);
@@ -163,6 +265,13 @@ impl ProgramHost {
         let earlier = self.pending.borrow_mut().replace(Pending { part: part.to_string(), scope });
         if let Some(earlier) = earlier.filter(|e| e.part != part) {
             self.send_edit(earlier, None);
+        }
+    }
+
+    /// The part `part` has the focus: its undo scope is what `-> undo` and `-> redo` act on.
+    pub fn set_focused(&self, part: &str) {
+        if let Some(scope) = self.scope(part) {
+            *self.focused_scope.borrow_mut() = Some(scope);
         }
     }
 
@@ -218,6 +327,38 @@ impl PartHost for ProgramHost {
     }
 
     fn run(&self, part: Option<&str>, call: &HandlerCall) -> bool {
+        // While a long call runs, no other handler does.
+        if self.calling() {
+            return false;
+        }
+        // Clarity's own targets: the keys window, ending the program, closing the window.
+        if call.args.is_empty() && call.event == "click" {
+            let own = match call.handler.as_str() {
+                "keys" => Some(Effect::Keys),
+                "quit" => Some(Effect::Quit),
+                "close" => Some(Effect::Close),
+                _ => None,
+            };
+            let undo = match call.handler.as_str() {
+                "undo" => Some(true),
+                "redo" => Some(false),
+                _ => None,
+            };
+            if let Some(back) = undo.filter(|_| self.files.window(&call.handler).is_none()) {
+                let scope = self.focused_scope.borrow().clone();
+                match scope {
+                    Some(scope) => self.undo(&scope, back),
+                    None => self.flush(),
+                }
+                return true;
+            }
+            if let Some(own) = own.filter(|_| self.files.window(&call.handler).is_none()) {
+                self.flush();
+                self.effects.borrow_mut().push(own);
+                self.changed();
+                return true;
+            }
+        }
         // A click that names a window opens it.
         if call.args.is_empty() && self.files.window(&call.handler).is_some() {
             self.flush();
@@ -237,7 +378,24 @@ impl PartHost for ProgramHost {
                 }
             }
         }
+        // Another event of the part whose edit waits (a table chooses the row
+        // of the cell it wrote before its change runs) goes on that edit: its
+        // handler runs as part of it, and the edit ends with the change, so
+        // Ctrl+Z takes back the value and what the handlers did as one.
+        let waiting = self.pending.borrow().clone();
+        if let Some(waiting) = waiting.filter(|w| Some(w.part.as_str()) == part) {
+            let readonly = self.read_only(&waiting.part);
+            let edit = Edit { handler: Some(call.written()), part: waiting.part, scope: waiting.scope, ends: false, readonly, path: None, editable: None };
+            let state = self.state_now();
+            return self.answered(self.program.edit_event(state, edit));
+        }
         self.flush();
+        // A program that watches its long calls runs the handler off the screen's thread.
+        if self.long() {
+            self.effects.borrow_mut().push(Effect::Call(Call::Dispatch(call.written())));
+            self.changed();
+            return true;
+        }
         let state = self.state_now();
         self.answered(self.program.dispatch_event(state, &call.written()))
     }
@@ -252,6 +410,10 @@ impl PartHost for ProgramHost {
         }
     }
 
+    fn icon_path(&self, name: &str) -> Option<String> {
+        self.facts.icon(name).map(str::to_string)
+    }
+
     fn changes(&self) -> u64 {
         self.changes.get()
     }
@@ -259,6 +421,234 @@ impl PartHost for ProgramHost {
     fn say(&self, level: Level, text: Text) {
         self.effects.borrow_mut().push(Effect::Say(vec![Message { level, text }]));
         self.changed();
+    }
+
+    /// The type as the generated program's facts give it (`list<Order>`, `money`, an enum's name), else as its model says.
+    fn type_of(&self, path: &str) -> Option<String> {
+        let window = self.window();
+        self.program.facts().type_of(&window, path).map(str::to_string).or_else(|| self.facts.type_of(&window, path))
+    }
+
+    /// The field's facts as the generated program carries them, else as its model says.
+    fn field(&self, path: &str) -> Option<FieldFacts> {
+        let window = self.window();
+        self.program.facts().field(&window, path).map(crate::facts::from_program).or_else(|| self.facts.field(&window, path))
+    }
+
+    fn formats(&self) -> Formats {
+        let mut formats = self.facts.formats();
+        formats.language = Some(crate::choices::language());
+        formats
+    }
+
+    /// An enum's values, the program's languages or themes for the settings
+    /// that pick them, or the records a reference points at.
+    fn choices(&self, path: &str) -> Vec<Choice> {
+        let window = self.window();
+        let Some((_, field)) = self.facts.field_at(&window, path) else { return Vec::new() };
+        let offers = |offers: Vec<crate::choices::Offer>| offers.into_iter().map(|o| Choice { value: Value::from(o.name), label: o.label, cells: None }).collect();
+        match field.kind.as_str() {
+            "enum" => {
+                let Some(name) = field.names.as_deref() else { return Vec::new() };
+                let labelled = self.facts.enum_choices(name);
+                if !labelled.is_empty() {
+                    return labelled;
+                }
+                self.program.facts().enum_values(name).iter().map(|v| Choice { value: Value::from(*v), label: v.to_string(), cells: None }).collect()
+            }
+            "language" => offers(crate::choices::languages()),
+            "theme" => offers(crate::choices::themes()),
+            "ref" => {
+                let Some(entity) = field.names.clone() else { return Vec::new() };
+                match self.program.ref_options(&entity) {
+                    Ok(options) => options.into_iter().map(|o| Choice { value: Value::from(o.id), label: o.text, cells: None }).collect(),
+                    Err(text) => {
+                        self.say(Level::Error, text);
+                        Vec::new()
+                    }
+                }
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// A typed dropdown's field values, a search dropdown's records with the fields it shows; else its choices.
+    fn offered(&self, part: &PartSpec, path: &str) -> Vec<Choice> {
+        let window = self.window();
+        let at = self.facts.field_at(&window, path).map(|(entity, field)| (entity, field.facts.refers.clone()));
+        let field_name = crate::facts::without_places(path).rsplit('.').next().unwrap_or_default().to_string();
+        if part.flag("typed") {
+            if let Some((entity, _)) = &at {
+                return match self.program.field_values(entity, &field_name) {
+                    Ok(values) => values.into_iter().map(|v| Choice { value: Value::from(v.clone()), label: v, cells: None }).collect(),
+                    Err(text) => {
+                        self.say(Level::Error, text);
+                        Vec::new()
+                    }
+                };
+            }
+        }
+        let show = part.names("show");
+        if part.flag("search") && !show.is_empty() {
+            if let Some((_, Some(target))) = &at {
+                return match self.program.find_options("search", target, None, &show, "") {
+                    Ok(Value::Array(found)) => found
+                        .into_iter()
+                        .map(|o| {
+                            let fields = o.get("fields").cloned().unwrap_or(Value::Null);
+                            let cells = show.iter().map(|f| match fields.get(f) { Some(Value::String(s)) => s.clone(), Some(Value::Null) | None => String::new(), Some(v) => v.to_string() }).collect();
+                            Choice { value: o.get("id").cloned().unwrap_or(Value::Null), label: o.get("text").and_then(Value::as_str).unwrap_or_default().to_string(), cells: Some(cells) }
+                        })
+                        .collect(),
+                    Ok(_) => Vec::new(),
+                    Err(text) => {
+                        self.say(Level::Error, text);
+                        Vec::new()
+                    }
+                };
+            }
+        }
+        self.choices(path)
+    }
+
+    fn fetch(&self, bind: &str, store_path: Option<&str>) -> Option<Vec<u8>> {
+        // A file of a file store by its path, else the stored field of the record the path is in.
+        if let Some(path) = store_path.filter(|p| !p.is_empty()) {
+            let window = self.window();
+            let store = self.facts.field_at(&window, bind).and_then(|(entity, _)| {
+                let field = crate::facts::without_places(bind).rsplit('.').next().unwrap_or_default().to_string();
+                self.facts.store_of(&entity, &field)
+            });
+            if let Some(store) = store {
+                return self.program.store_file(&store, path).ok();
+            }
+        }
+        let window = self.window();
+        let (entity, _) = self.facts.field_at(&window, bind)?;
+        let (owner, field) = bind.rsplit_once('.')?;
+        let id = self.read(owner)?.get("id")?.as_i64()?;
+        self.program.field_bytes(&entity, id, field).ok().flatten()
+    }
+
+    fn selected(&self, part: &str) -> Option<usize> {
+        self.state.borrow().selected.get(part).copied()
+    }
+
+    fn select(&self, part: &str, place: Option<usize>) {
+        let mut state = self.state.borrow_mut();
+        let was = state.selected.get(part).copied();
+        if was == place {
+            return;
+        }
+        match place {
+            Some(place) => state.selected.insert(part.to_string(), place),
+            None => state.selected.remove(part),
+        };
+        drop(state);
+        self.changed();
+    }
+
+    fn hears(&self, part: &str) -> Vec<Hear> {
+        let mut hears = self.hears.borrow_mut();
+        let (theirs, others): (Vec<Hear>, Vec<Hear>) = hears.drain(..).partition(|h| h.part == part);
+        *hears = others;
+        theirs
+    }
+
+    fn program(&self) -> Option<Arc<dyn Program>> {
+        Some(self.program.clone())
+    }
+
+    /// The canvas's handler of `event` runs with where the pointer was, kept
+    /// in the part's state; a drag, a drop or a bend is one edit of its undo
+    /// scope, as a change is. None when the canvas has no handler for it.
+    fn pointed(&self, part: &str, event: &str, at: &Map<String, Value>) -> Option<bool> {
+        let call = self.specs.get(part)?.on(event).next()?.clone();
+        self.state.borrow_mut().parts.entry(part.to_string()).or_default().pointer = Some(at.clone());
+        self.changed();
+        if self.calling() {
+            return Some(false);
+        }
+        if matches!(event, "drag" | "drop" | "bend") {
+            if let Some(scope) = self.scope(part) {
+                let waiting = self.pending.borrow_mut().take();
+                if let Some(other) = waiting.filter(|w| w.part != part) {
+                    self.send_edit(other, None);
+                }
+                return Some(self.send_edit(Pending { part: part.to_string(), scope }, Some(call.written())));
+            }
+        }
+        Some(self.run(Some(part), &call))
+    }
+
+    /// What the person did on a canvas with a mode (objects, paint, vector),
+    /// applied by the program as one edit, its `on change` with it.
+    fn acted(&self, part: &str, action: &Map<String, Value>) -> Option<bool> {
+        let spec = self.specs.get(part)?;
+        let mode = spec.json("mode").and_then(Value::as_str).filter(|m| !m.is_empty())?.to_string();
+        if self.calling() {
+            return Some(false);
+        }
+        let shown = self.state.borrow().parts.get(part).cloned().unwrap_or_default();
+        let grid = shown.grid.or_else(|| spec.number("grid").map(|g| g as i64)).unwrap_or(0);
+        let snap = shown.snap.unwrap_or_else(|| spec.flag("snap"));
+        let readonly = self.read_only(part);
+        let text_of = |v: &Value, field: &str| v.get(field).and_then(Value::as_str).unwrap_or_default().to_string();
+        let mut canvas = CanvasArgs { part: part.to_string(), mode: mode.clone(), list: String::new(), at: None, path: String::new(), units: None, grid, snap, readonly };
+        match (mode.as_str(), spec.json("objects")) {
+            ("objects", Some(objects)) => {
+                let objects = match objects {
+                    Value::String(text) => serde_json::from_str(text).unwrap_or(Value::Null),
+                    other => other.clone(),
+                };
+                canvas.list = text_of(&objects, "list");
+                canvas.at = Some([text_of(&objects, "x"), text_of(&objects, "y")]);
+            }
+            _ => {
+                canvas.path = spec.text("bind").unwrap_or_default().to_string();
+                let units = match spec.json("units") {
+                    Some(Value::String(text)) => serde_json::from_str(text).unwrap_or(Value::Null),
+                    Some(other) => other.clone(),
+                    None => Value::Null,
+                };
+                canvas.units = units.get("width").and_then(Value::as_i64).zip(units.get("height").and_then(Value::as_i64)).map(|(w, h)| [w, h]);
+            }
+        }
+        let handler = spec.on("change").next().map(HandlerCall::written);
+        self.flush();
+        let edit = CanvasEdit { canvas, action: action.clone(), scope: self.scope(part), handler, readonly };
+        let state = self.state_now();
+        Some(self.answered(self.program.canvas_event(state, edit)))
+    }
+
+    /// A custom part or a canvas's engine told `tell`: the handler wired to it on the part's line runs with the values.
+    fn told(&self, part: &str, tell: &str, values: &[Value]) {
+        let Some(spec) = self.specs.get(part) else { return };
+        let wired = match spec.json("tells") {
+            Some(Value::Array(items)) => items.clone(),
+            Some(Value::String(text)) => serde_json::from_str::<Vec<Value>>(text).unwrap_or_default(),
+            _ => Vec::new(),
+        };
+        let Some(handler) = wired.iter().find(|w| w.get("tell").and_then(Value::as_str) == Some(tell)).and_then(|w| w.get("handler")).and_then(Value::as_str) else { return };
+        if self.calling() {
+            return;
+        }
+        self.flush();
+        let state = self.state_now();
+        self.answered(self.program.answer_event(state, handler, values.to_vec()));
+    }
+
+    /// A new instance of the program's engine `name` for each canvas that runs it.
+    fn engine(&self, name: &str) -> Option<crate::parts::data::canvas::engine::MakeFrames> {
+        Some(crate::engines::make_frames(self.program.clone(), name))
+    }
+
+    /// The person's keys where they set their own and the project lets them, else the design's.
+    fn keys_of(&self, command: &str, designed: Option<&str>) -> Vec<String> {
+        match self.running() {
+            Some(running) if self.facts.keys_editable() => running.keys_of(command, designed),
+            _ => designed.filter(|d| !d.is_empty()).map(|d| vec![d.to_string()]).unwrap_or_default(),
+        }
     }
 
     fn bound_of(&self, part: &str) -> Option<String> {

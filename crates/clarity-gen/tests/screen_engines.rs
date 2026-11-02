@@ -100,3 +100,20 @@ fn a_clarity_engine_beside_the_screen_is_carried_compiled() {
     assert!(file(&files, "ScreenEngines.cs").contains("ScreenEngine.Load(\"Sky\", Read(\"sky.wasm\"), [], false,"), "C# loads the compiled engine");
     assert!(files.iter().any(|f| f.path == "Engines/sky.wasm"));
 }
+
+/// Rust on Clarity.UI carries the engine's file in the program and gives
+/// each canvas that runs it an instance of its own through the runtime's
+/// `ScreenEngine`, answered by `Program::screen_engine`.
+#[test]
+fn rust_on_clarity_ui_gives_each_canvas_an_instance_of_its_engine() {
+    let files = files(Backend::Rust, Ui::Clarity);
+    assert!(files.iter().any(|f| f.path == "engines/screen.wasm" && f.bytes.is_some()));
+    let main = file(&files, "src/main.rs");
+    assert!(
+        main.contains("    fn screen_engine(&self, name: &str) -> Option<std::result::Result<Box<dyn clarity_runtime::screen::Frames>, String>> {\n        let made = match name {\n            \"Screen\" => clarity_runtime::engine::ScreenEngine::load(\"Screen\", include_bytes!(\"../engines/screen.wasm\"), &[\"log\"], true, clarity_runtime::engine::Limits { seconds: 1, megabytes: 256 }),\n            _ => return None,\n        };\n        Some(made.map(|engine| Box::new(engine) as Box<dyn clarity_runtime::screen::Frames>))\n    }\n"),
+        "{main}"
+    );
+    // The runtime's engines run it, though the backend loads none.
+    assert!(file(&files, "Cargo.toml").contains("\"engines\""));
+    assert!(!files.iter().any(|f| f.path == "src/engines.rs"));
+}

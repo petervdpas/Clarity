@@ -253,6 +253,23 @@ pub trait Program: Send + Sync + 'static {
         let _ = watch;
         run()
     }
+
+    /// What the program knows of its fields and types (DESIGN 7.9): each
+    /// field's label, format and range, and the type of each window's
+    /// values, which the screen's parts read beside the values. A program
+    /// that carries none knows none.
+    fn facts(&self) -> &'static crate::fields::Facts {
+        &crate::fields::Facts::EMPTY
+    }
+
+    /// A new instance of the engine beside the screen `name` (DESIGN 5.12)
+    /// for one canvas that runs it: its frames, or why it could not start;
+    /// none when the program has no engine of that name. The runtime's
+    /// `engine::ScreenEngine` runs a generated program's.
+    fn screen_engine(&self, name: &str) -> Option<std::result::Result<Box<dyn crate::screen::Frames>, String>> {
+        let _ = name;
+        None
+    }
 }
 
 /// Fail safe: runs a call on the database. An error is what the screen

@@ -81,6 +81,10 @@ pub struct TextEditor {
     scroll_x: f64,
     scroll_y: f64,
     laid: RefCell<Option<Laid>>,
+    /// What an input method composes at the caret, not typed yet.
+    composing: Option<crate::element::Composition>,
+    /// Where the caret was last drawn, on the screen: an input method shows its window by it.
+    caret_drawn: std::cell::Cell<Option<Rect>>,
 }
 
 impl Default for TextEditor {
@@ -122,7 +126,26 @@ impl TextEditor {
             scroll_x: 0.0,
             scroll_y: 0.0,
             laid: RefCell::new(None),
+            composing: None,
+            caret_drawn: std::cell::Cell::new(None),
         }
+    }
+
+    /// An input method composes `composing` at the caret (none: it stopped);
+    /// what it commits comes as typed text. Read-only it composes nothing.
+    pub fn compose(&mut self, composing: Option<crate::element::Composition>, cx: &mut Cx) {
+        self.composing = composing.filter(|c| !c.text.is_empty() && !self.read_only && self.enabled);
+        cx.invalidate();
+    }
+
+    /// What an input method composes now; none while it composes nothing.
+    pub fn composing(&self) -> Option<&crate::element::Composition> {
+        self.composing.as_ref()
+    }
+
+    /// Where the caret was last drawn, while it has the focus.
+    pub fn caret_area(&self) -> Option<Rect> {
+        if self.node.focused { self.caret_drawn.get() } else { None }
     }
 
     /// Whether it holds several lines, which wrap; Enter is then a new line.
@@ -492,6 +515,9 @@ impl TextEditor {
     pub fn focus_moved(&mut self, focused: bool, cx: &mut Cx) {
         self.node.focused = focused;
         self.dragging = false;
+        if !focused {
+            self.composing = None;
+        }
         cx.invalidate();
     }
 
@@ -740,8 +766,24 @@ impl TextEditor {
 
         if node.focused && self.enabled {
             let line = line_of(&laid, self.caret);
-            let x = inner.x - self.scroll_x + self.align_shift(&laid, laid.lines[line], inner) + laid.across[self.caret];
-            p.fill(Rect::new(x.round(), top_of(line), 1.0, laid.height), text_color, 0.0);
+            let mut x = inner.x - self.scroll_x + self.align_shift(&laid, laid.lines[line], inner) + laid.across[self.caret];
+            let top = top_of(line);
+            // What an input method composes shows at the caret on a plate of its own, underlined, the marked part stronger.
+            if let Some(composing) = &self.composing {
+                let width = font.measure_str(&composing.text, None).0 as f64;
+                let place = Rect::new(x, top, width, laid.height);
+                p.fill(place, look.color("input"), 0.0);
+                p.canvas.draw_str(&composing.text, (x as f32, baseline(line) as f32), &font, &paint);
+                p.fill(Rect::new(x, top + laid.height - 2.0, width, 1.0), text_color, 0.0);
+                if let Some((from, to)) = composing.marked.filter(|(f, t)| f < t && *t <= composing.text.len()) {
+                    let at = font.measure_str(&composing.text[..from], None).0 as f64;
+                    let wide = font.measure_str(&composing.text[from..to], None).0 as f64;
+                    p.fill(Rect::new(x + at, top + laid.height - 2.0, wide, 2.0), text_color, 0.0);
+                }
+                x += width;
+            }
+            p.fill(Rect::new(x.round(), top, 1.0, laid.height), text_color, 0.0);
+            self.caret_drawn.set(Some(Rect::new(x.round(), top, 1.0, laid.height)));
         }
     }
 }

@@ -374,6 +374,14 @@ impl Element for TextBoxPart {
         self.ready();
         self.editor.typed(text, cx);
     }
+
+    fn on_compose(&mut self, composing: Option<crate::element::Composition>, cx: &mut Cx) {
+        self.editor.compose(composing, cx);
+    }
+
+    fn caret_area(&self) -> Option<crate::geometry::Rect> {
+        self.editor.caret_area()
+    }
 }
 
 impl Part for TextBoxPart {

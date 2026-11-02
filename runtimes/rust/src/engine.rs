@@ -265,11 +265,30 @@ impl Engine {
         std::thread::scope(|scope| {
             std::thread::Builder::new()
                 .stack_size(16 << 20)
-                .spawn_scoped(scope, || self.run(window, function, args, watch))
+                .spawn_scoped(scope, || self.run(window, function, args, watch, None))
                 .map_err(|e| Error::Engine(format!("engine {} could not start {function}: {e}", self.name)))?
                 .join()
                 .unwrap_or_else(|_| Err(Error::Engine(format!("engine {} failed in {function}", self.name))))
         })
+    }
+
+    /// Calls `function` in open window `window` as `call_in` does, adding
+    /// what its answer tells to `told` (an engine beside the screen, DESIGN 5.12).
+    pub fn call_told(&self, window: u64, function: &str, args: Vec<Value>, told: &mut Vec<crate::screen::ScreenTell>) -> Result<Value> {
+        let watch = CURRENT.with(|c| c.borrow().clone()).unwrap_or_default();
+        std::thread::scope(|scope| {
+            std::thread::Builder::new()
+                .stack_size(16 << 20)
+                .spawn_scoped(scope, || self.run(window, function, args, &watch, Some(told)))
+                .map_err(|e| Error::Engine(format!("engine {} could not start {function}: {e}", self.name)))?
+                .join()
+                .unwrap_or_else(|_| Err(Error::Engine(format!("engine {} failed in {function}", self.name))))
+        })
+    }
+
+    /// Whether its file exports `function`.
+    pub fn exports(&self, function: &str) -> bool {
+        self.module.exports().any(|e| e.name() == function && matches!(e.ty(), ExternType::Func(_)))
     }
 
     /// Drops the instance window `window` had, when it closes.
@@ -279,7 +298,7 @@ impl Engine {
         }
     }
 
-    fn run(&self, window: u64, function: &str, args: Vec<Value>, watch: &Watch) -> Result<Value> {
+    fn run(&self, window: u64, function: &str, args: Vec<Value>, watch: &Watch, told: Option<&mut Vec<crate::screen::ScreenTell>>) -> Result<Value> {
         let failed = |why: String| Error::Engine(format!("engine {} failed in {function}: {why}", self.name));
         let seconds = self.limits.seconds;
         let until = Instant::now() + Duration::from_secs(u64::from(seconds));
@@ -307,19 +326,35 @@ impl Engine {
         if let (Some(key), Some(kept)) = (key, kept.as_mut()) {
             kept.insert(key, live);
         }
-        self.answer(function, &output)
+        self.answer_told(function, &output, told)
     }
 
     /// The value in an engine's answer, or its refusal in its own words.
     fn answer(&self, function: &str, output: &[u8]) -> Result<Value> {
+        self.answer_told(function, output, None)
+    }
+
+    /// The value in an engine's answer, or its refusal in its own words;
+    /// what the answer tells goes to `told`, when given.
+    fn answer_told(&self, function: &str, output: &[u8], told: Option<&mut Vec<crate::screen::ScreenTell>>) -> Result<Value> {
         let failed = |why: String| Error::Engine(format!("engine {} failed in {function}: {why}", self.name));
         let answer: Value = serde_json::from_slice(output).map_err(|e| failed(format!("its answer is no JSON: {e}")))?;
-        match (answer.get("value"), answer.get("error")) {
+        let value = match (answer.get("value"), answer.get("error")) {
             // An engine refuses by the key of its text (its `says`), or in its own words.
-            (_, Some(error)) => Err(Error::Refused(Text::key(error.as_str().unwrap_or_default()))),
-            (Some(value), None) => Ok(value.clone()),
-            (None, None) => Err(failed("its answer has no value".into())),
+            (_, Some(error)) => return Err(Error::Refused(Text::key(error.as_str().unwrap_or_default()))),
+            (Some(value), None) => value.clone(),
+            (None, None) => return Err(failed("its answer has no value".into())),
+        };
+        if let (Some(told), Some(Value::Array(tells))) = (told, answer.get("tells")) {
+            for tell in tells {
+                let Some(name) = tell.get("tell").and_then(Value::as_str) else {
+                    return Err(failed("it told something without a name".into()));
+                };
+                let values = tell.get("values").and_then(Value::as_array).cloned().unwrap_or_default();
+                told.push(crate::screen::ScreenTell { tell: name.to_string(), values });
+            }
         }
+        Ok(value)
     }
 
     /// A new instance of the module with its services, opened when the engine has `on open`.
@@ -466,4 +501,112 @@ pub fn bytes_from(engine: &str, function: &str, value: Value) -> Result<Vec<u8>>
 /// What an engine gave, as a value of code of its declared type.
 pub fn from_value<T: serde::de::DeserializeOwned>(engine: &str, function: &str, value: Value) -> Result<T> {
     serde_json::from_value(value).map_err(|e| Error::Engine(format!("engine {engine} gave {function} a value of another type: {e}")))
+}
+
+/// An engine beside the screen (DESIGN 5.12) for one canvas: one instance,
+/// which keeps its memory from frame to frame. Each frame calls
+/// `clarity_tick` with the milliseconds since the last, then `clarity_draw`
+/// for the canvas's shapes, each call within the engine's limits. Pointer
+/// and keys since the last frame go first, to `clarity_pointer` and
+/// `clarity_key` when it has them, and hears to its functions of their
+/// names; what its answers tell comes back with the frame. A frame that
+/// fails ends the engine (conformance/screen-engines.json).
+pub struct ScreenEngine {
+    engine: Engine,
+    hears: crate::screen::Hears,
+    ended: Option<String>,
+}
+
+/// The window of the one instance: an engine beside the screen keeps it per canvas.
+const CANVAS: u64 = 1;
+
+impl ScreenEngine {
+    /// Loads `bytes` as engine `name` for one canvas; refuses a module that
+    /// is no engine, imports more than `uses` or lacks its frame loop. With
+    /// `opens`, `clarity_open` runs before the first frame. The log goes to
+    /// the standard error, the program's log, where the backend's engines write.
+    pub fn load(name: &str, bytes: &[u8], uses: &[&str], opens: bool, limits: Limits) -> std::result::Result<ScreenEngine, String> {
+        let said = |e: Error| match e {
+            Error::Engine(why) => why,
+            other => other.to_string(),
+        };
+        let mut engine = Engine::load(name, bytes, &Declaration { functions: &[], uses, limits, state: State::Window, opens: false }).map_err(said)?;
+        // An engine beside the screen exports its frame loop.
+        for needed in ["clarity_tick", "clarity_draw"] {
+            if !engine.exports(needed) {
+                return Err(format!("engine {name} lacks {needed}, which an engine beside the screen needs"));
+            }
+        }
+        if opens && !engine.exports("clarity_open") {
+            return Err(format!("engine {name} lacks clarity_open, which its on open needs"));
+        }
+        engine.opens = opens;
+        let hears = crate::screen::Hears { pointer: engine.exports("clarity_pointer"), keys: engine.exports("clarity_key") };
+        Ok(ScreenEngine { engine, hears, ended: None })
+    }
+
+    /// The engine with `services` in place of the system's.
+    pub fn with_services(mut self, services: Services) -> ScreenEngine {
+        self.engine.services = services;
+        self
+    }
+
+    /// Calls `function` on the canvas's instance; a refusal ends the engine as any failure does.
+    fn call(&self, function: &str, args: Vec<Value>, told: &mut Vec<crate::screen::ScreenTell>) -> std::result::Result<Value, String> {
+        self.engine.call_told(CANVAS, function, args, told).map_err(|e| match e {
+            Error::Refused(why) => format!("engine {} failed in {function}: {}", self.engine.name, why.show()),
+            Error::Engine(why) => why,
+            other => other.to_string(),
+        })
+    }
+
+    fn run_frame(&self, ms: f64, input: &[crate::screen::ScreenInput]) -> std::result::Result<crate::screen::Drawn, String> {
+        use crate::screen::ScreenInput;
+        let mut told = Vec::new();
+        for given in input {
+            match given {
+                ScreenInput::Pointer { kind, x, y } if self.hears.pointer => {
+                    self.call("clarity_pointer", vec![Value::from(kind.as_str()), Value::from(*x), Value::from(*y)], &mut told)?;
+                }
+                ScreenInput::Key { kind, name } if self.hears.keys => {
+                    self.call("clarity_key", vec![Value::from(kind.as_str()), Value::from(name.as_str())], &mut told)?;
+                }
+                ScreenInput::Hear { name, values } => {
+                    self.call(name, values.clone(), &mut told)?;
+                }
+                _ => {}
+            }
+        }
+        // Whole milliseconds go as whole numbers, as every renderer sends them.
+        let ms = if ms.fract() == 0.0 && ms.abs() < 9.0e15 { Value::from(ms as i64) } else { Value::from(ms) };
+        self.call("clarity_tick", vec![ms], &mut told)?;
+        match self.call("clarity_draw", Vec::new(), &mut told)? {
+            Value::Array(shapes) => Ok(crate::screen::Drawn { shapes, tells: told }),
+            _ => Err(format!("engine {} failed in clarity_draw: it gave no list of shapes", self.engine.name)),
+        }
+    }
+}
+
+impl crate::screen::Frames for ScreenEngine {
+    fn hears(&self) -> crate::screen::Hears {
+        self.hears
+    }
+
+    fn frame(&mut self, ms: f64, input: &[crate::screen::ScreenInput]) -> std::result::Result<crate::screen::Drawn, String> {
+        if let Some(ended) = &self.ended {
+            return Err(ended.clone());
+        }
+        let drawn = self.run_frame(ms, input);
+        if let Err(why) = &drawn {
+            self.ended = Some(why.clone());
+            self.engine.close_window(CANVAS);
+        }
+        drawn
+    }
+}
+
+impl Drop for ScreenEngine {
+    fn drop(&mut self) {
+        self.engine.close_window(CANVAS);
+    }
 }

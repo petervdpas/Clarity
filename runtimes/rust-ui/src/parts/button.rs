@@ -98,4 +98,8 @@ impl Part for ButtonPart {
     fn press(&mut self, cx: &mut Cx) {
         self.click(cx);
     }
+
+    fn set_corners(&mut self, corners: crate::painter::Corners) {
+        self.corners = corners;
+    }
 }

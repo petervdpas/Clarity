@@ -4,11 +4,17 @@
 //! kind's name, and a kind not drawn yet shows that in its place.
 
 pub mod button;
+pub mod custom;
+pub mod containers;
+pub mod data;
+pub mod inputs;
 pub mod check_box;
 pub mod heading;
 pub mod label;
+pub mod sound;
 pub mod text_box;
 pub mod text_editor;
+pub mod timer;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -174,6 +180,39 @@ pub trait PartHost {
         let _ = command;
         designed.filter(|d| !d.is_empty()).map(|d| vec![d.to_string()]).unwrap_or_default()
     }
+
+    /// The file dialogs the host made (the system's on the desktop); asked off the screen's thread through `Cx::later`.
+    fn files(&self) -> std::sync::Arc<dyn crate::files::FilePicker> {
+        crate::files::system()
+    }
+
+    /// What code told the custom part `part` since the last time (`arena.restart(2)`), in order; taken, so each is heard once.
+    fn hears(&self, part: &str) -> Vec<clarity_runtime::ui::Hear> {
+        let _ = part;
+        Vec::new()
+    }
+
+    /// The chosen row of the list, table or tree `part`: its place in the data; none when none is chosen.
+    fn selected(&self, part: &str) -> Option<usize> {
+        let _ = part;
+        None
+    }
+
+    /// The person chose row `place` of `part` (none: no row); handlers read it, it is no edit.
+    fn select(&self, part: &str, place: Option<usize>) {
+        let _ = (part, place);
+    }
+
+    /// How a canvas that `runs` engine `name` gets a new instance of it; none when the host has no engines (a test).
+    fn engine(&self, name: &str) -> Option<crate::parts::data::canvas::engine::MakeFrames> {
+        let _ = name;
+        None
+    }
+
+    /// The program's long work, run off the screen's thread so the window keeps drawing: none when the host runs none (a test).
+    fn program(&self) -> Option<std::sync::Arc<dyn clarity_runtime::program::Program>> {
+        None
+    }
 }
 
 /// What every part has: its node, its spec and its host.
@@ -270,6 +309,11 @@ pub trait Part: Element {
     fn press(&mut self, cx: &mut crate::element::Cx) {
         self.on_click(cx);
     }
+
+    /// Which of its corners are round: in a button group only the outer ones. A part with no round corners lets it go.
+    fn set_corners(&mut self, corners: crate::painter::Corners) {
+        let _ = corners;
+    }
 }
 
 /// Writes the methods every part's element has the same way, for a struct with a field `base`: its node, and that code may hide it.
@@ -304,7 +348,7 @@ macro_rules! part_element {
 pub type MakePart = fn(PartSpec, Rc<dyn PartHost>) -> Box<dyn Part>;
 
 /// The kinds Clarity.UI draws, each with the module that makes it.
-const DRAWN: [(&str, MakePart); 8] = [
+const DRAWN: [(&str, MakePart); 11] = [
     ("label", label::make),
     ("heading", heading::make),
     ("button", button::make),
@@ -313,6 +357,9 @@ const DRAWN: [(&str, MakePart); 8] = [
     ("password", text_box::make),
     ("checkbox", check_box::make),
     ("switch", check_box::make),
+    ("custom", custom::make),
+    ("sound", sound::make),
+    ("timer", timer::make),
 ];
 
 thread_local! {
@@ -326,15 +373,20 @@ pub fn register(kind: &str, make: MakePart) {
 
 /// The kinds Clarity.UI draws now, its own and those added.
 pub fn drawn() -> Vec<String> {
-    let mut kinds: Vec<String> = DRAWN.iter().map(|(k, _)| k.to_string()).collect();
+    let mut kinds: Vec<String> = own_kinds().map(|(k, _)| k.to_string()).collect();
     ADDED.with(|added| kinds.extend(added.borrow().keys().cloned()));
     kinds.sort();
     kinds.dedup();
     kinds
 }
 
+/// Every kind Clarity.UI draws itself: the first parts and each group's.
+fn own_kinds() -> impl Iterator<Item = &'static (&'static str, MakePart)> {
+    DRAWN.iter().chain(inputs::KINDS).chain(containers::KINDS).chain(data::KINDS)
+}
+
 fn maker(kind: &str) -> Option<MakePart> {
-    ADDED.with(|added| added.borrow().get(kind).copied()).or_else(|| DRAWN.iter().find(|(k, _)| *k == kind).map(|(_, m)| *m))
+    ADDED.with(|added| added.borrow().get(kind).copied()).or_else(|| own_kinds().find(|(k, _)| *k == kind).map(|(_, m)| *m))
 }
 
 /// The part of `spec`: its kind's own part; a kind not drawn yet, or one that

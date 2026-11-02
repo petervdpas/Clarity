@@ -42,3 +42,5 @@ Pick the part under Custom parts in the project tree. Its view shows what the wi
 - **Build** builds the part on its own (CMake, Cargo or go build), its compiler's output in the Output panel. A C# adapter builds with the program.
 
 Every Build and Run of the program builds the part in with it. On Linux the part draws in a native window Clarity keeps at its place; the `orbs` example (C++ with SFML) and the `dice` example (Rust with Bevy) show one each.
+
+On Clarity.UI (`stack rust desktop`, and C# on Clarity.UI) a part is no native window: it is a control of Clarity.UI and draws on the window's own surface, in its place, through the trait Clarity writes for it (in Rust, `GaugePart` in the crate's `src/clarity.rs`). It takes the pointer, the wheel, keys and the focus as any part does, and menus and dialogs lie over it. See [Rust](stacks.rust.md#custom-parts-on-clarityui) for the Rust trait.

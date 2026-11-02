@@ -73,7 +73,14 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     // Custom parts written in Rust (DESIGN 5.19): the runtime's part host.
     let rust_parts = parts::crate_parts(project);
-    if !rust_parts.is_empty() {
+    // On Clarity.UI a part is a control of clarity-ui, drawn without the runtime's native part host.
+    let clarity = settings.stack.ui == clarity_project::Ui::Clarity;
+    // On Clarity.UI the engines beside the screen run in the program, on the runtime's engines (DESIGN 5.12).
+    let screen_engines = clarity && !crate::screen_engines(project).is_empty();
+    if screen_engines {
+        features.push("engines");
+    }
+    if !rust_parts.is_empty() && !clarity {
         features.push("parts");
     }
     // HTTP calls from code (DESIGN 5.23): the runtime's client.
@@ -98,18 +105,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     // A program served to a browser alone has no desktop window, and nothing of Tauri.
     let desktop = settings.stack.has(clarity_project::Target::Desktop);
     // `stack rust desktop`: Clarity.UI draws the windows in the program's own process (DESIGN 7.9), no Tauri.
-    let clarity = settings.stack.ui == clarity_project::Ui::Clarity;
-    if clarity {
-        let mut refused = Vec::new();
-        if settings.stack.has(clarity_project::Target::Web) {
-            refused.push("the web target of Rust on Clarity.UI is not generated yet; write stack rust webview web for the shared web screen".to_string());
-        }
-        if !rust_parts.is_empty() {
-            refused.push("custom parts of Rust on Clarity.UI are not generated yet; write stack rust webview desktop to use them".to_string());
-        }
-        if !refused.is_empty() {
-            return Err(refused);
-        }
+    if clarity && settings.stack.has(clarity_project::Target::Web) {
+        return Err(vec!["the web target of Rust on Clarity.UI is not generated yet; write stack rust webview web for the shared web screen".to_string()]);
     }
     let tauri = desktop && !clarity;
     let mut files = vec![
@@ -183,6 +180,9 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     files.push(text("src/modules.rs", format!("{HEADER}\n{declared}")));
     files.push(text("src/schema.rs", schema_rs(project, &owned)?));
     files.extend(crate::engine_files(project, "engines"));
+    if screen_engines {
+        files.extend(crate::screen_engine_files(project, "engines"));
+    }
     // The native parts, built before the program and copied beside it in either build.
     // Each part's crate, its interface written from its declaration, and the glue that makes it.
     for part in &rust_parts {
@@ -190,10 +190,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         for file in project.part_files.iter().flatten().filter(|f| f.part == *n && f.path != "src/clarity.rs") {
             files.push(OutFile { path: format!("parts/{n}/{}", file.path), text: String::new(), bytes: Some(file.bytes.clone().into()) });
         }
-        files.push(text(&format!("parts/{n}/src/clarity.rs"), parts::interface(part)));
+        files.push(text(&format!("parts/{n}/src/clarity.rs"), if clarity { parts::ui_interface(part) } else { parts::interface(part) }));
     }
     if !rust_parts.is_empty() {
-        files.push(text("src/parts.rs", parts::glue(project)));
+        files.push(text("src/parts.rs", if clarity { parts::ui_glue(project) } else { parts::glue(project) }));
     }
     // Each library's crate, its trait written from its declaration (DESIGN 5.21).
     for library in crate::libraries::libraries(project) {
@@ -207,16 +207,186 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     // The screen's files, which a web server serves from the program itself.
     let ui: Vec<String> = files.iter().filter_map(|f| f.path.strip_prefix("ui/").map(String::from)).collect();
-    let clarity_run = clarity.then(|| clarity_run(project, settings, &files, &main_window));
+    let clarity_run = clarity.then(|| clarity_run(project, settings, &files, &main_window, !rust_parts.is_empty()));
     let (main_text, desktop_text) = split_desktop(&main_rs(project, settings, &owners, &databases, &main_window, &ui, clarity_run.as_deref()));
     // Everything of Tauri is in the desktop module; a program served to a browser alone, or on Clarity.UI, has none.
     if tauri {
         files.push(text("src/main.rs", main_text.replacen("mod modules;\n", "mod modules;\nmod desktop;\n", 1)));
         files.push(text("src/desktop.rs", format!("{HEADER}//! The desktop window: Tauri's commands, which call what the program\n//! answers in main.rs, its windows of their own and custom parts.\n\nuse super::*;\n{desktop_text}")));
+    } else if clarity {
+        // What Clarity.UI's parts read beside the values: the facts of the fields and types (DESIGN 7.9).
+        files.push(text("src/facts.rs", facts_rs(project)));
+        let main_text = main_text
+            .replacen("mod modules;\n", "mod modules;\nmod facts;\n", 1)
+            .replacen("impl Program for App {\n", &format!("impl Program for App {{\n    fn facts(&self) -> &'static clarity_runtime::fields::Facts {{\n        &facts::FACTS\n    }}\n\n{}", screen_engine_fn(project)), 1);
+        files.push(text("src/main.rs", main_text));
     } else {
         files.push(text("src/main.rs", main_text));
     }
     Ok(files)
+}
+
+/// The program's answer to a canvas that runs an engine beside the screen
+/// (DESIGN 5.12): a new instance of it from its file, carried in the
+/// program; none for a name it has no engine of. Empty without such engines.
+fn screen_engine_fn(project: &Project) -> String {
+    let engines = crate::screen_engines(project);
+    if engines.is_empty() {
+        return String::new();
+    }
+    let arms: String = engines
+        .iter()
+        .map(|e| {
+            format!(
+                "            {name:?} => clarity_runtime::engine::ScreenEngine::load({name:?}, include_bytes!(\"../engines/{file}\"), &[{uses}], {opens}, clarity_runtime::engine::Limits {{ seconds: {seconds}, megabytes: {megabytes} }}),\n",
+                name = e.name.name,
+                file = e.file,
+                uses = e.uses.iter().map(|u| format!("{:?}", u.name)).collect::<Vec<_>>().join(", "),
+                opens = e.opens,
+                seconds = e.seconds(),
+                megabytes = e.megabytes(),
+            )
+        })
+        .collect();
+    format!(
+        "    fn screen_engine(&self, name: &str) -> Option<std::result::Result<Box<dyn clarity_runtime::screen::Frames>, String>> {{\n        let made = match name {{\n{arms}            _ => return None,\n        }};\n        Some(made.map(|engine| Box::new(engine) as Box<dyn clarity_runtime::screen::Frames>))\n    }}\n\n"
+    )
+}
+
+/// A type as the runtime's facts write it (`clarity_runtime::fields`): a
+/// record, entity or enum by its name, a list as `list<Order>`, a reference
+/// as `ref<Customer>`, a plain value by its keyword.
+fn fact_type(ty: &FieldType) -> String {
+    match ty {
+        FieldType::Text { .. } => "text".into(),
+        FieldType::Integer => "integer".into(),
+        FieldType::Decimal { .. } => "decimal".into(),
+        FieldType::Money => "money".into(),
+        FieldType::Bool => "bool".into(),
+        FieldType::Date => "date".into(),
+        FieldType::DateTime => "datetime".into(),
+        FieldType::Duration => "duration".into(),
+        FieldType::Image => "image".into(),
+        FieldType::File => "file".into(),
+        FieldType::Email => "email".into(),
+        FieldType::Url => "url".into(),
+        FieldType::Color => "color".into(),
+        FieldType::Secret => "secret".into(),
+        FieldType::Folder => "folder".into(),
+        FieldType::Language => "language".into(),
+        FieldType::Theme => "theme".into(),
+        FieldType::Id => "id".into(),
+        FieldType::Enum { name } => name.name.clone(),
+        FieldType::Ref { entity } => format!("ref<{}>", entity.name),
+        FieldType::Record { entity } => entity.name.clone(),
+        FieldType::List { item } => format!("list<{}>", item.name),
+        FieldType::Values { item } => format!("list<{}>", item.word()),
+    }
+}
+
+/// A type written in code, as [`fact_type`] writes it.
+fn code_fact_type(ty: &clarity_spec::code::TypeRef) -> String {
+    use clarity_spec::code::TypeRefKind as K;
+    match &ty.kind {
+        K::Text => "text".into(),
+        K::Integer => "integer".into(),
+        K::Decimal => "decimal".into(),
+        K::Money => "money".into(),
+        K::Bool => "bool".into(),
+        K::Date => "date".into(),
+        K::DateTime => "datetime".into(),
+        K::Duration => "duration".into(),
+        K::File => "file".into(),
+        K::Bytes => "bytes".into(),
+        K::Named { name } => name.clone(),
+        K::List { item } => format!("list<{item}>"),
+    }
+}
+
+/// The facts of a program on Clarity.UI (DESIGN 7.9), as the C# program's
+/// Fields.cs: each window's values and their types, each entity's and
+/// record's fields and theirs, the facts of every entity's field keyed
+/// "Entity.field", and each enum's values.
+fn facts_rs(project: &Project) -> String {
+    use clarity_spec::model::{DataKind, Literal};
+    let typed = |pairs: Vec<(String, String)>| -> String { format!("&[{}]", pairs.iter().map(|(n, t)| format!("({n:?}, {t:?})")).collect::<Vec<_>>().join(", ")) };
+    let optional = |value: Option<&str>| value.map_or("None".to_string(), |v| format!("Some({v:?})"));
+    let literal = |value: &Option<Literal>| match value {
+        Some(Literal::Number(v) | Literal::Str(v) | Literal::Ident(v)) => format!("Some({v:?})"),
+        Some(Literal::Bool(b)) => format!("Some({:?})", b.to_string()),
+        None => "None".to_string(),
+    };
+    let mut windows = String::new();
+    let pages = project.files.iter().flat_map(|f| f.pages.iter().map(|p| (&p.name.name, &p.data)));
+    let apps = project.files.iter().flat_map(|f| f.apps.iter().map(|a| (&a.name.name, &a.data)));
+    for (name, data) in pages.chain(apps) {
+        let values = data
+            .iter()
+            .map(|d| {
+                let ty = match &d.of {
+                    DataKind::Record { entity } => entity.name.clone(),
+                    DataKind::List { entity } => format!("list<{}>", entity.name),
+                    DataKind::Value { ty, .. } => code_fact_type(ty),
+                };
+                (d.name.name.clone(), ty)
+            })
+            .collect();
+        let _ = writeln!(windows, "        ({name:?}, {}),", typed(values));
+    }
+    let mut records = String::new();
+    let mut fields = String::new();
+    for file in &project.files {
+        for entity in file.entities.iter().chain(&file.records) {
+            let types = entity.fields.iter().map(|f| (f.name.name.clone(), fact_type(&f.ty))).collect();
+            let _ = writeln!(records, "        ({:?}, {}),", entity.name.name, typed(types));
+        }
+    }
+    for entity in project.entities() {
+        let parent = crate::csharp::tree_parent(entity);
+        for field in &entity.fields {
+            let refers = match &field.ty {
+                FieldType::Ref { entity } => Some(entity.name.as_str()),
+                _ => None,
+            };
+            let format = fact_format(field).map_or("None".to_string(), |f| format!("Some({f})"));
+            let _ = writeln!(
+                fields,
+                "        ({key:?}, FieldFacts {{ label: {label:?}, format: {format}, required: {required}, min: {min}, max: {max}, refers: {refers}, parent: {parent}, color: {color} }}),",
+                key = format!("{}.{}", entity.name.name, field.name.name),
+                label = field.label,
+                required = field.modifiers.required,
+                min = literal(&field.modifiers.min),
+                max = literal(&field.modifiers.max),
+                refers = optional(refers),
+                parent = optional(parent),
+                color = matches!(field.ty, FieldType::Color),
+            );
+        }
+    }
+    let enums: String = project
+        .enums()
+        .map(|e| format!("        ({:?}, &[{}]),\n", e.name.name, e.variants.iter().map(|v| format!("{:?}", v.name.name)).collect::<Vec<_>>().join(", ")))
+        .collect();
+    format!(
+        "{HEADER}\n//! What the program knows of its fields and types, which Clarity.UI's parts\n//! read beside the values: each window's values and their types, each\n//! record's fields and theirs, the facts of every entity's field keyed\n//! \"Entity.field\", and each enum's values.\n\nuse clarity_runtime::fields::{{Facts, FieldFacts, FieldFormat, FormatKind}};\n\npub static FACTS: Facts = Facts {{\n    windows: &[\n{windows}    ],\n    records: &[\n{records}    ],\n    fields: &[\n{fields}    ],\n    enums: &[\n{enums}    ],\n}};\n"
+    )
+}
+
+/// How a field's values are formatted, as the runtime's `FieldFormat`, for
+/// the types that have formats.
+fn fact_format(field: &clarity_spec::model::Field) -> Option<String> {
+    let (kind, scale) = match &field.ty {
+        FieldType::Integer => ("Integer", None),
+        FieldType::Decimal { scale, .. } => ("Decimal", Some(*scale)),
+        FieldType::Money => ("Money", None),
+        FieldType::Date => ("Date", None),
+        FieldType::DateTime => ("DateTime", None),
+        FieldType::Duration => ("Duration", None),
+        _ => return None,
+    };
+    let scale = scale.map_or("None".to_string(), |s| format!("Some({s})"));
+    let format = field.modifiers.format.as_deref().map_or("None".to_string(), |f| format!("Some({f:?})"));
+    Some(format!("FieldFormat {{ kind: FormatKind::{kind}, scale: {scale}, format: {format} }}"))
 }
 
 /// The files of a program on Clarity.UI (DESIGN 7.9), beside its code: the
@@ -236,7 +406,7 @@ fn clarity_files(project: &Project) -> Vec<OutFile> {
 
 /// The lines that start Clarity.UI: the program's files, embedded, and main's
 /// last line, which opens the main window and runs until the last one closes.
-fn clarity_run(project: &Project, settings: &Settings, files: &[OutFile], main_window: &str) -> String {
+fn clarity_run(project: &Project, settings: &Settings, files: &[OutFile], main_window: &str, parts: bool) -> String {
     let embedded = |folder: &str, extension: &str| -> String {
         let found: Vec<String> = files
             .iter()
@@ -250,8 +420,10 @@ fn clarity_run(project: &Project, settings: &Settings, files: &[OutFile], main_w
         .filter_map(|f| f.path.strip_prefix("themes/").and_then(|n| n.strip_suffix(".json")).map(|name| format!("({name:?}, include_str!(\"../{}\"))", f.path)))
         .collect();
     let (width, height) = crate::window_size(project, main_window);
+    // The program's custom parts, registered with Clarity.UI before its first window opens.
+    let register = if parts { "    parts::register();\n" } else { "" };
     format!(
-        "    clarity_ui::desktop::run(app, FILES)\n//~files\n\n/// The windows, app frames, themes and model Clarity.UI draws from, in the program, and the main window's title and size.\nconst FILES: clarity_ui::AppFiles = clarity_ui::AppFiles {{\n    windows: &[{windows}],\n    apps: &[{apps}],\n    themes: &[{themes}],\n    model: MODEL,\n    title: {title:?},\n    width: {width}.0,\n    height: {height}.0,\n}};\n",
+        "{register}    clarity_ui::desktop::run(app, FILES)\n//~files\n\n/// The windows, app frames, themes and model Clarity.UI draws from, in the program, and the main window's title and size.\nconst FILES: clarity_ui::AppFiles = clarity_ui::AppFiles {{\n    windows: &[{windows}],\n    apps: &[{apps}],\n    themes: &[{themes}],\n    model: MODEL,\n    title: {title:?},\n    width: {width}.0,\n    height: {height}.0,\n}};\n",
         title = clarity_project::title(settings),
         windows = embedded("windows", ".cxaml"),
         apps = embedded("apps", ".cxaml"),
@@ -330,7 +502,14 @@ fn cargo_toml(name: &str, desktop: bool, clarity: bool, folders: bool, features:
     let features = features.iter().map(|f| format!("{f:?}")).collect::<Vec<_>>().join(", ");
     // Each custom part's crate, and the webview's GTK window, which the parts draw in, as Tauri's own GTK crates give it.
     let crates: String = parts.iter().map(|(package, part)| format!("{package} = {{ path = \"parts/{part}\" }}\n")).collect();
-    let parts = if parts.is_empty() { String::new() } else { format!("{crates}\n[target.'cfg(target_os = \"linux\")'.dependencies]\ngtk = \"0.18\"\ngdkx11 = \"0.18\"\n") };
+    // On Clarity.UI a part draws on Clarity.UI's own surface: no GTK window.
+    let parts = if parts.is_empty() {
+        String::new()
+    } else if clarity {
+        crates
+    } else {
+        format!("{crates}\n[target.'cfg(target_os = \"linux\")'.dependencies]\ngtk = \"0.18\"\ngdkx11 = \"0.18\"\n")
+    };
     // Each library's crate (DESIGN 5.21), before the parts' Linux table.
     let libraries: String = libraries.iter().map(|(package, library)| format!("{package} = {{ path = \"libraries/{library}\" }}\n")).collect();
     let parts = format!("{libraries}{parts}");

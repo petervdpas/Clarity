@@ -630,7 +630,7 @@ public static class Fields
 /// The field naming a record's parent, for an entity whose records make a
 /// tree: one with a list of its own kind (what a tree's `children` names),
 /// arranged through its one reference to its own kind.
-fn tree_parent(entity: &clarity_spec::model::Entity) -> Option<&str> {
+pub(crate) fn tree_parent(entity: &clarity_spec::model::Entity) -> Option<&str> {
     let own = |e: &clarity_spec::model::Ident| e.name == entity.name.name;
     let has_list = entity.fields.iter().any(|f| matches!(&f.ty, FieldType::List { item } if own(item)));
     let mut parents = entity.fields.iter().filter(|f| matches!(&f.ty, FieldType::Ref { entity } if own(entity)));

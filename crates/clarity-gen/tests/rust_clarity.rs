@@ -135,3 +135,86 @@ fn the_webview_stack_keeps_tauri() {
     has(file(&files, "src/desktop.rs"), "fn dispatch_event(app: tauri::State<App>, state: WindowState, handler: String) -> Answer<Reply> {\n    app.dispatch_event(state, &handler)\n}");
     has(file(&files, "src/main.rs"), "impl Program for App {");
 }
+
+const ORDERS: &str = "module orders
+
+enum Status
+    open
+    paid
+
+entity Customer
+    name: text(80), required
+
+entity Order
+    total: money, required, min 0
+    status: Status
+    customer: ref Customer
+    color: color
+
+page OrderList: window
+    title \"Orders\"
+    data orders: list<Order>
+    data order: Order
+    data note: text
+    table name grid at 1,1 span 12 rows 4 bind orders columns total
+";
+
+fn orders_files() -> Vec<OutFile> {
+    let project = load_keyed([("orders.clarity", ORDERS)], &[], "en");
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    generate(&project, &settings(Ui::Clarity)).unwrap_or_else(|errors| panic!("{errors:#?}"))
+}
+
+/// What Clarity.UI's parts read beside the values (the C# Fields.cs): each
+/// field's facts, the types of each window's values, each enum's values, as
+/// one static table the program gives through `Program::facts`.
+#[test]
+fn the_program_carries_the_facts_of_its_fields() {
+    let files = orders_files();
+    let facts = file(&files, "src/facts.rs");
+    has(facts, "pub static FACTS: Facts = Facts {\n");
+    has(facts, "(\"OrderList\", &[(\"orders\", \"list<Order>\"), (\"order\", \"Order\"), (\"note\", \"text\")])");
+    has(facts, "(\"Order\", &[(\"total\", \"money\"), (\"status\", \"Status\"), (\"customer\", \"ref<Customer>\"), (\"color\", \"color\")])");
+    has(facts, "(\"Order.total\", FieldFacts { label: \"@orderTotalLabel\", format: Some(FieldFormat { kind: FormatKind::Money, scale: None, format: None }), required: true, min: Some(\"0\"), max: None, refers: None, parent: None, color: false })");
+    has(facts, "(\"Order.customer\", FieldFacts { label: \"@orderCustomerLabel\", format: None, required: false, min: None, max: None, refers: Some(\"Customer\"), parent: None, color: false })");
+    has(facts, "color: true })");
+    has(facts, "(\"Status\", &[\"open\", \"paid\"])");
+    let main = file(&files, "src/main.rs");
+    has(main, "mod facts;\n");
+    has(main, "    fn facts(&self) -> &'static clarity_runtime::fields::Facts {\n        &facts::FACTS\n    }\n");
+}
+
+/// The shared screen reads the model, and carries no table of facts.
+#[test]
+fn the_webview_stack_carries_no_facts() {
+    let files = files_of(Ui::Webview);
+    assert!(!files.iter().any(|f| f.path == "src/facts.rs"));
+}
+
+mod everything_project;
+
+/// Every part of every window of the every-part project is written as an
+/// element Clarity.UI for Rust reads as a kind of its catalog
+/// (runtimes/rust-ui/catalog/part-defaults.json): `<Textbox>` is `textbox`,
+/// `<TreeTable>` is `treeTable`. A tag it does not know would show as a part
+/// that is missing.
+#[test]
+fn every_part_is_written_as_a_kind_clarity_ui_reads() {
+    let catalog: serde_json::Map<String, serde_json::Value> = serde_json::from_str(include_str!("../../../runtimes/rust-ui/catalog/part-defaults.json")).unwrap();
+    let (file, project, settings) = everything_project::prepare("rust-clarity-tags", "rust desktop cli");
+    let files = generate(&project, &settings).unwrap_or_else(|errors| panic!("{errors:#?}"));
+    let mut seen = std::collections::BTreeSet::new();
+    for window in files.iter().filter(|f| f.path.starts_with("windows/") && f.path.ends_with(".cxaml")) {
+        // A part is an element with a place in its grid: `at="1,2"`.
+        for element in window.text.split('<').skip(1).filter(|e| !e.starts_with('/') && e.contains(" at=\"")) {
+            let tag: String = element.chars().take_while(|c| c.is_ascii_alphanumeric()).collect();
+            let mut chars = tag.chars();
+            let kind: String = chars.next().map(|c| c.to_lowercase().chain(chars).collect()).unwrap_or_default();
+            assert!(catalog.contains_key(&kind), "<{tag}> in {} is no kind of Clarity.UI's catalog", window.path);
+            seen.insert(kind);
+        }
+    }
+    // The project has every kind of part.
+    assert!(seen.len() > 40, "{seen:?}");
+    let _ = std::fs::remove_dir_all(file.parent().unwrap());
+}

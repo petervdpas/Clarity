@@ -3,24 +3,43 @@
 //! (the runtime's `WindowState`, run through the program's `Program`), and
 //! the stack of windows in one desktop window: `open` shows a window in
 //! place, on top of the one before; `close` goes back to the one below,
-//! which is told it is on top again. Closing the last one ends the program.
-//! The messages belong to the stack, so one said just before a window closes
-//! shows in the window below.
+//! which is told it is on top again. Closing the last one ends the program,
+//! or the desktop window of its own it was in.
+//!
+//! A dialog, and a target marked `in new window`, open in a desktop window
+//! of their own where the host gives them (`Running::set_apart`, then
+//! `take_aparts`); elsewhere a dialog shows over the window as a modal
+//! overlay and a new window opens in place. A question a handler asks shows
+//! in Clarity's own dialog, and a handler of a program that watches its long
+//! calls runs off the screen's thread with the bar of a long call. The
+//! messages belong to the stack, so one said just before a window closes
+//! shows in the window below. When the language changes every window is
+//! made again, so its texts show in it. When the databases did not open,
+//! what keeps the connection shows first (DESIGN 5.27).
 
 pub mod host;
 pub mod messages;
 pub mod paths;
 pub mod view;
 
+use std::cell::{Cell, RefCell};
+use std::collections::BTreeSet;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 
-use clarity_runtime::program::Program;
-use clarity_runtime::ui::{Level, Message, Text};
-use serde_json::Map;
+use clarity_runtime::keys::PersonKeys;
+use clarity_runtime::program::{Answer, Program, Unconnected, Watch};
+use clarity_runtime::ui::{Ask, AskForm, Level, Message, Reply, Text, WindowState};
+use serde_json::{Map, Value};
 
 use crate::app_files::AppFiles;
+use crate::dialogs::ask::{self, Answered, AskDialog};
+use crate::dialogs::keys::{self, KeysWindow};
+use crate::dialogs::long_call::{LongCallBar, Said};
+use crate::dialogs::over::{dialog_size, DialogOverlay};
 use crate::element::{self, Cx, Element, ElementId, Node};
+use crate::facts::ModelFacts;
 use crate::geometry::Rect;
 use crate::input::{Key, KeyInput, Modifiers};
 use crate::locale;
@@ -28,9 +47,147 @@ use crate::markup;
 use crate::overlay::Overlay;
 use crate::parts::PartHost;
 
-pub use host::{Effect, ProgramHost};
+pub use host::{Call, Effect, ProgramHost};
 pub use messages::{NoteList, SaidDialog};
 pub use view::WindowView;
+
+/// What every window of a program shares, in every desktop window: the
+/// program, its files and model, the person's keys, whether a long call
+/// runs, and whether the host opens windows of their own.
+pub struct Running {
+    pub program: Arc<dyn Program>,
+    pub files: AppFiles,
+    pub facts: Arc<ModelFacts>,
+    keys: RefCell<Option<PersonKeys>>,
+    calling: Cell<bool>,
+    apart: Cell<bool>,
+    new_windows: BTreeSet<String>,
+}
+
+/// The targets a click opens in a desktop window of their own (`in new window`), as the model marks them.
+fn new_windows_of(model: &str) -> BTreeSet<String> {
+    fn walk(value: &Value, out: &mut BTreeSet<String>) {
+        match value {
+            Value::Object(map) => {
+                let marked = map.get("newWindow").and_then(Value::as_bool).unwrap_or(false);
+                if let Some(target) = map.get("onClick").and_then(Value::as_str).filter(|_| marked) {
+                    out.insert(target.to_string());
+                }
+                map.values().for_each(|v| walk(v, out));
+            }
+            Value::Array(items) => items.iter().for_each(|v| walk(v, out)),
+            _ => {}
+        }
+    }
+    let mut out = BTreeSet::new();
+    walk(&serde_json::from_str::<Value>(model).unwrap_or_default()["project"], &mut out);
+    out
+}
+
+impl Running {
+    pub fn new(program: Arc<dyn Program>, files: AppFiles) -> Rc<Running> {
+        Rc::new(Running {
+            facts: ModelFacts::of(files.model),
+            new_windows: new_windows_of(files.model),
+            program,
+            files,
+            keys: RefCell::new(None),
+            calling: Cell::new(false),
+            apart: Cell::new(false),
+        })
+    }
+
+    /// Whether a long call runs now: no other handler runs meanwhile.
+    pub fn calling(&self) -> bool {
+        self.calling.get()
+    }
+
+    /// The host opens dialogs, the keys window and new windows in desktop windows of their own.
+    pub fn set_apart(&self, apart: bool) {
+        self.apart.set(apart);
+    }
+
+    /// Whether a click on `target` opens it in a desktop window of its own.
+    pub fn opens_apart(&self, target: &str) -> bool {
+        self.new_windows.contains(target)
+    }
+
+    /// The person's keys, as the settings keep them (read once).
+    pub fn person_keys(&self) -> PersonKeys {
+        self.keys.borrow_mut().get_or_insert_with(|| PersonKeys::read(&self.program.read_settings())).clone()
+    }
+
+    /// The keys a command answers: the person's where they set their own, else the design's.
+    pub fn keys_of(&self, command: &str, designed: Option<&str>) -> Vec<String> {
+        if self.keys.borrow().is_none() {
+            self.person_keys();
+        }
+        self.keys.borrow().as_ref().map(|k| k.of(command, designed)).unwrap_or_default()
+    }
+
+    /// Keeps the person's keys with the program's settings, the other settings as they were.
+    pub fn keep_keys(&self, keys: &PersonKeys) -> Answer<()> {
+        *self.keys.borrow_mut() = Some(keys.clone());
+        let mut settings = self.program.read_settings();
+        keys.keep(&mut settings);
+        self.program.keep_settings(settings)
+    }
+
+    /// Clarity's keys window over the program's commands; `root` when it is a screen's root.
+    pub fn keys_window(running: &Rc<Running>, root: bool) -> KeysWindow {
+        let keeper = running.clone();
+        let keep: keys::KeepKeys = Rc::new(move |keys| {
+            if let Err(why) = keeper.keep_keys(keys) {
+                // Fail safe: keys that cannot be kept still work in this run.
+                eprintln!("{}", why.show());
+            }
+        });
+        KeysWindow::new(keys::catalog(running.files.model), running.person_keys(), keep, root)
+    }
+
+    /// A window's title as shown: its own, else the program's.
+    pub fn title_of(&self, window: &str) -> String {
+        match self.facts.window(window).and_then(|w| w.title.clone()).filter(|t| !t.is_empty()) {
+            Some(title) => crate::facts::shown(&title, &title),
+            None => self.files.title.to_string(),
+        }
+    }
+}
+
+/// A question whose answer is the value a dialog window closes with: the handler it runs, with its values.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Asked {
+    pub handler: String,
+    pub values: Vec<Value>,
+}
+
+/// A window to open in a desktop window of its own.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ApartWindow {
+    pub window: String,
+    pub with: Map<String, Value>,
+    /// The open window that opened it (its instance), told when it closes.
+    pub opener: u64,
+    pub asked: Option<Asked>,
+    /// It is a dialog: sized to it, and the window under it takes nothing while it is open.
+    pub dialog: bool,
+}
+
+/// What the stack asks the host to open in a desktop window of its own.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Apart {
+    Window(ApartWindow),
+    Keys,
+}
+
+/// A desktop window of its own closed: what the window that opened it is told.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ApartClosed {
+    pub opener: u64,
+    pub result: Option<Value>,
+    pub asked: Option<Asked>,
+    pub said: Vec<Message>,
+}
 
 /// One open window: its host, and its view while it is not on top (the top one is the stack's child).
 struct Shown {
@@ -38,70 +195,275 @@ struct Shown {
     parked: Option<Box<dyn Element>>,
 }
 
-/// The windows of a program, the one on top shown: the root of the desktop window's screen.
+/// A dialog over the window: its host, its overlay, the window that opened it, and the question it answers.
+struct Dialog {
+    host: Rc<ProgramHost>,
+    overlay: ElementId,
+    opener: Option<u64>,
+    asked: Option<Asked>,
+}
+
+/// The question shown now: its overlay, what the person answers, and the window that asked.
+struct Asking {
+    overlay: ElementId,
+    answered: Answered,
+    ask: Ask,
+    host: Rc<ProgramHost>,
+}
+
+/// While the databases are not open (DESIGN 5.27): what to show, and the settings when it showed.
+struct Unconnecting {
+    unconnected: Unconnected,
+    settings: Map<String, Value>,
+}
+
+/// What a long call gives back on the screen's thread.
+struct LongDone(Answer<Reply>);
+
+/// The windows of a program, the one on top shown: the root of a desktop window's screen.
 pub struct WindowStack {
     node: Node,
-    program: Arc<dyn Program>,
-    files: AppFiles,
+    running: Rc<Running>,
     stack: Vec<Shown>,
+    dialogs: Vec<Dialog>,
     /// The warnings and errors waiting for their dialog, the first one shown.
     said: Vec<Message>,
     saying: Option<ElementId>,
+    /// The questions waiting their turn, and the one shown.
+    asks: Vec<(Ask, Rc<ProgramHost>)>,
+    asking: Option<Asking>,
+    keys_overlay: Option<ElementId>,
+    /// The long call running: the window it runs for, and its bar.
+    long: Option<(Rc<ProgramHost>, ElementId)>,
     /// Effects of the start, before the main window is on a screen.
     early: Vec<Effect>,
-    /// How often the window on top's values had changed when the screen last drew them.
+    /// How often the windows' values had changed when the screen last drew them.
     seen: u64,
     ended: bool,
+    quitting: bool,
+    aparts: Vec<Apart>,
+    /// The window that opened this desktop window of its own, and the question it answers.
+    opener: Option<(u64, Option<Asked>)>,
+    closed: Option<ApartClosed>,
+    /// This desktop window of its own shows a dialog: it is sized to it.
+    dialog: bool,
+    unconnected: Option<Unconnecting>,
+    language: String,
+}
+
+/// The view of window `name` over `host`, from its markup; one the program does not carry, or that does not read, says why in its place.
+pub fn view_of(files: AppFiles, host: &Rc<ProgramHost>, name: &str) -> WindowView {
+    let as_host: Rc<dyn PartHost> = host.clone();
+    let Some(markup) = files.window(name) else {
+        let why = locale::fill(&locale::translate("windowMissing", "The program carries no window {window}."), "window", name);
+        return WindowView::failed(why, as_host);
+    };
+    match markup::read(markup) {
+        // Every window but a dialog shows the app's frame where it has none of its own.
+        Ok(spec) => WindowView::new(&spec, as_host).with_frame(crate::frame::app_frame_of(&files, name)),
+        Err(err) => WindowView::failed(err.0, as_host),
+    }
 }
 
 impl WindowStack {
-    /// Starts the program: its texts load, its `on start` runs and its main window opens.
-    pub fn start(program: Arc<dyn Program>, files: AppFiles) -> WindowStack {
-        clarity_runtime::i18n::load(files.model);
+    fn empty(running: Rc<Running>) -> WindowStack {
         let mut node = Node::new();
         node.add(Box::new(NoteList::default()));
-        let mut stack = WindowStack { node, program, files, stack: Vec::new(), said: Vec::new(), saying: None, early: Vec::new(), seen: 0, ended: false };
-        let started = stack.program.started();
-        match stack.program.start_app() {
-            Ok(reply) => {
-                if !reply.messages.is_empty() {
-                    stack.early.push(Effect::Say(reply.messages));
-                }
-            }
-            Err(text) => stack.early.push(Effect::Say(vec![Message { level: Level::Error, text }])),
+        WindowStack {
+            node,
+            running,
+            stack: Vec::new(),
+            dialogs: Vec::new(),
+            said: Vec::new(),
+            saying: None,
+            asks: Vec::new(),
+            asking: None,
+            keys_overlay: None,
+            long: None,
+            early: Vec::new(),
+            seen: 0,
+            ended: false,
+            quitting: false,
+            aparts: Vec::new(),
+            opener: None,
+            closed: None,
+            dialog: false,
+            unconnected: None,
+            language: crate::choices::language(),
         }
-        stack.open_window(&started.main, Map::new(), None);
+    }
+
+    /// Starts the program: its texts load, its `on start` runs and its main
+    /// window opens; when its databases did not open, what keeps the
+    /// connection shows first.
+    pub fn start(program: Arc<dyn Program>, files: AppFiles) -> WindowStack {
+        clarity_runtime::i18n::load(files.model);
+        let running = Running::new(program, files);
+        let mut stack = WindowStack::empty(running);
+        let started = stack.running.program.started();
+        match started.unconnected {
+            Some(unconnected) => stack.start_unconnected(unconnected, None),
+            None => stack.start_main(None),
+        }
         stack
     }
 
-    /// The desktop window's title now.
+    /// A desktop window of its own, which shows `request.window`; it shares what the program's windows share.
+    pub fn apart(running: Rc<Running>, request: ApartWindow) -> WindowStack {
+        let mut stack = WindowStack::empty(running);
+        stack.opener = Some((request.opener, request.asked.clone()));
+        stack.dialog = request.dialog;
+        stack.open_window(&request.window, request.with, None);
+        if stack.stack.is_empty() {
+            stack.ended = true;
+        }
+        stack
+    }
+
+    /// The app's `on start`, then its main window.
+    fn start_main(&mut self, cx: Option<&mut Cx>) {
+        let main = self.running.program.started().main;
+        match self.running.program.start_app() {
+            Ok(reply) => {
+                if !reply.messages.is_empty() {
+                    self.early.push(Effect::Say(reply.messages));
+                }
+            }
+            Err(text) => self.early.push(Effect::Say(vec![Message { level: Level::Error, text }])),
+        }
+        self.open_window(&main, Map::new(), cx);
+    }
+
+    /// The databases did not open: the app's `on unconnected` runs with why,
+    /// and what it opens shows; without one, or when it opens nothing, the
+    /// window that keeps the connection shows, saying why. With neither, the
+    /// program says why and ends.
+    fn start_unconnected(&mut self, unconnected: Unconnected, mut cx: Option<&mut Cx>) {
+        let settings = self.running.program.read_settings();
+        if let Some(handler) = &unconnected.handler {
+            // The handler reads why as the person does, in their language.
+            let why = Value::from(unconnected.problem.show());
+            match self.running.program.answer_event(WindowState::new("", Map::new()), handler, vec![why]) {
+                Ok(reply) => {
+                    if !reply.messages.is_empty() {
+                        self.early.push(Effect::Say(reply.messages));
+                    }
+                    for open in reply.open {
+                        self.open_window(&open.window, open.with, cx.as_deref_mut());
+                    }
+                }
+                Err(text) => self.early.push(Effect::Say(vec![Message { level: Level::Error, text }])),
+            }
+        }
+        if self.stack.is_empty() {
+            self.early.push(Effect::Say(vec![Message { level: Level::Error, text: unconnected.problem.clone() }]));
+            if let Some(window) = &unconnected.window {
+                self.open_window(window, Map::new(), cx.as_deref_mut());
+            }
+        }
+        if self.stack.is_empty() {
+            eprintln!("{}", unconnected.problem.show());
+            self.ended = true;
+            return;
+        }
+        self.unconnected = Some(Unconnecting { unconnected, settings });
+    }
+
+    /// The last window closed while the databases are not open: when a
+    /// setting changed the program connects again and its main window opens;
+    /// unchanged, the program ends.
+    fn reconnect(&mut self, cx: &mut Cx) -> bool {
+        let Some(was) = self.unconnected.take() else { return false };
+        if self.running.program.read_settings() == was.settings {
+            return false;
+        }
+        match self.running.program.connect() {
+            Ok(()) => self.start_main(Some(cx)),
+            Err(problem) => self.start_unconnected(Unconnected { problem, ..was.unconnected }, Some(cx)),
+        }
+        !self.stack.is_empty()
+    }
+
+    /// What every window of the program shares.
+    pub fn running(&self) -> &Rc<Running> {
+        &self.running
+    }
+
+    /// The desktop window's title now: the title of the window on top, else the program's.
     pub fn title(&self) -> String {
-        self.files.title.to_string()
+        match self.stack.last() {
+            Some(top) => self.running.title_of(&top.host.window()),
+            None => self.running.files.title.to_string(),
+        }
     }
 
     /// The size the program asks its desktop window to open at; none for the host's own.
+    /// A dialog of its own is sized to the dialog: as its model says, else 480 wide and as high as its rows.
     pub fn wanted_size(&self) -> Option<(f64, f64)> {
-        (self.files.width > 0.0 && self.files.height > 0.0).then_some((self.files.width, self.files.height))
+        let top = self.stack.first().map(|s| s.host.window());
+        let size = top.as_deref().and_then(|w| self.running.facts.window(w)).and_then(|w| w.size);
+        if self.dialog {
+            return self.view().map(|v| dialog_size(v, size));
+        }
+        if self.opener.is_some() {
+            return size;
+        }
+        let files = &self.running.files;
+        (files.width > 0.0 && files.height > 0.0).then_some((files.width, files.height))
     }
 
-    /// Whether the last window closed: the host ends.
+    /// Whether this desktop window of its own shows a dialog.
+    pub fn is_dialog(&self) -> bool {
+        self.dialog
+    }
+
+    /// Whether the last window closed: the host closes the desktop window it is in.
     pub fn ended(&self) -> bool {
         self.ended
     }
 
-    /// The program it runs.
-    pub fn program(&self) -> &Arc<dyn Program> {
-        &self.program
+    /// Whether the program ends (the built-in `quit`): the host closes every window.
+    pub fn quitting(&self) -> bool {
+        self.quitting
     }
 
-    /// The names of the open windows, from the bottom to the top.
+    /// The program it runs.
+    pub fn program(&self) -> &Arc<dyn Program> {
+        &self.running.program
+    }
+
+    /// The names of the open windows, from the bottom to the top, the dialogs over them last.
     pub fn windows(&self) -> Vec<String> {
-        self.stack.iter().map(|s| s.host.window()).collect()
+        self.stack.iter().map(|s| s.host.window()).chain(self.dialogs.iter().map(|d| d.host.window())).collect()
     }
 
     /// The host of the window on top.
     pub fn current(&self) -> Option<&Rc<ProgramHost>> {
         self.stack.last().map(|s| &s.host)
+    }
+
+    /// The host of the dialog on top, over the window.
+    pub fn dialog_host(&self) -> Option<&Rc<ProgramHost>> {
+        self.dialogs.last().map(|d| &d.host)
+    }
+
+    /// Whether the open window of number `instance` is in this stack.
+    pub fn holds(&self, instance: u64) -> bool {
+        self.host_of(instance).is_some()
+    }
+
+    fn host_of(&self, instance: u64) -> Option<Rc<ProgramHost>> {
+        self.stack.iter().map(|s| &s.host).chain(self.dialogs.iter().map(|d| &d.host)).find(|h| h.instance() == instance).cloned()
+    }
+
+    /// What the host is asked to open in desktop windows of their own since the last time.
+    pub fn take_aparts(&mut self) -> Vec<Apart> {
+        std::mem::take(&mut self.aparts)
+    }
+
+    /// This desktop window of its own closed: what to tell the window that opened it; taken once.
+    pub fn take_closed(&mut self) -> Option<ApartClosed> {
+        self.closed.take()
     }
 
     /// The view of the window on top.
@@ -127,32 +489,32 @@ impl WindowStack {
         &self.said
     }
 
-    /// Makes the view of a window from its markup; one the program does not carry, or that does not read, says why in its place.
-    fn make_view(&self, host: &Rc<ProgramHost>, name: &str) -> WindowView {
-        let as_host: Rc<dyn PartHost> = host.clone();
-        let Some(markup) = self.files.window(name) else {
-            let why = locale::fill(&locale::translate("windowMissing", "The program carries no window {window}."), "window", name);
-            return WindowView::failed(why, as_host);
-        };
-        match markup::read(markup) {
-            Ok(spec) => WindowView::new(&spec, as_host),
-            Err(err) => WindowView::failed(err.0, as_host),
-        }
+    /// Whether a long call runs, with its bar over the window.
+    pub fn long_call(&self) -> bool {
+        self.long.is_some()
+    }
+
+    /// Makes a window's host from what opening it answered.
+    fn host_for(&self, name: &str, reply: Reply) -> Rc<ProgramHost> {
+        let files = self.running.files;
+        let parts = files.window(name).and_then(|m| markup::read(m).ok()).map(|s| s.parts).unwrap_or_default();
+        let host = Rc::new(ProgramHost::new(self.running.program.clone(), files, reply.state.clone(), &parts));
+        host.set_running(self.running.clone());
+        host.apply(reply);
+        host
     }
 
     /// Opens window `name` on top: the program opens it (its `on open` runs), then it shows.
-    fn open_window(&mut self, name: &str, with: Map<String, serde_json::Value>, cx: Option<&mut Cx>) {
-        let reply = match self.program.open_window(name, with) {
+    fn open_window(&mut self, name: &str, with: Map<String, Value>, cx: Option<&mut Cx>) {
+        let reply = match self.running.program.open_window(name, with) {
             Ok(reply) => reply,
             Err(text) => {
                 self.early.push(Effect::Say(vec![Message { level: Level::Error, text }]));
                 return;
             }
         };
-        let parts = self.files.window(name).and_then(|m| markup::read(m).ok()).map(|s| s.parts).unwrap_or_default();
-        let host = Rc::new(ProgramHost::new(self.program.clone(), self.files, reply.state.clone(), &parts));
-        host.apply(reply);
-        let view = self.make_view(&host, name);
+        let host = self.host_for(name, reply);
+        let view = view_of(self.running.files, &host, name);
         // The window below is parked while this one is on top.
         if let Some(index) = self.view_index() {
             let mut below = self.node.children_mut().remove(index);
@@ -168,15 +530,84 @@ impl WindowStack {
         self.stack.push(Shown { host, parked: None });
     }
 
-    /// Closes the window on top: its `on close` runs, the window below shows and is told; the last one ends the program.
+    /// Opens a window a window asked for: in a desktop window of its own
+    /// where the host gives them, a dialog over the window, else in place.
+    fn open(&mut self, name: &str, with: Map<String, Value>, from: Option<&Rc<ProgramHost>>, asked: Option<Asked>, cx: &mut Cx) {
+        let dialog = self.running.facts.is_dialog(name) || asked.is_some();
+        let opener = from.or(self.current()).map(|h| h.instance());
+        if self.running.apart.get() && (dialog || self.running.opens_apart(name)) {
+            self.aparts.push(Apart::Window(ApartWindow { window: name.to_string(), with, opener: opener.unwrap_or(0), asked, dialog }));
+            return;
+        }
+        if dialog {
+            self.show_dialog(name, with, opener, asked, cx);
+        } else {
+            self.open_window(name, with, Some(cx));
+        }
+        cx.invalidate();
+    }
+
+    /// A dialog over the window, sized to it, its keys its own; what it says shows in the window under it.
+    fn show_dialog(&mut self, name: &str, with: Map<String, Value>, opener: Option<u64>, asked: Option<Asked>, cx: &mut Cx) {
+        let reply = match self.running.program.open_window(name, with) {
+            Ok(reply) => reply,
+            Err(text) => {
+                self.said.push(Message { level: Level::Error, text });
+                return;
+            }
+        };
+        let host = self.host_for(name, reply);
+        let (files, made_for, window) = (self.running.files, host.clone(), name.to_string());
+        let make = Box::new(move || view_of(files, &made_for, &window));
+        let size = self.running.facts.window(name).and_then(|w| w.size);
+        let content = DialogOverlay::new(self.running.title_of(name), size, make).with_host(host.clone());
+        let first = content.first();
+        let overlay = cx.open(Overlay { opener: Some(self.node.id()), ..Overlay::dialog(Box::new(content)) });
+        cx.focus(first);
+        self.dialogs.push(Dialog { host, overlay, opener, asked });
+    }
+
+    /// The dialog closes: its `on close` runs, the window that opened it (or
+    /// the one on top) is told, and what it closed with goes to the handler
+    /// that asked for it.
+    fn close_dialog(&mut self, index: usize, cx: &mut Cx) {
+        let dialog = self.dialogs.remove(index);
+        let effects = dialog.host.closing();
+        let result = dialog.host.take_result();
+        cx.close(dialog.overlay);
+        let below = dialog.opener.and_then(|o| self.host_of(o)).or_else(|| self.current().cloned());
+        if let Some(below) = &below {
+            below.returned();
+        }
+        self.take(below.clone(), effects, cx);
+        if let (Some(asked), Some(result), Some(below)) = (dialog.asked, result, below) {
+            let mut values = asked.values;
+            values.push(result);
+            below.answer(&asked.handler, values);
+        }
+        cx.invalidate();
+    }
+
+    /// Closes the window on top: its `on close` runs, the window below shows
+    /// and is told; the last one ends the desktop window it is in.
     fn close_top(&mut self, cx: &mut Cx) {
         let Some(top) = self.stack.pop() else { return };
         let effects = top.host.closing();
+        let result = top.host.take_result();
         if let Some(index) = self.view_index() {
             self.node.remove(index, cx);
         }
         cx.focus(None);
         if self.stack.is_empty() {
+            if self.unconnected.is_some() && self.reconnect(cx) {
+                self.take(None, effects, cx);
+                cx.invalidate();
+                return;
+            }
+            if let Some((opener, asked)) = self.opener.take() {
+                let said = effects.into_iter().flat_map(|e| if let Effect::Say(m) = e { m } else { Vec::new() }).collect();
+                self.closed = Some(ApartClosed { opener, result, asked, said });
+            }
             self.ended = true;
             cx.invalidate();
             return;
@@ -185,15 +616,51 @@ impl WindowStack {
             self.node.children_mut().insert(0, view);
         }
         let below = self.stack.last().map(|s| s.host.clone());
-        if let Some(below) = below {
+        if let Some(below) = &below {
             below.returned();
         }
-        self.take(effects, cx);
+        self.take(below, effects, cx);
         cx.invalidate();
     }
 
-    /// Does what replies asked: messages show, windows open and close, text goes on the clipboard.
-    fn take(&mut self, effects: Vec<Effect>, cx: &mut Cx) {
+    /// The desktop window it is in closes: its dialogs and the window on top
+    /// hear their `on close`, and the window that opened it is told.
+    pub fn closing(&mut self, cx: &mut Cx) {
+        while !self.dialogs.is_empty() {
+            self.close_dialog(self.dialogs.len() - 1, cx);
+        }
+        let Some(top) = self.stack.last() else { return };
+        let effects = top.host.closing();
+        if let Some((opener, asked)) = self.opener.take() {
+            let said = effects.into_iter().flat_map(|e| if let Effect::Say(m) = e { m } else { Vec::new() }).collect();
+            self.closed = Some(ApartClosed { opener, result: None, asked, said });
+        }
+        self.ended = true;
+    }
+
+    /// A desktop window of its own that a window here opened closed: that
+    /// window is told, sees what it said, and the handler that asked for its
+    /// value runs with it.
+    pub fn apart_closed(&mut self, closed: ApartClosed, cx: &mut Cx) {
+        let Some(host) = self.host_of(closed.opener).or_else(|| self.current().cloned()) else { return };
+        host.returned();
+        let mut effects = Vec::new();
+        if !closed.said.is_empty() {
+            effects.push(Effect::Say(closed.said));
+        }
+        if let (Some(asked), Some(result)) = (closed.asked, closed.result) {
+            let mut values = asked.values;
+            values.push(result);
+            host.answer(&asked.handler, values);
+        }
+        effects.extend(host.take_effects());
+        self.take(Some(host), effects, cx);
+        cx.invalidate();
+    }
+
+    /// Does what replies asked: messages show, windows open and close,
+    /// questions are asked, text goes on the clipboard; `from` is the window whose reply it was.
+    fn take(&mut self, from: Option<Rc<ProgramHost>>, effects: Vec<Effect>, cx: &mut Cx) {
         for effect in effects {
             match effect {
                 Effect::Say(messages) => {
@@ -206,15 +673,47 @@ impl WindowStack {
                         }
                     }
                 }
-                Effect::Open(window, with) => {
-                    self.open_window(&window, with, Some(cx));
+                Effect::Open(window, with) => self.open(&window, with, from.as_ref(), None, cx),
+                Effect::Close => {
+                    let dialog = from.as_ref().and_then(|f| self.dialogs.iter().position(|d| Rc::ptr_eq(&d.host, f)));
+                    match dialog {
+                        Some(index) => self.close_dialog(index, cx),
+                        None => {
+                            let top = self.current().cloned();
+                            if from.is_none() || from.as_ref().zip(top.as_ref()).is_some_and(|(f, t)| Rc::ptr_eq(f, t)) {
+                                self.close_top(cx);
+                            }
+                        }
+                    }
+                }
+                Effect::Copy(text) => cx.clipboard().set_text(&text),
+                Effect::Ask(asked) => match &asked.form {
+                    AskForm::Window { window, with } => {
+                        let what = Asked { handler: asked.handler.clone(), values: asked.values.clone() };
+                        self.open(window, with.clone(), from.as_ref(), Some(what), cx);
+                    }
+                    _ => {
+                        // A question the app's own start asks has no window to answer it.
+                        if let Some(host) = from.clone().or_else(|| self.current().cloned()) {
+                            self.asks.push((asked, host));
+                        }
+                    }
+                },
+                Effect::Keys => self.show_keys(cx),
+                Effect::Quit => {
+                    self.quitting = true;
+                    self.ended = true;
                     cx.invalidate();
                 }
-                Effect::Close => self.close_top(cx),
-                Effect::Copy(text) => cx.clipboard().set_text(&text),
+                Effect::Call(call) => {
+                    if let Some(host) = from.clone().or_else(|| self.current().cloned()) {
+                        self.start_call(host, call, cx);
+                    }
+                }
             }
         }
         self.say_next(cx);
+        self.ask_next(cx);
     }
 
     /// The next warning or error, in Clarity's dialog over the window, one at a time.
@@ -230,17 +729,109 @@ impl WindowStack {
         cx.focus(Some(ok));
     }
 
-    /// Says something among the messages, as a handler's reply does.
-    pub fn say(&mut self, level: Level, text: Text, cx: &mut Cx) {
-        self.take(vec![Effect::Say(vec![Message { level, text }])], cx);
+    /// The next question, in Clarity's own dialog over the window, one at a time.
+    fn ask_next(&mut self, cx: &mut Cx) {
+        if self.asking.is_some() || self.asks.is_empty() {
+            return;
+        }
+        let (asked, host) = self.asks.remove(0);
+        let choices = ask::choices_of(&asked.form, &self.running.facts, self.running.program.as_ref());
+        let dialog = AskDialog::new(asked.clone(), choices);
+        let first = dialog.first();
+        let answered = dialog.answered();
+        let overlay = cx.open(Overlay { opener: Some(self.node.id()), ..Overlay::dialog(Box::new(dialog)) });
+        cx.focus(Some(first));
+        self.asking = Some(Asking { overlay, answered, ask: asked, host });
     }
 
-    /// The part with the focus, or the first part it is in: its name.
-    fn focused_part(&self, focused: Option<ElementId>) -> Option<String> {
-        let focused = focused?;
-        let ids = element::chain(self, focused)?;
-        ids.iter().rev().filter_map(|id| element::find(self, *id)).find_map(|e| e.as_part().and_then(|p| p.base().spec.name().map(str::to_string)))
+    /// Clarity's keys window, where the project lets people set their keys: in a desktop window of its own where the host gives them, else over the window.
+    fn show_keys(&mut self, cx: &mut Cx) {
+        if !self.running.facts.keys_editable() {
+            return;
+        }
+        if self.running.apart.get() {
+            self.aparts.push(Apart::Keys);
+            return;
+        }
+        if self.keys_overlay.is_some() {
+            return;
+        }
+        let window = Running::keys_window(&self.running, false);
+        let overlay = cx.open(Overlay { opener: Some(self.node.id()), ..Overlay::dialog(Box::new(window)) });
+        cx.focus(Some(overlay));
+        self.keys_overlay = Some(overlay);
     }
+
+    /// A handler of `host` runs off the screen's thread, its long calls
+    /// watched: the bar lies over the window until it ended, says how far
+    /// it is, and Stop stops it.
+    fn start_call(&mut self, host: Rc<ProgramHost>, call: Call, cx: &mut Cx) {
+        if self.long.is_some() {
+            return;
+        }
+        let said: Said = Arc::new(Mutex::new(None));
+        let stop = Arc::new(AtomicBool::new(false));
+        let bar = cx.open(Overlay::dialog(Box::new(LongCallBar::new(said.clone(), stop.clone()))));
+        self.running.calling.set(true);
+        self.long = Some((host.clone(), bar));
+        let program = self.running.program.clone();
+        let state = host.state_now();
+        let progress = said.clone();
+        let watch = Watch { progress: Some(Arc::new(move |done, total| {
+            if let Ok(mut at) = progress.lock() {
+                *at = Some((done, total));
+            }
+        })), stop };
+        cx.later(self.node.id(), move || {
+            let mut answer = None;
+            let mut job = Some((call, state));
+            program.watched(&watch, &mut || {
+                if let Some((call, state)) = job.take() {
+                    answer = Some(call.run(program.as_ref(), state));
+                }
+            });
+            LongDone(answer.unwrap_or_else(|| Err(Text::plain("the handler did not run"))))
+        });
+    }
+
+    /// Makes every window's view again, as in another language; a dialog over the window makes its own.
+    fn remake(&mut self, cx: &mut Cx) {
+        let files = self.running.files;
+        let count = self.stack.len();
+        for i in 0..count {
+            let host = self.stack[i].host.clone();
+            host.reshow();
+            let view = view_of(files, &host, &host.window());
+            if i + 1 == count {
+                if let Some(index) = self.view_index() {
+                    self.node.remove(index, cx);
+                }
+                self.node.children_mut().insert(0, Box::new(view));
+            } else {
+                self.stack[i].parked = Some(Box::new(view));
+            }
+        }
+        for dialog in &self.dialogs {
+            dialog.host.reshow();
+        }
+        cx.invalidate();
+    }
+
+    /// Says something among the messages, as a handler's reply does.
+    pub fn say(&mut self, level: Level, text: Text, cx: &mut Cx) {
+        self.take(None, vec![Effect::Say(vec![Message { level, text }])], cx);
+    }
+
+    /// The part with the focus, or the first part it is in, when it is no button: its name.
+    fn focused_input(&self, focused: Option<ElementId>) -> Option<String> {
+        let ids = element::chain(self, focused?)?;
+        let part = ids.iter().rev().filter_map(|id| element::find(self, *id)).find_map(|e| e.as_part())?;
+        if part.base().spec.kind.eq_ignore_ascii_case("button") {
+            return None;
+        }
+        part.base().spec.name().map(str::to_string)
+    }
+
 }
 
 impl Element for WindowStack {
@@ -254,18 +845,39 @@ impl Element for WindowStack {
     }
 
     fn after_event(&mut self, cx: &mut Cx) {
-        let mut effects = std::mem::take(&mut self.early);
-        if let Some(host) = self.stack.last().map(|s| s.host.clone()) {
+        // The language changed: the program hears it, and every window is made again.
+        let language = crate::choices::language();
+        if language != self.language {
+            self.language = language.clone();
+            let written = self.running.facts.formats().language;
+            let picked = if written.as_deref() == Some(language.as_str()) { None } else { Some(language.as_str()) };
+            self.running.program.set_language(picked);
+            self.remake(cx);
+        }
+        let early = std::mem::take(&mut self.early);
+        if !early.is_empty() {
+            self.take(None, early, cx);
+            cx.invalidate();
+        }
+        // The part with the focus gives its undo scope, which `-> undo` and
+        // `-> redo` act on; a button that runs them keeps the one before.
+        if let (Some(host), Some(part)) = (self.current().cloned(), self.focused_input(cx.focused())) {
+            host.set_focused(&part);
+        }
+        let hosts: Vec<Rc<ProgramHost>> = self.stack.last().map(|s| s.host.clone()).into_iter().chain(self.dialogs.iter().map(|d| d.host.clone())).collect();
+        let mut changes = 0;
+        for host in hosts {
             host.flush();
-            effects.extend(host.take_effects());
-            // The window's values changed: the screen draws them again.
-            if host.changes() != self.seen {
-                self.seen = host.changes();
+            let effects = host.take_effects();
+            changes += host.changes();
+            if !effects.is_empty() {
+                self.take(Some(host), effects, cx);
                 cx.invalidate();
             }
         }
-        if !effects.is_empty() {
-            self.take(effects, cx);
+        // The windows' values changed: the screen draws them again.
+        if changes != self.seen {
+            self.seen = changes;
             cx.invalidate();
         }
     }
@@ -279,6 +891,30 @@ impl Element for WindowStack {
             self.say_next(cx);
             cx.invalidate();
         }
+        if self.asking.as_ref().is_some_and(|a| a.overlay == overlay) {
+            let Some(asking) = self.asking.take() else { return };
+            let values = asking.answered.borrow_mut().take();
+            // Cancelling runs nothing.
+            if let Some(values) = values {
+                asking.host.answer(&asking.ask.handler, values);
+            }
+            self.ask_next(cx);
+            cx.invalidate();
+        }
+        if self.keys_overlay == Some(overlay) {
+            self.keys_overlay = None;
+        }
+    }
+
+    /// A long call ended: its bar goes, and its reply is the window's.
+    fn on_later(&mut self, done: crate::later::Done, cx: &mut Cx) {
+        let Ok(done) = done.downcast::<LongDone>() else { return };
+        self.running.calling.set(false);
+        if let Some((host, bar)) = self.long.take() {
+            cx.close(bar);
+            host.answered(done.0);
+        }
+        cx.invalidate();
     }
 
     /// The window's own keys: the window on top's (shortcuts, the default and
@@ -290,29 +926,44 @@ impl Element for WindowStack {
         if self.node.children_mut()[index].window_key(key, cx) {
             return true;
         }
-        let command = key.control() || key.meta();
-        if !command || key.alt() {
-            return false;
-        }
-        let back = key.key == Key::Z && !key.shift();
-        let again = key.key == Key::Y || (key.key == Key::Z && key.shift());
-        if !back && !again {
-            return false;
-        }
-        let focused = cx.focused();
-        if let Some(e) = focused.and_then(|f| element::find_mut(self, f)) {
-            if e.on_key(key, cx) {
-                return true;
-            }
-        }
-        let part = self.focused_part(focused);
-        if let (Some(host), Some(part)) = (self.current().cloned(), part) {
-            if let Some(scope) = host.scope(&part) {
-                host.undo(&scope, back);
-            }
-        }
-        true
+        let host = self.current().cloned();
+        undo_key(self, host.as_ref(), key, cx)
     }
+}
+
+/// Ctrl+Z takes back the last edit of the scope of the part with the focus
+/// in `root` (a window, or a dialog over it), Ctrl+Y or Ctrl+Shift+Z does it
+/// again, through that window's `host`; a part that takes the key itself
+/// (typing not yet an edit) has it first. False for any other key.
+pub(crate) fn undo_key(root: &mut dyn Element, host: Option<&Rc<ProgramHost>>, key: KeyInput, cx: &mut Cx) -> bool {
+    let command = key.control() || key.meta();
+    if !command || key.alt() {
+        return false;
+    }
+    let back = key.key == Key::Z && !key.shift();
+    let again = key.key == Key::Y || (key.key == Key::Z && key.shift());
+    if !back && !again {
+        return false;
+    }
+    let focused = cx.focused();
+    if let Some(e) = focused.and_then(|f| element::find_mut(root, f)) {
+        if e.on_key(key, cx) {
+            return true;
+        }
+    }
+    let part = focused.and_then(|f| part_of(root, f));
+    if let (Some(host), Some(part)) = (host, part) {
+        if let Some(scope) = host.scope(&part) {
+            host.undo(&scope, back);
+        }
+    }
+    true
+}
+
+/// The part `focused` is, or the first part it is in, under `root`: its name.
+fn part_of(root: &dyn Element, focused: ElementId) -> Option<String> {
+    let ids = element::chain(root, focused)?;
+    ids.iter().rev().filter_map(|id| element::find(root, *id)).find_map(|e| e.as_part().and_then(|p| p.base().spec.name().map(str::to_string)))
 }
 
 /// Keys the stack takes itself, for a host that wires them by hand: none beyond `window_key` yet.

@@ -33,6 +33,16 @@ With `stack rust desktop` Clarity writes a Cargo project without Tauri:
 
 Cargo downloads Skia's prebuilt library on the first build; nothing is built from Skia's source.
 
+### Custom parts on Clarity.UI
+
+A custom part written in Rust (`crate "parts/Gauge"`) is a control of Clarity.UI: it draws on the window's own surface, in its place, and takes the pointer, the wheel, keys and the focus as any part does. Its crate depends on `clarity-ui`; Clarity writes the crate's `src/clarity.rs` from the declaration, with the trait `GaugePart` that the crate's `Gauge` implements:
+
+- `draw(&self, painter, area)`: draws the part with Skia, in the theme's look (`painter.look`).
+- `show_value(value, cx)`, `show_<property>(value, cx)` and `on_<hear>(values, cx)`: what the window gives it, typed as the declaration says.
+- `click`, `key`, `text`, `wheel`, `pointer_pressed` and the other input methods: each does nothing unless the crate writes it.
+
+From any of them the part speaks to its window through `cx`: `cx.changed(value)` changes what it binds (one edit, which Ctrl+Z takes back, and `on change` runs), and `cx.reached(level)` and the other tells run the handler wired to them. The program registers each part by its name in the generated `src/parts.rs`. Declaring a part writes a starter crate that draws its value in a frame; Clarity never writes over it, only over `src/clarity.rs`. See [Custom parts](design.custom-parts.md).
+
 ## What is generated with the web screen
 
 With `stack rust webview desktop` Clarity writes a Cargo project into the output folder (`out` by default):

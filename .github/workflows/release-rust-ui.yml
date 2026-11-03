@@ -1,0 +1,79 @@
+name: Release Rust Clarity.UI
+
+# Push a runtimes/rust-ui/v* tag (e.g. `git tag runtimes/rust-ui/v0.1.0 && git
+# push origin runtimes/rust-ui/v0.1.0`) to publish the crate clarity-ui to
+# crates.io. The tag must name the version in runtimes/rust-ui/Cargo.toml: bump
+# that first, commit, then tag. clarity-ui names a clarity-runtime version, so
+# that release goes first (tag runtimes/rust/v*). Clarity's Rust generator
+# requires the version in the manifest, so generated projects follow the release.
+#
+# Publishes with the repository secret CARGO_REGISTRY_TOKEN (a crates.io API
+# token with publish-new and publish-update, limited to clarity-*). A version on
+# crates.io can never be replaced, only yanked.
+
+on:
+  push:
+    tags:
+      - "runtimes/rust-ui/v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish clarity-ui
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      # What Skia, the window and sound link on Linux.
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig1-dev libfreetype-dev libasound2-dev libxkbcommon-dev libwayland-dev
+
+      - name: The tag names the crate's version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#runtimes/rust-ui/v}"
+          crate="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "clarity-ui") | .version')"
+          echo "tag $tag, crate $crate"
+          if [ "$tag" != "$crate" ]; then
+            echo "::error::the tag says $tag but runtimes/rust-ui/Cargo.toml says $crate"
+            exit 1
+          fi
+
+      # The clarity-runtime it names must be on crates.io already.
+      - name: The runtime it needs is released
+        run: |
+          set -euo pipefail
+          needed="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "clarity-ui") | .dependencies[] | select(.name == "clarity-runtime") | .req' | tr -d '^=~ ')"
+          status="$(curl -s -o /dev/null -w '%{http_code}' -A 'Clarity release (github.com/petervdpas/Clarity)' "https://crates.io/api/v1/crates/clarity-runtime/$needed")"
+          if [ "$status" != "200" ]; then
+            echo "::error::clarity-runtime $needed is not on crates.io yet: release it first (tag runtimes/rust/v$needed)"
+            exit 1
+          fi
+
+      - name: Test the library
+        run: cargo test -p clarity-ui
+
+      # A version published already (by hand, or by an earlier run of this
+      # tag) is left as it is: crates.io never takes a version twice.
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#runtimes/rust-ui/v}"
+          status="$(curl -s -o /dev/null -w '%{http_code}' -A 'Clarity release (github.com/petervdpas/Clarity)' "https://crates.io/api/v1/crates/clarity-ui/$version")"
+          if [ "$status" = "200" ]; then
+            echo "::notice::clarity-ui $version is on crates.io already"
+            exit 0
+          fi
+          cargo publish -p clarity-ui

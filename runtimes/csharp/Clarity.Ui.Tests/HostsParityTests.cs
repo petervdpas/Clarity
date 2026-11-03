@@ -8,6 +8,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Clarity.Runtime;
+using SkiaSharp;
 
 namespace Clarity.Ui.Tests;
 
@@ -137,6 +138,9 @@ public class HostsParityTests
         const string droid = "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf";
         if (File.Exists(droid))
             Assert.True(Fonts.AddFallback(File.ReadAllBytes(droid)));
+        // Without any font for the letters (a system with no CJK font, nothing carried) there is nothing to fall back on.
+        if (SKFontManager.Default.MatchCharacter(char.ConvertToUtf32(Japanese, 0)) is null && !File.Exists(droid))
+            Assert.Skip("this system has no font with CJK letters");
         var fonts = new Fonts(ThemeLook.Clarity(dark: false));
         var inter = Fonts.Carried(bold: false);
         Assert.False(Fonts.Has(inter, char.ConvertToUtf32(Japanese, 0)));

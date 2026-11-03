@@ -3,6 +3,7 @@
 // input's error in the error color, else its own text or its input's help.
 
 using Clarity.Runtime;
+using SkiaSharp;
 
 namespace Clarity.Ui.Tests.Parts;
 
@@ -34,8 +35,9 @@ public class LabelPartTests
         Assert.True(required.Required);
         Assert.False(((LabelPart)parts[2]).Required);
         using var pixels = Shot.Of(screen, 800, 400);
-        Assert.True(TextEditorTests.Inked(pixels, required.Bounds, screen.Look.Color("error")));
-        Assert.False(TextEditorTests.Inked(pixels, parts[2].Bounds, screen.Look.Color("error")));
+        // The star is small, so its pixels are blends: what counts is ink nearer the error color than the label's own.
+        Assert.True(InkedNearer(pixels, required.Bounds, screen.Look.Color("error"), screen.Look.Color("muted"), screen.Look.Color("background")));
+        Assert.False(InkedNearer(pixels, parts[2].Bounds, screen.Look.Color("error"), screen.Look.Color("muted"), screen.Look.Color("background")));
     }
 
     [Fact]
@@ -65,5 +67,19 @@ public class LabelPartTests
             <Help at="1,2" span="4" for="email" />
             """, host);
         Assert.Equal("An address we can write to", ((HelpPart)parts[1]).Text);
+    }
+
+    /// <summary>Whether some pixel in <paramref name="box"/> is ink nearer <paramref name="color"/> than the text's own color and the background, whatever font draws it.</summary>
+    static bool InkedNearer(SKBitmap pixels, Box box, SKColor color, SKColor text, SKColor background)
+    {
+        static int Distance(SKColor a, SKColor b) => Math.Abs(a.Red - b.Red) + Math.Abs(a.Green - b.Green) + Math.Abs(a.Blue - b.Blue);
+        for (var y = (int)box.Y; y < (int)box.Bottom; y++)
+            for (var x = (int)box.X; x < (int)box.Right; x++)
+            {
+                var p = pixels.PixelAt(x, y);
+                if (Distance(p, background) > 60 && Distance(p, color) < Distance(p, text) && Distance(p, color) < Distance(p, background))
+                    return true;
+            }
+        return false;
     }
 }

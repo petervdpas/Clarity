@@ -24,8 +24,8 @@ name: Release C# runtime
 # stored. The pack job asks GitHub for an OIDC token (id-token: write),
 # NuGet/login trades it for a short-lived key, and dotnet nuget push uses it.
 # nuget.org needs a Trusted Publishing policy for this repository and this
-# file's name (release-csharp-runtime.yml), and the repository variable
-# NUGET_USER holds the nuget.org account's user name (not its e-mail). A
+# file's name (release-csharp-runtime.yml), and NUGET_USER (a repository
+# variable or secret) holds the nuget.org account's user name (not its e-mail). A
 # version on nuget.org can never be replaced, only unlisted.
 
 on:
@@ -206,10 +206,10 @@ jobs:
 
       - name: The nuget.org user is set
         env:
-          NUGET_USER: ${{ vars.NUGET_USER }}
+          NUGET_USER: ${{ vars.NUGET_USER || secrets.NUGET_USER }}
         run: |
           if [ -z "$NUGET_USER" ]; then
-            echo "::error::set the repository variable NUGET_USER to the nuget.org user name"
+            echo "::error::set NUGET_USER (a repository variable or secret) to the nuget.org user name"
             exit 1
           fi
 
@@ -218,7 +218,7 @@ jobs:
         id: login
         uses: NuGet/login@v1
         with:
-          user: ${{ vars.NUGET_USER }}
+          user: ${{ vars.NUGET_USER || secrets.NUGET_USER }}
 
       # A version published already (by hand, or by an earlier run of this
       # tag) is left as it is: nuget.org never takes a version twice.

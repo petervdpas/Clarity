@@ -7,15 +7,23 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use clarity_gen::tools::{Install, Probe, check, engine_tools, find_on_path, search_path, wasm_tools_install};
+use clarity_gen::clarity_ui::Library;
 use clarity_project::{Backend, Ui};
 
 /// A machine with these programs, each answering one command line.
 #[derive(Default)]
 struct Machine {
     programs: HashMap<&'static str, HashMap<String, &'static str>>,
+    /// Where Clarity.UI's library comes from; by default fetched on the first build.
+    library: Option<Library>,
 }
 
 impl Machine {
+    fn library(mut self, library: Library) -> Self {
+        self.library = Some(library);
+        self
+    }
+
     fn with(mut self, program: &'static str, args: &str, answer: &'static str) -> Self {
         self.programs.entry(program).or_default().insert(args.to_string(), answer);
         self
@@ -30,7 +38,14 @@ impl Probe for Machine {
     fn run(&self, program: &str, args: &[&str]) -> Option<String> {
         self.programs.get(program)?.get(&args.join(" ")).map(|s| s.to_string())
     }
+
+    fn clarity_ui(&self) -> Library {
+        self.library.clone().unwrap_or(Library::ToFetch { folder: PathBuf::from("/cache/clarity/clarity-ui/0.1.0/linux-x64"), version: "0.1.0".into(), rid: "linux-x64".into() })
+    }
 }
+
+/// What the tools say of Clarity.UI's library when it is fetched on the first build.
+const FETCHED_ON_FIRST_BUILD: &str = "Clarity.UI's library 0.1.0, fetched on first build";
 
 /// Rust draws with Clarity.UI only, on Skia, whose prebuilt library cargo
 /// downloads: it needs cargo and no WebKitGTK, Tauri CLI or Node; its web
@@ -79,7 +94,8 @@ fn go_needs_go_and_a_c_compiler_for_cgo() {
     assert!(go.missing[0].contains("https://go.dev/dl"), "{:?}", go.missing);
     assert!(go.missing.iter().any(|m| m.contains("cgo")), "{:?}", go.missing);
     let ready = check(Backend::Go, Ui::Clarity, &Machine::default().with("go", "version", "go version go1.25.7 linux/amd64\n").with("cc", "--version", "cc (Debian 14.2.0-19) 14.2.0\n"));
-    assert_eq!(ready.found, ["go version go1.25.7 linux/amd64", "cc (Debian 14.2.0-19) 14.2.0"]);
+    // Clarity.UI's library is no tool to install: Clarity fetches it on the first build.
+    assert_eq!(ready.found, ["go version go1.25.7 linux/amd64", "cc (Debian 14.2.0-19) 14.2.0", FETCHED_ON_FIRST_BUILD]);
     assert!(ready.missing.is_empty(), "{:?}", ready.missing);
     let needs = clarity_gen::tools::requirements(Backend::Go);
     assert!(needs.iter().any(|r| r.contains("CLARITY_UI")) && !needs.iter().any(|r| r.contains("WebKit")), "{needs:?}");
@@ -111,11 +127,11 @@ fn c_and_cpp_need_a_compiler_cmake_and_their_libraries() {
         ),
     );
     assert!(c.generated);
-    assert_eq!(c.found, ["clang version 19.1.7", "cmake version 3.31.6", "GNU Make 4.4.1"]);
+    assert_eq!(c.found, ["clang version 19.1.7", "cmake version 3.31.6", "GNU Make 4.4.1", FETCHED_ON_FIRST_BUILD]);
     assert!(c.missing.is_empty(), "{:?}", c.missing);
     let cpp = check(Backend::Cpp, Ui::Clarity, &with_libraries(Machine::default().with("g++", "--version", "g++ (Debian 14.2.0-19) 14.2.0\n").with("ninja", "--version", "1.12.1\n")));
     assert!(cpp.generated);
-    assert_eq!(cpp.found, ["g++ (Debian 14.2.0-19) 14.2.0", "ninja 1.12.1"]);
+    assert_eq!(cpp.found, ["g++ (Debian 14.2.0-19) 14.2.0", "ninja 1.12.1", FETCHED_ON_FIRST_BUILD]);
     assert_eq!(cpp.missing.len(), 1);
     assert!(cpp.missing[0].contains("CMake") && cpp.missing[0].contains("https://cmake.org/download"), "{:?}", cpp.missing);
     // C++ draws with Clarity.UI's library too: no WebKitGTK, no WebView2.
@@ -130,6 +146,33 @@ fn c_and_cpp_need_a_compiler_cmake_and_their_libraries() {
         let no_json = check(Backend::Cpp, Ui::Clarity, &Machine::default().with("g++", "--version", "g++ 14\n"));
         assert!(no_json.missing.iter().any(|m| m.contains("nlohmann-json3-dev")), "{:?}", no_json.missing);
     }
+}
+
+/// Clarity.UI's library for Go, C and C++: the folder CLARITY_UI names wins;
+/// else the one fetched before; it is missing only where no release fits
+/// the system, or the named folder lacks the header.
+#[test]
+fn clarity_ui_is_named_fetched_or_fetched_on_first_build() {
+    let ready = |m: Machine| m.with("go", "version", "go1.25\n").with("cc", "--version", "cc 14\n");
+    let dir = std::env::temp_dir().join(format!("clarity-tools-ui-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("include")).unwrap();
+    std::fs::write(dir.join("include/clarity_ui.h"), "").unwrap();
+    let named = check(Backend::Go, Ui::Clarity, &ready(Machine::default().library(Library::Named(dir.clone()))));
+    assert!(named.missing.is_empty(), "{:?}", named.missing);
+    assert_eq!(named.found[2], format!("Clarity.UI's library in {} (CLARITY_UI)", dir.display()));
+    let wrong = check(Backend::Go, Ui::Clarity, &ready(Machine::default().library(Library::Named(dir.join("nothing")))));
+    assert!(wrong.missing[0].contains("has no include/clarity_ui.h"), "{:?}", wrong.missing);
+    let bundled = check(Backend::Go, Ui::Clarity, &ready(Machine::default().library(Library::Bundled(dir.clone()))));
+    assert_eq!(bundled.found[2], format!("Clarity.UI's library {}, carried by Clarity", clarity_gen::clarity_ui::version()));
+    let fetched = check(Backend::Go, Ui::Clarity, &ready(Machine::default().library(Library::Fetched(dir.clone()))));
+    assert_eq!(fetched.found[2], format!("Clarity.UI's library {}", clarity_gen::clarity_ui::version()));
+    for backend in [Backend::Go, Backend::C, Backend::Cpp] {
+        let none = check(backend, Ui::Clarity, &Machine::default().library(Library::Unavailable));
+        assert!(none.missing.iter().any(|m| m == clarity_gen::tools::CLARITY_UI_LIBRARY), "{:?}", none.missing);
+    }
+    // Rust and C# bring the library as a package.
+    assert!(!check(Backend::Rust, Ui::Clarity, &Machine::default().library(Library::Unavailable)).missing.iter().any(|m| m.contains("CLARITY_UI")));
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

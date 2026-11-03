@@ -95,6 +95,10 @@ fn writes_a_cmake_project_with_the_runtime_copied_in() {
     assert!(files.iter().any(|f| f.path == "clarity-runtime/ui/ui.hpp"));
     has(file(&files, "CMakeLists.txt"), "target_link_libraries(shop PRIVATE clarity clarity_desktop)");
     has(file(&files, "CMakeLists.txt"), "clarity_ui_files(shop ${CMAKE_CURRENT_SOURCE_DIR}/ui)\nclarity_ui_beside(shop)\n");
+    // Without CLARITY_UI, CMake fetches the version the project is generated for from its release.
+    has(file(&files, "CMakeLists.txt"), &format!("set(CLARITY_UI_VERSION {})\n\ninclude(clarity-runtime/clarity.cmake)", clarity_gen::clarity_ui::version()));
+    assert_eq!(file(&files, "clarity-runtime/clarity_ui.cmake"), include_str!("../../../runtimes/cpp/clarity_ui.cmake"));
+    has(file(&files, "README.md"), &format!("`clarity-ui-{}-<system>.tar.gz`", clarity_gen::clarity_ui::version()));
     assert!(!files.iter().any(|f| f.path.contains("webview") || f.path == "ui/index.html"), "no webview and no web page");
     assert!(files.iter().any(|f| f.path == "README.md"));
     // The runtime's own tests stay behind.

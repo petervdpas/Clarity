@@ -22,6 +22,8 @@ serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2", features = [] }
 notify = "8"
+# Fetches Clarity.UI's library for Go, C and C++ builds (build.rs), as clarity-agent calls its models.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls"] }
 base64 = "0.22"
 ts-rs.workspace = true
 tauri-plugin-dialog = "2"

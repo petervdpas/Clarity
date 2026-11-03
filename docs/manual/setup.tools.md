@@ -4,6 +4,8 @@ What to install for each stack on Windows, Linux and macOS, where to get it, and
 
 Clarity designs, previews and generates without any of these. Run and Build need the tools of the project's stack; Clarity uses them and does not bring them along. **Clarity settings**, **Environment** says which stacks are ready, and each missing tool there has a **How to install** button that opens this page at its part. The links below open in your browser.
 
+The Clarity.UI library that Go, C and C++ desktop programs draw with is not installed by hand: Clarity's installer carries it, and a Clarity without it fetches it from its GitHub release on the first build, into your cache folder, on every system. To use one of your own, set the environment variable `CLARITY_UI` to its folder (`include/clarity_ui.h` and `lib/`).
+
 ## Windows
 
 ### Rust on Windows

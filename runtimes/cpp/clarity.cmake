@@ -29,11 +29,20 @@ endif()
 # runtime copy has it, so a command-line program and a web server build
 # without it. Clarity.UI is one library (libclarity_ui.so, clarity_ui.dll,
 # libclarity_ui.dylib) with its header, in the folder CLARITY_UI names:
-# include/clarity_ui.h and lib/ with the library for this system. The
+# include/clarity_ui.h and lib/ with the library for this system. Without
+# it, a generated project (which names CLARITY_UI_VERSION) fetches the
+# library from its release into the build folder (clarity_ui.cmake). The
 # program finds the shared library beside it, where clarity_ui_beside
 # copies it after each build.
 if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/desktop.cpp)
   set(CLARITY_UI "$ENV{CLARITY_UI}" CACHE PATH "The folder of Clarity.UI: include/clarity_ui.h and lib/ with the library")
+  if(NOT CLARITY_UI AND CLARITY_UI_VERSION)
+    include(${CMAKE_CURRENT_LIST_DIR}/clarity_ui.cmake)
+    clarity_ui_rid(CLARITY_UI_RID "${CMAKE_SYSTEM_NAME}" "${CMAKE_SYSTEM_PROCESSOR}")
+    if(CLARITY_UI_RID)
+      clarity_ui_fetch(CLARITY_UI ${CLARITY_UI_RELEASES} ${CLARITY_UI_VERSION} ${CLARITY_UI_RID} ${CMAKE_BINARY_DIR}/clarity-ui)
+    endif()
+  endif()
   if(NOT CLARITY_UI OR NOT EXISTS ${CLARITY_UI}/include/clarity_ui.h)
     message(FATAL_ERROR "Clarity.UI is not found: set CLARITY_UI (the environment variable, or -DCLARITY_UI=...) to its folder, which holds include/clarity_ui.h and lib/ with the library")
   endif()

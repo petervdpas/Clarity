@@ -88,6 +88,8 @@ fn a_go_project_says_what_it_needs_and_how_to_build_it() {
     // Clarity.UI's library comes from the folder CLARITY_UI names, through cgo.
     has(&text, "    export CGO_CFLAGS=\"-I$CLARITY_UI/include\"\n");
     has(&text, "ship it beside the program");
+    // cgo downloads nothing: the README says where the release's archive is.
+    has(&text, &format!("`clarity-ui-{}-<system>.tar.gz`, from the release https://github.com/petervdpas/Clarity/releases/tag/runtimes/rust-ui-ffi/v{}", clarity_gen::clarity_ui::version(), clarity_gen::clarity_ui::version()));
     has(&text, "    go build -trimpath -ldflags=\"-s -w\" -o bin/shop .\n");
     has(&text, "    go run .\n");
     // The runtime comes as a Go module, or from Clarity's repository while working on it.

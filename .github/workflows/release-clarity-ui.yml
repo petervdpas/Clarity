@@ -1,0 +1,155 @@
+name: Release Clarity.UI library
+
+# Push a runtimes/rust-ui-ffi/v* tag (e.g. `git tag runtimes/rust-ui-ffi/v0.1.0
+# && git push origin runtimes/rust-ui-ffi/v0.1.0`) to publish the Clarity.UI
+# library for Go, C and C++ programs: one archive per system on a GitHub
+# release of that tag. The tag must name the version in
+# runtimes/rust-ui-ffi/Cargo.toml: bump that first, commit, then tag.
+#
+# Each archive is the folder a build's CLARITY_UI names (DESIGN 7.9):
+#   include/clarity_ui.h
+#   lib/libclarity_ui.so | libclarity_ui.dylib | clarity_ui.dll and clarity_ui.dll.lib
+# named clarity-ui-<version>-<rid>.tar.gz (Windows has tar too), for linux-x64,
+# linux-arm64, win-x64, win-arm64, osx-x64 and osx-arm64. The libraries are
+# built as the C# packages' are (release-csharp-runtime.yml): on each system's
+# own runner, with skia-safe's prebuilt Skia; Linux on Ubuntu 22.04, so they
+# ask no newer glibc than 2.35. C# carries the same library in its NuGet
+# package and does not use these archives.
+
+on:
+  push:
+    tags:
+      - "runtimes/rust-ui-ffi/v*"
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Library (${{ matrix.rid }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - rid: linux-x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            files: libclarity_ui.so
+          - rid: linux-arm64
+            os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            files: libclarity_ui.so
+          - rid: win-x64
+            os: windows-2025
+            target: x86_64-pc-windows-msvc
+            files: clarity_ui.dll clarity_ui.dll.lib
+          - rid: win-arm64
+            os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            files: clarity_ui.dll clarity_ui.dll.lib
+          - rid: osx-x64
+            os: macos-15
+            target: x86_64-apple-darwin
+            files: libclarity_ui.dylib
+          - rid: osx-arm64
+            os: macos-15
+            target: aarch64-apple-darwin
+            files: libclarity_ui.dylib
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: The tag names the library's version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#runtimes/rust-ui-ffi/v}"
+          crate="$(sed -n 's/^version = "\(.*\)"/\1/p' runtimes/rust-ui-ffi/Cargo.toml | head -1)"
+          echo "tag $tag, library $crate"
+          if [ "$tag" != "$crate" ]; then
+            echo "::error::the tag says $tag but runtimes/rust-ui-ffi/Cargo.toml says $crate"
+            exit 1
+          fi
+
+      # Skia's text needs fontconfig and freetype, the sound part ALSA.
+      - name: Install system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libfontconfig1-dev libfreetype-dev libasound2-dev
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build the library
+        shell: bash
+        run: cargo build --release -p clarity-ui-ffi --target ${{ matrix.target }}
+
+      - name: Pack the archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#runtimes/rust-ui-ffi/v}"
+          name="clarity-ui-$version-${{ matrix.rid }}"
+          mkdir -p "out/$name/include" "out/$name/lib"
+          cp runtimes/rust-ui-ffi/include/clarity_ui.h "out/$name/include/"
+          for f in ${{ matrix.files }}; do
+            cp "target/${{ matrix.target }}/release/$f" "out/$name/lib/"
+          done
+          cp LICENSE "out/$name/"
+          cd out
+          tar czf "$name.tar.gz" "$name"
+          ls -l
+
+      - name: Upload the archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: archive-${{ matrix.rid }}
+          path: out/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish the release
+    needs: [native]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download the archives
+        uses: actions/download-artifact@v8
+        with:
+          path: archives
+          pattern: archive-*
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          set -euo pipefail
+          cd archives
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      # A release that exists already (an earlier run of this tag) gets the
+      # archives again, replacing those of the same name.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#runtimes/rust-ui-ffi/v}"
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" archives/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" archives/* \
+              --title "Clarity.UI library $version" \
+              --notes "The Clarity.UI library and its C header for Go, C and C++ programs, one archive per system. Unpack it and point the environment variable CLARITY_UI at the folder."
+          fi

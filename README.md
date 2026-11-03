@@ -52,7 +52,7 @@ Generated applications get their runtime as a package: Rust from crates.io (`cla
 - On Linux: the Tauri system libraries (WebKitGTK 4.1, GTK 3, libsoup 3)
 - For C applications: CMake 3.25 or newer, a C17 compiler, pkg-config, and the SQLite 3 development package (`libsqlite3-dev` on Debian)
 - For C++ applications: CMake 3.25 or newer, a C++20 compiler, pkg-config, and the SQLite 3 and nlohmann-json development packages (`libsqlite3-dev nlohmann-json3-dev` on Debian)
-- For Go, C and C++ applications with a window: the Clarity.UI library (`libclarity_ui`, built from `runtimes/rust-ui-ffi`) and its header, in the folder the environment variable `CLARITY_UI` names (`include/` and `lib/`)
+- For Go, C and C++ applications with a window: the Clarity.UI library (`libclarity_ui`, built from `runtimes/rust-ui-ffi`) and its header. Clarity's installer carries it; a Clarity built from source fetches it from its GitHub release on the first build (as a generated C or C++ project's CMake does, built without Clarity); the environment variable `CLARITY_UI` names a folder of your own instead (`include/` and `lib/`)
 - For C# applications: the .NET 10 SDK; for one with the web target (`stack csharp web`), also .NET's WebAssembly tools, which link Clarity.UI's drawing (Skia) into the browser program: `dotnet workload install wasm-tools` (with `sudo` where .NET is installed for the whole system, as on Linux in `/usr/share/dotnet`)
 
 ### Setting up the tools

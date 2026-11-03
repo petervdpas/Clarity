@@ -35,10 +35,19 @@ endif()
 # library comes from the folder CLARITY_UI names (by default the environment
 # variable of that name): its include/clarity_ui.h, and in lib/ the library
 # for this system (libclarity_ui.so, libclarity_ui.dylib, or clarity_ui.dll
-# with its import library). The program finds it beside itself: every
+# with its import library). Without it, a generated project (which names
+# CLARITY_UI_VERSION) fetches the library from its release into the build
+# folder (clarity_ui.cmake). The program finds it beside itself: every
 # program that links it gets a copy next to it (clarity_beside below).
 if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/desktop/desktop.c)
   set(CLARITY_UI "$ENV{CLARITY_UI}" CACHE PATH "The folder of Clarity.UI's library: include/clarity_ui.h and lib/")
+  if(NOT CLARITY_UI AND CLARITY_UI_VERSION)
+    include(${CMAKE_CURRENT_LIST_DIR}/clarity_ui.cmake)
+    clarity_ui_rid(CLARITY_UI_RID "${CMAKE_SYSTEM_NAME}" "${CMAKE_SYSTEM_PROCESSOR}")
+    if(CLARITY_UI_RID)
+      clarity_ui_fetch(CLARITY_UI ${CLARITY_UI_RELEASES} ${CLARITY_UI_VERSION} ${CLARITY_UI_RID} ${CMAKE_BINARY_DIR}/clarity-ui)
+    endif()
+  endif()
   if(NOT CLARITY_UI OR NOT EXISTS "${CLARITY_UI}/include/clarity_ui.h")
     message(FATAL_ERROR "Clarity.UI's library is not found: set CLARITY_UI (the environment variable, or -DCLARITY_UI=...) to the folder with include/clarity_ui.h and lib/ (now '${CLARITY_UI}')")
   endif()

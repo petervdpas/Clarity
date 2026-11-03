@@ -12,7 +12,10 @@ name: Release Clarity
 # fire this.
 #
 # Tauri builds its own installers: NSIS and MSI on Windows, .deb and .rpm on
-# Linux. Each Linux package is built inside a container of the distribution
+# Linux. Each carries Clarity.UI's library for its own system as a resource
+# (clarity-ui/, staged by .github/scripts/stage-clarity-ui.sh and added by
+# app/src-tauri/tauri.clarity-ui.conf.json), which Go, C and C++ builds use.
+# Each Linux package is built inside a container of the distribution
 # it is for (.github/scripts/build-linux.sh), so it links that distribution's
 # glibc and WebKitGTK:
 #   Debian 12 bookworm, amd64     -> Debian 12 and 13, Ubuntu 24.04 and newer
@@ -122,9 +125,14 @@ jobs:
           npm version $ver --no-git-tag-version --allow-same-version
           Write-Host "version = $ver"
 
+      # The installer carries Clarity.UI's library for Go, C and C++ builds (DESIGN 7.9).
+      - name: Build Clarity.UI's library
+        shell: bash
+        run: bash .github/scripts/stage-clarity-ui.sh
+
       - name: Build installers
         working-directory: app
-        run: npm run tauri build -- --bundles nsis,msi
+        run: npm run tauri build -- --bundles nsis,msi --config src-tauri/tauri.clarity-ui.conf.json
 
       # The workspace's target folder is at the repository's root.
       - name: Collect artifacts

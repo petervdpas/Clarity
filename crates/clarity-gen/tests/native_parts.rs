@@ -459,3 +459,14 @@ fn a_program_served_to_a_browser_alone_has_no_native_parts() {
         assert!(clarity_gen::generate(&project, &both).is_ok(), "{desktop} with a desktop window");
     }
 }
+
+#[test]
+fn a_c_or_cpp_part_built_on_its_own_finds_the_library_header() {
+    let p = load_keyed([("game.clarity", GAME)], &[], "en");
+    let part = &p.files[0].parts[0];
+    for starter in [parts::c_starter(part), parts::cpp_starter(part)] {
+        let cmake = starter.iter().find(|(path, _)| path.ends_with("CMakeLists.txt")).map(|(_, text)| text).expect("a CMakeLists.txt");
+        assert!(cmake.contains("if(NOT TARGET clarity_ui AND DEFINED ENV{CLARITY_UI})"), "{cmake}");
+        assert!(cmake.contains("\"$ENV{CLARITY_UI}/include\""), "{cmake}");
+    }
+}

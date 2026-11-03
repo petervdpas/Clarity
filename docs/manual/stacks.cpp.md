@@ -47,7 +47,7 @@ A project with an [engine](code.engines.md) also gets the engine host and wasm3,
 - make or Ninja, to build what CMake writes
 - The SQLite development files (Debian and Ubuntu: `libsqlite3-dev`)
 - nlohmann-json (Debian and Ubuntu: `nlohmann-json3-dev`; elsewhere https://github.com/nlohmann/json)
-- Clarity.UI's library, for a desktop program: a folder with `include/clarity_ui.h` and, in `lib/`, the library for the system, named by the environment variable `CLARITY_UI` (see below)
+- Clarity.UI's library, for a desktop program: carried by Clarity (or fetched on the first build), or a folder with `include/clarity_ui.h` and, in `lib/`, the library for the system, named by the environment variable `CLARITY_UI` (see below)
 - For a project whose code calls web APIs, the libcurl development files (Debian and Ubuntu: `libcurl4-openssl-dev`)
 
 CMake finds SQLite and nlohmann_json itself. Clarity checks for all of these: run `clarity tools`, or look at Build tools on the Project tab.
@@ -56,7 +56,7 @@ Step by step, with the commands for Windows, Linux and macOS: [Setting up the bu
 
 ## Clarity.UI's library
 
-Clarity.UI is one library with a C interface (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` with its import library on Windows) and its header `clarity_ui.h`. CMake reads the folder from the environment variable `CLARITY_UI`, or from `cmake -DCLARITY_UI=<folder>`: `include/clarity_ui.h` and `lib/` with the library. In Clarity's repository it is built with `cargo build --release -p clarity-ui-ffi` (into `target/release`, the header in `runtimes/rust-ui-ffi/include`). Each build copies the library next to the program, where the program finds it when it runs; copy it along with the program.
+Clarity.UI is one library with a C interface (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` with its import library on Windows) and its header `clarity_ui.h`. CMake reads the folder from the environment variable `CLARITY_UI`, or from `cmake -DCLARITY_UI=<folder>`: `include/clarity_ui.h` and `lib/` with the library. When `CLARITY_UI` is not set, Clarity's build names the library its installer carries (a Clarity without it fetches the library once per version into your cache folder); a build without Clarity downloads `clarity-ui-<version>-<system>.tar.gz` from the release `runtimes/rust-ui-ffi/v<version>` on GitHub (https://github.com/petervdpas/Clarity/releases) itself, with CMake's own download checked against the release's `SHA256SUMS`, and unpacks it into the build folder (`clarity-runtime/clarity_ui.cmake`; the generated `CMakeLists.txt` names the version). In Clarity's repository it is built with `cargo build --release -p clarity-ui-ffi` (into `target/release`, the header in `runtimes/rust-ui-ffi/include`). Each build copies the library next to the program, where the program finds it when it runs; copy it along with the program.
 
 ## Build and run
 

@@ -217,7 +217,7 @@ pub fn out_files(project: &Project) -> Vec<OutFile> {
 pub fn starter(part: &PartDecl) -> Vec<(String, String)> {
     let n = &part.name.name;
     let cmake = format!(
-        "# The library of custom part {n}, a kind of part of Clarity.UI. Clarity builds\n# it into the program; the target keeps the part's name.\ncmake_minimum_required(VERSION 3.20)\nproject({n} LANGUAGES C)\n\nset(CMAKE_C_STANDARD 17)\nadd_library({n} STATIC {n}.c)\ntarget_include_directories({n} PUBLIC ${{CMAKE_CURRENT_SOURCE_DIR}})\n"
+        "# The library of custom part {n}, a kind of part of Clarity.UI. Clarity builds\n# it into the program; the target keeps the part's name.\ncmake_minimum_required(VERSION 3.20)\nproject({n} LANGUAGES C)\n\nset(CMAKE_C_STANDARD 17)\nadd_library({n} STATIC {n}.c)\ntarget_include_directories({n} PUBLIC ${{CMAKE_CURRENT_SOURCE_DIR}})\n# Built on its own (Build in the part's view), clarity_ui.h comes from the folder CLARITY_UI names.\nif(NOT TARGET clarity_ui AND DEFINED ENV{{CLARITY_UI}})\n    target_include_directories({n} PUBLIC \"$ENV{{CLARITY_UI}}/include\")\nendif()\n"
     );
     let field = |name: &str, k: Kind| match k {
         Kind::Integer => format!("    int64_t {name};"),

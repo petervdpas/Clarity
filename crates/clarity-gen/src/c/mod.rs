@@ -176,7 +176,9 @@ const SERVICE_FILES: [(&str, &str); 4] = [
 ];
 
 /// The thin C layer on Clarity.UI's library (DESIGN 7.9): the desktop target.
-const DESKTOP_FILES: [(&str, &str); 2] = [
+const DESKTOP_FILES: [(&str, &str); 3] = [
+    // Fetches the library from its release when CLARITY_UI names no folder.
+    ("clarity_ui.cmake", include_str!("../../../../runtimes/c/clarity_ui.cmake")),
     ("desktop/desktop.c", include_str!("../../../../runtimes/c/desktop/desktop.c")),
     ("desktop/desktop.h", include_str!("../../../../runtimes/c/desktop/desktop.h")),
 ];
@@ -486,14 +488,15 @@ project({program} LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-
+{library}
 include(clarity-runtime/clarity.cmake)
 
 file(GLOB PROGRAM_SOURCES CONFIGURE_DEPENDS src/*.c src/modules/*.c)
 add_executable({program} ${{PROGRAM_SOURCES}})
 target_include_directories({program} PRIVATE src)
 target_link_libraries({program} PRIVATE clarity {shell}{engine}{http})
-"
+",
+        library = if links.desktop { crate::clarity_ui::cmake_version_lines() } else { String::new() }
     );
     if links.desktop {
         // The files Clarity.UI reads, by kind, in the order the project gives them.

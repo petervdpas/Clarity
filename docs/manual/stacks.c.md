@@ -41,7 +41,7 @@ C has no package registry, so Clarity copies its runtime into every project as `
 
 ## Clarity.UI's library
 
-The desktop program draws with Clarity.UI's library, `clarity_ui`. The build takes it from the folder the environment variable `CLARITY_UI` names (or `cmake -DCLARITY_UI=<folder>`): `include/clarity_ui.h`, and in `lib/` the library for the system (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` with its import library on Windows). Each build copies the library next to the program, where the program finds it; ship the two together. With `CLARITY_HEADLESS` set the program runs without a window, driven by steps on its standard input.
+The desktop program draws with Clarity.UI's library, `clarity_ui`. The build takes it from the folder the environment variable `CLARITY_UI` names (or `cmake -DCLARITY_UI=<folder>`): `include/clarity_ui.h`, and in `lib/` the library for the system (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` with its import library on Windows). When `CLARITY_UI` is not set, Clarity's build names the library its installer carries (a Clarity without it fetches the library once per version into your cache folder); a build without Clarity downloads `clarity-ui-<version>-<system>.tar.gz` from the release `runtimes/rust-ui-ffi/v<version>` on GitHub (https://github.com/petervdpas/Clarity/releases) itself, with CMake's own download checked against the release's `SHA256SUMS`, and unpacks it into the build folder (`clarity-runtime/clarity_ui.cmake`; the generated `CMakeLists.txt` names the version). Each build copies the library next to the program, where the program finds it; ship the two together. With `CLARITY_HEADLESS` set the program runs without a window, driven by steps on its standard input.
 
 A project with an [engine](code.engines.md) also gets the engine host and wasm3, which runs engines, in `clarity-runtime/`.
 
@@ -51,7 +51,7 @@ A project with an [engine](code.engines.md) also gets the engine host and wasm3,
 - CMake 3.25 or newer, from https://cmake.org/download
 - make or Ninja, to build what CMake writes
 - The SQLite development files (Debian and Ubuntu: `libsqlite3-dev`)
-- For a desktop program, Clarity.UI's library, in the folder `CLARITY_UI` names (above)
+- For a desktop program, Clarity.UI's library: carried by Clarity (or fetched on the first build), or in the folder `CLARITY_UI` names (above)
 - For a project whose code calls web APIs, the libcurl development files (Debian and Ubuntu: `libcurl4-openssl-dev`)
 
 CMake finds SQLite itself. Clarity checks for all of these: run `clarity tools`, or look at Build tools on the Project tab.

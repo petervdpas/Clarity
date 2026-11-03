@@ -20,14 +20,16 @@ if command -v apt-get >/dev/null; then
     apt-get install -y --no-install-recommends \
         ca-certificates curl file git jq build-essential pkg-config \
         libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
-        librsvg2-dev libxdo-dev libssl-dev
+        librsvg2-dev libxdo-dev libssl-dev \
+        libfontconfig1-dev libfreetype-dev libasound2-dev
     curl -fsSL "https://deb.nodesource.com/setup_${NODE_VERSION}.x" | bash -
     apt-get install -y --no-install-recommends nodejs
 else
     dnf -y install \
         curl file git jq gcc gcc-c++ make pkgconf-pkg-config \
         webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel \
-        librsvg2-devel libxdo-devel openssl-devel
+        librsvg2-devel libxdo-devel openssl-devel \
+        fontconfig-devel freetype-devel alsa-lib-devel
     curl -fsSL "https://rpm.nodesource.com/setup_${NODE_VERSION}.x" | bash -
     dnf -y install nodejs
 fi
@@ -44,9 +46,13 @@ if [ -n "${VERSION:-}" ]; then
     echo "version = $VERSION"
 fi
 
+# The package carries Clarity.UI's library for Go, C and C++ builds (DESIGN 7.9);
+# Skia's text needs fontconfig and freetype, the sound part ALSA.
+bash .github/scripts/stage-clarity-ui.sh
+
 cd app
 npm ci
-npm run tauri build -- --bundles "$format"
+npm run tauri build -- --bundles "$format" --config src-tauri/tauri.clarity-ui.conf.json
 cd /src
 
 # The workspace's target folder is at the repository's root.

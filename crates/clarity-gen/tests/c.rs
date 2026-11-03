@@ -186,6 +186,10 @@ fn the_desktop_carries_its_files_for_clarity_ui() {
     has(main, "    int status = clarity_desktop_start(&(ClarityDesktopOptions){options, &clarity_carried, program_facts(), NULL, false, NULL});\n");
     // The library comes from the folder CLARITY_UI names, which the README says.
     has(file(&files, "README.md"), "CLARITY_UI");
+    // Without it, CMake fetches the version the project is generated for from its release.
+    has(cmake, &format!("set(CLARITY_UI_VERSION {})\n\ninclude(clarity-runtime/clarity.cmake)", clarity_gen::clarity_ui::version()));
+    assert_eq!(file(&files, "clarity-runtime/clarity_ui.cmake"), include_str!("../../../runtimes/c/clarity_ui.cmake"));
+    has(file(&files, "README.md"), &format!("`clarity-ui-{}-<system>.tar.gz`", clarity_gen::clarity_ui::version()));
 }
 
 /// The web target's page carries its script and styles.

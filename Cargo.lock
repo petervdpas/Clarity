@@ -1058,8 +1058,11 @@ dependencies = [
  "clarity-runtime",
  "clarity-spec",
  "clarity-wasm",
+ "flate2",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "tar",
 ]
 
 [[package]]
@@ -1073,6 +1076,7 @@ dependencies = [
  "clarity-spec",
  "clarity-vault",
  "notify",
+ "reqwest",
  "serde",
  "serde_json",
  "sysinfo",

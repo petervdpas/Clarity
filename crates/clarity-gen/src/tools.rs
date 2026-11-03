@@ -22,6 +22,10 @@ pub trait Probe {
     fn says(&self, program: &str, args: &[&str]) -> Option<String> {
         self.run(program, args)
     }
+    /// Where a Go, C or C++ desktop build takes Clarity.UI's library from.
+    fn clarity_ui(&self) -> crate::clarity_ui::Library {
+        crate::clarity_ui::library()
+    }
 }
 
 /// The machine Clarity runs on.
@@ -375,7 +379,7 @@ const NLOHMANN: &str = "nlohmann-json (Debian and Ubuntu: nlohmann-json3-dev; Wi
 /// HTTP calls from C and C++ code (DESIGN 5.23) go through libcurl.
 pub const LIBCURL: &str = "the libcurl development files, as the code calls web APIs (Debian and Ubuntu: libcurl4-openssl-dev; Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-curl; macOS brings it)";
 /// The library C, C++ and Go desktop programs draw with (DESIGN 7.9).
-pub const CLARITY_UI_LIBRARY: &str = "Clarity.UI's library, for a desktop program: a folder with include/clarity_ui.h and, in lib/, the library for the system, named by the environment variable CLARITY_UI";
+pub const CLARITY_UI_LIBRARY: &str = "Clarity.UI's library, for a desktop program: Clarity carries it, or its build fetches it from its release on GitHub (clarity-ui-<version>-<system>.tar.gz), or the environment variable CLARITY_UI names a folder with include/clarity_ui.h and, in lib/, the library for the system";
 
 fn dotnet() -> String {
     format!("the .NET {} SDK, from https://dotnet.microsoft.com/download", dotnet_major())
@@ -453,6 +457,7 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
                 Some(version) => found.push(version),
                 None => missing.push((CGO.to_string(), NATIVE_GUIDE)),
             }
+            clarity_ui_library(probe, &mut found, &mut missing);
         }
         Backend::C | Backend::Cpp => {
             let compilers = if backend == Backend::C { ["cc", "gcc", "clang"] } else { ["c++", "g++", "clang++"] };
@@ -485,6 +490,7 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
                     }
                 }
             }
+            clarity_ui_library(probe, &mut found, &mut missing);
         }
     }
     StackTools {
@@ -497,6 +503,22 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
         web_found,
         web_missing,
         web_install,
+    }
+}
+
+/// Clarity.UI's library for a Go, C or C++ desktop program (DESIGN 7.9):
+/// the folder CLARITY_UI names, else the one the installed Clarity carries,
+/// else the one Clarity fetched or fetches on the first build; missing only
+/// where none of these works.
+fn clarity_ui_library(probe: &dyn Probe, found: &mut Vec<String>, missing: &mut Vec<(String, Guide)>) {
+    use crate::clarity_ui::Library;
+    match probe.clarity_ui() {
+        Library::Named(folder) if folder.join("include").join("clarity_ui.h").is_file() => found.push(format!("Clarity.UI's library in {} (CLARITY_UI)", folder.display())),
+        Library::Named(folder) => missing.push((format!("Clarity.UI's library: the folder CLARITY_UI names ({}) has no include/clarity_ui.h", folder.display()), NATIVE_GUIDE)),
+        Library::Bundled(_) => found.push(format!("Clarity.UI's library {}, carried by Clarity", crate::clarity_ui::version())),
+        Library::Fetched(_) => found.push(format!("Clarity.UI's library {}", crate::clarity_ui::version())),
+        Library::ToFetch { version, .. } => found.push(format!("Clarity.UI's library {version}, fetched on first build")),
+        Library::Unavailable => missing.push((CLARITY_UI_LIBRARY.to_string(), NATIVE_GUIDE)),
     }
 }
 

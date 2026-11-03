@@ -1,0 +1,291 @@
+//! Clarity.UI's library for Go, C and C++ programs (DESIGN 7.9). Their
+//! builds take it from the folder the environment variable `CLARITY_UI`
+//! names: `include/clarity_ui.h` and, in `lib/`, the library for the
+//! system. In order: the folder the person names; the one the installed
+//! Clarity carries (its installer bundles the library for its own system);
+//! else Clarity fetches the archive of its own library version from the
+//! GitHub release the workflow release-clarity-ui.yml publishes, checks it
+//! against the release's SHA256SUMS and unpacks it into the person's cache
+//! folder, once per version. The decisions are plain functions here; the download itself is
+//! the caller's (`provide` takes it as `get`).
+
+use std::ffi::OsStr;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+
+/// Where the releases' files are downloaded from: `<RELEASES>/<tag>/<file>`.
+pub const RELEASES: &str = "https://github.com/petervdpas/Clarity/releases/download";
+
+/// The library's crate, whose version names the release.
+const FFI_MANIFEST: &str = include_str!("../../../runtimes/rust-ui-ffi/Cargo.toml");
+
+/// The library version this Clarity was built with: the ffi crate's.
+pub fn version() -> &'static str {
+    version_in(FFI_MANIFEST).unwrap_or("0.0.0")
+}
+
+/// The version of the `[package]` in a Cargo.toml.
+pub fn version_in(manifest: &str) -> Option<&str> {
+    let mut package = false;
+    for line in manifest.lines().map(str::trim) {
+        if line.starts_with('[') {
+            package = line == "[package]";
+        } else if package && let Some((key, value)) = line.split_once('=')
+            && key.trim() == "version"
+        {
+            return Some(value.trim().trim_matches('"'));
+        }
+    }
+    None
+}
+
+/// The release's name for system `os` on `arch` (std::env::consts): `linux-x64`,
+/// `win-arm64`, `osx-arm64`; none for a system the release has no archive for.
+pub fn rid(os: &str, arch: &str) -> Option<String> {
+    let os = match os {
+        "linux" => "linux",
+        "windows" => "win",
+        "macos" => "osx",
+        _ => return None,
+    };
+    let arch = match arch {
+        "x86_64" => "x64",
+        "aarch64" => "arm64",
+        _ => return None,
+    };
+    Some(format!("{os}-{arch}"))
+}
+
+/// The tag of the library's release: `runtimes/rust-ui-ffi/v0.1.0`.
+pub fn tag(version: &str) -> String {
+    format!("runtimes/rust-ui-ffi/v{version}")
+}
+
+/// The folder an archive holds: `clarity-ui-0.1.0-linux-x64`.
+pub fn folder_name(version: &str, rid: &str) -> String {
+    format!("clarity-ui-{version}-{rid}")
+}
+
+/// The archive of one system: `clarity-ui-0.1.0-linux-x64.tar.gz`.
+pub fn archive_name(version: &str, rid: &str) -> String {
+    format!("{}.tar.gz", folder_name(version, rid))
+}
+
+/// Where the archive is, under `base` (RELEASES): GitHub keeps the tag's
+/// slashes in the path.
+pub fn archive_url(base: &str, version: &str, rid: &str) -> String {
+    format!("{base}/{}/{}", tag(version), archive_name(version, rid))
+}
+
+/// The release's page, where people download an archive by hand.
+pub fn release_page(version: &str) -> String {
+    format!("https://github.com/petervdpas/Clarity/releases/tag/{}", tag(version))
+}
+
+/// Where the release's checksums are, one line per archive.
+pub fn sums_url(base: &str, version: &str) -> String {
+    format!("{base}/{}/SHA256SUMS", tag(version))
+}
+
+/// The person's cache folder on system `os`, with `env` giving the
+/// environment: %LOCALAPPDATA% on Windows, ~/Library/Caches on macOS,
+/// $XDG_CACHE_HOME or ~/.cache elsewhere.
+pub fn cache_dir_in(os: &str, env: impl Fn(&str) -> Option<String>) -> Option<PathBuf> {
+    let set = |name: &str| env(name).filter(|v| !v.is_empty());
+    match os {
+        "windows" => set("LOCALAPPDATA").map(PathBuf::from),
+        "macos" => set("HOME").map(|home| PathBuf::from(home).join("Library").join("Caches")),
+        _ => set("XDG_CACHE_HOME").map(PathBuf::from).or_else(|| set("HOME").map(|home| PathBuf::from(home).join(".cache"))),
+    }
+}
+
+/// Where a fetched library is kept: `<cache>/clarity/clarity-ui/<version>/<rid>`,
+/// the folder CLARITY_UI then names.
+pub fn library_dir(cache: &Path, version: &str, rid: &str) -> PathBuf {
+    cache.join("clarity").join("clarity-ui").join(version).join(rid)
+}
+
+/// The shared library's file in `lib/` on system `os`.
+pub fn library_file(os: &str) -> &'static str {
+    match os {
+        "windows" => "clarity_ui.dll",
+        "macos" => "libclarity_ui.dylib",
+        _ => "libclarity_ui.so",
+    }
+}
+
+/// Whether `folder` holds the header and the library for system `os`.
+pub fn complete(folder: &Path, os: &str) -> bool {
+    folder.join("include").join("clarity_ui.h").is_file() && folder.join("lib").join(library_file(os)).is_file()
+}
+
+/// The checksum SHA256SUMS (as `sha256sum` writes it) gives for file `name`.
+pub fn sum_for<'a>(sums: &'a str, name: &str) -> Option<&'a str> {
+    sums.lines().find_map(|line| {
+        let mut words = line.split_whitespace();
+        let (hash, file) = (words.next()?, words.next()?);
+        (file.trim_start_matches('*') == name).then_some(hash)
+    })
+}
+
+/// The SHA-256 of `bytes`, in lowercase hex.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    sha2::Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Whether `archive`, the file `name`, is what the release's SHA256SUMS says.
+pub fn check_archive(archive: &[u8], sums: &str, name: &str) -> Result<(), String> {
+    let expected = sum_for(sums, name).ok_or_else(|| format!("the release's SHA256SUMS names no {name}"))?;
+    let actual = sha256_hex(archive);
+    if actual.eq_ignore_ascii_case(expected) { Ok(()) } else { Err(format!("{name} is not the release's: its SHA-256 is {actual}, SHA256SUMS says {expected}")) }
+}
+
+/// Unpacks `archive` (a .tar.gz holding the folder `folder_name(version,
+/// rid)`) so that its contents are `into`: unpacked beside it first, then
+/// moved there whole, so a stopped fetch leaves no half folder behind.
+pub fn unpack(archive: &[u8], version: &str, rid: &str, into: &Path) -> Result<(), String> {
+    let parent = into.parent().ok_or_else(|| format!("{} has no parent folder", into.display()))?;
+    std::fs::create_dir_all(parent).map_err(|err| format!("cannot make {}: {err}", parent.display()))?;
+    let partial = parent.join(format!(".{rid}.partial-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&partial);
+    let done = (|| {
+        std::fs::create_dir_all(&partial).map_err(|err| format!("cannot make {}: {err}", partial.display()))?;
+        // tar leaves out entries that would land outside the folder (`..`, absolute paths).
+        tar::Archive::new(flate2::read::GzDecoder::new(archive)).unpack(&partial).map_err(|err| format!("cannot unpack the archive: {err}"))?;
+        let top = partial.join(folder_name(version, rid));
+        if !top.join("include").join("clarity_ui.h").is_file() {
+            return Err(format!("the archive has no {}/include/clarity_ui.h", folder_name(version, rid)));
+        }
+        if into.exists() {
+            std::fs::remove_dir_all(into).map_err(|err| format!("cannot replace {}: {err}", into.display()))?;
+        }
+        std::fs::rename(&top, into).map_err(|err| format!("cannot move the library to {}: {err}", into.display()))
+    })();
+    let _ = std::fs::remove_dir_all(&partial);
+    done
+}
+
+/// Where a build takes Clarity.UI's library from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Library {
+    /// The folder the person named with CLARITY_UI, which always wins.
+    Named(PathBuf),
+    /// The folder the installed Clarity carries.
+    Bundled(PathBuf),
+    /// Fetched before, in the cache folder.
+    Fetched(PathBuf),
+    /// Fetched into `folder` on the first build.
+    ToFetch { folder: PathBuf, version: String, rid: String },
+    /// Neither named nor fetchable: no archive for this system, or no cache folder.
+    Unavailable,
+}
+
+/// Where the library comes from, given what CLARITY_UI says (`named`), the
+/// folder the installed Clarity carries (`bundled`, taken when it is
+/// complete), the cache folder, this system's `rid` and `os`, and the
+/// library `version`.
+pub fn library_in(named: Option<&OsStr>, bundled: Option<&Path>, cache: Option<&Path>, rid: Option<&str>, version: &str, os: &str) -> Library {
+    if let Some(named) = named.filter(|n| !n.is_empty()) {
+        return Library::Named(PathBuf::from(named));
+    }
+    if let Some(bundled) = bundled.filter(|b| complete(b, os)) {
+        return Library::Bundled(bundled.to_path_buf());
+    }
+    let (Some(cache), Some(rid)) = (cache, rid) else { return Library::Unavailable };
+    let folder = library_dir(cache, version, rid);
+    if complete(&folder, os) { Library::Fetched(folder) } else { Library::ToFetch { folder, version: version.to_string(), rid: rid.to_string() } }
+}
+
+/// The folder the installed Clarity carries, which the IDE names when it
+/// starts (`set_bundled`); none in the command-line tool.
+static BUNDLED: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Names the folder of the library the installed Clarity carries: its
+/// resource folder's `clarity-ui`.
+pub fn set_bundled(folder: PathBuf) {
+    let _ = BUNDLED.set(folder);
+}
+
+/// Where the library comes from on this machine.
+pub fn library() -> Library {
+    let os = std::env::consts::OS;
+    let named = std::env::var_os("CLARITY_UI");
+    let cache = cache_dir_in(os, |name| std::env::var(name).ok());
+    library_in(named.as_deref(), BUNDLED.get().map(PathBuf::as_path), cache.as_deref(), rid(os, std::env::consts::ARCH).as_deref(), version(), os)
+}
+
+/// The folder Clarity's repository makes of the library it built (a
+/// Clarity run from source, which has no installer's folder):
+/// `<repo>/target/clarity-ui`, with the header from runtimes/rust-ui-ffi
+/// and the library from target/release copied in when they changed. None
+/// when the library is not built.
+pub fn repository_library(repo: &Path, os: &str) -> Option<PathBuf> {
+    let header = repo.join("runtimes").join("rust-ui-ffi").join("include").join("clarity_ui.h");
+    let release = repo.join("target").join("release");
+    let mut files = vec![(header, PathBuf::from("include").join("clarity_ui.h")), (release.join(library_file(os)), PathBuf::from("lib").join(library_file(os)))];
+    if os == "windows" {
+        files.push((release.join("clarity_ui.dll.lib"), PathBuf::from("lib").join("clarity_ui.dll.lib")));
+    }
+    if !files.iter().all(|(from, _)| from.is_file()) {
+        return None;
+    }
+    let folder = repo.join("target").join("clarity-ui");
+    for (from, to) in files {
+        let to = folder.join(to);
+        let same = |a: &Path, b: &Path| -> Option<bool> {
+            let (a, b) = (std::fs::metadata(a).ok()?, std::fs::metadata(b).ok()?);
+            Some(a.len() == b.len() && a.modified().ok()? <= b.modified().ok()?)
+        };
+        if same(&from, &to) != Some(true) {
+            std::fs::create_dir_all(to.parent()?).ok()?;
+            std::fs::copy(&from, &to).ok()?;
+        }
+    }
+    Some(folder)
+}
+
+/// The folder a build's CLARITY_UI names: the named or fetched one, else
+/// fetched now from `base` (RELEASES) with `get` (a URL's bytes), checked
+/// against SHA256SUMS and unpacked. `say` tells what happens, a line at a time.
+pub fn provide(library: Library, base: &str, get: &dyn Fn(&str) -> Result<Vec<u8>, String>, say: &dyn Fn(String)) -> Result<PathBuf, String> {
+    match library {
+        Library::Named(folder) | Library::Bundled(folder) | Library::Fetched(folder) => Ok(folder),
+        Library::Unavailable => Err(UNAVAILABLE.to_string()),
+        Library::ToFetch { folder, version, rid } => {
+            let name = archive_name(&version, &rid);
+            let url = archive_url(base, &version, &rid);
+            say(format!("Clarity.UI's library {version} for {rid}: fetching {url}"));
+            let sums = get(&sums_url(base, &version))?;
+            let sums = String::from_utf8_lossy(&sums);
+            let archive = get(&url)?;
+            check_archive(&archive, &sums, &name)?;
+            unpack(&archive, &version, &rid, &folder)?;
+            say(format!("Clarity.UI's library is in {}", folder.display()));
+            Ok(folder)
+        }
+    }
+}
+
+/// The lines a generated C or C++ CMakeLists.txt names the library's
+/// version with, before it includes the runtime: a build that names no
+/// CLARITY_UI fetches that version (clarity-runtime/clarity_ui.cmake).
+pub fn cmake_version_lines() -> String {
+    format!(
+        "\n# The version of Clarity.UI's library the program is generated for: a build\n# with no CLARITY_UI fetches it from its release (clarity-runtime/clarity_ui.cmake).\nset(CLARITY_UI_VERSION {})\n",
+        version()
+    )
+}
+
+/// Why the library cannot be fetched here.
+pub const UNAVAILABLE: &str = "Clarity.UI's library has no release for this system (or there is no cache folder to keep it in): set the environment variable CLARITY_UI to a folder with include/clarity_ui.h and lib/";
+
+/// Reads all of `reader`, at most `limit` bytes: what a download hands `provide`.
+pub fn read_limited(reader: impl Read, limit: u64) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
+    reader.take(limit + 1).read_to_end(&mut bytes).map_err(|err| format!("the download stopped: {err}"))?;
+    if bytes.len() as u64 > limit {
+        return Err(format!("the download is larger than {limit} bytes"));
+    }
+    Ok(bytes)
+}

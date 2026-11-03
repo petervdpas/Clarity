@@ -210,7 +210,7 @@ pub fn out_files(project: &Project) -> Vec<OutFile> {
 pub fn starter(part: &PartDecl) -> Vec<(String, String)> {
     let n = &part.name.name;
     let cmake = format!(
-        "# The library of custom part {n}, a control of Clarity.UI. Clarity builds it\n# into the program; the target keeps the part's name.\ncmake_minimum_required(VERSION 3.20)\nproject({n} LANGUAGES CXX)\n\nset(CMAKE_CXX_STANDARD 20)\nadd_library({n} STATIC {n}.cpp)\ntarget_include_directories({n} PUBLIC ${{CMAKE_CURRENT_SOURCE_DIR}})\n"
+        "# The library of custom part {n}, a control of Clarity.UI. Clarity builds it\n# into the program; the target keeps the part's name.\ncmake_minimum_required(VERSION 3.20)\nproject({n} LANGUAGES CXX)\n\nset(CMAKE_CXX_STANDARD 20)\nadd_library({n} STATIC {n}.cpp)\ntarget_include_directories({n} PUBLIC ${{CMAKE_CURRENT_SOURCE_DIR}})\n# Built on its own (Build in the part's view), clarity_ui.h comes from the folder CLARITY_UI names.\nif(NOT TARGET clarity_ui AND DEFINED ENV{{CLARITY_UI}})\n    target_include_directories({n} PUBLIC \"$ENV{{CLARITY_UI}}/include\")\nendif()\n"
     );
     let mut cpp = String::new();
     let _ = writeln!(cpp, "// Custom part {n}: draws on the canvas Clarity.UI gives it. Keep the");

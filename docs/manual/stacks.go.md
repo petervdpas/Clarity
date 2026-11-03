@@ -50,7 +50,9 @@ Clarity keeps `go.work` when it writes the module again. Remove it to build on t
 
 ## Clarity.UI's library
 
-Clarity.UI is one library with a C interface, the same for every language. The desktop program finds it in the folder the environment variable `CLARITY_UI` names: `include/clarity_ui.h`, and in `lib/` the library for the system (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` on Windows). Clarity's build hands that folder to cgo; by hand, on Linux:
+Clarity.UI is one library with a C interface, the same for every language. The desktop program finds it in the folder the environment variable `CLARITY_UI` names: `include/clarity_ui.h`, and in `lib/` the library for the system (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` on Windows). Clarity's build hands that folder to cgo. When `CLARITY_UI` is not set, Clarity uses the library its installer carries; a Clarity without it fetches the library itself on the first build: the archive of its library version for the system from the release `runtimes/rust-ui-ffi/v<version>` on GitHub (https://github.com/petervdpas/Clarity/releases), checked against the release's `SHA256SUMS` and unpacked into your cache folder (`~/.cache/clarity/clarity-ui/<version>/<system>` on Linux, `~/Library/Caches/...` on macOS, `%LOCALAPPDATA%\clarity\clarity-ui\...` on Windows), once per version. A `CLARITY_UI` you set always wins.
+
+cgo downloads nothing, so to build without Clarity, take `clarity-ui-<version>-<system>.tar.gz` from that release (`<system>` is one of `linux-x64`, `linux-arm64`, `win-x64`, `win-arm64`, `osx-x64`, `osx-arm64`; the generated README names the version), check it against `SHA256SUMS`, unpack it and set `CLARITY_UI` to the folder it holds. Then, on Linux:
 
 ```shell
 export CGO_CFLAGS="-I$CLARITY_UI/include"
@@ -63,7 +65,7 @@ On macOS `@executable_path` takes the place of `$ORIGIN`; on Windows `-L` alone.
 
 - Go, from https://go.dev/dl
 - a C compiler for cgo, as the desktop program calls Clarity.UI's library: GCC or Clang (on Windows, MSYS2's UCRT64 shell)
-- Clarity.UI's library, named by `CLARITY_UI` (above)
+- Clarity.UI's library: Clarity carries it (or fetches it on the first build), or `CLARITY_UI` names it (above)
 
 Clarity checks for these itself: run `clarity tools`, or look at Build tools on the Project tab.
 

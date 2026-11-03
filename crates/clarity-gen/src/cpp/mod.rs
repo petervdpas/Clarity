@@ -106,7 +106,9 @@ const SERVICE_FILES: [(&str, &str); 4] = [
 
 /// The desktop program on Clarity.UI and the C++ layer over its library; a
 /// program served to a browser alone has neither.
-const DESKTOP_FILES: [(&str, &str); 4] = [
+const DESKTOP_FILES: [(&str, &str); 5] = [
+    // Fetches the library from its release when CLARITY_UI names no folder.
+    ("clarity_ui.cmake", include_str!("../../../../runtimes/cpp/clarity_ui.cmake")),
     ("shell/desktop.cpp", include_str!("../../../../runtimes/cpp/shell/desktop.cpp")),
     ("shell/desktop.hpp", include_str!("../../../../runtimes/cpp/shell/desktop.hpp")),
     ("ui/ui.cpp", include_str!("../../../../runtimes/cpp/ui/ui.cpp")),
@@ -417,14 +419,15 @@ project({program} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
+{library}
 include(clarity-runtime/clarity.cmake)
 
 file(GLOB PROGRAM_SOURCES CONFIGURE_DEPENDS src/*.cpp src/modules/*.cpp)
 add_executable({program} ${{PROGRAM_SOURCES}})
 target_include_directories({program} PRIVATE src)
 target_link_libraries({program} PRIVATE clarity {shell}{engine}{http})
-{desktop_lines}{web_lines}"
+{desktop_lines}{web_lines}",
+        library = if desktop { crate::clarity_ui::cmake_version_lines() } else { String::new() }
     )
 }
 

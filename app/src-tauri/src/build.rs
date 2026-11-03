@@ -207,6 +207,9 @@ pub struct Generated {
     /// The last build, while it was made from these same files and its
     /// program is there: Run starts it without building again.
     pub built: Option<(clarity_gen::Toolchain, bool)>,
+    /// Whether the build links Clarity.UI's library from the folder
+    /// CLARITY_UI names, which Clarity fetches when the person names none.
+    pub library: bool,
 }
 
 /// Generates the project (the Generate button): transpiles it into its
@@ -275,7 +278,8 @@ pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, 
     let built = clarity_gen::last_build(&out, &fingerprint)
         .and_then(|release| toolchain_of(release).map(|t| (t, release)))
         .filter(|(t, _)| out.join(&t.program).exists());
-    Ok(Generated { out, toolchain, stack: settings.stack, fingerprint, release, built })
+    let library = !cli && clarity_gen::uses_clarity_ui(&settings.stack);
+    Ok(Generated { out, toolchain, stack: settings.stack, fingerprint, release, built, library })
 }
 
 /// Why the generated project in `out` cannot be built on this machine: the
@@ -418,13 +422,51 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
             // Run starts the last build when nothing changed since: the
             // generated files, the engines and the parts are as it had them.
             Ok(false) if run && let Some((toolchain, _)) = &generated.built => build(&app, &generated, toolchain, false, run, serves, command_line.as_deref()),
-            Ok(_) => build(&app, &generated, &generated.toolchain, true, run, serves, command_line.as_deref()),
+            Ok(_) => match with_library(&app, &generated) {
+                Ok(toolchain) => build(&app, &generated, &toolchain, true, run, serves, command_line.as_deref()),
+                Err(message) => BuildDone { ok: false, message, binary: None },
+            },
             Err(message) => BuildDone { ok: false, message, binary: None },
         };
         app.state::<BuildState>().busy.store(false, Ordering::SeqCst);
         send_done(&app, done);
     });
     Ok(())
+}
+
+/// The toolchain of `generated`, with Clarity.UI's library for a Go, C or
+/// C++ desktop program (DESIGN 7.9): the folder CLARITY_UI names, else the
+/// one fetched from the library's release into the cache folder, fetched
+/// now when it is not there yet.
+fn with_library(app: &AppHandle, generated: &Generated) -> Result<clarity_gen::Toolchain, String> {
+    if !generated.library {
+        return Ok(generated.toolchain.clone());
+    }
+    let folder = library_folder(app)?;
+    Ok(clarity_gen::with_clarity_ui(generated.toolchain.clone(), generated.stack.backend, &folder))
+}
+
+/// The folder of Clarity.UI's library for a build: the one CLARITY_UI names,
+/// the one Clarity carries, else fetched now into the cache folder.
+pub(crate) fn library_folder(app: &AppHandle) -> Result<PathBuf, String> {
+    let library = clarity_gen::clarity_ui::library();
+    clarity_gen::clarity_ui::provide(library, clarity_gen::clarity_ui::RELEASES, &download, &|line| send_line(app, line))
+}
+
+/// The largest download Clarity takes: an archive of Clarity.UI's library is some tens of MB.
+const DOWNLOAD_LIMIT: u64 = 512 * 1024 * 1024;
+
+/// The bytes at `url`, over HTTPS: the network part of fetching Clarity.UI's library.
+pub(crate) fn download(url: &str) -> Result<Vec<u8>, String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(600))
+        .build()
+        .map_err(|err| format!("cannot download {url}: {err}"))?;
+    let response = client.get(url).send().map_err(|err| format!("cannot download {url}: {err}"))?;
+    if !response.status().is_success() {
+        return Err(format!("cannot download {url}: {}", response.status()));
+    }
+    clarity_gen::clarity_ui::read_limited(response, DOWNLOAD_LIMIT)
 }
 
 /// Builds the generated program with `toolchain` (unless `building` is
@@ -786,5 +828,22 @@ mod tests {
         assert_eq!(toolchain.tool, "dotnet");
         assert!(toolchain.program.starts_with("bin/Debug"), "{}", toolchain.program.display());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A first Go, C or C++ desktop build fetches Clarity.UI's library from
+    /// its release on GitHub. Ignored: it needs the network and the release
+    /// of this library version (the tag runtimes/rust-ui-ffi/v<version>).
+    #[test]
+    #[ignore]
+    fn clarity_ui_library_is_fetched_from_its_release() {
+        use clarity_gen::clarity_ui;
+        let cache = std::env::temp_dir().join(format!("clarity-ui-fetch-{}", std::process::id()));
+        let os = std::env::consts::OS;
+        let rid = clarity_ui::rid(os, std::env::consts::ARCH);
+        let library = clarity_ui::library_in(None, None, Some(&cache), rid.as_deref(), clarity_ui::version(), os);
+        let folder = clarity_ui::provide(library, clarity_ui::RELEASES, &download, &|line| println!("{line}"));
+        let unpacked = folder.as_ref().is_ok_and(|folder| folder.starts_with(&cache) && clarity_ui::complete(folder, os));
+        let _ = std::fs::remove_dir_all(&cache);
+        assert!(unpacked, "{folder:?}");
     }
 }

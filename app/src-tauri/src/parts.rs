@@ -269,6 +269,10 @@ pub fn start_part_build(app: tauri::AppHandle, dir: &Path, name: &str) -> Result
             env.push(("CARGO_TARGET_DIR".to_string(), clarity_project::out_dir(&file, &settings).join("target").display().to_string()));
         }
     }
+    // A C or C++ part includes clarity_ui.h, which its CMakeLists finds through CLARITY_UI.
+    if kind == "native" {
+        env.push(("CLARITY_UI".to_string(), crate::build::library_folder(&app)?.display().to_string()));
+    }
     crate::build::start_part(app, name, folder, steps, env)
 }
 

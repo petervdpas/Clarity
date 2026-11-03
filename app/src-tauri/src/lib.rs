@@ -801,6 +801,14 @@ pub fn run() {
             fail_safe::report_panics(app.handle().clone());
             // The status bar's meters, and the System page while it is open.
             system::start(app.handle().clone());
+            // Clarity.UI's library for Go, C and C++ builds (DESIGN 7.9): the folder the
+            // installer carries; in a debug build, the one the repository built.
+            let os = std::env::consts::OS;
+            let carried = app.path().resource_dir().ok().map(|dir| dir.join("clarity-ui")).filter(|dir| clarity_gen::clarity_ui::complete(dir, os));
+            let repository = || cfg!(debug_assertions).then(|| clarity_gen::clarity_ui::repository_library(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")), os)).flatten();
+            if let Some(folder) = carried.or_else(repository) {
+                clarity_gen::clarity_ui::set_bundled(folder);
+            }
             let info = app.package_info();
             if let Some(window) = app.get_webview_window("main") {
                 // F5, Ctrl+R, Ctrl+P and Ctrl+F are Clarity's, not the webview's.

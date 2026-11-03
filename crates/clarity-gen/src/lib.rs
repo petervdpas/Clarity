@@ -4,6 +4,7 @@
 //! byte, so `out/` can be compared, cached and regenerated at any time.
 
 pub mod tools;
+pub mod clarity_ui;
 mod c;
 pub mod calls;
 mod consts;
@@ -1062,6 +1063,27 @@ pub fn go_cgo_env(clarity_ui: Option<&std::path::Path>, os: &str) -> Vec<(&'stat
         _ => format!(" -Wl,-rpath,$ORIGIN -Wl,-rpath,{lib}"),
     };
     vec![("CGO_ENABLED", "1".into()), ("CGO_CFLAGS", format!("-I{}", folder.join("include").display())), ("CGO_LDFLAGS", format!("-L{lib}{found}"))]
+}
+
+/// Whether the windowed build of `stack` (not its command-line program)
+/// links Clarity.UI's library from the folder CLARITY_UI names: a Go, C or
+/// C++ desktop program (DESIGN 7.9). Rust and C# bring it as a package.
+pub fn uses_clarity_ui(stack: &clarity_project::Stack) -> bool {
+    matches!(stack.backend, Backend::Go | Backend::C | Backend::Cpp) && stack.has(clarity_project::Target::Desktop)
+}
+
+/// `toolchain` building with Clarity.UI's library in `folder` (the one
+/// CLARITY_UI names, or the one Clarity fetched): cgo's flags for Go, the
+/// variable CLARITY_UI for CMake.
+pub fn with_clarity_ui(mut toolchain: Toolchain, backend: Backend, folder: &std::path::Path) -> Toolchain {
+    let env = match backend {
+        Backend::Go => go_cgo_env(Some(folder), std::env::consts::OS),
+        Backend::C | Backend::Cpp => vec![("CLARITY_UI", folder.display().to_string())],
+        _ => Vec::new(),
+    };
+    toolchain.env.retain(|(name, _)| !env.iter().any(|(n, _)| n == name));
+    toolchain.env.extend(env);
+    toolchain
 }
 
 /// A command line typed in Clarity (Run on a command-line program) as the

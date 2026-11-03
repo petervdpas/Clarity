@@ -70,7 +70,7 @@ pub fn readme(settings: &Settings, project: &clarity_spec::Project) -> String {
     }
     if backend == Backend::Cpp && settings.stack.has(clarity_project::Target::Desktop) {
         // The desktop program links Clarity.UI's library (DESIGN 7.9), from the folder CLARITY_UI names.
-        out.push_str("\nThe desktop program draws with Clarity.UI, one library with a C interface. CMake finds it in the folder the environment variable `CLARITY_UI` names (or `cmake -DCLARITY_UI=<folder>`): `include/clarity_ui.h` and, in `lib/`, the library for the system (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` with its import library on Windows). In Clarity's repository the library is built with `cargo build --release -p clarity-ui-ffi` (into `target/release`, the header in `runtimes/rust-ui-ffi/include`). Each build copies the library next to the program, where the program finds it when it runs; copy it along with the program.\n");
+        out.push_str(&format!("\nThe desktop program draws with Clarity.UI, one library with a C interface. CMake finds it in the folder the environment variable `CLARITY_UI` names (or `cmake -DCLARITY_UI=<folder>`): `include/clarity_ui.h` and, in `lib/`, the library for the system (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` with its import library on Windows). {} In Clarity's repository the library is built with `cargo build --release -p clarity-ui-ffi` (into `target/release`, the header in `runtimes/rust-ui-ffi/include`). Each build copies the library next to the program, where the program finds it when it runs; copy it along with the program.\n", cmake_fetches()));
     }
     if clarity_ui {
         out.push_str(&format!(
@@ -86,7 +86,7 @@ pub fn readme(settings: &Settings, project: &clarity_spec::Project) -> String {
     }
     if backend == Backend::Go && settings.stack.has(clarity_project::Target::Desktop) {
         // The desktop program calls Clarity.UI's library through cgo (DESIGN 7.9), from the folder CLARITY_UI names.
-        out.push_str("\nThe desktop program draws with Clarity.UI, one library with a C interface, which the program calls through cgo. It comes from the folder the environment variable `CLARITY_UI` names: `include/clarity_ui.h` and, in `lib/`, the library for the system (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` on Windows). Clarity's build hands it to cgo; by hand, on Linux:\n\n    export CGO_CFLAGS=\"-I$CLARITY_UI/include\"\n    export CGO_LDFLAGS=\"-L$CLARITY_UI/lib -Wl,-rpath,\\$ORIGIN -Wl,-rpath,$CLARITY_UI/lib\"\n\n(on macOS `@executable_path` in place of `$ORIGIN`; on Windows `-L` alone). The program finds the library beside it, else in that folder: ship it beside the program (on Windows it must be there, or on `PATH`). In Clarity's repository the library is built with `cargo build --release -p clarity-ui-ffi` (into `target/release`, the header in `runtimes/rust-ui-ffi/include`).\n");
+        out.push_str(&format!("\nThe desktop program draws with Clarity.UI, one library with a C interface, which the program calls through cgo. It comes from the folder the environment variable `CLARITY_UI` names: `include/clarity_ui.h` and, in `lib/`, the library for the system (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` on Windows). Clarity's build hands it to cgo, and without `CLARITY_UI` takes the library Clarity carries (or fetches it). cgo downloads nothing, so to build without Clarity take the archive for the system, {}, from the release {} (`<system>` is one of {}), check it against the release's `SHA256SUMS`, unpack it and set `CLARITY_UI` to the folder it holds. Then, on Linux:\n\n    export CGO_CFLAGS=\"-I$CLARITY_UI/include\"\n    export CGO_LDFLAGS=\"-L$CLARITY_UI/lib -Wl,-rpath,\\$ORIGIN -Wl,-rpath,$CLARITY_UI/lib\"\n\n(on macOS `@executable_path` in place of `$ORIGIN`; on Windows `-L` alone). The program finds the library beside it, else in that folder: ship it beside the program (on Windows it must be there, or on `PATH`). In Clarity's repository the library is built with `cargo build --release -p clarity-ui-ffi` (into `target/release`, the header in `runtimes/rust-ui-ffi/include`).\n", archive(), release_page(), SYSTEMS));
     }
     if backend == Backend::Go {
         out.push_str(&format!(
@@ -97,7 +97,7 @@ pub fn readme(settings: &Settings, project: &clarity_spec::Project) -> String {
     }
 
     if backend == Backend::C && settings.stack.has(clarity_project::Target::Desktop) {
-        out.push_str("\nThe windows are drawn by Clarity.UI's library (`clarity_ui`), which the build takes from the folder the environment variable `CLARITY_UI` names (or `cmake -DCLARITY_UI=<folder>`): `include/clarity_ui.h`, and in `lib/` the library for the system (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` with its import library on Windows). Each build copies the library next to the program, where the program finds it, so ship the two together.\n");
+        out.push_str(&format!("\nThe windows are drawn by Clarity.UI's library (`clarity_ui`), which the build takes from the folder the environment variable `CLARITY_UI` names (or `cmake -DCLARITY_UI=<folder>`): `include/clarity_ui.h`, and in `lib/` the library for the system (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` with its import library on Windows). {} Each build copies the library next to the program, where the program finds it, so ship the two together.\n", cmake_fetches()));
     }
 
     let (build, run) = commands(settings);
@@ -156,4 +156,27 @@ pub fn readme(settings: &Settings, project: &clarity_spec::Project) -> String {
         }
     }
     out
+}
+
+/// The systems the library's release has an archive for.
+const SYSTEMS: &str = "`linux-x64`, `linux-arm64`, `win-x64`, `win-arm64`, `osx-x64`, `osx-arm64`";
+
+/// The archive of Clarity.UI's library this project is generated for, by name.
+fn archive() -> String {
+    format!("`{}`", crate::clarity_ui::archive_name(crate::clarity_ui::version(), "<system>"))
+}
+
+/// The release page of that library version.
+fn release_page() -> String {
+    crate::clarity_ui::release_page(crate::clarity_ui::version())
+}
+
+/// What a C or C++ build does without CLARITY_UI (clarity_ui.cmake).
+fn cmake_fetches() -> String {
+    format!(
+        "Without it, the build downloads the archive for the system, {}, from the release {} (`<system>` is one of {}), checks it against the release's `SHA256SUMS` and unpacks it into the build folder; Clarity's own build names the library Clarity carries (or fetches it once into the person's cache folder).",
+        archive(),
+        release_page(),
+        SYSTEMS
+    )
 }

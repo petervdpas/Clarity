@@ -463,15 +463,6 @@ pub fn validate(settings: &Settings) -> Vec<String> {
             backend.label,
             stack_line(&Stack { ui: Ui::Clarity, ..stack.clone() })
         ));
-    } else if stack.ui == Ui::Clarity && stack.has(Target::Web) && stack.has(Target::Desktop) && !clarity_ui_on_the_web(stack.backend) {
-        // The web program of Rust, Go, C and C++ is the shared web screen's server until Clarity.UI draws in the browser (G8d).
-        let alone = |target| stack_line(&Stack { targets: vec![target], ..stack.clone() });
-        problems.push(format!(
-            "the web program of {} is not generated beside its desktop program yet; write {}, or {} for the web program alone",
-            backend.label,
-            alone(Target::Desktop),
-            alone(Target::Web)
-        ));
     }
     if stack.targets.is_empty() {
         problems.push("the project needs at least one target".to_string());
@@ -686,13 +677,6 @@ fn backend_info(backend: Backend) -> BackendInfo {
         Backend::Cpp => "C++",
     };
     BackendInfo { id: backend, label, uis: backend_uis(backend).to_vec() }
-}
-
-/// Whether Clarity generates the web target of `backend` on Clarity.UI:
-/// C# does; the web program of Rust, Go, C and C++ serves the shared web
-/// screen, alone, until G8d (DESIGN 7.9).
-fn clarity_ui_on_the_web(backend: Backend) -> bool {
-    backend == Backend::Csharp
 }
 
 fn ui_label(ui: Ui) -> &'static str {

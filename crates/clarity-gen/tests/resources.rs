@@ -56,15 +56,12 @@ fn files(backend: Backend, ui: Ui) -> Vec<OutFile> {
     generate(&project(), &settings).unwrap_or_else(|e| panic!("{e:#?}"))
 }
 
-/// The program of `backend` on the shared web screen: Rust's is its web
-/// program, until Clarity.UI draws in the browser (G8d).
+/// The web program of `backend`: a server for Clarity.UI in the browser.
 fn web_files(backend: Backend) -> Vec<OutFile> {
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = backend;
     settings.stack.ui = clarity_project::usual_ui(backend);
-    if backend == Backend::Rust {
-        settings.stack.targets = vec![clarity_project::Target::Web];
-    }
+    settings.stack.targets = vec![clarity_project::Target::Web];
     generate(&project(), &settings).unwrap_or_else(|e| panic!("{e:#?}"))
 }
 
@@ -77,17 +74,18 @@ fn text<'a>(files: &'a [OutFile], path: &str) -> &'a str {
     &files.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("no {path}")).text
 }
 
-/// The web stacks put the resources next to the screen, which shows
-/// `resources/logo.png` from its own folder; the Markdown travels in the
-/// model, and a key that points at a resource is, in each language, the
-/// Markdown of its file or the name of its picture.
+/// A web program serves the resources beside the page, where Clarity.UI in
+/// the browser fetches each by its name; the Markdown travels in the model
+/// (files.json), and a key that points at a resource is, in each language,
+/// the Markdown of its file or the name of its picture.
 #[test]
-fn the_web_stacks_carry_the_resources_with_the_renderer() {
-    for (backend, model) in [(Backend::Rust, "src/model.json"), (Backend::Go, "model.json")] {
+fn the_web_stacks_serve_the_resources_beside_the_page() {
+    // C#'s server serves them from the application it embeds them in (csharp_web).
+    for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
         let files = web_files(backend);
-        assert_eq!(bytes(&files, "ui/resources/logo.png"), LOGO, "{backend:?}");
-        assert_eq!(bytes(&files, "ui/resources/rules-nl.md"), b"# Regels", "{backend:?}");
-        let model = text(&files, model);
+        assert_eq!(bytes(&files, "browser/clarity/resources/logo.png"), LOGO, "{backend:?}");
+        assert_eq!(bytes(&files, "browser/clarity/resources/rules-nl.md"), b"# Regels", "{backend:?}");
+        let model = text(&files, "browser/clarity/files.json");
         assert!(model.contains("\"license.md\":\"# License\""), "{backend:?}: {model}");
         assert!(model.contains("\"nl\":{\"bannerPicture\":\"banner-nl.png\",\"gameRules\":\"# Regels\"}"), "{backend:?}: {model}");
     }
@@ -127,14 +125,14 @@ fn no_resources_no_folder() {
     assert!(!text(&files, "Shop.csproj").contains("Include=\"resources/**\""));
 }
 
-/// The one-file page of the C and C++ webview carries its pictures as data
-/// URLs, each with its own kind: an SVG as an SVG, which a browser shows only so.
+/// The browser files carry a picture as it is: an SVG as its own text.
 #[test]
-fn the_one_file_page_carries_an_svg_as_an_svg() {
+fn the_browser_files_carry_an_svg_as_it_is() {
     let source = "module art\n\napp Art\n    main Gallery\n\npage Gallery: window\n    image name logo at 1,1 span 3 rows 3 source \"logo.svg\"\n";
     let mut project = clarity_spec::load_sources([("art.clarity", source)]);
     let svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><circle cx=\"5\" cy=\"5\" r=\"4\"/></svg>".to_vec();
     clarity_spec::resources::attach(&mut project, vec![clarity_spec::resources::ResourceFile { name: "logo.svg".into(), bytes: svg }]);
-    let page = clarity_gen::web::single_page(&project);
-    assert!(page.contains("\"logo.svg\":\"data:image/svg+xml;base64,"), "{}", &page[page.find("clarityResources").unwrap_or(0)..][..200]);
+    let site = clarity_gen::web_browser::site(&project, &clarity_project::starter("Art", "art"));
+    let logo = site.iter().find(|f| f.path == "browser/clarity/resources/logo.svg").expect("the svg is served");
+    assert!(logo.bytes.as_deref().is_some_and(|b| b.starts_with(b"<svg")));
 }

@@ -55,6 +55,8 @@ fn the_secrets_are_named_to_the_settings() {
     assert!(rust.contains("clarity_runtime::settings::read_with(PROGRAM, SECRETS)"));
     let go = generated(Backend::Go, Ui::Clarity, "data/shop.db");
     assert!(go.contains("clarity.Secrets = secrets.System{}"));
+    // The desktop's service keeps them in the store when the library keeps the settings.
+    assert!(go.contains(", Secrets: []string{\"shopDb\"}}"), "Go names its secrets to the service");
     let csharp = generated(Backend::Csharp, Ui::Clarity, "data/shop.db");
     assert!(csharp.contains("KeptSettings.Read(ProgramName, Secrets)"));
     for backend in [Backend::C, Backend::Cpp] {
@@ -62,6 +64,8 @@ fn the_secrets_are_named_to_the_settings() {
         assert!(code.contains("secrets_use();"), "{backend:?} turns the store on");
         assert!(code.contains("clarity_secrets"), "{backend:?} links the store");
     }
+    let cpp = generated(Backend::Cpp, Ui::Clarity, "data/shop.db");
+    assert!(cpp.contains("options.secrets = nlohmann::json::array({\"shopDb\"});"), "C++ names its secrets to the service");
 }
 
 /// The app's `on unconnected` (DESIGN 5.27) takes over from the window that

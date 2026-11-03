@@ -163,12 +163,6 @@ pub struct StackTools {
     /// The heading of the manual's setup page (`clarity_gen::tools::SETUP_TOPIC`)
     /// that tells how to install the first of `missing`.
     pub guide: Option<String>,
-    /// What the web target needs beyond these (DESIGN 7.6), found and missing.
-    pub web_found: Vec<String>,
-    pub web_missing: Vec<String>,
-    /// Whether Clarity can install what the web target is missing, and whether the system asks the person's permission for it.
-    pub web_installable: bool,
-    pub web_elevated: bool,
 }
 
 /// Looks for the build tools of every stack the catalog offers.
@@ -183,10 +177,6 @@ pub fn stack_tools() -> Vec<StackTools> {
             found: t.found,
             guide: t.guides.first().map(|g| g.to_string()),
             missing: t.missing,
-            web_found: t.web_found,
-            web_missing: t.web_missing,
-            web_installable: t.web_install.is_some(),
-            web_elevated: t.web_install.is_some_and(|i| i.elevated),
         })
         .collect()
 }
@@ -240,7 +230,11 @@ fn transpile(file: &Path) -> Result<Source, String> {
         (None, None) => return Err(format!("{shown} cannot be read")),
     };
     let built = clarity_project::build_settings(&dir, &settings);
-    let programs = clarity_gen::programs(&project, &built).map_err(|errors| errors.join("; "))?;
+    let mut programs = clarity_gen::programs(&project, &built).map_err(|errors| errors.join("; "))?;
+    // A program served to a browser carries Clarity.UI's browser files (round B of DESIGN 7.9).
+    if clarity_gen::web_browser::needs_library(&programs) {
+        clarity_gen::web_browser::with_library(&mut programs, &browser_folder()?)?;
+    }
     let out = clarity_project::out_dir(file, &settings);
     Ok(Source { out, settings, programs, shown, written: clarity_gen::Written::default() })
 }
@@ -300,19 +294,6 @@ pub fn cannot_build(tools: &clarity_gen::tools::StackTools, out: &Path) -> Optio
 /// order, with `env`; the first to fail ends it.
 pub fn start_part(app: AppHandle, name: String, folder: PathBuf, steps: Vec<Vec<String>>, env: Vec<(String, String)>) -> Result<(), String> {
     start_steps(app, folder, steps, env, format!("{name} built"), format!("{name} did not build"))
-}
-
-/// Installs what the web target of C# with Clarity.UI is missing (DESIGN 7.6),
-/// .NET's WebAssembly tools, its output in the Output panel; the system asks
-/// the person's permission first where .NET is installed for every user.
-pub fn install_web_tools(app: AppHandle) -> Result<(), String> {
-    let tools = clarity_gen::tools::check(clarity_project::Backend::Csharp, clarity_project::Ui::Clarity, &clarity_gen::tools::System);
-    let Some(install) = tools.web_install else {
-        return Err(if tools.web_missing.is_empty() { "the WebAssembly tools are installed already".into() } else { "Clarity cannot install the WebAssembly tools here; the manual says how".into() });
-    };
-    let folder = std::env::temp_dir();
-    let step = std::iter::once(install.program).chain(install.args).collect();
-    start_steps(app, folder, vec![step], vec![], ".NET's WebAssembly tools are installed".into(), ".NET's WebAssembly tools were not installed".into())
 }
 
 /// Runs `steps` in `folder` one after the other, their output in the Output panel; how it ended as `ok` or `failed`.
@@ -395,11 +376,7 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
         let serves = (command_line.is_none() && stack.has(clarity_project::Target::Web) && !stack.has(clarity_project::Target::Desktop))
             .then(|| clarity_project::load(&file).settings.map(|s| clarity_project::serve_address(&s)))
             .flatten();
-        let mut tools = clarity_gen::tools::check(stack.backend, stack.ui, &clarity_gen::tools::System);
-        // A program served to a browser may need more (DESIGN 7.6).
-        if stack.has(clarity_project::Target::Web) {
-            tools.missing.extend(tools.web_missing.clone());
-        }
+        let tools = clarity_gen::tools::check(stack.backend, stack.ui, &clarity_gen::tools::System);
         match cannot_build(&tools, &out) {
             Some(why) => Err(why),
             None => Ok((generated, serves)),
@@ -451,6 +428,14 @@ fn with_library(app: &AppHandle, generated: &Generated) -> Result<clarity_gen::T
 pub(crate) fn library_folder(app: &AppHandle) -> Result<PathBuf, String> {
     let library = clarity_gen::clarity_ui::library();
     clarity_gen::clarity_ui::provide(library, clarity_gen::clarity_ui::RELEASES, &download, &|line| send_line(app, line))
+}
+
+/// The folder of Clarity.UI's browser files for a web program: the one
+/// CLARITY_UI_BROWSER names, the one Clarity carries, else fetched now from
+/// the library's release into the cache folder.
+pub(crate) fn browser_folder() -> Result<PathBuf, String> {
+    let library = clarity_gen::clarity_ui::browser_library();
+    clarity_gen::clarity_ui::provide(library, clarity_gen::clarity_ui::RELEASES, &download, &|line| eprintln!("{line}"))
 }
 
 /// The largest download Clarity takes: an archive of Clarity.UI's library is some tens of MB.
@@ -768,9 +753,6 @@ mod tests {
             found: vec![],
             missing: vec!["the .NET 10 SDK, from https://dotnet.microsoft.com/download".into()],
             guides: vec!["net-on-linux"],
-            web_found: vec![],
-            web_missing: vec![],
-            web_install: None,
         };
         assert_eq!(
             cannot_build(&check, Path::new("/p/shop/out")),

@@ -63,6 +63,18 @@ impl Call {
             Call::Answer(handler, values) => program.answer_event(state, &handler, values),
         }
     }
+
+    /// Its request on the wire with `state`, run under the long call's
+    /// `watch` (the browser sends it without waiting): the command and its
+    /// arguments, `watch` among them.
+    pub fn wire(&self, state: &WindowState, watch: u64) -> (&'static str, serde_json::Map<String, Value>) {
+        let (command, mut args) = match self {
+            Call::Dispatch(handler) => ("dispatch_event", crate::program_wire::args::dispatch(state, handler)),
+            Call::Answer(handler, values) => ("answer_event", crate::program_wire::args::answer(state, handler, values)),
+        };
+        args.insert("watch".into(), Value::from(watch));
+        (command, args)
+    }
 }
 
 /// The edit the person made that is not sent yet: the part and its undo scope.
@@ -272,7 +284,12 @@ impl ProgramHost {
     pub fn answered(&self, answer: Answer<Reply>) -> bool {
         match answer {
             Ok(reply) => {
+                let before = self.settings_record();
                 self.apply(reply);
+                // A handler that changed a setting keeps it, as a part's write does (every language alike).
+                if before.is_some() && self.settings_record() != before {
+                    self.keep_settings();
+                }
                 true
             }
             Err(text) => {
@@ -281,6 +298,13 @@ impl ProgramHost {
                 false
             }
         }
+    }
+
+    /// The window's settings record without its own number; none when it has none.
+    fn settings_record(&self) -> Option<Map<String, Value>> {
+        let Some(Value::Object(mut now)) = self.state.borrow().data.get("settings").cloned() else { return None };
+        now.remove("id");
+        Some(now)
     }
 
     /// Keeps the settings the window holds over what the program kept (the

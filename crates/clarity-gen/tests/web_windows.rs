@@ -56,21 +56,23 @@ fn a_field_with_no_value_is_listed_as_none() {
     assert!(!markup.contains("\"null\""), "{markup}");
 }
 
-/// The screen reads each kind's defaults, a new menu item's, and how to read
-/// each field, from files this writes, so Rust's catalog and ts-rs's types
-/// stay the one source of them.
+/// Clarity.UI's markup reader takes each kind's defaults, a new menu item's,
+/// and how to read each field, from files this writes (runtimes/rust-ui/catalog),
+/// so Rust's catalog and the model's types (ts-rs) stay the one source of them.
 /// `CLARITY_WRITE_DEFAULTS=1 cargo test -p clarity-gen --test web_windows` writes them again.
 #[test]
 fn the_screen_reads_the_catalog_s_defaults_and_the_fields_types() {
-    let generated = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/web/src/generated");
+    let types = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/web/src/generated");
+    let generated = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/rust-ui/catalog");
+    let read_type = |name: &str| std::fs::read_to_string(types.join(name)).unwrap_or_default();
     let read = |name: &str| std::fs::read_to_string(generated.join(name)).unwrap_or_default();
     let wanted = [
         ("part-defaults.json", clarity_gen::web_windows::part_defaults()),
         ("command-defaults.json", clarity_gen::web_windows::command_defaults()),
-        ("part-fields.json", clarity_gen::web_windows::field_kinds(&read("WidgetProps.ts"))),
-        ("command-fields.json", clarity_gen::web_windows::field_kinds(&read("CommandProps.ts"))),
+        ("part-fields.json", clarity_gen::web_windows::field_kinds(&read_type("WidgetProps.ts"))),
+        ("command-fields.json", clarity_gen::web_windows::field_kinds(&read_type("CommandProps.ts"))),
         ("sidebar-defaults.json", clarity_gen::web_windows::sidebar_defaults()),
-        ("sidebar-fields.json", clarity_gen::web_windows::field_kinds(&read("SidebarProps.ts"))),
+        ("sidebar-fields.json", clarity_gen::web_windows::field_kinds(&read_type("SidebarProps.ts"))),
     ];
     for (name, text) in &wanted {
         if std::env::var("CLARITY_WRITE_DEFAULTS").is_ok() {
@@ -126,4 +128,74 @@ fn a_custom_part_that_grows_says_so_in_the_markup() {
     let markup = clarity_gen::web_windows::window_markup(page);
     assert!(markup.contains("<Custom name=\"board\" at=\"1,1\" span=\"6\" rows=\"4\" undoScope=\"board\" part=\"Board\" grows=\"true\" />"), "{markup}");
     assert!(markup.contains("<Custom name=\"dial\" at=\"7,1\" span=\"6\" rows=\"2\" undoScope=\"dial\" part=\"Dial\" />"), "{markup}");
+}
+
+/// A web program's browser files (round B, DESIGN 7.9): the page, titled as
+/// the app, and files.json with what the library draws from, the same as a
+/// desktop program carries, in the project's order.
+#[test]
+fn a_web_program_s_browser_files_carry_the_page_and_what_the_library_draws_from() {
+    let project = calculator();
+    let mut settings = clarity_project::starter("Calc", "calc");
+    settings.title = Some("Calc <one>".into());
+    let files = clarity_gen::web_browser::site(&project, &settings);
+    let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(paths[..2], ["browser/index.html", "browser/clarity/files.json"]);
+    let page = &files[0].text;
+    assert!(page.contains("<title>Calc &lt;one&gt;</title>"), "{page}");
+    assert!(page.contains("<canvas id=\"clarity-ui\"></canvas>") && page.contains("<script src=\"clarity-ui-page.js\"></script>"), "{page}");
+    let json: serde_json::Value = serde_json::from_str(&files[1].text).unwrap();
+    assert_eq!(json["title"], "Calc <one>");
+    let windows: Vec<&String> = json["windows"].as_object().unwrap().keys().collect();
+    assert_eq!(windows, ["Main", "Preferences"]);
+    assert!(json["windows"]["Main"].as_str().unwrap().contains("<Window name=\"Main\" columns=\"4\">"));
+    assert!(json["model"].is_object(), "the model is JSON: {}", json["model"]);
+    assert!(json["width"].as_u64().unwrap() > 0 && json["height"].as_u64().unwrap() > 0);
+    // The light theme before the dark, as the desktop programs carry them.
+    let text = &files[1].text;
+    let first_light = text.find(".light\":").unwrap();
+    let first_dark = text.find(".dark\":").unwrap();
+    assert!(first_light < first_dark, "{}", &text[..text.len().min(400)]);
+    assert!(json["themes"].as_object().unwrap().values().all(serde_json::Value::is_object));
+    assert_eq!(json["resources"], serde_json::json!([]));
+}
+
+/// The resources are named in files.json and served beside it; the
+/// library's four files are added to a program that is served, from the
+/// browser folder, and to no other.
+#[test]
+fn the_library_s_browser_files_join_the_programs_served_to_a_browser() {
+    let mut project = calculator();
+    project.resources = Some(clarity_spec::resources::Resources { files: vec![clarity_spec::resources::ResourceFile { name: "logo.png".into(), bytes: vec![1, 2, 3] }], ..Default::default() });
+    let settings = clarity_project::starter("Calc", "calc");
+    let site = clarity_gen::web_browser::site(&project, &settings);
+    let json: serde_json::Value = serde_json::from_str(&site.iter().find(|f| f.path == "browser/clarity/files.json").unwrap().text).unwrap();
+    assert_eq!(json["resources"], serde_json::json!(["logo.png"]));
+    let logo = site.iter().find(|f| f.path == "browser/clarity/resources/logo.png").expect("the resource is served");
+    assert_eq!(logo.bytes.as_deref(), Some(&[1u8, 2, 3][..]));
+
+    let folder = std::env::temp_dir().join(format!("clarity-browser-files-{}", std::process::id()));
+    std::fs::create_dir_all(&folder).unwrap();
+    for name in clarity_gen::clarity_ui::BROWSER_FILES {
+        std::fs::write(folder.join(name), name.as_bytes()).unwrap();
+    }
+    let mut programs = vec![
+        clarity_gen::Program { target: clarity_project::Target::Web, files: site.clone() },
+        clarity_gen::Program { target: clarity_project::Target::Cli, files: vec![] },
+    ];
+    assert!(clarity_gen::web_browser::needs_library(&programs));
+    clarity_gen::web_browser::with_library(&mut programs, &folder).unwrap();
+    // Twice is the same as once.
+    clarity_gen::web_browser::with_library(&mut programs, &folder).unwrap();
+    for name in clarity_gen::clarity_ui::BROWSER_FILES {
+        let copied: Vec<_> = programs[0].files.iter().filter(|f| f.path == format!("browser/{name}")).collect();
+        assert_eq!(copied.len(), 1, "{name}");
+        assert_eq!(copied[0].bytes.as_deref(), Some(name.as_bytes()));
+    }
+    assert!(programs[1].files.is_empty());
+    let all = clarity_gen::web_browser::files(&project, &settings, &folder).unwrap();
+    assert_eq!(all.len(), site.len() + 4);
+    std::fs::remove_dir_all(&folder).unwrap();
+    let missing = clarity_gen::web_browser::library(&folder).unwrap_err();
+    assert!(missing.contains("clarity-ui.js"), "{missing}");
 }

@@ -5,7 +5,9 @@
 use clarity_spec::layout::{BUTTON_SIDES, CONTENT_PADDING, GAP, INPUT_SIDES, MESSAGE_MS, ROW_HEIGHT, WINDOW_HEIGHT, WINDOW_WIDTH};
 
 const GRID_TS: &str = include_str!("../../../runtimes/web/src/screen/grid.ts");
-const RUNTIME_SVELTE: &str = include_str!("../../../runtimes/web/src/host/Runtime.svelte");
+/// The running window of every generated program: Clarity.UI (DESIGN 7.9).
+const MESSAGES_RS: &str = include_str!("../../../runtimes/rust-ui/src/window/messages.rs");
+const VIEW_RS: &str = include_str!("../../../runtimes/rust-ui/src/window/view.rs");
 const SIDEBARS_TS: &str = include_str!("../../../runtimes/web/src/frame/sidebars.ts");
 const FRAME_VIEW: &str = include_str!("../../../runtimes/web/src/frame/FrameView.svelte");
 const RENDER_CSS: &str = include_str!("../../../runtimes/web/src/screen/render.css");
@@ -35,14 +37,13 @@ fn the_web_renderer_uses_the_shared_values() {
     assert_eq!(constant(GRID_TS, "CONTENT_PADDING"), CONTENT_PADDING);
     assert_eq!((constant(GRID_TS, "WINDOW_MIN_WIDTH"), constant(GRID_TS, "WINDOW_MIN_HEIGHT")), clarity_spec::layout::WINDOW_MIN);
     assert_eq!((constant(GRID_TS, "WINDOW_MAX_WIDTH"), constant(GRID_TS, "WINDOW_MAX_HEIGHT")), clarity_spec::layout::WINDOW_MAX);
-    assert_eq!(constant(RUNTIME_SVELTE, "MESSAGE_MS"), MESSAGE_MS);
+    assert!(MESSAGES_RS.contains(&format!("Duration::from_millis({MESSAGE_MS})")), "Clarity.UI keeps an info message MESSAGE_MS");
     // A sidebar's widths.
     let (narrowest, widest) = clarity_spec::model::SIDEBAR_WIDTHS;
     assert_eq!((constant(SIDEBARS_TS, "NARROWEST"), constant(SIDEBARS_TS, "WIDEST")), (narrowest, widest));
     assert!(FRAME_VIEW.contains("sidebarWidth("), "FrameView sizes sidebars by sidebars.ts");
-    // The space around a running window's grid, written in its CSS.
-    let client = RUNTIME_SVELTE.split("  .client {").nth(1).expect("the .client rule");
-    assert!(client.split('}').next().unwrap().contains(&format!("padding: {CONTENT_PADDING}px;")), "{client}");
+    // The space around a running window's grid, in Clarity.UI.
+    assert!(VIEW_RS.contains(&format!("pub const CONTENT_PADDING: f64 = {CONTENT_PADDING}.0;")), "Clarity.UI pads a window's grid by CONTENT_PADDING");
 }
 
 #[test]

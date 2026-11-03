@@ -274,6 +274,11 @@ impl WindowStack {
     /// connection shows first.
     pub fn start(program: Arc<dyn Program>, files: AppFiles) -> WindowStack {
         clarity_runtime::i18n::load(files.model);
+        // A language kept from an earlier run: the program hears it before
+        // it answers anything, as when it is chosen (a server keeps it per browser).
+        if let Some(picked) = crate::choices::language_picked() {
+            program.set_language(Some(&picked));
+        }
         let running = Running::new(program, files);
         let mut stack = WindowStack::empty(running);
         let started = stack.running.program.started();
@@ -761,12 +766,18 @@ impl WindowStack {
         self.running.calling.set(true);
         self.long = Some((host.clone(), bar));
         let state = host.state_now();
-        cx.later(self.node.id(), move || {
+        // Where the host sends requests without waiting (the browser), the
+        // handler's request names its watch and its answer comes later; else
+        // the handler runs on a thread of its own between its watch's start and end.
+        let (command, args) = call.wire(&state, watch);
+        let answered: crate::later::Answered = Box::new(move |answer| Box::new(LongDone(crate::program_wire::read(command, answer), watch)) as crate::later::Done);
+        let work: crate::later::Work = Box::new(move || {
             program.start_watch(watch);
             let answer = call.run(program.as_ref(), state);
             program.end_watch(watch);
-            LongDone(answer, watch)
+            Box::new(LongDone(answer, watch)) as crate::later::Done
         });
+        cx.later_ask(self.node.id(), crate::later::Asked { command: command.to_string(), args, answered, work });
     }
 
     /// Makes every window's view again, as in another language; a dialog over the window makes its own.

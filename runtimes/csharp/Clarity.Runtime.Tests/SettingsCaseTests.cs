@@ -9,7 +9,7 @@ using Xunit;
 
 namespace Clarity.Runtime.Tests;
 
-// With the other tests of kept settings, one at a time: KeptSettings.Store is shared.
+// With the other tests of kept settings, one at a time: the settings files are shared.
 [Collection("kept settings")]
 public class SettingsCaseTests
 {

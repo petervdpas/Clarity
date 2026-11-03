@@ -1,7 +1,5 @@
-// A window's state as JSON (DESIGN 7.6): what crosses between the server,
-// where a window's handlers run, and the browser, which shows a mirror of
-// it. The state is the window's own properties that hold something (those
-// with a setter, and those set once by the constructor), and each part's
+// A window's state as JSON: what a window's undo keeps and takes back. The
+// state is the window's own properties that hold something (those with a setter, and those set once by the constructor), and each part's
 // state; computed ones, such as the title, are left to each side. A
 // selected row crosses as a row and is matched back to the row of the
 // window's own list, so a grid keeps it selected.
@@ -32,12 +30,9 @@ public static class Snapshot
     }
 
     /// <summary>
-    /// The state of <paramref name="window"/>: <c>{"data": ..., "parts": ...}</c>;
-    /// with <paramref name="told"/>, also what code told its parts since the
-    /// last time (a sound to play, a custom part's hear), which the server
-    /// sends its mirror once.
+    /// The state of <paramref name="window"/>: <c>{"data": ..., "parts": ...}</c>.
     /// </summary>
-    public static JsonObject Of(WindowViewModel window, bool told = false)
+    public static JsonObject Of(WindowViewModel window)
     {
         var data = new JsonObject();
         var parts = new JsonObject();
@@ -45,20 +40,12 @@ public static class Snapshot
         {
             var value = property.GetValue(window);
             if (value is PartState part)
-            {
                 parts[property.Name] = Part(part);
-                if (told && part.TakeTold() is { Count: > 0 } said)
-                    parts[property.Name]!["told"] = new JsonArray([.. said.Select(t => (JsonNode)new JsonArray([JsonValue.Create(t.Hear), .. t.Values.Select(v => JsonSerializer.SerializeToNode(v, typeof(object), Options))]))]);
-            }
             else
                 data[property.Name] = JsonSerializer.SerializeToNode(value, property.PropertyType, Options);
         }
         return new JsonObject { ["data"] = data, ["parts"] = parts };
     }
-
-    /// <summary>A state as the other side sent it.</summary>
-    public static JsonObject Parse(string text) =>
-        JsonNode.Parse(text) as JsonObject ?? throw new SessionException("a window's state is a JSON object");
 
     /// <summary>Gives <paramref name="window"/> the state <paramref name="state"/>: its data, then its parts.</summary>
     public static void Apply(WindowViewModel window, JsonObject state)
@@ -85,57 +72,6 @@ public static class Snapshot
                     ApplyPart(window, part, sent);
             }
         }
-    }
-
-    /// <summary>
-    /// Runs the command <paramref name="command"/> of <paramref name="window"/>,
-    /// as a click on the window runs it, with what it was given. Only a
-    /// window's commands run, nothing else of it.
-    /// </summary>
-    public static void Run(WindowViewModel window, string command, object?[] args)
-    {
-        var method = Command(window.GetType(), command);
-        method.Invoke(window, args.Length == method.GetParameters().Length ? args : throw new SessionException($"{command} takes {method.GetParameters().Length} values"));
-    }
-
-    /// <summary>The values a command was given, as JSON, as its parameters take them.</summary>
-    public static object?[] Arguments(WindowViewModel window, string command, JsonArray? sent) =>
-        [.. Command(window.GetType(), command).GetParameters().Select((p, i) => sent?.ElementAtOrDefault(i)?.Deserialize(p.ParameterType, Options))];
-
-    /// <summary>
-    /// What the fetcher <paramref name="fetcher"/> of <paramref name="window"/>
-    /// fetches: a picture or a file of the database. Only a fetcher, nothing
-    /// else of the window.
-    /// </summary>
-    public static byte[]? Fetch(WindowViewModel window, string fetcher, JsonArray? args)
-    {
-        var property = window.GetType().GetProperty(fetcher, BindingFlags.Instance | BindingFlags.Public);
-        Task<byte[]?> fetched = property?.GetValue(window) switch
-        {
-            Func<Task<byte[]?>> whole => whole(),
-            Func<string, Task<byte[]?>> byPath => byPath(args?.ElementAtOrDefault(0)?.GetValue<string>() ?? ""),
-            _ => throw new SessionException($"the window has no fetcher {fetcher}"),
-        };
-        return fetched.GetAwaiter().GetResult();
-    }
-
-    /// <summary>The form of a question as the server sent it.</summary>
-    public static AskForm Form(JsonNode? sent) =>
-        sent?.Deserialize<object>(Options) as AskForm ?? throw new SessionException("a question needs its form");
-
-    /// <summary>The values a command was given, as JSON, each as its own type: the command's parameters read them so.</summary>
-    public static JsonArray Arguments(object?[] args) => [.. args.Select(a => a is null ? null : JsonSerializer.SerializeToNode(a, a.GetType(), Options))];
-
-    static MethodInfo Command(Type type, string command)
-    {
-        // The window's own commands, and the few every window has (DrawAnew).
-        for (var t = type; t is not null && t != typeof(ObservableObject); t = t.BaseType)
-        {
-            var method = t.GetMethod(command, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-            if (method?.GetCustomAttribute<RelayCommandAttribute>() is not null || method?.GetCustomAttribute<CommandAttribute>() is not null)
-                return method;
-        }
-        throw new SessionException($"the window has no command {command}");
     }
 
     /// <summary>The window's parts, each by the name its state goes by.</summary>
@@ -192,11 +128,6 @@ public static class Snapshot
         part.Pointer = sent["pointer"]?.Deserialize<Pointer>(Options);
         part.ShowDrawing(Get<List<Shape>>("drawing", [.. part.Drawing]));
         part.SelectedItem = Matched(window, sent["selected"]?.Deserialize<object>(Options));
-        foreach (var told in sent["told"]?.AsArray() ?? [])
-        {
-            if (told is JsonArray said && said.Count > 0)
-                part.Hear(said[0]!.GetValue<string>(), [.. said.Skip(1).Select(v => v?.Deserialize<object>(Options))]);
-        }
     }
 
     /// <summary>The row of one of the window's lists that <paramref name="row"/> is: the same record, by its id.</summary>

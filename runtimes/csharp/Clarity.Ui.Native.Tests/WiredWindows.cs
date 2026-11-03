@@ -56,6 +56,11 @@ public sealed class TicketSettings : ISettings
 
 public sealed class TicketsViewModel() : WindowViewModel(Db.Empty())
 {
+    /// <summary>As a generated window is made on the databases, when the program opens another of it.</summary>
+    public TicketsViewModel(Db db) : this()
+    {
+    }
+
     public const string Markup = """
         <Window name="Tickets">
           <Textbox name="titleBox" at="1,1" span="6" bind="ticket.title" undoScope="ticket" />

@@ -228,7 +228,7 @@ fn handlers_work_on_the_window_and_the_screen() {
 }
 
 /// The backend translates text code makes: it loads the model's
-/// translations, and the web screen names the language it picked.
+/// translations, and the screen names the language it picked.
 #[test]
 fn the_backend_translates_in_the_language_the_screen_picked() {
     let files = files();
@@ -237,7 +237,8 @@ fn the_backend_translates_in_the_language_the_screen_picked() {
     let mut web = shop();
     web.stack.targets = vec![clarity_project::Target::Web];
     let web = generate(&load_sources([("sales.clarity", SALES)]), &web).unwrap();
-    assert!(file(&web, "src/main.rs").contains("        \"set_language\" => given((|| {"), "{}", file(&web, "src/main.rs"));
+    // The browser's commands, set_language among them, go to the program through the runtime's wire.
+    assert!(file(&web, "src/main.rs").contains("clarity_runtime::wire::answer(&app, command, args)"), "{}", file(&web, "src/main.rs"));
 }
 
 #[test]
@@ -845,11 +846,11 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
     assert!(sales.contains("ui.x(\"dial\") + ui.y(\"dial\")"), "{sales}");
 }
 
-/// The web target (DESIGN 7.3): the program serves the renderer to a
-/// browser, its commands answered by the program; beside the desktop target
-/// it is not generated yet (G8d).
+/// The web target (DESIGN 7.3, round B of 7.9): the program serves
+/// Clarity.UI's browser files and answers their wire with the program;
+/// beside the desktop target, one program does both and `--serve` serves.
 #[test]
-fn the_web_target_serves_the_renderer() {
+fn the_web_target_serves_the_browser_files_and_the_wire() {
     use clarity_project::Target;
     let project = load_sources([("sales.clarity", SALES)]);
     let main_of = |targets: Vec<Target>| {
@@ -863,18 +864,27 @@ fn the_web_target_serves_the_renderer() {
     assert!(!desktop.contains("clarity_runtime::serve::serve("), "a desktop program serves nothing");
     has(&desktop, "    let app = App(Mutex::new(db));\n    clarity_ui::desktop::run(app, FILES)\n");
     let web = main_of(vec![Target::Web]);
-    has(&web, "clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args, \"127.0.0.1:8080\"), &files, &mut |command, args| served(&app, command, args))");
-    has(&web, "        \"open_window\" => given((|| {");
-    // Nor does it link Clarity.UI: the renderer's files are in the program.
+    has(&web, "clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args, \"127.0.0.1:8080\"), &files, &|command, args| clarity_runtime::wire::answer(&app, command, args))");
+    // Nor does it link Clarity.UI: the browser files are in the program.
     assert!(!web.contains("clarity_ui"), "{web}");
-    has(&web, "            \"index.html\" => Some(include_bytes!(\"../ui/index.html\").to_vec()),\n");
-    has(&web, "            \"windows/OrderForm.cxaml\" => Some(include_bytes!(\"../ui/windows/OrderForm.cxaml\").to_vec()),\n");
+    for served in ["index.html", "clarity/files.json", "clarity-ui.js", "clarity-ui.wasm", "clarity-ui-worker.js", "clarity-ui-page.js"] {
+        has(&web, &format!("            \"{served}\" => Some(include_bytes!(\"../browser/{served}\").to_vec()),\n"));
+    }
+    // The facts the parts read, answered over the wire as on the desktop.
+    has(&web, "    fn facts_json(&self) -> Value {\n        facts::FACTS.to_json()\n    }\n");
     let mut settings = shop();
     settings.stack.targets = vec![Target::Web];
     let files = generate(&project, &settings).unwrap();
     assert!(!file(&files, "Cargo.toml").contains("clarity-ui"), "{}", file(&files, "Cargo.toml"));
+    assert!(files.iter().any(|f| f.path == "browser/clarity/files.json") && !files.iter().any(|f| f.path.starts_with("ui/")));
+    // Both: the desktop program, which serves with --serve.
+    let both = main_of(vec![Target::Desktop, Target::Web]);
+    has(&both, "    if std::env::args().any(|arg| arg == \"--serve\") {\n        let files = |path: &str|");
+    has(&both, "        return std::process::ExitCode::SUCCESS;\n    }\n    clarity_ui::desktop::run(app, FILES)\n");
     settings.stack.targets = vec![Target::Desktop, Target::Web];
-    assert!(generate(&project, &settings).is_err(), "the web program beside the desktop one");
+    let files = generate(&project, &settings).unwrap();
+    assert!(file(&files, "Cargo.toml").contains("clarity-ui"));
+    assert!(files.iter().any(|f| f.path == "browser/index.html") && files.iter().any(|f| f.path == "windows/OrderForm.cxaml"));
 }
 
 /// Backend drives frontend (DESIGN 1.7): the screen sends the person's
@@ -908,13 +918,11 @@ fn the_runtime_decides_what_the_persons_action_does() {
     settings.stack.targets = vec![Target::Web];
     let web = generate(&project, &settings).unwrap();
     let web = file(&web, "src/main.rs");
-    for command in ["reorder_event", "item_event", "range_event", "step_event", "view_event", "canvas_event", "find_options"] {
-        assert!(web.contains(&format!("        \"{command}\" => given((|| {{")), "{command} served in\n{web}");
+    // The browser's commands reach the same program, through the runtime's wire (clarity_runtime::wire).
+    assert!(web.contains("&|command, args| clarity_runtime::wire::answer(&app, command, args)"), "{web}");
+    for command in ["reorder_event", "item_event", "range_event", "step_event", "view_event", "canvas_event"] {
+        assert!(web.contains(&format!("    fn {command}(&self, state: WindowState, ")), "{command} in\n{web}");
     }
-    assert_eq!(web.matches("let readonly: Option<bool> = arg(&args, \"readonly\")?;").count(), 5, "{web}");
-    assert!(web.contains("path: arg(&args, \"path\")?, editable: arg(&args, \"editable\")? };"), "{web}");
-    assert!(web.contains("let canvas = clarity_runtime::canvas::CanvasArgs { part: arg(&args, \"part\")?, mode: arg(&args, \"mode\")?, list: list.unwrap_or_default()"), "{web}");
-    assert!(web.contains("app.find_options(&kind, &entity, field.as_deref(), &show.unwrap_or_default(), &typed)"), "{web}");
     assert!(web.contains("clarity_runtime::dropdown_options::find(kind, show, typed, || values_of(db, entity, field.unwrap_or_default()), || options(db, entity))"), "{web}");
 }
 

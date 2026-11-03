@@ -58,8 +58,9 @@ fn csharp_tells_a_sound() {
 }
 
 #[test]
-fn the_one_file_page_carries_the_sounds() {
-    let page = clarity_gen::web::single_page(&project());
-    assert!(page.contains("window.clarityResources = {"), "the page carries its resources");
-    assert!(page.contains("\"roll.wav\":\"data:audio/wav;base64,"));
+fn the_browser_files_carry_the_sounds() {
+    let site = clarity_gen::web_browser::site(&project(), &clarity_project::starter("Art", "art"));
+    assert!(site.iter().any(|f| f.path == "browser/clarity/resources/roll.wav" && f.bytes.is_some()), "the sound is served");
+    let files = &site.iter().find(|f| f.path == clarity_gen::web_browser::FILES_JSON).unwrap().text;
+    assert!(files.contains("\"resources\":[\"roll.wav\"]"), "{files}");
 }

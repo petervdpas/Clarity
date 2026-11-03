@@ -123,6 +123,7 @@ pub enum Request {
     Wake(ElementId, Instant),
     Animate(ElementId, bool),
     Later(ElementId, crate::later::Work),
+    Ask(ElementId, crate::later::Asked),
 }
 
 /// What an element's handlers reach of the screen: its look, fonts,
@@ -235,6 +236,13 @@ impl Cx {
     pub fn later<T: Send + 'static>(&mut self, element: ElementId, work: impl FnOnce() -> T + Send + 'static) {
         let work: crate::later::Work = Box::new(move || Box::new(work()) as crate::later::Done);
         self.requests.push(Request::Later(element, work));
+    }
+
+    /// One request of the program for `element`: sent without waiting where
+    /// the host can, its answer coming back to `on_later`; else `asked.work`
+    /// runs off the screen's thread as `later` does.
+    pub fn later_ask(&mut self, element: ElementId, asked: crate::later::Asked) {
+        self.requests.push(Request::Ask(element, asked));
     }
 }
 

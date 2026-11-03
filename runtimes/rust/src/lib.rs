@@ -41,6 +41,7 @@ pub mod tables;
 pub mod trees;
 pub mod ui;
 pub mod views;
+pub mod wire;
 
 #[cfg(feature = "mssql")]
 mod mssql;

@@ -1,7 +1,8 @@
 {
   "bundle": {
     "resources": {
-      "clarity-ui/**/*": "clarity-ui/"
+      "clarity-ui/**/*": "clarity-ui/",
+      "clarity-ui-browser/**/*": "clarity-ui-browser/"
     }
   }
 }

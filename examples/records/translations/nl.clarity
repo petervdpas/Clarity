@@ -182,6 +182,7 @@ translation nl
     theAlbumHasNoCover "Het album heeft nog geen hoes"
     theCoverIsNowThePhoto "De hoes is nu de foto van {name}"
     chooseFolder "Een map kiezen"
+    typeServerFolder "Typ het pad van een map op de server"
     cutText "Knippen"
     copyText "Kopiëren"
     pasteText "Plakken"

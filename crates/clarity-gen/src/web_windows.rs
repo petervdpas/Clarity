@@ -1,14 +1,15 @@
-//! The windows of a web stack as markup (DESIGN 7.8): one XML file per
+//! The windows of a program as markup (DESIGN 7.8, 7.9): one XML file per
 //! window, `ui/windows/Main.cxaml`, each part an element with its options as
 //! attributes, written in Clarity's own words, as C# writes each window as
-//! AXAML. The screen Clarity ships reads them when the application starts,
-//! so building an application needs no tools of the web's own.
+//! AXAML. Clarity.UI reads them when the program starts, on the desktop and
+//! in the browser, so building a program needs no tools of the web's own.
 //!
 //! A part writes only what differs from its kind's defaults (the catalog's
-//! `new_props`, which the screen reads from `generated/part-defaults.json`),
-//! so a window reads like its Clarity. Every value is text: text as it is, a
-//! number or true and false as written, a list or a record as JSON; the
-//! screen reads each by its field's type (`generated/part-fields.json`).
+//! `new_props`, which Clarity.UI reads from `catalog/part-defaults.json` in
+//! runtimes/rust-ui), so a window reads like its Clarity. Every value is
+//! text: text as it is, a number or true and false as written, a list or a
+//! record as JSON; Clarity.UI reads each by its field's type
+//! (`catalog/part-fields.json`).
 
 use std::fmt::Write as _;
 

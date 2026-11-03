@@ -5,7 +5,9 @@
 //! folder picker through the "..." button inside its right edge, which says
 //! what it does in Clarity's own words when the pointer rests on it and
 //! takes no Tab stop, and a chosen folder is taken at once. Where nothing
-//! picks a folder (a browser) and on a read-only one, there is no button. A
+//! picks a folder (a browser) and on a read-only one, there is no button;
+//! where nothing picks one, a part without a placeholder of its own says
+//! in Clarity's words that the folder's path on the server is typed. A
 //! bound one writes its field; an unbound named one keeps its text in its
 //! state.
 //!
@@ -36,6 +38,11 @@ pub const BUTTON_WIDTH: f64 = 28.0;
 /// What the button does, in Clarity's own words: its name and the title of the picker.
 pub fn choose_name() -> String {
     locale::translate("chooseFolder", "Choose a folder")
+}
+
+/// What a folder part says where nothing picks a folder (a browser, whose program and folders are on the server).
+pub fn type_name() -> String {
+    locale::translate("typeServerFolder", "Type the path of a folder on the server")
 }
 
 /// The folder the picker gave.
@@ -78,6 +85,8 @@ pub struct FolderPart {
     base: PartBase,
     editor: TextEditor,
     button: ChooseButton,
+    /// The placeholder its markup gives.
+    placeholder: Option<String>,
     own: String,
     shown: Option<String>,
     /// A press began on the button.
@@ -93,12 +102,13 @@ impl FolderPart {
     pub fn new(spec: PartSpec, host: Rc<dyn PartHost>) -> FolderPart {
         let base = PartBase::new(spec, host);
         let mut editor = TextEditor::new(false);
-        editor.placeholder = base.spec.text("placeholder").map(|p| base.host.text(Some(p)));
+        let placeholder = base.spec.text("placeholder").map(|p| base.host.text(Some(p)));
+        editor.placeholder = placeholder.clone();
         editor.undoes = !base.spec.flag("noUndo");
         let mut side = InputSideButton::new(InputIcon::More);
         side.name = choose_name();
         let button = ChooseButton { side, shown: false };
-        let mut part = FolderPart { base, editor, button, own: String::new(), shown: None, pressing_button: false, pointer: None };
+        let mut part = FolderPart { base, editor, button, placeholder, own: String::new(), shown: None, pressing_button: false, pointer: None };
         part.sync();
         part
     }
@@ -188,6 +198,8 @@ impl FolderPart {
         self.editor.enabled = self.base.enabled();
         self.editor.read_only = self.base.read_only();
         self.editor.marked = state.and_then(|s| s.error).is_some_and(|e| !e.show().is_empty());
+        let typed_only = !self.base.read_only() && !crate::files::system().picks_folders();
+        self.editor.placeholder = self.placeholder.clone().or_else(|| typed_only.then(type_name));
         self.editor.mirror(&self.base.node);
     }
 }

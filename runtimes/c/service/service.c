@@ -40,7 +40,28 @@ struct ClarityService {
     /// a handler changed them: a row chosen since shows (DESIGN 1.7).
     ClaritySelected* sent;
     size_t sent_count;
+    /// The settings of the page whose command runs (clarity_service_page).
+    const cJSON* page;
 };
+
+void clarity_service_page(ClarityService* service, const cJSON* settings) {
+    if (service) service->page = cJSON_IsObject(settings) ? settings : NULL;
+}
+
+/// The window's settings record starts from the page's: each setting it
+/// has, of the same kind (a number for a number, text for text, ...).
+static void with_page_settings(const ClarityService* s, ClarityWindowState* opened) {
+    cJSON* record = opened && opened->data ? cJSON_GetObjectItemCaseSensitive(opened->data, "settings") : NULL;
+    if (!s->page || !cJSON_IsObject(record)) return;
+    const cJSON* setting;
+    cJSON_ArrayForEach(setting, s->page) {
+        if (!setting->string || strcmp(setting->string, "id") == 0) continue;
+        cJSON* was = cJSON_GetObjectItemCaseSensitive(record, setting->string);
+        int kind = was ? (was->type & 0xFF) : 0, given = setting->type & 0xFF;
+        bool alike = kind == given || ((kind == cJSON_True || kind == cJSON_False) && (given == cJSON_True || given == cJSON_False));
+        if (was && alike) cJSON_ReplaceItemInObjectCaseSensitive(record, setting->string, cJSON_Duplicate(setting, true));
+    }
+}
 
 ClarityService* clarity_service_new(const ClarityServiceOptions* options) {
     clarity_start();
@@ -504,6 +525,7 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
     if (strcmp(command, "open_window") == 0) {
         ClarityWindowState* opened;
         if (!windows->open(db, text_of(args, "window"), with, &opened)) return failed();
+        with_page_settings(s, opened);
         return replied(s, opened, "open");
     }
     if (strcmp(command, "close_window") == 0) {

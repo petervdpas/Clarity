@@ -7,8 +7,7 @@ use winit::keyboard::{Key as Logical, KeyCode, ModifiersState, NamedKey, Physica
 
 use crate::input::{Key, Modifiers};
 
-/// How far a notch of the wheel scrolls, in the screen's units; a browser's line is the same.
-pub const WHEEL_NOTCH: f64 = 50.0;
+pub use crate::input::WHEEL_NOTCH;
 
 /// Clarity.UI's key of a key of the keyboard. What the key writes comes
 /// first, so a shortcut is the letter or symbol the person sees on it (the

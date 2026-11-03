@@ -8,6 +8,13 @@
 //! against the release's SHA256SUMS and unpacks it into the person's cache
 //! folder, once per version. The decisions are plain functions here; the download itself is
 //! the caller's (`provide` takes it as `get`).
+//!
+//! The browser files (round B: `clarity-ui.js`, `clarity-ui.wasm` and the
+//! worker and page scripts, which every language's web server serves) come
+//! the same way, as the release's `browser` archive: the folder the
+//! environment variable `CLARITY_UI_BROWSER` names, else the one the
+//! installed Clarity carries, else fetched into the cache folder
+//! (`browser_library`).
 
 use std::ffi::OsStr;
 use std::io::Read;
@@ -15,6 +22,12 @@ use std::path::{Path, PathBuf};
 
 /// Where the releases' files are downloaded from: `<RELEASES>/<tag>/<file>`.
 pub const RELEASES: &str = "https://github.com/petervdpas/Clarity/releases/download";
+
+/// The release's name for the browser files, beside the systems' rids.
+pub const BROWSER: &str = "browser";
+
+/// The browser files, as a web server serves them side by side.
+pub const BROWSER_FILES: [&str; 4] = ["clarity-ui.js", "clarity-ui.wasm", "clarity-ui-worker.js", "clarity-ui-page.js"];
 
 /// The library's crate, whose version names the release.
 const FFI_MANIFEST: &str = include_str!("../../../runtimes/rust-ui-ffi/Cargo.toml");
@@ -119,6 +132,16 @@ pub fn complete(folder: &Path, os: &str) -> bool {
     folder.join("include").join("clarity_ui.h").is_file() && folder.join("lib").join(library_file(os)).is_file()
 }
 
+/// Whether `folder` holds the browser files.
+pub fn browser_complete(folder: &Path) -> bool {
+    BROWSER_FILES.iter().all(|file| folder.join(file).is_file())
+}
+
+/// The file an unpacked archive of `rid` must hold, below its folder.
+fn proof(rid: &str) -> &'static str {
+    if rid == BROWSER { "clarity-ui.wasm" } else { "include/clarity_ui.h" }
+}
+
 /// The checksum SHA256SUMS (as `sha256sum` writes it) gives for file `name`.
 pub fn sum_for<'a>(sums: &'a str, name: &str) -> Option<&'a str> {
     sums.lines().find_map(|line| {
@@ -154,8 +177,8 @@ pub fn unpack(archive: &[u8], version: &str, rid: &str, into: &Path) -> Result<(
         // tar leaves out entries that would land outside the folder (`..`, absolute paths).
         tar::Archive::new(flate2::read::GzDecoder::new(archive)).unpack(&partial).map_err(|err| format!("cannot unpack the archive: {err}"))?;
         let top = partial.join(folder_name(version, rid));
-        if !top.join("include").join("clarity_ui.h").is_file() {
-            return Err(format!("the archive has no {}/include/clarity_ui.h", folder_name(version, rid)));
+        if !top.join(proof(rid)).is_file() {
+            return Err(format!("the archive has no {}/{}", folder_name(version, rid), proof(rid)));
         }
         if into.exists() {
             std::fs::remove_dir_all(into).map_err(|err| format!("cannot replace {}: {err}", into.display()))?;
@@ -186,15 +209,26 @@ pub enum Library {
 /// complete), the cache folder, this system's `rid` and `os`, and the
 /// library `version`.
 pub fn library_in(named: Option<&OsStr>, bundled: Option<&Path>, cache: Option<&Path>, rid: Option<&str>, version: &str, os: &str) -> Library {
+    found_in(named, bundled, cache, rid, version, &|folder| complete(folder, os))
+}
+
+/// Where the browser files come from, given what CLARITY_UI_BROWSER says
+/// (`named`), the folder the installed Clarity carries (`bundled`), the
+/// cache folder and the library `version`: as `library_in` decides.
+pub fn browser_library_in(named: Option<&OsStr>, bundled: Option<&Path>, cache: Option<&Path>, version: &str) -> Library {
+    found_in(named, bundled, cache, Some(BROWSER), version, &browser_complete)
+}
+
+fn found_in(named: Option<&OsStr>, bundled: Option<&Path>, cache: Option<&Path>, rid: Option<&str>, version: &str, ready: &dyn Fn(&Path) -> bool) -> Library {
     if let Some(named) = named.filter(|n| !n.is_empty()) {
         return Library::Named(PathBuf::from(named));
     }
-    if let Some(bundled) = bundled.filter(|b| complete(b, os)) {
+    if let Some(bundled) = bundled.filter(|b| ready(b)) {
         return Library::Bundled(bundled.to_path_buf());
     }
     let (Some(cache), Some(rid)) = (cache, rid) else { return Library::Unavailable };
     let folder = library_dir(cache, version, rid);
-    if complete(&folder, os) { Library::Fetched(folder) } else { Library::ToFetch { folder, version: version.to_string(), rid: rid.to_string() } }
+    if ready(&folder) { Library::Fetched(folder) } else { Library::ToFetch { folder, version: version.to_string(), rid: rid.to_string() } }
 }
 
 /// The folder the installed Clarity carries, which the IDE names when it
@@ -213,6 +247,28 @@ pub fn library() -> Library {
     let named = std::env::var_os("CLARITY_UI");
     let cache = cache_dir_in(os, |name| std::env::var(name).ok());
     library_in(named.as_deref(), BUNDLED.get().map(PathBuf::as_path), cache.as_deref(), rid(os, std::env::consts::ARCH).as_deref(), version(), os)
+}
+
+/// The browser files the installed Clarity carries, which the IDE names when it starts.
+static BUNDLED_BROWSER: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Names the folder of the browser files the installed Clarity carries: its resource folder's `clarity-ui-browser`.
+pub fn set_bundled_browser(folder: PathBuf) {
+    let _ = BUNDLED_BROWSER.set(folder);
+}
+
+/// Where the browser files come from on this machine.
+pub fn browser_library() -> Library {
+    let named = std::env::var_os("CLARITY_UI_BROWSER");
+    let cache = cache_dir_in(std::env::consts::OS, |name| std::env::var(name).ok());
+    browser_library_in(named.as_deref(), BUNDLED_BROWSER.get().map(PathBuf::as_path), cache.as_deref(), version())
+}
+
+/// The browser files Clarity's repository built (runtimes/rust-ui-browser/build.sh
+/// writes them to `<repo>/target/clarity-ui-browser`); none when they are not built.
+pub fn repository_browser(repo: &Path) -> Option<PathBuf> {
+    let folder = repo.join("target").join("clarity-ui-browser");
+    browser_complete(&folder).then_some(folder)
 }
 
 /// The folder Clarity's repository makes of the library it built (a

@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use clarity_ui::input::{Key, KeyInput, PointerButton};
 use clarity_ui::locale;
-use clarity_ui::parts::inputs::folder::{choose_name, FolderPart};
+use clarity_ui::parts::inputs::folder::{choose_name, type_name, FolderPart};
 use clarity_ui::parts::inputs::testing::InputsHost;
 use clarity_ui::parts::text_box::InputIcon;
 use clarity_ui::parts::PartHost;
@@ -135,6 +135,26 @@ fn where_nothing_picks_a_folder_it_is_only_typed() {
     let (screen, _, picker) = make(MARKUP);
     picker.no_folders();
     assert!(!part(&screen).choose_button().is_shown());
+}
+
+/// In a browser nothing picks a folder: the program and its folders are on
+/// the server, so the part says in Clarity's words that a path there is
+/// typed; a placeholder of its own goes first.
+#[test]
+fn where_nothing_picks_a_folder_it_says_a_path_on_the_server_is_typed() {
+    let (mut screen, _, picker) = make(r#"<Folder at="1,1" span="12" name="export" />"#);
+    assert_eq!(None, part(&screen).editor().placeholder, "a picker: the button says it");
+    picker.no_folders();
+    screen.resize(810.0, 60.0, 1.0);
+    Shot::of(&mut screen, 810, 60, 1.0);
+    let words = locale::translate("typeServerFolder", "Type the path of a folder on the server");
+    assert_eq!(words, type_name());
+    assert_eq!(Some(words), part(&screen).editor().placeholder);
+    let (mut own, _, picker) = make(r#"<Folder at="1,1" span="12" name="export" placeholder="Exports" />"#);
+    picker.no_folders();
+    own.resize(810.0, 60.0, 1.0);
+    Shot::of(&mut own, 810, 60, 1.0);
+    assert_eq!(Some("Exports".to_string()), part(&own).editor().placeholder);
 }
 
 #[test]

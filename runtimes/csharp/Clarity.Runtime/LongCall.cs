@@ -3,10 +3,10 @@
 // it says (Waiter): on the desktop the windows' loop goes on, so the window keeps
 // painting, shows how far the call is with a bar and Stop, and takes no other
 // handler. One handler runs at a time in the windows that show together, so a
-// long call belongs to them: the window stack on the desktop (with the desktop
-// windows it opened), a session on a server. Each window holds the long call
-// of the windows it shows with (WindowViewModel.LongCall), and another
-// stack's or session's handlers neither wait for it nor see it.
+// long call belongs to them: the windows of the program answering Clarity.UI,
+// on the desktop or on a web server. Each window holds the long call of the
+// windows it shows with (WindowViewModel.LongCall), and another program's
+// handlers neither wait for it nor see it.
 
 using Clarity.Runtime;
 

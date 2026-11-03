@@ -458,6 +458,11 @@ fn a_program_served_to_a_browser_alone_has_no_native_parts() {
         let both = clarity_project::parse(&format!("project Game\n    stack {desktop}\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
         assert!(clarity_gen::generate(&project, &both).is_ok(), "{desktop} with a desktop window");
     }
+    // A .NET part too: Clarity.UI runs alone in the browser, for every language (DESIGN 7.9, B2).
+    let web = clarity_project::parse("project Notes\n    stack csharp web\n    datasource main sqlite \"data/notes.db\"\n").unwrap();
+    let refused = clarity_gen::generate(&notes_project(), &web).expect_err("a .NET part in a browser");
+    assert_eq!(refused, ["part Notes draws in a window of the desktop, which a program served to a browser has not; add the desktop target, or leave the part out"]);
+    assert!(clarity_gen::generate(&notes_project(), &notes_settings()).is_ok());
 }
 
 #[test]

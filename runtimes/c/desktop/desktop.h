@@ -15,31 +15,10 @@
 // the library is read as CLARITY_OK or not.
 #undef CLARITY_INVALID
 #undef CLARITY_NOT_FOUND
+#include "service/carried.h"
 #include "service/service.h"
-
-/// A file the program carries: its name (a window's, a theme's
-/// "shop.light", a resource's "logo.png") and its bytes.
-typedef struct {
-    const char* name;
-    const unsigned char* data;
-    size_t size;
-} ClarityCarried;
-
-/// Everything the program carries for Clarity.UI, in the order the project
-/// gives it: CMake puts the files in (clarity_carry in clarity.cmake).
-typedef struct {
-    const ClarityCarried* windows;
-    size_t window_count;
-    const ClarityCarried* apps;
-    size_t app_count;
-    const ClarityCarried* themes;
-    size_t theme_count;
-    const ClarityCarried* resources;
-    size_t resource_count;
-} ClarityCarriedFiles;
-
-/// The files the program carries: CMake writes them (clarity_carry in clarity.cmake).
-extern const ClarityCarriedFiles clarity_carried;
+#include "service/watches.h"
+#include "service/wire.h"
 
 typedef struct {
     /// What the service answers from: the program's windows, its databases,

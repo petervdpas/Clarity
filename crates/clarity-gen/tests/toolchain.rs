@@ -43,6 +43,11 @@ fn csharp_builds_with_dotnet() {
     assert_eq!(release.args, ["build", "--nologo", "-tl:off", "-c", "Release"]);
     assert_eq!(release.program, exe("bin/Release/net10.0/Shop"));
     assert!(debug.missing.contains(".NET SDK"), "{}", debug.missing);
+    // A web application is built as its server, which builds the application it serves.
+    let web = clarity_project::parse("project Shop\n    stack csharp web\n    datasource main sqlite \"data/shop.db\"\n").unwrap();
+    let served = clarity_gen::toolchain(&web, false).unwrap();
+    assert_eq!(served.args, ["build", "Server", "--nologo", "-tl:off", "-c", "Debug"]);
+    assert_eq!(served.program, exe("Server/bin/Debug/net10.0/Shop.Server"));
 }
 
 #[test]
@@ -350,5 +355,105 @@ fn the_repository_s_library_serves_as_the_carried_one() {
     std::fs::write(repo.join("target/release").join(library_file(os)), "second").unwrap();
     repository_library(&repo, os).unwrap();
     assert_eq!(std::fs::read_to_string(folder.join("lib").join(library_file(os))).unwrap(), "second");
+    std::fs::remove_dir_all(&repo).unwrap();
+}
+
+/// The browser archive as the release workflow packs it: the folder
+/// clarity-ui-<version>-browser with the four browser files and LICENSE.
+fn clarity_ui_browser_archive(version: &str, files: &[&str]) -> Vec<u8> {
+    let top = clarity_gen::clarity_ui::folder_name(version, "browser");
+    let mut tar = tar::Builder::new(flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default()));
+    for path in files.iter().copied().chain(["LICENSE"]) {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(path.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append_data(&mut header, format!("{top}/{path}"), path.as_bytes()).unwrap();
+    }
+    tar.into_inner().unwrap().finish().unwrap()
+}
+
+/// The browser files come as the library does: CLARITY_UI_BROWSER, else the
+/// installed Clarity's folder, else the release's `browser` archive,
+/// fetched once, checked against SHA256SUMS and unpacked into the cache.
+#[test]
+fn clarity_ui_browser_files_are_fetched_once_checked_and_unpacked() {
+    use clarity_gen::clarity_ui::{BROWSER, BROWSER_FILES, Library, archive_url, browser_complete, browser_library_in, provide, sha256_hex, sums_url};
+    assert_eq!(BROWSER_FILES, ["clarity-ui.js", "clarity-ui.wasm", "clarity-ui-worker.js", "clarity-ui-page.js"]);
+    assert_eq!(archive_url("https://x", "1.2.3", BROWSER), "https://x/runtimes/rust-ui-ffi/v1.2.3/clarity-ui-1.2.3-browser.tar.gz");
+    let cache = std::env::temp_dir().join(format!("clarity-ui-browser-cache-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&cache);
+    let archive = clarity_ui_browser_archive("9.9.9", &BROWSER_FILES);
+    let sums = format!("0000  clarity-ui-9.9.9-linux-x64.tar.gz\n{}  clarity-ui-9.9.9-browser.tar.gz\n", sha256_hex(&archive));
+    let base = "https://example.test/releases";
+    let asked = std::cell::RefCell::new(Vec::new());
+    let get = |url: &str| -> Result<Vec<u8>, String> {
+        asked.borrow_mut().push(url.to_string());
+        if url == sums_url(base, "9.9.9") {
+            Ok(sums.clone().into_bytes())
+        } else if url == archive_url(base, "9.9.9", BROWSER) {
+            Ok(archive.clone())
+        } else {
+            Err(format!("no {url}"))
+        }
+    };
+    let say = |_: String| {};
+
+    let folder = cache.join("clarity/clarity-ui/9.9.9/browser");
+    let first = browser_library_in(None, None, Some(&cache), "9.9.9");
+    assert_eq!(first, Library::ToFetch { folder: folder.clone(), version: "9.9.9".into(), rid: "browser".into() });
+    assert_eq!(provide(first, base, &get, &say).unwrap(), folder);
+    assert!(browser_complete(&folder));
+    assert_eq!(std::fs::read_to_string(folder.join("clarity-ui.wasm")).unwrap(), "clarity-ui.wasm");
+    assert_eq!(asked.borrow().len(), 2);
+    assert_eq!(browser_library_in(None, None, Some(&cache), "9.9.9"), Library::Fetched(folder.clone()));
+
+    // The named folder wins; the installed Clarity's comes before the cache when it is complete.
+    let named = std::path::Path::new("/opt/clarity-ui-browser");
+    assert_eq!(browser_library_in(Some(named.as_os_str()), None, Some(&cache), "9.9.9"), Library::Named(named.to_path_buf()));
+    let bundled = cache.join("installed");
+    std::fs::create_dir_all(&bundled).unwrap();
+    assert_eq!(browser_library_in(None, Some(&bundled), Some(&cache), "9.9.9"), Library::Fetched(folder.clone()));
+    for file in BROWSER_FILES {
+        std::fs::write(bundled.join(file), "").unwrap();
+    }
+    assert_eq!(browser_library_in(None, Some(&bundled), Some(&cache), "8.8.8"), Library::Bundled(bundled.clone()));
+    assert_eq!(browser_library_in(None, None, None, "8.8.8"), Library::Unavailable);
+
+    // An archive that is not the release's is refused.
+    let wrong = |url: &str| -> Result<Vec<u8>, String> {
+        if url.ends_with("SHA256SUMS") { Ok(format!("{}  clarity-ui-8.8.8-browser.tar.gz\n", "0".repeat(64)).into_bytes()) } else { Ok(clarity_ui_browser_archive("8.8.8", &BROWSER_FILES)) }
+    };
+    assert!(provide(browser_library_in(None, None, Some(&cache), "8.8.8"), base, &wrong, &say).unwrap_err().contains("not the release's"));
+    assert!(!cache.join("clarity/clarity-ui/8.8.8").exists());
+    std::fs::remove_dir_all(&cache).unwrap();
+}
+
+/// A browser archive without the wasm is refused, and leaves nothing.
+#[test]
+fn clarity_ui_browser_archive_must_hold_the_wasm() {
+    use clarity_gen::clarity_ui::unpack;
+    let cache = std::env::temp_dir().join(format!("clarity-ui-browser-unpack-{}", std::process::id()));
+    let into = cache.join("7.7.7/browser");
+    let archive = clarity_ui_browser_archive("7.7.7", &["clarity-ui.js"]);
+    assert!(unpack(&archive, "7.7.7", "browser", &into).unwrap_err().contains("clarity-ui-7.7.7-browser/clarity-ui.wasm"));
+    assert_eq!(std::fs::read_dir(cache.join("7.7.7")).unwrap().count(), 0);
+    std::fs::remove_dir_all(&cache).unwrap();
+}
+
+/// Clarity run from its repository takes the browser files build.sh wrote to target/clarity-ui-browser.
+#[test]
+fn the_repository_s_browser_files_serve_as_the_carried_ones() {
+    use clarity_gen::clarity_ui::{BROWSER_FILES, repository_browser};
+    let repo = std::env::temp_dir().join(format!("clarity-ui-browser-repo-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&repo);
+    let folder = repo.join("target/clarity-ui-browser");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("clarity-ui.js"), "").unwrap();
+    assert_eq!(repository_browser(&repo), None, "not all of them are built");
+    for file in BROWSER_FILES {
+        std::fs::write(folder.join(file), "").unwrap();
+    }
+    assert_eq!(repository_browser(&repo), Some(folder));
     std::fs::remove_dir_all(&repo).unwrap();
 }

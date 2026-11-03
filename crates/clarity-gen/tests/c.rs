@@ -192,27 +192,22 @@ fn the_desktop_carries_its_files_for_clarity_ui() {
     has(file(&files, "README.md"), &format!("`clarity-ui-{}-<system>.tar.gz`", clarity_gen::clarity_ui::version()));
 }
 
-/// The web target's page carries its script and styles.
+/// The web target carries the browser's files (browser/, round B): the page
+/// on which Clarity.UI draws, and files.json with the windows' markup, the
+/// themes and the model, put into the program by CMake.
 #[test]
 fn the_page_carries_the_renderer() {
-    // Clarity's screen is one page in ui/, which CMake compiles into the program with the windows' markup (DESIGN 7.8).
     let project = load_sources([("sales.clarity", SALES)]);
     let mut settings = settings();
     settings.stack.targets = vec![clarity_project::Target::Web];
     let files = generate(&project, &settings).unwrap();
-    let page = file(&files, "src/page.c");
-    has(page, "clarity_page_html");
-    has(page, "const char* page_html(void) {");
-    let cmake = file(&files, "CMakeLists.txt");
-    has(cmake, "file(GLOB CLARITY_WINDOWS ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/*.cxaml)");
-    has(cmake, "string(REPLACE \"<!--clarity-windows-->\" \"${CLARITY_MARKUP}\" CLARITY_PAGE \"${CLARITY_PAGE}\")");
-    has(cmake, "target_sources(shop PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/page_html.c)");
-    assert!(!cmake.contains("clarity_carry"), "{cmake}");
-    // Clarity's screen as one page, with the place for the windows, and the windows' markup beside it.
-    let page = file(&files, "ui/index.html");
-    has(page, "<script type=\"module\">");
-    has(page, "<!--clarity-windows-->");
-    assert!(files.iter().any(|f| f.path.starts_with("ui/windows/") && f.path.ends_with(".cxaml")));
+    has(file(&files, "browser/index.html"), "<canvas id=\"clarity-ui\"></canvas>");
+    let carried = file(&files, "browser/clarity/files.json");
+    has(carried, "\"windows\":{\"OrderForm\":\"<?xml");
+    has(carried, "<Window name=\\\"OrderForm\\\">");
+    has(carried, "\"themes\":{");
+    has(file(&files, "CMakeLists.txt"), "clarity_carry(shop\n  BROWSER browser)");
+    assert!(!files.iter().any(|f| f.path.starts_with("windows/") || f.path.starts_with("ui/")), "the windows go in files.json alone");
 }
 
 #[test]
@@ -238,12 +233,12 @@ fn rows_read_again_lose_their_selected_row() {
 #[test]
 fn the_desktop_window_opens_at_the_main_windows_size() {
     let code: String = files().iter().filter(|f| f.path.ends_with(".c")).map(|f| f.text.as_str()).collect();
-    has(&code, "program_model(), NULL, db, &windows, 1100, 760};");
+    has(&code, "program_model(), db, &windows, 1100, 760};");
     let sized = SALES.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n");
     assert_ne!(sized, SALES);
     let project = load_sources([("sales.clarity", sized.as_str())]);
     let code: String = generate(&project, &settings()).unwrap().iter().filter(|f| f.path.ends_with(".c")).map(|f| f.text.clone()).collect();
-    has(&code, "program_model(), NULL, db, &windows, 640, 480};");
+    has(&code, "program_model(), db, &windows, 640, 480};");
 }
 
 /// A click can pass values to its handler: each written call is a case of
@@ -418,8 +413,9 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
     assert!(code.contains("clarity_ui_x(ui, \"dial\") + clarity_ui_y(ui, \"dial\")"), "{code}");
 }
 
-/// The web target (DESIGN 7.3): the program serves the renderer to a
-/// browser; beside the desktop target it serves with `--serve`.
+/// The web target (DESIGN 7.3, round B): the program serves Clarity.UI's
+/// browser files and its own (browser/), carried in it, and answers the
+/// library over HTTP; beside the desktop target it serves with `--serve`.
 #[test]
 fn the_web_target_serves_the_renderer() {
     use clarity_project::Target;
@@ -435,18 +431,34 @@ fn the_web_target_serves_the_renderer() {
     has(&desktop, "    int status = clarity_desktop_start(");
     assert!(!desktop.contains("clarity_serve("), "a desktop program serves nothing");
     let web = main_of(vec![Target::Web]);
-    has(&web, "    int status = clarity_serve(&options, clarity_serve_address(argc, argv, \"127.0.0.1:8080\"));\n");
-    assert!(!web.contains("clarity_desktop_start"), "a web program opens no window");
-    // Nor does it link Clarity.UI: only the service.
+    has(&web, "    int status = clarity_serve(&(ClarityServeOptions){options, &clarity_carried, {program_facts(), NULL}, false, NULL}, clarity_serve_address(argc, argv, \"127.0.0.1:8080\"));\n");
+    has(&web, "#include \"facts.h\"\n");
+    assert!(!web.contains("clarity_desktop_start") && !web.contains("page_html"), "a web program opens no window and has no page of its own");
+    // Nor does it link Clarity.UI: only the service, carrying the browser files of browser/.
     let mut settings = settings();
     settings.stack.targets = vec![Target::Web];
     let files = generate(&project, &settings).unwrap();
-    has(file(&files, "CMakeLists.txt"), "target_link_libraries(shop PRIVATE clarity clarity_service)");
+    let lists = file(&files, "CMakeLists.txt");
+    has(lists, "target_link_libraries(shop PRIVATE clarity clarity_service)");
+    has(lists, "clarity_carry(shop\n  BROWSER browser)\n");
+    assert!(!lists.contains("clarity_beside") && !lists.contains("CLARITY_UI_VERSION") && !lists.contains("page_html"), "{lists}");
+    for path in ["browser/index.html", "browser/clarity/files.json", "src/facts.c", "clarity-runtime/service/wire.c", "clarity-runtime/service/carried.h"] {
+        assert!(files.iter().any(|f| f.path == path), "{path}");
+    }
+    has(file(&files, "browser/index.html"), "<script src=\"clarity-ui-page.js\"></script>");
+    // No Svelte screen: no ui/ folder, no page of the old screen.
+    for f in &files {
+        assert!(!f.path.starts_with("ui/") && f.path != "src/page.c" && f.path != "src/page.h", "{}", f.path);
+    }
     for path in ["clarity-runtime/desktop/desktop.c", "clarity-runtime/desktop/desktop.h"] {
         assert!(!files.iter().any(|f| f.path == path), "{path}");
     }
     let both = main_of(vec![Target::Desktop, Target::Web]);
-    has(&both, "    if (serving)\n        status = clarity_serve(&options, clarity_serve_address(argc, argv, \"127.0.0.1:8080\"));\n    else\n        status = clarity_desktop_start(");
+    has(&both, "    if (serving)\n        status = clarity_serve(&(ClarityServeOptions){options, &clarity_carried, {program_facts(), NULL}, false, NULL}, clarity_serve_address(argc, argv, \"127.0.0.1:8080\"));\n    else\n        status = clarity_desktop_start(");
+    // Together the program carries the desktop's files and the browser's.
+    settings.stack.targets = vec![Target::Desktop, Target::Web];
+    let files = generate(&project, &settings).unwrap();
+    has(file(&files, "CMakeLists.txt"), "\n  BROWSER browser)\nclarity_beside(shop)\n");
 }
 
 // A canvas with a mode (DESIGN 5.31): its tool, brush and ink are part state

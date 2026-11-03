@@ -23,12 +23,6 @@ Install the .NET 10 SDK from [dotnet.microsoft.com](https://dotnet.microsoft.com
 winget install Microsoft.DotNet.SDK.10
 ```
 
-For an application with C#'s web target (`stack csharp web`), add .NET's WebAssembly tools, which link Clarity.UI's drawing (Skia) into the browser program, once; they stay with the SDK. Clarity installs them itself: **Install** in the Build tools row of the project settings, after you agree, with Windows asking for permission. To install them by hand, run this in a terminal opened as administrator when .NET is installed for every user, as winget installs it:
-
-```
-dotnet workload install wasm-tools
-```
-
 ### Go on Windows
 
 Install Go from [go.dev/dl](https://go.dev/dl), or in a terminal:
@@ -73,12 +67,6 @@ A Rust program draws its windows with Clarity.UI and needs nothing more: cargo d
 
 Install the .NET 10 SDK as [learn.microsoft.com](https://learn.microsoft.com/dotnet/core/install/linux) describes for your system, from its packages or with the install script.
 
-For an application with C#'s web target (`stack csharp web`), add .NET's WebAssembly tools, which link Clarity.UI's drawing (Skia) into the browser program, once; they stay with the SDK. Clarity installs them itself: **Install** in the Build tools row of the project settings, after you agree, with the system asking for your password where .NET is installed for every user. To install them by hand: with .NET from the system's packages (in `/usr/share/dotnet`) it takes `sudo`; with the install script, in your home folder, leave `sudo` out:
-
-```
-sudo dotnet workload install wasm-tools
-```
-
 ### Go on Linux
 
 Install Go from [go.dev/dl](https://go.dev/dl); the distribution's own package is often older than a project needs. A Go desktop program calls Clarity.UI's library through cgo, so it also needs a C compiler (Debian and Ubuntu: `sudo apt install gcc`).
@@ -102,12 +90,6 @@ Install the Xcode Command Line Tools with `xcode-select --install`, then Rust fr
 ### .NET on macOS
 
 Install the .NET 10 SDK from [dotnet.microsoft.com](https://dotnet.microsoft.com/download).
-
-For an application with C#'s web target (`stack csharp web`), add .NET's WebAssembly tools, which link Clarity.UI's drawing (Skia) into the browser program, once; they stay with the SDK. Clarity installs them itself: **Install** in the Build tools row of the project settings, after you agree, with macOS asking for your password. To install them by hand:
-
-```
-sudo dotnet workload install wasm-tools
-```
 
 ### Go on macOS
 

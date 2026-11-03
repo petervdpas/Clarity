@@ -22,8 +22,23 @@ fn scratch() -> std::path::PathBuf {
     dir
 }
 
+/// Clarity.UI's library for a desktop build: the folder CLARITY_UI names,
+/// else the one this repository built (`cargo build --release -p
+/// clarity-ui-ffi`), so the test builds on the library of this source and not
+/// on a release that may not be out yet; else none (the build fetches it).
+fn clarity_ui() -> Option<std::path::PathBuf> {
+    match std::env::var_os("CLARITY_UI") {
+        Some(folder) if !folder.is_empty() => Some(folder.into()),
+        _ => clarity_gen::clarity_ui::repository_library(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."), std::env::consts::OS),
+    }
+}
+
 fn run(dir: &Path, tool: &str, args: &[&str]) -> String {
-    let out = Command::new(tool).args(args).current_dir(dir).output().unwrap_or_else(|e| panic!("{tool}: {e}"));
+    let mut command = Command::new(tool);
+    if let Some(folder) = clarity_ui() {
+        command.env("CLARITY_UI", folder);
+    }
+    let out = command.args(args).current_dir(dir).output().unwrap_or_else(|e| panic!("{tool}: {e}"));
     let said = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     assert!(out.status.success(), "{tool} {args:?} failed in {}:\n{said}", dir.display());
     said
@@ -131,7 +146,7 @@ const BOARD_CHECK: &str = r#"#include <stdio.h>
 #include <string.h>
 
 #include "app.h"
-#include "page.h"
+#include "model.h"
 
 #define EXPECT(holds, what)                                                          \
     do {                                                                             \
@@ -150,7 +165,7 @@ static int64_t mark(uint64_t window, int64_t square) {
 
 int main(void) {
     clarity_start();
-    clarity_load_translations(page_model());
+    clarity_load_translations(program_model());
     const char* said = NULL;
     EXPECT(board_play(1, 1, &said) && strcmp(clarity_text_of(said), "Your move") == 0, "play");
     EXPECT(mark(1, 1) == 1, "your cross");
@@ -236,8 +251,9 @@ fn questions_and_their_answers_build_in_c() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// The web target (DESIGN 7.3): a project whose only target is the web
-/// builds into a web server that serves the renderer and answers its commands.
+/// The web target (DESIGN 7.3, round B): a project whose only target is the
+/// web builds into a web server that serves Clarity.UI's page and browser
+/// files, the program's files.json, and answers the library's commands.
 #[test]
 #[ignore]
 fn the_web_target_serves_in_c() {
@@ -249,7 +265,12 @@ fn the_web_target_serves_in_c() {
     let out = scratch().join(format!("clarity-gen-c-web-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
-    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let mut files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    // The program carries Clarity.UI's browser files, as Clarity's build adds them.
+    assert!(clarity_gen::web_browser::serves(&files));
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let folder = clarity_gen::web_browser::local_folder(Some(&root)).unwrap_or_else(|e| panic!("{e}"));
+    files.extend(clarity_gen::web_browser::library(&folder).unwrap());
     clarity_gen::write_out(&out, &files, &["build", "data"]).unwrap();
     let said = run(&out, "cmake", &["--workflow", "--preset", "debug"]);
     let own: Vec<&str> = said.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();

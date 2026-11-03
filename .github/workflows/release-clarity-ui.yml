@@ -15,6 +15,12 @@ name: Release Clarity.UI library
 # own runner, with skia-safe's prebuilt Skia; Linux on Ubuntu 22.04, so they
 # ask no newer glibc than 2.35. C# carries the same library in its NuGet
 # package and does not use these archives.
+#
+# Beside them, clarity-ui-<version>-browser.tar.gz holds the browser files
+# (DESIGN 7.9, round B): clarity-ui.js, clarity-ui.wasm, clarity-ui-worker.js
+# and clarity-ui-page.js, the library compiled once to WebAssembly with
+# Emscripten (the version rust-skia's CI builds skia-safe's prebuilt Skia
+# with), which every language's web server serves. SHA256SUMS covers all.
 
 on:
   push:
@@ -116,9 +122,66 @@ jobs:
           path: out/*.tar.gz
           if-no-files-found: error
 
+  browser:
+    name: Browser files
+    runs-on: ubuntu-24.04
+    env:
+      # rust-skia's CI builds skia-safe 0.156's prebuilt Skia for the browser with this one.
+      EMSCRIPTEN_VERSION: "6.0.9"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: The tag names the library's version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#runtimes/rust-ui-ffi/v}"
+          crate="$(sed -n 's/^version = "\(.*\)"/\1/p' runtimes/rust-ui-ffi/Cargo.toml | head -1)"
+          if [ "$tag" != "$crate" ]; then
+            echo "::error::the tag says $tag but runtimes/rust-ui-ffi/Cargo.toml says $crate"
+            exit 1
+          fi
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-emscripten
+
+      - name: Setup Emscripten
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "$EMSCRIPTEN_VERSION"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "$EMSCRIPTEN_VERSION"
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm32-unknown-emscripten
+
+      - name: Build the browser files
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#runtimes/rust-ui-ffi/v}"
+          name="clarity-ui-$version-browser"
+          EMSDK="$RUNNER_TEMP/emsdk" runtimes/rust-ui-browser/build.sh "out/$name"
+          cp LICENSE "out/$name/"
+          cd out
+          tar czf "$name.tar.gz" "$name"
+          ls -l
+
+      - name: Upload the archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: archive-browser
+          path: out/*.tar.gz
+          if-no-files-found: error
+
   release:
     name: Publish the release
-    needs: [native]
+    needs: [native, browser]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -151,5 +214,5 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" archives/* \
               --title "Clarity.UI library $version" \
-              --notes "The Clarity.UI library and its C header for Go, C and C++ programs, one archive per system. Unpack it and point the environment variable CLARITY_UI at the folder."
+              --notes "The Clarity.UI library and its C header for Go, C and C++ programs, one archive per system: unpack it and point the environment variable CLARITY_UI at the folder. The browser archive holds the files every language's web server serves (clarity-ui.js, clarity-ui.wasm and the worker and page scripts): CLARITY_UI_BROWSER names its folder."
           fi

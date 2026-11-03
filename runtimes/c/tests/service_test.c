@@ -136,7 +136,7 @@ static cJSON* invoked(ClarityService* s, const char* command, const char* args) 
 void the_service_answers_the_wires_commands(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
-    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", db, &cards};
     ClarityService* s = clarity_service_new(&options);
     CHECK_JSON(invoked(s, "start", "{}"), "{\"value\":{\"model\":{\"project\":{}},\"main\":\"Card\"}}");
     // The screen names the language text code makes is translated to.
@@ -194,7 +194,7 @@ static void closed(uint64_t instance, void* context) {
 void a_closed_window_is_reported(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
-    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", db, &cards};
     ClarityService* s = clarity_service_new(&options);
     closed_window = 0;
     clarity_on_window_closed(closed, NULL);
@@ -222,7 +222,7 @@ static bool connect_later(ClarityDb** out) {
 void an_unconnected_start_says_why_and_connects_later(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
-    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", db, &cards};
     clarity_fail(CLARITY_NOT_KEPT, "the secret setting shopDb is not kept yet");
     ClarityError not_kept = *clarity_error();
     options.unconnected = &not_kept;
@@ -253,7 +253,7 @@ void the_runtime_keeps_the_edits_and_ctrl_z_takes_them_back(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
     REQUIRE_OK(clarity_db_batch(db, "", "CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"));
-    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", db, &cards};
     ClarityService* s = clarity_service_new(&options);
     // A handler that changed the database answers with its step; one that failed or changed nothing, with none.
     CHECK(cJSON_GetObjectItem(invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"data\":{}},\"handler\":\"fail\"}"), "error"));
@@ -299,7 +299,7 @@ void the_runtime_reorders_a_list_and_ctrl_z_puts_it_back(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
     REQUIRE_OK(clarity_db_batch(db, "", "CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"));
-    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", db, &cards};
     ClarityService* s = clarity_service_new(&options);
     invoked(s, "dispatch_event", clarity_format("{\"state\":%s,\"handler\":\"noop\"}", tasks));
     const char* drag = "{\"row\":2,\"where\":\"before\",\"target\":0}";
@@ -327,7 +327,7 @@ void the_runtime_reorders_a_list_and_ctrl_z_puts_it_back(void) {
 void the_runtime_adds_a_typed_item_or_refuses_it(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
-    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", db, &cards};
     ClarityService* s = clarity_service_new(&options);
     const char* album = "{\"window\":\"Card\",\"instance\":11,\"data\":{\"album\":{\"tags\":[\"jazz\"],\"years\":[1999]}}}";
     invoked(s, "dispatch_event", clarity_format("{\"state\":%s,\"handler\":\"noop\"}", album));
@@ -352,7 +352,7 @@ void the_runtime_adds_a_typed_item_or_refuses_it(void) {
 void the_runtime_moves_a_value_within_its_range(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
-    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", db, &cards};
     ClarityService* s = clarity_service_new(&options);
     const char* mixer = "{\"window\":\"Card\",\"instance\":12,\"data\":{\"volume\":5,\"mix\":{\"balance\":\"0.2\"}}}";
     const char* volume = "\"part\":\"volume\",\"path\":\"volume\",\"min\":\"0\",\"max\":\"10\",\"step\":\"1\",\"whole\":true";
@@ -374,7 +374,7 @@ void the_runtime_moves_an_object_and_edits_a_drawing(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
     REQUIRE_OK(clarity_db_batch(db, "", "CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"));
-    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", db, &cards};
     ClarityService* s = clarity_service_new(&options);
     const char* types = "[{\"id\":1,\"x\":0,\"y\":0},{\"id\":2,\"x\":40,\"y\":40}]";
     const char* card = clarity_format("{\"window\":\"Card\",\"instance\":31,\"data\":{\"types\":%s,\"note\":{\"drawing\":\"\"}}}", types);
@@ -410,7 +410,7 @@ void the_runtime_walks_a_wizard(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
     REQUIRE_OK(clarity_db_batch(db, "", "CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"));
-    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", db, &cards};
     ClarityService* s = clarity_service_new(&options);
     const char* first = "{\"window\":\"Card\",\"data\":{}}";
     const char* second = "{\"window\":\"Card\",\"data\":{},\"parts\":{\"wizard\":{\"step\":2}}}";
@@ -452,7 +452,7 @@ static const ClarityWindows customers = {open_card, handler_of, dispatch, search
 void the_runtime_finds_a_dropdowns_options(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
-    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &customers};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", db, &customers};
     ClarityService* s = clarity_service_new(&options);
     CHECK_JSON(invoked(s, "find_options", "{\"kind\":\"typed\",\"entity\":\"Customer\",\"field\":\"city\",\"typed\":\"amst\"}"), "{\"value\":[\"Amstelveen\",\"amsterdam\"]}");
     CHECK_JSON(invoked(s, "find_options", "{\"kind\":\"search\",\"entity\":\"Customer\",\"show\":[\"city\"],\"typed\":\"gent\"}"),
@@ -483,7 +483,7 @@ static const char* const planner =
 void a_reply_fills_the_shown_rows_of_its_views(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
-    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", db, &cards};
     ClarityService* s = clarity_service_new(&options);
     cJSON* reply = invoked(s, "dispatch_event", clarity_format("{\"state\":%s,\"handler\":\"noop\"}", planner));
     CHECK_JSON(cJSON_GetObjectItem(view_of(reply, "grid"), "shown"), "[2,1]");
@@ -518,7 +518,7 @@ static cJSON* viewed(ClarityService* s, const cJSON* reply, const char* part, co
 void a_view_event_sorts_pages_opens_and_closes(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
-    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", db, &cards};
     ClarityService* s = clarity_service_new(&options);
     cJSON* first = invoked(s, "dispatch_event", clarity_format("{\"state\":%s,\"handler\":\"choose\"}", planner));
     // The chosen row stays chosen, and the person turns away from its page.
@@ -553,7 +553,7 @@ void a_readonly_part_takes_back_what_the_screen_changed(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
     REQUIRE_OK(clarity_db_batch(db, "", "CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"));
-    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", db, &cards};
     ClarityService* s = clarity_service_new(&options);
     invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"instance\":21,\"data\":{\"name\":\"Ada\",\"volume\":5,\"tags\":[\"jazz\"],\"rows\":[{\"id\":1,\"n\":1},{\"id\":2,\"n\":2}]}},\"handler\":\"noop\"}");
     const char* typed = "{\"window\":\"Card\",\"instance\":21,\"data\":{\"name\":\"Ann\",\"volume\":5,\"tags\":[\"jazz\"],\"rows\":[{\"id\":1,\"n\":1},{\"id\":2,\"n\":2}]}}";
@@ -585,7 +585,7 @@ void a_readonly_part_takes_back_what_the_screen_changed(void) {
 void a_table_takes_back_a_change_to_a_column_it_does_not_edit(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
-    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", db, &cards};
     ClarityService* s = clarity_service_new(&options);
     const char* rows = "[{\"id\":1,\"title\":\"Milk\",\"hours\":2},{\"id\":2,\"title\":\"Eggs\",\"hours\":1}]";
     invoked(s, "dispatch_event", clarity_format("{\"state\":{\"window\":\"Card\",\"instance\":22,\"data\":{\"tasks\":%s}},\"handler\":\"noop\"}", rows));

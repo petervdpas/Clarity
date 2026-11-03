@@ -1,6 +1,6 @@
 # C++ with Clarity.UI
 
-How Clarity turns a project into a C++20 desktop program whose windows Clarity.UI draws, or a C++ web server, what you need to install, and how to build it with CMake.
+How Clarity turns a project into a C++20 desktop program whose windows Clarity.UI draws, or a C++ web server whose windows Clarity.UI draws in the browser, what you need to install, and how to build it with CMake.
 
 ## Choosing the stack
 
@@ -10,7 +10,7 @@ Name the stack in the project file, or pick it on the Project tab:
 stack cpp desktop
 ```
 
-The backend is C++20 and the windows are drawn by Clarity.UI, Clarity's own UI, in the program's own process. `stack cpp web` makes a web server that shows the windows in a browser with Clarity's web renderer, and `stack cpp desktop cli` adds the command-line program. The project has the same shape as a [C project](stacks.c.md). See [The project file](project.file.md).
+The backend is C++20 and the windows are drawn by Clarity.UI, Clarity's own UI, in the program's own process. `stack cpp web` makes a web server instead: Clarity.UI, compiled for the browser, draws the same windows there and asks the program on the server. `stack cpp desktop web` opens the window, or serves with `--serve`, and `stack cpp desktop cli` adds the command-line program. The project has the same shape as a [C project](stacks.c.md). See [The project file](project.file.md).
 
 ## SQLite only
 
@@ -26,7 +26,8 @@ Clarity writes a CMake project into the output folder (`out` by default). All ge
 - `src/schema.hpp` and `src/schema.cpp`: the migration steps of every database Clarity owns.
 - `src/page.cpp`: the model (the data dictionary, the translations, what each window is besides its look) and the facts the parts read beside the values (each field's label, format and range), built into the program.
 - `ui/windows/` and `ui/apps/`: each window, and each app's frame (menu bar, toolbar, ribbon, sidebars, footer), as markup (`.cxaml`, Clarity's own dialect): its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`). Change a window in Clarity; Generate writes these files again. CMake builds them into the program, so a changed window file takes effect on the next build.
-- `ui/themes/` and `ui/resources/`: the project's themes as Clarity resolves them, and its pictures and other resources, built into the program the same way. The web target has Clarity's screen as one page instead, `ui/index.html`.
+- `ui/themes/` and `ui/resources/`: the project's themes as Clarity resolves them, and its pictures and other resources, built into the program the same way (the desktop target).
+- `browser/`: for the web target, what the browser takes: `index.html` (the page Clarity.UI draws on), Clarity.UI's browser files (`clarity-ui.js`, `clarity-ui.wasm`, `clarity-ui-worker.js`, `clarity-ui-page.js`), `clarity/files.json` (the windows and app frames as markup, the themes, the model, the title and size) and `clarity/resources/`. CMake builds every file of `browser/` into the program (`clarity_browser_files`), so it serves them without a folder beside it.
 - `src/parts.cpp` and `parts/`: the [custom parts](design.custom-parts.md), each a library of its own folder.
 - `src/main.cpp`: opens and migrates the databases and runs the windows on Clarity.UI (or serves them, for the web target).
 - `clarity-runtime/`: the C++ runtime, copied in.
@@ -36,9 +37,13 @@ Do not edit these files. Change the project in Clarity; it writes the folder aga
 
 ## The runtime
 
-As for C, Clarity copies its runtime into every project as `clarity-runtime/`. It holds the runtime (records, storage, queries and the binding to the screen), the service that answers the screen's commands, the web server, and the desktop program with `ui/ui.hpp`, the C++ layer over Clarity.UI's library. JSON comes from nlohmann_json, which you install on the system.
+As for C, Clarity copies its runtime into every project as `clarity-runtime/`. It holds the runtime (records, storage, queries and the binding to the screen), the service that answers Clarity.UI's commands on the desktop and over HTTP (`shell::wire_answer`), the web server, and the desktop program with `ui/ui.hpp`, the C++ layer over Clarity.UI's library. JSON comes from nlohmann_json, which you install on the system.
 
 A project with an [engine](code.engines.md) also gets the engine host and wasm3, which runs engines, in `clarity-runtime/`.
+
+## In the browser
+
+A web program is a web server (plain sockets, Winsock on Windows; each request on a thread of its own, the commands taking turns on the database). It listens on `--address host:port`, else the environment variable `CLARITY_ADDRESS`, else `127.0.0.1` at the project's `port` (8080 without the line). At `/` it serves `browser/index.html`; the page starts Clarity.UI in a Web Worker, which reads `clarity/files.json` and draws the windows with WebGL. Each thing the library asks the program is a POST of `{"command", "args"}` to `/clarity/invoke`, answered as `{"value"}` or `{"error"}` by the same service the desktop asks in-process. The database stays on the server, and so do engines: a long call's handler runs in its own request while the page asks how far it is and stops it in others. The person's settings stay in the browser.
 
 ## What to install
 
@@ -75,4 +80,4 @@ The application has one desktop window. `open` shows a window in place, on top o
 
 ## The same on every stack
 
-Clarity.UI is one library for every language, so the desktop programs of Rust, C#, Go, C and C++ draw alike. The web target shows the shared web screen until Clarity.UI draws in the browser. The shared cases in `conformance/` say what each part must do, and every runtime runs them.
+Clarity.UI is one library for every language, so the desktop programs of Rust, C#, Go, C and C++ draw alike. In the browser the same library draws, compiled once to WebAssembly. The shared cases in `conformance/` say what each part must do, and every runtime runs them.

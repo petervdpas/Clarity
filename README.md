@@ -43,7 +43,7 @@ examples/                example projects, each a project file with a folder of 
   build-engines.sh       builds the examples' engines from their sources in <example>/engines/<name>/
 ```
 
-Generated applications get their runtime as a package: Rust from crates.io (`clarity-runtime`), Go as a module (`github.com/petervdpas/Clarity/runtimes/go`), C# from NuGet (`Clarity.Ui` for a desktop program, which brings Clarity.UI's native library and `Clarity.Runtime`; `Clarity.Ui.Browser` for a browser page; a driver package per kind of database, such as `Clarity.Runtime.Sqlite`; and `Clarity.Runtime.Engines` for engines). The C and C++ runtimes are copied into every application, so it builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`). `runtimes/parts` is the part host of the C and C++ stacks, which runs custom parts written in C or C++, with its tests in `runtimes/parts/tests`; the Rust and Go runtimes host their parts themselves.
+Generated applications get their runtime as a package: Rust from crates.io (`clarity-runtime`), Go as a module (`github.com/petervdpas/Clarity/runtimes/go`), C# from NuGet (`Clarity.Ui` for a desktop program, which brings Clarity.UI's native library and `Clarity.Runtime`; `Clarity.Ui.Server` for a web server, which serves Clarity.UI's browser files; a driver package per kind of database, such as `Clarity.Runtime.Sqlite`; and `Clarity.Runtime.Engines` for engines). The C and C++ runtimes are copied into every application, so it builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`). `runtimes/parts` is the part host of the C and C++ stacks, which runs custom parts written in C or C++, with its tests in `runtimes/parts/tests`; the Rust and Go runtimes host their parts themselves.
 
 ## Requirements
 
@@ -53,7 +53,7 @@ Generated applications get their runtime as a package: Rust from crates.io (`cla
 - For C applications: CMake 3.25 or newer, a C17 compiler, pkg-config, and the SQLite 3 development package (`libsqlite3-dev` on Debian)
 - For C++ applications: CMake 3.25 or newer, a C++20 compiler, pkg-config, and the SQLite 3 and nlohmann-json development packages (`libsqlite3-dev nlohmann-json3-dev` on Debian)
 - For Go, C and C++ applications with a window: the Clarity.UI library (`libclarity_ui`, built from `runtimes/rust-ui-ffi`) and its header. Clarity's installer carries it; a Clarity built from source fetches it from its GitHub release on the first build (as a generated C or C++ project's CMake does, built without Clarity); the environment variable `CLARITY_UI` names a folder of your own instead (`include/` and `lib/`)
-- For C# applications: the .NET 10 SDK; for one with the web target (`stack csharp web`), also .NET's WebAssembly tools, which link Clarity.UI's drawing (Skia) into the browser program: `dotnet workload install wasm-tools` (with `sudo` where .NET is installed for the whole system, as on Linux in `/usr/share/dotnet`)
+- For C# applications: the .NET 10 SDK (a web application gets Clarity.UI's browser files from Clarity, as the other languages do)
 
 ### Setting up the tools
 

@@ -562,9 +562,9 @@ fn questions_and_their_answers_build_in_rust() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// The web target (DESIGN 7.3): a project whose only target is the web
-/// builds into a web server that serves the renderer and answers its
-/// commands, with what the desktop commands call.
+/// The web target (DESIGN 7.3, round B of 7.9): a project whose only target
+/// is the web builds into a web server that serves Clarity.UI's browser
+/// files and answers the wire the library asks the program over.
 #[test]
 #[ignore]
 fn the_web_target_serves_in_rust() {
@@ -572,7 +572,10 @@ fn the_web_target_serves_in_rust() {
     let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
     let mut settings = clarity_project::starter("Music", "music");
     settings.stack.targets = vec![clarity_project::Target::Web];
-    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let mut files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    // Clarity.UI's browser files, as Clarity's build adds them.
+    let folder = clarity_gen::web_browser::local_folder(Some(&root)).unwrap_or_else(|e| panic!("{e}"));
+    files.extend(clarity_gen::web_browser::library(&folder).unwrap());
     let out = scratch().join(format!("clarity-gen-build-web-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();

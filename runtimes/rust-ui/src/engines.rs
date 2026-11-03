@@ -48,9 +48,10 @@ fn gone() -> String {
 }
 
 impl Engines {
-    /// Instances whose frames each run on a thread of their own.
+    /// Instances whose frames each run on a thread of their own; at once
+    /// in a browser build, which has no threads.
     pub fn new() -> Engines {
-        Engines { here: false, next: Cell::new(1), running: RefCell::new(BTreeMap::new()) }
+        Engines { here: cfg!(target_os = "emscripten"), next: Cell::new(1), running: RefCell::new(BTreeMap::new()) }
     }
 
     /// Instances whose frames run at once, on the caller's thread: for a test, which waits for nothing.

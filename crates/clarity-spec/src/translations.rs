@@ -39,8 +39,9 @@ pub const STEP_KEYS: [(&str, &str); 3] = [("back", "Back"), ("next", "Next"), ("
 /// Clarity's words heading the pickers of the click targets `language` and `theme`.
 /// Clarity's word of a long engine call on the screen: its Stop button.
 pub const PROGRESS_KEYS: [(&str, &str); 1] = [("stopCall", "Stop")];
-/// Clarity's word of a folder part: its button that chooses a folder.
-pub const FOLDER_KEYS: [(&str, &str); 1] = [("chooseFolder", "Choose a folder")];
+/// Clarity's words of a folder part: its button that chooses a folder, and
+/// what it says where nothing picks one (a browser: the folder is on the server).
+pub const FOLDER_KEYS: [(&str, &str); 2] = [("chooseFolder", "Choose a folder"), ("typeServerFolder", "Type the path of a folder on the server")];
 
 /// The buttons of a canvas that zooms: out, back to whole, in.
 pub const ZOOM_KEYS: [(&str, &str); 3] = [("zoomOut", "Zoom out"), ("zoomWhole", "Show it whole"), ("zoomIn", "Zoom in")];

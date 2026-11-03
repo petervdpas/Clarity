@@ -1,8 +1,8 @@
 //! What the person chose to see the program in: its language and its theme
 //! (DESIGN 1.5), picked with the `language` and `theme` targets of a menu
 //! or the settings, and kept for the next start in a small file of the
-//! program's own (`choices.json`), as the web screen keeps them in the
-//! browser's storage. The languages offered are the one the texts are
+//! program's own (`choices.json`); in the browser, the page keeps them in
+//! its storage (`Keeper`). The languages offered are the one the texts are
 //! written in, then those the project translates; the themes are the
 //! project's, else Clarity's own. Whoever shows something of them (the
 //! window stack, the screen's look) reads `changes` to know they moved.
@@ -40,6 +40,7 @@ struct Chosen {
     themes: Vec<ThemeOffer>,
     theme: Option<String>,
     folder: Option<PathBuf>,
+    keeper: Option<Keeper>,
     kept: BTreeMap<String, String>,
     changes: u64,
 }
@@ -51,6 +52,10 @@ fn with<R>(act: impl FnOnce(&mut Chosen) -> R) -> R {
     act(guard.get_or_insert_with(Chosen::default))
 }
 
+/// What keeps the choices where the program has no folder of its own (the
+/// browser's page, in its storage): given them all each time one changes.
+pub type Keeper = Arc<dyn Fn(&BTreeMap<String, String>) + Send + Sync>;
+
 const LANGUAGE_KEY: &str = "language";
 const THEME_KEY: &str = "theme";
 
@@ -58,18 +63,30 @@ const THEME_KEY: &str = "theme";
 /// what the person chose in an earlier run (kept in `folder`; none keeps
 /// choices for this run only).
 pub fn start(files: &AppFiles, folder: Option<PathBuf>) {
+    let kept = folder.as_ref().map(|f| read_kept(&f.join("choices.json"))).unwrap_or_default();
+    begin(files, folder, None, kept);
+}
+
+/// Starts from the program's model with what `keeper` kept in an earlier
+/// visit (`kept`, as the page's storage holds it); each choice made is
+/// given to `keeper` with the others.
+pub fn start_kept(files: &AppFiles, kept: BTreeMap<String, String>, keeper: Keeper) {
+    begin(files, None, Some(keeper), kept);
+}
+
+fn begin(files: &AppFiles, folder: Option<PathBuf>, keeper: Option<Keeper>, kept: BTreeMap<String, String>) {
     let model: Value = serde_json::from_str(files.model).unwrap_or_default();
     let project = &model["project"];
     let written = project["locale"]["language"].as_str().unwrap_or("en").to_string();
     let mut translated: Vec<String> = project["translations"].as_object().map(|t| t.keys().filter(|k| **k != written).cloned().collect()).unwrap_or_default();
     translated.sort();
     let themes = theme_offers(&model, files);
-    let kept = folder.as_ref().map(|f| read_kept(&f.join("choices.json"))).unwrap_or_default();
     with(|c| {
         c.written = written;
         c.translated = translated;
         c.themes = themes;
         c.folder = folder;
+        c.keeper = keeper;
         c.kept = kept;
         c.language = None;
         c.theme = None;
@@ -133,6 +150,9 @@ fn read_kept(file: &std::path::Path) -> BTreeMap<String, String> {
 /// Keeps one choice: read, changed and written back, so other keys stay as they were.
 fn keep(c: &mut Chosen, key: &str, value: &str) {
     c.kept.insert(key.to_string(), value.to_string());
+    if let Some(keeper) = &c.keeper {
+        keeper(&c.kept);
+    }
     let Some(folder) = c.folder.clone() else { return };
     let file = folder.join("choices.json");
     let mut all = read_kept(&file);
@@ -159,7 +179,11 @@ pub fn keep_value(key: &str, value: &str) {
 /// Forgets the value kept under `key`, for this run and the next start.
 pub fn forget(key: &str) {
     with(|c| {
-        c.kept.remove(key);
+        if c.kept.remove(key).is_some()
+            && let Some(keeper) = &c.keeper
+        {
+            keeper(&c.kept);
+        }
         let Some(folder) = c.folder.clone() else { return };
         let file = folder.join("choices.json");
         let mut all = read_kept(&file);
@@ -177,7 +201,8 @@ pub fn changes() -> u64 {
 }
 
 /// The language picked over the one the texts are written in; none for the written one.
-fn language_picked() -> Option<String> {
+/// The language chosen (kept or picked), when it is not the one the texts are written in.
+pub fn language_picked() -> Option<String> {
     with(|c| c.language.clone())
 }
 

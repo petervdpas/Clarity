@@ -1,0 +1,625 @@
+//! Clarity.UI in a real browser (round B): a small server serves the
+//! browser files (runtimes/rust-ui-browser/build.sh writes them to
+//! target/clarity-ui-browser, or CLARITY_UI_BROWSER names them), a window's
+//! markup and a program answering the wire; a headless Chromium with a
+//! profile of its own opens the page, the page's own pointer handlers
+//! click the button, and the server's reply shows in the canvas's pixels.
+//!
+//! Ignored: it needs the browser files (and so the Emscripten SDK) and
+//! Chromium. Run with `cargo test -p clarity-ui --test hosts browser_page
+//! -- --ignored --test-threads=1`; CLARITY_BROWSER_PROFILE names the folder
+//! the browser's profile and the shots go to (target/tmp otherwise).
+//!
+//! Besides the click: a long call (a handler that takes seconds) while the
+//! page draws on, its bar and Stop; and a phone-sized page at two device
+//! pixels per CSS pixel, clicked by touch.
+
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::{Arc, Mutex};
+use std::collections::BTreeSet;
+use std::time::{Duration, Instant};
+
+use base64::Engine as _;
+use clarity_runtime::ui::WindowState;
+use serde_json::{Map, Value, json};
+
+const MAIN: &str = r#"<Window name="Main">
+  <Heading name="title" at="1,1" span="12" caption="Clarity.UI in the browser" />
+  <Button name="greet" at="1,2" span="4" caption="Greet" onclick="greet" />
+  <Textbox name="answer" at="1,3" span="8" bind="answer" />
+</Window>
+"#;
+
+const ANSWER: &str = "Hello from the server";
+
+/// The test's page: the page script on a canvas that fills it, and a check
+/// that clicks the button through the canvas's own pointer events and posts
+/// what it saw.
+const PAGE: &str = r#"<!doctype html>
+<html><head><meta charset="utf-8"><title>Clarity.UI</title>
+<style>html, body { margin: 0; height: 100%; overflow: hidden; } #clarity-ui { width: 100vw; height: 100vh; }</style>
+</head><body><canvas id="clarity-ui"></canvas>
+<script>window.addEventListener("error", (e) => fetch("/result", { method: "POST", body: JSON.stringify({ error: e.message + " at " + e.filename + ":" + e.lineno }) }));</script>
+<script src="clarity-ui-page.js"></script>
+<script>
+(async () => {
+  const report = (what) => fetch("/result", { method: "POST", body: JSON.stringify(what) });
+  try {
+    const ui = window.clarityUi;
+    await ui.started;
+    const before = await ui.shot();
+    const read = await ui.step({ do: "read" });
+    const [x, y, w, h] = read.shown.greet;
+    const at = ui.canvas.getBoundingClientRect();
+    // As a page's own script makes one: no isPrimary, no pointerType; a mouse's all the same.
+    const point = { clientX: at.left + x + w / 2, clientY: at.top + y + h / 2, button: 0, bubbles: true };
+    ui.canvas.dispatchEvent(new PointerEvent("pointermove", point));
+    ui.canvas.dispatchEvent(new PointerEvent("pointerdown", point));
+    ui.canvas.dispatchEvent(new PointerEvent("pointerup", point));
+    let after = null;
+    for (let i = 0; i < 50; i++) {
+      after = await ui.step({ do: "read" });
+      if (after.data && after.data.answer) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const shot = await ui.shot();
+    const box = [ui.canvas.clientWidth, ui.canvas.clientHeight, window.innerWidth, window.innerHeight];
+    report({ read, after, before, shot, box, title: document.title, dpr: window.devicePixelRatio, kept: JSON.parse(localStorage.getItem("clarity.settings") || "null") });
+  } catch (why) {
+    report({ error: String(why && why.stack || why) });
+  }
+})();
+</script></body></html>
+"#;
+
+fn browser_files() -> PathBuf {
+    match std::env::var_os("CLARITY_UI_BROWSER") {
+        Some(folder) if !folder.is_empty() => PathBuf::from(folder),
+        _ => Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/clarity-ui-browser"),
+    }
+}
+
+fn chromium() -> Option<PathBuf> {
+    ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable"].iter().find_map(|name| {
+        std::env::var_os("PATH").and_then(|paths| std::env::split_paths(&paths).map(|p| p.join(name)).find(|p| p.is_file()))
+    })
+}
+
+/// What a test's server answers on the wire, by command and arguments.
+type Answers = Arc<dyn Fn(&str, &Value) -> Value + Send + Sync>;
+
+/// What the test's server serves: the page, the program's window, its answers.
+struct Site {
+    page: String,
+    /// A page around it, which shows it in a frame (`/page`); none: it is the page.
+    outer: Option<String>,
+    main: &'static str,
+    answers: Answers,
+}
+
+/// The program on the server: it starts (no app), opens Main, and its `greet` puts the answer in the window's data.
+fn answer(command: &str, args: &Value) -> Value {
+    let reply = |state: WindowState| json!({ "value": serde_json::to_value(super::core_windows_fake::reply(state)).unwrap() });
+    match command {
+        "started" => json!({ "value": { "main": "Main" } }),
+        "start_app" => reply(WindowState::new("", Map::new())),
+        "open_window" => {
+            let mut data = Map::new();
+            data.insert("answer".into(), json!(""));
+            // The answer brings the page's settings back: the page keeps them.
+            let mut answered = reply(WindowState::new(args["window"].as_str().unwrap_or("Main"), data));
+            answered["settings"] = json!({ "seen": "yes" });
+            answered
+        }
+        "dispatch_event" => {
+            let mut state: WindowState = serde_json::from_value(args["state"].clone()).unwrap();
+            if args["handler"] == json!("greet") {
+                state.data.insert("answer".into(), json!(ANSWER));
+            }
+            reply(state)
+        }
+        other => json!({ "error": format!("The test's program does not answer {other}.") }),
+    }
+}
+
+fn respond(mut stream: TcpStream, status: &str, kind: &str, body: &[u8]) {
+    let head = format!("HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n", body.len());
+    let _ = stream.write_all(head.as_bytes());
+    let _ = stream.write_all(body);
+}
+
+/// Serves one request: the page, the browser files, the program's files and wire, the result.
+fn serve(stream: TcpStream, files: &Path, site: &Site, asked: &Mutex<Vec<String>>, posted: &Mutex<Vec<Value>>, result: &Sender<Value>) {
+    let mut reader = BufReader::new(stream.try_clone().unwrap());
+    let mut line = String::new();
+    if reader.read_line(&mut line).is_err() {
+        return;
+    }
+    let mut length = 0;
+    loop {
+        let mut header = String::new();
+        if reader.read_line(&mut header).is_err() || header.trim().is_empty() {
+            break;
+        }
+        if let Some((name, value)) = header.split_once(':')
+            && name.eq_ignore_ascii_case("content-length")
+        {
+            length = value.trim().parse().unwrap_or(0);
+        }
+    }
+    let mut body = vec![0; length];
+    let _ = reader.read_exact(&mut body);
+    let path = line.split_whitespace().nth(1).unwrap_or("/").split('?').next().unwrap_or("/").to_string();
+    match path.as_str() {
+        "/" => respond(stream, "200 OK", "text/html; charset=utf-8", site.outer.as_ref().unwrap_or(&site.page).as_bytes()),
+        "/page" => respond(stream, "200 OK", "text/html; charset=utf-8", site.page.as_bytes()),
+        "/clarity/files.json" => {
+            let served = json!({ "title": "Greeter", "windows": { "Main": site.main }, "apps": {}, "themes": {}, "model": "", "resources": [] });
+            respond(stream, "200 OK", "application/json", served.to_string().as_bytes())
+        }
+        "/clarity/invoke" => {
+            let request = posted_value(&body);
+            let command = request["command"].as_str().unwrap_or_default().to_string();
+            asked.lock().unwrap().push(command.clone());
+            posted.lock().unwrap().push(posted_body(&request));
+            let answered = (site.answers)(&command, &request["args"]);
+            respond(stream, "200 OK", "application/json", answered.to_string().as_bytes())
+        }
+        "/result" => {
+            respond(stream, "200 OK", "text/plain", b"");
+            let _ = result.send(serde_json::from_slice(&body).unwrap_or(Value::Null));
+        }
+        _ => {
+            let name = path.trim_start_matches('/');
+            let kind = match name {
+                "clarity-ui.wasm" => "application/wasm",
+                "clarity-ui.js" | "clarity-ui-worker.js" | "clarity-ui-page.js" => "text/javascript",
+                _ => return respond(stream, "404 Not Found", "text/plain", b"not here"),
+            };
+            match std::fs::read(files.join(name)) {
+                Ok(bytes) => respond(stream, "200 OK", kind, &bytes),
+                Err(_) => respond(stream, "404 Not Found", "text/plain", b"not built"),
+            }
+        }
+    }
+}
+
+struct Browser(Child);
+
+impl Drop for Browser {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+fn png(base64: &Value) -> skia_safe::Image {
+    let bytes = base64::engine::general_purpose::STANDARD.decode(base64.as_str().expect("a shot")).unwrap();
+    skia_safe::Image::from_encoded(skia_safe::Data::new_copy(&bytes)).expect("the shot is a PNG")
+}
+
+fn pixels(image: &skia_safe::Image) -> Vec<u8> {
+    let info = skia_safe::ImageInfo::new_n32_premul((image.width(), image.height()), None);
+    let mut pixels = vec![0u8; (image.width() * image.height() * 4) as usize];
+    assert!(image.read_pixels(&info, &mut pixels, (image.width() * 4) as usize, (0, 0), skia_safe::image::CachingHint::Allow));
+    pixels
+}
+
+/// The page open in a headless Chromium with a profile of its own, away
+/// from any desktop session: what the server was asked, and what the page reports.
+struct Opened {
+    scratch: PathBuf,
+    asked: Arc<Mutex<Vec<String>>>,
+    /// Every wire request as posted, without its arguments.
+    posted: Arc<Mutex<Vec<Value>>>,
+    results: Receiver<Value>,
+    _browser: Browser,
+}
+
+fn open(name: &str, site: Site, flags: &[&str]) -> Opened {
+    let files = browser_files();
+    for file in ["clarity-ui.js", "clarity-ui.wasm", "clarity-ui-worker.js", "clarity-ui-page.js"] {
+        assert!(files.join(file).is_file(), "{} is not built: run runtimes/rust-ui-browser/build.sh", files.join(file).display());
+    }
+    let chromium = chromium().expect("no Chromium on this machine");
+    let scratch = std::env::var_os("CLARITY_BROWSER_PROFILE").map(PathBuf::from).unwrap_or_else(|| Path::new(env!("CARGO_TARGET_TMPDIR")).join("browser-page"));
+    let profile = scratch.join(format!("profile-{name}"));
+    let _ = std::fs::remove_dir_all(&profile);
+    std::fs::create_dir_all(&profile).unwrap();
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let asked: Arc<Mutex<Vec<String>>> = Arc::default();
+    let posted: Arc<Mutex<Vec<Value>>> = Arc::default();
+    let (sent, results) = channel();
+    let site = Arc::new(site);
+    {
+        let (asked, posted, files) = (asked.clone(), posted.clone(), files.clone());
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let (asked, posted, files, sent, site) = (asked.clone(), posted.clone(), files.clone(), sent.clone(), site.clone());
+                std::thread::spawn(move || serve(stream, &files, &site, &asked, &posted, &sent));
+            }
+        });
+    }
+
+    let browser = Browser(
+        Command::new(chromium)
+            .args(["--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
+            .args(flags)
+            .arg(format!("--user-data-dir={}", profile.display()))
+            .arg(format!("http://{address}/"))
+            .env("HOME", &profile)
+            .env_remove("DISPLAY")
+            .env_remove("WAYLAND_DISPLAY")
+            .env_remove("DBUS_SESSION_BUS_ADDRESS")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("Chromium starts"),
+    );
+    Opened { scratch, asked, posted, results, _browser: browser }
+}
+
+fn posted_value(body: &[u8]) -> Value {
+    serde_json::from_slice(body).unwrap_or(Value::Null)
+}
+
+/// A posted request without its arguments: command, browser, settings.
+fn posted_body(posted: &Value) -> Value {
+    json!({ "command": posted["command"], "browser": posted["browser"], "settings": posted["settings"] })
+}
+
+fn save_shot(scratch: &Path, name: &str, shot: &Value) {
+    let _ = std::fs::write(scratch.join(name), base64::engine::general_purpose::STANDARD.decode(shot.as_str().unwrap_or_default()).unwrap_or_default());
+}
+
+#[test]
+#[ignore = "needs the browser files (Emscripten) and Chromium"]
+fn a_click_in_the_browser_runs_the_servers_handler_and_its_reply_is_drawn() {
+    let site = Site { page: PAGE.to_string(), outer: None, main: MAIN, answers: Arc::new(answer) };
+    let Opened { scratch, asked, posted, results, _browser } = open("click", site, &["--window-size=900,600", "--force-device-scale-factor=1"]);
+    let result = results.recv_timeout(Duration::from_secs(90)).expect("the page reported within 90 s");
+    assert!(result.get("error").is_none(), "the page failed: {}", result["error"]);
+
+    let asked = asked.lock().unwrap().clone();
+    assert!(asked.contains(&"open_window".to_string()), "{asked:?}");
+    assert!(asked.contains(&"dispatch_event".to_string()), "{asked:?}: {}", json!({ "read": result["read"], "after": result["after"] }));
+    assert_eq!(result["title"], json!("Greeter"));
+    // Every request names this tab and carries the settings the page keeps;
+    // the settings an answer brought back are kept, by the page and in the next requests.
+    let posted = posted.lock().unwrap().clone();
+    let tab = posted[0]["browser"].as_str().expect("a request names its tab").to_string();
+    assert_eq!(tab.len(), 36, "one id per tab: {tab}");
+    assert!(posted.iter().all(|p| p["browser"] == json!(tab) && p["settings"].is_object()), "{posted:?}");
+    let opened = posted.iter().position(|p| p["command"] == json!("open_window")).unwrap();
+    assert_eq!(posted[0]["settings"], json!({}));
+    assert!(posted[opened + 1..].iter().all(|p| p["settings"] == json!({ "seen": "yes" })), "{posted:?}");
+    assert!(posted[opened + 1..].iter().any(|p| p["command"] == json!("dispatch_event")));
+    assert_eq!(result["kept"], json!({ "seen": "yes" }));
+    assert_eq!(result["after"]["data"]["answer"], json!(ANSWER), "{}", result["after"]);
+
+    // The reply shows: the answer's box is drawn otherwise than before.
+    let (before, after) = (png(&result["before"]), png(&result["shot"]));
+    save_shot(&scratch, "browser-before.png", &result["before"]);
+    save_shot(&scratch, "browser-after.png", &result["shot"]);
+    assert_eq!((after.width(), after.height()), (before.width(), before.height()));
+    let at: Vec<f64> = result["read"]["shown"]["answer"].as_array().expect("the answer's place").iter().map(|v| v.as_f64().unwrap()).collect();
+    let scale = result["dpr"].as_f64().unwrap_or(1.0);
+    let (left, top) = ((at[0] * scale) as i32, (at[1] * scale) as i32);
+    let (right, bottom) = (((at[0] + at[2]) * scale) as i32, ((at[1] + at[3]) * scale) as i32);
+    let (a, b) = (pixels(&before), pixels(&after));
+    let width = before.width();
+    let changed = (top..bottom).flat_map(|y| (left..right).map(move |x| ((y * width + x) * 4) as usize)).filter(|i| a[*i..*i + 4] != b[*i..*i + 4]).count();
+    assert!(changed > 50, "the answer's box shows no new text: {changed} pixels changed");
+    // The page draws something: not one color all over.
+    assert!(b.chunks(4).any(|p| p != &b[0..4]));
+}
+
+/// A phone-sized page at two device pixels per CSS pixel: the canvas fills
+/// the page, it draws at the device's pixels (sharp text), and a finger's
+/// tap (pointer events of type touch) clicks.
+#[test]
+#[ignore = "needs the browser files (Emscripten) and Chromium"]
+fn a_phone_sized_page_draws_sharp_fills_the_page_and_a_tap_clicks() {
+    // A finger must say what it is: a touch pointer, the primary one.
+    let page = PAGE.replace("button: 0, bubbles: true };", r#"button: 0, pointerId: 2, isPrimary: true, pointerType: "touch", bubbles: true };"#);
+    assert_ne!(page, PAGE);
+    // A headless window is at least 500 wide: the phone's page is a frame of a phone's size in it.
+    let outer = r#"<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0"><iframe src="/page" width="390" height="844" style="border:0;display:block"></iframe></body></html>"#;
+    let site = Site { page, outer: Some(outer.to_string()), main: MAIN, answers: Arc::new(answer) };
+    let Opened { scratch, asked, results, _browser, .. } = open("phone", site, &["--window-size=900,1000", "--force-device-scale-factor=2", "--touch-events=enabled"]);
+    let result = results.recv_timeout(Duration::from_secs(90)).expect("the page reported within 90 s");
+    assert!(result.get("error").is_none(), "the page failed: {}", result["error"]);
+    save_shot(&scratch, "browser-phone.png", &result["shot"]);
+    assert_eq!(result["dpr"].as_f64(), Some(2.0));
+    // The canvas fills the page.
+    let b: Vec<f64> = result["box"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+    assert_eq!((b[0], b[1]), (b[2], b[3]), "the canvas is the page's size: {b:?}");
+    assert_eq!((b[2], b[3]), (390.0, 844.0), "a phone's size: {b:?}");
+    // Drawn at the device's pixels, not scaled up from CSS pixels.
+    let shot = png(&result["shot"]);
+    assert_eq!((shot.width() as f64, shot.height() as f64), (b[2] * 2.0, b[3] * 2.0));
+    // The tap ran the handler, and the window fits the width.
+    assert!(asked.lock().unwrap().contains(&"dispatch_event".to_string()));
+    assert_eq!(result["after"]["data"]["answer"], json!(ANSWER), "{}", result["after"]);
+    let at: Vec<f64> = result["read"]["shown"]["answer"].as_array().expect("the answer's place").iter().map(|v| v.as_f64().unwrap()).collect();
+    assert!(at[0] + at[2] <= b[2] + 0.5, "the answer's box fits the phone's width: {at:?}");
+    // Sharp text: hard edges, a dark pixel beside a light one somewhere in the title's row.
+    let pixels = pixels(&shot);
+    let title: Vec<f64> = result["read"]["shown"]["title"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+    let row = ((title[1] + title[3] / 2.0) * 2.0) as i32;
+    let width = shot.width();
+    let light = |x: i32| pixels[((row * width + x) * 4) as usize..][..3].iter().map(|c| *c as i32).sum::<i32>();
+    let steepest = (((title[0] * 2.0) as i32)..(((title[0] + title[2]) * 2.0) as i32 - 1).min(width - 1)).map(|x| (light(x) - light(x + 1)).abs()).max().unwrap_or(0);
+    assert!(steepest > 300, "the title's text has no hard edge: {steepest}");
+}
+
+const LONG_MAIN: &str = r#"<Window name="Main">
+  <Button name="long" at="1,1" span="4" caption="Long" onclick="long" />
+  <Textbox name="answer" at="1,2" span="8" bind="answer" />
+</Window>
+"#;
+
+/// The page clicks Long, reads the page while the handler runs (the worker
+/// is not held), finds the bar's Stop and clicks it, and waits for the answer.
+const LONG_PAGE: &str = r#"<!doctype html>
+<html><head><meta charset="utf-8"><title>Clarity.UI</title>
+<style>html, body { margin: 0; height: 100%; overflow: hidden; } #clarity-ui { width: 100vw; height: 100vh; }</style>
+</head><body><canvas id="clarity-ui"></canvas>
+<script src="clarity-ui-page.js"></script>
+<script>
+(async () => {
+  const report = (what) => fetch("/result", { method: "POST", body: JSON.stringify(what) });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    const ui = window.clarityUi;
+    await ui.started;
+    const click = (place) => {
+      const [x, y, w, h] = place;
+      const at = ui.canvas.getBoundingClientRect();
+      const point = { clientX: at.left + x + w / 2, clientY: at.top + y + h / 2, button: 0, pointerId: 1, isPrimary: true, pointerType: "mouse", bubbles: true };
+      ui.canvas.dispatchEvent(new PointerEvent("pointermove", point));
+      ui.canvas.dispatchEvent(new PointerEvent("pointerdown", point));
+      ui.canvas.dispatchEvent(new PointerEvent("pointerup", point));
+    };
+    const read = await ui.step({ do: "read" });
+    const clicked = Date.now();
+    click(read.shown.long);
+    let stop = null, during = null, reads = 0;
+    for (let i = 0; i < 100 && !stop; i++) {
+      during = await ui.step({ do: "read" });
+      reads++;
+      stop = (during.buttons || []).find((b) => b.text === "Stop");
+      if (!stop) await sleep(50);
+    }
+    const barAfter = Date.now() - clicked;
+    await sleep(400);
+    const bar = await ui.shot();
+    if (stop) click(stop.at);
+    let after = null;
+    for (let i = 0; i < 100; i++) {
+      after = await ui.step({ do: "read" });
+      if (after.data && after.data.answer) break;
+      await sleep(50);
+    }
+    report({ barAfter, reads, during, after, bar, answeredAfter: Date.now() - clicked, stop: !!stop });
+  } catch (why) {
+    report({ error: String(why && why.stack || why) });
+  }
+})();
+</script></body></html>
+"#;
+
+/// The server's long handler: it says it is one of four along and runs
+/// until its watch is stopped (at most `LONG`), then answers how it ended.
+const LONG: Duration = Duration::from_secs(8);
+
+#[derive(Default)]
+struct Watches {
+    running: Option<u64>,
+    stopped: BTreeSet<u64>,
+    ended: BTreeSet<u64>,
+}
+
+fn long_answers(watches: Arc<Mutex<Watches>>) -> Answers {
+    Arc::new(move |command: &str, args: &Value| {
+        let id = args["id"].as_u64().unwrap_or(0);
+        match command {
+            "watches" => json!({ "value": true }),
+            "start_watch" => json!({ "value": null }),
+            "watch_progress" => {
+                let running = watches.lock().unwrap().running == Some(id);
+                json!({ "value": if running { json!([1, 4]) } else { Value::Null } })
+            }
+            "stop_watch" => {
+                watches.lock().unwrap().stopped.insert(id);
+                json!({ "value": null })
+            }
+            "end_watch" => {
+                let mut w = watches.lock().unwrap();
+                w.ended.insert(id);
+                if w.running == Some(id) {
+                    w.running = None;
+                }
+                json!({ "value": null })
+            }
+            "dispatch_event" if args["handler"] == json!("long") => {
+                let watch = args["watch"].as_u64().expect("a long call's request names its watch");
+                watches.lock().unwrap().running = Some(watch);
+                let until = Instant::now() + LONG;
+                while Instant::now() < until && !watches.lock().unwrap().stopped.contains(&watch) {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                let mut state: WindowState = serde_json::from_value(args["state"].clone()).unwrap();
+                let stopped = watches.lock().unwrap().stopped.contains(&watch);
+                state.data.insert("answer".into(), json!(if stopped { "stopped" } else { "finished" }));
+                json!({ "value": serde_json::to_value(super::core_windows_fake::reply(state)).unwrap() })
+            }
+            other => answer(other, args),
+        }
+    })
+}
+
+/// A long call in the browser: the handler takes seconds on the server, the
+/// page draws on and reads meanwhile, the bar shows how far it is, and its
+/// Stop reaches the server's watch, which ends the handler early.
+#[test]
+#[ignore = "needs the browser files (Emscripten) and Chromium"]
+fn a_long_call_in_the_browser_shows_its_bar_and_stop_stops_it() {
+    let watches: Arc<Mutex<Watches>> = Arc::default();
+    let site = Site { page: LONG_PAGE.to_string(), outer: None, main: LONG_MAIN, answers: long_answers(watches.clone()) };
+    let Opened { scratch, asked, results, _browser, .. } = open("long", site, &["--window-size=900,600", "--force-device-scale-factor=1"]);
+    let result = results.recv_timeout(Duration::from_secs(90)).expect("the page reported within 90 s");
+    assert!(result.get("error").is_none(), "the page failed: {}", result["error"]);
+    save_shot(&scratch, "browser-long-bar.png", &result["bar"]);
+    let asked = asked.lock().unwrap().clone();
+    // The worker was not held: the bar showed and the page read while the handler ran.
+    assert!(result["stop"].as_bool().unwrap(), "the bar's Stop showed: {}", result["during"]);
+    assert!(result["barAfter"].as_u64().unwrap() < 3000, "the bar showed while the handler ran: {}", result["barAfter"]);
+    assert!(asked.contains(&"watch_progress".to_string()), "the bar asked how far: {asked:?}");
+    assert!(asked.contains(&"stop_watch".to_string()), "Stop went to the server: {asked:?}");
+    // Stop ended the handler early, its answer was taken and the watch ended.
+    assert_eq!(result["after"]["data"]["answer"], json!("stopped"), "{}", result["after"]);
+    assert!(result["answeredAfter"].as_u64().unwrap() < LONG.as_millis() as u64, "{}", result["answeredAfter"]);
+    let w = watches.lock().unwrap();
+    assert_eq!(w.stopped.len(), 1);
+    assert!(w.ended.is_superset(&w.stopped), "end_watch followed: {:?}", w.ended);
+    // The bar is gone.
+    assert!(!result["after"]["buttons"].as_array().unwrap().iter().any(|b| b["text"] == json!("Stop")), "{}", result["after"]["buttons"]);
+}
+
+/// The page's own handling of what the person does, checked in the browser
+/// by what it sends the worker and what it leaves the browser to do: AltGr,
+/// the Mac's Option and dead keys write text, keys the browser keeps are
+/// left to it, a phone's keyboard edits, a cancelled touch clicks nothing,
+/// sound plays through Web Audio, and links and shown files open only what
+/// is safe.
+const INPUT_PAGE: &str = r#"<!doctype html>
+<html><head><meta charset="utf-8"><title>Clarity.UI</title>
+<style>html, body { margin: 0; height: 100%; overflow: hidden; } #clarity-ui { width: 100vw; height: 100vh; }</style>
+</head><body><canvas id="clarity-ui"></canvas>
+<script src="clarity-ui-page.js"></script>
+<script>
+(async () => {
+  const report = (what) => fetch("/result", { method: "POST", body: JSON.stringify(what) });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    const ui = window.clarityUi;
+    await ui.started;
+    const sent = [];
+    const post = ui.worker.postMessage.bind(ui.worker);
+    ui.worker.postMessage = (message, transfer) => { sent.push(message); post(message, transfer); };
+    const opened = [];
+    window.open = (url) => { opened.push(String(url).slice(0, 5)); return null; };
+    const typing = document.querySelector("textarea");
+    typing.focus();
+    const out = {};
+    const run = (name, events) => {
+      const from = sent.length;
+      const prevented = events.map((e) => { typing.dispatchEvent(e); return e.defaultPrevented; });
+      out[name] = { prevented, sent: sent.slice(from).filter((m) => m.type === "key" || m.type === "text").map((m) => m.type === "key" ? [m.down ? "down" : "up", m.key, m.held] : ["text", m.text]) };
+    };
+    const key = (type, init) => new KeyboardEvent(type, Object.assign({ bubbles: true, cancelable: true }, init));
+    const typed = (text) => { typing.value = text; return new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }); };
+    // A touch the page takes away clicks nothing.
+    const read = await ui.step({ do: "read" });
+    const [x, y, w, h] = read.shown.greet;
+    const at = ui.canvas.getBoundingClientRect();
+    const point = { clientX: at.left + x + w / 2, clientY: at.top + y + h / 2, button: 0, pointerId: 2, isPrimary: true, pointerType: "touch", bubbles: true };
+    const from = sent.length;
+    ui.canvas.dispatchEvent(new PointerEvent("pointerdown", point));
+    ui.canvas.dispatchEvent(new PointerEvent("pointercancel", point));
+    ui.canvas.dispatchEvent(new PointerEvent("pointerup", point));
+    out.touchKinds = sent.slice(from).filter((m) => m.type === "pointer").map((m) => m.kind);
+    await sleep(300);
+    out.afterCancel = (await ui.step({ do: "read" })).data;
+
+    run("altGraph", [key("keydown", { key: "@", code: "KeyQ", ctrlKey: true, altKey: true, modifierAltGraph: true }), typed("@")]);
+    run("option", [key("keydown", { key: "å", code: "KeyA", altKey: true }), typed("å")]);
+    run("altShortcut", [key("keydown", { key: "a", code: "KeyA", altKey: true })]);
+    run("dead", [key("keydown", { key: "Dead", code: "Quote" }), key("keydown", { key: "é", code: "KeyE" }), typed("é")]);
+    run("kept", [key("keydown", { key: "F5", code: "F5" }), key("keydown", { key: "+", code: "Equal", ctrlKey: true }), key("keydown", { key: "r", code: "KeyR", ctrlKey: true })]);
+    run("shortcut", [key("keydown", { key: "s", code: "KeyS", ctrlKey: true }), key("keydown", { key: "Tab", code: "Tab" })]);
+    run("phone", [key("keydown", { key: "Unidentified", keyCode: 229 }), typed("x"), new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "deleteContentBackward" }), new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertLineBreak" })]);
+
+    // Sound through Web Audio: played to its end, the worker hears it.
+    ui.worker.onmessage({ data: { type: "tell", tell: "play", id: 77, data: "__WAV__", volume: 1, repeat: false } });
+    for (let i = 0; i < 60 && !sent.some((m) => m.type === "sound-ended" && m.id === 77); i++) await sleep(50);
+    out.soundEnded = sent.some((m) => m.type === "sound-ended" && m.id === 77);
+
+    // Links and shown files: only what is safe opens.
+    const tell = (t) => ui.worker.onmessage({ data: Object.assign({ type: "tell" }, t) });
+    tell({ tell: "open", address: "javascript:alert(1)" });
+    tell({ tell: "open", address: "data:text/html,x" });
+    tell({ tell: "open", address: "https://example.org" });
+    tell({ tell: "show", name: "a.html", data: "PGI+PC9iPg==" });
+    tell({ tell: "show", name: "a.pdf", data: "JVBERg==", type: "application/pdf" });
+    out.opened = opened;
+    report(out);
+  } catch (why) {
+    report({ error: String(why && why.stack || why) });
+  }
+})();
+</script></body></html>
+"#;
+
+/// A short silent WAV (8 kHz, 16 bits, a tenth of a second), as base64.
+fn silent_wav() -> String {
+    let samples = 800u32;
+    let data = samples * 2;
+    let mut wav = Vec::new();
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + data).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&8000u32.to_le_bytes());
+    wav.extend_from_slice(&16000u32.to_le_bytes());
+    wav.extend_from_slice(&2u16.to_le_bytes());
+    wav.extend_from_slice(&16u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&data.to_le_bytes());
+    wav.resize(wav.len() + data as usize, 0);
+    base64::engine::general_purpose::STANDARD.encode(wav)
+}
+
+#[test]
+#[ignore = "needs the browser files (Emscripten) and Chromium"]
+fn the_pages_keys_touch_sound_and_links_in_the_browser() {
+    let page = INPUT_PAGE.replace("__WAV__", &silent_wav());
+    let site = Site { page, outer: None, main: MAIN, answers: Arc::new(answer) };
+    let Opened { results, _browser, .. } = open("input", site, &["--window-size=900,600", "--force-device-scale-factor=1", "--autoplay-policy=no-user-gesture-required"]);
+    let r = results.recv_timeout(Duration::from_secs(90)).expect("the page reported within 90 s");
+    assert!(r.get("error").is_none(), "the page failed: {}", r["error"]);
+    let case = |name: &str| (r[name]["prevented"].clone(), r[name]["sent"].clone());
+    // AltGr and Option write their text: the key goes without Ctrl and Alt, the browser writes.
+    assert_eq!(case("altGraph"), (json!([false, false]), json!([["down", "@", 0], ["text", "@"]])), "{}", r["altGraph"]);
+    assert_eq!(case("option"), (json!([false, false]), json!([["down", "\u{e5}", 0], ["text", "\u{e5}"]])), "{}", r["option"]);
+    // Alt with a plain letter is a shortcut.
+    assert_eq!(case("altShortcut"), (json!([true]), json!([["down", "a", 4]])));
+    // A dead key sends nothing and is left to the browser; its letter comes as text.
+    assert_eq!(case("dead"), (json!([false, false, false]), json!([["down", "\u{e9}", 0], ["text", "\u{e9}"]])), "{}", r["dead"]);
+    // Keys the browser keeps are its own.
+    assert_eq!(case("kept"), (json!([false, false, false]), json!([])));
+    assert_eq!(case("shortcut"), (json!([true, true]), json!([["down", "s", 2], ["down", "Tab", 0]])));
+    // A phone's keyboard: text typed, deleting and a new line as keys.
+    assert_eq!(
+        case("phone"),
+        (json!([false, false, true, true]), json!([["text", "x"], ["down", "Backspace", 0], ["up", "Backspace", 0], ["down", "Enter", 0], ["up", "Enter", 0]])),
+        "{}",
+        r["phone"]
+    );
+    // A cancelled touch: pressed, cancelled, released, and no handler ran.
+    assert_eq!(r["touchKinds"], json!([1, 4, 2]));
+    assert_eq!(r["afterCancel"]["answer"], json!(""), "{}", r["afterCancel"]);
+    // (Enter on the focused button afterwards runs it: the keys come after the touch.)
+    assert_eq!(r["soundEnded"], json!(true), "the page's sound did not end");
+    // Only the web page and the PDF opened: no javascript:, data: or HTML.
+    assert_eq!(r["opened"], json!(["https", "blob:"]));
+}

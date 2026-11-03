@@ -10,6 +10,9 @@ pub enum PointerButton {
     Right,
 }
 
+/// How far a notch (a line) of the wheel scrolls, in the screen's units: the desktop's notch and the browser's line alike.
+pub const WHEEL_NOTCH: f64 = 50.0;
+
 /// The keys held with a key or a press: Shift, Control, Alt and Meta.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Modifiers(u8);

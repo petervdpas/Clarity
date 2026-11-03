@@ -30,14 +30,15 @@ public:
     Service& service() { return service_; }
 
 private:
-    /// A long call's watch, by the number the screen picked.
-    struct Watch;
-    std::shared_ptr<Watch> watch(uint64_t id);
-    nlohmann::json watching(const std::string& command, uint64_t id);
+    /// The settings the person kept.
+    nlohmann::json kept_settings();
+    /// The service's answer to one of the library's commands: a window that
+    /// opens starts from the kept settings.
+    std::optional<std::string> answered(const std::string& command, const nlohmann::json& args);
 
     Service service_;
-    std::mutex watches_mutex_;
-    std::map<uint64_t, std::shared_ptr<Watch>> watches_;
+    /// The long calls, answered beside the service from other threads.
+    Watches watches_;
 };
 
 /// The files Clarity.UI draws from: the options' windows, app frames,

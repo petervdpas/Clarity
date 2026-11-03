@@ -89,7 +89,7 @@ fn a_program_served_alone_is_the_web_program() {
         clarity_gen::programs(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}")).iter().map(|p| p.target).collect::<Vec<_>>()
     };
     assert_eq!(program_of(Backend::Rust, vec![Target::Web]), [Target::Web]);
-    // Rust's web program is not generated beside its desktop one yet (G8d); Go's is the desktop program's.
+    // Beside the desktop target, the desktop program of Rust and Go serves the web too (--serve).
     assert_eq!(program_of(Backend::Go, vec![Target::Desktop, Target::Web]), [Target::Desktop]);
     assert_eq!(program_of(Backend::Rust, vec![Target::Web, Target::Cli]), [Target::Web, Target::Cli]);
 }

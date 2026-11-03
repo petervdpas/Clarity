@@ -35,9 +35,12 @@ fn the_core_references_nothing_native() {
     for name in NATIVE_ONLY {
         assert_eq!(None, dependency(&runtime, name), "the runtime names {name}");
     }
-    // The desktop host's module is the feature's.
+    // The desktop host's module is the feature's (and never a browser build's).
     let lib = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs")).unwrap();
-    assert!(lib.contains("#[cfg(feature = \"desktop\")]\npub mod desktop;"));
+    let at = lib.find("\npub mod desktop;").expect("a desktop module");
+    let cfg = lib[..at].lines().next_back().unwrap_or_default();
+    assert!(cfg.starts_with("#[cfg(") && cfg.contains("feature = \"desktop\""), "{cfg}");
+    assert!(cfg.contains("not(target_os = \"emscripten\")"), "{cfg}");
 }
 
 #[test]

@@ -365,7 +365,7 @@ impl<'a> Window<'a> {
         for widget in self.parts.iter().filter(|w| matches!(w.props.kind, WidgetKind::Image | WidgetKind::File) || paints(w)) {
             let Some((data, field)) = widget.props.bind.as_deref().and_then(|b| b.split_once('.')) else { continue };
             let Some(entity) = self.entity_of(data) else { continue };
-            // Through Fetched, so a mirror in a browser asks the server for it (DESIGN 7.6).
+            // Through Fetched, as every picture of the database comes.
             let fetcher = picture_fetch(data, field);
             fetches.insert(
                 fetcher.clone(),
@@ -720,10 +720,10 @@ impl<'a> Window<'a> {
                     .enumerate()
                     .map(|(i, p)| format!("PartValues.Read<{}>(values, {i})", super::names::value_type(&crate::type_ref_info(self.project, &p.ty))))
                     .collect();
-                // With what it told, so a mirror in a browser runs it on the server (DESIGN 7.6).
+                // With what it told, as the handler's values.
                 let _ = write!(cases, "            case {}:\n                Handle(() => {}({}), [tell, values]);\n                break;\n", string(&wired.tell), on(&wired.handler), values.join(", "));
             }
-            let _ = write!(clicks, "    /// <summary>What custom part {name} told.</summary>\n    [Command]\n    public void Told_{}(string tell, System.Text.Json.JsonElement[] values)\n    {{\n        switch (tell)\n        {{\n{cases}        }}\n    }}\n\n", member(name));
+            let _ = write!(clicks, "    /// <summary>What custom part {name} told.</summary>\n    public void Told_{}(string tell, System.Text.Json.JsonElement[] values)\n    {{\n        switch (tell)\n        {{\n{cases}        }}\n    }}\n\n", member(name));
         }
         // The calls with values its parts wire, a command each, and its Run_,
         // which the screen runs to hear whether the handler refused.
@@ -766,8 +766,6 @@ impl<'a> Window<'a> {
             identity.push_str(&format!("\n    public override Extent? WindowSize => new({}, {});\n", size.width, size.height));
         }
         let body = format!("{identity}\n{properties}{parts}\n{events}{clicks}{handlers}");
-        // A mirror of the window, in a browser, loads nothing: the server sends its state (DESIGN 7.6).
-        let mirror = if constructor.is_empty() { "" } else { "        if (IsMirror)\n            return;\n" };
         Ok(format!(
             "{HEADER}
 using Clarity.Runtime;
@@ -779,7 +777,7 @@ public sealed partial class {name}ViewModel : WindowViewModel
 {{
     public {name}ViewModel(Db? db) : base(db)
     {{
-{said}{mirror}{constructor}    }}
+{said}{constructor}    }}
 
 {}
 }}

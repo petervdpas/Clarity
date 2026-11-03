@@ -200,11 +200,7 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
         return Err(errors);
     }
     files.push(text("Schema.cs", schema_cs(project, &name, &owned)?));
-    files.push(text("Program.cs", program_cs(project, &name, &databases, &drivers, settings, engines, ui == DESKTOP_PACKAGE)));
-    // The keys window's commands: on the desktop the library reads them from model.json.
-    if project.keys_editable && ui != DESKTOP_PACKAGE {
-        files.push(text("KeysCatalog.cs", keys_catalog(project, &name)));
-    }
+    files.push(text("Program.cs", program_cs(project, &name, &databases, &drivers, settings, engines)));
     if engines {
         files.extend(crate::engine_files(project, "Engines"));
         files.push(text("Engines.cs", engines_cs(project, &name)));
@@ -229,11 +225,9 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     }
     files.push(text("Labels.cs", labels_cs(project, &name)));
     files.push(text("Fields.cs", fields_cs(project, &name)));
-    // The model as JSON, which the native Clarity.UI library reads on the desktop: the
+    // The model as JSON, which Clarity.UI reads on the desktop and in the browser: the
     // windows' facts, the fields', the translations, the themes and the keys (DESIGN 7.9).
-    if ui == DESKTOP_PACKAGE {
-        files.push(text("model.json", crate::web::model_json(project)));
-    }
+    files.push(text("model.json", crate::web::model_json(project)));
     if !clarity_spec::icons::used(project).is_empty() {
         files.push(text("Icons.cs", icons_cs(project, &name)));
     }
@@ -420,7 +414,7 @@ fn screen_engines_cs(project: &Project, name: &str) -> String {
     let mut members = String::new();
     for engine in crate::screen_engines(project) {
         members.push_str(&format!(
-            "    /// <summary>Engine {engine_name} beside the screen, from {file}: a new instance for each canvas that runs it.</summary>\n    public static readonly Func<IFrames> {member} = () => InBrowser is {{ }} load\n        ? load({name}, Read({file_text}), [{uses}], {opens}, {seconds}, {megabytes})\n        : ScreenEngine.Load({name}, Read({file_text}), [{uses}], {opens}, new EngineLimits({seconds}, {megabytes}));\n\n",
+            "    /// <summary>Engine {engine_name} beside the screen, from {file}: a new instance for each canvas that runs it.</summary>\n    public static readonly Func<IFrames> {member} = () =>\n        ScreenEngine.Load({name}, Read({file_text}), [{uses}], {opens}, new EngineLimits({seconds}, {megabytes}));\n\n",
             name = string(&engine.name.name),
             file_text = string(&engine.file),
             uses = engine.uses.iter().map(|u| string(&u.name)).collect::<Vec<_>>().join(", "),
@@ -433,7 +427,7 @@ fn screen_engines_cs(project: &Project, name: &str) -> String {
         ));
     }
     format!(
-        "{HEADER}\nusing Clarity.Runtime;\n\nnamespace {name};\n\n/// <summary>The engines beside the screen, which the canvases that run them draw with.</summary>\npublic static class ScreenEngines\n{{\n    /// <summary>How a browser loads an engine beside the screen, where Wasmtime cannot run (DESIGN 7.6): its name, file, services, on open and limits; none on the desktop.</summary>\n    public static Func<string, byte[], string[], bool, long, long, IFrames>? InBrowser {{ get; set; }}\n\n{members}    static byte[] Read(string file)\n    {{\n        using var stream = typeof(ScreenEngines).Assembly.GetManifestResourceStream(\"Engines/\" + file) ?? throw new EngineException($\"the engine file {{file}} is missing\");\n        using var bytes = new MemoryStream();\n        stream.CopyTo(bytes);\n        return bytes.ToArray();\n    }}\n}}\n"
+        "{HEADER}\nusing Clarity.Runtime;\n\nnamespace {name};\n\n/// <summary>The engines beside the screen, which the canvases that run them draw with.</summary>\npublic static class ScreenEngines\n{{\n{members}    static byte[] Read(string file)\n    {{\n        using var stream = typeof(ScreenEngines).Assembly.GetManifestResourceStream(\"Engines/\" + file) ?? throw new EngineException($\"the engine file {{file}} is missing\");\n        using var bytes = new MemoryStream();\n        stream.CopyTo(bytes);\n        return bytes.ToArray();\n    }}\n}}\n"
     )
 }
 
@@ -483,7 +477,7 @@ fn opening(project: &Project, databases: &[(String, Sql, String)], drivers: &[&D
     )
 }
 
-fn program_cs(project: &Project, name: &str, databases: &[(String, Sql, String)], drivers: &[&Driver], settings: &Settings, engines: bool, desktop: bool) -> String {
+fn program_cs(project: &Project, name: &str, databases: &[(String, Sql, String)], drivers: &[&Driver], settings: &Settings, engines: bool) -> String {
     let check_engines = check_engines(engines);
     let opening = opening(project, databases, drivers, settings, "OpenDatabases");
     let main_window = main_window(project).unwrap_or_default();
@@ -494,13 +488,12 @@ fn program_cs(project: &Project, name: &str, databases: &[(String, Sql, String)]
     let settings_start = if project.entities().any(|e| e.settings) { "        Settings.Start();\n" } else { "" };
     // The person's keys and the keys window's commands (DESIGN 5.28).
     let keys_start = if project.keys_editable {
-        let catalog = if desktop { "" } else { "        KeysWindow.Catalog = KeysCatalog.Layers;\n" };
-        format!("        PersonKeys.Start({});\n{catalog}", string(&crate::settings_program(settings)))
+        format!("        PersonKeys.Start({});\n", string(&crate::settings_program(settings)))
     } else {
         String::new()
     };
     let unconnected = unconnected_start(project, &main_window);
-    // DesktopWindow and Unconnected are Clarity.Ui's.
+    // DesktopWindow is Clarity.Ui's.
     let ui_using = "using Clarity.Ui;\n";
     format!(
         "{HEADER}
@@ -561,45 +554,6 @@ fn unconnected_start(project: &Project, main_window: &str) -> String {
     let settings = if project.entities().any(|e| e.settings) { "                Settings = Settings.Current,\n" } else { "" };
     format!(
         "            // The databases did not open (DESIGN 5.27): what keeps the connection shows first.\n            DesktopWindow.Run(new Unconnected\n            {{\n                Connect = OpenDatabases,\n                Empty = Sqlite.Memory,\n                Main = db => new {main_window}ViewModel(db),\n{window}{handler}{settings}            }}, Unconnected.Reason(e));\n            return 0;\n"
-    )
-}
-
-/// The commands the keys window lists, by place (DESIGN 5.28).
-fn keys_catalog(project: &Project, name: &str) -> String {
-    let text = |written: &Option<String>, name: &str| match written.as_deref() {
-        Some(t) => match t.strip_prefix('@') {
-            Some(key) => format!("Text.Of({})", string(key)),
-            None => format!("Text.Plain({})", string(t)),
-        },
-        None => format!("Text.Plain({})", string(name)),
-    };
-    // Where a toolbar or ribbon command lives, shown beside its name.
-    let places = clarity_spec::shortcuts::places(project);
-    let layers: Vec<String> = clarity_spec::shortcuts::catalog(project)
-        .iter()
-        .map(|layer| {
-            let commands: Vec<String> = layer
-                .commands
-                .iter()
-                .map(|c| {
-                    let keys: Vec<String> = c.keys.iter().map(|k| string(k)).collect();
-                    let place = match places.iter().find(|(id, _)| *id == c.id).map(|(_, p)| p) {
-                        Some(clarity_spec::shortcuts::KeyPlace::Toolbar) => ", [new Text(\"Toolbar\") { Key = \"keysToolbar\" }]".to_string(),
-                        Some(clarity_spec::shortcuts::KeyPlace::Ribbon { tab, group }) => {
-                            format!(", [{}, {}]", text(&Some(tab.clone()), tab), text(&Some(group.clone()), group))
-                        }
-                        None => String::new(),
-                    };
-                    format!("new KeyCommandInfo({}, {}, [{}]{place})", string(&c.id), text(&c.caption, &c.name), keys.join(", "))
-                })
-                .collect();
-            let title = if layer.id.is_empty() { "null".to_string() } else { text(&layer.title, &layer.id) };
-            format!("        new KeyLayerInfo({}, {title}, [{}]),\n", string(&layer.id), commands.join(", "))
-        })
-        .collect();
-    format!(
-        "{HEADER}\nusing Clarity.Runtime;\nusing Clarity.Ui;\n\nnamespace {name};\n\n/// <summary>The commands a person gives keys in the keys window, by place (DESIGN 5.28).</summary>\npublic static class KeysCatalog\n{{\n    public static readonly KeyLayerInfo[] Layers =\n    [\n{}    ];\n}}\n",
-        layers.concat()
     )
 }
 

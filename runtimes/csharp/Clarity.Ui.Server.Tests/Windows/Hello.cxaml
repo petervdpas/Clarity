@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Window name="Hello">
-  <Button name="helloButton" at="1,1" span="3" caption="Hello" onclick="hello" />
-</Window>

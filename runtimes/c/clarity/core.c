@@ -71,6 +71,12 @@ void clarity_scratch_reset(void) {
     current = first;
 }
 
+void clarity_scratch_release(void) {
+    clarity_scratch_reset();
+    free(first);
+    first = current = NULL;
+}
+
 size_t clarity_scratch_used(void) {
     size_t used = 0;
     for (Block* b = first; b; b = b->next) used += b->used;

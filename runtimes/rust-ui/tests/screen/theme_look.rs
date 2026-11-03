@@ -1,18 +1,11 @@
 //! A theme as Clarity.UI reads it: Clarity's own, the same files every
 //! version carries, and a project's theme on top of it (conformance/themes.json).
 
-use clarity_ui::theme::{parse_color, ThemeLook, CLARITY_DARK, CLARITY_LIGHT};
+use clarity_ui::theme::{parse_color, ThemeLook};
 use skia_safe::Color;
 
 fn c(written: &str) -> Color {
     parse_color(written).unwrap()
-}
-
-#[test]
-fn clarity_s_own_theme_is_the_same_file_as_the_csharp_version_carries() {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../csharp/Clarity.Ui.Drawing/Themes/");
-    assert_eq!(std::fs::read_to_string(format!("{root}clarity.light.json")).unwrap(), CLARITY_LIGHT);
-    assert_eq!(std::fs::read_to_string(format!("{root}clarity.dark.json")).unwrap(), CLARITY_DARK);
 }
 
 #[test]
@@ -70,20 +63,3 @@ fn a_role_the_theme_does_not_know_is_the_text_s_color() {
     assert_eq!(look.color("text"), look.color("no_such_role"));
 }
 
-#[test]
-fn the_catalog_is_the_same_file_as_the_shared_screen_s() {
-    let ours = concat!(env!("CARGO_MANIFEST_DIR"), "/catalog/");
-    let shared = concat!(env!("CARGO_MANIFEST_DIR"), "/../web/src/generated/");
-    for name in ["part-defaults.json", "part-fields.json", "command-defaults.json", "command-fields.json", "sidebar-defaults.json", "sidebar-fields.json"] {
-        assert_eq!(std::fs::read_to_string(format!("{shared}{name}")).unwrap(), std::fs::read_to_string(format!("{ours}{name}")).unwrap(), "{name} differs from the shared screen's");
-    }
-}
-
-#[test]
-fn inter_is_carried_as_the_csharp_version_carries_it() {
-    let ours = concat!(env!("CARGO_MANIFEST_DIR"), "/fonts/");
-    let theirs = concat!(env!("CARGO_MANIFEST_DIR"), "/../csharp/Clarity.Ui.Drawing/Fonts/");
-    for name in ["Inter-Regular.ttf", "Inter-Bold.ttf", "Inter-LICENSE.txt"] {
-        assert_eq!(std::fs::read(format!("{theirs}{name}")).unwrap(), std::fs::read(format!("{ours}{name}")).unwrap(), "{name} differs");
-    }
-}

@@ -715,24 +715,37 @@ fn a_step_without_statements_is_written_as_gofmt_writes_it() {
     has(file(&files, "schema.go"), "\t\t// 2: Search albums\n\t\t{},\n");
 }
 
-/// The web target (DESIGN 7.3): the program serves the renderer to a
-/// browser, and links nothing of the desktop.
+/// The web target (DESIGN 7.3, round B of 7.9): the program serves
+/// Clarity.UI's browser files and answers their wire, and links nothing of
+/// the desktop; beside the desktop target one program does both, and
+/// `--serve` serves.
 #[test]
-fn the_web_target_serves_the_renderer() {
+fn the_web_target_serves_the_browser_files_and_the_wire() {
     use clarity_project::Target;
     let project = load_sources([("sales.clarity", SALES)]);
-    let main_of = |targets: Vec<Target>| {
+    let generated = |targets: Vec<Target>| {
         let mut settings = settings();
         settings.stack.targets = targets;
-        let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
-        file(&files, "main.go").to_string()
+        generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"))
     };
-    let web = main_of(vec![Target::Web]);
-    has(&web, "\tif err := shell.Serve(options, shell.Address(os.Args[1:], \"127.0.0.1:8080\")); err != nil {");
+    let files = generated(vec![Target::Web]);
+    let web = file(&files, "main.go");
+    has(web, "\tif err := shell.Serve(shell.ProgramOptions{Options: options, Facts: facts}, shell.Address(os.Args[1:], \"127.0.0.1:8080\")); err != nil {");
     assert!(!web.contains("ui.Run("), "a web program opens no window");
     // Nor does it link Clarity.UI.
-    assert!(!web.contains("runtimes/go/ui\"") && !web.contains("facts"), "{web}");
-    has(&web, "//go:embed ui\nvar embedded embed.FS");
-    has(&web, "\tassets, err := fs.Sub(embedded, \"ui\")");
-    has(&web, "Model: model, Assets: assets, Db: db,");
+    assert!(!web.contains("runtimes/go/ui\"") && !web.contains("//go:embed ui\n"), "{web}");
+    has(web, "//go:embed browser\nvar site embed.FS");
+    has(web, "\tassets, err := fs.Sub(site, \"browser\")");
+    has(web, "Model: model, Assets: assets, Db: db,");
+    let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+    assert!(paths.contains(&"browser/index.html") && paths.contains(&"browser/clarity/files.json") && paths.contains(&"facts.json"), "{paths:?}");
+    assert!(!paths.iter().any(|p| p.starts_with("ui/")), "no web screen: {paths:?}");
+
+    let files = generated(vec![Target::Desktop, Target::Web]);
+    let both = file(&files, "main.go");
+    has(both, "\tif slices.Contains(os.Args[1:], \"--serve\") {\n\t\tif err := shell.Serve(");
+    has(both, "\t\treturn\n\t}\n\t// Clarity.UI draws the windows in this process;");
+    has(both, "//go:embed ui\nvar embedded embed.FS");
+    has(both, "//go:embed browser\nvar site embed.FS");
+    assert!(files.iter().any(|f| f.path == "ui/windows/OrderForm.cxaml") && files.iter().any(|f| f.path == "browser/index.html"));
 }

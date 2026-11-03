@@ -21,6 +21,32 @@ struct Languages {
 
 static LANGUAGES: RwLock<Languages> = RwLock::new(Languages { values: BTreeMap::new(), default: String::new(), picked: None });
 
+std::thread_local! {
+    /// The language of the browser whose request this thread answers (a
+    /// served program, DESIGN 7.9 B2): over the one the screen picked.
+    static HERE: std::cell::RefCell<Option<Option<String>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `run` with texts in `language` on this thread (none for the
+/// default), whatever the screen picked: how a web server answers each
+/// browser in its own language while requests run side by side.
+pub fn speaking<T>(language: Option<&str>, run: impl FnOnce() -> T) -> T {
+    struct Back(Option<Option<String>>);
+    impl Drop for Back {
+        fn drop(&mut self) {
+            let was = self.0.take();
+            HERE.with(|here| *here.borrow_mut() = was);
+        }
+    }
+    let _back = Back(HERE.with(|here| here.replace(Some(language.map(str::to_string)))));
+    run()
+}
+
+/// The language this thread speaks: its browser's, else the screen's pick.
+fn picked(l: &Languages) -> Option<String> {
+    HERE.with(|here| here.borrow().clone()).unwrap_or_else(|| l.picked.clone())
+}
+
 /// Takes every language's values from the model (`project.translations`),
 /// and the default language (`project.locale.language`).
 pub fn load(model: &str) {
@@ -42,7 +68,7 @@ pub fn set_language(language: Option<&str>) {
 
 /// The language the screen picked; none for the default.
 pub fn language() -> Option<String> {
-    LANGUAGES.read().ok().and_then(|l| l.picked.clone())
+    LANGUAGES.read().ok().and_then(|l| picked(&l))
 }
 
 /// The value of `key` in the language picked, or the default language's
@@ -50,7 +76,7 @@ pub fn language() -> Option<String> {
 pub fn value(key: &str) -> Option<String> {
     let l = LANGUAGES.read().ok()?;
     let of = |language: &str| l.values.get(language).and_then(|v| v.get(key)).filter(|v| !v.is_empty()).cloned();
-    l.picked.as_deref().and_then(of).or_else(|| of(&l.default))
+    picked(&l).as_deref().and_then(of).or_else(|| of(&l.default))
 }
 
 /// A text an engine gives: the value of the key it names, or the text

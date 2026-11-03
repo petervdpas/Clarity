@@ -11,6 +11,7 @@
 #include "check.h"
 #include "clarity/code.h"
 #include "clarity/disk.h"
+#include "clarity/settings.h"
 #include "desktop/desktop.h"
 #include "engine/screen.h"
 #include "tests.h"
@@ -119,7 +120,7 @@ static bool redraw(ClarityDb* db, ClarityReply* reply) {
 static const ClarityWindows cards = {open_card, handler_of, dispatch, options, picture, redraw, NULL, NULL};
 
 static ClarityDesktopOptions card_options(ClarityDb* db) {
-    ClarityDesktopOptions options = {{"shop", "Shop", "Card", "{\"project\":{}}", NULL, db, &cards, 600, 400}, &card_files, "{\"windows\":{\"Card\":{\"name\":\"text\"}}}", NULL, true, NULL};
+    ClarityDesktopOptions options = {{"shop", "Shop", "Card", "{\"project\":{}}", db, &cards, 600, 400}, &card_files, "{\"windows\":{\"Card\":{\"name\":\"text\"}}}", NULL, true, NULL};
     return options;
 }
 
@@ -343,4 +344,71 @@ void code_quits_and_opens_the_keys_window_through_the_layer(void) {
     CHECK(!cJSON_GetObjectItem(cJSON_GetObjectItem(plain, "value"), "keys"));
     clarity_desktop_program_free(program);
     clarity_db_close(db);
+}
+
+static const char flip_markup[] = "<Window name=\"Card\"><Button name=\"flipButton\" at=\"1,1\" span=\"3\" caption=\"Flip\" onclick=\"flip\" /></Window>";
+static const ClarityCarried flip_windows[] = {{"Card", (const unsigned char*)flip_markup, sizeof flip_markup - 1}};
+static const ClarityCarriedFiles flip_files = {flip_windows, 1, NULL, 0, NULL, 0, NULL, 0};
+
+/// What each run of flip saw of showDone: 't' or 'f'.
+static char flips_saw[8];
+
+static bool open_with_settings(ClarityDb* db, const char* window, const cJSON* with, ClarityWindowState** out) {
+    (void)db;
+    *out = clarity_opened(window, clarity_json_object(1, "settings", cJSON_Parse("{\"id\":0,\"showDone\":true,\"theme\":\"\"}")), with);
+    return true;
+}
+
+static bool flip(ClarityDb* db, const ClarityWindowState* state, const char* handler, ClarityReply** out) {
+    (void)db;
+    (void)handler;
+    cJSON* data = cJSON_Duplicate(state->data, true);
+    cJSON* settings = cJSON_GetObjectItemCaseSensitive(data, "settings");
+    bool shown = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(settings, "showDone"));
+    size_t at = strlen(flips_saw);
+    if (at + 1 < sizeof flips_saw) flips_saw[at] = shown ? 't' : 'f';
+    cJSON_ReplaceItemInObjectCaseSensitive(settings, "showDone", cJSON_CreateBool(!shown));
+    *out = clarity_ui_reply(clarity_ui(state), state->window, data);
+    return true;
+}
+
+static const ClarityWindows flipping = {open_with_settings, handler_of, flip, options, picture, redraw, NULL, NULL};
+
+/// One run of the program: its window opens, the person clicks Flip once.
+static void run_flip_once(ClarityDb* db) {
+    ClarityDesktopOptions options = {{"clarity-desktop-settings-test", "Flip", "Card", "{\"project\":{}}", db, &flipping, 600, 400}, &flip_files, NULL, NULL, false, NULL};
+    ClarityFiles* files = clarity_desktop_files(&options);
+    REQUIRE(files != NULL);
+    ClarityDesktopProgram* program = clarity_desktop_program_new(&options);
+    REQUIRE(program != NULL);
+    ClarityDriven* driven = NULL;
+    REQUIRE(clarity_driven_start(clarity_desktop_program(program), files, &driven) == CLARITY_OK);
+    step(driven, "{\"do\":\"click\",\"part\":\"flipButton\"}");
+    clarity_driven_free(driven);
+    clarity_desktop_program_free(program);
+    clarity_files_free(files);
+}
+
+// A window starts from the settings the person kept, and settings a handler
+// changes are kept: the next run's handler sees them.
+void a_window_starts_from_the_kept_settings_and_a_handlers_change_is_kept(void) {
+    const char* folder = clarity_format("%s/clarity-desktop-settings-c-%d", temp_folder(), rand());
+#ifdef _WIN32
+    const char* was = getenv("APPDATA") ? clarity_format("%s", getenv("APPDATA")) : "";
+    _putenv_s("APPDATA", folder);
+#else
+    setenv("XDG_CONFIG_HOME", folder, 1);
+#endif
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    memset(flips_saw, 0, sizeof flips_saw);
+    run_flip_once(db);
+    CHECK_JSON(cJSON_GetObjectItem(clarity_read_settings("clarity-desktop-settings-test"), "showDone"), "false");
+    run_flip_once(db);
+    CHECK_TEXT(flips_saw, "tf");
+    clarity_db_close(db);
+    remove_tree(folder);
+#ifdef _WIN32
+    _putenv_s("APPDATA", was);
+#endif
 }

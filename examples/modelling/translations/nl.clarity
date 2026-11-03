@@ -201,6 +201,7 @@ translation nl
     undoChangedSince "Dit is intussen gewijzigd en kan daarom niet ongedaan worden gemaakt"
     fieldRequired "{field} is verplicht"
     chooseFolder "Een map kiezen"
+    typeServerFolder "Typ het pad van een map op de server"
     zoomOut "Uitzoomen"
     zoomWhole "Geheel tonen"
     zoomIn "Inzoomen"

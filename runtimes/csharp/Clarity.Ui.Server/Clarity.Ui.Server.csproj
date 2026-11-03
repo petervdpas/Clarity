@@ -1,6 +1,8 @@
 <!-- The server of a Clarity.UI program shown in browsers (DESIGN 7.6, 7.9):
-     the sessions of the windows over HTTP, the browser program's files and
-     the windows' markup. It draws nothing, so it takes the runtime alone. -->
+     the library in the browser asks the program here, which answers through
+     the runtime's ProgramWire as on the desktop; it serves the browser files
+     and the program's files. It draws nothing, so it takes the runtime alone,
+     not the native library. -->
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -14,8 +16,8 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageId>Clarity.Ui.Server</PackageId>
-    <Description>The server of a Clarity.UI program shown in browsers: a session of the windows per browser tab, where their handlers run against the server's databases, the browser program's files and the windows' markup, over HTTP.</Description>
-    <PackageTags>clarity;ui;server;webassembly;browser</PackageTags>
+    <Description>The server of a Clarity.UI program shown in browsers: Clarity.UI runs in the browser and asks the program on the server, where the windows' handlers run against the server's databases; it serves the browser files and the program's files over HTTP.</Description>
+    <PackageTags>clarity;ui;server;browser</PackageTags>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Clarity.Runtime/Clarity.Runtime.csproj" />

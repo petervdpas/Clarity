@@ -1,7 +1,7 @@
-// The service of C++ applications: the commands of Clarity's screen (the
-// web server's wire, DESIGN 7.3), answered by the program's windows. The
-// desktop program on Clarity.UI (desktop.hpp) and the web server
-// (serve.hpp) both answer through it.
+// The service of C++ applications: Clarity.UI's commands (the wire, DESIGN
+// 7.3), answered by the program's windows. The desktop program, where the
+// library runs in the program (desktop.hpp), and the web server, where it
+// runs in the browser (serve.hpp), both answer through wire_answer.
 
 #pragma once
 
@@ -56,9 +56,11 @@ struct Size {
 /// The size a window opens at: `size`, or the standard size when it says none.
 Size window_size(Size size);
 
-/// A file the desktop program carries for Clarity.UI (DESIGN 7.9): kind
-/// "window", "app", "theme" or "resource", its name and its bytes. A list
-/// of them ends with one whose kind is null.
+/// A file the program carries (DESIGN 7.9): for Clarity.UI on the desktop
+/// kind "window", "app", "theme" or "resource"; for the web server kind
+/// "browser", named by its path below browser/ ("index.html",
+/// "clarity/files.json"). Its name and its bytes. A list of them ends with
+/// one whose kind is null.
 struct UiFile {
     const char* kind;
     const char* name;
@@ -74,8 +76,6 @@ struct Options {
     std::string main;
     /// The windows, frame and data dictionary the screen draws from, as JSON.
     std::string model;
-    /// The web screen's page, with its script, styles and pictures in it (the web target).
-    std::string html;
     Db* db = nullptr;
     Windows* windows = nullptr;
     /// The size the main window opens at; zero for the standard size.
@@ -88,9 +88,16 @@ struct Options {
     std::string unconnected_handler;
     std::string unconnected_window;
     std::function<std::unique_ptr<Db>()> connect;
+    /// The names of the secret settings (DESIGN 5.27), as a JSON array: kept
+    /// in the system's protected store, never in the settings file; null for none.
+    nlohmann::json secrets;
     /// The desktop's files (windows and app frames as markup, themes,
     /// resources), ended by one without a kind; none on the web.
     const UiFile* ui_files = nullptr;
+    /// The files the web server serves to a browser (browser/: the page,
+    /// Clarity.UI's browser files, clarity/files.json, the resources),
+    /// ended by one without a kind; none on the desktop.
+    const UiFile* browser_files = nullptr;
     /// What the program knows of its fields and types, as JSON (the
     /// runtime's facts, DESIGN 7.9); empty for none.
     std::string facts;
@@ -99,7 +106,7 @@ struct Options {
     bool watches = false;
     /// Registers the program's custom parts with Clarity.UI; none without.
     std::function<void()> register_parts;
-    /// Engines beside the screen on the desktop (DESIGN 5.12): answers
+    /// Engines beside the screen, in the program on the desktop and the web (DESIGN 5.12): answers
     /// Clarity.UI's engine commands (engine_open, engine_hears, engine_frame,
     /// engine_close), from several threads; none for no engine.
     std::function<std::optional<nlohmann::json>(const std::string& command, const nlohmann::json& args)> screen_engines;
@@ -152,5 +159,59 @@ private:
     /// its edit baseline had it, no handler run, no edit kept.
     Reply taken_back(const WindowState& state);
 };
+
+/// One browser page of a served program (DESIGN 7.9 B2): its person's
+/// settings as the page keeps them, and the language its set_language chose.
+struct Page {
+    nlohmann::json settings = nlohmann::json::object();
+    std::optional<std::string> language;
+};
+
+/// While it lives, the commands this thread runs are `page`'s: they speak
+/// its language, and a window that opens starts its settings record from
+/// its settings (each setting the record has, of the same kind), so its
+/// handlers see that page's settings.
+class AsPage {
+public:
+    explicit AsPage(const Page& page);
+    ~AsPage();
+    AsPage(const AsPage&) = delete;
+    AsPage& operator=(const AsPage&) = delete;
+
+private:
+    const Page* was_;
+};
+
+/// Long calls (DESIGN 5.12, clarity_ui.h "Long calls"): what the screen sees
+/// of a handler that runs long and how the person stops it, by the number
+/// the screen gave the call. The desktop asks from the screen's thread while
+/// the handler runs on another; the web server from one request while the
+/// handler's request is open.
+class Watches {
+public:
+    /// Whether `command` is start_watch, watch_progress, stop_watch or end_watch.
+    static bool is_command(const std::string& command);
+    /// Answers a watch command for call `id`: `{"value": ...}`. start_watch
+    /// enters the watch on this thread (the desktop's); end_watch may come
+    /// twice, and while the handler still runs on another thread.
+    nlohmann::json answer(const std::string& command, uint64_t id);
+    /// Runs what this thread does next under watch `id` until leave: a stop
+    /// sent before holds.
+    void enter(uint64_t id);
+    /// This thread's handler is done: its watch keeps how far it got until end_watch.
+    void leave();
+
+private:
+    struct Watch;
+    std::shared_ptr<Watch> watch(uint64_t id);
+    std::mutex mutex_;
+    std::map<uint64_t, std::shared_ptr<Watch>> all_;
+};
+
+/// Answers one of Clarity.UI's commands (clarity_ui.h) through the service,
+/// the same on the desktop and on the web: `{"value": ...}` or `{"error":
+/// ...}` as text, or none for the library's default. The desktop's own
+/// commands (watches, engines beside the screen) are the desktop's.
+std::optional<std::string> wire_answer(Service& service, const std::string& command, const nlohmann::json& args);
 
 }  // namespace clarity::shell

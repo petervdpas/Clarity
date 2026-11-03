@@ -182,6 +182,7 @@ translation de
     theAlbumHasNoCover "Das Album hat noch kein Cover"
     theCoverIsNowThePhoto "Das Cover ist jetzt das Foto von {name}"
     chooseFolder "Ordner wählen"
+    typeServerFolder "Pfad eines Ordners auf dem Server eingeben"
     cutText "Ausschneiden"
     copyText "Kopieren"
     pasteText "Einfügen"

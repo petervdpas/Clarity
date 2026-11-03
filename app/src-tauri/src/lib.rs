@@ -421,14 +421,6 @@ fn stop_app(app: AppHandle) {
     build::stop(&app);
 }
 
-/// Installs what the web target of C# with Clarity.UI is missing, .NET's
-/// WebAssembly tools; the system asks the person's permission first where
-/// .NET is installed for every user.
-#[tauri::command]
-fn install_web_tools(app: AppHandle) -> Result<(), String> {
-    build::install_web_tools(app)
-}
-
 /// The application Run started, while it runs: where a browser opens it.
 #[tauri::command]
 fn app_state(app: AppHandle) -> Option<build::AppRunning> {
@@ -809,6 +801,18 @@ pub fn run() {
             if let Some(folder) = carried.or_else(repository) {
                 clarity_gen::clarity_ui::set_bundled(folder);
             }
+            // Its browser files for web programs (round B): carried by the installer; in a debug build, the repository's.
+            let carried = app.path().resource_dir().ok().map(|dir| dir.join("clarity-ui-browser")).filter(|dir| clarity_gen::clarity_ui::browser_complete(dir));
+            let repository = || cfg!(debug_assertions).then(|| clarity_gen::clarity_ui::repository_browser(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")))).flatten();
+            if let Some(folder) = carried.or_else(repository) {
+                clarity_gen::clarity_ui::set_bundled_browser(folder);
+            }
+            // Its browser files for web programs (DESIGN 7.9, round B), carried the same way.
+            let carried_browser = app.path().resource_dir().ok().map(|dir| dir.join("clarity-ui-browser")).filter(|dir| clarity_gen::clarity_ui::browser_complete(dir));
+            let repository_browser = || cfg!(debug_assertions).then(|| clarity_gen::clarity_ui::repository_browser(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")))).flatten();
+            if let Some(folder) = carried_browser.or_else(repository_browser) {
+                clarity_gen::clarity_ui::set_bundled_browser(folder);
+            }
             let info = app.package_info();
             if let Some(window) = app.get_webview_window("main") {
                 // F5, Ctrl+R, Ctrl+P and Ctrl+F are Clarity's, not the webview's.
@@ -863,7 +867,6 @@ pub fn run() {
             type_line,
             stop_app,
             app_state,
-            install_web_tools,
             engines::engine_info,
             engines::engine_source_text,
             parts::part_files,

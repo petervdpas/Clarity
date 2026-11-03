@@ -1,6 +1,7 @@
 //! The Rust backend: a desktop program drawn by Clarity.UI (the crate
-//! clarity-ui), or a web program that serves the shared web screen to a
-//! browser. One Rust module per Clarity module, the schema as its first
+//! clarity-ui), a web program that serves Clarity.UI's browser files and
+//! answers their wire (round B, DESIGN 7.9), or one program that does both
+//! (`--serve` serves). One Rust module per Clarity module, the schema as its first
 //! migration, the window structs and handlers, on the runtime crate
 //! `clarity-runtime` from crates.io with the features of the project's
 //! databases. While working on the runtime, `.cargo/config.toml` in the
@@ -109,13 +110,12 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     // Custom parts written in Rust (DESIGN 5.19): the runtime's part host.
     let rust_parts = parts::crate_parts(project);
     // `stack rust desktop`: Clarity.UI draws the windows in the program's own process (DESIGN 7.9).
-    // `stack rust web` serves the shared web screen to a browser, until Clarity.UI draws there (G8d).
+    // `stack rust web`: the program serves Clarity.UI's browser files and answers their wire;
+    // with both, `--serve` serves.
     let clarity = settings.stack.has(clarity_project::Target::Desktop);
-    if clarity && settings.stack.has(clarity_project::Target::Web) {
-        return Err(vec!["the web program of Rust is not generated beside its desktop program yet; write stack rust desktop, or stack rust web for the web program alone".to_string()]);
-    }
-    // On Clarity.UI the engines beside the screen run in the program, on the runtime's engines (DESIGN 5.12).
-    let screen_engines = clarity && !crate::screen_engines(project).is_empty();
+    let web = settings.stack.has(clarity_project::Target::Web);
+    // The engines beside the screen run in the program, on the runtime's engines (DESIGN 5.12).
+    let screen_engines = !crate::screen_engines(project).is_empty();
     if screen_engines {
         features.push("engines");
     }
@@ -154,9 +154,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if clarity {
         // The windows and app frames as markup, the themes and the texts, which Clarity.UI reads (DESIGN 7.9).
         files.extend(clarity_files(project));
-    } else {
-        // Clarity's screen, the themes, the resources and the windows as markup (DESIGN 7.8), in ui/.
-        files.extend(crate::web::renderer_files(project));
+    }
+    if web {
+        // The page and what Clarity.UI draws from in a browser, in browser/; the library's files join them (web_browser).
+        files.extend(crate::web_browser::site(project, settings));
     }
 
     let mut modules = Vec::new();
@@ -216,20 +217,20 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !crate::engines(project).is_empty() {
         files.push(text("src/engines.rs", engines_rs(project)));
     }
-    // The screen's files, which a web server serves from the program itself.
-    let ui: Vec<String> = files.iter().filter_map(|f| f.path.strip_prefix("ui/").map(String::from)).collect();
-    let clarity_run = clarity.then(|| clarity_run(project, settings, &files, &main_window, !rust_parts.is_empty()));
-    let main_text = main_rs(project, settings, &owners, &databases, &main_window, &ui, clarity_run.as_deref());
-    if clarity {
-        // What Clarity.UI's parts read beside the values: the facts of the fields and types (DESIGN 7.9).
-        files.push(text("src/facts.rs", facts_rs(project)));
-        let main_text = main_text
-            .replacen("mod modules;\n", "mod modules;\nmod facts;\n", 1)
-            .replacen("impl Program for App {\n", &format!("{}impl Program for App {{\n    fn facts_json(&self) -> Value {{\n        facts::FACTS.to_json()\n    }}\n\n{}", screen_engines_static(project), screen_engine_fn(project)), 1);
-        files.push(text("src/main.rs", main_text));
-    } else {
-        files.push(text("src/main.rs", main_text));
+    // The browser files, which the web server serves from the program itself: its own and the library's.
+    let mut served: Vec<String> = files.iter().filter_map(|f| f.path.strip_prefix("browser/").map(String::from)).collect();
+    if web {
+        served.extend(crate::clarity_ui::BROWSER_FILES.iter().map(|f| f.to_string()));
+        served.sort();
     }
+    let clarity_run = clarity.then(|| clarity_run(project, settings, &files, &main_window, !rust_parts.is_empty()));
+    let main_text = main_rs(project, settings, &owners, &databases, &main_window, &served, clarity_run.as_deref());
+    // What Clarity.UI's parts read beside the values: the facts of the fields and types (DESIGN 7.9).
+    files.push(text("src/facts.rs", facts_rs(project)));
+    let main_text = main_text
+        .replacen("mod modules;\n", "mod modules;\nmod facts;\n", 1)
+        .replacen("impl Program for App {\n", &format!("{}impl Program for App {{\n    fn facts_json(&self) -> Value {{\n        facts::FACTS.to_json()\n    }}\n\n{}", screen_engines_static(project), screen_engine_fn(project)), 1);
+    files.push(text("src/main.rs", main_text));
     // Built on the crates in Clarity's repository when CLARITY_RUNTIME names them.
     files.extend(local_patch_file(clarity)?);
     Ok(files)
@@ -598,8 +599,8 @@ fn main_window(project: &Project) -> Option<String> {
 
 /// The manifest of the application, with the runtime features of the
 /// databases its data sources are. `clarity`: the desktop program, which
-/// Clarity.UI draws; without it the web program, which serves the shared
-/// web screen.
+/// Clarity.UI draws; without it the web program, which serves Clarity.UI's
+/// browser files.
 fn cargo_toml(name: &str, clarity: bool, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)]) -> String {
     // Clarity.UI, which draws the windows with Skia in the system's own window (DESIGN 7.9).
     let ui = if clarity { format!("clarity-ui = \"{}\"\n", ui_version()) } else { String::new() };
@@ -642,9 +643,11 @@ fn display_field(entity: &clarity_spec::model::Entity) -> Option<String> {
 
 /// The program's main.rs: the program (`App`, which implements the runtime's
 /// `Program`). With `clarity_run`, the lines that start Clarity.UI, main
-/// starts the desktop program; without, it serves the web screen.
+/// starts the desktop program; with `served` (the paths below browser/), it
+/// serves the browser files and answers their wire; with both, `--serve`
+/// serves.
 #[allow(clippy::too_many_arguments)]
-fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str, ui: &[String], clarity_run: Option<&str>) -> String {
+fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str, served: &[String], clarity_run: Option<&str>) -> String {
     // An engine that says how far a long call is (DESIGN 5.12): handlers run off
     // the screen's thread, so the window keeps painting its bar, and Stop reaches the call.
     let watches = project.files.iter().flat_map(|f| &f.engines).any(|e| e.uses.iter().any(|u| u.name == clarity_spec::code::check::PROGRESS));
@@ -669,11 +672,9 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     };
     // A database that connects with a secret setting (DESIGN 5.27): when it
     // cannot open at start, the screen shows the window that keeps it first.
-    let started_fn = "/// The model and the main window, which the screen starts from; when the\n/// databases did not open, what to show first and why.\nfn started(app: &App) -> Value {\n    let started = app.started();\n    let mut start = serde_json::json!({ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": started.main });\n    if let Some(unconnected) = started.unconnected {\n        start[\"unconnected\"] = serde_json::json!({ \"handler\": unconnected.handler, \"window\": unconnected.window, \"problem\": unconnected.problem });\n    }\n    start\n}\n\n";
-    let (app_struct, start_command, open_db, app_new, started_unconnected, connect_fn) = match crate::unconnected(project) {
+    let (app_struct, open_db, app_new, started_unconnected, connect_fn) = match crate::unconnected(project) {
         None => (
             "/// The program: its databases, which every call shares.\nstruct App(Mutex<Db>);\n".to_string(),
-            started_fn.to_string(),
             "    let db = open_databases().expect(\"cannot open the databases\");\n".to_string(),
             "    let app = App(Mutex::new(db));\n",
             "None".to_string(),
@@ -685,25 +686,25 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
                 unconnected.handler.as_ref().map(|(_, h)| h.as_str()),
                 unconnected.window.as_deref()
             ),
-            started_fn.to_string(),
             "    // Until they open, the windows work on an empty database in memory.\n    let (db, problem) = match open_databases() {\n        Ok(db) => (db, None),\n        Err(err) => (Db::memory().expect(\"cannot open a database in memory\"), Some(clarity_runtime::unconnected_reason(&err))),\n    };\n".to_string(),
             "    let app = App(Mutex::new(db), Mutex::new(problem));\n",
             "self.1.lock().ok().and_then(|problem| problem.clone()).map(|problem| program::Unconnected { handler: UNCONNECTED_HANDLER.map(String::from), window: CONNECTION_WINDOW.map(String::from), problem })".to_string(),
             "\n    /// Opens the databases again, as when the person has kept their connection.\n    fn connect(&self) -> Answer<()> {\n        let db = open_databases().map_err(|err| clarity_runtime::unconnected_reason(&err))?;\n        *self.0.lock().map_err(|_| Text::plain(\"the database is not available\"))? = db;\n        if let Ok(mut problem) = self.1.lock() {\n            *problem = None;\n        }\n        Ok(())\n    }\n".to_string(),
         ),
     };
-    // The web target (DESIGN 7.3): the commands a browser sends, answered by the program.
-    let unconnected = crate::unconnected(project).is_some();
     // The desktop program is the crate clarity-ui's, in the program's own process (DESIGN 7.9):
     // Clarity.UI's start is main's last line; its files' constant follows main.
-    // Without it, main serves the web screen to a browser.
+    // Without it, main serves Clarity.UI's browser files to a browser.
     let (clarity_run, files_const) = match clarity_run.map(|run| run.split_once("//~files\n").unwrap_or((run, ""))) {
         Some((run, files)) => (Some(run), files),
         None => (None, ""),
     };
-    let start = match clarity_run {
-        Some(run) => run.to_string(),
-        None => serve_main(&clarity_project::serve_address(settings), ui),
+    let serve = (!served.is_empty()).then(|| serve_main(&clarity_project::serve_address(settings), served));
+    let start = match (clarity_run, serve) {
+        (Some(run), None) => run.to_string(),
+        (None, Some(serve)) => serve,
+        (Some(run), Some(serve)) => format!("    if std::env::args().any(|arg| arg == \"--serve\") {{\n{}        return std::process::ExitCode::SUCCESS;\n    }}\n{run}", serve.lines().map(|l| format!("    {l}\n")).collect::<String>()),
+        (None, None) => String::new(),
     };
     // An engine whose file does not fit its declaration stops the application at start, not at its first call.
     let (engines_mod, check_engines, close_engines) = if crate::engines(project).is_empty() {
@@ -715,8 +716,6 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
             "    engines::close_window(instance);\n",
         )
     };
-    // The web server's commands; a program on Clarity.UI has none.
-    let served = if clarity_run.is_some() { String::new() } else { served_rs(unconnected) };
     // On Clarity.UI main answers what the window's host ends with.
     let main_returns = if clarity_run.is_some() { " -> std::process::ExitCode" } else { "" };
     // Custom parts (DESIGN 6.5), which Clarity.UI draws.
@@ -728,13 +727,14 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         .collect::<Vec<_>>()
         .join(", ");
     // The settings a window shows are what the person kept, each value that
-    // still fits; a browser's settings are its own, so the web program starts
-    // from the defaults.
+    // still fits; served, a browser's settings are its own (the page's, over
+    // the defaults, or over what the desktop kept).
     let kept_settings = match project.files.iter().find_map(|f| f.entities.iter().find(|e| e.settings).map(|e| (f, e))) {
         Some((file, entity)) => {
             let module = file.module.as_ref().map(|m| snake(&m.name)).unwrap_or_default();
             let ty = format!("modules::{module}::{}", entity.name.name);
-            let body = if clarity_run.is_some() { format!("{ty}::from_kept(&{read})") } else { format!("{ty}::default()") };
+            let base = if clarity_run.is_some() { read.to_string() } else { "Map::new()".to_string() };
+            let body = format!("{ty}::from_kept(&clarity_runtime::serve::page_settings_over({base}))");
             format!("\n/// The settings a window starts with: each kept value that still fits.\nfn kept_settings() -> {ty} {{\n    {body}\n}}\n")
         }
         None => String::new(),
@@ -1106,7 +1106,6 @@ fn window_reply(sent: &clarity_runtime::views::Sent, answer: Answer<Reply>) -> A
     Ok(reply)
 }}
 
-{start_command}
 /// Opens every database, brings it up to date and adds its file stores.
 fn open_databases() -> Result<Db> {{
     let mut db = Db::connect(DATABASES)?;
@@ -1233,7 +1232,6 @@ impl Program for App {{
     }}
 {connect_fn}{watched_impl}}}
 
-{served}
 
 fn main(){main_returns} {{
 {check_engines}    // Text code makes is translated from the model's translations.
@@ -1300,132 +1298,14 @@ pub const SOURCES: &[(&str, &[&[&str]])] = &[
     if errors.is_empty() { Ok(out) } else { Err(errors) }
 }
 
-/// The commands a browser sends to the web server (DESIGN 7.3), each
-/// answered by the program. What a browser does itself (its title, links,
-/// files and the person's settings) never comes here, and custom parts and
-/// windows of their own are the desktop's.
-fn served_rs(unconnected: bool) -> String {
-    let connect = if unconnected { "        \"connect\" => given(app.connect()),\n" } else { "" };
+/// main as a web server (DESIGN 7.3, round B of 7.9): the browser files,
+/// embedded in the program, and the page's wire, answered by the program
+/// (`clarity_runtime::wire::answer`).
+fn serve_main(address: &str, served: &[String]) -> String {
+    // The browser files, in the program itself.
+    let arms: String = served.iter().map(|path| format!("            {path:?} => Some(include_bytes!(\"../browser/{path}\").to_vec()),\n")).collect();
     format!(
-        r#"
-/// A command a browser sends to the web server (DESIGN 7.3), answered by the
-/// program: `{{"value": ...}}` or `{{"error": ...}}`.
-#[allow(dead_code)]
-fn served(app: &App, command: &str, args: Value) -> Value {{
-    fn arg<T: serde::de::DeserializeOwned>(args: &Value, name: &str) -> Answer<T> {{
-        serde_json::from_value(args.get(name).cloned().unwrap_or(Value::Null)).map_err(|err| Text::plain(format!("{{name}}: {{err}}")))
-    }}
-    fn given<T: serde::Serialize>(answer: Answer<T>) -> Value {{
-        match answer {{
-            Ok(value) => serde_json::json!({{ "value": value }}),
-            Err(error) => serde_json::json!({{ "error": error }}),
-        }}
-    }}
-    match command {{
-        "start" => given(Ok(started(app))),
-{connect}        "start_app" => given(app.start_app()),
-        "open_window" => given((|| {{
-            let (window, with): (String, Map<String, Value>) = (arg(&args, "window")?, arg(&args, "with")?);
-            app.open_window(&window, with)
-        }})()),
-        "close_window" => given((|| app.close_window(arg(&args, "state")?))()),
-        "return_to" => given((|| app.return_to(arg(&args, "state")?))()),
-        "dispatch_event" => given((|| {{
-            let (state, handler): (WindowState, String) = (arg(&args, "state")?, arg(&args, "handler")?);
-            app.dispatch_event(state, &handler)
-        }})()),
-        "edit_event" => given((|| {{
-            let readonly: Option<bool> = arg(&args, "readonly")?;
-            let edit = program::Edit {{ handler: arg(&args, "handler")?, part: arg(&args, "part")?, scope: arg(&args, "scope")?, ends: arg(&args, "ends")?, readonly: readonly.unwrap_or_default(), path: arg(&args, "path")?, editable: arg(&args, "editable")? }};
-            app.edit_event(arg(&args, "state")?, edit)
-        }})()),
-        "undo_edit" => given((|| {{
-            let (state, scope, back): (WindowState, String, bool) = (arg(&args, "state")?, arg(&args, "scope")?, arg(&args, "back")?);
-            app.undo_edit(state, &scope, back)
-        }})()),
-        "reorder_event" => given((|| {{
-            let readonly: Option<bool> = arg(&args, "readonly")?;
-            let reorder = program::Reorder {{ part: arg(&args, "part")?, scope: arg(&args, "scope")?, list: arg(&args, "list")?, by: arg(&args, "by")?, parent: arg(&args, "parent")?, moved: arg(&args, "move")?, handler: arg(&args, "handler")?, readonly: readonly.unwrap_or_default() }};
-            app.reorder_event(arg(&args, "state")?, reorder)
-        }})()),
-        "item_event" => given((|| {{
-            let values: Option<Vec<String>> = arg(&args, "values")?;
-            let readonly: Option<bool> = arg(&args, "readonly")?;
-            let item = program::ItemEdit {{ part: arg(&args, "part")?, scope: arg(&args, "scope")?, path: arg(&args, "path")?, item: arg(&args, "item")?, values: values.unwrap_or_default(), typed: arg(&args, "typed")?, handler: arg(&args, "handler")?, readonly: readonly.unwrap_or_default() }};
-            app.item_event(arg(&args, "state")?, item)
-        }})()),
-        "range_event" => given((|| {{
-            let range = clarity_runtime::ranges::Range {{ min: arg(&args, "min")?, max: arg(&args, "max")?, step: arg(&args, "step")? }};
-            let moved = clarity_runtime::ranges::RangeMove::of(arg(&args, "key")?, arg(&args, "at")?, arg(&args, "typed")?).map_err(|err| Text::plain(err.to_string()))?;
-            let readonly: Option<bool> = arg(&args, "readonly")?;
-            let range = program::RangeEdit {{ part: arg(&args, "part")?, scope: arg(&args, "scope")?, path: arg(&args, "path")?, range, whole: arg(&args, "whole")?, moved, handler: arg(&args, "handler")?, readonly: readonly.unwrap_or_default() }};
-            app.range_event(arg(&args, "state")?, range)
-        }})()),
-        "canvas_event" => given((|| {{
-            let (list, path, grid, snap): (Option<String>, Option<String>, Option<i64>, Option<bool>) = (arg(&args, "list")?, arg(&args, "path")?, arg(&args, "grid")?, arg(&args, "snap")?);
-            let canvas = clarity_runtime::canvas::CanvasArgs {{ part: arg(&args, "part")?, mode: arg(&args, "mode")?, list: list.unwrap_or_default(), at: arg(&args, "at")?, path: path.unwrap_or_default(), units: arg(&args, "units")?, grid: grid.unwrap_or_default(), snap: snap.unwrap_or_default(), readonly: false }};
-            let readonly: Option<bool> = arg(&args, "readonly")?;
-            let canvas = program::CanvasEdit {{ canvas, action: arg(&args, "action")?, scope: arg(&args, "scope")?, handler: arg(&args, "handler")?, readonly: readonly.unwrap_or_default() }};
-            app.canvas_event(arg(&args, "state")?, canvas)
-        }})()),
-        "step_event" => given((|| {{
-            let step = program::StepPress {{ part: arg(&args, "part")?, button: arg(&args, "button")?, steps: arg(&args, "steps")?, next: arg(&args, "next")?, finish: arg(&args, "finish")? }};
-            app.step_event(arg(&args, "state")?, step)
-        }})()),
-        "view_event" => given((|| {{
-            let (state, part, action): (WindowState, String, Map<String, Value>) = (arg(&args, "state")?, arg(&args, "part")?, arg(&args, "action")?);
-            app.view_event(state, &part, action)
-        }})()),
-        "answer_event" => given((|| {{
-            let (state, handler, values): (WindowState, String, Vec<Value>) = (arg(&args, "state")?, arg(&args, "handler")?, arg(&args, "values")?);
-            app.answer_event(state, &handler, values)
-        }})()),
-        "ref_options" => given((|| app.ref_options(&arg::<String>(&args, "entity")?))()),
-        "field_values" => given((|| {{
-            let (entity, field): (String, String) = (arg(&args, "entity")?, arg(&args, "field")?);
-            app.field_values(&entity, &field)
-        }})()),
-        "find_options" => given((|| {{
-            let (kind, entity, field, show, typed): (String, String, Option<String>, Option<Vec<String>>, String) =
-                (arg(&args, "kind")?, arg(&args, "entity")?, arg(&args, "field")?, arg(&args, "show")?, arg(&args, "typed")?);
-            app.find_options(&kind, &entity, field.as_deref(), &show.unwrap_or_default(), &typed)
-        }})()),
-        "picture" => given((|| {{
-            let (entity, id, field): (String, i64, String) = (arg(&args, "entity")?, arg(&args, "id")?, arg(&args, "field")?);
-            app.field_bytes(&entity, id, &field)?.map(|bytes| clarity_runtime::picture::data_url(&bytes).map_err(|err| program::said(&err))).transpose()
-        }})()),
-        "file_data" => given((|| {{
-            let (entity, id, field): (String, i64, String) = (arg(&args, "entity")?, arg(&args, "id")?, arg(&args, "field")?);
-            Ok(app.field_bytes(&entity, id, &field)?.map(|bytes| clarity_runtime::record_file::data(&bytes)))
-        }})()),
-        "store_file" => given((|| {{
-            let (store, path): (String, String) = (arg(&args, "store")?, arg(&args, "path")?);
-            clarity_runtime::picture::data_url(&app.store_file(&store, &path)?).map_err(|err| program::said(&err))
-        }})()),
-        "set_language" => given((|| {{
-            let language: Option<String> = arg(&args, "language")?;
-            app.set_language(language.as_deref());
-            Ok(Value::Null)
-        }})()),
-        "log_line" => given((|| {{
-            let line: String = arg(&args, "line")?;
-            eprintln!("{{line}}");
-            Ok(Value::Null)
-        }})()),
-        _ => serde_json::json!({{ "error": format!("there is no command {{command}}") }}),
-    }}
-}}
-"#
-    )
-}
-
-/// main as a web server: the renderer's files, embedded in the program, the
-/// commands answered by `served`.
-fn serve_main(address: &str, ui: &[String]) -> String {
-    // The screen's files, in the program itself.
-    let arms: String = ui.iter().map(|path| format!("            {path:?} => Some(include_bytes!(\"../ui/{path}\").to_vec()),\n")).collect();
-    format!(
-        "    let files = |path: &str| -> Option<Vec<u8>> {{\n        match path {{\n{arms}            _ => None,\n        }}\n    }};\n    let args: Vec<String> = std::env::args().collect();\n    if let Err(err) = clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args, {address:?}), &files, &mut |command, args| served(&app, command, args)) {{\n        eprintln!(\"{{PROGRAM}}: {{err}}\");\n        std::process::exit(1);\n    }}\n"
+        "    let files = |path: &str| -> Option<Vec<u8>> {{\n        match path {{\n{arms}            _ => None,\n        }}\n    }};\n    let args: Vec<String> = std::env::args().collect();\n    if let Err(err) = clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args, {address:?}), &files, &|command, args| clarity_runtime::wire::answer(&app, command, args)) {{\n        eprintln!(\"{{PROGRAM}}: {{err}}\");\n        std::process::exit(1);\n    }}\n"
     )
 }
 

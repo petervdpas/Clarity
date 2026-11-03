@@ -75,6 +75,7 @@
     X(the_layer_answers_several_threads_at_once)                  \
     X(the_layer_runs_engines_beside_the_screen)                   \
     X(a_c_program_runs_on_clarity_ui)                             \
+    X(a_window_starts_from_the_kept_settings_and_a_handlers_change_is_kept) \
     X(a_command_inside_a_parts_callback_keeps_its_values)         \
     X(the_runtime_keeps_the_edits_and_ctrl_z_takes_them_back)  \
     X(the_runtime_reorders_a_list_and_ctrl_z_puts_it_back)     \
@@ -92,6 +93,8 @@
     X(the_edit_bus_puts_back_what_code_set_on_parts)            \
     X(the_server_serves_the_page_and_answers_its_commands)        \
     X(the_server_listens_where_it_is_told)                        \
+    X(a_long_call_over_the_wire_says_how_far_it_is_and_stops)     \
+    X(each_browser_has_its_own_settings_and_language)              \
     X(every_open_window_has_its_own_number)                       \
     X(a_closed_window_is_reported_to_what_listens)                \
     X(a_closed_window_is_reported)                                \

@@ -1,8 +1,8 @@
 // What only a desktop program has (DESIGN 7.6): quitting, and Clarity's keys
 // window in a window of its own. Clarity.Ui gives it as the program starts
-// (the next reply to the native library says quit or keys). A browser
-// page shows the keys window and does not quit; on a server there is none,
-// and the built-in `quit` and `keys` do nothing.
+// (the next reply to the native library says quit or keys); so does a web
+// server's program, where the library in the browser shows the keys window
+// and does not quit.
 
 namespace Clarity.Runtime;
 
@@ -16,7 +16,7 @@ public interface IDesktop
     void ShowKeys();
 }
 
-/// <summary>The desktop program, once it has started; none in a browser.</summary>
+/// <summary>The program answering Clarity.UI, once it has started.</summary>
 public static class DesktopProgram
 {
     public static IDesktop? Current { get; set; }

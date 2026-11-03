@@ -245,8 +245,8 @@ fn a_reply_opens_the_keys_window_and_a_window_of_its_own() {
     }
 }
 
-fn direct(fake: &Fake) -> CallbackProgram {
-    CallbackProgram::new(ClarityProgramCallbacks { user: fake as *const Fake as *mut c_void, call: Some(call), release: None })
+fn direct(fake: &Fake) -> ui::program_wire::WireProgram<CallbackProgram> {
+    ui::program_wire::WireProgram::new(CallbackProgram::new(ClarityProgramCallbacks { user: fake as *const Fake as *mut c_void, call: Some(call), release: None }))
 }
 
 #[test]

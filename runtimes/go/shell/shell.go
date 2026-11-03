@@ -1,7 +1,7 @@
 // Package shell answers the commands of a generated Go application's
 // screen: the web wire (DESIGN 7.3), the same on every stack. Clarity.UI's
-// desktop asks them through package ui, and the web target serves the
-// shared web screen to a browser (serve.go), which asks them over HTTP.
+// desktop asks them through package ui, and in a browser the web target's
+// page asks them over HTTP (serve.go); Program (program.go) answers both.
 package shell
 
 import (
@@ -57,7 +57,8 @@ type Options struct {
 	Width, Height int
 	// Model is the windows, frame and data dictionary the renderer draws from.
 	Model []byte
-	// Assets are the renderer's files: index.html, its script, styles and themes.
+	// Assets are the browser files a web server serves (browser/ of the
+	// program): the page, Clarity.UI's browser files, files.json and the resources.
 	Assets  fs.FS
 	Db      *clarity.Db
 	Windows Windows
@@ -66,6 +67,9 @@ type Options struct {
 	// nil when they opened.
 	Unconnected *Unconnected
 	Connect     func() (*clarity.Db, error)
+	// Secrets are the names of the secret settings (DESIGN 5.27), kept in
+	// the system's protected store, never in the settings file.
+	Secrets []string
 }
 
 // Unconnected is why the databases did not open, and what the screen shows
@@ -234,6 +238,80 @@ func (c *Service) dispatch(state clarity.WindowState, handler string) (clarity.R
 	return c.options.Windows.Redraw(c.options.Db, reply)
 }
 
+// Page is one browser tab of a served program (DESIGN 7.9 B2): its
+// person's settings as the page keeps them and the language its
+// set_language chose. A command asked with one in its context runs in that
+// language, and a window it opens starts from those settings.
+type Page struct {
+	Settings map[string]any
+	Language *string
+}
+
+type pageKey struct{}
+
+// WithPage is ctx asking for page.
+func WithPage(ctx context.Context, page *Page) context.Context {
+	return context.WithValue(ctx, pageKey{}, page)
+}
+
+func pageOf(ctx context.Context) *Page {
+	page, _ := ctx.Value(pageKey{}).(*Page)
+	return page
+}
+
+type desktopKey struct{}
+
+// OnTheDesktop is ctx asking for the desktop: a window it opens starts
+// from the settings the person kept, as a page's start from the page's.
+func OnTheDesktop(ctx context.Context) context.Context {
+	return context.WithValue(ctx, desktopKey{}, true)
+}
+
+func onTheDesktop(ctx context.Context) bool {
+	desktop, _ := ctx.Value(desktopKey{}).(bool)
+	return desktop
+}
+
+// withPageSettings has the window's settings record start from the page's:
+// each setting the record has, of the same kind.
+func withPageSettings(data map[string]any, page *Page) {
+	if page != nil {
+		withSettings(data, page.Settings)
+	}
+}
+
+// withSettings has the window's settings record start from settings: each
+// setting the record has, of the same kind.
+func withSettings(data map[string]any, settings map[string]any) {
+	if len(settings) == 0 || data["settings"] == nil {
+		return
+	}
+	text, err := json.Marshal(data["settings"])
+	if err != nil {
+		return
+	}
+	var record map[string]any
+	if json.Unmarshal(text, &record) != nil || record == nil {
+		return
+	}
+	kind := func(v any) string { return fmt.Sprintf("%T", v) }
+	for name, value := range settings {
+		if was, has := record[name]; has && name != "id" && kind(was) == kind(value) {
+			record[name] = value
+		}
+	}
+	data["settings"] = record
+}
+
+// secrets are the names of the secret settings: those the command names,
+// or else the program's own.
+func (c *Service) secrets(a Args) []string {
+	if a.Secrets != nil {
+		return a.Secrets
+	}
+	return c.options.Secrets
+}
+
 // Invoke runs a command of the renderer: the same commands, with the same
 // arguments, as the Tauri shell has.
 func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessage) Answer {
@@ -369,6 +447,10 @@ func (c *Service) invoke(ctx context.Context, command string, a Args) (answer An
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// Served, the command speaks its page's language: set under mu, as commands take turns.
+	if page := pageOf(ctx); page != nil {
+		clarity.SetLanguage(page.Language)
+	}
 	screen, shows := c.desktop.(Screen)
 	if !watched[command] || !shows {
 		return c.answer(ctx, command, a)
@@ -463,10 +545,10 @@ func (c *Service) command(ctx context.Context, command string, a Args) Answer {
 		return Answer{}
 	case "read_settings":
 		// The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
-		return Answer{Value: clarity.ReadSettingsWith(c.options.Name, a.Secrets)}
+		return Answer{Value: clarity.ReadSettingsWith(c.options.Name, c.secrets(a))}
 	case "keep_settings":
 		// The person's settings, as the screen has them now; its secrets go to the protected store.
-		if err := clarity.KeepSettingsWith(c.options.Name, a.Settings, a.Secrets); err != nil {
+		if err := clarity.KeepSettingsWith(c.options.Name, a.Settings, c.secrets(a)); err != nil {
 			return failed(err)
 		}
 		return Answer{}
@@ -479,6 +561,10 @@ func (c *Service) command(ctx context.Context, command string, a Args) Answer {
 		if err != nil {
 			return failed(err)
 		}
+		if onTheDesktop(ctx) {
+			withSettings(state.Data, clarity.ReadSettingsWith(c.options.Name, c.options.Secrets))
+		}
+		withPageSettings(state.Data, pageOf(ctx))
 		return answer(c.onEvent(state, "open"))
 	case "close_window":
 		reply, err := c.onEvent(a.State, "close")

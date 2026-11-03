@@ -130,26 +130,25 @@ fn the_webview_desktop_is_gone() {
     assert_eq!(errors, ["Rust draws its windows with Clarity.UI only; write stack rust desktop"]);
 }
 
-/// `stack rust web` alone serves the shared web screen to a browser, until
-/// Clarity.UI draws in the browser (G8d); beside the desktop program it is
-/// not generated yet.
+/// `stack rust web` serves Clarity.UI's browser files and answers their
+/// wire (round B of DESIGN 7.9); beside the desktop target it is the same
+/// program, serving with `--serve`.
 #[test]
-fn the_web_program_serves_the_shared_screen_alone() {
+fn the_web_program_serves_clarity_ui_in_the_browser() {
     let project = load_keyed([("shop.clarity", SHOP)], &[], "en");
     let mut web = settings(Ui::Clarity);
     web.stack.targets = vec![clarity_project::Target::Web];
     let files = generate(&project, &web).unwrap_or_else(|errors| panic!("{errors:#?}"));
     let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
-    assert!(paths.contains(&"ui/index.html") && !paths.contains(&"src/facts.rs"), "{paths:?}");
+    assert!(paths.contains(&"browser/index.html") && paths.contains(&"browser/clarity/files.json") && paths.contains(&"src/facts.rs"), "{paths:?}");
     assert!(!file(&files, "Cargo.toml").contains("clarity-ui"));
-    has(file(&files, "src/main.rs"), "fn served(app: &App, command: &str, args: Value) -> Value {");
-    has(file(&files, "README.md"), "Rust with the web renderer");
+    has(file(&files, "src/main.rs"), "clarity_runtime::wire::answer(&app, command, args)");
+    has(file(&files, "README.md"), "Rust with Clarity.UI");
 
+    // With the desktop target too, one program: the desktop's, serving with --serve.
     web.stack.targets = vec![clarity_project::Target::Desktop, clarity_project::Target::Web];
-    assert_eq!(
-        generate(&project, &web).unwrap_err(),
-        ["the web program of Rust is not generated beside its desktop program yet; write stack rust desktop, or stack rust web for the web program alone"]
-    );
+    let files = generate(&project, &web).unwrap_or_else(|errors| panic!("{errors:#?}"));
+    has(file(&files, "src/main.rs"), "arg == \"--serve\"");
 }
 
 const ORDERS: &str = "module orders

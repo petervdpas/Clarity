@@ -7,6 +7,7 @@
 // into native code.
 
 using System.Text.Json.Nodes;
+using Clarity.Runtime;
 
 namespace Clarity.Ui.Native.Tests;
 

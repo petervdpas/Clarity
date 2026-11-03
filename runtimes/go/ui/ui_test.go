@@ -275,53 +275,6 @@ func TestEnginesBesideTheScreenGoByNumber(t *testing.T) {
 	}
 }
 
-func TestALongCallIsWatchedOnTheThreadItsHandlerRunsOn(t *testing.T) {
-	model := &windows{}
-	d := desktop(t, model)
-	d.Watches = true
-	p := NewProgram(d)
-	if got := string(p.Answer("watches", nil, 1)); got != `{"value":true}` {
-		t.Fatalf("watches: %s", got)
-	}
-	state := `{"state":{"window":"Main","instance":1,"data":{"name":"Ann"}},"handler":"long"}`
-	// The handler runs on thread 9 as watch 4, and says how far it is.
-	p.Answer("start_watch", []byte(`{"id":4}`), 9)
-	if got := string(p.Answer("watch_progress", []byte(`{"id":4}`), 1)); got != `{"value":null}` {
-		t.Fatalf("progress before any: %s", got)
-	}
-	p.Answer("dispatch_event", []byte(state), 9)
-	if got := string(p.Answer("watch_progress", []byte(`{"id":4}`), 1)); got != `{"value":[3,10]}` {
-		t.Fatalf("progress: %s", got)
-	}
-	// Stop from the screen's thread closes the handler's Stop.
-	p.Answer("stop_watch", []byte(`{"id":4}`), 1)
-	select {
-	case <-model.watched[len(model.watched)-1].Stop:
-	default:
-		t.Fatal("Stop did not reach the handler's watch")
-	}
-	p.Answer("end_watch", []byte(`{"id":4}`), 9)
-	// A handler on another thread, with no watch, runs unwatched.
-	p.Answer("dispatch_event", []byte(state), 2)
-	if model.watched[len(model.watched)-1].Stop != nil {
-		t.Fatal("a handler without a watch was watched")
-	}
-	// A Stop that comes before its watch starts holds once it starts; one of a watch that ended stops nothing.
-	p.Answer("stop_watch", []byte(`{"id":5}`), 1)
-	p.Answer("start_watch", []byte(`{"id":5}`), 9)
-	p.Answer("dispatch_event", []byte(state), 9)
-	select {
-	case <-model.watched[len(model.watched)-1].Stop:
-	default:
-		t.Fatal("an early Stop did not hold")
-	}
-	p.Answer("end_watch", []byte(`{"id":5}`), 9)
-	p.Answer("stop_watch", []byte(`{"id":5}`), 1)
-	if len(p.early) != 0 {
-		t.Fatalf("a Stop of an ended watch was kept: %v", p.early)
-	}
-}
-
 // gauge is a custom part written in Go: it shows its speed, and a click
 // changes it and tells reached.
 type gauge struct {
@@ -378,5 +331,81 @@ func TestACustomPartWrittenInGoDrawsHearsAndTells(t *testing.T) {
 	// Its change reached what it binds, and its tell ran the handler wired to it.
 	if data["speed"] != float64(4) || data["name"] != "Reached" || fmt.Sprint(ranOf) != "[gaugeReached [4]]" {
 		t.Fatalf("after a click on the gauge: %v, ran %v", data, ranOf)
+	}
+}
+
+// settingsWindows is a window model whose Main has the person's settings
+// record; its handler flip says what it saw and turns showDone over.
+type settingsWindows struct {
+	windows
+	saw, tokens []any
+}
+
+func (w *settingsWindows) Open(db *clarity.Db, window string, with map[string]any) (clarity.WindowState, error) {
+	return clarity.NewWindowState(window, map[string]any{"settings": map[string]any{"id": 0.0, "showDone": true, "theme": "", "apiToken": ""}}), nil
+}
+
+func (w *settingsWindows) Dispatch(db *clarity.Db, state clarity.WindowState, handler string) (clarity.Reply, error) {
+	settings := state.Data["settings"].(map[string]any)
+	w.mu.Lock()
+	w.saw = append(w.saw, settings["showDone"])
+	w.tokens = append(w.tokens, settings["apiToken"])
+	w.mu.Unlock()
+	settings["showDone"] = !settings["showDone"].(bool)
+	return clarity.NewUi(state).Reply(state.Window, state.Data)
+}
+
+// A window starts from the settings the person kept, and settings a handler
+// changes are kept: the next run's handler sees them.
+func TestAWindowStartsFromTheKeptSettingsAndAHandlersChangeIsKept(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	run := func() []any {
+		model := &settingsWindows{}
+		d := desktop(t, &model.windows)
+		d.Options.Windows = model
+		d.Files = fstest.MapFS{"windows/Main.cxaml": {Data: []byte(`<Window name="Main"><Button name="flip" at="1,1" span="3" caption="Flip" onclick="flip" /></Window>`)}}
+		driven, _ := driving(t, d)
+		step(t, driven, `{"do":"click","part":"flip"}`)
+		driven.Close()
+		return model.saw
+	}
+	if saw := run(); fmt.Sprint(saw) != "[true]" {
+		t.Fatalf("the first run saw %v", saw)
+	}
+	if kept := clarity.ReadSettings("GoLayerTest"); kept["showDone"] != false {
+		t.Fatalf("kept %v", kept)
+	}
+	if saw := run(); fmt.Sprint(saw) != "[false]" {
+		t.Fatalf("the second run saw %v, not the kept setting", saw)
+	}
+}
+
+// storeOf is a protected store in memory.
+type storeOf map[string]string
+
+func (s storeOf) Get(program, name string) string { return s[program+"/"+name] }
+func (s storeOf) Set(program, name, value string) error {
+	s[program+"/"+name] = value
+	return nil
+}
+
+// A secret setting a handler reads has its value from the protected store,
+// never from the settings file.
+func TestASecretSettingAHandlerReadsComesFromTheStore(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	clarity.Secrets = storeOf{"GoLayerTest/apiToken": "s3cret"}
+	t.Cleanup(func() { clarity.Secrets = nil })
+	model := &settingsWindows{}
+	d := desktop(t, &model.windows)
+	d.Options.Windows = model
+	d.Options.Secrets = []string{"apiToken"}
+	d.Files = fstest.MapFS{"windows/Main.cxaml": {Data: []byte(`<Window name="Main"><Button name="flip" at="1,1" span="3" caption="Flip" onclick="flip" /></Window>`)}}
+	driven, _ := driving(t, d)
+	step(t, driven, `{"do":"click","part":"flip"}`)
+	if fmt.Sprint(model.tokens) != "[s3cret]" {
+		t.Fatalf("the handler read %v (%v)", model.tokens, step(t, driven, `{"do":"read"}`))
+	}
+	if kept := clarity.ReadSettings("GoLayerTest"); kept["apiToken"] != nil {
+		t.Fatalf("the secret went to the file: %v", kept)
 	}
 }

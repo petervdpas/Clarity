@@ -12,13 +12,13 @@ stack rust desktop
 
 Rust names no UI: it draws its windows with Clarity.UI, as C# does. Clarity.UI is Clarity's own UI framework: it draws the windows itself with Skia in the system's own window, and every stack gets its own version of it (see [C# with Clarity.UI](stacks.csharp.md)). A desktop program is nothing web: there is no webview in it. The webview desktop Rust once had (Tauri, `stack rust webview desktop`) is gone; a project file that still says so is refused with the line to write instead.
 
-The web target is a program of its own for now:
+The web target serves the same windows to a browser:
 
 ```clarity
 stack rust web
 ```
 
-It is a web server whose page in the browser is the shared web screen, until Clarity.UI draws in the browser. It is not generated beside the desktop program yet: `stack rust desktop web` is refused, and says to write one or the other. See [The project file](project.file.md).
+The program is a web server. Its page runs Clarity.UI in the browser (the same library, compiled once for the browser), which draws the windows and asks the program on the server for each handler, edit and engine frame. With `stack rust desktop web` it is one program: it opens its window, and started with `--serve` it serves instead. See [The project file](project.file.md).
 
 ## What is generated
 
@@ -34,7 +34,13 @@ With `stack rust desktop` Clarity writes a Cargo project into the output folder 
 - `src/main.rs`: the program, which answers what the windows ask of it (the runtime's `Program`); it opens and migrates the databases and starts `clarity_ui::desktop` with the files above, which it carries in itself.
 - a `README.md` that says how to build the project without Clarity.
 
-With `stack rust web` the program serves the shared web screen instead: `ui/` holds the screen (`index.html`, `runtime.js`, `runtime.css`), a CSS file per theme, the windows as markup and the resources, all carried in the program, and `src/main.rs` answers what the browser sends.
+With the `web` target the program also has `browser/`, the files its server serves, all carried in the program:
+
+- `index.html`: the page, a canvas Clarity.UI draws on.
+- `clarity/files.json`: what Clarity.UI draws from in the browser: the windows and app frames as markup, the themes, the data dictionary, the title and the main window's size; `clarity/resources/` holds the resources.
+- `clarity-ui.js`, `clarity-ui.wasm`, `clarity-ui-worker.js` and `clarity-ui-page.js`: Clarity.UI for the browser. Clarity copies them in when it writes the program, from the folder the environment variable `CLARITY_UI_BROWSER` names, else the ones Clarity carries, else the release's archive, fetched once.
+
+`src/main.rs` answers what the browser asks over `/clarity/invoke` with the same program the desktop runs. The program listens at `--address host:port`, else the environment's `CLARITY_ADDRESS`, else the project's port. Requests run side by side, so a long call shows its bar and Stop in the browser too.
 
 Cargo downloads Skia's prebuilt library on the first build; nothing is built from Skia's source. Do not edit these files. Change the project in Clarity; it writes the folder again. See [Run and Build](project.run-build.md).
 
@@ -102,4 +108,4 @@ The application has one desktop window. `open` shows a window in place, on top o
 
 ## The same on every stack
 
-Clarity.UI in Rust follows Clarity.UI in C# ([C# with Clarity.UI](stacks.csharp.md)) part by part, and the web screen of Rust's web program is the one Go, C and C++ share. The shared cases in `conformance/` say what each part must do, and every renderer runs them.
+Clarity.UI in Rust follows Clarity.UI in C# ([C# with Clarity.UI](stacks.csharp.md)) part by part, and every language's web program serves the same Clarity.UI in the browser. The shared cases in `conformance/` say what each part must do, and every renderer runs them.

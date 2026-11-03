@@ -1,6 +1,6 @@
 # C with Clarity.UI
 
-How Clarity turns a project into a C17 desktop program whose windows Clarity.UI draws, what you need to install, and how to build it with CMake.
+How Clarity turns a project into a C17 desktop program whose windows Clarity.UI draws, or a C web server whose windows Clarity.UI draws in the browser, what you need to install, and how to build it with CMake.
 
 ## Choosing the stack
 
@@ -10,7 +10,7 @@ Name the stack in the project file, or pick it on the Project tab:
 stack c desktop
 ```
 
-The backend is C17 and the windows are drawn by Clarity.UI, Clarity's own UI library, through its C interface (`clarity_ui.h`). `stack c web` serves the application to a browser instead, with Clarity's web screen. See [The project file](project.file.md).
+The backend is C17 and the windows are drawn by Clarity.UI, Clarity's own UI library, through its C interface (`clarity_ui.h`). `stack c web` makes a web server instead: Clarity.UI, compiled for the browser, draws the same windows there and asks the program on the server. `stack c desktop web` makes one program that opens its window, or serves with `--serve`. See [The project file](project.file.md).
 
 ## SQLite only
 
@@ -27,17 +27,16 @@ Clarity writes a CMake project into the output folder (`out` by default):
 - `src/model.c`: the model (the data dictionary, the translations, what each window is besides its look), and `src/facts.c`: what the parts read beside the values (labels, formats, required fields), both built into the program.
 - `windows/` and `apps/`: each window, and each app's frame (menu bar, toolbar, ribbon, sidebars, footer), as markup (`.cxaml`, Clarity's own dialect): its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`). `themes/` holds the project's themes as Clarity resolves them, `resources/` its resources. CMake puts these files into the program when it builds it (`clarity_carry` in `CMakeLists.txt`, in the order the project gives them), so a changed window file takes effect on the next build.
 - `src/parts.c`: for a project with [custom parts](design.custom-parts.md), each part registered with Clarity.UI.
-- `src/main.c`: opens and migrates the databases and shows the first window.
+- `browser/`: for the web target, what the browser takes: `index.html` (the page Clarity.UI draws on), Clarity.UI's browser files (`clarity-ui.js`, `clarity-ui.wasm`, `clarity-ui-worker.js`, `clarity-ui-page.js`), `clarity/files.json` (the windows and app frames as markup, the themes, the model, the title and size) and `clarity/resources/`. CMake puts every file of `browser/` into the program (`clarity_carry(<name> BROWSER browser)`), so the program serves them without a folder beside it. A web program alone has no `windows/`, `apps/`, `themes/` or `resources/`: they are in `files.json`.
+- `src/main.c`: opens and migrates the databases and shows the first window, or serves.
 - `clarity-runtime/`: the C runtime, copied in.
-
-A web program (`stack c web`) has `ui/index.html`, Clarity's web screen as one page, and the windows in `ui/windows/` and `ui/apps/` instead.
 - `README.md`: what to install to build the project without Clarity.
 
 Do not edit these files. Change the project in Clarity; it writes the folder again.
 
 ## The runtime
 
-C has no package registry, so Clarity copies its runtime into every project as `clarity-runtime/`. It holds the runtime (records, storage, queries and the binding to the screen), the service that answers Clarity.UI and the web screen (`service/`), the thin layer on Clarity.UI (`desktop/`), and cJSON for JSON.
+C has no package registry, so Clarity copies its runtime into every project as `clarity-runtime/`. It holds the runtime (records, storage, queries and the binding to the screen), the service that answers Clarity.UI's commands on the desktop and over HTTP, with the web server (`service/`), the thin layer on Clarity.UI (`desktop/`), and cJSON for JSON.
 
 ## Clarity.UI's library
 
@@ -45,13 +44,17 @@ The desktop program draws with Clarity.UI's library, `clarity_ui`. The build tak
 
 A project with an [engine](code.engines.md) also gets the engine host and wasm3, which runs engines, in `clarity-runtime/`.
 
+## In the browser
+
+A web program is a web server (plain sockets, Winsock on Windows; each request on a thread of its own, the commands taking turns on the database). It listens on `--address host:port`, else the environment variable `CLARITY_ADDRESS`, else `127.0.0.1` at the project's `port` (8080 without the line). At `/` it serves `browser/index.html`; the page starts Clarity.UI in a Web Worker, which reads `clarity/files.json` and draws the windows with WebGL. Each thing the library asks the program (a window to open, a handler to run) is a POST of `{"command", "args"}` to `/clarity/invoke`, answered as `{"value"}` or `{"error"}` by the same service the desktop asks in-process (`service/wire.c`). The database stays on the server, and so do engines: a long call's handler runs in its own request while the page asks how far it is and stops it in others. The person's settings stay in the browser.
+
 ## What to install
 
 - A C compiler: GCC or Clang (on Windows, Visual Studio's Build Tools)
 - CMake 3.25 or newer, from https://cmake.org/download
 - make or Ninja, to build what CMake writes
 - The SQLite development files (Debian and Ubuntu: `libsqlite3-dev`)
-- For a desktop program, Clarity.UI's library: carried by Clarity (or fetched on the first build), or in the folder `CLARITY_UI` names (above)
+- For a desktop program, Clarity.UI's library: carried by Clarity (or fetched on the first build), or in the folder `CLARITY_UI` names (above). A web program needs nothing of it to build: Clarity copies Clarity.UI's browser files into `browser/` when it writes the project (from the folder `CLARITY_UI_BROWSER` names, else the ones it carries or fetched once)
 - For a project whose code calls web APIs, the libcurl development files (Debian and Ubuntu: `libcurl4-openssl-dev`)
 
 CMake finds SQLite itself. Clarity checks for all of these: run `clarity tools`, or look at Build tools on the Project tab.

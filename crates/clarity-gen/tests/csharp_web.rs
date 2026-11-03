@@ -1,9 +1,8 @@
 //! The web target of C# on Clarity.UI (DESIGN 7.6, 7.9): the windows' view
-//! models run on a server, in a session per browser tab; the browser program
-//! is Clarity.UI in WebAssembly, drawing each window from its markup over a
-//! mirror of the server's state. Three projects: the application as a
-//! library, the server, and the browser program the server's build
-//! publishes into it.
+//! models run on a server; in the browser runs Clarity.UI's library,
+//! compiled once for every language, which asks the server for what each
+//! window does. Two projects, the application as a library and the server,
+//! and `browser/` with the page, beside which Clarity puts the browser files.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Target, Ui, starter};
@@ -66,7 +65,7 @@ fn lacks(text: &str, unexpected: &str) {
 }
 
 #[test]
-fn the_web_target_writes_the_application_the_server_and_the_browser_program() {
+fn the_web_target_writes_the_application_the_server_and_the_page() {
     let files = files(vec![Target::Web]);
     for path in [
         "App/Walker.csproj",
@@ -75,98 +74,75 @@ fn the_web_target_writes_the_application_the_server_and_the_browser_program() {
         "App/Modules/Walker.cs",
         "App/Texts.cs",
         "App/Fields.cs",
+        "App/model.json",
         "Server/Walker.Server.csproj",
         "Server/Program.cs",
         "Server/Databases.cs",
-        "Browser/Walker.Browser.csproj",
-        "Browser/Directory.Build.props",
-        "Browser/Program.cs",
-        "Browser/wwwroot/index.html",
-        "Browser/wwwroot/main.js",
+        "browser/index.html",
         "README.md",
     ] {
         file(&files, path);
     }
-    // The application starts nowhere itself: the server and the browser program start it.
+    // The application starts nowhere itself: the server starts it.
     assert!(!files.iter().any(|f| f.path == "App/Program.cs" || f.path == "Program.cs"));
+    // No browser program of its own: Clarity.UI's browser files are the same for every language.
+    assert!(!files.iter().any(|f| f.path.starts_with("Browser/")), "{:?}", files.iter().map(|f| &f.path).collect::<Vec<_>>());
+    // So the library's files join it, as they join every web program.
+    assert!(clarity_gen::web_browser::serves(&files));
 }
 
 #[test]
-fn the_application_is_a_library_on_clarity_ui_without_the_desktop_or_a_driver() {
+fn the_application_is_a_library_on_the_runtime_carrying_the_browser_files() {
     let files = files(vec![Target::Web]);
     let app = file(&files, "App/Walker.csproj");
     has(app, "<OutputType>Library</OutputType>");
-    // On the browser package, which carries Clarity.UI's drawing in C# until the browser build (R2).
-    has(app, "<PackageReference Include=\"Clarity.Ui.Browser\" Version=");
-    has(app, "<ProjectReference Include=\"$(ClarityRuntime)/Clarity.Ui.Browser/Clarity.Ui.Browser.csproj\" />");
+    // On the runtime alone, which answers Clarity.UI: no Clarity.Ui, no native library.
+    has(app, "<PackageReference Include=\"Clarity.Runtime\" Version=");
+    has(app, "<ProjectReference Include=\"$(ClarityRuntime)/Clarity.Runtime/Clarity.Runtime.csproj\" />");
+    lacks(app, "\"Clarity.Ui\"");
+    lacks(app, "Clarity.Ui.Browser");
     has(app, "<EmbeddedResource Include=\"Windows/*.cxaml\"");
-    // The browser program carries the library: no native window, no database driver.
-    lacks(app, "Clarity.Ui.Desktop");
+    // The page and the library's browser files, for the server to serve.
+    has(app, "<EmbeddedResource Include=\"../browser/**\" LogicalName=\"browser/%(RecursiveDir)%(Filename)%(Extension)\" />");
+    // The server opens the databases: no driver here.
     lacks(app, "Clarity.Runtime.Sqlite");
     lacks(app, "WinExe");
+    // The page is the one every language serves.
+    let page = file(&files, "browser/index.html");
+    has(page, "<title>Walker</title>");
+    has(page, "<canvas id=\"clarity-ui\"></canvas>");
+    has(page, "<script src=\"clarity-ui-page.js\"></script>");
 }
 
 #[test]
-fn the_server_keeps_the_sessions_opens_the_databases_and_serves_the_browser_program() {
+fn the_server_opens_the_databases_and_serves_the_application() {
     let files = files(vec![Target::Web]);
     let server = file(&files, "Server/Walker.Server.csproj");
     has(server, "<ProjectReference Include=\"../App/Walker.csproj\" />");
     has(server, "<PackageReference Include=\"Clarity.Ui.Server\" Version=");
     has(server, "<ProjectReference Include=\"$(ClarityRuntime)/Clarity.Ui.Server/Clarity.Ui.Server.csproj\" />");
     has(server, "<PackageReference Include=\"Clarity.Runtime.Sqlite\" Version=");
-    // Its build publishes the browser program beside it, unless told not to.
-    has(server, "dotnet publish &quot;../Browser/Walker.Browser.csproj&quot;");
-    has(server, "Condition=\"'$(SkipBrowser)' != 'true'\"");
-    // The nested publish leaves no compiler server or build nodes behind, which would hold a build's lock.
-    has(server, "-p:UseSharedCompilation=false -nodeReuse:false --nologo\" EnvironmentVariables=\"MSBUILDDISABLENODEREUSE=1\" />");
+    // Nothing is published into it: no browser program, no WebAssembly tools.
+    lacks(server, "dotnet publish");
+    lacks(server, "Browser");
     let program = file(&files, "Server/Program.cs");
     has(program, "using Clarity.Ui.Server;");
     has(program, "using var db = Databases.Open();");
-    has(program, "new Sessions(() => new FieldViewModel(db))");
-    // The windows' markup is the server's: it serves it from the application it runs.
-    has(program, "typeof(FieldViewModel).Assembly");
-    has(program, "WebServer.Address(args, \"127.0.0.1:8080\")");
-    // The person's settings come with each request and go back with each reply (DESIGN 7.6).
-    has(program, "Settings = (() => Settings.Current.ToJson(), sent => Settings.Current.Apply(sent))");
+    has(program, "new WebServer(new FieldViewModel(db)).Serve(\"Walker\", WebServer.Address(args, \"127.0.0.1:8080\"));");
     has(program, "args.Contains(\"--check\")");
+    lacks(program, "Sessions");
     let databases = file(&files, "Server/Databases.cs");
     has(databases, "        Sqlite.Use();\n");
     has(databases, "public static Db Open()");
-}
-
-#[test]
-fn the_browser_program_is_clarity_ui_in_webassembly_over_the_server_s_sessions() {
-    let files = files(vec![Target::Web]);
-    let browser = file(&files, "Browser/Walker.Browser.csproj");
-    has(browser, "<Project Sdk=\"Microsoft.NET.Sdk.WebAssembly\">");
-    has(browser, "<TargetFramework>net10.0-browser</TargetFramework>");
-    has(browser, "<ProjectReference Include=\"../App/Walker.csproj\" />");
-    has(browser, "<PackageReference Include=\"Clarity.Ui.Browser\" Version=");
-    has(browser, "<ProjectReference Include=\"$(ClarityRuntime)/Clarity.Ui.Browser/Clarity.Ui.Browser.csproj\" />");
-    lacks(browser, "Avalonia");
-    lacks(browser, "Sqlite");
-    let program = file(&files, "Browser/Program.cs");
-    has(program, "using Clarity.Ui.Browser;");
-    // What the browser keeps (the language, the theme, the settings) is read before the windows show.
-    has(program, "await BrowserCanvas.Ready();");
-    has(program, "Remembered.Use(\"Walker\");");
-    has(program, "Locale.Start(Texts.BaseLanguage, Texts.Languages, null, Texts.In, Labels.Named);");
-    has(program, "AppThemes.Start();");
-    has(program, "Settings.Start();");
-    has(program, "await BrowserCanvas.Serve(typeof(Texts).Assembly, settings: (() => Settings.Current.ToJson(), sent => Settings.Current.Apply(sent)));");
-    let page = file(&files, "Browser/wwwroot/index.html");
-    has(page, "<title>Walker</title>");
-    has(page, "<canvas id=\"clarity\"");
-    has(file(&files, "Browser/wwwroot/main.js"), "import { dotnet } from './_framework/dotnet.js';");
     let readme = file(&files, "README.md");
-    has(readme, "dotnet workload install wasm-tools");
     has(readme, "dotnet build Server");
+    lacks(readme, "wasm-tools");
     lacks(readme, "Avalonia");
 }
 
 /// With `stack csharp desktop web` the target list gives two programs, each
 /// in its folder of `out` and each building on its own: the desktop program
-/// and the web program (application, server and browser program).
+/// and the web program (application, server and page).
 #[test]
 fn desktop_and_web_together_make_the_desktop_and_the_web_program() {
     let project = clarity_spec::keyed::load_keyed([("walker.clarity", WALKER)], &[], "en");
@@ -175,12 +151,12 @@ fn desktop_and_web_together_make_the_desktop_and_the_web_program() {
     let desktop = &programs[0].files;
     file(desktop, "Walker.csproj");
     file(desktop, "Program.cs");
-    assert!(!desktop.iter().any(|f| f.path.starts_with("Server/") || f.path.starts_with("Browser/")));
+    assert!(!desktop.iter().any(|f| f.path.starts_with("Server/") || f.path.starts_with("browser/")));
     has(file(desktop, "Walker.csproj"), "<PackageReference Include=\"Clarity.Ui\" ");
     let web = &programs[1].files;
     file(web, "App/Walker.csproj");
     file(web, "Server/Walker.Server.csproj");
-    file(web, "Browser/Walker.Browser.csproj");
+    file(web, "browser/index.html");
     assert!(!web.iter().any(|f| f.path == "Program.cs"));
     lacks(file(web, "App/Walker.csproj"), "Clarity.Ui.Desktop");
     // Each README tells how to build its own program.
@@ -211,21 +187,8 @@ fn the_web_program_has_one_readme_with_its_server_and_its_data() {
     lacks(readme, "dotnet run\n");
 }
 
-/// A language the person picks in the browser shows: the page carries the
-/// data of every culture (the default ICU shard of an English page has no
-/// Dutch) and loads every language's texts, not only the starting one's.
-/// Seen in the walker example, where Nederlands was chosen and kept but the
-/// page stayed English, before and after a reload.
-#[test]
-fn the_browser_program_carries_every_language_it_can_be_shown_in() {
-    let files = files(vec![Target::Web]);
-    has(file(&files, "Browser/Walker.Browser.csproj"), "<BlazorWebAssemblyLoadAllGlobalizationData>true</BlazorWebAssemblyLoadAllGlobalizationData>");
-    has(file(&files, "Browser/wwwroot/main.js"), "await dotnet.withConfig({ loadAllSatelliteResources: true }).run();");
-}
-
-/// The server knows the application's languages and themes: the settings a
-/// browser sends are checked against them, and a language it did not know
-/// (Dutch) was refused and sent back as English, so the page never switched.
+/// The server knows the application's languages and themes, which the
+/// library in the browser may choose (set_language).
 #[test]
 fn the_server_knows_the_languages_and_themes_the_settings_may_name() {
     let files = files(vec![Target::Web]);
@@ -233,5 +196,5 @@ fn the_server_knows_the_languages_and_themes_the_settings_may_name() {
     has(program, "Locale.Start(Texts.BaseLanguage, Texts.Languages, null, Texts.In, Labels.Named);");
     has(program, "AppThemes.Start();");
     let start = program.find("Locale.Start(").unwrap();
-    assert!(start < program.find("new Sessions(").unwrap(), "{program}");
+    assert!(start < program.find("new WebServer(").unwrap(), "{program}");
 }

@@ -108,7 +108,7 @@ public:
 TEST(the_shell_answers_the_renderers_commands) {
     Db db = Db::memory();
     Cards cards;
-    shell::Service service({"shop", "Shop", "Card", R"({"project":{}})", "", &db, &cards});
+    shell::Service service({"shop", "Shop", "Card", R"({"project":{}})", &db, &cards});
     CHECK_EQ(service.invoke("start", json::object()), json::parse(R"({"value":{"model":{"project":{}},"main":"Card"}})"));
     json opened = service.invoke("open_window", {{"window", "Card"}, {"with", {{"name", "Grace"}}}});
     CHECK_EQ(opened["value"]["state"]["parts"]["title"]["caption"], json("Card of Grace"));
@@ -154,7 +154,7 @@ TEST(the_shell_answers_the_renderers_commands) {
 TEST(a_closed_window_is_reported) {
     Db db = Db::memory();
     Cards cards;
-    shell::Service service({"shop", "Shop", "Card", R"({"project":{}})", "", &db, &cards});
+    shell::Service service({"shop", "Shop", "Card", R"({"project":{}})", &db, &cards});
     uint64_t closed = 0;
     auto listening = on_window_closed([&](uint64_t instance) { closed = instance; });
     auto state = service.invoke("open_window", {{"window", "Card"}, {"with", json::object()}})["value"]["state"];
@@ -168,7 +168,7 @@ TEST(a_closed_window_is_reported) {
 TEST(an_unconnected_start_says_why_and_connects_later) {
     Db db = Db::memory();
     Cards cards;
-    shell::Options options{"shop", "Shop", "Card", R"({"project":{}})", "", &db, &cards};
+    shell::Options options{"shop", "Shop", "Card", R"({"project":{}})", &db, &cards};
     options.unconnected = Text::key("unconnectedNotKept");
     options.unconnected_window = "Preferences";
     int tries = 0;
@@ -191,7 +191,7 @@ TEST(the_runtime_keeps_the_edits_and_ctrl_z_takes_them_back) {
     Db db = Db::memory();
     db.migrate({{"CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"}});
     Cards cards;
-    shell::Service service({"shop", "Shop", "Card", R"({"project":{}})", "", &db, &cards});
+    shell::Service service({"shop", "Shop", "Card", R"({"project":{}})", &db, &cards});
     auto card = [](const char* name) { return json{{"window", "Card"}, {"instance", 7}, {"data", {{"name", name}}}}; };
     // A handler that failed made no step.
     CHECK(!service.invoke("dispatch_event", {{"state", card("Ada")}, {"handler", "fail"}}).contains("value"));
@@ -223,7 +223,7 @@ namespace {
 struct Running {
     Db db = Db::memory();
     Cards cards;
-    shell::Service service{{"shop", "Shop", "Card", R"({"project":{}})", "", &db, &cards}};
+    shell::Service service{{"shop", "Shop", "Card", R"({"project":{}})", &db, &cards}};
     Running() { db.migrate({{"CREATE TABLE memo (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL)"}}); }
 };
 

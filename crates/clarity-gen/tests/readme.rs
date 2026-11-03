@@ -95,11 +95,15 @@ fn a_go_project_says_what_it_needs_and_how_to_build_it() {
     // The runtime comes as a Go module, or from Clarity's repository while working on it.
     has(&text, &format!("Clarity's runtime comes as the Go module github.com/petervdpas/Clarity/runtimes/go ({})", clarity_gen::go_runtime_version()));
     has(&text, "    go work init .\n    go work edit -replace github.com/petervdpas/Clarity/runtimes/go=<Clarity>/runtimes/go\n");
-    // The web program serves the shared web screen, and needs no library.
+    // The web program serves Clarity.UI's browser files, and needs no native library.
     settings.stack.targets = vec![clarity_project::Target::Web];
     let web = readme(&settings);
-    has(&web, "Go with the web renderer");
-    assert!(!web.contains("CGO_CFLAGS"), "{web}");
+    has(&web, "Go with Clarity.UI");
+    has(&web, "Clarity.UI's browser files (`clarity-ui.js`, `clarity-ui.wasm`, `clarity-ui-worker.js`, `clarity-ui-page.js`)");
+    has(&web, &format!("the archive `clarity-ui-{}-browser.tar.gz`", clarity_gen::clarity_ui::version()));
+    assert!(!web.contains("CGO_CFLAGS") && !web.contains("--serve"), "{web}");
+    settings.stack.targets = vec![clarity_project::Target::Desktop, clarity_project::Target::Web];
+    has(&readme(&settings), "Started with `--serve`, the program serves instead of opening its window.");
 }
 
 /// Every runtime opens an SQLite file in the folder CLARITY_DATA names, so

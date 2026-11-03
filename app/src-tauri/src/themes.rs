@@ -1,6 +1,6 @@
-//! The CSS of the project's themes for the designer: the same files the
-//! generator writes into the application (`ui/themes/*.css`), so the canvas
-//! shows a theme as the application will.
+//! The CSS of the project's themes for the designer, from the same resolved
+//! themes the generated programs carry, so the canvas shows a theme as the
+//! application will.
 
 use tauri::State;
 

@@ -94,7 +94,7 @@ fn a_window_starts_with_the_kept_settings_that_still_fit() {
     has(&all, "    pub fn from_kept(kept: &serde_json::Map<String, serde_json::Value>) -> Settings {\n");
     // The window's settings are the kept ones, read when it opens.
     has(&all, "            settings: crate::kept_settings(),\n");
-    has(file(&files, "src/main.rs"), "fn kept_settings() -> modules::shop::Settings {\n    modules::shop::Settings::from_kept(&clarity_runtime::settings::read(PROGRAM))\n}\n");
+    has(file(&files, "src/main.rs"), "fn kept_settings() -> modules::shop::Settings {\n    modules::shop::Settings::from_kept(&clarity_runtime::serve::page_settings_over(clarity_runtime::settings::read(PROGRAM)))\n}\n");
 }
 
 #[test]

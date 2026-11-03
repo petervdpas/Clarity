@@ -1,10 +1,9 @@
-// Windows the tests open: a shelf of books, a book, a pick and a window that
-// reads a setting; and the sessions reached as a browser reaches them, as
-// JSON text through the server, in the same process.
+// Windows the tests open: a shelf that greets and steps, and a window whose
+// handler waits for a long engine call; and the program's commands sent as
+// the library in the browser sends them.
 
 using System.Text.Json.Nodes;
 using Clarity.Runtime;
-using Clarity.Ui.Browser;
 using CommunityToolkit.Mvvm.Input;
 
 namespace Clarity.Ui.Server.Tests;
@@ -13,140 +12,110 @@ sealed partial class ShelfViewModel(Db? db) : WindowViewModel(db)
 {
     public override string Title => "Shelf";
 
-    public List<string> Log { get; set; } = [];
+    public override Extent? WindowSize => new(800, 600);
+
     public long Steps { get; set; }
     public PartState Name { get; } = new("name");
-    public PartState Clock { get; } = new("clock");
-
-    protected override void OnOpen() => Log.Add("opened");
-
-    protected override void OnReturn() => Log.Add("back");
 
     [RelayCommand]
     void Greet() => Handle(() => Say(Level.Info, Text.Plain("Hello " + Name.Text)));
 
     [RelayCommand]
-    void CopyName() => Handle(() => Copy(Text.Plain("Name: " + Name.Text)));
+    void Stepped() => Handle(() => Steps++);
+
+    /// <summary>The person's settings, as a generated window shows them.</summary>
+    public ISettings Settings => ShelfSettings.Current;
+
+    /// <summary>What the last handler saw: the speed setting, and the culture it ran in.</summary>
+    public string Seen { get; set; } = "";
+
+    [RelayCommand]
+    void Look() => Handle(() => Seen = $"{ShelfSettings.Current.Speed} {System.Globalization.CultureInfo.CurrentCulture.Name}");
+
+    [RelayCommand]
+    void Faster() => Handle(() => ShelfSettings.Current.Speed++);
+
+    [RelayCommand]
+    void QuitNow() => Handle(QuitApplication);
+
+    [RelayCommand]
+    void KeysNow() => Handle(ShowKeys);
+}
+
+/// <summary>Settings as a generated app writes them: one object, each setting a property.</summary>
+public sealed class ShelfSettings : ISettings
+{
+    public static ShelfSettings Current { get; } = new();
+
+    public long Speed { get; set; } = 1;
+    public string Greeting { get; set; } = "hi";
+
+    public JsonObject ToJson() => new() { ["speed"] = Speed, ["greeting"] = Greeting };
+
+    public void Apply(JsonObject sent)
+    {
+        Speed = sent["speed"]?.GetValue<long>() ?? Speed;
+        Greeting = sent["greeting"]?.GetValue<string>() ?? Greeting;
+    }
+}
+
+sealed partial class CrunchViewModel(Db? db) : WindowViewModel(db)
+{
+    /// <summary>Lets the long call end.</summary>
+    public static readonly ManualResetEventSlim Done = new();
+
+    public long Steps { get; set; }
+    public bool Stopped { get; set; }
 
     [RelayCommand]
     void Stepped() => Handle(() => Steps++);
 
+    /// <summary>As a handler's engine call does: it reports 30 of 120 from its own thread and runs until it is stopped or let end (at most 20 s).</summary>
     [RelayCommand]
-    void Detail() => Handle(() => Open(new BookViewModel(Db)));
-
-    [RelayCommand]
-    void Pick() => Handle(() => Ask(new PickViewModel(Db), picked => Log.Add($"picked {picked}")));
-
-    [RelayCommand]
-    void Remove() => Handle(() => Ask(Text.Plain("Remove it?"), new ConfirmForm(null, null), _ => Log.Add("removed")));
-}
-
-sealed partial class BookViewModel(Db? db) : WindowViewModel(db)
-{
-    /// <summary>The book's cover, from the server as a generated window fetches it.</summary>
-    public Func<Task<byte[]?>> CoverPicture => () => Fetched(nameof(CoverPicture), () => [1, 2, 3]);
-
-    /// <summary>A file of the store, by its path.</summary>
-    public Func<string, Task<byte[]?>> CoverFile => path => Fetched(nameof(CoverFile), () => path == "a.png" ? [4] : null, path);
-
-    public override string Title => "Book";
-
-    [RelayCommand]
-    void Back() => Handle(Close);
-}
-
-sealed partial class PickViewModel(Db? db) : WindowViewModel(db)
-{
-    public override bool IsDialog => true;
-
-    [RelayCommand]
-    void Choose(string what) => Handle(() => CloseWith(what), [what]);
-}
-
-/// <summary>A person's settings, one at a time on the server, as a generated Settings is.</summary>
-static class Prefs
-{
-    public static int Speed { get; set; } = 1;
-
-    public static (Func<JsonObject> Of, Action<JsonObject> Apply) Hooks => (() => new JsonObject { ["speed"] = Speed }, sent => Speed = sent["speed"]?.GetValue<int>() ?? Speed);
-}
-
-sealed partial class FasterViewModel(Db? db) : WindowViewModel(db)
-{
-    public int Seen { get; set; }
-
-    [RelayCommand]
-    void Faster() => Handle(() =>
+    void Crunch() => Handle(() =>
     {
-        Seen = Prefs.Speed;
-        Prefs.Speed++;
+        var watch = Watching.Current!;
+        var call = Task.Run(() =>
+        {
+            watch.Progress!(30, 120);
+            var until = DateTime.UtcNow.AddSeconds(20);
+            while (!watch.Stop.IsCancellationRequested && !Done.IsSet && DateTime.UtcNow < until)
+                Thread.Sleep(5);
+            Stopped = watch.Stop.IsCancellationRequested;
+        });
+        watch.Wait!(call);
     });
 }
 
-/// <summary>
-/// The server reached as the browser reaches it: each request and reply as
-/// JSON text through its answer, and the markup from its markup path. With a
-/// gate, a request waits for it before the server answers, as a slow server does.
-/// </summary>
-sealed class InProcess(WebServer server) : ISessionLink
+/// <summary>The application's engines say how far a long call is, as a generated Engines does.</summary>
+public static class Engines
 {
-    public InProcess(Func<WindowViewModel> main) : this(new WebServer(new Sessions(main), "", typeof(InProcess).Assembly)) { }
+    public const bool Watches = true;
+}
 
-    /// <summary>What each request asked, in the order sent.</summary>
-    public List<string> Sent { get; } = [];
-
-    /// <summary>The commands run, in the order sent.</summary>
-    public List<string> Commands { get; } = [];
-
-    public TaskCompletionSource? Gate { get; set; }
-
-    /// <summary>Each request answered on a thread of its own, as a browser's requests cross the wire at once: a long call's reply does not hold back the questions how far it is.</summary>
-    public bool Threaded { get; init; }
-
-    /// <summary>What each request asked, as it was sent.</summary>
-    public List<JsonObject> Requests { get; } = [];
-
-    public async Task<JsonObject> Send(JsonObject request)
+static class Wire
+{
+    /// <summary>A command as the worker posts it: <c>{"command", "args"}</c>, with the page that asks and its settings when given.</summary>
+    public static string Command(string command, JsonObject? args = null, string? browser = null, JsonObject? settings = null)
     {
-        lock (Sent)
+        var sent = new JsonObject { ["command"] = command, ["args"] = args ?? [] };
+        if (browser is not null)
+            sent["browser"] = browser;
+        if (settings is not null)
+            sent["settings"] = settings;
+        return sent.ToJsonString();
+    }
+
+    /// <summary>A handler of the window <paramref name="instance"/> named <paramref name="window"/>, with its state, under watch <paramref name="watch"/> if one is given.</summary>
+    public static string Dispatch(string window, long instance, string handler, JsonObject? data = null, ulong? watch = null, string? browser = null, JsonObject? settings = null)
+    {
+        var args = new JsonObject
         {
-            Sent.Add(request["do"]!.GetValue<string>());
-            Requests.Add((JsonObject)request.DeepClone());
-            if (request["command"]?.GetValue<string>() is { } command)
-                Commands.Add(command);
-        }
-        if (Gate is { } gate)
-            await gate.Task;
-        var body = request.ToJsonString();
-        var reply = Threaded ? await Task.Run(() => server.Answer("POST", WebServer.SessionPath, body)) : server.Answer("POST", WebServer.SessionPath, body);
-        return JsonNode.Parse(reply.Body)!.AsObject();
+            ["state"] = new JsonObject { ["window"] = window, ["instance"] = instance, ["data"] = data ?? [] },
+            ["handler"] = handler,
+        };
+        if (watch is { } id)
+            args["watch"] = id;
+        return Command("dispatch_event", args, browser, settings);
     }
-
-    public Task<JsonObject> Markup() =>
-        Task.FromResult(JsonNode.Parse(server.Answer("GET", WebServer.MarkupPath, "").Body)!.AsObject());
-}
-
-/// <summary>A window whose canvas draws the name typed in a box, as the walker example draws its walker's name.</summary>
-sealed partial class SketchViewModel(Db? db) : WindowViewModel(db)
-{
-    public string Name { get => name; set => SetProperty(ref name, value); }
-    string name = "";
-
-    public PartState Field { get; } = new("field");
-
-    protected override void Redraw()
-    {
-        Field.BeginDrawing();
-        Field.Draw(new Shape.Words(50, 50, Text.Plain(Name), "text", 10));
-        Field.EndDrawing();
-    }
-}
-
-/// <summary>A window whose handler says a text it builds from a key, outside a slot, and a number written out.</summary>
-sealed partial class HelloViewModel(Db? db) : WindowViewModel(db)
-{
-    public string Said { get; set; } = "";
-
-    [RelayCommand]
-    void Hello() => Handle(() => Said = Locale.Show(Text.Of("hello")) + " " + 2.5m.ToString(System.Globalization.CultureInfo.CurrentCulture));
 }

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/clarity-spec", "crates/clarity-project", "crates/clarity-db", "crates/clarity-vault", "crates/clarity-agent", "runtimes/rust", "runtimes/rust-engine", "runtimes/rust-ui", "runtimes/rust-ui-ffi", "crates/clarity-gen", "crates/clarity-cli", "crates/clarity-wasm", "app/src-tauri"]
+members = ["crates/clarity-spec", "crates/clarity-project", "crates/clarity-db", "crates/clarity-vault", "crates/clarity-agent", "runtimes/rust", "runtimes/rust-engine", "runtimes/rust-ui", "runtimes/rust-ui-ffi", "runtimes/rust-ui-browser", "crates/clarity-gen", "crates/clarity-cli", "crates/clarity-wasm", "app/src-tauri"]
 # The examples' crates (custom parts, libraries, generated programs) are projects of their own.
 exclude = ["examples"]
 
@@ -38,3 +38,9 @@ opt-level = 3
 
 [profile.dev.package.aes]
 opt-level = 3
+
+# Clarity.UI's browser files (runtimes/rust-ui-browser/build.sh): small over fast.
+[profile.browser]
+inherits = "release"
+opt-level = "s"
+strip = true

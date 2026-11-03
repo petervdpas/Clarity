@@ -181,6 +181,7 @@ translation en
     theAlbumHasNoCover "The album has no cover yet"
     theCoverIsNowThePhoto "The cover is now {name}'s photo"
     chooseFolder "Choose a folder"
+    typeServerFolder "Type the path of a folder on the server"
     cutText "Cut"
     copyText "Copy"
     pasteText "Paste"

@@ -13,25 +13,15 @@ namespace Clarity.Runtime;
 
 public abstract class WindowViewModel(Db? db) : ObservableObject
 {
-    /// <summary>The databases of the application; none in a mirror.</summary>
+    /// <summary>The databases of the application.</summary>
     public Db Db { get; } = db!;
-
-    /// <summary>
-    /// Whether this is a mirror of a window whose handlers run on a server
-    /// (DESIGN 7.6): made without a database, it loads nothing itself and
-    /// sends its commands to <see cref="Remote"/>.
-    /// </summary>
-    public bool IsMirror { get; } = db is null;
-
-    /// <summary>Where a mirror sends its commands.</summary>
-    public IRemote? Remote { get; set; }
 
     /// <summary>The number of this open window, its own: what belongs to it, such as an engine's state per window, goes by it.</summary>
     public long Instance { get; } = OpenWindows.Next();
 
     /// <summary>
     /// The long engine call of the windows this one shows with: the shell that
-    /// shows it (a window stack, a server's session) gives its own, so a long
+    /// shows it (the program answering Clarity.UI) gives its own, so a long
     /// call holds back only their handlers. Its own until a shell shows it.
     /// </summary>
     public LongCall LongCall { get; set; } = new();
@@ -202,13 +192,6 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// </summary>
     public void EditOf(string part, string scope, bool ends, Action handler)
     {
-        // A mirror's handlers run on the server, which keeps its edits; it draws the change anew.
-        if (Remote is not null)
-        {
-            handler();
-            Changed();
-            return;
-        }
         baseline ??= DataNow();
         var before = Db?.LastStep ?? 0;
         editing = true;
@@ -244,12 +227,6 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// </summary>
     public bool CanvasEvent(PartState part, string? scope, CanvasArgs args, JsonObject action, Action? changed, [CallerMemberName] string command = "")
     {
-        // A mirror's handlers run on the server, which decides.
-        if (Remote is not null)
-        {
-            Remote.Command(this, command, [action]);
-            return true;
-        }
         if (args.Readonly || part.IsReadOnly || !part.IsEnabled || LongCall.Waiting)
             return false;
         Action? apply;
@@ -566,14 +543,6 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// </summary>
     public bool Handle(Action handler, object?[]? args = null, [CallerMemberName] string command = "")
     {
-        // A mirror's handlers run on the server: the command goes there, by its name.
-        if (Remote is not null)
-        {
-            // The server draws the canvases anew after it, with the person's change.
-            stale = false;
-            Remote.Command(this, command, args ?? []);
-            return true;
-        }
         // While the screen waits for a long engine call of these windows, it takes no other handler.
         if (LongCall.Waiting)
             return false;
@@ -701,12 +670,8 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// <summary>The person answered: the handler the answer goes to runs, as any handler does.</summary>
     public void Answer(Question question, object? answer) => Handle(() => question.Answered(answer));
 
-    /// <summary>
-    /// A picture or a file of the database, fetched by <paramref name="here"/>;
-    /// a mirror asks the server for it by the name of its <paramref name="fetcher"/> (DESIGN 7.6).
-    /// </summary>
-    protected Task<byte[]?> Fetched(string fetcher, Func<byte[]?> here, params object?[] args) =>
-        Remote is { } remote ? remote.Fetch(this, fetcher, args) : Task.FromResult(here());
+    /// <summary>A picture or a file of the database, fetched by <paramref name="here"/>.</summary>
+    protected Task<byte[]?> Fetched(string fetcher, Func<byte[]?> here, params object?[] args) => Task.FromResult(here());
 
     /// <summary>The row selected in a table or list.</summary>
     protected static R Selected<R>(PartState part) where R : class =>
@@ -794,8 +759,7 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// setting, ticked a box) and no handler runs: once the work at hand is
     /// done the canvases draw anew, as after a handler, since a draw handler
     /// may read it. A handler that runs first (the part's on change) draws
-    /// them itself, and nothing more is drawn; a mirror asks the server, where
-    /// the draw handlers run.
+    /// them itself, and nothing more is drawn.
     /// </summary>
     public void Changed()
     {
@@ -811,18 +775,11 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
 
     /// <summary>
     /// Draws the canvases anew with what the window shows now, as after a
-    /// handler; a failing draw handler says why. A mirror's command, which the
-    /// server runs with the person's change.
+    /// handler; a failing draw handler says why.
     /// </summary>
-    [Command]
     public void DrawAnew()
     {
         stale = false;
-        if (Remote is not null)
-        {
-            Remote.Command(this, nameof(DrawAnew), []);
-            return;
-        }
         if (running > 0 || LongCall.Waiting)
             return;
         running++;

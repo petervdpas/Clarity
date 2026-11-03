@@ -33,7 +33,10 @@
     <InternalsVisibleTo Include="Clarity.Runtime.SqlServer" />
     <InternalsVisibleTo Include="Clarity.Runtime.Tests" />
     <InternalsVisibleTo Include="Clarity.Ui" />
-    <InternalsVisibleTo Include="Clarity.Ui.Browser" />
+    <!-- The program answering Clarity.UI's commands (Program/ProgramWire.cs): the desktop's and the web server's. -->
+    <InternalsVisibleTo Include="Clarity.Ui.Native.Tests" />
+    <InternalsVisibleTo Include="Clarity.Ui.Server" />
+    <InternalsVisibleTo Include="Clarity.Ui.Server.Tests" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="" />

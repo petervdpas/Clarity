@@ -1,11 +1,12 @@
 name: Release C# runtime
 
 # Push a runtimes/csharp/v* tag (e.g. `git tag runtimes/csharp/v0.72.0 && git
-# push origin runtimes/csharp/v0.72.0`) to publish the nine NuGet packages of
+# push origin runtimes/csharp/v0.72.0`) to publish the eight NuGet packages of
 # Clarity's C# runtime: Clarity.Runtime, Clarity.Runtime.Sqlite,
 # Clarity.Runtime.PostgreSql, Clarity.Runtime.MySql, Clarity.Runtime.SqlServer,
-# Clarity.Runtime.Engines, Clarity.Ui, Clarity.Ui.Browser and
-# Clarity.Ui.Server. The tag must name the version in
+# Clarity.Runtime.Engines, Clarity.Ui and Clarity.Ui.Server. Clarity.Ui.Server
+# serves the browser files (release-clarity-ui.yml) that Clarity's generator
+# puts in the application, and carries no native library. The tag must name the version in
 # runtimes/csharp/Directory.Build.props: bump that first, commit, then tag.
 #
 # Clarity.Ui carries the native Clarity.UI library (runtimes/rust-ui-ffi) for
@@ -117,7 +118,7 @@ jobs:
           if-no-files-found: error
 
   # ───────────────────────────────────────────────────────────────
-  # The nine packages, built and tested once, pushed to nuget.org.
+  # The eight packages, built and tested once, pushed to nuget.org.
   # ───────────────────────────────────────────────────────────────
   pack:
     name: Pack and publish
@@ -179,7 +180,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#runtimes/csharp/v}"
-          for p in Clarity.Runtime Clarity.Runtime.Sqlite Clarity.Runtime.PostgreSql Clarity.Runtime.MySql Clarity.Runtime.SqlServer Clarity.Runtime.Engines Clarity.Ui Clarity.Ui.Browser Clarity.Ui.Server; do
+          for p in Clarity.Runtime Clarity.Runtime.Sqlite Clarity.Runtime.PostgreSql Clarity.Runtime.MySql Clarity.Runtime.SqlServer Clarity.Runtime.Engines Clarity.Ui Clarity.Ui.Server; do
             nupkg="runtimes/csharp/$p/bin/Release/$p.$version.nupkg"
             test -f "$nupkg" || { echo "::error::$nupkg was not made"; exit 1; }
             mkdir -p packages
@@ -195,6 +196,10 @@ jobs:
             runtimes/osx-arm64/native/libclarity_ui.dylib; do
             unzip -l "$ui" "$entry" > /dev/null || { echo "::error::Clarity.Ui lacks $entry"; exit 1; }
           done
+          # The server draws nothing: no native library, and no package that brings one.
+          server="packages/Clarity.Ui.Server.$version.nupkg"
+          if unzip -l "$server" | grep -q clarity_ui; then echo "::error::Clarity.Ui.Server carries the native library"; exit 1; fi
+          if unzip -p "$server" Clarity.Ui.Server.nuspec | grep -q 'id="Clarity.Ui"'; then echo "::error::Clarity.Ui.Server depends on Clarity.Ui"; exit 1; fi
           ls -l packages
 
       - name: Keep the packages

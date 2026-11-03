@@ -45,11 +45,22 @@ fn runtime_dir() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/go").canonicalize().unwrap()
 }
 
+/// Clarity.UI's library for a desktop build: the folder CLARITY_UI names,
+/// else the one this repository built (`cargo build --release -p
+/// clarity-ui-ffi`), so the test builds on the library of this source and not
+/// on a release that may not be out yet; else none (the build fetches it).
+fn clarity_ui() -> Option<std::path::PathBuf> {
+    match std::env::var_os("CLARITY_UI") {
+        Some(folder) if !folder.is_empty() => Some(folder.into()),
+        _ => clarity_gen::clarity_ui::repository_library(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."), std::env::consts::OS),
+    }
+}
+
 /// `tool` with `args` in `dir`; it must succeed. GOWORK is left to the
 /// go.work in `dir`, which only a local build has. A desktop program links
 /// Clarity.UI's library from the folder CLARITY_UI names, as Clarity's build does.
 fn run(dir: &Path, tool: &str, args: &[&str]) -> String {
-    let cgo = clarity_gen::go_cgo_env(std::env::var_os("CLARITY_UI").as_deref().map(Path::new), std::env::consts::OS);
+    let cgo = clarity_gen::go_cgo_env(clarity_ui().as_deref(), std::env::consts::OS);
     let out = Command::new(tool).args(args).current_dir(dir).env_remove("GOWORK").envs(cgo).output().unwrap_or_else(|e| panic!("{tool}: {e}"));
     let said = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     assert!(out.status.success(), "{tool} {args:?} failed in {}:\n{said}", dir.display());
@@ -106,7 +117,12 @@ fn built_in_go(name: &str, program: &str, runtime: Runtime) -> std::path::PathBu
     let out = scratch().join(format!("clarity-gen-go-{name}-{}", std::process::id()));
     // The database in the scratch folder, not in the example.
     settings.datasources[0].url = "data/app.db".into();
-    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let mut files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    // A program served to a browser carries Clarity.UI's browser files, as Clarity's build adds them.
+    if clarity_gen::web_browser::serves(&files) {
+        let folder = clarity_gen::web_browser::local_folder(Some(&root)).unwrap_or_else(|e| panic!("{e}"));
+        files.extend(clarity_gen::web_browser::library(&folder).unwrap());
+    }
     write(&out, &files, runtime);
 
     checks(&out, runtime);
@@ -544,7 +560,8 @@ fn an_engine_beside_the_screen_builds_in_go() {
 }
 
 /// The invaders example, whose only target is the web: the program is a web
-/// server that serves the game to a browser and answers its commands.
+/// server that serves Clarity.UI's browser files and answers the wire the
+/// library asks the game over (round B of DESIGN 7.9).
 #[test]
 #[ignore]
 fn the_invaders_example_serves_in_go() {

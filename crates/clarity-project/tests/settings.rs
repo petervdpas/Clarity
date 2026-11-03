@@ -233,11 +233,11 @@ fn rust_serves_the_web_alone() {
     assert_eq!(validate(&settings), Vec::<String>::new());
     assert_eq!(write(Some(&web), &settings).unwrap(), web);
 
-    let both = parse(&SHOP.replace("stack csharp desktop", "stack rust desktop web")).unwrap();
-    assert_eq!(
-        validate(&both),
-        ["the web program of Rust is not generated beside its desktop program yet; write stack rust desktop, or stack rust web for the web program alone"]
-    );
+    // Beside the desktop target: one program, which serves with --serve (round B).
+    for both in ["stack rust desktop web", "stack go desktop web", "stack c desktop web", "stack cpp desktop web"] {
+        let both = parse(&SHOP.replace("stack csharp desktop", both)).unwrap();
+        assert_eq!(validate(&both), Vec::<String>::new());
+    }
     // C# on Clarity.UI has its web target.
     let csharp = parse(&SHOP.replace("stack csharp desktop", "stack csharp desktop web")).unwrap();
     assert_eq!(validate(&csharp), Vec::<String>::new());

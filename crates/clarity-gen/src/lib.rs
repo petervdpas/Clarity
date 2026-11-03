@@ -23,6 +23,7 @@ mod rust;
 mod schema;
 pub mod web;
 pub mod web_windows;
+pub mod web_browser;
 
 pub use csharp::runtime_version as csharp_runtime_version;
 pub use go::runtime_version as go_runtime_version;
@@ -30,7 +31,7 @@ pub use rust::runtime_version as rust_runtime_version;
 pub use rust::ui_version as rust_ui_version;
 pub use rust::local_patch as rust_local_patch;
 pub use rust::migration_sql;
-pub use web::{APP_CLASS, base_css, theme_css, theme_file};
+pub use web::{APP_CLASS, base_css, theme_css};
 
 use clarity_project::{Backend, Settings};
 use clarity_spec::Project;
@@ -81,6 +82,15 @@ fn check_stores(project: &Project, settings: &Settings) -> Result<(), Vec<String
         })
         .collect();
     if missing.is_empty() { Ok(()) } else { Err(missing) }
+}
+
+/// The window the application opens with: the app's main window, or the
+/// first window of the project.
+pub(crate) fn main_window(project: &Project) -> Option<String> {
+    project
+        .apps()
+        .find_map(|a| a.main.as_ref().map(|m| m.name.clone()))
+        .or_else(|| project.pages().next().map(|p| p.name.name.clone()))
 }
 
 /// The size the window `name` opens at, in pixels: its own (`size 320 x
@@ -996,11 +1006,17 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
         }
         Backend::Csharp if settings.stack.ui == clarity_project::Ui::Clarity => {
             let configuration = if release { "Release" } else { "Debug" };
-            let (folder, program) = ("", csharp::project_name(settings));
+            // The web application is built as its server, which builds the application it serves (DESIGN 7.6).
+            let web = windowed_target(settings) == clarity_project::Target::Web;
+            let (project, folder, program) = if web {
+                (vec!["Server".to_string()], "Server/", format!("{}.Server", csharp::project_name(settings)))
+            } else {
+                (vec![], "", csharp::project_name(settings))
+            };
             Some(Toolchain {
                 tool: "dotnet",
                 // `-tl:off`: plain lines, not the terminal logger.
-                args: ["build", "--nologo", "-tl:off", "-c", configuration].map(String::from).to_vec(),
+                args: ["build".to_string()].into_iter().chain(project).chain(["--nologo", "-tl:off", "-c", configuration].map(String::from)).collect(),
                 env: vec![("DOTNET_CLI_TELEMETRY_OPTOUT", "1".into()), ("DOTNET_NOLOGO", "1".into())],
                 program: exe(format!("{folder}bin/{configuration}/{}/{program}", csharp::TARGET_FRAMEWORK)),
                 missing: "is the .NET SDK installed?",
@@ -1196,12 +1212,12 @@ pub(crate) fn paging_word(kind: clarity_spec::PagingKind) -> &'static str {
     }
 }
 
-/// A custom part drawn by a native library, a crate or a Go package draws in
-/// a native window of the desktop (DESIGN 6.5), which a program served to a
-/// browser alone has not. A .NET part is a control of the page, as any.
+/// A custom part is a library of the stack's own language (DESIGN 6.5, 7.9),
+/// which runs beside Clarity.UI on the desktop; in a browser Clarity.UI runs
+/// alone, compiled once for every language, so a program served to a
+/// browser alone has none (a .NET part too, since C#'s browser drawing went).
 fn check_parts_in_browser(project: &Project, settings: &Settings) -> Result<(), Vec<String>> {
     use clarity_project::Target;
-    use clarity_spec::code::PartLibrary;
     if settings.stack.has(Target::Desktop) || !settings.stack.has(Target::Web) {
         return Ok(());
     }
@@ -1209,7 +1225,7 @@ fn check_parts_in_browser(project: &Project, settings: &Settings) -> Result<(), 
         .files
         .iter()
         .flat_map(|f| &f.parts)
-        .filter(|p| matches!(p.library, Some(PartLibrary::Native { .. } | PartLibrary::Crate { .. } | PartLibrary::Go { .. })))
+        .filter(|p| p.library.is_some())
         .map(|p| format!("part {} draws in a window of the desktop, which a program served to a browser has not; add the desktop target, or leave the part out", p.name.name))
         .collect();
     if found.is_empty() { Ok(()) } else { Err(found) }

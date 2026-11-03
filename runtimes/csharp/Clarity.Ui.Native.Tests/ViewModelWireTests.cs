@@ -192,7 +192,8 @@ public sealed class ViewModelWireTests
         Value(wire.Answer("close_window", new JsonObject { ["state"] = state.DeepClone() }.ToJsonString()));
         var late = wire.Answer("dispatch_event", new JsonObject { ["state"] = state.DeepClone(), ["handler"] = "count" }.ToJsonString());
         Assert.NotNull(late?["error"]);
-        Assert.NotNull(Opened(wire)["state"]);
+        // Opened again, it is a new window: the closed one is not shown again.
+        Assert.NotEqual(state["instance"]!.GetValue<long>(), Opened(wire)["state"]!["instance"]!.GetValue<long>());
     }
 
     // -- Unconnected (DESIGN 5.27) --------------------------------------------------------

@@ -21,7 +21,7 @@ public static class DesktopWindow
     public static void Run(WindowViewModel main)
     {
         var app = main.GetType().Assembly;
-        var wire = new ProgramWire(app, main, Markup(app));
+        var wire = new ProgramWire(app, main, ProgramWire.MarkupOf(app));
         var size = main.WindowSize is { } s ? (s.Width, s.Height) : ((double, double)?)null;
         Show(app, wire, main.Title, size);
     }
@@ -36,27 +36,17 @@ public static class DesktopWindow
     {
         Console.Error.WriteLine(Locale.Show(problem));
         var app = Assembly.GetEntryAssembly() ?? typeof(DesktopWindow).Assembly;
-        var wire = new ProgramWire(app, null, Markup(app), unconnected, problem);
+        var wire = new ProgramWire(app, null, ProgramWire.MarkupOf(app), unconnected, problem);
         try
         {
             Show(app, wire, null, null);
         }
         finally
         {
-            // The databases that opened meanwhile close as the application ends, however it ends.
-            wire.Connected?.Dispose();
+            // The databases that opened meanwhile close as the application ends, however it ends, and the empty one in memory too.
+            wire.Ended();
         }
     }
-
-    /// <summary>The markup of each window the application carries, by its name.</summary>
-    internal static Func<string, string?> Markup(Assembly app) => name =>
-    {
-        using var stream = app.GetManifestResourceStream($"Windows/{name}.cxaml");
-        if (stream is null)
-            return null;
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
-    };
 
     static void Show(Assembly app, ProgramWire wire, string? title, (double, double)? size)
     {

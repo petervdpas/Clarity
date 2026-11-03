@@ -39,6 +39,9 @@ char* clarity_copy_n(const char* text, size_t length);
 char* clarity_format(const char* format, ...) CLARITY_PRINTF(1, 2);
 /// Ends a command: everything the scratch arena holds is gone.
 void clarity_scratch_reset(void);
+/// Gives back everything the arena of this thread holds, its first block
+/// too, as a thread does before it ends.
+void clarity_scratch_release(void);
 /// How many bytes the scratch arena hands out now, for tests.
 size_t clarity_scratch_used(void);
 

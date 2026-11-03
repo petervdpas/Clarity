@@ -31,6 +31,9 @@ version of Clarity.UI (C#, Go, C, C++), and passes the same conformance cases.
   glutin, the clipboard through arboard, sound through rodio, the input method (IME), and the
   system's own file dialogs (the desktop portal over D-Bus, zenity or kdialog on Linux; osascript
   on macOS; the common item dialog on Windows), written in the crate.
+- `browser` (built for `wasm32-unknown-emscripten`): the same screen in a Web Worker, drawn
+  through WebGL2 on the page's canvas, the program asked on the server the page came from; the
+  page does the clipboard, files, sound, title and links.
 
 ## Use
 
@@ -58,7 +61,13 @@ It changes its bound value with `cx.change(value)` and tells its window with `cx
 ## Building
 
 Skia comes as prebuilt binaries for the features `gl` and `textlayout` on Linux, Windows and
-macOS; it is never built from source.
+macOS, and for the browser; it is never built from source.
+
+The browser files (`clarity-ui.js`, `clarity-ui.wasm`, `clarity-ui-worker.js`,
+`clarity-ui-page.js`) are built with `runtimes/rust-ui-browser/build.sh` into
+`target/clarity-ui-browser`. It needs the Emscripten SDK (`EMSDK`, else `~/emsdk`) and
+`rustup target add wasm32-unknown-emscripten`. A web server serves the four side by side, the
+wasm as `application/wasm`, with a page holding `<canvas id="clarity-ui">` and the page script.
 
 ## License
 

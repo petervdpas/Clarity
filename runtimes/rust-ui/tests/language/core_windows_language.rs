@@ -32,3 +32,17 @@ fn another_language_makes_every_window_again_in_it() {
     assert_eq!(vec!["language None"], fake.calls());
     assert_eq!("Hello", greeting(&screen));
 }
+
+/// A language kept from an earlier run is told to the program at the start,
+/// before anything else: a server answers each browser in its own.
+#[test]
+fn a_kept_language_is_told_to_the_program_at_the_start() {
+    let _alone = super::one_at_a_time();
+    let kept = std::collections::BTreeMap::from([("language".to_string(), "nl".to_string())]);
+    clarity_ui::choices::start_kept(&FILES, kept, std::sync::Arc::new(|_: &std::collections::BTreeMap<String, String>| ()));
+    let (screen, fake) = started();
+    assert_eq!(Some("language Some(\"nl\")"), fake.calls().first().map(String::as_str));
+    assert_eq!("Hallo", greeting(&screen));
+    clarity_ui::choices::start(&FILES, None);
+    clarity_runtime::i18n::set_language(None);
+}

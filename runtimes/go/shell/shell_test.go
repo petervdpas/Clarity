@@ -18,7 +18,10 @@ import (
 
 // cards is a project with one window, Card, whose open event and save
 // handler a test can see.
-type cards struct{ log []string }
+type cards struct {
+	log     []string
+	watched []clarity.Watch
+}
 
 func (c *cards) Open(db *clarity.Db, window string, with map[string]any) (clarity.WindowState, error) {
 	if window != "Card" {
@@ -70,6 +73,12 @@ func (c *cards) Dispatch(db *clarity.Db, state clarity.WindowState, handler stri
 	case "crash":
 		var none []int64
 		_ = none[3]
+	case "long":
+		// A long call that says how far it is once.
+		c.watched = append(c.watched, clarity.CurrentWatch())
+		if watch := clarity.CurrentWatch(); watch.Progress != nil {
+			watch.Progress(3, 10)
+		}
 	case "plan":
 		// As a long engine call does: it says how far it is until it is stopped.
 		watch := clarity.CurrentWatch()

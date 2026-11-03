@@ -65,9 +65,7 @@ public class WindowRowsTests
     {
         var home = Directory.CreateTempSubdirectory("clarity-keys-");
         var was = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-        var store = KeptSettings.Store;
         Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", home.FullName);
-        KeptSettings.Store = null;
         try
         {
             KeptSettings.Keep("keys-test", new JsonObject { ["pageSize"] = 20 });
@@ -84,7 +82,6 @@ public class WindowRowsTests
         finally
         {
             PersonKeys.Stop();
-            KeptSettings.Store = store;
             Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", was);
             home.Delete(true);
         }

@@ -23,3 +23,4 @@ obj/
 /runtimes/csharp/Clarity.Ui/runtimes/
 # The Clarity.UI library the IDE's installer carries (.github/scripts/stage-clarity-ui.sh).
 /app/src-tauri/clarity-ui/
+/app/src-tauri/clarity-ui-browser/

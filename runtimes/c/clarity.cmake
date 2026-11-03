@@ -17,13 +17,16 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(clarity PRIVATE $<$<COMPILE_LANGUAGE:C>:-Wall -Wextra>)
 endif()
 
-# The service answers the commands of the web wire, and serves the web
-# screen to a browser (the web target): only in a project whose runtime
-# copy has it, so a command-line program builds without it.
+# The service answers Clarity.UI's commands, and serves the browser files
+# to a browser (the web target): only in a project whose runtime copy has
+# it, so a command-line program builds without it.
 if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/service/service.c)
-  add_library(clarity_service STATIC ${CMAKE_CURRENT_LIST_DIR}/service/service.c ${CMAKE_CURRENT_LIST_DIR}/service/serve.c)
+  add_library(clarity_service STATIC ${CMAKE_CURRENT_LIST_DIR}/service/service.c ${CMAKE_CURRENT_LIST_DIR}/service/wire.c ${CMAKE_CURRENT_LIST_DIR}/service/watches.c ${CMAKE_CURRENT_LIST_DIR}/service/serve.c)
   target_include_directories(clarity_service PUBLIC ${CMAKE_CURRENT_LIST_DIR})
   target_link_libraries(clarity_service PUBLIC clarity)
+  # Requests side by side, each on a thread; long calls watched beside them.
+  find_package(Threads REQUIRED)
+  target_link_libraries(clarity_service PUBLIC Threads::Threads)
   if(WIN32)
     # Winsock for the server, the shell for links.
     target_link_libraries(clarity_service PUBLIC ws2_32 shell32)
@@ -86,17 +89,41 @@ function(clarity_beside target)
   endif()
 endfunction()
 
-# The files a desktop program carries for Clarity.UI (DESIGN 7.9), put into
-# the program as C arrays in the order given, by their names: the windows
-# and app frames as markup (WINDOWS, APPS: windows/Main.cxaml is "Main"),
-# the resolved themes (THEMES: themes/shop.light.json is "shop.light") and
-# the resources (RESOURCES: resources/fonts/a.ttf is "fonts/a.ttf"). Paths
-# are relative to the project; a change to one configures again.
+# The bytes of `file` as a C initializer in `out`: a string literal where
+# the compiler takes a long one cheaply (GCC, Clang), else a list of bytes
+# (MSVC limits string literals). Either ends with a zero byte past the file.
+function(clarity_bytes out file)
+  file(READ ${file} hex HEX)
+  if(MSVC)
+    string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," bytes "${hex}")
+    set(${out} "{${bytes}0x00}" PARENT_SCOPE)
+  else()
+    string(REGEX REPLACE "([0-9a-f][0-9a-f])" "\\\\x\\1" bytes "${hex}")
+    set(${out} "\"${bytes}\"" PARENT_SCOPE)
+  endif()
+endfunction()
+
+# The files a program carries (DESIGN 7.9), put into the program as C
+# arrays in the order given, by their names: for Clarity.UI on the desktop
+# the windows and app frames as markup (WINDOWS, APPS: windows/Main.cxaml
+# is "Main"), the resolved themes (THEMES: themes/shop.light.json is
+# "shop.light") and the resources (RESOURCES: resources/fonts/a.ttf is
+# "fonts/a.ttf"); for the web target every file below the folder BROWSER
+# names, by its path there (browser/clarity/files.json is "clarity/files.json"),
+# which the server serves to the browser. Paths are relative to the
+# project; a change to one configures again.
 function(clarity_carry target)
-  cmake_parse_arguments(CARRY "" "" "WINDOWS;APPS;THEMES;RESOURCES" ${ARGN})
-  set(source "/* The files the program carries for Clarity.UI, from the project's folders. */\n#include \"desktop/desktop.h\"\n\n")
+  cmake_parse_arguments(CARRY "" "BROWSER" "WINDOWS;APPS;THEMES;RESOURCES" ${ARGN})
+  set(CARRY_BROWSER_FILES "")
+  if(CARRY_BROWSER)
+    file(GLOB_RECURSE found RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/${CARRY_BROWSER}/*)
+    list(SORT found)
+    set(CARRY_BROWSER_FILES ${found})
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${CARRY_BROWSER})
+  endif()
+  set(source "/* The files the program carries, from the project's folders. */\n#include \"service/carried.h\"\n\n")
   set(index 0)
-  foreach(kind WINDOWS APPS THEMES RESOURCES)
+  foreach(kind WINDOWS APPS THEMES RESOURCES BROWSER_FILES)
     set(entries "")
     set(count 0)
     foreach(path IN LISTS CARRY_${kind})
@@ -104,26 +131,31 @@ function(clarity_carry target)
       set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${file})
       if(kind STREQUAL "RESOURCES")
         string(REGEX REPLACE "^resources/" "" name "${path}")
+      elseif(kind STREQUAL "BROWSER_FILES")
+        file(RELATIVE_PATH name ${CMAKE_CURRENT_SOURCE_DIR}/${CARRY_BROWSER} ${file})
       else()
         get_filename_component(name "${path}" NAME)
         string(REGEX REPLACE "\\.(cxaml|json)$" "" name "${name}")
       endif()
-      file(READ ${file} hex HEX)
-      string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," bytes "${hex}")
+      clarity_bytes(bytes ${file})
       file(SIZE ${file} size)
-      string(APPEND source "static const unsigned char carried_${index}[] = {${bytes}0x00};\n")
+      string(APPEND source "static const unsigned char carried_${index}[] = ${bytes};\n")
       string(APPEND entries "    {\"${name}\", carried_${index}, ${size}},\n")
       math(EXPR index "${index} + 1")
       math(EXPR count "${count} + 1")
     endforeach()
-    string(TOLOWER ${kind} lower)
+    if(kind STREQUAL "BROWSER_FILES")
+      set(lower browser)
+    else()
+      string(TOLOWER ${kind} lower)
+    endif()
     if(count EQUAL 0)
       string(APPEND entries "    {\"\", 0, 0},\n")
     endif()
     string(APPEND source "static const ClarityCarried carried_${lower}[] = {\n${entries}};\n\n")
     set(${lower}_count ${count})
   endforeach()
-  string(APPEND source "const ClarityCarriedFiles clarity_carried = {carried_windows, ${windows_count}, carried_apps, ${apps_count}, carried_themes, ${themes_count}, carried_resources, ${resources_count}};\n")
+  string(APPEND source "const ClarityCarriedFiles clarity_carried = {carried_windows, ${windows_count}, carried_apps, ${apps_count}, carried_themes, ${themes_count}, carried_resources, ${resources_count}, carried_browser, ${browser_count}};\n")
   file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/carried.c.in "${source}")
   configure_file(${CMAKE_CURRENT_BINARY_DIR}/carried.c.in ${CMAKE_CURRENT_BINARY_DIR}/carried.c COPYONLY)
   target_sources(${target} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/carried.c)

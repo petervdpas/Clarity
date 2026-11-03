@@ -1,79 +1,113 @@
 // The server that shows a Clarity.UI program's windows in browsers (DESIGN
-// 7.6, 7.9): it answers the sessions at SessionPath, one request at a time,
-// serves the windows' markup the application carries at MarkupPath, and the
-// browser program's files. It speaks HTTP over a plain socket, as the other
-// stacks' servers do: Windows's own HTTP listener (http.sys) lets only an
-// administrator listen on 127.0.0.1 or 0.0.0.0.
+// 7.6, 7.9): the browser runs Clarity.UI itself (the browser files, which
+// the application carries under browser/), and asks the program here, at
+// InvokePath, as the native library asks it on the desktop: ProgramWire
+// answers both. It serves the page, the browser files, the program's files
+// (files.json: its windows' markup, themes and model) and its resources. It
+// speaks HTTP over a plain socket, as the other stacks' servers do: Windows's
+// own HTTP listener (http.sys) lets only an administrator listen on
+// 127.0.0.1 or 0.0.0.0.
 
+using System.Collections.Concurrent;
 using System.Globalization;
+using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using System.Reflection;
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Clarity.Runtime;
 
 namespace Clarity.Ui.Server;
 
-/// <summary>The server of a program's sessions, its browser program's files and its windows' markup.</summary>
+/// <summary>The server of a program's windows, shown in browsers by Clarity.UI.</summary>
 public sealed class WebServer
 {
-    readonly Sessions sessions;
-    readonly string files;
-    readonly Assembly? app;
+    readonly Assembly app;
+    readonly ProgramWire wire;
+    readonly string? title;
+    readonly Extent? size;
 
     /// <summary>
-    /// The server of <paramref name="sessions"/>, serving the browser program's
-    /// files from the folder <paramref name="files"/> and the markup that the
-    /// application <paramref name="app"/> carries (none when it is not given).
-    /// While a session waits for a long engine call, its turn goes to the other
-    /// requests (the sessions' Turn), so one person's long call keeps no one else waiting.
+    /// The server of the application whose main window is <paramref name="main"/>,
+    /// made on the server's databases: the first browser shows it, every other
+    /// browser a new one of its kind. Windows a browser left alone for half
+    /// an hour (a tab that closed) are let go.
     /// </summary>
-    public WebServer(Sessions sessions, string files, Assembly? app = null)
+    public WebServer(WindowViewModel main) : this(main.GetType().Assembly, main)
     {
-        this.sessions = sessions;
-        this.files = files;
+    }
+
+    /// <summary>The server of <paramref name="app"/>, starting with <paramref name="main"/>.</summary>
+    public WebServer(Assembly app, WindowViewModel main)
+    {
         this.app = app;
-        sessions.Turn = (LetGo, TakeAgain);
+        title = main.Title;
+        size = main.WindowSize;
+        // Each browser's long call goes by the watch its handler's command names.
+        wire = new ProgramWire(app, main, ProgramWire.MarkupOf(app)) { Served = true };
+        // The built-in `keys` from code: the next reply says so, and the library in the browser opens the keys window.
+        DesktopProgram.Current = wire;
     }
 
-    /// <summary>Where the browser program sends its sessions' requests.</summary>
-    public const string SessionPath = "/clarity/session";
+    /// <summary>The program, for tests.</summary>
+    internal ProgramWire Wire => wire;
 
-    /// <summary>Where the browser program reads the windows' markup, the app frames and the themes.</summary>
-    public const string MarkupPath = "/clarity/markup";
+    /// <summary>Where the library in the browser asks the program: a POST of <c>{"command", "args"}</c>.</summary>
+    public const string InvokePath = "/clarity/invoke";
 
-    /// <summary>The resources the browser draws the windows from, by the start of their names: the windows, the app frames and the themes.</summary>
-    static readonly string[] Drawn = ["Windows/", "Apps/", "Themes/"];
+    /// <summary>Where the library in the browser reads the program's files.</summary>
+    public const string FilesPath = "/clarity/files.json";
 
-    /// <summary>The markup, once: what the application carries does not change while it runs.</summary>
-    byte[]? markup;
+    /// <summary>Where the library in the browser reads each file of the resources folder by its name.</summary>
+    public const string ResourcesPath = "/clarity/resources/";
+
+    /// <summary>The folder of the application's embedded resources that holds the browser files.</summary>
+    const string BrowserFolder = "browser/";
+
+    /// <summary>The program's files, once: what the application carries does not change while it runs.</summary>
+    AppFiles? carried;
+    byte[]? filesJson;
+
+    AppFiles Carried => carried ??= AppFiles.Of(app, title);
 
     /// <summary>
-    /// The windows' and app frames' markup and the themes <paramref name="app"/>
-    /// carries, as one JSON object by their names (<c>Windows/Main.cxaml</c>).
+    /// The program's files as the library in the browser reads them:
+    /// <c>{"title", "width", "height", "windows", "apps", "themes", "model", "resources"}</c>.
     /// </summary>
-    public static JsonObject Markup(Assembly? app)
+    public JsonObject Files()
     {
-        var all = new JsonObject();
-        if (app is null)
-            return all;
-        foreach (var name in app.GetManifestResourceNames().Where(n => Drawn.Any(d => n.StartsWith(d, StringComparison.Ordinal))).Order(StringComparer.Ordinal))
+        var files = Carried;
+        static JsonObject Named(SortedDictionary<string, string> all) => new(all.Select(p => KeyValuePair.Create(p.Key, (JsonNode?)p.Value)));
+        return new JsonObject
         {
-            using var stream = app.GetManifestResourceStream(name);
-            if (stream is null)
-                continue;
-            using var reader = new StreamReader(stream);
-            all[name] = reader.ReadToEnd();
-        }
-        return all;
+            ["title"] = files.Title,
+            ["width"] = size?.Width,
+            ["height"] = size?.Height,
+            ["windows"] = Named(files.Windows),
+            ["apps"] = Named(files.Apps),
+            ["themes"] = Named(files.Themes),
+            ["model"] = files.Model,
+            ["resources"] = new JsonArray([.. files.Resources.Select(r => (JsonNode?)r)]),
+        };
     }
+
+    /// <summary>The page: Clarity.UI's canvas and its page script, under the program's title.</summary>
+    public string Page() =>
+        "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+        + $"<title>{WebUtility.HtmlEncode(Carried.Title)}</title>\n"
+        + "<style>html, body { margin: 0; height: 100%; overflow: hidden; } #clarity-ui { display: block; width: 100vw; height: 100vh; touch-action: none; }</style>\n"
+        + "</head>\n<body>\n<canvas id=\"clarity-ui\"></canvas>\n<script src=\"clarity-ui-page.js\"></script>\n</body>\n</html>\n";
 
     /// <summary>A reply: its status, the kind of its body, the body, and how the body is compressed (none when it is not).</summary>
     public readonly record struct Reply(int Status, string Type, byte[] Body, string? Encoding = null);
 
-    /// <summary>The compressed copies the publish writes beside each file, the smaller first.</summary>
-    static readonly (string Encoding, string Extension)[] Copies = [("br", ".br"), ("gzip", ".gz")];
+    /// <summary>The encodings the server compresses with, the smaller first.</summary>
+    static readonly string[] Encodings = ["br", "gzip"];
+
+    /// <summary>Each file compressed once, by its name and encoding.</summary>
+    readonly ConcurrentDictionary<(string File, string Encoding), byte[]> compressed = new();
 
     /// <summary>Where the server listens: <c>--address host:port</c>, else CLARITY_ADDRESS, else <paramref name="project"/>, where the project file says.</summary>
     public static string Address(string[] args, string project)
@@ -104,41 +138,94 @@ public sealed class WebServer
     /// <summary>The reply to one request; <paramref name="accepts"/> is its Accept-Encoding.</summary>
     public Reply Answer(string method, string path, string body, string? accepts = null)
     {
-        if (path == SessionPath)
+        var file = Uri.UnescapeDataString(path.Split('?')[0]);
+        if (file == InvokePath)
         {
             if (method != "POST")
-                return Text(405, "text/plain", "send a session's request with POST");
-            JsonObject answer;
-            try
-            {
-                answer = sessions.Answer(JsonNode.Parse(body) as JsonObject ?? throw new SessionException("a request is a JSON object"));
-            }
-            catch (Exception e) when (e is System.Text.Json.JsonException or SessionException)
-            {
-                answer = new JsonObject { ["error"] = e.Message };
-            }
-            return Text(200, "application/json", answer.ToJsonString());
+                return Text(405, "text/plain", "ask the program with POST");
+            return Text(200, "application/json", Invoke(body).ToJsonString());
         }
-        if (path.Split('?')[0] == MarkupPath)
+        if (method is not ("GET" or "HEAD"))
+            return Text(405, "text/plain", "");
+        if (file == FilesPath)
         {
-            markup ??= Encoding.UTF8.GetBytes(Markup(app).ToJsonString());
-            return new Reply(200, "application/json", markup);
+            filesJson ??= Encoding.UTF8.GetBytes(Files().ToJsonString());
+            return Compressed("files.json", "application/json", filesJson, accepts);
         }
-        var file = Uri.UnescapeDataString(path.Split('?')[0]).TrimStart('/');
-        if (file == "")
-            file = "index.html";
-        // Only the browser program's own files: nothing above its folder, on any system.
-        if (file.Contains('\\') || file.Contains(':') || file.Split('/').Any(part => part is ".." or "." or ""))
+        // The page the application carries (every language's), else the server's own.
+        if (file is "/" or "/index.html")
+            return new Reply(200, Kind(".html"), Carried.Read(BrowserFolder + "index.html") ?? Encoding.UTF8.GetBytes(Page()));
+        // Only the application's own files: nothing above their folder, on any system.
+        var name = file.TrimStart('/');
+        if (name.Contains('\\') || name.Contains(':') || name.Split('/').Any(part => part is ".." or "." or ""))
             return Text(404, "text/plain", "");
-        var full = Path.Combine(files, file);
-        if (!File.Exists(full))
-            return Text(404, "text/plain", "");
-        // The compressed copy, to a browser that takes it: a few times smaller.
+        if (file.StartsWith(ResourcesPath, StringComparison.Ordinal))
+        {
+            var resource = file[ResourcesPath.Length..];
+            return Carried.Resources.Contains(resource) && Carried.Resource(resource) is { } bytes
+                ? new Reply(200, Kind(Path.GetExtension(resource)), bytes)
+                : Text(404, "text/plain", "");
+        }
+        if (!name.Contains('/') && Carried.Read(BrowserFolder + name) is { } browser)
+            return Compressed(name, Kind(Path.GetExtension(name)), browser, accepts);
+        return Text(404, "text/plain", "");
+    }
+
+    /// <summary>
+    /// The program's answer to the library's command in <paramref name="body"/>
+    /// (<c>{"command", "args", "browser", "settings"}</c>): <c>{"value"}</c> or
+    /// <c>{"error"}</c>, and <c>{}</c> where the program leaves the library's
+    /// default. <c>browser</c> names the page that asks (one per tab), and
+    /// <c>settings</c> are its person's settings as the page keeps them: the
+    /// handler sees those, in that page's language, and what it asks of the
+    /// screen goes to that page alone. The answer brings the page's settings
+    /// back (<c>"settings"</c>) when the command changed them, for the page to keep.
+    /// </summary>
+    JsonObject Invoke(string body)
+    {
+        JsonObject asked;
+        try
+        {
+            asked = JsonNode.Parse(body) as JsonObject ?? throw new JsonException("a command is a JSON object");
+        }
+        catch (JsonException e)
+        {
+            return new JsonObject { ["error"] = e.Message };
+        }
+        var command = asked["command"] is JsonValue c && c.TryGetValue<string>(out var named) ? named : "";
+        if (command == "")
+            return new JsonObject { ["error"] = "a command has its name" };
+        var args = asked["args"] switch
+        {
+            null => "{}",
+            JsonValue text when text.TryGetValue<string>(out var json) => json,
+            var given => given.ToJsonString(),
+        };
+        var browser = asked["browser"] is JsonValue b && b.TryGetValue<string>(out var page) ? page : "";
+        var sent = asked["settings"] as JsonObject;
+        var (answer, settings) = wire.AnswerFor(browser, sent, command, args);
+        var reply = answer ?? [];
+        if (settings is not null)
+            reply["settings"] = settings;
+        return reply;
+    }
+
+    /// <summary><paramref name="bytes"/>, compressed once, to a browser that takes it.</summary>
+    Reply Compressed(string file, string type, byte[] bytes, string? accepts)
+    {
         var taken = Taken(accepts);
-        foreach (var (encoding, extension) in Copies)
-            if (taken.Contains(encoding) && File.Exists(full + extension))
-                return new Reply(200, Kind(file), File.ReadAllBytes(full + extension), encoding);
-        return new Reply(200, Kind(file), File.ReadAllBytes(full));
+        foreach (var encoding in Encodings)
+            if (taken.Contains(encoding))
+                return new Reply(200, type, compressed.GetOrAdd((file, encoding), _ => Compress(bytes, encoding)), encoding);
+        return new Reply(200, type, bytes);
+    }
+
+    static byte[] Compress(byte[] bytes, string encoding)
+    {
+        using var into = new MemoryStream();
+        using (Stream by = encoding == "br" ? new BrotliStream(into, CompressionLevel.Optimal) : new GZipStream(into, CompressionLevel.Optimal))
+            by.Write(bytes);
+        return into.ToArray();
     }
 
     /// <summary>The encodings an Accept-Encoding names, without those it refuses (<c>;q=0</c>).</summary>
@@ -150,8 +237,8 @@ public sealed class WebServer
             .Select(part => part[0].ToLowerInvariant()),
     ];
 
-    /// <summary>The kind of a file of the browser program, by its extension.</summary>
-    static string Kind(string file) => Path.GetExtension(file) switch
+    /// <summary>The kind of a file, by its extension.</summary>
+    static string Kind(string extension) => extension.ToLowerInvariant() switch
     {
         ".html" => "text/html; charset=utf-8",
         ".js" or ".mjs" => "text/javascript",
@@ -161,6 +248,12 @@ public sealed class WebServer
         ".svg" => "image/svg+xml",
         ".png" => "image/png",
         ".ico" => "image/x-icon",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".gif" => "image/gif",
+        ".webp" => "image/webp",
+        ".pdf" => "application/pdf",
+        ".txt" or ".md" => "text/plain; charset=utf-8",
+        ".csv" => "text/csv; charset=utf-8",
         ".woff2" => "font/woff2",
         ".ttf" => "font/ttf",
         _ => "application/octet-stream",
@@ -229,28 +322,6 @@ public sealed class WebServer
         }
     }
 
-    /// <summary>One request at a time, as the sessions are answered.</summary>
-    readonly SemaphoreSlim one = new(1, 1);
-
-    /// <summary>Whether the request answered on this thread has the turn; one answered without a connection has none.</summary>
-    [ThreadStatic]
-    static WebServer? turnHeld;
-
-    void LetGo()
-    {
-        if (turnHeld == this)
-            one.Release();
-    }
-
-    void TakeAgain()
-    {
-        if (turnHeld == this)
-            one.Wait();
-    }
-
-    /// <summary>How a request is answered once it is its turn: <see cref="Answer"/>; a test watches it to see no two run at once.</summary>
-    internal Func<string, string, string, string?, Reply>? Answering { get; set; }
-
     /// <summary>The longest head of a request, and the largest body, it reads.</summary>
     const int HeadLimit = 64 * 1024, BodyLimit = 64 * 1024 * 1024;
 
@@ -302,18 +373,8 @@ public sealed class WebServer
                 var used = bodyStart + Math.Min(filled - bodyStart, length);
                 Array.Copy(buffer, used, buffer, 0, filled - used);
                 filled -= used;
-                Reply reply;
-                await one.WaitAsync(stop);
-                try
-                {
-                    turnHeld = this;
-                    reply = (Answering ?? Answer)(start[0], start[1], Encoding.UTF8.GetString(body), headers.GetValueOrDefault("Accept-Encoding"));
-                }
-                finally
-                {
-                    turnHeld = null;
-                    one.Release();
-                }
+                // The program answers one command at a time (ProgramWire); files come meanwhile.
+                var reply = Answer(start[0], start[1], Encoding.UTF8.GetString(body), headers.GetValueOrDefault("Accept-Encoding"));
                 var close = start[2] == "HTTP/1.0" || headers.GetValueOrDefault("Connection")?.Equals("close", StringComparison.OrdinalIgnoreCase) == true;
                 var head = new StringBuilder()
                     .Append(CultureInfo.InvariantCulture, $"HTTP/1.1 {reply.Status} {Reason(reply.Status)}\r\n")

@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use clarity_gen::tools::{Install, Probe, check, engine_tools, find_on_path, search_path, wasm_tools_install};
+use clarity_gen::tools::{Probe, check, engine_tools, find_on_path, search_path};
 use clarity_gen::clarity_ui::Library;
 use clarity_project::{Backend, Ui};
 
@@ -49,7 +49,7 @@ const FETCHED_ON_FIRST_BUILD: &str = "Clarity.UI's library 0.1.0, fetched on fir
 
 /// Rust draws with Clarity.UI only, on Skia, whose prebuilt library cargo
 /// downloads: it needs cargo and no WebKitGTK, Tauri CLI or Node; its web
-/// program serves the shared web screen and needs nothing more.
+/// program serves Clarity.UI's browser files and needs nothing more.
 #[test]
 fn rust_on_clarity_ui_needs_only_cargo() {
     let bare = check(Backend::Rust, Ui::Clarity, &Machine::default());
@@ -382,48 +382,14 @@ fn every_missing_tool_points_at_the_manual() {
     assert_eq!(rust.guides[0], expected);
 }
 
-/// The web target of C# (DESIGN 7.6) also needs .NET's WebAssembly tools,
-/// which link Skia's drawing into the browser program;
-/// a desktop project builds without them.
+/// The web target of C# needs nothing beyond the SDK: its server serves
+/// Clarity.UI's browser files, which Clarity carries (DESIGN 7.9, B2).
 #[test]
-fn the_web_target_of_csharp_needs_the_webassembly_tools() {
+fn the_web_target_of_csharp_needs_only_the_sdk() {
     let sdk = "10.0.402 [/usr/share/dotnet/sdk]\n";
-    let without = Machine::default().with("dotnet", "--list-sdks", sdk).with("dotnet", "workload list", "\nInstalled Workload Id      Manifest Version\n------------------\n");
-    let tools = check(Backend::Csharp, Ui::Clarity, &without);
-    assert!(tools.ready(), "a desktop project builds without them");
-    assert!(!tools.ready_for(true));
-    assert!(tools.web_missing[0].contains("dotnet workload install wasm-tools"), "{:?}", tools.web_missing);
-    // Clarity can install them, from where the SDK is.
-    let install = tools.web_install.expect("an install");
-    assert!(install.args.join(" ").contains("workload install wasm-tools"), "{install:?}");
-
-    let with = Machine::default().with("dotnet", "--list-sdks", sdk).with("dotnet", "workload list", "wasm-tools                 10.0.114/10.0.100      SDK 10.0.400\n");
-    let tools = check(Backend::Csharp, Ui::Clarity, &with);
-    assert!(tools.ready_for(true), "{:?}", tools.web_missing);
-    assert_eq!(tools.web_found, ["wasm-tools 10.0.114/10.0.100"]);
-    assert_eq!(tools.web_install, None);
-    // Another stack needs nothing more for the web.
-    assert!(check(Backend::Go, Ui::Clarity, &Machine::default()).web_missing.is_empty());
-}
-
-/// .NET installed for the whole system needs the system's permission to add
-/// a workload: the system asks for it, in its own way on each.
-#[test]
-fn the_webassembly_tools_install_asks_the_system_where_it_must() {
-    let dotnet = std::path::Path::new("/usr/share/dotnet/dotnet");
-    assert_eq!(
-        wasm_tools_install(dotnet, true, "linux"),
-        Install { program: "/usr/share/dotnet/dotnet".into(), args: ["workload", "install", "wasm-tools"].map(String::from).to_vec(), elevated: false }
-    );
-    let linux = wasm_tools_install(dotnet, false, "linux");
-    assert_eq!((linux.program.as_str(), linux.elevated), ("pkexec", true));
-    assert_eq!(linux.args, ["/usr/share/dotnet/dotnet", "workload", "install", "wasm-tools"]);
-    let mac = wasm_tools_install(std::path::Path::new("/usr/local/share/dotnet/dotnet"), false, "macos");
-    assert_eq!(mac.program, "osascript");
-    assert_eq!(mac.args, ["-e", "do shell script \"'/usr/local/share/dotnet/dotnet' workload install wasm-tools\" with administrator privileges"]);
-    let windows = wasm_tools_install(std::path::Path::new("C:\\Program Files\\dotnet\\dotnet.exe"), false, "windows");
-    assert_eq!(windows.program, "powershell");
-    assert_eq!(windows.args.last().unwrap(), "Start-Process -FilePath 'C:\\Program Files\\dotnet\\dotnet.exe' -ArgumentList 'workload','install','wasm-tools' -Verb RunAs -Wait");
+    let tools = check(Backend::Csharp, Ui::Clarity, &Machine::default().with("dotnet", "--list-sdks", sdk));
+    assert!(tools.ready(), "{:?}", tools.missing);
+    assert!(!tools.missing.iter().chain(&tools.found).any(|t| t.contains("wasm-tools")), "{tools:?}");
 }
 
 /// No stack asks for Node.js or npm: a web stack's windows are markup the

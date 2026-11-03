@@ -4,6 +4,7 @@
 #include "shell/shell.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <set>
@@ -24,6 +25,7 @@ extern char** environ;
 #include "clarity/ranges.hpp"
 #include "clarity/reorder.hpp"
 #include "clarity/settings.hpp"
+#include "clarity/watch.hpp"
 #include "clarity/steps.hpp"
 #include "clarity/views.hpp"
 
@@ -147,8 +149,33 @@ Reply Service::edited(const WindowState& state, const std::string& part, const s
     return reply;
 }
 
+namespace {
+
+/// The page whose commands this thread runs (AsPage); none off a page.
+thread_local const Page* asking = nullptr;
+
+/// The window's settings record starts from the asking page's: each setting it has, of the same kind.
+WindowState with_page_settings(WindowState state) {
+    if (!asking || !state.data.is_object() || !state.data.contains("settings") || !state.data["settings"].is_object()) return state;
+    auto& record = state.data["settings"];
+    for (const auto& [name, value] : asking->settings.items()) {
+        if (name == "id" || !record.contains(name)) continue;
+        const auto& was = record[name];
+        bool alike = was.type() == value.type() || (was.is_number() && value.is_number());
+        if (alike) record[name] = value;
+    }
+    return state;
+}
+
+}  // namespace
+
+AsPage::AsPage(const Page& page) : was_(asking) { asking = &page; }
+AsPage::~AsPage() { asking = was_; }
+
 json Service::invoke(const std::string& command, const json& args) {
     std::lock_guard lock(mutex_);
+    // Served, the command speaks its page's language: set under the lock, as commands take turns.
+    if (asking) set_language(asking->language);
     return answer(command, args);
 }
 
@@ -178,16 +205,16 @@ json Service::answer(const std::string& command, const json& args) {
             return value(nullptr);
         }
         // The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
-        if (command == "read_settings") return value(read_settings_with(options_.name, args.value("secrets", json(nullptr))));
+        if (command == "read_settings") return value(read_settings_with(options_.name, args.value("secrets", options_.secrets)));
         // The person's settings, as the screen has them now.
         if (command == "keep_settings") {
             const auto& settings = args.contains("settings") ? args["settings"] : json(nullptr);
             if (!settings.is_object()) throw InvalidError("keep_settings takes the settings as an object");
             // Its secret settings go to the system's protected store, never the file (DESIGN 5.27).
-            keep_settings_with(options_.name, settings, args.value("secrets", json(nullptr)));
+            keep_settings_with(options_.name, settings, args.value("secrets", options_.secrets));
             return value(nullptr);
         }
-        if (command == "open_window") return answered(on_event(options_.windows->open(db, text_of(args, "window"), with), "open"));
+        if (command == "open_window") return answered(on_event(with_page_settings(options_.windows->open(db, text_of(args, "window"), with)), "open"));
         if (command == "close_window") {
             auto reply = on_event(state, "close");
             // The window has closed: what it had of an engine goes, and its edits.
@@ -409,6 +436,130 @@ json Service::answer(const std::string& command, const json& args) {
         // Fail safe: whatever else a handler throws is an error the screen shows.
         return {{"error", "the handler stopped"}};
     }
+}
+
+struct Watches::Watch {
+    /// How far the call is; done is -1 until an engine said.
+    std::atomic<int64_t> done{-1};
+    std::atomic<int64_t> total{0};
+    std::shared_ptr<std::atomic<bool>> stop = std::make_shared<std::atomic<bool>>(false);
+    EngineWatch engine;
+    /// Whether its handler runs now, and whether end_watch came meanwhile.
+    bool running = false;
+    bool ended = false;
+};
+
+namespace {
+
+/// The watch the handler on this thread runs under, from its start to its leave.
+struct OnThread {
+    uint64_t id = 0;
+    std::shared_ptr<void> kept;
+    std::unique_ptr<Watching> watching;
+};
+thread_local OnThread on_thread;
+
+}  // namespace
+
+bool Watches::is_command(const std::string& command) {
+    return command == "start_watch" || command == "watch_progress" || command == "stop_watch" || command == "end_watch";
+}
+
+std::shared_ptr<Watches::Watch> Watches::watch(uint64_t id) {
+    auto& found = all_[id];
+    if (!found) found = std::make_shared<Watch>();
+    return found;
+}
+
+void Watches::enter(uint64_t id) {
+    std::lock_guard lock(mutex_);
+    auto w = watch(id);
+    Watch* raw = w.get();
+    w->engine = EngineWatch{[raw](int64_t done, int64_t total) {
+                                raw->total = total;
+                                raw->done = done;
+                            },
+                            w->stop};
+    w->running = true;
+    w->ended = false;
+    on_thread.watching.reset();
+    on_thread.id = id;
+    on_thread.kept = w;
+    on_thread.watching = std::make_unique<Watching>(w->engine);
+}
+
+void Watches::leave() {
+    std::lock_guard lock(mutex_);
+    if (!on_thread.kept) return;
+    auto w = std::static_pointer_cast<Watch>(on_thread.kept);
+    on_thread.watching.reset();
+    on_thread.kept.reset();
+    w->running = false;
+    if (w->ended) all_.erase(on_thread.id);
+    on_thread.id = 0;
+}
+
+json Watches::answer(const std::string& command, uint64_t id) {
+    if (command == "start_watch") {
+        // On the handler's thread, just before it runs: its engine calls report here.
+        enter(id);
+        return value(nullptr);
+    }
+    if (command == "watch_progress") {
+        std::lock_guard lock(mutex_);
+        auto found = all_.find(id);
+        if (found == all_.end() || found->second->done < 0) return value(nullptr);
+        return value(json::array({found->second->done.load(), found->second->total.load()}));
+    }
+    if (command == "stop_watch") {
+        // It may come before its start: it holds once the call starts.
+        std::lock_guard lock(mutex_);
+        watch(id)->stop->store(true);
+        return value(nullptr);
+    }
+    // end_watch: on the handler's thread, from the screen's, or while it still runs elsewhere.
+    if (on_thread.kept && on_thread.id == id) {
+        {
+            std::lock_guard lock(mutex_);
+            std::static_pointer_cast<Watch>(on_thread.kept)->ended = true;
+        }
+        leave();
+        return value(nullptr);
+    }
+    std::lock_guard lock(mutex_);
+    auto found = all_.find(id);
+    if (found != all_.end()) {
+        if (found->second->running) found->second->ended = true;
+        else all_.erase(found);
+    }
+    return value(nullptr);
+}
+
+std::optional<std::string> wire_answer(Service& service, const std::string& command, const json& args) {
+    if (command == "facts") {
+        if (service.options().facts.empty()) return std::nullopt;
+        return value(json::parse(service.options().facts)).dump();
+    }
+    // started: the main window and why the databases did not open, from the service's start.
+    if (command == "started") {
+        json started = service.invoke("start", json::object());
+        if (!started.contains("value")) return started.dump();
+        started["value"].erase("model");
+        if (!started["value"].contains("unconnected")) started["value"]["unconnected"] = nullptr;
+        return started.dump();
+    }
+    // A record's file as base64: the service's file_data.
+    if (command == "field_bytes") return service.invoke("file_data", args).dump();
+    json answered = service.invoke(command, args);
+    // A store's file: base64, without the data URL around it.
+    if (command == "store_file" && answered.contains("value") && answered["value"].is_string()) {
+        std::string url = answered["value"];
+        auto comma = url.find(',');
+        if (url.rfind("data:", 0) == 0 && comma != std::string::npos) answered["value"] = url.substr(comma + 1);
+    }
+    // A command the service does not know takes the library's default.
+    if (answered == json{{"error", "there is no command " + command}}) return std::nullopt;
+    return answered.dump();
 }
 
 Size window_size(Size size) {

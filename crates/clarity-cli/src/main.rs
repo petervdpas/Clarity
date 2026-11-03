@@ -203,7 +203,7 @@ fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> Ex
     let out = out.map_or_else(|| clarity_project::out_dir(project_file, &settings), std::path::Path::to_path_buf);
     let out = out.as_path();
     let built = clarity_project::build_settings(&clarity_project::module_dir(project_file), &settings);
-    let programs = match clarity_gen::programs(&project, &built) {
+    let mut programs = match clarity_gen::programs(&project, &built) {
         Ok(programs) => programs,
         Err(errors) => {
             for diagnostic in project.diagnostics.iter().filter(|d| d.severity == Severity::Error) {
@@ -215,6 +215,15 @@ fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> Ex
             return ExitCode::FAILURE;
         }
     };
+    // A program served to a browser carries Clarity.UI's browser files (round B of DESIGN 7.9):
+    // CLARITY_UI_BROWSER's, the fetched ones, else the ones Clarity's repository built.
+    if clarity_gen::web_browser::needs_library(&programs) {
+        let repository = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+        if let Err(why) = clarity_gen::web_browser::local_folder(Some(repository)).and_then(|folder| clarity_gen::web_browser::with_library(&mut programs, &folder)) {
+            eprintln!("clarity: {why}");
+            return ExitCode::FAILURE;
+        }
+    }
     match clarity_gen::write_programs(out, &programs, settings.stack.backend, &settings.keeps) {
         Ok(written) => {
             for program in &programs {

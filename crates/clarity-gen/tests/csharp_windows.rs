@@ -520,13 +520,14 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
     has(vm, "    [RelayCommand]\n    void ClickAt_Dial(Pointer at) => EditOf(\"dial\", \"dial\", ends: true, () => Handle(() =>\n    {\n        Dial.Pointer = at;\n        OnDialClicked();\n    }, [at]));");
 }
 
-/// A window can be a mirror, in a browser, of the one its server keeps
-/// (DESIGN 7.6): made without a database, it loads nothing itself.
+/// A window loads its data as it is made: there is no mirror of it any
+/// more, the browser asks the server's window itself (DESIGN 7.9, B2).
 #[test]
-fn a_window_made_as_a_mirror_loads_nothing() {
+fn a_window_loads_its_data_as_it_is_made() {
     let files = files();
     let vm = file(&files, "Windows/OrderFormViewModel.cs");
-    has(vm, "    public OrderFormViewModel(Db? db) : base(db)\n    {\n        if (IsMirror)\n            return;\n");
+    has(vm, "    public OrderFormViewModel(Db? db) : base(db)\n    {\n");
+    assert!(!vm.contains("IsMirror"), "{vm}");
 }
 
 

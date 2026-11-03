@@ -13,12 +13,15 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(clarity PRIVATE -Wall -Wextra)
 endif()
 
-# The service, which answers the screen's commands and serves the web
-# screen to a browser (the web target): nothing of the desktop.
+# The service, which answers Clarity.UI's commands and serves the browser
+# files to a browser (the web target): nothing of the desktop.
 if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/service.cpp)
   add_library(clarity_service STATIC ${CMAKE_CURRENT_LIST_DIR}/shell/service.cpp ${CMAKE_CURRENT_LIST_DIR}/shell/serve.cpp)
   target_include_directories(clarity_service PUBLIC ${CMAKE_CURRENT_LIST_DIR})
   target_link_libraries(clarity_service PUBLIC clarity)
+  # Requests side by side, each on a thread; long calls watched beside them.
+  find_package(Threads REQUIRED)
+  target_link_libraries(clarity_service PUBLIC Threads::Threads)
   if(WIN32)
     # Winsock for the server, the shell for links.
     target_link_libraries(clarity_service PUBLIC ws2_32 shell32)
@@ -88,6 +91,45 @@ function(clarity_ui_beside target)
   endif()
 endfunction()
 
+# The bytes of `file` as a C++ initializer in `out`: a string literal where
+# the compiler takes a long one cheaply (GCC, Clang), else a list of bytes
+# (MSVC limits string literals). Either ends with a zero byte past the file.
+function(clarity_bytes out file)
+  file(READ ${file} hex HEX)
+  if(MSVC)
+    string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," bytes "${hex}")
+    set(${out} "{${bytes}0x00}" PARENT_SCOPE)
+  else()
+    string(REGEX REPLACE "([0-9a-f][0-9a-f])" "\\\\x\\1" bytes "${hex}")
+    set(${out} "\"${bytes}\"" PARENT_SCOPE)
+  endif()
+endfunction()
+
+# The files a browser takes from the web server (the web target, DESIGN
+# 7.9), compiled into `target`: every file below `folder` (browser/: the page,
+# Clarity.UI's browser files, clarity/files.json, the resources), named by
+# its path there, as the list clarity_browser_files the program hands to
+# the server (shell::Options::browser_files).
+function(clarity_browser_files target folder)
+  file(GLOB_RECURSE found ${folder}/*)
+  list(SORT found)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${found} ${folder})
+  set(arrays "")
+  set(entries "")
+  set(n 0)
+  foreach(path IN LISTS found)
+    file(RELATIVE_PATH name ${folder} ${path})
+    clarity_bytes(bytes ${path})
+    file(SIZE ${path} size)
+    string(APPEND arrays "static const unsigned char browser${n}[] = ${bytes};\n")
+    string(APPEND entries "    {\"browser\", \"${name}\", browser${n}, ${size}},\n")
+    math(EXPR n "${n} + 1")
+  endforeach()
+  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/clarity_browser_files.cpp.in "/* The files a browser takes from the web server, from ${folder}. */\n#include \"shell/shell.hpp\"\n\n${arrays}\nextern const clarity::shell::UiFile clarity_browser_files[] = {\n${entries}    {nullptr, nullptr, nullptr, 0},\n};\n")
+  configure_file(${CMAKE_CURRENT_BINARY_DIR}/clarity_browser_files.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/clarity_browser_files.cpp COPYONLY)
+  target_sources(${target} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/clarity_browser_files.cpp)
+endfunction()
+
 # The files Clarity.UI draws from, compiled into `target`: the windows and
 # app frames as markup (windows/*.cxaml, apps/*.cxaml), the themes
 # (themes/*.json) and the resources (resources/...) under `folder`, as the
@@ -126,11 +168,9 @@ function(clarity_ui_files target folder)
       else()
         get_filename_component(name ${path} NAME_WLE)
       endif()
-      file(READ ${path} hex HEX)
-      string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," bytes "${hex}")
-      string(APPEND arrays "static const unsigned char file${n}[] = {${bytes}0x00};\n")
-      string(LENGTH "${hex}" digits)
-      math(EXPR size "${digits} / 2")
+      clarity_bytes(bytes ${path})
+      file(SIZE ${path} size)
+      string(APPEND arrays "static const unsigned char file${n}[] = ${bytes};\n")
       string(APPEND entries "    {\"${kind}\", \"${name}\", file${n}, ${size}},\n")
       math(EXPR n "${n} + 1")
     endforeach()

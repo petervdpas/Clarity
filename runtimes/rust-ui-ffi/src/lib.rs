@@ -15,7 +15,8 @@ pub mod files;
 pub mod host;
 pub mod program;
 pub mod screen;
-pub mod wire;
+// The program's calls as the wire's JSON: clarity-ui's, which the browser host shares.
+pub use ui::program_wire::args as wire;
 
 #[cfg(test)]
 mod tests;

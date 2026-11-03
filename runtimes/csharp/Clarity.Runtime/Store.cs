@@ -2,8 +2,7 @@
 // run a statement, insert and get the new key, read rows, and apply a
 // migration step. Each kind of database is a package of its own
 // (Clarity.Runtime.Sqlite, .PostgreSql, .MySql, .SqlServer), which a
-// program turns on with its Use() before it opens its databases, so a
-// program in a browser carries none.
+// program turns on with its Use() before it opens its databases.
 
 using System.Data.Common;
 

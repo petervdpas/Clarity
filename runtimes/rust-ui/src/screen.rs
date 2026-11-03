@@ -333,6 +333,16 @@ impl Screen {
         self.later.set_waker(waker);
     }
 
+    /// Requests of the program (a long call's) are sent through `asker` without waiting (the browser host).
+    pub fn set_asker(&self, asker: crate::later::AskLater) {
+        self.later.set_asker(asker);
+    }
+
+    /// How many requests sent without waiting wait for their answer.
+    pub fn later_asking(&self) -> usize {
+        self.later.asking()
+    }
+
     /// What work off the screen's thread gave goes to the elements that asked for it; true when something came.
     pub fn take_later(&mut self) -> bool {
         let done = self.later.take();
@@ -495,6 +505,7 @@ impl Screen {
                         }
                     }
                     Request::Later(id, work) => self.later.start(id, work),
+                    Request::Ask(id, asked) => self.later.ask(id, asked),
                 }
             }
         }

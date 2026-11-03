@@ -1,4 +1,5 @@
-//! The desktop host: its window, keys, file dialogs, sound and growing.
+//! The hosts: the desktop's window, keys, file dialogs, sound and growing;
+//! the browser's page, without a browser and in one.
 //! One test binary for these files (each a module, its tests named
 //! `<file>::<test>`), so Skia is linked once for them all.
 
@@ -9,6 +10,8 @@ mod core_frame_shared;
 #[path = "../common/core_windows_fake.rs"]
 mod core_windows_fake;
 
+mod browser_host;
+mod browser_page;
 mod desktop_check_fix_hosts;
 mod desktop_grow;
 mod desktop_host;
@@ -16,3 +19,4 @@ mod desktop_keys;
 mod desktop_platform;
 mod desktop_split;
 mod looks_pointer_place;
+mod wire_round_trip;

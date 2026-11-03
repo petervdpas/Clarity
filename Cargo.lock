@@ -1103,7 +1103,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-runtime"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -1136,7 +1136,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-ui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "arboard",
  "base64 0.22.1",
@@ -1152,8 +1152,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "clarity-ui-ffi"
+name = "clarity-ui-browser"
 version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "clarity-ui",
+ "skia-bindings",
+]
+
+[[package]]
+name = "clarity-ui-ffi"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "clarity-runtime",

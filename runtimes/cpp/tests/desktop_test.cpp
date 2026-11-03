@@ -3,10 +3,14 @@
 // and a program driven on a screen without a window, with a custom part.
 
 #include <algorithm>
+#include <cstdlib>
+#include <filesystem>
 #include <functional>
+#include <map>
 #include <thread>
 
 #include "check.hpp"
+#include "clarity/settings.hpp"
 #include "clarity/watch.hpp"
 #include "engine/engine.hpp"
 #include "shell/desktop.hpp"
@@ -70,7 +74,7 @@ const shell::UiFile files[] = {
 };
 
 shell::Options options_of(Db& db, Shop& shop) {
-    shell::Options options{"shop", "Shop", "Main", R"({"project":{}})", "", &db, &shop};
+    shell::Options options{"shop", "Shop", "Main", R"({"project":{}})", &db, &shop};
     options.ui_files = files;
     return options;
 }
@@ -234,4 +238,110 @@ TEST(code_quits_and_opens_the_keys_window_through_the_layer) {
     CHECK(!keys.contains("quit"));
     json plain = run("save");
     CHECK(!plain.contains("quit") && !plain.contains("keys"));
+}
+
+namespace {
+
+/// A window whose data is the person's settings record; flip says what it saw and turns showDone over.
+class Flipping final : public shell::Windows {
+public:
+    std::string saw, tokens;
+    WindowState open(Db&, const std::string& window, const json& with) override {
+        return opened(window, {{"settings", {{"id", 0}, {"showDone", true}, {"theme", ""}, {"apiToken", ""}}}}, with);
+    }
+    std::optional<std::string> handler(const std::string&, const std::string&) override { return std::nullopt; }
+    Reply redraw(Db&, Reply reply) override { return reply; }
+    Reply dispatch(Db&, const WindowState& state, const std::string&) override {
+        json data = state.data;
+        bool shown = data["settings"]["showDone"].get<bool>();
+        saw += shown ? "t" : "f";
+        tokens += data["settings"]["apiToken"].get<std::string>();
+        data["settings"]["showDone"] = !shown;
+        return Ui(state).reply(state.window, data);
+    }
+    Reply answer(Db&, const WindowState& state, const std::string&, const json&) override { return Ui(state).reply(state.window, state.data); }
+    std::vector<RefOption> options(Db&, const std::string&) override { return {}; }
+    std::optional<Bytes> picture(Db&, const std::string&, int64_t, const std::string&) override { return std::nullopt; }
+};
+
+const char* const flip_markup = R"(<Window name="Main"><Button name="flip" at="1,1" span="3" caption="Flip" onclick="flip" /></Window>)";
+
+const shell::UiFile flip_files[] = {
+    {"window", "Main", bytes_of(flip_markup), std::char_traits<char>::length(flip_markup)},
+    {nullptr, nullptr, nullptr, 0},
+};
+
+}  // namespace
+
+// A window starts from the settings the person kept, and settings a handler
+// changes are kept: the next run's handler sees them.
+TEST(a_window_starts_from_the_kept_settings_and_a_handlers_change_is_kept) {
+    REQUIRE(ui::fits());
+    auto folder = std::filesystem::temp_directory_path() / "clarity-desktop-settings-cpp";
+    std::filesystem::remove_all(folder);
+#ifdef _WIN32
+    const char* had = std::getenv("APPDATA");
+    std::string was = had ? had : "";
+    _putenv_s("APPDATA", folder.string().c_str());
+#else
+    setenv("XDG_CONFIG_HOME", folder.string().c_str(), 1);
+#endif
+    Db db = Db::memory();
+    Flipping flipping;
+    auto run = [&] {
+        shell::Options options{"clarity-desktop-settings-test", "Flip", "Main", R"({"project":{}})", &db, &flipping};
+        options.ui_files = flip_files;
+        shell::DesktopProgram program(options);
+        ui::Files made = shell::desktop_files(options);
+        ui::Driven driven(program, made);
+        driven.step(R"({"do":"click","part":"flip"})");
+    };
+    run();
+    CHECK_EQ(read_settings("clarity-desktop-settings-test").value("showDone", true), false);
+    run();
+    CHECK_EQ(flipping.saw, std::string("tf"));
+    std::filesystem::remove_all(folder);
+#ifdef _WIN32
+    _putenv_s("APPDATA", was.c_str());
+#endif
+}
+
+// A secret setting a handler reads has its value from the protected store,
+// never from the settings file.
+TEST(a_secret_setting_a_handler_reads_comes_from_the_store) {
+    REQUIRE(ui::fits());
+    auto folder = std::filesystem::temp_directory_path() / "clarity-desktop-secrets-cpp";
+    std::filesystem::remove_all(folder);
+#ifdef _WIN32
+    const char* had = std::getenv("APPDATA");
+    std::string was = had ? had : "";
+    _putenv_s("APPDATA", folder.string().c_str());
+#else
+    setenv("XDG_CONFIG_HOME", folder.string().c_str(), 1);
+#endif
+    SecretStore before = secret_store;
+    std::map<std::string, std::string> store{{"apiToken", "s3cret"}};
+    secret_store.get = [&](const std::string&, const std::string& name) -> std::optional<std::string> {
+        auto found = store.find(name);
+        return found == store.end() ? std::nullopt : std::optional<std::string>(found->second);
+    };
+    secret_store.set = [&](const std::string&, const std::string& name, const std::string& value) { store[name] = value; };
+    Db db = Db::memory();
+    Flipping flipping;
+    {
+        shell::Options options{"clarity-desktop-secrets-test", "Flip", "Main", R"({"project":{}})", &db, &flipping};
+        options.ui_files = flip_files;
+        options.secrets = json::array({"apiToken"});
+        shell::DesktopProgram program(options);
+        ui::Files made = shell::desktop_files(options);
+        ui::Driven driven(program, made);
+        driven.step(R"({"do":"click","part":"flip"})");
+    }
+    CHECK_EQ(flipping.tokens, std::string("s3cret"));
+    CHECK(!read_settings("clarity-desktop-secrets-test").contains("apiToken"));
+    secret_store = before;
+    std::filesystem::remove_all(folder);
+#ifdef _WIN32
+    _putenv_s("APPDATA", was.c_str());
+#endif
 }

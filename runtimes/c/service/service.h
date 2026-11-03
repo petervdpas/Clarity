@@ -1,7 +1,8 @@
 // The service of C applications: the commands of the web wire (DESIGN 7.3),
-// answered by the program's windows. Clarity.UI asks them on the desktop
-// (desktop/desktop.h) and the shared web screen in a browser (serve.h); the
-// commands and their JSON are every stack's.
+// answered by the program's windows. Clarity.UI asks them, in the program
+// on the desktop (desktop/desktop.h) and from the browser on the web
+// (serve.h), through service/wire.h; the commands and their JSON are every
+// stack's.
 
 #pragma once
 
@@ -42,9 +43,6 @@ typedef struct {
     const char* main;
     /// The model: the windows, frame, data dictionary and translations, as JSON.
     const char* model;
-    /// The web screen's page, with its script, styles and pictures in it,
-    /// which the web target serves; NULL on the desktop.
-    const char* html;
     ClarityDb* db;
     const ClarityWindows* windows;
     /// The size the main window's desktop window opens at; zero for the library's own.
@@ -67,6 +65,11 @@ void clarity_service_free(ClarityService* service);
 /// Runs a command, with its arguments as the web wire has them. Answers
 /// `{"value": ...}` or `{"error": ...}`, in the scratch arena.
 cJSON* clarity_service_invoke(ClarityService* service, const char* command, const cJSON* args);
+/// The settings of the browser page whose commands run next on a server
+/// (DESIGN 7.9 B2), an object: a window that opens starts its settings
+/// record from them (each setting it has, of the same kind), so its
+/// handlers see that page's settings. NULL off a page, as on the desktop.
+void clarity_service_page(ClarityService* service, const cJSON* settings);
 /// Opens a link in the person's browser; whether it could.
 bool clarity_open_in_browser(const char* address);
 /// How the service opens a link of a markdown part: clarity_open_in_browser

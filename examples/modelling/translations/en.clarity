@@ -200,6 +200,7 @@ translation en
     undoChangedSince "This was changed since, so it cannot be taken back"
     fieldRequired "{field} is required"
     chooseFolder "Choose a folder"
+    typeServerFolder "Type the path of a folder on the server"
     zoomOut "Zoom out"
     zoomWhole "Show it whole"
     zoomIn "Zoom in"

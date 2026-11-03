@@ -114,10 +114,10 @@ pub fn property(entity: &str, field: &str) -> String {
 /// protected ones, ObservableObject's and object's), which data, a part or a
 /// handler's command cannot be called. Clarity.Runtime.Tests checks that the
 /// list holds every member WindowViewModel has.
-pub const VIEW_MODEL_MEMBERS: [&str; 57] = [
+pub const VIEW_MODEL_MEMBERS: [&str; 55] = [
     "Answer", "AppSettings", "Ask", "AskRequested", "CanvasEvent", "Changed", "Close", "CloseRequested", "CloseWith", "Closing", "Copy",
-    "CopyRequested", "Db", "DrawAnew", "Edited", "EditOf", "Edits", "Fetched", "FocusedScope", "Handle", "Instance", "IsDialog", "IsMirror",
-    "LongCall", "Messages", "OnClose", "OnOpen", "OnReturn", "Open", "Opened", "OpenRequested", "QuitApplication", "Redraw", "Remote",
+    "CopyRequested", "Db", "DrawAnew", "Edited", "EditOf", "Edits", "Fetched", "FocusedScope", "Handle", "Instance", "IsDialog",
+    "LongCall", "Messages", "OnClose", "OnOpen", "OnReturn", "Open", "Opened", "OpenRequested", "QuitApplication", "Redraw",
     "Reshow", "Returned", "RunUnconnected", "Say", "Selected", "ShowKeys", "ShowText", "Title", "UndoEdit", "UndoFocused",
     "WindowSize", "PropertyChanged", "PropertyChanging", "OnPropertyChanged", "OnPropertyChanging", "SetProperty",
     "SetPropertyAndNotifyOnCompletion", "Equals", "GetHashCode", "ToString", "GetType", "MemberwiseClone", "Finalize",
@@ -239,7 +239,9 @@ mod tests {
         assert_eq!(backing("event"), "_event");
         assert_eq!(member("orders"), "Orders");
         assert_eq!(member("messages"), "Messages_");
-        assert_eq!(member("remote"), "Remote_");
+        assert_eq!(member("title"), "Title_");
+        // The mirror's Remote went with the browser's C# drawing (round B): a name of its own now.
+        assert_eq!(member("remote"), "Remote");
         assert_eq!(on("saveClicked"), "OnSaveClicked");
         assert_eq!(on("open"), "OnOpen_");
         let taken = ["RedInk".to_string()].into_iter().collect();

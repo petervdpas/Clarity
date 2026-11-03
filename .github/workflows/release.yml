@@ -14,7 +14,11 @@ name: Release Clarity
 # Tauri builds its own installers: NSIS and MSI on Windows, .deb and .rpm on
 # Linux. Each carries Clarity.UI's library for its own system as a resource
 # (clarity-ui/, staged by .github/scripts/stage-clarity-ui.sh and added by
-# app/src-tauri/tauri.clarity-ui.conf.json), which Go, C and C++ builds use.
+# app/src-tauri/tauri.clarity-ui.conf.json), which Go, C and C++ builds use,
+# and Clarity.UI's browser files (clarity-ui-browser/), which every
+# language's web program serves. Those are the same on every system: the
+# browser job builds them once with the Emscripten SDK and each installer
+# job takes them.
 # Each Linux package is built inside a container of the distribution
 # it is for (.github/scripts/build-linux.sh), so it links that distribution's
 # glibc and WebKitGTK:
@@ -86,11 +90,54 @@ jobs:
         run: cargo test --workspace
 
   # ───────────────────────────────────────────────────────────────
+  # Clarity.UI's browser files (DESIGN 7.9, round B), built once with the
+  # Emscripten SDK for every installer to carry.
+  # ───────────────────────────────────────────────────────────────
+  browser:
+    name: Clarity.UI browser files
+    needs: [check]
+    runs-on: ubuntu-24.04
+    env:
+      # rust-skia's CI builds skia-safe 0.156's prebuilt Skia for the browser with this one (as release-clarity-ui.yml).
+      EMSCRIPTEN_VERSION: "6.0.9"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-emscripten
+
+      - name: Setup Emscripten
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "$EMSCRIPTEN_VERSION"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "$EMSCRIPTEN_VERSION"
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm32-unknown-emscripten
+
+      - name: Build the browser files
+        shell: bash
+        run: EMSDK="$RUNNER_TEMP/emsdk" runtimes/rust-ui-browser/build.sh out/clarity-ui-browser
+
+      - name: Upload the browser files
+        uses: actions/upload-artifact@v7
+        with:
+          name: clarity-ui-browser
+          path: out/clarity-ui-browser/*
+          if-no-files-found: error
+
+  # ───────────────────────────────────────────────────────────────
   # Windows: NSIS installer + MSI installer + portable zip.
   # ───────────────────────────────────────────────────────────────
   windows:
     name: Windows (amd64)
-    needs: [check]
+    needs: [check, browser]
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v7
@@ -125,7 +172,13 @@ jobs:
           npm version $ver --no-git-tag-version --allow-same-version
           Write-Host "version = $ver"
 
-      # The installer carries Clarity.UI's library for Go, C and C++ builds (DESIGN 7.9).
+      - name: Take Clarity.UI's browser files
+        uses: actions/download-artifact@v8
+        with:
+          name: clarity-ui-browser
+          path: app/src-tauri/clarity-ui-browser
+
+      # The installer carries Clarity.UI's library for Go, C and C++ builds (DESIGN 7.9), and its browser files.
       - name: Build Clarity.UI's library
         shell: bash
         run: bash .github/scripts/stage-clarity-ui.sh
@@ -193,7 +246,7 @@ jobs:
   # ───────────────────────────────────────────────────────────────
   linux:
     name: Linux ${{ matrix.label }}
-    needs: [check]
+    needs: [check, browser]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -230,6 +283,13 @@ jobs:
           else
             echo "VERSION=" >> "$GITHUB_OUTPUT"
           fi
+
+      # The same browser files for every package; build-linux.sh stages them with the library.
+      - name: Take Clarity.UI's browser files
+        uses: actions/download-artifact@v8
+        with:
+          name: clarity-ui-browser
+          path: app/src-tauri/clarity-ui-browser
 
       - name: Build in ${{ matrix.image }}
         run: |

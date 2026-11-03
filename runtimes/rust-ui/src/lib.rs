@@ -6,12 +6,14 @@
 //! `clarity_runtime::program::Program`.
 
 pub mod app_files;
+pub mod browser;
 pub mod choices;
 pub mod dialogs;
 pub mod element;
 pub mod engines;
 pub mod facts;
 pub mod program_facts;
+pub mod program_wire;
 pub mod files;
 pub mod fonts;
 pub mod frame;
@@ -36,7 +38,8 @@ pub mod window;
 pub mod wire;
 pub mod xml;
 
-#[cfg(feature = "desktop")]
+// The desktop host; a browser build has the `browser` host instead.
+#[cfg(all(feature = "desktop", not(target_os = "emscripten")))]
 pub mod desktop;
 
 pub use app_files::AppFiles;

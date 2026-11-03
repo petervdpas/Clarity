@@ -115,8 +115,20 @@ impl Driven {
     /// window), every window in this one screen: a dialog over the window, a
     /// window `in new window` in place.
     pub fn start(program: Arc<dyn Program>, files: AppFiles) -> Driven {
-        let kept = clarity_runtime::settings::file(files.title).and_then(|f| f.parent().map(|p| p.to_path_buf()));
-        crate::choices::start(&files, kept);
+        Driven::start_keeping(program, files, None)
+    }
+
+    /// Starts `program` as `start` does; the person's choices kept by
+    /// `keeping` (what was kept, and what keeps them) instead of in the
+    /// program's settings folder, as the browser's page keeps them.
+    pub fn start_keeping(program: Arc<dyn Program>, files: AppFiles, keeping: Option<(std::collections::BTreeMap<String, String>, crate::choices::Keeper)>) -> Driven {
+        match keeping {
+            Some((kept, keeper)) => crate::choices::start_kept(&files, kept, keeper),
+            None => {
+                let kept = clarity_runtime::settings::file(files.title).and_then(|f| f.parent().map(|p| p.to_path_buf()));
+                crate::choices::start(&files, kept);
+            }
+        }
         let given = Arc::new(Given::default());
         crate::files::set_system(given.clone());
         let stack = WindowStack::start(program, files);

@@ -144,8 +144,8 @@ fn the_windows_the_csharp_server_tests_carry_read() {
             read += 1;
         }
     }
-    // Every window the C# tests carry reads, however many they are.
-    assert!(read >= 3, "only {read} windows read");
+    // Every window the C# server tests carry reads (Shelf and Crunch, since the session mirror's went).
+    assert!(read >= 2, "only {read} windows read");
 }
 
 #[test]

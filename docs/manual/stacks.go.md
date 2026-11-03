@@ -10,7 +10,7 @@ Name the stack in the project file, or pick it on the Project tab:
 stack go desktop
 ```
 
-The backend is Go and the windows are drawn by Clarity.UI, Clarity's own UI, in the program's own process. `stack go web` makes a web server that shows the windows in a browser with Clarity's web renderer, and `stack go desktop cli` adds the command-line program. The desktop and the web program are not generated together yet. See [The project file](project.file.md).
+The backend is Go and the windows are drawn by Clarity.UI, Clarity's own UI, in the program's own process. `stack go web` makes a web server: its page runs Clarity.UI in the browser (the same library, compiled once for the browser), which asks the program on the server for each handler, edit and engine frame. With `stack go desktop web` it is one program, which opens its window, or serves when started with `--serve`. `stack go desktop cli` adds the command-line program. See [The project file](project.file.md).
 
 ## What is generated
 
@@ -21,7 +21,8 @@ Clarity writes a Go module into the output folder (`out` by default), all in pac
 - `schema.go`: the migration steps of every database Clarity owns.
 - `main.go`: opens and migrates the databases and runs the windows on Clarity.UI (or serves them, for the web target).
 - `ui/windows/` and `ui/apps/`: each window, and each app's frame (menu bar, toolbar, ribbon, sidebars, footer), as markup (`.cxaml`, Clarity's own dialect): its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`). Change a window in Clarity; Generate writes these files again.
-- `ui/themes/` and `ui/resources/`: the project's themes as Clarity resolves them, and its pictures and other resources. The web target has Clarity's screen in `ui/` instead (`index.html`, `runtime.js`, `runtime.css`).
+- `ui/themes/` and `ui/resources/`: the project's themes as Clarity resolves them, and its pictures and other resources.
+- `browser/`, with the `web` target: the files the server serves. `index.html` is the page; `clarity/files.json` holds what Clarity.UI draws from in the browser (the windows and app frames, the themes, the data dictionary, the title and size) and `clarity/resources/` the resources; `clarity-ui.js`, `clarity-ui.wasm`, `clarity-ui-worker.js` and `clarity-ui-page.js` are Clarity.UI for the browser, which Clarity copies in when it writes the program (from the folder `CLARITY_UI_BROWSER` names, else the ones Clarity carries, else the release's archive, fetched once). The server answers the browser at `/clarity/invoke`, requests side by side, so a long call shows its bar and Stop there too. It listens at `--address host:port`, else `CLARITY_ADDRESS`, else the project's port. A web program alone needs no cgo and no native library.
 - `model.json`: the data dictionary and the translations; `facts.json`: what the parts read beside the values (each field's label, format and range).
 - `engines/`: the [engines](code.engines.md), those beside the screen too, which the program runs.
 - `parts.go` and `parts/`: the [custom parts](design.custom-parts.md) written in Go, each a module of its own.
@@ -34,7 +35,7 @@ The program embeds all of it. Do not edit these files. Change the project in Cla
 The generated module carries no runtime sources. It requires the Go module `github.com/petervdpas/Clarity/runtimes/go`, which has these packages:
 
 - `clarity`: records, storage (SQLite included), queries, migrations and the binding to the screen.
-- `shell`: the commands of the screen, and the web server.
+- `shell`: the commands of the screen, the program Clarity.UI asks (on the desktop and over the web), and the web server.
 - `ui`: the desktop on Clarity.UI, calling its library through cgo.
 - `postgresql`, `mysql` and `sqlserver`: one per server database. A generated module imports only the ones its data sources use, and its go.mod leaves out the others' dependencies.
 - `engine`: runs [engines](code.engines.md) with wazero, imported only when the project has one.

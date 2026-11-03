@@ -20,15 +20,6 @@ public sealed record Setting(string Type, string? Min = null, string? Max = null
 
 public static partial class KeptSettings
 {
-    /// <summary>
-    /// Where settings are kept instead of a file (DESIGN 7.6): in a browser,
-    /// its own storage, by a key; none for the file. A store keeps no secret:
-    /// a browser has no protected store, so the person gives them again.
-    /// </summary>
-    public static (Func<string, string?> Read, Action<string, string> Write)? Store { get; set; }
-
-    static string StoreKey(string program) => $"settings:{program}";
-
     /// <summary>Where <paramref name="program"/> keeps its settings on system <paramref name="os"/>, with <paramref name="env"/> giving the environment; null when it names no folder for them.</summary>
     public static string? FileIn(string os, Func<string, string?> env, string program)
     {
@@ -72,8 +63,6 @@ public static partial class KeptSettings
     {
         try
         {
-            if (Store is { } store)
-                return store.Read(StoreKey(program)) is { } text && JsonNode.Parse(text) is JsonObject stored ? stored : [];
             return File(program) is { } file && System.IO.File.Exists(file) && JsonNode.Parse(System.IO.File.ReadAllText(file)) is JsonObject kept ? kept : [];
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
@@ -85,11 +74,6 @@ public static partial class KeptSettings
     /// <summary>Keeps <paramref name="values"/> as the settings of <paramref name="program"/>, written whole and then put in place.</summary>
     public static void Keep(string program, JsonObject values)
     {
-        if (Store is { } store)
-        {
-            store.Write(StoreKey(program), values.ToJsonString());
-            return;
-        }
         var file = File(program) ?? throw new InvalidOperationException("this system names no folder for application settings");
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         var written = file + ".new";
@@ -106,7 +90,7 @@ public static partial class KeptSettings
         foreach (var name in secrets)
         {
             values.Remove(name);
-            if (Store is null && Secrets.Get(program, name) is { } secret)
+            if (Secrets.Get(program, name) is { } secret)
             {
                 values[name] = secret;
                 keptSecrets[(program, name)] = secret;
@@ -128,7 +112,7 @@ public static partial class KeptSettings
             var text = value?.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : "";
             // Only a secret that changed goes to the protected store: another
             // setting changing never needs it, nor fails where it cannot be reached.
-            if (Store is null && keptSecrets.GetValueOrDefault((program, name), "") != text)
+            if (keptSecrets.GetValueOrDefault((program, name), "") != text)
             {
                 Secrets.Set(program, name, text);
                 keptSecrets[(program, name)] = text;

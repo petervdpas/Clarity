@@ -42,6 +42,8 @@ fn main() {
         "-sEXPORTED_RUNTIME_METHODS=GL,UTF8ToString,stringToNewUTF8,HEAPU8".to_string(),
         format!("-sEXPORTED_FUNCTIONS={}", EXPORTED.join(",")),
         format!("--js-library={}", library.display()),
+        // Skia is C++: since Emscripten 6.0.6 emcc links C++'s libraries only when asked.
+        "-sDEFAULT_TO_CXX".to_string(),
     ];
     for arg in args {
         println!("cargo:rustc-link-arg-bins={arg}");

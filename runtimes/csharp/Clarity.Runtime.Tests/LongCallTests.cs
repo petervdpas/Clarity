@@ -122,4 +122,26 @@ public class LongCallTests
         kept!.Progress!(5, 10);
         Assert.Null(window.LongCall.Current);
     }
+
+    /// <summary>
+    /// A Stop that came before its call started (a screen that shows Stop as
+    /// it asks for the call) holds once the next handler starts; forgotten,
+    /// it stops nothing.
+    /// </summary>
+    [Fact]
+    public void A_stop_before_the_call_starts_holds_once_it_starts_and_forgotten_stops_nothing()
+    {
+        var window = new ShelfViewModel(null);
+        window.LongCall.StopAtStart();
+        var stopped = false;
+        window.Handle(() => stopped = Watching.Current!.Stop.IsCancellationRequested);
+        Assert.True(stopped);
+        // It held once: the next call runs on.
+        window.Handle(() => stopped = Watching.Current!.Stop.IsCancellationRequested);
+        Assert.False(stopped);
+        window.LongCall.StopAtStart();
+        window.LongCall.ForgetStop();
+        window.Handle(() => stopped = Watching.Current!.Stop.IsCancellationRequested);
+        Assert.False(stopped);
+    }
 }

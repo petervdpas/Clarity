@@ -151,6 +151,26 @@ fn two_probes() -> (Screen, ElementId, ElementId, Rc<RefCell<Vec<String>>>, Rc<R
 }
 
 #[test]
+fn the_pointer_hovers_one_element_at_a_time() {
+    let (mut screen, left, right, _, _) = two_probes();
+    screen.take_redraw();
+    let hovered = |screen: &Screen, id: ElementId| screen.element(id).unwrap().node().hovered;
+    let mut drawings = 0;
+    for (x, y) in [(50.0, 10.0), (60.0, 12.0), (300.0, 10.0), (300.0, 150.0)] {
+        screen.pointer_moved(x, y);
+        drawings += screen.take_redraw() as usize;
+        match (x, y) {
+            (300.0, 10.0) => assert!(!hovered(&screen, left) && hovered(&screen, right)),
+            (300.0, 150.0) => assert!(!hovered(&screen, left) && !hovered(&screen, right)),
+            _ => assert!(hovered(&screen, left) && !hovered(&screen, right)),
+        }
+    }
+    assert!(screen.hovered() != Some(left) && screen.hovered() != Some(right));
+    // One redraw for each change of what is hovered; a move within the same element asks none.
+    assert_eq!(3, drawings);
+}
+
+#[test]
 fn a_press_is_held_until_it_is_let_go_wherever_the_pointer_goes() {
     let (mut screen, left, _, seen, _) = two_probes();
     screen.pointer_pressed(10.0, 10.0, PointerButton::Left, 1);

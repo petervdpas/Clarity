@@ -96,3 +96,71 @@ fn a_note_said_before_a_window_of_its_own_closes_shows_in_its_opener() {
     screen.act_root::<WindowStack, _>(move |s, cx| s.apart_closed(closed, cx));
     assert_eq!(stack(&screen).notes().iter().map(|m| m.text.show()).collect::<Vec<_>>(), ["Saved"]);
 }
+
+/// A handler's `open ... in new window` opens a desktop window of its own,
+/// with its values, where the host gives them; else in place.
+#[test]
+fn a_handler_s_open_in_new_window_opens_apart_with_its_values() {
+    fn opens_apart(reply: &mut clarity_runtime::ui::Reply) {
+        let with = serde_json::Map::from_iter([("year".to_string(), serde_json::json!(2026))]);
+        reply.open.push(clarity_runtime::ui::OpenRequest { window: "Connection".into(), with, new_window: true });
+    }
+    let (mut screen, fake) = started();
+    stack(&screen).running().set_apart(true);
+    *fake.then.lock().unwrap() = Some(opens_apart);
+    click(&mut screen, "save");
+    assert_eq!(stack(&screen).windows(), ["Main"]);
+    let aparts = screen.act_root::<WindowStack, _>(|s, _| s.take_aparts()).unwrap();
+    let Some(Apart::Window(request)) = aparts.into_iter().next() else { panic!("a window of its own is asked for") };
+    assert_eq!(("Connection", false), (request.window.as_str(), request.dialog));
+    assert_eq!(Some(&serde_json::json!(2026)), request.with.get("year"));
+    // Where the host gives no windows of their own, it opens in place.
+    let (mut screen, fake) = started();
+    *fake.then.lock().unwrap() = Some(opens_apart);
+    click(&mut screen, "save");
+    assert_eq!(stack(&screen).windows(), ["Main", "Connection"]);
+}
+
+/// A handler that quits by code ends the program, from a window of its own too.
+#[test]
+fn a_handler_that_quits_by_code_ends_the_program_from_any_window() {
+    fn quits(reply: &mut clarity_runtime::ui::Reply) {
+        reply.quit = true;
+    }
+    let (mut screen, fake) = started();
+    *fake.then.lock().unwrap() = Some(quits);
+    click(&mut screen, "save");
+    assert!(stack(&screen).quitting());
+    assert!(stack(&screen).ended());
+    // From a window of its own: its stack quits, which ends the desktop's every window.
+    let (mut screen, fake) = started();
+    stack(&screen).running().set_apart(true);
+    click(&mut screen, "openConnectionApart");
+    let aparts = screen.act_root::<WindowStack, _>(|s, _| s.take_aparts()).unwrap();
+    let Some(Apart::Window(request)) = aparts.into_iter().next() else { panic!("a window of its own is asked for") };
+    let mut own = Screen::new(Box::new(WindowStack::apart(stack(&screen).running().clone(), request)), FILES.look(false));
+    own.resize(800.0, 500.0, 1.0);
+    drawn(&mut own);
+    *fake.then.lock().unwrap() = Some(quits);
+    click(&mut own, "keep");
+    assert!(own.act_root::<WindowStack, _>(|s, _| s.quitting()).unwrap());
+}
+
+/// A handler that opens the keys window by code shows it over the window,
+/// or asks for it in a window of its own where the host gives them.
+#[test]
+fn a_handler_that_opens_the_keys_window_by_code_shows_it() {
+    fn keys(reply: &mut clarity_runtime::ui::Reply) {
+        reply.keys = true;
+    }
+    let (mut screen, fake) = started();
+    *fake.then.lock().unwrap() = Some(keys);
+    click(&mut screen, "save");
+    assert!(screen.find::<clarity_ui::dialogs::KeysWindow>().is_some());
+    let (mut screen, fake) = started();
+    stack(&screen).running().set_apart(true);
+    *fake.then.lock().unwrap() = Some(keys);
+    click(&mut screen, "save");
+    let aparts = screen.act_root::<WindowStack, _>(|s, _| s.take_aparts()).unwrap();
+    assert!(matches!(aparts.as_slice(), [Apart::Keys]));
+}

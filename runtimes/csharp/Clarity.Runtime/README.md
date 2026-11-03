@@ -5,7 +5,7 @@
 
 **Clarity.Runtime** is the runtime of the C# applications that [Clarity](https://github.com/petervdpas/Clarity) generates. Clarity is a designer-first IDE with its own small language: you design the windows, data and logic, and it writes readable source code for Rust, Go, C#, C or C++. In a C# application, the generated code stands on this library.
 
-It holds no user interface: the windows are drawn by Clarity.UI ([Clarity.Ui](https://www.nuget.org/packages/Clarity.Ui/), with [Clarity.Ui.Desktop](https://www.nuget.org/packages/Clarity.Ui.Desktop/) and [Clarity.Ui.Browser](https://www.nuget.org/packages/Clarity.Ui.Browser/)).
+It holds no user interface: the windows are drawn by Clarity.UI ([Clarity.Ui](https://www.nuget.org/packages/Clarity.Ui/) on the desktop, which carries Clarity.UI's native library, and [Clarity.Ui.Browser](https://www.nuget.org/packages/Clarity.Ui.Browser/) in a browser).
 
 ## What it does
 

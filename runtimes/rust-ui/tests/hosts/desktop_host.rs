@@ -59,6 +59,24 @@ fn without_a_sound_device_it_plays_nothing_and_runs_on() {
 }
 
 #[test]
+fn a_sound_that_ended_is_let_go_and_one_that_repeats_goes_on() {
+    use std::num::NonZero;
+    let (mixer, mut speakers) = clarity_ui::desktop::sound::mixer(NonZero::new(1).unwrap(), NonZero::new(melodies::SAMPLE_RATE).unwrap());
+    let tone = melodies::wav(&[Note { hertz: Some(440.0), seconds: 0.05 }]);
+    let once = clarity_ui::desktop::sound::play_on(&mixer, &tone, 1.0, false);
+    let again = clarity_ui::desktop::sound::play_on(&mixer, &tone, 1.0, true);
+    assert!(!once.ended() && !again.ended());
+    // The speakers take a second of samples: the tone of 50 ms is over, the repeated one plays on.
+    for _ in 0..melodies::SAMPLE_RATE {
+        speakers.next();
+    }
+    assert!(once.ended());
+    assert!(!again.ended());
+    // Data that is no WAV plays nothing: it has ended at once.
+    assert!(clarity_ui::desktop::sound::play_on(&mixer, &[0; 10], 1.0, false).ended());
+}
+
+#[test]
 fn each_system_shows_its_own_dialogs() {
     assert_eq!(&[Way::Portal, Way::Commands], ways(Os::Linux));
     assert_eq!(&[Way::Commands], ways(Os::MacOs));

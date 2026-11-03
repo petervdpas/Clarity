@@ -12,7 +12,6 @@ using System.ComponentModel;
 using System.Text.Json;
 using Clarity.Runtime;
 using Clarity.Ui.Browser;
-using Clarity.Ui.Desktop;
 
 namespace Clarity.Ui.Tests;
 
@@ -53,39 +52,6 @@ public class CheckFixHostsTests
         public override void OnPointerPressed(PointerInput at) => Seen.Add("press");
     }
 
-    [Fact]
-    public async Task While_a_file_dialog_is_open_what_the_person_does_on_a_window_is_dropped()
-    {
-        var probe = new Probe();
-        var screen = new Screen(probe, ThemeLook.Clarity(dark: false));
-        screen.Resize(200, 100, 1);
-        using var open = new SemaphoreSlim(0);
-        var picker = new SystemFilePicker(_ =>
-        {
-            open.Wait();
-            return null;
-        }, _ => { }, action => action());
-        var input = new Queue<Action>();
-        void Press() => input.Enqueue(() => screen.PointerPressed(50, 50, PointerButton.Left));
-        void Release() => input.Enqueue(() => screen.PointerReleased(50, 50, PointerButton.Left));
-        void Pump() => DesktopWindow.Drain(input, () => DesktopWindow.BlocksInput(false, picker), action => action());
-        var choosing = picker.ChooseFolder("Choose a folder");
-        Press();
-        Release();
-        Pump();
-        Assert.Empty(probe.Seen);
-        // Dropped, not kept for when the dialog closed.
-        Assert.Empty(input);
-        open.Release();
-        Assert.Null(await choosing.WaitAsync(TestContext.Current.CancellationToken));
-        Press();
-        Release();
-        Pump();
-        Assert.Equal(["press"], probe.Seen);
-        // A dialog of the window's own blocks it too.
-        Assert.True(DesktopWindow.BlocksInput(true, picker));
-    }
-
     sealed class SizedViewModel() : WindowViewModel(null)
     {
         public override string Title => "Sized";
@@ -113,47 +79,6 @@ public class CheckFixHostsTests
         "Windows/Lender.cxaml" => """<Window name="Lender"><Label at="1,1" span="4" caption="Lender" /></Window>""",
         _ => null,
     }, systemDark: false);
-
-    [Fact]
-    public void A_desktop_window_opens_at_the_standard_size_the_size_its_window_names_or_a_dialog_s()
-    {
-        Assert.Equal(new Extent(1100, 760), DesktopWindow.StandardSize);
-        using (var plain = App())
-        {
-            var first = new PlainViewModel();
-            plain.Stack.Push(first);
-            Assert.Equal(DesktopWindow.StandardSize, DesktopWindow.OpenSize(plain, first, dialog: false));
-        }
-        using (var sized = App())
-        {
-            var first = new SizedViewModel();
-            sized.Stack.Push(first);
-            Assert.Equal(new Extent(640, 480), DesktopWindow.OpenSize(sized, first, dialog: false));
-        }
-        using var dialog = App();
-        var pick = new PickFriendViewModel();
-        dialog.Stack.Push(pick);
-        Assert.Equal(WindowStack.DialogSize(dialog.Stack.View!, pick), DesktopWindow.OpenSize(dialog, pick, dialog: true));
-    }
-
-    [Fact]
-    public void A_dialog_in_a_window_of_its_own_starts_on_its_first_part_and_the_title_is_the_top_window_s()
-    {
-        using var dialog = App();
-        dialog.Stack.Push(new PickFriendViewModel());
-        Shot.Of(dialog.Screen, 560, 200).Dispose();
-        var first = Assert.IsType<ButtonPart>(DesktopWindow.FirstFocus(dialog));
-        Assert.Equal("cancelButton", first.Spec.Name);
-        Assert.Equal("Pick a friend", DesktopWindow.TitleOf(dialog));
-
-        using var app = App();
-        var lender = new LenderViewModel();
-        app.Stack.Push(lender);
-        string? title = null;
-        app.Stack.TitleChanged += () => title = DesktopWindow.TitleOf(app);
-        lender.OpenHere(new PlainViewModel());
-        Assert.Equal("Plain", title);
-    }
 
     [Fact]
     public void The_systems_close_makes_the_top_window_hear_its_on_close_and_tells_the_opener()
@@ -204,39 +129,12 @@ public class CheckFixHostsTests
         Assert.Equal("Name: Ada", board.Text);
     }
 
-    [Fact]
-    public void A_window_shows_the_application_s_icon_or_Clarity_s()
-    {
-        // This assembly carries no icon.png: Clarity's own, at every size the system picks from.
-        var icon = WindowSystem.Icon(typeof(CheckFixHostsTests).Assembly);
-        Assert.Equal([16, 32, 48, 64, 128], icon.Select(i => i.Width));
-        Assert.All(icon, i => Assert.Equal(i.Width, i.Height));
-        Assert.All(icon, i => Assert.Equal(i.Width * i.Height * 4, i.Pixels.Length));
-    }
-
     // -- Sound -----------------------------------------------------------------------------------------
 
     sealed class Held : IDisposable
     {
         public int Released;
         public void Dispose() => Released++;
-    }
-
-    [Fact]
-    public void A_sound_that_ended_lets_go_on_the_screen_s_thread_and_one_that_repeats_goes_on()
-    {
-        var posted = new List<Action>();
-        var once = new Held();
-        SoundFlowOutput.Ended(repeats: false, once, posted.Add);
-        // Not on the audio thread that said it ended: posted to the screen's.
-        Assert.Equal(0, once.Released);
-        Assert.Single(posted)();
-        Assert.Equal(1, once.Released);
-        var looping = new Held();
-        posted.Clear();
-        SoundFlowOutput.Ended(repeats: true, looping, posted.Add);
-        Assert.Empty(posted);
-        Assert.Equal(0, looping.Released);
     }
 
     // -- Unconnected -----------------------------------------------------------------------------------
@@ -261,49 +159,6 @@ public class CheckFixHostsTests
         public void Show(WindowViewModel first, IReadOnlyList<Message> said, Action whenClosed) => Close = whenClosed;
         void IUnconnectedScreen.Connected(Db db, WindowViewModel main) => Connected = db;
         void IUnconnectedScreen.Ended() { }
-    }
-
-    [Fact]
-    public void The_databases_connected_while_unconnected_close_as_the_application_ends()
-    {
-        foreach (var fails in new[] { false, true })
-        {
-            var setting = new Setting();
-            var memory = new List<Db>();
-            var flow = new Unconnected
-            {
-                Connect = Db.Empty,
-                Empty = () =>
-                {
-                    var db = Db.Empty();
-                    memory.Add(db);
-                    return db;
-                },
-                Main = db => new Card(db, "Main"),
-                Window = db => new Card(db, "Preferences"),
-                Settings = setting,
-            };
-            var desk = new Desk();
-            void Loop()
-            {
-                // The person keeps the connection and closes the window; the main window works on it until the app ends.
-                setting.Change();
-                desk.Close!();
-                Assert.False(desk.Connected!.Disposed);
-                if (fails)
-                    throw new InvalidOperationException("the loop failed");
-            }
-            try
-            {
-                DesktopWindow.RunUnconnected(flow, Text.Plain("not kept"), desk, Loop, () => desk.Connected);
-            }
-            catch (InvalidOperationException) when (fails)
-            {
-            }
-            Assert.True(desk.Connected!.Disposed);
-            // The memory database the windows worked on meanwhile went with its window.
-            Assert.True(Assert.Single(memory).Disposed);
-        }
     }
 
     // -- A custom part ----------------------------------------------------------------------------------

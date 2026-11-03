@@ -115,6 +115,10 @@ fn file<'a>(files: &'a [OutFile], path: &str) -> &'a str {
     &files.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("no {path} in {:?}", files.iter().map(|f| &f.path).collect::<Vec<_>>())).text
 }
 
+fn lacks(text: &str, unexpected: &str) {
+    assert!(!text.contains(unexpected), "did not expect {unexpected:?} in:\n{text}");
+}
+
 fn has(text: &str, expected: &str) {
     assert!(text.contains(expected), "expected\n{expected}\nin\n{text}");
 }
@@ -124,14 +128,19 @@ fn a_clarity_ui_desktop_application() {
     let files = files();
     let project = file(&files, "Shop.csproj");
     has(project, "<OutputType>WinExe</OutputType>");
-    // Clarity.UI's desktop host brings Clarity.Ui and the runtime.
-    has(project, "<PackageReference Include=\"Clarity.Ui.Desktop\"");
+    // Clarity.Ui brings the native Clarity.UI library, whose desktop host shows the windows, and the runtime.
+    has(project, "<PackageReference Include=\"Clarity.Ui\"");
+    lacks(project, "Clarity.Ui.Desktop");
+    // The model, which the library reads its facts, translations and keys from.
+    has(project, "<EmbeddedResource Include=\"model.json\" LogicalName=\"model.json\"");
+    has(file(&files, "model.json"), "\"project\"");
     // The windows as markup, the app frames and the themes travel in the program.
     has(project, "<EmbeddedResource Include=\"Windows/*.cxaml\" LogicalName=\"Windows/%(Filename)%(Extension)\" />");
     has(file(&files, "Windows/OrderForm.cxaml"), "<Window ");
     has(file(&files, "Windows/OrderFormViewModel.cs"), "public sealed partial class OrderFormViewModel : WindowViewModel");
     let program = file(&files, "Program.cs");
-    has(program, "using Clarity.Ui.Desktop;");
+    has(program, "using Clarity.Ui;");
+    lacks(program, "Clarity.Ui.Desktop");
     has(program, "Locale.Start(Texts.BaseLanguage, Texts.Languages, ");
     has(program, "AppThemes.Start();");
     has(program, "DesktopWindow.Run(new OrderFormViewModel(databases));");

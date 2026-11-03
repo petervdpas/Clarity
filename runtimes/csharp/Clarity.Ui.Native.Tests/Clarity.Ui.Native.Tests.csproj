@@ -1,0 +1,26 @@
+<!-- The C# layer over the native Clarity.UI library: marshalling, callbacks,
+     lifetimes, errors crossing the boundary, and the C# window model
+     answering the library. Drawing and the parts' behaviour are tested once,
+     in Rust (runtimes/rust-ui/tests). -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Clarity.Ui/Clarity.Ui.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Clarity.Ui" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>

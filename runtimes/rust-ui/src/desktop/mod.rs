@@ -151,9 +151,14 @@ fn desktop_files() -> Arc<SystemFilePicker> {
 /// in its look for the system's light or dark. Ends when its own windows
 /// closed or it quit.
 pub fn run(program: impl Program, files: AppFiles) -> ExitCode {
+    run_shared(Arc::new(program), files)
+}
+
+/// Runs a program held elsewhere too (one the C interface gives), as `run` does.
+pub fn run_shared(program: Arc<dyn Program>, files: AppFiles) -> ExitCode {
     // Driven without a window, step by step from standard input (DESIGN 1.6).
     if std::env::var_os(crate::headless::VARIABLE).is_some_and(|v| !v.is_empty()) {
-        return crate::headless::run(program, files);
+        return crate::headless::run_shared(program, files);
     }
     // The fonts the project carries (`fonts/*.ttf` in its resources) come before the system's.
     crate::fonts::carry_fallbacks(files.resources);
@@ -161,7 +166,7 @@ pub fn run(program: impl Program, files: AppFiles) -> ExitCode {
     let kept = clarity_runtime::settings::file(files.title).and_then(|f| f.parent().map(|p| p.to_path_buf()));
     crate::choices::start(&files, kept);
     prepare();
-    let stack = WindowStack::start(Arc::new(program), files);
+    let stack = WindowStack::start(program, files);
     // Dialogs, the keys window and new windows get desktop windows of their own.
     stack.running().set_apart(true);
     let title = stack.title();
@@ -180,9 +185,11 @@ pub fn show(screen: Screen, mut options: ShowOptions) -> ExitCode {
     };
     let looks: Option<Rc<dyn Fn(bool) -> Arc<ThemeLook>>> = options.looks.take().map(Rc::from);
     let mut host = Host::new(event_loop.create_proxy(), looks, window_system::window_icon(options.icon));
+    *OUTSIDE.lock().unwrap_or_else(|p| p.into_inner()) = Some(event_loop.create_proxy());
     host.untold = untold_moves(&event_loop);
     host.add(screen, options.title.clone(), (options.width, options.height), None, false);
     let ran = event_loop.run_app(&mut host);
+    *OUTSIDE.lock().unwrap_or_else(|p| p.into_inner()) = None;
     // The system's light or dark is no longer followed once the windows are gone.
     host.theme_following = None;
     for win in host.wins.iter_mut() {
@@ -250,6 +257,19 @@ fn untold_moves(event_loop: &EventLoop<Wake>) -> bool {
 enum Wake {
     Done,
     Dark(bool),
+    /// Woken from another thread (`wake`): every window draws anew.
+    Outside,
+}
+
+/// The loop that runs now, to wake from another thread; none while none runs.
+static OUTSIDE: Mutex<Option<EventLoopProxy<Wake>>> = Mutex::new(None);
+
+/// Wakes the desktop that runs now from any thread: every window reads its
+/// values again and draws. Does nothing while no desktop runs.
+pub fn wake() {
+    if let Some(proxy) = OUTSIDE.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
+        let _ = proxy.send_event(Wake::Outside);
+    }
 }
 
 /// How Skia draws in a window: through its OpenGL, or in memory put on the window as pixels.
@@ -1032,10 +1052,19 @@ impl ApplicationHandler<Wake> for Host {
             }
             return;
         }
+        let outside = matches!(event, Wake::Outside);
         for i in 0..self.wins.len() {
             self.safely(|host| {
                 host.wins[i].screen.take_later();
+                if outside {
+                    host.wins[i].screen.invalidate();
+                }
             });
+            if outside {
+                if let Some(shown) = &self.wins[i].shown {
+                    shown.window.request_redraw();
+                }
+            }
         }
     }
 

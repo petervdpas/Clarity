@@ -227,6 +227,9 @@ enum Wire {
         key: String,
         #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
         values: BTreeMap<String, Slot>,
+        /// Clarity's own words carry their English, shown where the language has no value.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        text: String,
     },
     Slots { text: String, values: BTreeMap<String, Slot> },
 }
@@ -234,7 +237,7 @@ enum Wire {
 impl Serialize for Text {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         if let Some(key) = &self.key {
-            Wire::Keyed { key: key.clone(), values: self.values.clone() }.serialize(serializer)
+            Wire::Keyed { key: key.clone(), values: self.values.clone(), text: self.text.clone() }.serialize(serializer)
         } else if self.values.is_empty() {
             Wire::Plain(self.show()).serialize(serializer)
         } else {
@@ -251,7 +254,7 @@ impl<'de> Deserialize<'de> for Text {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> std::result::Result<Text, D::Error> {
         Ok(match Wire::deserialize(deserializer)? {
             Wire::Plain(text) => Text::plain(text),
-            Wire::Keyed { key, values } => Text { text: String::new(), values, key: Some(key) },
+            Wire::Keyed { key, values, text } => Text { text, values, key: Some(key) },
             Wire::Slots { text, values } => Text { text, values, key: None },
         })
     }
@@ -400,6 +403,10 @@ pub struct Message {
 pub struct OpenRequest {
     pub window: String,
     pub with: Map<String, Value>,
+    /// `open Window in new window`: a desktop window of its own where the
+    /// screen gives them, else in place.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub new_window: bool,
 }
 
 /// `ask ... then handler(values)` (DESIGN 5.14): a question the screen
@@ -486,6 +493,13 @@ pub struct Reply {
     /// value of its list's kind: the screen keeps the text and marks it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub refused: bool,
+    /// The handler ended the program (the built-in `quit` run by code):
+    /// every window closes, windows of their own too.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub quit: bool,
+    /// The handler opened Clarity's keys window (the built-in `keys` run by code).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub keys: bool,
 }
 
 /// What a handler can do to the screen.
@@ -503,6 +517,10 @@ pub struct Ui {
     hears: Vec<Hear>,
     copied: Option<Text>,
     pub close: bool,
+    /// The handler ended the program (`quit`).
+    pub quit: bool,
+    /// The handler opened Clarity's keys window (`keys`).
+    pub keys: bool,
 }
 
 impl Ui {
@@ -796,7 +814,16 @@ impl Ui {
         self.open.push(OpenRequest {
             window: window.to_string(),
             with: with.into_iter().map(|(k, v)| (k.to_string(), v)).collect(),
+            new_window: false,
         });
+    }
+
+    /// `open Window in new window`: in a desktop window of its own where the screen gives them.
+    pub fn open_new(&mut self, window: &str, with: Vec<(&str, Value)>) {
+        self.open(window, with);
+        if let Some(open) = self.open.last_mut() {
+            open.new_window = true;
+        }
     }
 
     /// Closes the dialog with `value`, which the handler that asked for it gets.
@@ -831,6 +858,8 @@ impl Ui {
             copy: self.copied,
             step: 0,
             refused: false,
+            quit: self.quit,
+            keys: self.keys,
         }
     }
 
@@ -1026,6 +1055,47 @@ mod tests {
         assert_eq!(answer_id(&serde_json::json!(5)).unwrap(), 5);
         assert_eq!(answer_id(&serde_json::json!({ "id": 7, "title": "Blue" })).unwrap(), 7);
         assert!(answer_id(&serde_json::json!("seven")).is_err());
+    }
+
+    /// Quitting, the keys window and a window of its own go in the reply
+    /// only when a handler asked for them; a reply without them still reads.
+    #[test]
+    fn a_reply_says_quit_keys_and_a_new_window_only_when_asked() {
+        let mut ui = Ui::from_state(&WindowState::new("Orders", Map::new()));
+        let plain = serde_json::to_value(ui_reply_of(&mut ui)).unwrap();
+        assert!(plain.get("quit").is_none() && plain.get("keys").is_none());
+        ui.open("Pick", Vec::new());
+        ui.open_new("Report", vec![("year", Value::from(2026))]);
+        ui.quit = true;
+        ui.keys = true;
+        let reply = ui.reply("Orders", Map::new());
+        let json = serde_json::to_value(&reply).unwrap();
+        assert_eq!(json["quit"], Value::Bool(true));
+        assert_eq!(json["keys"], Value::Bool(true));
+        assert!(json["open"][0].get("new_window").is_none());
+        assert_eq!(json["open"][1]["new_window"], Value::Bool(true));
+        let back: Reply = serde_json::from_value(json).unwrap();
+        assert_eq!(back, reply);
+        let old: Reply = serde_json::from_value(serde_json::json!({"state": {"window": "Orders", "instance": 0, "data": {}}, "messages": [], "open": [{"window": "Pick", "with": {}}], "close": false})).unwrap();
+        assert!(!old.quit && !old.keys && !old.open[0].new_window);
+    }
+
+    /// Clarity's own words keep their English across the wire, so a screen
+    /// whose language has no value for the key shows the English, not the key.
+    #[test]
+    fn a_keyed_text_keeps_its_english_across_the_wire() {
+        let own = Text::keyed("someOwnWordsForTheWire", "It was stopped");
+        let json = serde_json::to_value(&own).unwrap();
+        assert_eq!(json, serde_json::json!({ "key": "someOwnWordsForTheWire", "text": "It was stopped" }));
+        let back: Text = serde_json::from_value(json).unwrap();
+        assert_eq!(back, own);
+        assert_eq!(back.show(), "It was stopped");
+        // A project's key carries no English: it goes as the key alone.
+        assert_eq!(serde_json::to_value(Text::key("saveCaption")).unwrap(), serde_json::json!({ "key": "saveCaption" }));
+    }
+
+    fn ui_reply_of(ui: &mut Ui) -> Reply {
+        std::mem::take(ui).reply("Orders", Map::new())
     }
 
     #[test]

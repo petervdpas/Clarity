@@ -10,7 +10,6 @@
 
 using Clarity.Runtime;
 using Clarity.Ui.Browser;
-using Clarity.Ui.Desktop;
 using CommunityToolkit.Mvvm.Input;
 
 namespace Clarity.Ui.Tests;
@@ -300,57 +299,4 @@ public class CheckFixScreenTests
         Assert.Equal("Color tip", TipAt(((ColorPart)parts[3]).Swatch.Bounds));
     }
 
-    [Fact]
-    public void A_key_clarity_ui_has_no_key_for_is_written_and_matched_by_its_own_name()
-    {
-        var f13 = new KeyInput(Key.Other, Modifiers.Control) { Name = "F13" };
-        Assert.Equal("Ctrl+F13", KeysWindow.Written(f13));
-        Assert.True(Shortcuts.Matches("Ctrl+F13", f13, typing: false));
-        Assert.False(Shortcuts.Matches("Ctrl+F14", f13, typing: false));
-        Assert.False(Shortcuts.Matches("F13", f13, typing: false));
-        // Without a name, or with one that is no word, it stays unwritten.
-        Assert.Null(KeysWindow.Written(new KeyInput(Key.Other, Modifiers.None)));
-        Assert.Null(KeysWindow.Written(new KeyInput(Key.Other, Modifiers.None) { Name = "é" }));
-        Assert.Null(KeysWindow.Written(new KeyInput(Key.Other, Modifiers.Control) { Name = "Tab" }));
-        // The hosts give the name of such a key, and none for the keys Clarity.UI has or that only change others.
-        Assert.Equal("F13", DesktopWindow.NameOf(Silk.NET.Input.Key.F13));
-        Assert.Equal("Pause", DesktopWindow.NameOf(Silk.NET.Input.Key.Pause));
-        Assert.Null(DesktopWindow.NameOf(Silk.NET.Input.Key.A));
-        Assert.Null(DesktopWindow.NameOf(Silk.NET.Input.Key.CapsLock));
-        Assert.Null(DesktopWindow.NameOf(Silk.NET.Input.Key.SuperLeft));
-        Assert.Equal("F13", WebKeys.NameOf("F13"));
-        Assert.Equal("Pause", WebKeys.NameOf("Pause"));
-        Assert.Null(WebKeys.NameOf("a"));
-        Assert.Null(WebKeys.NameOf("Tab"));
-        Assert.Null(WebKeys.NameOf("Meta"));
-        Assert.Null(WebKeys.NameOf("é"));
-        // A button with such a key is pressed by it.
-        var host = new TestHost();
-        var spec = WindowMarkup.Read("""<Window name="Keys"><Button name="mark" at="1,1" span="3" caption="Mark" key="Ctrl+F13" onclick="mark" /></Window>""");
-        var view = new WindowView(spec, host);
-        var screen = new Screen(view, ThemeLook.Clarity(dark: false)) { Keys = view.KeyPressed };
-        screen.Resize(800, 400, 1);
-        Assert.True(screen.KeyPressed(f13));
-        Assert.Equal(["run mark click mark"], host.Log);
-    }
-
-    [Fact]
-    public void A_digit_key_is_pressed_from_the_number_pad_too()
-    {
-        // The desktop gives the number pad's 7 as the 7 beside the letters: a second gesture of key 7.
-        Assert.Equal(Key.D7, DesktopWindow.KeyOf(Silk.NET.Input.Key.Keypad7));
-        Assert.Equal(Key.D7, DesktopWindow.KeyOf(Silk.NET.Input.Key.Number7));
-        var host = new TestHost();
-        var spec = WindowMarkup.Read("""<Window name="Pad"><Button name="seven" at="1,1" span="3" caption="7" key="7" onclick="seven" /></Window>""");
-        var view = new WindowView(spec, host);
-        var screen = new Screen(view, ThemeLook.Clarity(dark: false)) { Keys = view.KeyPressed };
-        screen.Resize(800, 400, 1);
-        foreach (var key in new[] { Silk.NET.Input.Key.Keypad7, Silk.NET.Input.Key.Number7 })
-        {
-            screen.KeyPressed(new KeyInput(DesktopWindow.KeyOf(key), Modifiers.None) { Name = DesktopWindow.NameOf(key) });
-            // The character the key typed does not press it again.
-            screen.TextTyped("7");
-        }
-        Assert.Equal(["run seven click seven", "run seven click seven"], host.Log);
-    }
 }

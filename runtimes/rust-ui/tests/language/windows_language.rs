@@ -22,9 +22,12 @@ const GREET: &str = r#"<Window name="Main">
   <Textbox name="second" at="1,3" span="6" />
   <Button name="go" at="1,4" span="6" caption="Go" />
   <Button name="openOther" at="7,4" span="6" caption="Other" opens="Other" />
+  <Button name="openAsk" at="1,5" span="6" caption="Ask" opens="Ask" />
 </Window>"#;
 
 const OTHER: &str = r#"<Window name="Other"><Label name="greeting" at="1,1" span="6" caption="@hello" /><Button name="back" at="1,2" span="3" caption="Back" onclick="done" /></Window>"#;
+
+const ASK: &str = r#"<Window name="Ask"><Label name="askGreeting" at="1,1" span="6" caption="@hello" /></Window>"#;
 
 const GREET_MODEL: &str = r#"{
   "project": {
@@ -32,12 +35,13 @@ const GREET_MODEL: &str = r#"{
     "translations": {"en": {"hello": "Hello", "greetTitle": "Greeting"}, "nl": {"hello": "Hallo", "greetTitle": "Groet"}},
     "files": [{"pages": [
       {"name": {"name": "Main"}, "kind": "window", "title": "@greetTitle"},
-      {"name": {"name": "Other"}, "kind": "window", "title": "@greetTitle"}
+      {"name": {"name": "Other"}, "kind": "window", "title": "@greetTitle"},
+      {"name": {"name": "Ask"}, "kind": "dialog", "title": "@greetTitle"}
     ]}]
   }
 }"#;
 
-const GREET_FILES: AppFiles = AppFiles { windows: &[("Main", GREET), ("Other", OTHER)], apps: &[], themes: &[], model: GREET_MODEL, resources: &[], title: "Greet", width: 800.0, height: 400.0 };
+const GREET_FILES: AppFiles = AppFiles { windows: &[("Main", GREET), ("Other", OTHER), ("Ask", ASK)], apps: &[], themes: &[], model: GREET_MODEL, resources: &[], title: "Greet", width: 800.0, height: 400.0 };
 
 fn greet() -> (Screen, Arc<Fake>) {
     clarity_ui::choices::start(&GREET_FILES, None);
@@ -83,6 +87,21 @@ fn a_language_change_rebuilds_the_views_of_every_window_and_the_title_follows() 
     // The window below is made again too: it shows in Dutch once it is on top.
     click(&mut screen, "back");
     assert_eq!(vec!["Main"], stack(&screen).windows());
+    assert_eq!("Hallo", greeting(&screen));
+    choose(&mut screen, "en");
+}
+
+#[test]
+fn a_language_change_remakes_a_dialog_over_the_window_too() {
+    let _alone = super::one_at_a_time();
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let (mut screen, _) = greet();
+    click(&mut screen, "openAsk");
+    assert_eq!(1, screen.overlays().len());
+    let label = |screen: &Screen| screen.element(named(screen, "askGreeting")).unwrap().as_any().downcast_ref::<LabelPart>().unwrap().text();
+    assert_eq!("Hello", label(&screen));
+    choose(&mut screen, "nl");
+    assert_eq!("Hallo", label(&screen));
     assert_eq!("Hallo", greeting(&screen));
     choose(&mut screen, "en");
 }

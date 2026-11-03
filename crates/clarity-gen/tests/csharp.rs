@@ -89,9 +89,7 @@ fn has(text: &str, expected: &str) {
 
 /// The version of the runtime's packages, as runtimes/csharp/Directory.Build.props sets it.
 fn runtime_version() -> &'static str {
-    let props = include_str!("../../../runtimes/csharp/Directory.Build.props");
-    let start = props.find("<Version>").unwrap() + "<Version>".len();
-    &props[start..start + props[start..].find("</Version>").unwrap()]
+    clarity_gen::csharp_runtime_version()
 }
 
 #[test]
@@ -113,13 +111,14 @@ fn writes_a_complete_dotnet_project_on_the_runtime_packages() {
             "Texts.resx",
             "Windows/OrderForm.cxaml",
             "Windows/OrderFormViewModel.cs",
+            "model.json",
         ]
     );
     let project = file(&files, "Shop.csproj");
     has(project, "<TargetFramework>net10.0</TargetFramework>");
     has(project, "<RootNamespace>Shop</RootNamespace>");
-    // Clarity.Ui.Desktop brings Clarity.Ui, Clarity.Runtime and the packages they stand on.
-    has(project, &format!("<PackageReference Include=\"Clarity.Ui.Desktop\" Version=\"{}\" />", runtime_version()));
+    // Clarity.Ui brings the native Clarity.UI library, Clarity.Runtime and the packages they stand on.
+    has(project, &format!("<PackageReference Include=\"Clarity.Ui\" Version=\"{}\" />", runtime_version()));
     assert!(!project.contains("Include=\"Clarity.Runtime\"") && !project.contains("Microsoft.Data.Sqlite"), "{project}");
 }
 
@@ -134,11 +133,11 @@ fn the_local_runtime_projects_can_stand_in_for_the_packages() {
         &project,
         &format!(
             "  <ItemGroup Condition=\"'$(ClarityRuntime)' == ''\">
-    <PackageReference Include=\"Clarity.Ui.Desktop\" Version=\"{v}\" />
+    <PackageReference Include=\"Clarity.Ui\" Version=\"{v}\" />
     <PackageReference Include=\"Clarity.Runtime.Sqlite\" Version=\"{v}\" />
   </ItemGroup>
   <ItemGroup Condition=\"'$(ClarityRuntime)' != ''\">
-    <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Ui.Desktop/Clarity.Ui.Desktop.csproj\" />
+    <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Ui/Clarity.Ui.csproj\" />
     <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Runtime.Sqlite/Clarity.Runtime.Sqlite.csproj\" />
   </ItemGroup>",
             v = runtime_version()

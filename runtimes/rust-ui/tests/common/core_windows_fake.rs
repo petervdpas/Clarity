@@ -120,10 +120,12 @@ pub struct Fake {
     pub found: Value,
     /// A stored field's bytes, and a file store's file.
     pub bytes: Option<Vec<u8>>,
+    /// What the next handler's reply asks besides, as code asks it (quit, the keys window, a window of its own).
+    pub then: Mutex<Option<fn(&mut Reply)>>,
 }
 
 pub fn reply(state: WindowState) -> Reply {
-    Reply { state, messages: Vec::new(), shown: Default::default(), open: Vec::new(), close: false, asks: Vec::new(), result: None, hears: Vec::new(), copy: None, step: 0, refused: false }
+    Reply { state, messages: Vec::new(), shown: Default::default(), open: Vec::new(), close: false, asks: Vec::new(), result: None, hears: Vec::new(), copy: None, step: 0, refused: false, quit: false, keys: false }
 }
 
 fn asking(state: WindowState, form: AskForm, handler: &str, values: Vec<Value>) -> Reply {
@@ -133,6 +135,61 @@ fn asking(state: WindowState, form: AskForm, handler: &str, values: Vec<Value>) 
 }
 
 impl Fake {
+    fn dispatched(&self, mut state: WindowState, handler: &str) -> Answer<Reply> {
+        self.said(format!("dispatch {handler}"));
+        match handler {
+            "warn" => {
+                let mut r = reply(state);
+                r.messages.push(Message { level: Level::Warning, text: Text::plain("Careful") });
+                Ok(r)
+            }
+            "ask" => Ok(asking(state, AskForm::Confirm { yes: Some(Text::plain("Delete")), no: Some(Text::plain("Keep")) }, "confirmed", vec![json!(1)])),
+            "askNumber" => Ok(asking(state, AskForm::Value { ty: "integer".into(), of: None, only: None, default: None }, "numbered", Vec::new())),
+            "askColor" => Ok(asking(state, AskForm::Value { ty: "enum".into(), of: Some("Color".into()), only: Some(vec![json!("green"), json!("blue")]), default: None }, "colored", Vec::new())),
+            "pick" => Ok(asking(state, AskForm::Window { window: "Pick".into(), with: Map::new() }, "picked", vec![json!("x")])),
+            "choose" => {
+                let mut r = reply(state);
+                r.close = true;
+                r.result = Some(json!("red"));
+                Ok(r)
+            }
+            "done" => {
+                let mut r = reply(state);
+                r.close = true;
+                Ok(r)
+            }
+            "refuse" => Err(Text::plain("A title first")),
+            "savedAndDone" => {
+                let mut r = reply(state);
+                r.messages.push(Message { level: Level::Info, text: Text::plain("Saved") });
+                r.close = true;
+                Ok(r)
+            }
+            "keep" => {
+                self.settings.lock().unwrap().insert("connection".into(), json!("kept"));
+                Ok(reply(state))
+            }
+            "long" => {
+                let watch = self.watch.lock().unwrap().clone();
+                if let Some(watch) = &watch {
+                    *watch.said.lock().unwrap() = Some((1, 4));
+                }
+                self.long_reached.store(true, Ordering::SeqCst);
+                let until = Instant::now() + Duration::from_secs(10);
+                while Instant::now() < until && !watch.as_ref().is_some_and(|w| w.stopped()) {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                state.data.insert("stopped".into(), json!(watch.is_some_and(|w| w.stopped())));
+                Ok(reply(state))
+            }
+            "unconnected" => {
+                let mut r = reply(state);
+                r.open.push(OpenRequest { window: "Connection".into(), with: Map::new(), new_window: false });
+                Ok(r)
+            }
+            _ => Ok(reply(state)),
+        }
+    }
     pub fn said(&self, what: String) {
         self.log.lock().unwrap().push(what);
     }
@@ -190,59 +247,15 @@ impl Program for Fake {
         self.said(format!("return {}", state.window));
         Ok(reply(state))
     }
-    fn dispatch_event(&self, mut state: WindowState, handler: &str) -> Answer<Reply> {
-        self.said(format!("dispatch {handler}"));
-        match handler {
-            "warn" => {
-                let mut r = reply(state);
-                r.messages.push(Message { level: Level::Warning, text: Text::plain("Careful") });
-                Ok(r)
-            }
-            "ask" => Ok(asking(state, AskForm::Confirm { yes: Some(Text::plain("Delete")), no: Some(Text::plain("Keep")) }, "confirmed", vec![json!(1)])),
-            "askNumber" => Ok(asking(state, AskForm::Value { ty: "integer".into(), of: None, only: None, default: None }, "numbered", Vec::new())),
-            "askColor" => Ok(asking(state, AskForm::Value { ty: "enum".into(), of: Some("Color".into()), only: Some(vec![json!("green"), json!("blue")]), default: None }, "colored", Vec::new())),
-            "pick" => Ok(asking(state, AskForm::Window { window: "Pick".into(), with: Map::new() }, "picked", vec![json!("x")])),
-            "choose" => {
-                let mut r = reply(state);
-                r.close = true;
-                r.result = Some(json!("red"));
-                Ok(r)
-            }
-            "done" => {
-                let mut r = reply(state);
-                r.close = true;
-                Ok(r)
-            }
-            "refuse" => Err(Text::plain("A title first")),
-            "savedAndDone" => {
-                let mut r = reply(state);
-                r.messages.push(Message { level: Level::Info, text: Text::plain("Saved") });
-                r.close = true;
-                Ok(r)
-            }
-            "keep" => {
-                self.settings.lock().unwrap().insert("connection".into(), json!("kept"));
-                Ok(reply(state))
-            }
-            "long" => {
-                let watch = self.watch.lock().unwrap().clone();
-                if let Some(watch) = &watch {
-                    *watch.said.lock().unwrap() = Some((1, 4));
-                }
-                self.long_reached.store(true, Ordering::SeqCst);
-                let until = Instant::now() + Duration::from_secs(10);
-                while Instant::now() < until && !watch.as_ref().is_some_and(|w| w.stopped()) {
-                    std::thread::sleep(Duration::from_millis(5));
-                }
-                state.data.insert("stopped".into(), json!(watch.is_some_and(|w| w.stopped())));
-                Ok(reply(state))
-            }
-            "unconnected" => {
-                let mut r = reply(state);
-                r.open.push(OpenRequest { window: "Connection".into(), with: Map::new() });
-                Ok(r)
-            }
-            _ => Ok(reply(state)),
+    fn dispatch_event(&self, state: WindowState, handler: &str) -> Answer<Reply> {
+        let then = self.then.lock().unwrap().take();
+        let answer = self.dispatched(state, handler);
+        match then {
+            Some(then) => answer.map(|mut reply| {
+                then(&mut reply);
+                reply
+            }),
+            None => answer,
         }
     }
     fn edit_event(&self, state: WindowState, edit: program::Edit) -> Answer<Reply> {

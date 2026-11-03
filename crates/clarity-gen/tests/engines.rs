@@ -75,3 +75,9 @@ fn c_and_cpp_call_an_engine_with_state_per_window_in_its_window() {
     let cpp = files(Backend::Cpp, Ui::Webview);
     has(&cpp, "src/modules/shop.cpp", "engines::board().call_in_as<int64_t>(ui.instance(), \"count\", nlohmann::json::array())");
 }
+
+/// Without an engine that says how far it is, C#'s handlers run on the screen's thread.
+#[test]
+fn csharp_watches_no_long_call_without_progress() {
+    has(&files(Backend::Csharp, Ui::Clarity), "Engines.cs", "    public const bool Watches = false;\n");
+}

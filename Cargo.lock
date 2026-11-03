@@ -1148,6 +1148,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "clarity-ui-ffi"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "clarity-runtime",
+ "clarity-ui",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "clarity-vault"
 version = "0.1.0"
 dependencies = [

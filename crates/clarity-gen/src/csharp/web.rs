@@ -16,9 +16,10 @@ use super::names::string;
 use super::{DRIVERS, Driver, HEADER, check_engines, main_window, opening, project_name};
 use crate::OutFile;
 
-/// The package the application's library is made on: Clarity.UI without a
-/// desktop of its own, which both the server and the browser program take.
-pub(super) const APP_PACKAGE: &str = "Clarity.Ui";
+/// The package the application's library is made on: Clarity.UI's drawing in
+/// C#, which the browser package carries until the browser build (DESIGN 7.9,
+/// R2), and which both the server and the browser program take.
+pub(super) const APP_PACKAGE: &str = "Clarity.Ui.Browser";
 
 /// The package of the server: the sessions over HTTP, and the browser program's files.
 const SERVER_PACKAGE: &str = "Clarity.Ui.Server";

@@ -4,7 +4,7 @@
 //! that Clarity.UI draws; the app frames (`Apps/*.cxaml`); the themes as
 //! Clarity resolves them; and the migration steps of every database. The
 //! project builds with `dotnet build` on the runtime's NuGet packages
-//! (Clarity.Ui.Desktop and the driver of each kind of database), or on the
+//! (Clarity.Ui and the driver of each kind of database), or on the
 //! runtime's own projects while working on them (the `ClarityRuntime`
 //! switch of the project file).
 
@@ -38,14 +38,62 @@ const RUNTIME_PROPS: &str = include_str!("../../../../runtimes/csharp/Directory.
 /// The version of the runtime's packages a project references: the one the
 /// runtime in this repository is (all its packages share it).
 pub fn runtime_version() -> &'static str {
-    let start = RUNTIME_PROPS.find("<Version>").expect("Directory.Build.props sets a Version") + "<Version>".len();
-    let end = RUNTIME_PROPS[start..].find("</Version>").expect("the Version is closed");
-    RUNTIME_PROPS[start..start + end].trim()
+    version_of(RUNTIME_PROPS).expect("Directory.Build.props sets a Version of digits and dots")
 }
 
-/// The package a desktop program draws its windows with: Clarity.UI in the
-/// system's own window, and through it Clarity.Ui and Clarity.Runtime (DESIGN 7.9).
-const DESKTOP_PACKAGE: &str = "Clarity.Ui.Desktop";
+/// The `<Version>` element of a props file: outside its comments, and only a
+/// version of digits and dots (`0.71.0`), so a comment that names the element
+/// can never put other text in every generated project file.
+fn version_of(props: &str) -> Option<&str> {
+    let mut rest = props;
+    let mut at = 0;
+    loop {
+        let comment = rest.find("<!--");
+        let element = rest.find("<Version>")?;
+        match comment {
+            Some(c) if c < element => {
+                let end = rest[c..].find("-->")? + c + "-->".len();
+                at += end;
+                rest = &props[at..];
+            }
+            _ => {
+                let start = element + "<Version>".len();
+                let end = rest[start..].find("</Version>")? + start;
+                let version = rest[start..end].trim();
+                let plain = !version.is_empty() && version.split('.').all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()));
+                return plain.then_some(version);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::version_of;
+
+    #[test]
+    fn the_runtime_version_is_digits_and_dots() {
+        let version = super::runtime_version();
+        assert!(version.split('.').all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit())), "{version}");
+    }
+
+    #[test]
+    fn a_comment_that_names_the_version_element_is_passed_over() {
+        let props = "<!-- the packages share one <Version> --><Project><PropertyGroup><Version>1.2.3</Version></PropertyGroup></Project>";
+        assert_eq!(version_of(props), Some("1.2.3"));
+    }
+
+    #[test]
+    fn a_version_that_is_not_digits_and_dots_is_none() {
+        assert_eq!(version_of("<Version>$(Other)</Version>"), None);
+        assert_eq!(version_of("<Project />"), None);
+    }
+}
+
+/// The package a desktop program draws its windows with: Clarity.UI, the C#
+/// layer over the native library that runs the system's own window, and
+/// through it Clarity.Runtime (DESIGN 7.9).
+const DESKTOP_PACKAGE: &str = "Clarity.Ui";
 
 /// What a kind of database brings into a project: the runtime's package of
 /// its driver (with the client it stands on), and the class whose Use() turns
@@ -152,8 +200,9 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
         return Err(errors);
     }
     files.push(text("Schema.cs", schema_cs(project, &name, &owned)?));
-    files.push(text("Program.cs", program_cs(project, &name, &databases, &drivers, settings, engines)));
-    if project.keys_editable {
+    files.push(text("Program.cs", program_cs(project, &name, &databases, &drivers, settings, engines, ui == DESKTOP_PACKAGE)));
+    // The keys window's commands: on the desktop the library reads them from model.json.
+    if project.keys_editable && ui != DESKTOP_PACKAGE {
         files.push(text("KeysCatalog.cs", keys_catalog(project, &name)));
     }
     if engines {
@@ -180,6 +229,11 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     }
     files.push(text("Labels.cs", labels_cs(project, &name)));
     files.push(text("Fields.cs", fields_cs(project, &name)));
+    // The model as JSON, which the native Clarity.UI library reads on the desktop: the
+    // windows' facts, the fields', the translations, the themes and the keys (DESIGN 7.9).
+    if ui == DESKTOP_PACKAGE {
+        files.push(text("model.json", crate::web::model_json(project)));
+    }
     if !clarity_spec::icons::used(project).is_empty() {
         files.push(text("Icons.cs", icons_cs(project, &name)));
     }
@@ -213,7 +267,7 @@ fn main_window(project: &Project) -> Option<String> {
         .or_else(|| project.pages().next().map(|p| p.name.name.clone()))
 }
 
-/// The project file. It references the runtime's packages: `ui` (Clarity.Ui.Desktop)
+/// The project file. It references the runtime's packages: `ui` (Clarity.Ui)
 /// and the driver of each kind of database the data sources are. With the
 /// property `ClarityRuntime` (or the environment variable CLARITY_RUNTIME) set
 /// to the runtime's folder (runtimes/csharp in Clarity's repository), it
@@ -252,6 +306,7 @@ fn csproj(name: &str, ui: &str, drivers: &[&Driver], carried: bool, engines: boo
     <EmbeddedResource Include=\"Windows/*.cxaml\" LogicalName=\"Windows/%(Filename)%(Extension)\" />
     <EmbeddedResource Include=\"Apps/*.cxaml\" LogicalName=\"Apps/%(Filename)%(Extension)\" />
     <EmbeddedResource Include=\"Themes/*.json\" LogicalName=\"Themes/%(Filename)%(Extension)\" />
+    <EmbeddedResource Include=\"model.json\" LogicalName=\"model.json\" Condition=\"Exists('model.json')\" />
   </ItemGroup>
   <ItemGroup Condition=\"'$(ClarityRuntime)' == ''\">
 {references}  </ItemGroup>
@@ -351,8 +406,11 @@ fn engines_cs(project: &Project, name: &str) -> String {
         ));
         checks.push_str(&format!("        _ = {member};\n"));
     }
+    // An engine that says how far a long call is (DESIGN 5.12): Clarity.UI runs the
+    // handlers off the screen's thread, so the window shows the bar with Stop.
+    let watches = crate::engines(project).iter().any(|e| e.uses.iter().any(|u| u.name == clarity_spec::code::check::PROGRESS));
     format!(
-        "{HEADER}\nusing Clarity.Runtime;\n\nnamespace {name};\n\n/// <summary>The engines of the application: each loaded once from its file, every one checked when the application starts.</summary>\npublic static class Engines\n{{\n{members}    /// <summary>Loads every engine, so one whose file does not fit stops the application at start.</summary>\n    public static void Check()\n    {{\n{checks}    }}\n\n    static byte[] Read(string file)\n    {{\n        using var stream = typeof(Engines).Assembly.GetManifestResourceStream(\"Engines/\" + file) ?? throw new EngineException($\"the engine file {{file}} is missing\");\n        using var bytes = new MemoryStream();\n        stream.CopyTo(bytes);\n        return bytes.ToArray();\n    }}\n}}\n"
+        "{HEADER}\nusing Clarity.Runtime;\n\nnamespace {name};\n\n/// <summary>The engines of the application: each loaded once from its file, every one checked when the application starts.</summary>\npublic static class Engines\n{{\n    /// <summary>Whether an engine says how far a long call is: the screen then shows the bar with Stop.</summary>\n    public const bool Watches = {watches};\n\n{members}    /// <summary>Loads every engine, so one whose file does not fit stops the application at start.</summary>\n    public static void Check()\n    {{\n{checks}    }}\n\n    static byte[] Read(string file)\n    {{\n        using var stream = typeof(Engines).Assembly.GetManifestResourceStream(\"Engines/\" + file) ?? throw new EngineException($\"the engine file {{file}} is missing\");\n        using var bytes = new MemoryStream();\n        stream.CopyTo(bytes);\n        return bytes.ToArray();\n    }}\n}}\n"
     )
 }
 
@@ -425,7 +483,7 @@ fn opening(project: &Project, databases: &[(String, Sql, String)], drivers: &[&D
     )
 }
 
-fn program_cs(project: &Project, name: &str, databases: &[(String, Sql, String)], drivers: &[&Driver], settings: &Settings, engines: bool) -> String {
+fn program_cs(project: &Project, name: &str, databases: &[(String, Sql, String)], drivers: &[&Driver], settings: &Settings, engines: bool, desktop: bool) -> String {
     let check_engines = check_engines(engines);
     let opening = opening(project, databases, drivers, settings, "OpenDatabases");
     let main_window = main_window(project).unwrap_or_default();
@@ -436,17 +494,18 @@ fn program_cs(project: &Project, name: &str, databases: &[(String, Sql, String)]
     let settings_start = if project.entities().any(|e| e.settings) { "        Settings.Start();\n" } else { "" };
     // The person's keys and the keys window's commands (DESIGN 5.28).
     let keys_start = if project.keys_editable {
-        format!("        PersonKeys.Start({});\n        KeysWindow.Catalog = KeysCatalog.Layers;\n", string(&crate::settings_program(settings)))
+        let catalog = if desktop { "" } else { "        KeysWindow.Catalog = KeysCatalog.Layers;\n" };
+        format!("        PersonKeys.Start({});\n{catalog}", string(&crate::settings_program(settings)))
     } else {
         String::new()
     };
     let unconnected = unconnected_start(project, &main_window);
-    let ui_using = if project.keys_editable || crate::unconnected(project).is_some() { "using Clarity.Ui;\n" } else { "" };
+    // DesktopWindow and Unconnected are Clarity.Ui's.
+    let ui_using = "using Clarity.Ui;\n";
     format!(
         "{HEADER}
 using Clarity.Runtime;
-{ui_using}using Clarity.Ui.Desktop;
-
+{ui_using}
 namespace {name};
 
 public static class Program

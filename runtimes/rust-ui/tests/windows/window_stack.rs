@@ -26,6 +26,7 @@ const MAIN: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
   <Button name="warn" at="7,3" span="3" caption="Warn" onclick="warn" />
   <Button name="fail" at="10,3" span="3" caption="Fail" onclick="fail" />
   <Button name="digit" at="1,4" span="3" caption="7" onclick="digit(7)" />
+  <Button name="twoErrors" at="4,4" span="3" caption="Errors" onclick="twoErrors" />
 </Window>
 "#;
 
@@ -46,7 +47,7 @@ struct Fake {
 }
 
 fn reply(state: WindowState) -> Reply {
-    Reply { state, messages: Vec::new(), shown: Default::default(), open: Vec::new(), close: false, asks: Vec::new(), result: None, hears: Vec::new(), copy: None, step: 0, refused: false }
+    Reply { state, messages: Vec::new(), shown: Default::default(), open: Vec::new(), close: false, asks: Vec::new(), result: None, hears: Vec::new(), copy: None, step: 0, refused: false, quit: false, keys: false }
 }
 
 impl Fake {
@@ -100,6 +101,12 @@ impl Program for Fake {
                 Ok(r)
             }
             "fail" => Err(Text::plain("That did not work")),
+            "twoErrors" => {
+                let mut r = reply(state);
+                r.messages.push(Message { level: Level::Error, text: Text::plain("one") });
+                r.messages.push(Message { level: Level::Error, text: Text::plain("two") });
+                Ok(r)
+            }
             "done" => {
                 let mut r = reply(state);
                 r.close = true;
@@ -107,7 +114,7 @@ impl Program for Fake {
             }
             "openUsers" => {
                 let mut r = reply(state);
-                r.open.push(OpenRequest { window: "Users".into(), with: Map::new() });
+                r.open.push(OpenRequest { window: "Users".into(), with: Map::new(), new_window: false });
                 Ok(r)
             }
             _ => Ok(reply(state)),
@@ -242,6 +249,52 @@ fn a_warning_shows_in_clarity_s_dialog_and_ok_takes_it_away() {
     screen.key_pressed(KeyInput::plain(Key::Enter));
     assert!(screen.overlays().is_empty());
     assert!(stack(&screen).said().is_empty());
+}
+
+#[test]
+fn an_info_message_is_a_note_that_goes_by_itself() {
+    let (mut screen, _) = started();
+    // The screen's clock, which the test moves on.
+    let now = std::time::Instant::now();
+    let clock = std::rc::Rc::new(std::cell::Cell::new(now));
+    let read = clock.clone();
+    screen.now = Box::new(move || read.get());
+    click(&mut screen, "save");
+    assert_eq!(vec!["Saved".to_string()], stack(&screen).notes().iter().map(|m| m.text.show()).collect::<Vec<_>>());
+    clock.set(now + std::time::Duration::from_secs(4));
+    screen.wake_due(clock.get());
+    assert_eq!(1, stack(&screen).notes().len());
+    clock.set(now + clarity_ui::window::messages::INFO_DURATION);
+    screen.wake_due(clock.get());
+    assert!(stack(&screen).notes().is_empty());
+    assert!(stack(&screen).said().is_empty());
+}
+
+#[test]
+fn a_note_closes_with_its_x() {
+    let (mut screen, _) = started();
+    click(&mut screen, "save");
+    Shot::of(&mut screen, 800, 500, 1.0);
+    let list = clarity_ui::Element::node(screen.find::<clarity_ui::window::messages::NoteList>().unwrap()).bounds;
+    // The x sits at the note's top right: 30 in from its right edge, 6 down, 24 square.
+    let (x, y) = (list.right() - 30.0 + 12.0, list.y + 6.0 + 12.0);
+    screen.pointer_pressed(x, y, clarity_ui::input::PointerButton::Left, 1);
+    screen.pointer_released(x, y, clarity_ui::input::PointerButton::Left);
+    assert!(stack(&screen).notes().is_empty());
+}
+
+#[test]
+fn errors_are_said_one_at_a_time() {
+    let (mut screen, _) = started();
+    click(&mut screen, "twoErrors");
+    let says = |screen: &Screen| screen.find::<SaidDialog>().map(|d| d.message.text.show());
+    assert_eq!(1, screen.overlays().len());
+    assert_eq!(Some("one".to_string()), says(&screen));
+    screen.key_pressed(KeyInput::plain(Key::Enter));
+    assert_eq!(1, screen.overlays().len());
+    assert_eq!(Some("two".to_string()), says(&screen));
+    screen.key_pressed(KeyInput::plain(Key::Enter));
+    assert!(screen.overlays().is_empty());
 }
 
 #[test]

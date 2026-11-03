@@ -93,3 +93,53 @@ fn a_sound_told_to_play_while_its_window_is_parked_plays_at_once() {
     screen.element_mut(id).unwrap().as_any_mut().downcast_mut::<SoundPart>().unwrap().hear_now();
     assert_eq!(1, output.played.borrow().len());
 }
+
+/// A sound whose end a test decides.
+struct Ending(Rc<RefCell<bool>>, Rc<RefCell<usize>>);
+
+impl Playing for Ending {
+    fn stop(&mut self) {}
+
+    fn ended(&self) -> bool {
+        *self.0.borrow()
+    }
+}
+
+impl Drop for Ending {
+    fn drop(&mut self) {
+        *self.1.borrow_mut() += 1;
+    }
+}
+
+#[derive(Default)]
+struct EndingOutput {
+    ends: RefCell<Vec<Rc<RefCell<bool>>>>,
+    gone: Rc<RefCell<usize>>,
+}
+
+impl SoundOutput for EndingOutput {
+    fn play(&self, _file: Vec<u8>, _volume: f32, _repeat: bool) -> Box<dyn Playing> {
+        let ended = Rc::new(RefCell::new(false));
+        self.ends.borrow_mut().push(ended.clone());
+        Box::new(Ending(ended, self.gone.clone()))
+    }
+}
+
+#[test]
+fn a_sound_that_ended_lets_go_on_the_screens_thread_and_one_that_repeats_goes_on() {
+    let output = Rc::new(EndingOutput::default());
+    sound::set_output(output.clone());
+    let host = TestHost::new();
+    host.resources.borrow_mut().insert("roll.wav".into(), vec![0; 100]);
+    let mut screen = window_of(r#"<Sound name="rollSound" at="1,1" source="roll.wav" repeat="true" />"#, host.clone());
+    Shot::of(&mut screen, 200, 100, 1.0);
+    hear(&host, &mut screen, "play", vec![]);
+    hear(&host, &mut screen, "tone", vec![json!(440), json!(0.1)]);
+    assert_eq!(2, part(&screen).playing());
+    // The tone played to its end; the window lays out again on the screen's thread and lets go of it.
+    *output.ends.borrow()[1].borrow_mut() = true;
+    host.change();
+    Shot::of(&mut screen, 200, 100, 1.0);
+    assert_eq!(1, part(&screen).playing());
+    assert_eq!(1, *output.gone.borrow());
+}

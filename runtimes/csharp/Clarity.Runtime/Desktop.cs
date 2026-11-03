@@ -1,7 +1,8 @@
 // What only a desktop program has (DESIGN 7.6): quitting, and Clarity's keys
-// window in a window of its own. Clarity.Ui.Desktop gives it as the
-// program starts; in a browser and on a server there is none, and the
-// built-in `quit` and `keys` do nothing.
+// window in a window of its own. Clarity.Ui gives it as the program starts
+// (the next reply to the native library says quit or keys). A browser
+// page shows the keys window and does not quit; on a server there is none,
+// and the built-in `quit` and `keys` do nothing.
 
 namespace Clarity.Runtime;
 

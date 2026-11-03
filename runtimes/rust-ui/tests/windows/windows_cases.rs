@@ -38,7 +38,7 @@ struct Cases {
 }
 
 fn reply(state: WindowState) -> Reply {
-    Reply { state, messages: Vec::new(), shown: Default::default(), open: Vec::new(), close: false, asks: Vec::new(), result: None, hears: Vec::new(), copy: None, step: 0, refused: false }
+    Reply { state, messages: Vec::new(), shown: Default::default(), open: Vec::new(), close: false, asks: Vec::new(), result: None, hears: Vec::new(), copy: None, step: 0, refused: false, quit: false, keys: false }
 }
 
 impl Program for Cases {
@@ -64,7 +64,7 @@ impl Program for Cases {
         let mut r = reply(state);
         for action in handler.strip_prefix("do:").unwrap_or_default().split('|') {
             match action.strip_prefix("open ") {
-                Some(window) => r.open.push(OpenRequest { window: window.to_string(), with: Map::new() }),
+                Some(window) => r.open.push(OpenRequest { window: window.to_string(), with: Map::new(), new_window: false }),
                 None if action == "close" => r.close = true,
                 None => panic!("unknown action {action}"),
             }

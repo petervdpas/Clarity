@@ -19,6 +19,7 @@ public sealed class LongCall
     DateTime last;
     (long Done, long Total)? current;
     volatile bool waiting;
+    bool stopAtStart;
 
     /// <summary>How far the call that runs is, done of total; none while no call reports.</summary>
     public (long Done, long Total)? Current
@@ -46,6 +47,24 @@ public sealed class LongCall
             stopping?.Cancel();
     }
 
+    /// <summary>
+    /// A Stop that came before its call started (a screen that asks for the
+    /// call and shows Stop at once): the next call starts stopped. Forgotten
+    /// by <see cref="ForgetStop"/> when that call never starts.
+    /// </summary>
+    public void StopAtStart()
+    {
+        lock (gate)
+            stopAtStart = true;
+    }
+
+    /// <summary>The Stop that waited for its call is forgotten.</summary>
+    public void ForgetStop()
+    {
+        lock (gate)
+            stopAtStart = false;
+    }
+
     /// <summary>The watch of a handler that starts.</summary>
     internal EngineWatch Start()
     {
@@ -54,6 +73,11 @@ public sealed class LongCall
             stopping?.Dispose();
             stopping = new CancellationTokenSource();
             last = default;
+            if (stopAtStart)
+            {
+                stopAtStart = false;
+                stopping.Cancel();
+            }
             var started = stopping;
             return new EngineWatch((done, total) => Report(started, done, total), started.Token, Wait);
         }

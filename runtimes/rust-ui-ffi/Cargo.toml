@@ -1,0 +1,26 @@
+[package]
+name = "clarity-ui-ffi"
+description = "The C interface of Clarity.UI: the one library C#, Go, C and C++ draw their windows with"
+version = "0.1.0"
+edition.workspace = true
+license = "MIT"
+repository = "https://github.com/petervdpas/Clarity"
+homepage = "https://github.com/petervdpas/Clarity"
+# Shipped as a native library inside each language's package, not on crates.io.
+publish = false
+
+# The library's file is clarity_ui on every system: libclarity_ui.so,
+# clarity_ui.dll, libclarity_ui.dylib, and libclarity_ui.a for static linking.
+# No rlib: its file would be clarity-ui's own; the tests are the library's
+# own (src/tests), and tests/c_header.rs builds a C program against the header.
+[lib]
+name = "clarity_ui"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+# Named `ui` here: this library is `clarity_ui` itself.
+ui = { package = "clarity-ui", path = "../rust-ui" }
+clarity-runtime = { path = "../rust", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"

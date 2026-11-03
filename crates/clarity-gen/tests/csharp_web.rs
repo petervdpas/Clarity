@@ -96,8 +96,9 @@ fn the_application_is_a_library_on_clarity_ui_without_the_desktop_or_a_driver() 
     let files = files(vec![Target::Web]);
     let app = file(&files, "App/Walker.csproj");
     has(app, "<OutputType>Library</OutputType>");
-    has(app, "<PackageReference Include=\"Clarity.Ui\" Version=");
-    has(app, "<ProjectReference Include=\"$(ClarityRuntime)/Clarity.Ui/Clarity.Ui.csproj\" />");
+    // On the browser package, which carries Clarity.UI's drawing in C# until the browser build (R2).
+    has(app, "<PackageReference Include=\"Clarity.Ui.Browser\" Version=");
+    has(app, "<ProjectReference Include=\"$(ClarityRuntime)/Clarity.Ui.Browser/Clarity.Ui.Browser.csproj\" />");
     has(app, "<EmbeddedResource Include=\"Windows/*.cxaml\"");
     // The browser program carries the library: no native window, no database driver.
     lacks(app, "Clarity.Ui.Desktop");
@@ -175,7 +176,7 @@ fn desktop_and_web_together_make_the_desktop_and_the_web_program() {
     file(desktop, "Walker.csproj");
     file(desktop, "Program.cs");
     assert!(!desktop.iter().any(|f| f.path.starts_with("Server/") || f.path.starts_with("Browser/")));
-    has(file(desktop, "Walker.csproj"), "Clarity.Ui.Desktop");
+    has(file(desktop, "Walker.csproj"), "<PackageReference Include=\"Clarity.Ui\" ");
     let web = &programs[1].files;
     file(web, "App/Walker.csproj");
     file(web, "Server/Walker.Server.csproj");

@@ -656,7 +656,7 @@ impl WindowStack {
                     }
                 }
                 Effect::Open(window, with) => self.open(&window, with, from.as_ref(), None, false, cx),
-                Effect::OpenNew(window) => self.open(&window, Map::new(), from.as_ref(), None, true, cx),
+                Effect::OpenNew(window, with) => self.open(&window, with, from.as_ref(), None, true, cx),
                 Effect::Close => {
                     let dialog = from.as_ref().and_then(|f| self.dialogs.iter().position(|d| Rc::ptr_eq(&d.host, f)));
                     match dialog {

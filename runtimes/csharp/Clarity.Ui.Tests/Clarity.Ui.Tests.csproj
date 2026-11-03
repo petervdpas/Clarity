@@ -15,9 +15,8 @@
     <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="14.2.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../Clarity.Ui/Clarity.Ui.csproj" />
+    <!-- The C# drawing the browser host keeps until the browser build (R2); the desktop is the native library's, tested in Rust. -->
     <ProjectReference Include="../Clarity.Ui.Browser/Clarity.Ui.Browser.csproj" />
-    <ProjectReference Include="../Clarity.Ui.Desktop/Clarity.Ui.Desktop.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- The cases every stack shares. -->

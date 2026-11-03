@@ -219,6 +219,35 @@ fn a_tooltip_shows_after_the_pointer_rests_and_goes_when_it_moves_off_or_presses
 }
 
 #[test]
+fn a_press_starts_no_new_pause() {
+    let (mut screen, _, tip) = shown();
+    let now = Instant::now();
+    screen.now = Box::new(move || now);
+    *tip.borrow_mut() = Some("Users".into());
+    screen.pointer_moved(100.0, 100.0);
+    screen.pointer_pressed(100.0, 100.0, PointerButton::Left, 1);
+    screen.pointer_released(100.0, 100.0, PointerButton::Left);
+    screen.wake_due(now + TIP_PAUSE + TIP_PAUSE);
+    assert!(screen.tip().is_none());
+    // Resting on the same place after it starts no new pause until the pointer goes elsewhere.
+    screen.pointer_moved(101.0, 100.0);
+    assert_eq!(screen.next_wake(), None);
+}
+
+#[test]
+fn what_is_under_the_pointer_no_more_shows_no_tip() {
+    let (mut screen, _, tip) = shown();
+    let now = Instant::now();
+    screen.now = Box::new(move || now);
+    *tip.borrow_mut() = Some("Users".into());
+    screen.pointer_moved(100.0, 100.0);
+    // Something else shows under the pointer before the pause is over.
+    *tip.borrow_mut() = None;
+    screen.wake_due(now + TIP_PAUSE);
+    assert!(screen.tip().is_none());
+}
+
+#[test]
 fn a_dialog_on_top_hears_keys_before_the_focused_element() {
     let (mut screen, log, _) = shown();
     let heard = Rc::new(RefCell::new(Vec::new()));

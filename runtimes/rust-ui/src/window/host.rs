@@ -28,9 +28,10 @@ pub enum Effect {
     Say(Vec<Message>),
     /// A window to open in place, with its values.
     Open(String, Map<String, Value>),
-    /// A window a route marked `in new window` opens: in a desktop window of
-    /// its own where the host gives them, else in place.
-    OpenNew(String),
+    /// A window a route marked `in new window` (or a handler's `open ... in
+    /// new window`) opens, with its values: in a desktop window of its own
+    /// where the host gives them, else in place.
+    OpenNew(String, Map<String, Value>),
     /// The window closes.
     Close,
     /// Text to put on the clipboard.
@@ -251,10 +252,17 @@ impl ProgramHost {
             effects.push(Effect::Close);
         }
         for open in reply.open {
-            effects.push(Effect::Open(open.window, open.with));
+            effects.push(if open.new_window { Effect::OpenNew(open.window, open.with) } else { Effect::Open(open.window, open.with) });
         }
         for ask in reply.asks {
             effects.push(Effect::Ask(ask));
+        }
+        // The built-in targets run by code: the keys window opens, the program ends.
+        if reply.keys {
+            effects.push(Effect::Keys);
+        }
+        if reply.quit {
+            effects.push(Effect::Quit);
         }
         drop(effects);
         self.changed();
@@ -426,7 +434,7 @@ impl PartHost for ProgramHost {
         // A click that names a window opens it.
         if call.args.is_empty() && self.files.window(&call.handler).is_some() {
             self.flush();
-            let open = if call.event == crate::parts::NEW_WINDOW_CLICK { Effect::OpenNew(call.handler.clone()) } else { Effect::Open(call.handler.clone(), Map::new()) };
+            let open = if call.event == crate::parts::NEW_WINDOW_CLICK { Effect::OpenNew(call.handler.clone(), Map::new()) } else { Effect::Open(call.handler.clone(), Map::new()) };
             self.effects.borrow_mut().push(open);
             self.changed();
             return true;

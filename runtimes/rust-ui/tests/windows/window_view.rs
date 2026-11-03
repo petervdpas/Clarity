@@ -35,6 +35,25 @@ fn view_mut(screen: &mut Screen) -> &mut WindowView {
     screen.root_mut().as_any_mut().downcast_mut::<WindowView>().unwrap()
 }
 
+#[test]
+fn a_menu_item_s_key_runs_its_handler_while_the_menu_is_closed() {
+    let (mut screen, host) = shown(
+        r#"<Window name="Keys"><Button name="more" at="1,1" span="3" caption="More" split="true"><Menu><Item caption="Print" key="Ctrl+P" onclick="print" /></Menu></Button></Window>"#,
+        600.0,
+        300.0,
+    );
+    press(&mut screen, Key::P, Modifiers::CONTROL);
+    assert_eq!(vec!["run more click print"], host.logged());
+}
+
+#[test]
+fn a_modal_overlay_over_the_window_keeps_its_keys() {
+    let (mut screen, host) = shown(r#"<Window name="Keys"><Button name="ok" at="1,1" span="3" caption="OK" default="true" onclick="ok" /></Window>"#, 600.0, 300.0);
+    screen.open(clarity_ui::Overlay { modal: true, ..clarity_ui::Overlay::new(Box::new(clarity_ui::element::Plate::new("panel", None)), Rect::new(0.0, 0.0, 100.0, 100.0)) });
+    press(&mut screen, Key::Enter, Modifiers::NONE);
+    assert!(host.logged().is_empty(), "{:?}", host.logged());
+}
+
 fn press(screen: &mut Screen, key: Key, held: Modifiers) {
     screen.key_pressed(KeyInput::new(key, held));
 }

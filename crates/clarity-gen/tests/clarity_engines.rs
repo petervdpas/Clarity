@@ -96,3 +96,12 @@ fn the_program_watches_a_long_call() {
     assert!(text.contains("    fn end_watch(&self, id: u64) {"));
     assert!(!text.contains("tauri"));
 }
+
+/// C# says the same in its Engines class: an engine that says how far a
+/// long call is makes Clarity.UI run the handlers off the screen's thread.
+#[test]
+fn csharp_says_it_watches_a_long_call() {
+    let files = files(Backend::Csharp, Ui::Clarity);
+    let engines = files.iter().find(|f| f.path == "Engines.cs").expect("Engines.cs");
+    assert!(engines.text.contains("    public const bool Watches = true;\n"), "{}", engines.text);
+}

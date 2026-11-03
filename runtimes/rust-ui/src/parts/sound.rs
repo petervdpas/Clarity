@@ -23,6 +23,11 @@ use crate::parts::{Part, PartBase, PartHost};
 /// Something that plays; stopping it ends it.
 pub trait Playing {
     fn stop(&mut self);
+
+    /// Whether it played to its end: a sound that repeats never does.
+    fn ended(&self) -> bool {
+        false
+    }
 }
 
 /// Where sounds play: the computer's speakers on the desktop.
@@ -138,8 +143,15 @@ impl SoundPart {
         }
     }
 
+    /// Lets go of the sounds that played to their end, on the screen's
+    /// thread (C# SoundFlowOutput): one that repeats goes on.
+    pub fn let_go_ended(&mut self) {
+        self.playing.retain(|p| !p.ended());
+    }
+
     /// Plays, also while its window is parked: what was told plays when it was told.
     fn start(&mut self, file: Vec<u8>, repeat: bool) {
+        self.let_go_ended();
         self.playing.push(output().play(file, self.volume as f32 / 100.0, repeat));
     }
 
@@ -179,6 +191,7 @@ impl Element for SoundPart {
     /// Laid out with its window, it takes no room; what code told it is heard then, after every reply.
     fn arrange(&mut self, area: Rect, _cx: &mut Cx) {
         self.base.node.bounds = Rect::new(area.x, area.y, 0.0, 0.0);
+        self.let_go_ended();
         self.hear_all();
     }
 

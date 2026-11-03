@@ -123,7 +123,7 @@ pub struct Fake {
 }
 
 pub fn reply(state: WindowState) -> Reply {
-    Reply { state, messages: Vec::new(), shown: Default::default(), open: Vec::new(), close: false, asks: Vec::new(), result: None, hears: Vec::new(), copy: None, step: 0, refused: false }
+    Reply { state, messages: Vec::new(), shown: Default::default(), open: Vec::new(), close: false, asks: Vec::new(), result: None, hears: Vec::new(), copy: None, step: 0, refused: false, quit: false, keys: false }
 }
 
 fn asking(state: WindowState, form: AskForm, handler: &str, values: Vec<Value>) -> Reply {
@@ -214,7 +214,7 @@ impl Program for Fake {
             }
             "unconnected" => {
                 let mut r = reply(state);
-                r.open.push(OpenRequest { window: "Connection".into(), with: Map::new() });
+                r.open.push(OpenRequest { window: "Connection".into(), with: Map::new(), new_window: false });
                 Ok(r)
             }
             _ => Ok(reply(state)),

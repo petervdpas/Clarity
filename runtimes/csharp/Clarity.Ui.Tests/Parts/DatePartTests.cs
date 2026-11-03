@@ -354,7 +354,8 @@ public class DatePartTests
         DateOnly? picked = null;
         var open = DayCalendar.Open(screen, new Box(10, 10, 100, 24), null, d => picked = d, host.Formats.Culture);
         var calendar = (DayCalendar)open.Content;
-        calendar.Today = new DateOnly(2026, 11, 2);
+        // The keys start from the day it opened on, the system's today: the test marks that day, whatever day it runs.
+        calendar.Today = DateOnly.FromDateTime(DateTime.Now);
         Assert.Same(calendar, screen.Focused);
         Assert.Null(calendar.Chosen);
         Assert.True(calendar.CellOf(calendar.Today) is not null);

@@ -16,7 +16,8 @@ const APP: &str = include_str!("../../../app/src/App.svelte");
 /// The shells of the stacks whose runtime opens the window itself.
 const SHELLS: [(&str, &str); 4] = [
     ("Go", include_str!("../../../runtimes/go/desktop/desktop.go")),
-    ("C#", include_str!("../../../runtimes/csharp/Clarity.Ui.Desktop/DesktopWindow.cs")),
+    // C# shows its windows through the one Clarity.UI library (DESIGN 7.9), whose desktop host this is.
+    ("C#", include_str!("../../../runtimes/rust-ui/src/desktop/mod.rs")),
     ("C", include_str!("../../../runtimes/c/shell/service.c")),
     ("C++", include_str!("../../../runtimes/cpp/shell/service.cpp")),
 ];

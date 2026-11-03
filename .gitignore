@@ -19,3 +19,5 @@ obj/
 # Each person's own editor and assistant settings, with paths of their own machine.
 /.vscode/
 /.claude/
+# The native Clarity.UI library a Release build copies in for packing.
+/runtimes/csharp/Clarity.Ui/runtimes/

@@ -33,7 +33,6 @@
     <InternalsVisibleTo Include="Clarity.Runtime.SqlServer" />
     <InternalsVisibleTo Include="Clarity.Runtime.Tests" />
     <InternalsVisibleTo Include="Clarity.Ui" />
-    <InternalsVisibleTo Include="Clarity.Ui.Desktop" />
     <InternalsVisibleTo Include="Clarity.Ui.Browser" />
   </ItemGroup>
   <ItemGroup>

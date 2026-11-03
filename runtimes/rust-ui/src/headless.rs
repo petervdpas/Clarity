@@ -33,7 +33,9 @@
 //! - `quit`: the run ends.
 //!
 //! Every answer has `ok` (and `error` when a step could not be done); a
-//! `read` also has the open windows (`windows`), the one on top (`window`),
+//! `read` also has the open windows (`windows`), whether the program ended
+//! (`ended`) and by quitting (`quit`), whether Clarity's keys window shows
+//! (`keys`), the one on top (`window`),
 //! its data (`data`), its parts' states (`parts`), the rows chosen
 //! (`selected`), the dialog over it (`dialog`, with its `data`), the part
 //! with the focus (`focused`), every part and named frame button that shows
@@ -121,6 +123,16 @@ impl Driven {
         let mut screen = Screen::new(Box::new(stack), crate::choices::look(&files, false));
         screen.follow(Box::new(move |dark| crate::choices::look(&files, dark)));
         screen.resize(START_SIZE.0, START_SIZE.1, 1.0);
+        let mut driven = Driven { screen, given };
+        driven.settle(Duration::ZERO);
+        driven
+    }
+
+    /// Drives a screen of its own (a window over a host of the caller's,
+    /// as the C interface makes one), with no program behind it.
+    pub fn over(screen: Screen) -> Driven {
+        let given = Arc::new(Given::default());
+        crate::files::set_system(given.clone());
         let mut driven = Driven { screen, given };
         driven.settle(Duration::ZERO);
         driven
@@ -405,6 +417,8 @@ impl Driven {
         let stack = self.screen.root().as_any().downcast_ref::<WindowStack>();
         if let Some(stack) = stack {
             out.insert("windows".into(), json!(stack.windows()));
+            out.insert("ended".into(), json!(stack.ended()));
+            out.insert("quit".into(), json!(stack.quitting()));
             if let Some(host) = stack.current() {
                 let state = host.state_now();
                 out.insert("window".into(), json!(state.window));
@@ -419,6 +433,7 @@ impl Driven {
             out.insert("notes".into(), json!(stack.notes().iter().map(|m| m.text.show()).collect::<Vec<_>>()));
             out.insert("said".into(), json!(stack.said().iter().map(|m| m.text.show()).collect::<Vec<_>>()));
         }
+        out.insert("keys".into(), json!(self.screen.find::<crate::dialogs::KeysWindow>().is_some()));
         let focused = self.screen.focused().and_then(|id| self.owning_part(id));
         out.insert("focused".into(), json!(focused));
         let mut shown = Map::new();
@@ -620,9 +635,15 @@ pub fn key_named(name: &str) -> Option<Key> {
 /// Runs `program` driven from standard input, answering on standard output,
 /// until a `quit` step or the end of the input.
 pub fn run(program: impl Program, files: AppFiles) -> std::process::ExitCode {
+    run_shared(Arc::new(program), files)
+}
+
+/// Runs a program held elsewhere too (one the C interface gives) driven
+/// from standard input, as `run` does.
+pub fn run_shared(program: Arc<dyn Program>, files: AppFiles) -> std::process::ExitCode {
     // The fonts the project carries come before the system's, as on the desktop.
     crate::fonts::carry_fallbacks(files.resources);
-    let mut driven = Driven::start(Arc::new(program), files);
+    let mut driven = Driven::start(program, files);
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     for line in stdin.lock().lines() {

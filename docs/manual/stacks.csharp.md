@@ -48,7 +48,7 @@ Do not edit these files. Change the project in Clarity; it writes the folder aga
 
 The generated project carries no runtime sources. It references NuGet packages from nuget.org, all at one shared version:
 
-- `Clarity.Ui.Desktop`: Clarity.UI in the system's own window, on Linux, Windows and macOS. It brings `Clarity.Ui`, which draws, and `Clarity.Runtime`: the window model (view models, part state, undo), records, queries and migrations, without a database driver.
+- `Clarity.Ui`: Clarity.UI, which draws the windows and runs them in the system's own window, on Linux, Windows and macOS. It carries Clarity.UI's native library for each system (Linux, Windows and macOS, each on x64 and arm64), and .NET loads the one for the system the program runs on. It brings `Clarity.Runtime`: the window model (view models, part state, undo), records, queries and migrations, without a database driver.
 - `Clarity.Ui.Browser`: Clarity.UI on a browser page's canvas, for the web target's browser program.
 - `Clarity.Ui.Server`: the web target's server, with the sessions that keep each tab's windows.
 - `Clarity.Runtime.Sqlite`, `Clarity.Runtime.PostgreSql`, `Clarity.Runtime.MySql` and `Clarity.Runtime.SqlServer`: one per kind of database, added only when a data source uses it.
@@ -61,6 +61,8 @@ dotnet build -p:ClarityRuntime=<Clarity>/runtimes/csharp
 ```
 
 Or set the environment variable `CLARITY_RUNTIME` to that folder. Without either, the build uses the packages.
+
+That route needs Clarity.UI's native library built in the repository first: `cargo build -p clarity-ui-ffi` for a Debug build of the program, `cargo build --release -p clarity-ui-ffi` for a Release build. The build puts it next to the program.
 
 ## What to install
 

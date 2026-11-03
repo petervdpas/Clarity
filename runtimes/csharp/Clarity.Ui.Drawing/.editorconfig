@@ -1,0 +1,5 @@
+# The C# drawing is compiled into the browser assembly (Clarity.Ui.Browser) until the
+# browser build; its desktop paths (a process to open an address, the system theme
+# asked of the system) are never reached in a page, as before the move.
+[*.cs]
+dotnet_diagnostic.CA1416.severity = none

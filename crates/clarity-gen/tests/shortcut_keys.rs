@@ -42,13 +42,29 @@ fn file<'a>(files: &'a [OutFile], path: &str) -> &'a str {
 fn csharp_starts_the_persons_keys() {
     let files = files(Backend::Csharp, Ui::Clarity, true);
     let program = file(&files, "Program.cs");
-    assert!(program.contains("PersonKeys.Start(\"shop\");\n        KeysWindow.Catalog = KeysCatalog.Layers;\n"), "{program}");
-    let catalog = file(&files, "KeysCatalog.cs");
+    // On the desktop the library reads the keys window's commands from model.json.
+    assert!(program.contains("PersonKeys.Start(\"shop\");\n"), "{program}");
+    assert!(!program.contains("KeysCatalog"), "{program}");
+    assert!(!files.iter().any(|f| f.path == "KeysCatalog.cs"));
+    let model = file(&files, "model.json");
+    assert!(model.contains("\"keysEditable\":true"), "the model says keys are editable");
+}
+
+#[test]
+fn csharp_on_the_web_keeps_its_keys_catalog() {
+    let mut settings: Settings = starter("Shop", "shop");
+    settings.stack.backend = Backend::Csharp;
+    settings.stack.ui = Ui::Clarity;
+    settings.keys_editable = true;
+    settings.stack.targets = vec![clarity_project::Target::Web];
+    let project = clarity_spec::load_in([("shop.clarity", SHOP)], [], &clarity_project::source_refs(&settings));
+    let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let catalog = file(&files, "App/KeysCatalog.cs");
     assert!(catalog.contains("using Clarity.Ui;\n"), "{catalog}");
     assert!(catalog.contains("new KeyLayerInfo(\"\", null, [new KeyCommandInfo(\"keysItem\", Text.Of(\"keysItem\"), []), new KeyCommandInfo(\"quitItem\", Text.Of(\"quitItem\"), [\"Ctrl+Q\"])])"), "{catalog}");
     // A toolbar command says where it lives, in Clarity's words.
     assert!(catalog.contains("new KeyLayerInfo(\"Card\", Text.Of(\"cardTitle\"), [new KeyCommandInfo(\"Card.printButton\", Text.Of(\"printCaption\"), [], [new Text(\"Toolbar\") { Key = \"keysToolbar\" }]), new KeyCommandInfo(\"Card.saveButton\", Text.Of(\"saveCaption\"), [\"Ctrl+S\"])])"), "{catalog}");
-    let model = file(&files, "Windows/CardViewModel.cs");
+    let model = file(&files, "App/Windows/CardViewModel.cs");
     assert!(model.contains("void Keys_() => ShowKeys();"), "{model}");
 }
 

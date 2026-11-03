@@ -7,7 +7,7 @@
   <Project Path="Clarity.Runtime.Tests/Clarity.Runtime.Tests.csproj" />
   <Project Path="Clarity.Runtime/Clarity.Runtime.csproj" />
   <Project Path="Clarity.Ui.Browser/Clarity.Ui.Browser.csproj" />
-  <Project Path="Clarity.Ui.Desktop/Clarity.Ui.Desktop.csproj" />
+  <Project Path="Clarity.Ui.Native.Tests/Clarity.Ui.Native.Tests.csproj" />
   <Project Path="Clarity.Ui.Server/Clarity.Ui.Server.csproj" />
   <Project Path="Clarity.Ui.Server.Tests/Clarity.Ui.Server.Tests.csproj" />
   <Project Path="Clarity.Ui.Tests/Clarity.Ui.Tests.csproj" />

@@ -10,7 +10,7 @@ fn c(written: &str) -> Color {
 
 #[test]
 fn clarity_s_own_theme_is_the_same_file_as_the_csharp_version_carries() {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../csharp/Clarity.Ui/Themes/");
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../csharp/Clarity.Ui.Drawing/Themes/");
     assert_eq!(std::fs::read_to_string(format!("{root}clarity.light.json")).unwrap(), CLARITY_LIGHT);
     assert_eq!(std::fs::read_to_string(format!("{root}clarity.dark.json")).unwrap(), CLARITY_DARK);
 }
@@ -82,7 +82,7 @@ fn the_catalog_is_the_same_file_as_the_shared_screen_s() {
 #[test]
 fn inter_is_carried_as_the_csharp_version_carries_it() {
     let ours = concat!(env!("CARGO_MANIFEST_DIR"), "/fonts/");
-    let theirs = concat!(env!("CARGO_MANIFEST_DIR"), "/../csharp/Clarity.Ui/Fonts/");
+    let theirs = concat!(env!("CARGO_MANIFEST_DIR"), "/../csharp/Clarity.Ui.Drawing/Fonts/");
     for name in ["Inter-Regular.ttf", "Inter-Bold.ttf", "Inter-LICENSE.txt"] {
         assert_eq!(std::fs::read(format!("{theirs}{name}")).unwrap(), std::fs::read(format!("{ours}{name}")).unwrap(), "{name} differs");
     }

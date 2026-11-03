@@ -8,6 +8,8 @@ use std::cell::RefCell;
 use std::num::NonZero;
 
 use rodio::buffer::SamplesBuffer;
+/// A mixer of its own, without speakers: what a test plays on to see a sound end.
+pub use rodio::mixer::{mixer, Mixer, MixerSource};
 use rodio::{DeviceSinkBuilder, MixerDeviceSink, Player, Source};
 
 use crate::parts::sound::{Playing, SoundOutput};
@@ -36,6 +38,29 @@ impl Playing for Played {
             player.stop();
         }
     }
+
+    /// Played to its end, or never played; a sound that repeats goes on.
+    fn ended(&self) -> bool {
+        self.0.as_ref().is_none_or(Player::empty)
+    }
+}
+
+/// Plays WAV data on `mixer` (the speakers', or a test's own); plays nothing for data that is no WAV.
+pub fn play_on(mixer: &Mixer, file: &[u8], volume: f32, repeat: bool) -> Box<dyn Playing> {
+    let Some((channels, rate, samples)) = read_wav(file) else {
+        eprintln!("{}", crate::locale::translate("soundNotWav", "a sound that is no WAV data plays nothing"));
+        return Box::new(Played(None));
+    };
+    let (Some(channels), Some(rate)) = (NonZero::new(channels), NonZero::new(rate)) else { return Box::new(Played(None)) };
+    let player = Player::connect_new(mixer);
+    let buffer = SamplesBuffer::new(channels, rate, samples);
+    if repeat {
+        player.append(buffer.repeat_infinite());
+    } else {
+        player.append(buffer);
+    }
+    player.set_volume(volume.clamp(0.0, 1.0));
+    Box::new(Played(Some(player)))
 }
 
 /// WAV data as its channels, rate and samples between -1 and 1; none for data that is no PCM WAV.
@@ -103,22 +128,6 @@ impl Speakers {
 
 impl SoundOutput for Speakers {
     fn play(&self, file: Vec<u8>, volume: f32, repeat: bool) -> Box<dyn Playing> {
-        let Some((channels, rate, samples)) = read_wav(&file) else {
-            eprintln!("{}", crate::locale::translate("soundNotWav", "a sound that is no WAV data plays nothing"));
-            return Box::new(Played(None));
-        };
-        let (Some(channels), Some(rate)) = (NonZero::new(channels), NonZero::new(rate)) else { return Box::new(Played(None)) };
-        let player = self.with_sink(|sink| {
-            let player = Player::connect_new(sink.mixer());
-            let buffer = SamplesBuffer::new(channels, rate, samples);
-            if repeat {
-                player.append(buffer.repeat_infinite());
-            } else {
-                player.append(buffer);
-            }
-            player.set_volume(volume.clamp(0.0, 1.0));
-            player
-        });
-        Box::new(Played(player))
+        self.with_sink(|sink| play_on(sink.mixer(), &file, volume, repeat)).unwrap_or_else(|| Box::new(Played(None)))
     }
 }

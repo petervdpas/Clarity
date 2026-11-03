@@ -1,5 +1,5 @@
 project Calculator
-    stack go webview desktop
+    stack go desktop
     output "out"
     datasource main sqlite "data/calculator.db"
     theme Calculator

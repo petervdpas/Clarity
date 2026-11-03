@@ -56,7 +56,7 @@ void a_canvas_acts_as_every_runtime_does(void) {
         int units[2];
         const cJSON* at = cJSON_GetObjectItem(c, "at");
         const cJSON* grid = cJSON_GetObjectItem(c, "grid");
-        ClarityCanvas canvas = {
+        ClarityCanvasPart canvas = {
             .mode = text_or_empty(c, "mode"),
             .list = text_or_empty(c, "list"),
             .at = {at ? cJSON_GetArrayItem(at, 0)->valuestring : "", at ? cJSON_GetArrayItem(at, 1)->valuestring : ""},

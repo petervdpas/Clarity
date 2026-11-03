@@ -70,12 +70,19 @@ fn csharp_needs_the_dotnet_sdk_the_project_targets() {
     assert_eq!(ready.found, [".NET SDK 10.0.402"]);
 }
 
+/// Go draws with Clarity.UI's library through cgo (DESIGN 7.9): Go and a C
+/// compiler, no WebKitGTK; the library is the folder CLARITY_UI names.
 #[test]
-fn go_needs_go_and_on_linux_webkitgtk() {
-    let go = check(Backend::Go, Ui::Webview, &Machine::default());
-    // Go with Wails is generated (G3b); Wails builds against WebKitGTK on Linux, like Tauri.
+fn go_needs_go_and_a_c_compiler_for_cgo() {
+    let go = check(Backend::Go, Ui::Clarity, &Machine::default());
     assert!(go.generated);
     assert!(go.missing[0].contains("https://go.dev/dl"), "{:?}", go.missing);
+    assert!(go.missing.iter().any(|m| m.contains("cgo")), "{:?}", go.missing);
+    let ready = check(Backend::Go, Ui::Clarity, &Machine::default().with("go", "version", "go version go1.25.7 linux/amd64\n").with("cc", "--version", "cc (Debian 14.2.0-19) 14.2.0\n"));
+    assert_eq!(ready.found, ["go version go1.25.7 linux/amd64", "cc (Debian 14.2.0-19) 14.2.0"]);
+    assert!(ready.missing.is_empty(), "{:?}", ready.missing);
+    let needs = clarity_gen::tools::requirements(Backend::Go);
+    assert!(needs.iter().any(|r| r.contains("CLARITY_UI")) && !needs.iter().any(|r| r.contains("WebKit")), "{needs:?}");
 }
 
 /// What the C and C++ projects build with on Linux besides the tools: the
@@ -90,10 +97,10 @@ fn with_libraries(machine: Machine) -> Machine {
 #[test]
 fn c_and_cpp_need_a_compiler_cmake_and_their_libraries() {
     // C and C++ build with CMake (the generated project has a CMakeLists.txt) and make or Ninja.
-    // C needs a C++ compiler too, for the webview's one C++ file.
+    // C draws with Clarity.UI's library (DESIGN 7.9): no C++ compiler, no WebKitGTK.
     let c = check(
         Backend::C,
-        Ui::Webview,
+        Ui::Clarity,
         &with_libraries(
             Machine::default()
                 .with("clang", "--version", "clang version 19.1.7\nTarget: x86_64\n")
@@ -104,20 +111,23 @@ fn c_and_cpp_need_a_compiler_cmake_and_their_libraries() {
         ),
     );
     assert!(c.generated);
-    assert_eq!(c.found, ["clang version 19.1.7", "clang version 19.1.7", "cmake version 3.31.6", "GNU Make 4.4.1"]);
+    assert_eq!(c.found, ["clang version 19.1.7", "cmake version 3.31.6", "GNU Make 4.4.1"]);
     assert!(c.missing.is_empty(), "{:?}", c.missing);
-    let cpp = check(Backend::Cpp, Ui::Webview, &with_libraries(Machine::default().with("g++", "--version", "g++ (Debian 14.2.0-19) 14.2.0\n").with("ninja", "--version", "1.12.1\n")));
+    let cpp = check(Backend::Cpp, Ui::Clarity, &with_libraries(Machine::default().with("g++", "--version", "g++ (Debian 14.2.0-19) 14.2.0\n").with("ninja", "--version", "1.12.1\n")));
     assert!(cpp.generated);
     assert_eq!(cpp.found, ["g++ (Debian 14.2.0-19) 14.2.0", "ninja 1.12.1"]);
     assert_eq!(cpp.missing.len(), 1);
     assert!(cpp.missing[0].contains("CMake") && cpp.missing[0].contains("https://cmake.org/download"), "{:?}", cpp.missing);
-    let bare = check(Backend::C, Ui::Webview, &Machine::default().with("cc", "--version", "cc (Debian 14.2.0-19) 14.2.0\n").with("cmake", "--version", "cmake version 3.31.6\n"));
-    assert!(bare.missing.iter().any(|m| m.contains("C++ compiler")), "{:?}", bare.missing);
+    // C++ draws with Clarity.UI's library too: no WebKitGTK, no WebView2.
+    let needs = clarity_gen::tools::requirements(Backend::Cpp);
+    assert!(needs.iter().any(|r| r.contains("CLARITY_UI")) && !needs.iter().any(|r| r.contains("WebKit") || r.contains("WebView2")), "{needs:?}");
+    let bare = check(Backend::C, Ui::Clarity, &Machine::default().with("cc", "--version", "cc (Debian 14.2.0-19) 14.2.0\n").with("cmake", "--version", "cmake version 3.31.6\n"));
+    assert!(!bare.missing.iter().any(|m| m.contains("C++ compiler") || m.contains("WebKitGTK")), "{:?}", bare.missing);
+    assert!(clarity_gen::tools::requirements(Backend::C).iter().any(|r| r.contains("CLARITY_UI")));
     assert!(bare.missing.iter().any(|m| m.contains("make or Ninja")), "{:?}", bare.missing);
     if cfg!(target_os = "linux") {
         assert!(bare.missing.iter().any(|m| m.contains("libsqlite3-dev")), "{:?}", bare.missing);
-        assert!(bare.missing.iter().any(|m| m.contains("libwebkit2gtk-4.1-dev")), "{:?}", bare.missing);
-        let no_json = check(Backend::Cpp, Ui::Webview, &Machine::default().with("g++", "--version", "g++ 14\n"));
+        let no_json = check(Backend::Cpp, Ui::Clarity, &Machine::default().with("g++", "--version", "g++ 14\n"));
         assert!(no_json.missing.iter().any(|m| m.contains("nlohmann-json3-dev")), "{:?}", no_json.missing);
     }
 }
@@ -182,7 +192,7 @@ fn every_stack_of_the_catalog_is_checked_and_reported() {
     let report = clarity_gen::tools::report(&all);
     assert!(report.contains("C# with Clarity.UI: ready (.NET SDK 10.0.402)\n"), "{report}");
     assert!(report.contains("Rust with Clarity.UI: missing Rust with cargo, from https://rustup.rs"), "{report}");
-    assert!(report.contains("Go with the web renderer: missing Go, from https://go.dev/dl"), "{report}");
+    assert!(report.contains("Go with Clarity.UI: missing Go, from https://go.dev/dl"), "{report}");
     // Where to read how, once something is missing.
     assert!(report.ends_with("How to install each: the manual's page Setting up the build tools (Manual in Clarity, or docs/manual/setup.tools.md).\n"), "{report}");
     let ready = clarity_gen::tools::report(&all.into_iter().filter(|s| s.missing.is_empty()).collect::<Vec<_>>());
@@ -286,7 +296,7 @@ fn visual_studio_s_cl_counts_as_a_c_and_cpp_compiler() {
         .with("cl", "", "Microsoft (R) C/C++ Optimizing Compiler Version 19.40.33811 for x64\n")
         .with("cmake", "--version", "cmake version 3.29.5\n")
         .with("ninja", "--version", "1.11.1\n");
-    let cpp = check(Backend::Cpp, Ui::Webview, &with_libraries(machine));
+    let cpp = check(Backend::Cpp, Ui::Clarity, &with_libraries(machine));
     assert!(cpp.found.contains(&"Microsoft (R) C/C++ Optimizing Compiler Version 19.40.33811 for x64".to_string()), "{:?}", cpp.found);
     assert!(!cpp.missing.iter().any(|m| m.contains("compiler")), "{:?}", cpp.missing);
 }
@@ -294,7 +304,7 @@ fn visual_studio_s_cl_counts_as_a_c_and_cpp_compiler() {
 #[test]
 fn mingw_s_make_counts_as_make() {
     let machine = Machine::default().with("g++", "--version", "g++ (Rev2, Built by MSYS2 project) 14.2.0\n").with("cmake", "--version", "cmake version 3.31.6\n").with("mingw32-make", "--version", "GNU Make 4.4.1\n");
-    let cpp = check(Backend::Cpp, Ui::Webview, &with_libraries(machine));
+    let cpp = check(Backend::Cpp, Ui::Clarity, &with_libraries(machine));
     assert!(cpp.found.contains(&"GNU Make 4.4.1".to_string()), "{:?}", cpp.found);
     assert!(!cpp.missing.iter().any(|m| m.contains("make or Ninja")), "{:?}", cpp.missing);
 }
@@ -319,7 +329,7 @@ fn every_missing_tool_points_at_the_manual() {
         assert!(anchors.iter().any(|a| a == heading), "the setup page has no heading #{heading}: {anchors:?}");
     }
     // A machine without anything misses every tool, each with its part of the page.
-    for (backend, ui) in [(Backend::Rust, Ui::Clarity), (Backend::Rust, Ui::Clarity), (Backend::Csharp, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Clarity), (Backend::Rust, Ui::Clarity), (Backend::Csharp, Ui::Clarity), (Backend::Go, Ui::Clarity), (Backend::C, Ui::Clarity), (Backend::Cpp, Ui::Clarity)] {
         let bare = check(backend, ui, &Machine::default());
         assert_eq!(bare.missing.len(), bare.guides.len(), "{backend:?}: {:?} {:?}", bare.missing, bare.guides);
         assert!(bare.guides.iter().all(|g| guide_headings().contains(g)), "{:?}", bare.guides);
@@ -350,7 +360,7 @@ fn the_web_target_of_csharp_needs_the_webassembly_tools() {
     assert_eq!(tools.web_found, ["wasm-tools 10.0.114/10.0.100"]);
     assert_eq!(tools.web_install, None);
     // Another stack needs nothing more for the web.
-    assert!(check(Backend::Go, Ui::Webview, &Machine::default()).web_missing.is_empty());
+    assert!(check(Backend::Go, Ui::Clarity, &Machine::default()).web_missing.is_empty());
 }
 
 /// .NET installed for the whole system needs the system's permission to add
@@ -378,7 +388,7 @@ fn the_webassembly_tools_install_asks_the_system_where_it_must() {
 /// stack's own tools (DESIGN 7.8).
 #[test]
 fn no_stack_needs_node() {
-    for (backend, ui) in [(Backend::Rust, Ui::Clarity), (Backend::Rust, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Clarity), (Backend::Rust, Ui::Clarity), (Backend::Go, Ui::Clarity), (Backend::C, Ui::Clarity), (Backend::Cpp, Ui::Clarity), (Backend::Csharp, Ui::Clarity)] {
         let check = check(backend, ui, &Machine::default());
         assert!(!check.missing.iter().any(|m| m.contains("Node") || m.contains("npm")), "{backend:?}: {:?}", check.missing);
         assert!(!clarity_gen::tools::requirements(backend).iter().any(|r| r.contains("Node")), "{backend:?}");

@@ -1,6 +1,6 @@
 project Orbs
     title "Orbs"
-    stack cpp webview desktop
+    stack cpp desktop
     output "out"
     language "en"
     datasource main sqlite "data/orbs.db"

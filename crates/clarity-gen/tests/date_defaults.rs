@@ -47,9 +47,9 @@ fn code(backend: Backend, ui: Ui) -> String {
 fn every_stack_starts_a_new_record_with_its_date_defaults() {
     let written = [
         (Backend::Rust, Ui::Clarity, ["NaiveDate::from_ymd_opt(2026, 10, 20)", "NaiveDate::from_ymd_opt(2026, 10, 20).and_then(|d| d.and_hms_opt(14, 5, 0))"]),
-        (Backend::Go, Ui::Webview, ["&clarity.Date{Year: 2026, Month: 10, Day: 20}", "&clarity.DateTime{Date: clarity.Date{Year: 2026, Month: 10, Day: 20}, Hour: 14, Minute: 5, Second: 0}"]),
-        (Backend::C, Ui::Webview, ["(ClarityDate){2026, 10, 20}", "(ClarityDateTime){2026, 10, 20, 14, 5, 0}"]),
-        (Backend::Cpp, Ui::Webview, ["clarity::Date{2026, 10, 20}", "clarity::DateTime{clarity::Date{2026, 10, 20}, 14, 5, 0}"]),
+        (Backend::Go, Ui::Clarity, ["&clarity.Date{Year: 2026, Month: 10, Day: 20}", "&clarity.DateTime{Date: clarity.Date{Year: 2026, Month: 10, Day: 20}, Hour: 14, Minute: 5, Second: 0}"]),
+        (Backend::C, Ui::Clarity, ["(ClarityDate){2026, 10, 20}", "(ClarityDateTime){2026, 10, 20, 14, 5, 0}"]),
+        (Backend::Cpp, Ui::Clarity, ["clarity::Date{2026, 10, 20}", "clarity::DateTime{clarity::Date{2026, 10, 20}, 14, 5, 0}"]),
         (Backend::Csharp, Ui::Clarity, ["new DateOnly(2026, 10, 20)", "new DateTime(2026, 10, 20, 14, 5, 0)"]),
     ];
     for (backend, ui, [day, due]) in written {
@@ -65,5 +65,5 @@ fn every_stack_starts_a_new_record_with_its_date_defaults() {
 #[test]
 fn a_null_date_from_the_screen_is_no_date_in_cpp() {
     let read = "if (in.contains(\"due\")) r.due = in[\"due\"].is_null() ? std::nullopt : std::optional<clarity::DateTime>(in[\"due\"].get<clarity::DateTime>());";
-    assert!(code(Backend::Cpp, Ui::Webview).contains(read));
+    assert!(code(Backend::Cpp, Ui::Clarity).contains(read));
 }

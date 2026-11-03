@@ -1,6 +1,6 @@
 // The web target (DESIGN 7.3): the shell as a web server, which serves the
-// renderer's page to a browser and answers its commands over HTTP with the
-// same service the desktop window binds into its webview.
+// web screen's page to a browser and answers its commands over HTTP with
+// the same service the desktop program answers Clarity.UI with.
 
 #include <cstdlib>
 

@@ -33,9 +33,9 @@ code Main
 fn every_stack_sets_a_field_of_a_record_in_a_list() {
     let written = [
         (Backend::Rust, Ui::Clarity, "(*clarity_runtime::at_mut(&mut w.items[..], 2i64)?).done = true;"),
-        (Backend::Go, Ui::Webview, "(&w.Items[2-1]).Done = true"),
-        (Backend::C, Ui::Webview, "->done = true;"),
-        (Backend::Cpp, Ui::Webview, "clarity::at(items, int64_t{2}).done = true;"),
+        (Backend::Go, Ui::Clarity, "(&w.Items[2-1]).Done = true"),
+        (Backend::C, Ui::Clarity, "->done = true;"),
+        (Backend::Cpp, Ui::Clarity, "clarity::at(items, int64_t{2}).done = true;"),
         (Backend::Csharp, Ui::Clarity, "Lists.At(Items, 2L).Done = true;"),
     ];
     for (backend, ui, line) in written {

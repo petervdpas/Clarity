@@ -42,10 +42,10 @@ fn has(text: &str, expected: &str) {
 #[test]
 fn every_stack_adds_a_store_that_follows_its_folder_setting() {
     has(&files(Backend::Rust, Ui::Clarity), "db.add_store_setting(\"photos\", \"records\", \"photosFolder\", \"photos\")?;");
-    has(&files(Backend::Go, Ui::Webview), "db.AddStoreSetting(\"photos\", \"records\", \"photosFolder\", \"photos\")");
+    has(&files(Backend::Go, Ui::Clarity), "db.AddStoreSetting(\"photos\", \"records\", \"photosFolder\", \"photos\")");
     has(&files(Backend::Csharp, Ui::Clarity), "db.AddStoreSetting(\"photos\", \"records\", \"photosFolder\", \"photos\");");
-    has(&files(Backend::C, Ui::Webview), "clarity_add_store_setting(db, \"photos\", \"records\", \"photosFolder\", \"photos\")");
-    has(&files(Backend::Cpp, Ui::Webview), "db.add_store_setting(\"photos\", \"records\", \"photosFolder\", \"photos\");");
+    has(&files(Backend::C, Ui::Clarity), "clarity_add_store_setting(db, \"photos\", \"records\", \"photosFolder\", \"photos\")");
+    has(&files(Backend::Cpp, Ui::Clarity), "db.add_store_setting(\"photos\", \"records\", \"photosFolder\", \"photos\");");
 }
 
 /// The folder part's button opens the system's folder picker through

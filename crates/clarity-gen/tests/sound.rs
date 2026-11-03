@@ -30,9 +30,9 @@ fn settings(backend: Backend) -> clarity_project::Settings {
     let stack = match backend {
         Backend::Csharp => "csharp desktop",
         Backend::Rust => "rust desktop",
-        Backend::Go => "go webview desktop",
-        Backend::C => "c webview desktop",
-        Backend::Cpp => "cpp webview desktop",
+        Backend::Go => "go desktop",
+        Backend::C => "c desktop",
+        Backend::Cpp => "cpp desktop",
     };
     clarity_project::parse(&format!("project Dice\n    stack {stack}\n    datasource main sqlite \"data/dice.db\"\n")).unwrap()
 }

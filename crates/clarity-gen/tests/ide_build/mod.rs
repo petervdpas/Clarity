@@ -125,14 +125,9 @@ pub fn build_for_run(file: &Path, project: &clarity_spec::Project, settings: &cl
     clarity_gen::write_programs(&out, &programs, settings.stack.backend, &settings.keeps).unwrap();
     let program = programs.iter().find(|p| p.target == target).unwrap_or_else(|| panic!("{} has no {target:?} program", file.display()));
     let folder = clarity_project::target_dir(&out, program.target);
-    for step in clarity_gen::steps_before(&folder, settings.stack.backend) {
-        let (tool, args) = step.split_first().unwrap();
-        let ran = Command::new(tool).args(args).current_dir(&folder).output().unwrap();
-        assert!(ran.status.success(), "{tool} {args:?}:\n{}", String::from_utf8_lossy(&ran.stderr));
-    }
     let toolchain = clarity_gen::toolchain(&built, false).expect("Clarity builds this stack");
     let mut command = Command::new(toolchain.tool);
-    command.args(&toolchain.args).envs(toolchain.env.iter().copied()).current_dir(&folder);
+    command.args(&toolchain.args).envs(toolchain.env.iter().cloned()).current_dir(&folder);
     local_runtime(&folder, settings.stack.backend, &mut command);
     let ran = command.output().unwrap_or_else(|e| panic!("{}: {e}", toolchain.tool));
     assert!(ran.status.success(), "{} {}:\n{}{}", toolchain.tool, toolchain.args.join(" "), String::from_utf8_lossy(&ran.stdout), String::from_utf8_lossy(&ran.stderr));
@@ -158,18 +153,10 @@ pub fn builds_without_warnings(file: &Path, project: &clarity_spec::Project, set
     let mut all = Vec::new();
     for program in &programs {
         let target = clarity_project::target_dir(&out, program.target);
-        // Native parts are built first, where the stack's own build does not build them.
-        for step in clarity_gen::steps_before(&target, settings.stack.backend) {
-            let (tool, args) = step.split_first().unwrap();
-            let ran = Command::new(tool).args(args).current_dir(&target).output().unwrap();
-            let said = format!("{}{}", String::from_utf8_lossy(&ran.stdout), String::from_utf8_lossy(&ran.stderr));
-            assert!(ran.status.success(), "{tool} {args:?} in {}:\n{said}", target.display());
-            all.extend(warnings(&said).into_iter().map(|w| format!("{tool}: {w}")));
-        }
         for &release in configurations(settings.stack.backend) {
             let toolchain = if program.target == clarity_project::Target::Cli { clarity_gen::cli_toolchain(&built, release) } else { clarity_gen::toolchain(&built, release) }.expect("Clarity builds this stack");
             let mut command = Command::new(toolchain.tool);
-            command.args(&toolchain.args).envs(toolchain.env.iter().copied()).current_dir(&target);
+            command.args(&toolchain.args).envs(toolchain.env.iter().cloned()).current_dir(&target);
             local_runtime(&target, settings.stack.backend, &mut command);
             let ran = command.output().unwrap_or_else(|e| panic!("{}: {e}", toolchain.tool));
             let said = format!("{}{}", String::from_utf8_lossy(&ran.stdout), String::from_utf8_lossy(&ran.stderr));

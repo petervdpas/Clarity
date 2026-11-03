@@ -81,7 +81,7 @@ fn runs_as_a_person_uses_it(stack: &str) {
 #[test]
 #[ignore = "builds and drives the Go program; run with --ignored, one at a time"]
 fn go_as_a_person_uses_it() {
-    runs_as_a_person_uses_it("go webview web cli");
+    runs_as_a_person_uses_it("go web cli");
 }
 
 #[test]
@@ -93,13 +93,13 @@ fn rust_as_a_person_uses_it() {
 #[test]
 #[ignore = "builds and drives the C program; run with --ignored, one at a time"]
 fn c_as_a_person_uses_it() {
-    runs_as_a_person_uses_it("c webview web cli");
+    runs_as_a_person_uses_it("c web cli");
 }
 
 #[test]
 #[ignore = "builds and drives the C++ program; run with --ignored, one at a time"]
 fn cpp_as_a_person_uses_it() {
-    runs_as_a_person_uses_it("cpp webview web cli");
+    runs_as_a_person_uses_it("cpp web cli");
 }
 
 

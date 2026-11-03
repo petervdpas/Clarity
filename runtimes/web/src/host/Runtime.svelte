@@ -26,9 +26,8 @@
   import { errorText, type ShownText } from "../screen/format.ts";
   import { copyText } from "./clipboard";
   import { catchUncaught } from "./uncaught";
-  import { allParts, findPage, undoScope, valueEntry, windowSize, type PageData } from "../screen/pages.ts";
+  import { allParts, findPage, undoScope, valueEntry, type PageData } from "../screen/pages.ts";
   import { handlerCall } from "../screen/calls.ts";
-  import type { Place } from "../screen/customParts.ts";
   import { SoundPart } from "./sound";
   import { bundled } from "../screen/pictures.ts";
   import { dataEntity, isList, translatedDefaults } from "../screen/windowData.ts";
@@ -223,9 +222,6 @@
     return made;
   }
 
-  /** Set when this is a desktop window of its own (`in new window`), not the main one. */
-  let apart = false;
-
   /** A reply with the texts its handlers put in text values filled in the person's language and format. */
   function received(reply: Reply, start = false): Reply {
     // A handler may have set the settings; the app's start has only their defaults.
@@ -238,7 +234,6 @@
       }
       const sound = soundOf(reply.state.instance ?? 0, reply.state.window, h.part);
       if (sound) sound.hear(h.hear, h.values);
-      else invoke("hear_part", { instance: reply.state.instance ?? 0, part: h.part, hear: h.hear, values: h.values }).catch(() => {});
     }
     if (!model || !reply.shown) return reply;
     const data = { ...reply.state.data };
@@ -399,10 +394,9 @@
     {
       get: () => stack,
       set: (next) => {
-        // A window that closed ends its custom parts.
+        // A window that closed ends its canvases.
         const open = new Set(next.map((s) => s.instance));
         for (const gone of stack.filter((s) => s.instance !== undefined && !open.has(s.instance))) {
-          invoke("close_parts", { instance: gone.instance }).catch(() => {});
           canvasHears.closed(gone.instance!);
           // Its sounds stop.
           for (const [key, sound] of sounds) {
@@ -423,15 +417,11 @@
       open: async (window, withData) => opened(await invoke<Reply>("open_window", { window, with: withSettings(withData) })),
       close: async (state) => received(await invoke<Reply>("close_window", { state: $state.snapshot(state) })),
       returnTo: async (state) => received(await invoke<Reply>("return_to", { state: $state.snapshot(state) })),
-      // A desktop window of its own opens at the size of the window it shows.
-      openApart: (window, withData) => {
-        const target = model ? findPage(model, window) : undefined;
-        const size = target ? windowSize(target) : undefined;
-        return invoke("open_apart", { window, with: withSettings(withData), width: size?.width, height: size?.height });
-      },
-      // The main window ends the application; a window of its own just closes.
-      // While the databases are not open, the last window closing connects again.
-      quit: () => (unconnected ? reconnect() : invoke(apart ? "close_apart" : "quit_app")),
+      // A page has no desktop windows: a window in a new window opens in place.
+      openApart: (window, withData): Promise<void> => nav.open(window, withData),
+      // The last window ends the application; while the databases are not
+      // open, it closing connects again.
+      quit: () => (unconnected ? reconnect() : invoke("quit_app")),
     },
     say,
     (err) => say({ level: "error", text: errorText(err) }),
@@ -916,14 +906,6 @@
       if (!part) return designed ? [designed] : [];
       return keysOfCommand(appFrame ? part : `${current?.window ?? ""}.${part}`, designed, personChoices);
     },
-    placePart(part: string, kind: string, place: Place, shown: boolean) {
-      if (current?.instance === undefined) return;
-      invoke("place_part", { instance: current.instance, part, kind, ...place, shown }).catch(() => {});
-    },
-    setPartValue(part: string, name: string, value: JsonValue) {
-      if (current?.instance === undefined) return;
-      invoke("set_part", { instance: current.instance, part, name, value }).catch(() => {});
-    },
     fieldValues(entity: string, field: string) {
       const at = `${entity}.${field}`;
       const known = fieldValues[at];
@@ -1075,13 +1057,6 @@
     await startSettings(start.model);
     await tellLanguage();
     try {
-      // A desktop window of its own starts with the window it was opened for.
-      const own = await invoke<{ window: string; with: Record<string, unknown> } | null>("apart_start").catch(() => null);
-      if (own) {
-        apart = true;
-        await nav.open(own.window, own.with);
-        return;
-      }
       if (start.unconnected) {
         await showUnconnected(start.unconnected);
         return;

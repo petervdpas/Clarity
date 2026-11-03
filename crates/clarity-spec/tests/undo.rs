@@ -143,3 +143,22 @@ fn why_a_save_was_refused_for_a_required_field_is_a_clarity_word() {
     let without = keys_of("module m\n\nentity Customer\n    name: text, label \"Name\"\n");
     assert!(!without.contains(&"fieldRequired".to_string()), "{without:?}");
 }
+
+/// What a custom part binds the person changes through it: an edit with its scope, which Ctrl+Z takes back.
+#[test]
+fn a_custom_part_has_its_undo_scope() {
+    let source = "module m
+
+part Gauge
+    native \"parts/Gauge\"
+    binds integer
+
+page Main: window
+    data level: integer
+    Gauge name gauge at 1,1 span 4 rows 2 bind level
+";
+    assert!(errors(source).is_empty(), "{:#?}", errors(source));
+    let project = load_sources([("m.clarity", source)]);
+    let widgets = &project.files[0].pages[0].widgets;
+    assert_eq!(widgets[0].props.undo_scope.as_deref(), Some("gauge"));
+}

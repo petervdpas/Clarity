@@ -173,10 +173,16 @@ fn problems_of(change: impl FnOnce(&mut Settings)) -> Vec<String> {
     validate(&settings)
 }
 
+// Every language draws with Clarity.UI (DESIGN 7.9): settings that still
+// carry the shared web screen say what to write instead.
 #[test]
-fn a_native_toolkit_needs_its_backend() {
-    let problems = problems_of(|s| s.stack.backend = Backend::Go);
-    assert_eq!(problems, ["Clarity.UI is a UI for the C# and Rust backends, not for Go"]);
+fn every_language_draws_with_clarity_ui() {
+    assert_eq!(problems_of(|s| s.stack.backend = Backend::Go), Vec::<String>::new());
+    let problems = problems_of(|s| {
+        s.stack.backend = Backend::Go;
+        s.stack.ui = Ui::Webview;
+    });
+    assert_eq!(problems, ["Go draws its windows with Clarity.UI and names no UI; write stack go desktop"]);
 }
 
 // Rust draws its desktop with Clarity.UI only, unnamed as C#'s; the
@@ -204,7 +210,7 @@ fn rust_draws_its_desktop_with_clarity_ui_only() {
     // Settings that still carry the web renderer for Rust are refused too.
     let mut webview = settings.clone();
     webview.stack.ui = Ui::Webview;
-    assert_eq!(validate(&webview), ["Web renderer is a UI for Go, C and C++, not for Rust; write stack rust desktop"]);
+    assert_eq!(validate(&webview), ["Rust draws its windows with Clarity.UI and names no UI; write stack rust desktop"]);
 
     // A command line program beside the window, in either order.
     let cli = parse(&SHOP.replace("    stack csharp desktop", "    stack rust cli desktop")).unwrap();
@@ -245,9 +251,15 @@ fn clarity_ui_is_not_named_in_the_stack_line() {
     // A UI word is no target: C# draws with Clarity.UI only.
     let named = parse(&SHOP.replace("    stack csharp desktop", "    stack csharp wpf desktop")).unwrap_err();
     assert!(named.contains("wpf"), "{named}");
-    // The other languages still name the shared web screen.
-    let go = parse(&SHOP.replace("    stack csharp desktop", "    stack go webview desktop")).unwrap();
-    assert_eq!((go.stack.ui, go.stack.targets), (Ui::Webview, vec![Target::Desktop]));
+    // Go, C and C++ draw with Clarity.UI too (DESIGN 7.9): the shared web screen is named no more.
+    for (language, label) in [("go", "Go"), ("c", "C"), ("cpp", "C++")] {
+        let line = format!("    stack {language} desktop");
+        let settings = parse(&SHOP.replace("    stack csharp desktop", &line)).unwrap();
+        assert_eq!((settings.stack.ui, settings.stack.targets.clone()), (Ui::Clarity, vec![Target::Desktop]));
+        assert_eq!(validate(&settings), Vec::<String>::new());
+        let named = parse(&SHOP.replace("    stack csharp desktop", &format!("    stack {language} webview desktop"))).unwrap_err();
+        assert_eq!(named, format!("line 3: {label} draws its windows with Clarity.UI and names no UI; write stack {language} desktop"));
+    }
 }
 
 #[test]
@@ -434,7 +446,8 @@ fn the_catalog_offers_every_backend_and_a_ui_for_each() {
     let rust = catalog.backends.iter().find(|b| b.id == Backend::Rust).unwrap();
     assert_eq!(rust.uis, [Ui::Clarity]);
     assert_eq!(catalog.starter, Stack { backend: Backend::Rust, ui: Ui::Clarity, targets: vec![Target::Desktop] });
-    assert!(catalog.backends.iter().filter(|b| ![Backend::Csharp, Backend::Rust].contains(&b.id)).all(|b| b.uis == [Ui::Webview]));
+    // Go, C and C++ draw with Clarity.UI only too (DESIGN 7.9).
+    assert!(catalog.backends.iter().all(|b| b.uis == [Ui::Clarity]));
     assert_eq!(catalog.sources.len(), 5);
 }
 
@@ -631,11 +644,10 @@ fn a_command_line_program_beside_the_desktop_one() {
 }
 
 #[test]
-fn a_window_needs_its_ui_named() {
-    assert_eq!(
-        parse("project Shop\n    stack go cli desktop\n").unwrap_err(),
-        "line 2: a program with a window names its UI before the targets, like: stack go webview desktop cli"
-    );
+fn a_window_takes_its_targets_after_the_language() {
+    let settings = parse("project Shop\n    stack go cli desktop\n").unwrap();
+    assert_eq!((settings.stack.ui, settings.stack.targets), (Ui::Clarity, vec![Target::Cli, Target::Desktop]));
+    assert_eq!(parse("project Shop\n    stack\n").unwrap_err(), "line 2: write the backend and at least one target, like: stack go desktop");
     assert!(catalog().targets.iter().any(|t| t.id == Target::Cli && t.label == "Command line"));
 }
 
@@ -650,7 +662,7 @@ fn each_target_has_its_own_output_folder() {
 /// which the system's protected store keeps.
 #[test]
 fn a_web_api_signs_with_a_secret_setting() {
-    let text = "project Shop\n    stack go webview desktop\n    datasource shop rest \"https://shop.example.com/api\"\n        auth bearer \"setting:shopToken\"\n";
+    let text = "project Shop\n    stack go desktop\n    datasource shop rest \"https://shop.example.com/api\"\n        auth bearer \"setting:shopToken\"\n";
     let settings = parse(text).unwrap();
     assert_eq!(validate(&settings), Vec::<String>::new());
     let bare = text.replace("\"setting:shopToken\"", "\"setting:\"");
@@ -752,7 +764,7 @@ fn the_project_says_which_port_it_serves_on() {
 #[test]
 fn a_web_api_says_how_it_pages() {
     use clarity_project::{Paging, PagingKind};
-    let file = |paging: &str| format!("project Forms\n    stack go webview desktop\n    datasource forms rest \"https://forms.example.com/api\"\n        {paging}\n");
+    let file = |paging: &str| format!("project Forms\n    stack go desktop\n    datasource forms rest \"https://forms.example.com/api\"\n        {paging}\n");
     let cases = [
         ("paging page \"page\" size \"per_page\" 100 items \"data\"", Paging { kind: PagingKind::Page, param: "page".into(), size_param: "per_page".into(), size: 100, next: String::new(), items: "data".into() }),
         ("paging offset \"offset\" size \"limit\" 50", Paging { kind: PagingKind::Offset, param: "offset".into(), size_param: "limit".into(), size: 50, next: String::new(), items: String::new() }),
@@ -778,11 +790,11 @@ fn a_web_api_says_how_it_pages() {
         assert_eq!(parse(&file(line)).unwrap_err(), problem, "{line}");
     }
     // Written under the auth line, before the description and its picks.
-    let text = "project Forms\n    stack go webview desktop\n    datasource forms rest \"https://forms.example.com/api\"\n        auth bearer \"env:FORMS_TOKEN\"\n        paging link\n        openapi \"forms.yaml\"\n        pick \"listForms\"\n";
+    let text = "project Forms\n    stack go desktop\n    datasource forms rest \"https://forms.example.com/api\"\n        auth bearer \"env:FORMS_TOKEN\"\n        paging link\n        openapi \"forms.yaml\"\n        pick \"listForms\"\n";
     let settings = parse(text).unwrap();
     assert_eq!(write(None, &settings).unwrap(), text.replace("desktop\n", "desktop\n    output \"out\"\n"));
     // Only a web API pages.
-    let settings = parse("project Shop\n    stack go webview desktop\n    datasource main sqlite \"data/shop.db\"\n        paging link\n").unwrap();
+    let settings = parse("project Shop\n    stack go desktop\n    datasource main sqlite \"data/shop.db\"\n        paging link\n").unwrap();
     assert_eq!(validate(&settings), ["data source 'main': only a web API pages"]);
     // Settings the IDE's form saves are checked as the file's lines are, so a file it writes always reads back.
     let paged = |paging: Paging| {

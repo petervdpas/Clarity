@@ -363,8 +363,8 @@ mod color_roles {
 /// Where in the one page of the C and C++ stacks their build puts the windows' markup.
 pub const WINDOWS_MARK: &str = "<!--clarity-windows-->";
 
-/// The screen's page with everything in it, for the C and C++ stacks,
-/// whose webview shows a page and no folder: its script, styles, theme
+/// The screen's page with everything in it, for the C and C++ web targets,
+/// whose server serves one page and no folder: its script, styles, theme
 /// styles and fixed pictures. Their CMake build puts the windows' markup
 /// (`ui/windows/`) into it when it builds the program.
 pub fn single_page(project: &Project) -> String {

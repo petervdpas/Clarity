@@ -28,7 +28,7 @@ test("a stack without its tools says what to install, and that the rest works", 
 });
 
 test("a stack Clarity does not generate yet says so", () => {
-  assert.deepEqual(toolsNote(all, "go", "web", ["desktop"]), { level: "warning", text: "Clarity does not generate this stack yet.", guide: null, install: null });
+  assert.deepEqual(toolsNote(all, "go", "webview", ["desktop"]), { level: "warning", text: "Clarity does not generate this stack yet.", guide: null, install: null });
 });
 
 test("nothing is said before the tools are known", () => {

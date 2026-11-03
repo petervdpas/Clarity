@@ -25,7 +25,7 @@ typedef struct {
     int64_t grid;
     bool snap;
     bool readonly;
-} ClarityCanvas;
+} ClarityCanvasPart;
 
 typedef enum { CLARITY_CANVAS_FAILED, CLARITY_CANVAS_REFUSED, CLARITY_CANVAS_CHANGED } ClarityCanvasDone;
 
@@ -39,7 +39,7 @@ typedef struct {
 /// Applies the person's `action` on a canvas to `data`, changed in place. An
 /// action that changes nothing, or names no object or shape, is refused, as
 /// every action on a readonly canvas; an action that is none fails.
-ClarityCanvasDone clarity_canvas_event(cJSON* data, const ClarityCanvas* canvas, const cJSON* action, ClarityCanvasTouched* touched);
+ClarityCanvasDone clarity_canvas_event(cJSON* data, const ClarityCanvasPart* canvas, const cJSON* action, ClarityCanvasTouched* touched);
 
 /// A drawing's SVG text: its units and its shapes, one element on a line.
 const char* clarity_drawing_text(const int units[2], const cJSON* shapes);

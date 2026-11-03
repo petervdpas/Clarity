@@ -46,9 +46,11 @@ fn runtime_dir() -> std::path::PathBuf {
 }
 
 /// `tool` with `args` in `dir`; it must succeed. GOWORK is left to the
-/// go.work in `dir`, which only a local build has.
+/// go.work in `dir`, which only a local build has. A desktop program links
+/// Clarity.UI's library from the folder CLARITY_UI names, as Clarity's build does.
 fn run(dir: &Path, tool: &str, args: &[&str]) -> String {
-    let out = Command::new(tool).args(args).current_dir(dir).env_remove("GOWORK").output().unwrap_or_else(|e| panic!("{tool}: {e}"));
+    let cgo = clarity_gen::go_cgo_env(std::env::var_os("CLARITY_UI").as_deref().map(Path::new), std::env::consts::OS);
+    let out = Command::new(tool).args(args).current_dir(dir).env_remove("GOWORK").envs(cgo).output().unwrap_or_else(|e| panic!("{tool}: {e}"));
     let said = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     assert!(out.status.success(), "{tool} {args:?} failed in {}:\n{said}", dir.display());
     said
@@ -100,7 +102,7 @@ fn built_in_go(name: &str, program: &str, runtime: Runtime) -> std::path::PathBu
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
     // An example builds on the stack its project file names, and no other.
-    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Go, Ui::Webview), "{name} is not a Go example");
+    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Go, Ui::Clarity), "{name} is not a Go example");
     let out = scratch().join(format!("clarity-gen-go-{name}-{}", std::process::id()));
     // The database in the scratch folder, not in the example.
     settings.datasources[0].url = "data/app.db".into();
@@ -312,7 +314,7 @@ fn an_engine_answers_in_the_generated_application_in_go() {
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = clarity_project::starter("Shop", "shop");
     settings.stack.backend = clarity_project::Backend::Go;
-    settings.stack.ui = clarity_project::Ui::Webview;
+    settings.stack.ui = clarity_project::Ui::Clarity;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch().join(format!("clarity-gen-go-engine-{}", std::process::id()));
     write(&out, &files, Runtime::Local);
@@ -348,7 +350,7 @@ fn functions_named_like_types_build_in_go() {
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = clarity_project::starter("Shop", "shop");
     settings.stack.backend = clarity_project::Backend::Go;
-    settings.stack.ui = clarity_project::Ui::Webview;
+    settings.stack.ui = clarity_project::Ui::Clarity;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch().join(format!("clarity-gen-go-names-{}", std::process::id()));
     write(&out, &files, Runtime::Local);
@@ -463,7 +465,7 @@ fn board_runs_in_go(interpreted: bool) {
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     let mut settings = clarity_project::load(&file).settings.expect("the fixture has a project file");
     settings.stack.backend = Backend::Go;
-    settings.stack.ui = Ui::Webview;
+    settings.stack.ui = Ui::Clarity;
     settings.datasources[0].url = "data/app.db".into();
     settings.engines_interpreted = interpreted;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
@@ -490,7 +492,7 @@ fn a_clarity_engine_beside_the_screen_builds_in_go() {
     assert!(errors.is_empty(), "{errors:#?}");
     let mut settings = clarity_project::starter("Skies", "sky");
     settings.stack.backend = clarity_project::Backend::Go;
-    settings.stack.ui = clarity_project::Ui::Webview;
+    settings.stack.ui = clarity_project::Ui::Clarity;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch().join("clarity-gen-go-sky");
     write(&out, &files, Runtime::Local);
@@ -509,7 +511,7 @@ fn questions_and_their_answers_build_in_go() {
     let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
     let mut settings = clarity_project::starter("Music", "music");
     settings.stack.backend = Backend::Go;
-    settings.stack.ui = Ui::Webview;
+    settings.stack.ui = Ui::Clarity;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch().join(format!("clarity-gen-go-asks-{}", std::process::id()));
     write(&out, &files, Runtime::Local);
@@ -530,7 +532,7 @@ fn an_engine_beside_the_screen_builds_in_go() {
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = clarity_project::starter("Play", "play");
     settings.stack.backend = clarity_project::Backend::Go;
-    settings.stack.ui = clarity_project::Ui::Webview;
+    settings.stack.ui = clarity_project::Ui::Clarity;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch().join("clarity-gen-go-play");
     write(&out, &files, Runtime::Local);
@@ -556,11 +558,10 @@ fn the_invaders_example_serves_in_go() {
 }
 
 /// The packages of the runtime a program imports, in groups: every program
-/// imports the first; the others only when it uses them (a desktop window,
-/// secret settings, engines, a server database).
-const GROUPS: [(&str, &[&str]); 7] = [
+/// imports the first; the others only when it uses them (secret settings,
+/// engines, a server database). The desktop's package ui needs nothing more.
+const GROUPS: [(&str, &[&str]); 6] = [
     ("base", &["clarity", "shell"]),
-    ("desktop", &["desktop"]),
     ("secrets", &["secrets"]),
     ("engine", &["engine"]),
     ("postgresql", &["postgresql"]),

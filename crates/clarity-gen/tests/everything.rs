@@ -135,12 +135,12 @@ const STACKS: [&str; 9] = [
     "csharp desktop cli",
     "rust desktop cli",
     "rust web cli",
-    "go webview desktop cli",
-    "go webview web cli",
-    "c webview desktop cli",
-    "c webview web cli",
-    "cpp webview desktop cli",
-    "cpp webview web cli",
+    "go desktop cli",
+    "go web cli",
+    "c desktop cli",
+    "c web cli",
+    "cpp desktop cli",
+    "cpp web cli",
 ];
 
 #[test]

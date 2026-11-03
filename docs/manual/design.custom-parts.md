@@ -1,6 +1,6 @@
 # Custom parts
 
-How to put a part on a window that an outside library draws, such as a game scene drawn with SFML or Bevy, written in your project's own language.
+How to put a part on a window that an outside library draws, such as a game scene drawn with Bevy, written in your project's own language.
 
 ## What a custom part is
 
@@ -43,6 +43,6 @@ Pick the part under Custom parts in the project tree. Its view shows what the wi
 - The **file tree** opens files in tabs; **+ File**, **+ Folder**, **Rename** and **Delete** change the folder. Clarity's file opens read only: change the declaration and it follows.
 - **Build** builds the part on its own (CMake, Cargo or go build), its compiler's output in the Output panel. A C# adapter builds with the program.
 
-Every Build and Run of the program builds the part in with it. On the webview stacks (Go, C and C++) the part draws in a native window Clarity keeps at its place; the `orbs` example (C++ with SFML) shows one.
+Every Build and Run of the program builds the part in with it. On every stack the part draws on the canvas Clarity.UI gives it, in its place on the window; the `orbs` example (C++) shows one.
 
 On Clarity.UI (Rust and C#) a part is no native window: it is a control of Clarity.UI and draws on the window's own surface, in its place, through the trait Clarity writes for it (in Rust, `GaugePart` in the crate's `src/clarity.rs`). It takes the pointer, the wheel, keys and the focus as any part does, and menus and dialogs lie over it. See [Rust](stacks.rust.md#custom-parts) for the Rust trait; the `dice` example (Rust with Bevy) shows one.

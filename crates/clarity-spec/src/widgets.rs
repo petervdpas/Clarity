@@ -1017,7 +1017,8 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Change],
-        properties: &[WidgetProperty::TabOrder],
+        // What it binds the person changes through it: an edit, which Ctrl+Z takes back (DESIGN 5.29).
+        properties: &[WidgetProperty::TabOrder, WidgetProperty::NoUndo],
     },
 ];
 

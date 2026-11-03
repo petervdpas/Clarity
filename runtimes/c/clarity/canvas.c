@@ -55,7 +55,7 @@ static bool put_at_path(cJSON* data, const char* path, cJSON* value) {
 }
 
 /// A place on the canvas: snapped to the grid when it snaps, else a whole number.
-static int64_t placed(const ClarityCanvas* canvas, double v) {
+static int64_t placed(const ClarityCanvasPart* canvas, double v) {
     if (canvas->snap && canvas->grid > 0) return whole(v / (double)canvas->grid) * canvas->grid;
     return whole(v);
 }
@@ -279,7 +279,7 @@ static const ShapeFields shape_fields[] = {
 
 /// A shape as a vector canvas keeps it: whole numbers, places snapped. NULL
 /// and an error when it is no shape a canvas keeps.
-static cJSON* fit_shape(const cJSON* shape, const ClarityCanvas* canvas) {
+static cJSON* fit_shape(const cJSON* shape, const ClarityCanvasPart* canvas) {
     const char* op = string_of(shape, "op");
     const ShapeFields* fields = NULL;
     for (size_t i = 0; i < sizeof shape_fields / sizeof *shape_fields; ++i)
@@ -355,7 +355,7 @@ static bool same_number(const cJSON* value, int64_t n) {
 
 static ClarityCanvasDone fails(void) { return CLARITY_CANVAS_FAILED; }
 
-static ClarityCanvasDone moved_object(cJSON* data, const ClarityCanvas* canvas, const cJSON* move, ClarityCanvasTouched* touched) {
+static ClarityCanvasDone moved_object(cJSON* data, const ClarityCanvasPart* canvas, const cJSON* move, ClarityCanvasTouched* touched) {
     if (!cJSON_IsObject(move)) return clarity_fail(CLARITY_INVALID, "an object is moved"), fails();
     cJSON* list = clarity_data_at(data, canvas->list);
     if (!cJSON_IsArray(list)) return clarity_fail(CLARITY_INVALID, "the window has no list %s", canvas->list), fails();
@@ -382,7 +382,7 @@ static int index_of(const cJSON* v) {
     return number_of(v, &n) && n >= 1 ? (int)n : 0;
 }
 
-static ClarityCanvasDone vector_changed(cJSON* data, const ClarityCanvas* canvas, const cJSON* action, ClarityCanvasTouched* touched) {
+static ClarityCanvasDone vector_changed(cJSON* data, const ClarityCanvasPart* canvas, const cJSON* action, ClarityCanvasTouched* touched) {
     int units[2] = {canvas->units ? canvas->units[0] : default_units[0], canvas->units ? canvas->units[1] : default_units[1]};
     const cJSON* was = clarity_data_at(data, canvas->path);
     const char* text = cJSON_IsString(was) ? was->valuestring : "";
@@ -424,7 +424,7 @@ static ClarityCanvasDone vector_changed(cJSON* data, const ClarityCanvas* canvas
     return CLARITY_CANVAS_CHANGED;
 }
 
-ClarityCanvasDone clarity_canvas_event(cJSON* data, const ClarityCanvas* canvas, const cJSON* action, ClarityCanvasTouched* touched) {
+ClarityCanvasDone clarity_canvas_event(cJSON* data, const ClarityCanvasPart* canvas, const cJSON* action, ClarityCanvasTouched* touched) {
     *touched = (ClarityCanvasTouched){false, 0};
     if (canvas->readonly) return CLARITY_CANVAS_REFUSED;
     const char* mode = canvas->mode ? canvas->mode : "";

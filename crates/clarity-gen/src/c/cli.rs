@@ -1,5 +1,5 @@
 //! The C command-line program (DESIGN 5.20): a CMake project of its own in
-//! `out/cli`, on the runtime without the shell and its webview, with the
+//! `out/cli`, on the runtime without the desktop layer, with the
 //! project's records, actions and commands, and a main that reads the
 //! command line and runs the command it names.
 
@@ -145,7 +145,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let types = check::types(&project.files);
     let engines = !crate::engines(project).is_empty();
     let mut files = vec![text("CMakeLists.txt", cmake_lists(&program, engines, project.calls_out(), !project.secret_settings().is_empty())), text("CMakePresets.json", PRESETS.to_string())];
-    // The runtime without the shell: no window, no webview.
+    // The runtime without the desktop layer: no window.
     let engine_files = ENGINE_FILES.iter().chain(&WASM3_FILES).filter(|_| engines);
     let http_files = super::HTTP_FILES.iter().filter(|_| project.calls_out());
     let secret_files = super::SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());

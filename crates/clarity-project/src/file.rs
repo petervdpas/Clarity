@@ -372,7 +372,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                         .collect::<Result<Vec<_>, _>>()?;
                     if targets.iter().any(|t| *t != Target::Cli) {
                         return Err(format!(
-                            "line {line}: a program with a window names its UI before the targets, like: stack go webview desktop cli"
+                            "line {line}: a program with a window names its targets after the language, like: stack go desktop cli"
                         ));
                     }
                     stack = Some(Stack { backend, ui: usual_ui(backend), targets });
@@ -380,12 +380,12 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     let (Some(backend), Some(ui), targets) = (words.first(), words.get(1), words.get(2..).unwrap_or(&[]))
                     else {
                         return Err(format!(
-                            "line {line}: write the backend, the UI and at least one target, like: stack go webview desktop"
+                            "line {line}: write the backend and at least one target, like: stack go desktop"
                         ));
                     };
                     if targets.is_empty() {
                         return Err(format!(
-                            "line {line}: the stack needs at least one target, like: stack go webview desktop"
+                            "line {line}: the stack needs at least one target, like: stack go desktop"
                         ));
                     }
                     stack = Some(Stack {

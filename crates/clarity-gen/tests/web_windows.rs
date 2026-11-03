@@ -124,6 +124,6 @@ fn a_custom_part_that_grows_says_so_in_the_markup() {
     let project = clarity_spec::keyed::load_keyed([("m.clarity", source)], &[], "en");
     let page = project.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == "Main").unwrap();
     let markup = clarity_gen::web_windows::window_markup(page);
-    assert!(markup.contains("<Custom name=\"board\" at=\"1,1\" span=\"6\" rows=\"4\" part=\"Board\" grows=\"true\" />"), "{markup}");
-    assert!(markup.contains("<Custom name=\"dial\" at=\"7,1\" span=\"6\" rows=\"2\" part=\"Dial\" />"), "{markup}");
+    assert!(markup.contains("<Custom name=\"board\" at=\"1,1\" span=\"6\" rows=\"4\" undoScope=\"board\" part=\"Board\" grows=\"true\" />"), "{markup}");
+    assert!(markup.contains("<Custom name=\"dial\" at=\"7,1\" span=\"6\" rows=\"2\" undoScope=\"dial\" part=\"Dial\" />"), "{markup}");
 }

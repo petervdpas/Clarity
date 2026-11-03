@@ -45,13 +45,13 @@ fn code_reads_and_sets_folded_from_the_design_on_every_stack() {
     let rust = files(Backend::Rust, Ui::Clarity);
     has(text(&rust, "src/modules/shop.rs"), "if ui.folded(\"details\", true) {");
     has(text(&rust, "src/modules/shop.rs"), "ui.set_folded(\"details\", false);");
-    let go = files(Backend::Go, Ui::Webview);
+    let go = files(Backend::Go, Ui::Clarity);
     has(text(&go, "shop_module.go"), "if ui.Folded(\"details\", true) {");
     has(text(&go, "shop_module.go"), "ui.SetFolded(\"details\", false)");
-    let c = files(Backend::C, Ui::Webview);
+    let c = files(Backend::C, Ui::Clarity);
     has(text(&c, "src/modules/shop.c"), "if (clarity_ui_folded(ui, \"details\", true)) {");
     has(text(&c, "src/modules/shop.c"), "clarity_ui_set_folded(ui, \"details\", false);");
-    let cpp = files(Backend::Cpp, Ui::Webview);
+    let cpp = files(Backend::Cpp, Ui::Clarity);
     has(text(&cpp, "src/modules/shop.cpp"), "if (ui.folded(\"details\", true)) {");
     has(text(&cpp, "src/modules/shop.cpp"), "ui.set_folded(\"details\", false);");
 }

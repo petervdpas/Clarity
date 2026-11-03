@@ -37,10 +37,10 @@ Because it removes files, Clarity marks the folder as its own with a file `.clar
 
 Clarity uses the tools of each stack and does not bring them along. What it looks for:
 
-- Rust: `cargo`; on Linux, also the WebKitGTK development files (found with `pkg-config`).
+- Rust: `cargo`.
 - C#: a .NET SDK of the version the generated project targets.
-- Go: `go`; on Linux, also the WebKitGTK development files.
-- C and C++: a compiler, CMake, and make or Ninja; on Linux, also the SQLite and WebKitGTK development files, and nlohmann-json for C++. C also needs a C++ compiler for the webview.
+- Go: `go` and a C compiler (cgo), and the Clarity.UI library in the folder `CLARITY_UI` names.
+- C and C++: a compiler, CMake, and make or Ninja; on Linux, also the SQLite development files, and nlohmann-json for C++; and the Clarity.UI library in the folder `CLARITY_UI` names.
 
 The **Build tools** row, in the New project dialog and in the project settings under Stack, says what was found or what to install, with where to get it. **How to install** beside it opens [Setting up the build tools](setup.tools.md) at the part about the first missing tool, for the system you are on. **Environment...** beside it opens Clarity settings at Environment, where the tools are scanned and chosen; the row follows when you come back.
 

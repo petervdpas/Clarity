@@ -25,9 +25,6 @@ mysql = ["dep:mysql"]
 mssql = ["dep:tiberius", "dep:tokio", "dep:tokio-util"]
 # Engines (DESIGN 5.11): WebAssembly modules hosted through wasmi.
 engines = ["dep:wasmi"]
-# Custom parts written in Rust (DESIGN 5.19): their host, which draws them
-# in native child windows: X11 on Linux, Win32 on Windows.
-parts = ["dep:windows-sys"]
 # HTTP calls from code (DESIGN 5.23), through ureq with rustls.
 http = ["dep:ureq"]
 # Secret settings (DESIGN 5.27): the system's protected store. The
@@ -57,15 +54,9 @@ ureq = { version = "3", optional = true }
 [target.'cfg(not(windows))'.dependencies]
 keyring = { version = "3.6.3", optional = true, default-features = false, features = ["apple-native", "async-secret-service", "async-io", "crypto-rust"] }
 
-# The part host's child windows on Windows, and the Credential Manager of the
-# secrets; on Linux the part host calls X11 directly.
+# The Credential Manager of the secrets on Windows.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", optional = true, features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-    "Win32_System_LibraryLoader",
-    "Win32_UI_WindowsAndMessaging",
-] }
+windows-sys = { version = "0.61", optional = true, features = ["Win32_Foundation"] }
 
 # The secrets test reads a credential back through Win32, to see how it was kept.
 [target.'cfg(windows)'.dev-dependencies]

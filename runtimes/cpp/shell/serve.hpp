@@ -1,7 +1,7 @@
 // The web target (DESIGN 7.3): the application as a web server. It serves
 // the renderer's page to a browser, telling the page where to send its
 // commands, and answers each command with the same service the desktop
-// window binds into its webview. One request at a time; the database is
+// program answers Clarity.UI with. One request at a time; the database is
 // the server's.
 
 #pragma once

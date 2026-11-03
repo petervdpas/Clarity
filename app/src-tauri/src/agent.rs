@@ -1155,10 +1155,11 @@ mod tests {
         let broken = tools.call("write_file", &json!({"path": "tasks.clarity", "text": "module tasks\n\nentity Task\n    title: nonsense\n"}));
         assert!(!broken.is_error);
         assert!(broken.text.contains("error(s)") && broken.text.contains("tasks.clarity:"), "{}", broken.text);
-        // A label is a key, whose text the default language's file gives.
+        // A label is a key, whose text the default language's file gives; a
+        // required field also needs Clarity's word for saying so.
         let en = tools.call("read_file", &json!({"path": "translations/en.clarity"}));
         assert!(en.text.starts_with("translation en"), "{}", en.text);
-        let with_key = format!("{}\n    taskTitle \"Title\"\n", en.text.trim_end());
+        let with_key = format!("{}\n    taskTitle \"Title\"\n    fieldRequired \"{{field}} is required\"\n", en.text.trim_end());
         assert!(!tools.call("write_file", &json!({"path": "translations/en.clarity", "text": with_key})).is_error);
         let fixed = tools.call("write_file", &json!({"path": "tasks.clarity", "text": "module tasks\n\nentity Task\n    title: text(120), required, label @taskTitle"}));
         assert!(fixed.text.contains("No errors") && fixed.text.contains("not in a migration yet"), "{}", fixed.text);

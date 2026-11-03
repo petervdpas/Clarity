@@ -11,7 +11,6 @@ import type { Event as PartEvent } from "../generated/Event";
 import type { Move } from "../parts/rowDrag";
 import type { RangeMove } from "./ranges";
 import type { ShownText } from "./format";
-import type { Place } from "./customParts";
 import type { JsonValue } from "../generated/serde_json/JsonValue";
 
 const LIVE = Symbol("clarity-live");
@@ -128,10 +127,6 @@ export interface Live {
   setOpen(part: string, open: number): void;
   /** Keeps whether a part shows: a popover the person opened or closed, sent with the next event. */
   setVisible(part: string, visible: boolean): void;
-  /** Where a custom part is in the webview and whether it shows: the shell keeps its native window there (DESIGN 6.5). */
-  placePart(part: string, kind: string, place: Place, shown: boolean): void;
-  /** Gives a custom part one of its values: a property, `value` for what it binds, or `enabled`. */
-  setPartValue(part: string, name: string, value: JsonValue): void;
   /**
    * A canvas an engine beside the screen draws (DESIGN 5.12) shows: what
    * handlers tell it reaches `hear`, those told before it showed first.

@@ -25,8 +25,6 @@ pub mod markdown;
 pub mod picture;
 pub mod program;
 pub mod query;
-#[cfg(feature = "parts")]
-pub mod parts;
 pub mod ranges;
 pub mod record_file;
 pub mod reorder;

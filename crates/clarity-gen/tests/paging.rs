@@ -60,7 +60,7 @@ fn rust_reads_every_page() {
 
 #[test]
 fn go_reads_every_page() {
-    let code = code(Backend::Go, Ui::Webview, "api_module.go");
+    let code = code(Backend::Go, Ui::Clarity, "api_module.go");
     has(&code, "clarity.HTTPPages(\"https://shop.example.com/api\", \"/orders\", ");
     has(&code, "clarity.HTTPAuth{Kind: \"bearer\", Secret: \"env:SHOP_TOKEN\"}, clarity.HTTPPaging{Kind: \"page\", Param: \"page\", SizeParam: \"per_page\", Size: 100, Next: \"\", Items: \"data\"})");
 }
@@ -74,14 +74,14 @@ fn csharp_reads_every_page() {
 
 #[test]
 fn cpp_reads_every_page() {
-    let code = code(Backend::Cpp, Ui::Webview, "src/modules/api.cpp");
+    let code = code(Backend::Cpp, Ui::Clarity, "src/modules/api.cpp");
     has(&code, "clarity::http_pages(std::string(\"https://shop.example.com/api\"), ");
     has(&code, "clarity::HttpAuth::Bearer, std::string(\"env:SHOP_TOKEN\"), clarity::HttpPaging{clarity::PagingKind::Page, \"page\", \"per_page\", 100, \"\", \"data\"})");
 }
 
 #[test]
 fn c_reads_every_page() {
-    let code = code(Backend::C, Ui::Webview, "src/modules/api.c");
+    let code = code(Backend::C, Ui::Clarity, "src/modules/api.c");
     has(&code, "clarity_http_pages(\"https://shop.example.com/api\", ");
     has(&code, "CLARITY_AUTH_BEARER, \"env:SHOP_TOKEN\", (ClarityHttpPaging){CLARITY_PAGING_PAGE, \"page\", \"per_page\", 100, \"\", \"data\"})");
 }

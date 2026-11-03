@@ -3,7 +3,7 @@
 // run by Clarity's interpreter, in the pills folder next to this file.
 project Pills
     title "Pills"
-    stack go webview desktop
+    stack go desktop
     output "out"
     language "en"
     engines interpreted

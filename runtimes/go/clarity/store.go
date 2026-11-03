@@ -56,6 +56,10 @@ func location(text string) (string, error) {
 
 // open connects to the database of a data source.
 func open(dialect Dialect, at string) (driver, error) {
+	// An SQLite file opens in the folder CLARITY_DATA names, when it is set.
+	if dialect == Sqlite {
+		at = DataFolderSqlite(at, os.Getenv)
+	}
 	where, err := location(at)
 	if err != nil {
 		return nil, err

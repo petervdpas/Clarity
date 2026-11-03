@@ -1,6 +1,6 @@
 project Waves
     title "Waves"
-    stack go webview desktop
+    stack go desktop
     output "out"
     language "en"
     datasource main sqlite "data/waves.db"

@@ -31,8 +31,8 @@ fn has(text: &str, expected: &str) {
 #[test]
 fn every_stack_copies_to_the_clipboard() {
     has(&generated(Backend::Rust, Ui::Clarity), "ui.copy(");
-    has(&generated(Backend::Go, Ui::Webview), "ui.Copy(");
-    has(&generated(Backend::C, Ui::Webview), "clarity_ui_copy(ui, ");
-    has(&generated(Backend::Cpp, Ui::Webview), "ui.copy(");
+    has(&generated(Backend::Go, Ui::Clarity), "ui.Copy(");
+    has(&generated(Backend::C, Ui::Clarity), "clarity_ui_copy(ui, ");
+    has(&generated(Backend::Cpp, Ui::Clarity), "ui.copy(");
     has(&generated(Backend::Csharp, Ui::Clarity), "Copy(");
 }

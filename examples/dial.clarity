@@ -1,4 +1,4 @@
 project Dial
-    stack go webview desktop
+    stack go desktop
     output "out"
     datasource main sqlite "data/dial.db"

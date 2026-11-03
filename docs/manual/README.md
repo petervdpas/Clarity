@@ -18,7 +18,7 @@ How to make applications with Clarity, one topic per page. Start with [What Clar
 - [Windows](design.windows.md): How a window is declared and designed: its kind, its data and events, the snap grid, and how one window opens another.
 - [Parts](design.parts.md): The parts you place on a window, grouped as the Parts palette shows them, with what each binds to and its events, and the properties panel.
 - [The app and its frame](design.frame.md): The `app` block: the main window, the frame every window shares (menu, toolbar, ribbon, sidebars, footer), keys, and the built-in click targets.
-- [Custom parts](design.custom-parts.md): How to put a part on a window that an outside library draws, such as a game scene drawn with SFML or Bevy, written in your project's own language.
+- [Custom parts](design.custom-parts.md): How to put a part on a window that an outside library draws, such as a game scene drawn with Bevy, written in your project's own language.
 - [Sound](design.sound.md): How a window plays sound files, tones and melodies with the sound part, on every stack.
 - [Design as text](design.text.md): The text panel of the designer: a window as Clarity text, with the canvas following what you type, and the code behind next to it.
 
@@ -49,9 +49,9 @@ How to make applications with Clarity, one topic per page. Start with [What Clar
 
 - [Rust with Clarity.UI](stacks.rust.md): How Clarity turns a project into a Rust desktop program drawn by Clarity.UI, what you need to install, and how to build it.
 - [C# with Clarity.UI](stacks.csharp.md): How Clarity turns a project into a C# desktop program whose windows Clarity.UI draws, what you need to install, and how to build it.
-- [Go with Wails](stacks.go.md): How Clarity turns a project into a Go desktop program with Wails v3 and the web renderer, what you need to install, and how to build it.
-- [C with a webview](stacks.c.md): How Clarity turns a project into a C17 desktop program that shows the web renderer in a webview, what you need to install, and how to build it with CMake.
-- [C++ with a webview](stacks.cpp.md): How Clarity turns a project into a C++20 desktop program that shows the web renderer in a webview, what you need to install, and how to build it with CMake.
+- [Go with Clarity.UI](stacks.go.md): How Clarity turns a project into a Go desktop program drawn by Clarity.UI, or a Go web server, what you need to install, and how to build it.
+- [C with Clarity.UI](stacks.c.md): How Clarity turns a project into a C17 desktop program whose windows Clarity.UI draws, what you need to install, and how to build it with CMake.
+- [C++ with Clarity.UI](stacks.cpp.md): How Clarity turns a project into a C++20 desktop program whose windows Clarity.UI draws, or a C++ web server, what you need to install, and how to build it with CMake.
 
 ## AI and the vault
 

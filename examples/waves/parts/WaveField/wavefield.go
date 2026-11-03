@@ -1,12 +1,11 @@
-// Custom part WaveField: water drawn in the native window Clarity gives it.
+// Custom part WaveField: water drawn on the canvas Clarity.UI gives it.
 // Waves run out from a few sources, meet, and the part colours every pixel by
 // how high the water stands there. Keep the methods of Part (clarity.go),
 // which follow the part's declaration.
 //
-// Everything that makes the picture is plain Go: the part fills a buffer of
-// pixels and asks the screen to put it on the window. Only that last step is
-// written per system (blit_windows.go, blit_linux.go), so the drawing itself
-// is the same everywhere.
+// Everything that makes the picture is plain Go: the part wakes about 60
+// times a second while its window shows, fills a buffer of pixels and draws
+// it in its place.
 package wavefield
 
 import (
@@ -21,6 +20,13 @@ const most = 5
 // swellAt is how high the water must stand before the part tells of it.
 const swellAt = 240
 
+// frame is how long the part waits between pictures: about 60 a second.
+const frame = 1000.0 / 60
+
+// fine is how many of the screen's units one pixel of the water covers:
+// the picture is drawn at half the place's size and stretched to it.
+const fine = 2
+
 // source is one place the water is pushed, and how fast its rings run.
 type source struct {
 	x, y   float64
@@ -29,16 +35,13 @@ type source struct {
 }
 
 type part struct {
-	host    Host
-	window  Window
-	width   int
-	height  int
 	enabled bool
 	speed   int64
 	sources int64
 
-	screen  screen
 	pix     []byte
+	width   int
+	height  int
 	springs []source
 	random  *rand.Rand
 	clock   time.Time
@@ -48,19 +51,15 @@ type part struct {
 	best int64
 }
 
-// New makes the part in window, width by height pixels.
-func New(window Window, width, height int, host Host) Part {
+// New makes the part when its window opens.
+func New() Part {
 	p := &part{
-		host:    host,
-		window:  window,
 		enabled: true,
 		speed:   4,
 		sources: 3,
 		random:  rand.New(rand.NewSource(time.Now().UnixNano())),
 		clock:   time.Now(),
 	}
-	p.screen = openScreen(window)
-	p.Resize(width, height)
 	p.stir()
 	return p
 }
@@ -72,74 +71,80 @@ func (p *part) stir() {
 		p.springs = append(p.springs, source{
 			x:      p.random.Float64(),
 			y:      p.random.Float64(),
-			length: 40 + p.random.Float64()*90,
+			length: 20 + p.random.Float64()*45,
 			phase:  p.random.Float64() * 2 * math.Pi,
 		})
 	}
 }
 
-func (p *part) Resize(width, height int) {
-	if width < 1 {
-		width = 1
-	}
-	if height < 1 {
-		height = 1
-	}
-	p.width, p.height = width, height
-	p.pix = make([]byte, width*height*4)
+// Start has the water run: the part wakes again and again while its window shows.
+func (p *part) Start(cx Cx) {
+	p.clock = time.Now()
+	cx.WakeIn(frame)
 }
 
-func (p *part) Frame() {
+// Wake moves the water on by the time since the last frame and draws it anew.
+func (p *part) Wake(cx Cx) {
 	now := time.Now()
-	step := now.Sub(p.clock).Seconds()
+	step := math.Min(now.Sub(p.clock).Seconds(), 0.1)
 	p.clock = now
-	if step > 0.1 {
-		step = 0.1
-	}
 	if p.enabled {
 		p.run += step * float64(p.speed)
 	}
-
-	springs := p.springs[:min(int(p.sources), len(p.springs))]
-	highest := 0.0
-	for y := 0; y < p.height; y++ {
-		for x := 0; x < p.width; x++ {
-			height := 0.0
-			for _, s := range springs {
-				dx := float64(x) - s.x*float64(p.width)
-				dy := float64(y) - s.y*float64(p.height)
-				height += math.Sin(math.Sqrt(dx*dx+dy*dy)/s.length*math.Pi - p.run*2 + s.phase)
-			}
-			// From the sum of the waves to one value from 0 to 1.
-			level := (height/float64(len(springs)) + 1) / 2
-			if level > highest {
-				highest = level
-			}
-			at := (y*p.width + x) * 4
-			r, g, b := water(level, p.enabled)
-			// The buffer is blue, green, red, nothing: what both systems take.
-			p.pix[at], p.pix[at+1], p.pix[at+2], p.pix[at+3] = b, g, r, 0
-		}
-	}
-	p.screen.blit(p.pix, p.width, p.height)
+	_, _, width, height := cx.Bounds()
+	stands := p.paint(max(int(width)/fine, 1), max(int(height)/fine, 1))
+	cx.Invalidate()
+	cx.WakeIn(frame)
 
 	// A swell is worth telling of when the water goes higher than it has
 	// stood since it was calmed, and high enough to be a swell at all.
-	stands := int64(highest * 255)
 	if stands >= swellAt && stands > p.best {
 		p.best = stands
-		p.host.Swelled(stands)
+		Swelled(cx, stands)
 	}
+}
+
+// paint fills the picture, width by height pixels: how high the highest
+// water stands, from 0 to 255.
+func (p *part) paint(width, height int) int64 {
+	if width != p.width || height != p.height {
+		p.width, p.height = width, height
+		p.pix = make([]byte, width*height*4)
+	}
+	springs := p.springs[:min(int(p.sources), len(p.springs))]
+	highest := 0.0
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			sum := 0.0
+			for _, s := range springs {
+				dx := float64(x) - s.x*float64(width)
+				dy := float64(y) - s.y*float64(height)
+				sum += math.Sin(math.Sqrt(dx*dx+dy*dy)/s.length*math.Pi - p.run*2 + s.phase)
+			}
+			// From the sum of the waves to one value from 0 to 1.
+			level := (sum/float64(len(springs)) + 1) / 2
+			highest = math.Max(highest, level)
+			at := (y*width + x) * 4
+			r, g, b := water(level, p.enabled)
+			p.pix[at], p.pix[at+1], p.pix[at+2], p.pix[at+3] = r, g, b, 255
+		}
+	}
+	return int64(highest * 255)
+}
+
+// Draw puts the picture in the part's place.
+func (p *part) Draw(canvas Canvas, x, y, width, height float64) {
+	if p.pix == nil {
+		canvas.Fill(x, y, width, height, 0xFF061C48, 0)
+		return
+	}
+	canvas.Pixels(p.pix, p.width, p.height, p.width*4, x, y, width, height)
 }
 
 // water is the colour of water standing at level, from 0 to 1: deep blue
 // below, white foam on top. Water nobody tends keeps its colours but grey.
 func water(level float64, enabled bool) (r, g, b byte) {
-	if level < 0 {
-		level = 0
-	} else if level > 1 {
-		level = 1
-	}
+	level = math.Min(math.Max(level, 0), 1)
 	if !enabled {
 		grey := byte(60 + level*120)
 		return grey, grey, grey
@@ -153,18 +158,18 @@ func water(level float64, enabled bool) (r, g, b byte) {
 	return byte(32 + at*203), byte(120 + at*130), byte(190 + at*65)
 }
 
-func (p *part) SetEnabled(enabled bool) { p.enabled = enabled }
+func (p *part) SetEnabled(enabled bool, cx Cx) { p.enabled = enabled }
 
-func (p *part) SetSpeed(speed int64) {
+func (p *part) SetSpeed(speed int64, cx Cx) {
 	p.speed = min(max(speed, 1), 10)
 }
 
-func (p *part) SetSources(sources int64) {
+func (p *part) SetSources(sources int64, cx Cx) {
 	p.sources = min(max(sources, 1), most)
 }
 
 // Calm stills the water and starts it again from somewhere new.
-func (p *part) Calm() {
+func (p *part) Calm(cx Cx) {
 	p.run = 0
 	p.best = 0
 	p.stir()

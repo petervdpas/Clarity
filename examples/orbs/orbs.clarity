@@ -6,8 +6,8 @@ entity Score
     points: integer, label @scorePointsLabel
     played: datetime, label @scorePlayedLabel
 
-// A field of orbs, drawn with SFML: each orb is caught by clicking it
-// before it shrinks away. A round lasts thirty seconds.
+// A field of orbs, drawn on Clarity.UI's canvas: each orb is caught by
+// clicking it before it shrinks away. A round lasts thirty seconds.
 part OrbField
     native "parts/OrbField"
     speed: integer, min 1, max 10, default 3

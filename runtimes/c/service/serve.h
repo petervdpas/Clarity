@@ -1,0 +1,23 @@
+// The web target (DESIGN 7.3): the application as a web server. It serves
+// the renderer's page to a browser, telling the page where to send its
+// commands, and answers each command with the same service Clarity.UI
+// asks on the desktop. One request at a time; the database is the server's.
+
+#pragma once
+
+#include "service/service.h"
+
+/// Where a page the server serves sends its commands.
+#define CLARITY_INVOKE_PATH "/clarity/invoke"
+
+/// The reply to one HTTP request, `length` bytes of it, in the scratch
+/// arena: `page` at `/`, a command's answer at CLARITY_INVOKE_PATH.
+const char* clarity_serve_answer(ClarityService* service, const char* page, const char* request, size_t request_length, size_t* length);
+
+/// Where the server listens: `--address host:port`, else the environment's
+/// CLARITY_ADDRESS, else `project`, where the project file says (its port).
+const char* clarity_serve_address(int argc, char** argv, const char* project);
+
+/// Runs the application as a web server on `address` until it stops; the
+/// exit status.
+int clarity_serve(const ClarityServiceOptions* options, const char* address);

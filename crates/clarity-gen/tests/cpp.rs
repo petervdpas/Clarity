@@ -65,7 +65,7 @@ code OrderForm
 fn settings() -> Settings {
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = Backend::Cpp;
-    settings.stack.ui = Ui::Webview;
+    settings.stack.ui = Ui::Clarity;
     settings
 }
 
@@ -90,7 +90,12 @@ fn writes_a_cmake_project_with_the_runtime_copied_in() {
     has(file(&files, "CMakeLists.txt"), "include(clarity-runtime/clarity.cmake)");
     has(file(&files, "CMakePresets.json"), "\"workflowPresets\"");
     assert_eq!(file(&files, "clarity-runtime/clarity/db.hpp"), include_str!("../../../runtimes/cpp/clarity/db.hpp"));
-    assert!(files.iter().any(|f| f.path == "clarity-runtime/third_party/webview/webview.h"));
+    // The desktop program on Clarity.UI: its layer, the files it carries and the library beside it.
+    assert!(files.iter().any(|f| f.path == "clarity-runtime/shell/desktop.cpp"));
+    assert!(files.iter().any(|f| f.path == "clarity-runtime/ui/ui.hpp"));
+    has(file(&files, "CMakeLists.txt"), "target_link_libraries(shop PRIVATE clarity clarity_desktop)");
+    has(file(&files, "CMakeLists.txt"), "clarity_ui_files(shop ${CMAKE_CURRENT_SOURCE_DIR}/ui)\nclarity_ui_beside(shop)\n");
+    assert!(!files.iter().any(|f| f.path.contains("webview") || f.path == "ui/index.html"), "no webview and no web page");
     assert!(files.iter().any(|f| f.path == "README.md"));
     // The runtime's own tests stay behind.
     assert!(!files.iter().any(|f| f.path.contains("tests/")));
@@ -101,7 +106,7 @@ fn writes_a_cmake_project_with_the_runtime_copied_in() {
 fn every_cpp_runtime_source_file_is_copied() {
     let files = files();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/cpp");
-    for folder in ["clarity", "shell", "third_party/webview"] {
+    for folder in ["clarity", "shell", "ui"] {
         for entry in std::fs::read_dir(root.join(folder)).unwrap() {
             let name = entry.unwrap().file_name().to_string_lossy().to_string();
             assert!(files.iter().any(|f| f.path == format!("clarity-runtime/{folder}/{name}")), "{folder}/{name} is not copied");
@@ -151,12 +156,15 @@ fn handlers_are_member_functions_of_their_window() {
     has(main, "        if (entity == \"Customer\") for (const auto& r : db.all<Customer>()) out.push_back({r.id, r.name});");
 }
 
-/// The renderer's page carries its script and styles, since the webview
-/// shows a page and no folder.
+/// The web screen's page carries its script and styles, since the server
+/// serves one page and no folder.
 #[test]
 fn the_page_carries_the_renderer() {
     // Clarity's screen is one page in ui/, which CMake compiles into the program with the windows' markup (DESIGN 7.8).
-    let files = files();
+    let project = load_sources([("sales.clarity", SALES)]);
+    let mut settings = settings();
+    settings.stack.targets = vec![clarity_project::Target::Web];
+    let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let page = file(&files, "src/page.cpp");
     has(page, "clarity_page_html");
     has(page, "const std::string& page() {");
@@ -169,6 +177,24 @@ fn the_page_carries_the_renderer() {
     has(page, "<script type=\"module\">");
     has(page, "<!--clarity-windows-->");
     assert!(files.iter().any(|f| f.path.starts_with("ui/windows/") && f.path.ends_with(".cxaml")));
+}
+
+/// The desktop program carries what Clarity.UI draws from (DESIGN 7.9): the
+/// windows as markup, the themes resolved, the model and the facts of the
+/// fields, and hands them to the desktop.
+#[test]
+fn the_desktop_carries_its_files_for_clarity_ui() {
+    let files = files();
+    assert!(files.iter().any(|f| f.path == "ui/windows/OrderForm.cxaml"));
+    let page = file(&files, "src/page.cpp");
+    has(page, "const std::string& facts() {");
+    has(page, "\"Order.total\"");
+    assert!(!page.contains("clarity_page_html"), "no web page on the desktop");
+    let main = file(&files, "src/main.cpp");
+    has(main, "#include \"shell/desktop.hpp\"\n");
+    has(main, "extern const clarity::shell::UiFile clarity_ui_files[];");
+    has(main, "        options.ui_files = clarity_ui_files;\n        options.facts = shop::facts();\n");
+    assert!(!main.contains("shell/serve.hpp"), "a desktop program serves nothing");
 }
 
 #[test]
@@ -194,12 +220,12 @@ fn rows_read_again_lose_their_selected_row() {
 #[test]
 fn the_desktop_window_opens_at_the_main_windows_size() {
     let code: String = files().iter().filter(|f| f.path.ends_with(".cpp")).map(|f| f.text.as_str()).collect();
-    has(&code, "::page(), &db, &windows, {1100, 760}};");
+    has(&code, "::model(), \"\", &db, &windows, {1100, 760}};");
     let sized = SALES.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n");
     assert_ne!(sized, SALES);
     let project = load_sources([("sales.clarity", sized.as_str())]);
     let code: String = generate(&project, &settings()).unwrap().iter().filter(|f| f.path.ends_with(".cpp")).map(|f| f.text.clone()).collect();
-    has(&code, "::page(), &db, &windows, {640, 480}};");
+    has(&code, "::model(), \"\", &db, &windows, {640, 480}};");
 }
 
 /// A click can pass values to its handler: each written call is a case of
@@ -353,7 +379,7 @@ fn an_engine_brings_its_host_and_wasm3() {
             assert!(files.iter().any(|f| f.path == format!("clarity-runtime/{folder}/{name}")), "{folder}/{name} is not copied");
         }
     }
-    has(file(&files, "CMakeLists.txt"), "clarity_shell clarity_engine)");
+    has(file(&files, "CMakeLists.txt"), "clarity_desktop clarity_engine)");
     // Without an engine, neither comes along.
     assert!(!self::files().iter().any(|f| !f.path.starts_with("ui/") && (f.path.contains("engine") || f.path.contains("wasm3"))));
 }
@@ -381,7 +407,7 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
     assert!(code.contains("ui.x(\"dial\") + ui.y(\"dial\")"), "{code}");
 }
 
-/// The web target (DESIGN 7.3): the program serves the renderer to a
+/// The web target (DESIGN 7.3): the program serves the web screen to a
 /// browser; beside the desktop target it serves with `--serve`.
 #[test]
 fn the_web_target_serves_the_renderer() {
@@ -400,12 +426,12 @@ fn the_web_target_serves_the_renderer() {
     let web = main_of(vec![Target::Web]);
     has(&web, "        return clarity::shell::serve(options, clarity::shell::serve_address(argc, argv, \"127.0.0.1:8080\"));\n");
     assert!(!web.contains("shell::run("), "a web program opens no window");
-    // Nor does it link the desktop toolkit: only the service, without the webview.
+    // Nor does it link the desktop: only the service, without Clarity.UI.
     let mut settings = settings();
     settings.stack.targets = vec![Target::Web];
     let files = generate(&project, &settings).unwrap();
     has(file(&files, "CMakeLists.txt"), "target_link_libraries(shop PRIVATE clarity clarity_service)");
-    for path in ["clarity-runtime/shell/shell.cpp", "clarity-runtime/shell/parts.cpp", "clarity-runtime/third_party/webview/webview.h"] {
+    for path in ["clarity-runtime/shell/desktop.cpp", "clarity-runtime/ui/ui.cpp", "ui/themes/clarity.light.json"] {
         assert!(!files.iter().any(|f| f.path == path), "{path}");
     }
     let both = main_of(vec![Target::Desktop, Target::Web]);

@@ -38,16 +38,16 @@ fn every_stack_counts_and_joins() {
     let rust = generated(Backend::Rust, Ui::Clarity);
     has(&rust, "(1i64..=3i64).collect::<Vec<i64>>()");
     has(&rust, ".join(");
-    let go = generated(Backend::Go, Ui::Webview);
+    let go = generated(Backend::Go, Ui::Clarity);
     has(&go, "clarity.Range(1, 3)");
     has(&go, "clarity.Join(");
     let csharp = generated(Backend::Csharp, Ui::Clarity);
     has(&csharp, "Lists.Range(1L, 3L)");
     has(&csharp, "string.Join(");
-    let c = generated(Backend::C, Ui::Webview);
+    let c = generated(Backend::C, Ui::Clarity);
     has(&c, "clarity_range(1, 3)");
     has(&c, "clarity_joined(");
-    let cpp = generated(Backend::Cpp, Ui::Webview);
+    let cpp = generated(Backend::Cpp, Ui::Clarity);
     has(&cpp, "clarity::range(int64_t{1}, int64_t{3})");
     has(&cpp, "clarity::joined(");
 }

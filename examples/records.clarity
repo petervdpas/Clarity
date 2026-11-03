@@ -3,7 +3,7 @@
 // 2000s. Its modules are in the records folder next to this file.
 project Records
     title "My Record Collection"
-    stack go webview desktop
+    stack go desktop
     output "out"
     language "en"
     currency USD

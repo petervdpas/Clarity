@@ -29,11 +29,11 @@ fn the_web_stacks_read_and_set_the_open_section_in_the_parts_state() {
     let rust = generated(Backend::Rust, Ui::Clarity);
     has(&rust, "ui.open_section(\"notesAccordion\")");
     has(&rust, "ui.set_open_section(\"notesAccordion\", 2");
-    let go = generated(Backend::Go, Ui::Webview);
+    let go = generated(Backend::Go, Ui::Clarity);
     has(&go, "ui.OpenSection(\"notesAccordion\")");
     has(&go, "ui.SetOpenSection(\"notesAccordion\", 2)");
-    has(&generated(Backend::C, Ui::Webview), "clarity_ui_set_open_section(ui, \"notesAccordion\"");
-    has(&generated(Backend::Cpp, Ui::Webview), "ui.set_open_section(\"notesAccordion\"");
+    has(&generated(Backend::C, Ui::Clarity), "clarity_ui_set_open_section(ui, \"notesAccordion\"");
+    has(&generated(Backend::Cpp, Ui::Clarity), "ui.set_open_section(\"notesAccordion\"");
 }
 
 #[test]

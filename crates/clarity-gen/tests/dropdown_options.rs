@@ -30,13 +30,13 @@ fn every_web_shell_gives_a_fields_values_and_the_fields_a_search_shows() {
     has(&rust, "fn field_values(");
     has(&rust, "(\"Friend\", \"city\") => db.all::<");
     has(&rust, "fields: serde_json::Map::from_iter([(\"name\".to_string(), clarity_runtime::ui::to_value(&r.name)?), (\"city\".to_string(), clarity_runtime::ui::to_value(&r.city)?)])");
-    let go = generated(Backend::Go, Ui::Webview);
+    let go = generated(Backend::Go, Ui::Clarity);
     has(&go, "func (windows) Values(");
     has(&go, "Fields: map[string]any{\"name\": r.Name, \"city\": r.City}");
-    let c = generated(Backend::C, Ui::Webview);
+    let c = generated(Backend::C, Ui::Clarity);
     has(&c, "static bool windows_values(");
     has(&c, "cJSON_AddItemToObject(fields, \"city\", clarity_json_text(r->city));");
-    let cpp = generated(Backend::Cpp, Ui::Webview);
+    let cpp = generated(Backend::Cpp, Ui::Clarity);
     has(&cpp, "std::vector<std::string> values(");
     has(&cpp, "nlohmann::json{{\"name\", r.name}, {\"city\", r.city}}");
 }

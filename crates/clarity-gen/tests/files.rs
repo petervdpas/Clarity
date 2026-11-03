@@ -87,7 +87,7 @@ fn csharp_reaches_the_files_of_a_store() {
 
 #[test]
 fn go_reaches_the_files_of_a_store() {
-    let files = files(Backend::Go, Ui::Webview);
+    let files = files(Backend::Go, Ui::Clarity);
     let code = text(&files, "catalog_module.go");
     has(code, "db.Files(\"photos\")");
     has(code, "clarity.SortFiles(");

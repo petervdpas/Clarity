@@ -193,7 +193,7 @@ func TestTheEditBusPutsBackWhatCodeSetOnParts(t *testing.T) {
 				}
 				state = WithEditData(state, after)
 				var want struct {
-					Data  map[string]any                       `json:"data"`
+					Data  map[string]any                        `json:"data"`
 					Parts map[string]map[string]json.RawMessage `json:"parts"`
 				}
 				_ = json.Unmarshal(s["state"], &want)

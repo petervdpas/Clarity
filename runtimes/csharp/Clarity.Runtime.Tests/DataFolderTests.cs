@@ -24,9 +24,10 @@ public class DataFolderTests
         // Unset or empty, the file is where the project put it.
         Assert.Equal("/home/someone/noughts/data/noughts.db", DataFolder.Sqlite("/home/someone/noughts/data/noughts.db", Env(null)));
         Assert.Equal("/home/someone/noughts/data/noughts.db", DataFolder.Sqlite("/home/someone/noughts/data/noughts.db", Env("")));
-        // A location from the environment or a secret setting is as it says.
+        // A location from the environment or a secret setting is as it says, and so is SQLite's database in memory.
         Assert.Equal("env:SHOP_DB", DataFolder.Sqlite("env:SHOP_DB", Env(folder)));
         Assert.Equal("setting:shop/db", DataFolder.Sqlite("setting:shop/db", Env(folder)));
+        Assert.Equal(":memory:", DataFolder.Sqlite(":memory:", Env(folder)));
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 # The runtime's libraries, for the runtime's own build and for generated
 # projects, which include this file: `clarity` (records, storage, the
-# binding to the screen) and `clarity_shell` (the window and webview).
+# binding to the screen), `clarity_service` (the screen's commands and the
+# web server) and `clarity_desktop` (the desktop program on Clarity.UI).
 find_package(SQLite3 REQUIRED)
 find_package(nlohmann_json 3 REQUIRED)
 
@@ -12,8 +13,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(clarity PRIVATE -Wall -Wextra)
 endif()
 
-# The service, which answers the renderer's commands and serves it to a
-# browser (the web target): nothing of the desktop toolkit.
+# The service, which answers the screen's commands and serves the web
+# screen to a browser (the web target): nothing of the desktop.
 if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/service.cpp)
   add_library(clarity_service STATIC ${CMAKE_CURRENT_LIST_DIR}/shell/service.cpp ${CMAKE_CURRENT_LIST_DIR}/shell/serve.cpp)
   target_include_directories(clarity_service PUBLIC ${CMAKE_CURRENT_LIST_DIR})
@@ -24,47 +25,110 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/service.cpp)
   endif()
 endif()
 
-# The shell, which shows the windows: only in a project whose runtime copy
-# has it, so a command-line program and a web server build without a webview.
-if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/shell.cpp)
-  # The webview draws with WebKitGTK on Linux, WebView2 on Windows and WebKit on macOS.
-  add_library(clarity_shell STATIC ${CMAKE_CURRENT_LIST_DIR}/shell/shell.cpp ${CMAKE_CURRENT_LIST_DIR}/shell/parts.cpp)
-  target_include_directories(clarity_shell PUBLIC ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/third_party)
-  target_link_libraries(clarity_shell PUBLIC clarity_service)
-  # A handler runs on a thread of its own, so the window keeps painting (DESIGN 5.12).
-  find_package(Threads REQUIRED)
-  target_link_libraries(clarity_shell PUBLIC Threads::Threads)
-  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(WEBKIT REQUIRED IMPORTED_TARGET gtk+-3.0 webkit2gtk-4.1)
-    target_link_libraries(clarity_shell PUBLIC PkgConfig::WEBKIT dl)
+# The desktop program on Clarity.UI (DESIGN 7.9): only in a project whose
+# runtime copy has it, so a command-line program and a web server build
+# without it. Clarity.UI is one library (libclarity_ui.so, clarity_ui.dll,
+# libclarity_ui.dylib) with its header, in the folder CLARITY_UI names:
+# include/clarity_ui.h and lib/ with the library for this system. The
+# program finds the shared library beside it, where clarity_ui_beside
+# copies it after each build.
+if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/desktop.cpp)
+  set(CLARITY_UI "$ENV{CLARITY_UI}" CACHE PATH "The folder of Clarity.UI: include/clarity_ui.h and lib/ with the library")
+  if(NOT CLARITY_UI OR NOT EXISTS ${CLARITY_UI}/include/clarity_ui.h)
+    message(FATAL_ERROR "Clarity.UI is not found: set CLARITY_UI (the environment variable, or -DCLARITY_UI=...) to its folder, which holds include/clarity_ui.h and lib/ with the library")
+  endif()
+  if(WIN32)
+    find_file(CLARITY_UI_SHARED NAMES clarity_ui.dll PATHS ${CLARITY_UI}/lib ${CLARITY_UI}/bin NO_DEFAULT_PATH)
+    find_file(CLARITY_UI_IMPORT NAMES clarity_ui.dll.lib clarity_ui.lib libclarity_ui.dll.a PATHS ${CLARITY_UI}/lib NO_DEFAULT_PATH)
   elseif(APPLE)
-    target_link_libraries(clarity_shell PUBLIC "-framework WebKit")
-  elseif(WIN32)
-    # The webview draws with WebView2, and builds against Microsoft's SDK
-    # headers, which are not packaged for MinGW or MSYS2. CMake fetches the
-    # SDK once into the build folder and keeps it there; the loader itself is
-    # built into webview.h, so no import library is needed, and the WebView2
-    # runtime ships with Windows 11.
-    set(WEBVIEW2_VERSION 1.0.2903.40)
-    set(WEBVIEW2_DIR ${CMAKE_BINARY_DIR}/webview2)
-    if(NOT EXISTS ${WEBVIEW2_DIR}/build/native/include/WebView2.h)
-      message(STATUS "Fetching the WebView2 SDK ${WEBVIEW2_VERSION}")
-      file(DOWNLOAD
-        https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/${WEBVIEW2_VERSION}
-        ${CMAKE_BINARY_DIR}/webview2.nupkg
-        STATUS WEBVIEW2_FETCHED)
-      list(GET WEBVIEW2_FETCHED 0 WEBVIEW2_FAILED)
-      if(WEBVIEW2_FAILED)
-        list(GET WEBVIEW2_FETCHED 1 WEBVIEW2_WHY)
-        message(FATAL_ERROR "the WebView2 SDK could not be fetched (${WEBVIEW2_WHY}); download Microsoft.Web.WebView2 and point WEBVIEW2_DIR at it")
-      endif()
-      file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/webview2.nupkg DESTINATION ${WEBVIEW2_DIR})
-    endif()
-    target_include_directories(clarity_shell PUBLIC ${WEBVIEW2_DIR}/build/native/include)
-    target_link_libraries(clarity_shell PUBLIC advapi32 ole32 shell32 shlwapi user32 uuid version)
+    find_file(CLARITY_UI_SHARED NAMES libclarity_ui.dylib PATHS ${CLARITY_UI}/lib NO_DEFAULT_PATH)
+  else()
+    find_file(CLARITY_UI_SHARED NAMES libclarity_ui.so PATHS ${CLARITY_UI}/lib NO_DEFAULT_PATH)
+  endif()
+  if(NOT CLARITY_UI_SHARED OR (WIN32 AND NOT CLARITY_UI_IMPORT))
+    message(FATAL_ERROR "Clarity.UI's library for this system is not in ${CLARITY_UI}/lib")
+  endif()
+  add_library(clarity_ui SHARED IMPORTED GLOBAL)
+  set_target_properties(clarity_ui PROPERTIES IMPORTED_LOCATION ${CLARITY_UI_SHARED} INTERFACE_INCLUDE_DIRECTORIES ${CLARITY_UI}/include)
+  if(WIN32)
+    set_target_properties(clarity_ui PROPERTIES IMPORTED_IMPLIB ${CLARITY_UI_IMPORT})
+  elseif(NOT APPLE)
+    # The library names no soname: the program asks for it by its file name, found beside it.
+    set_target_properties(clarity_ui PROPERTIES IMPORTED_NO_SONAME TRUE)
+  endif()
+  add_library(clarity_desktop STATIC ${CMAKE_CURRENT_LIST_DIR}/shell/desktop.cpp ${CMAKE_CURRENT_LIST_DIR}/ui/ui.cpp)
+  target_include_directories(clarity_desktop PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+  target_link_libraries(clarity_desktop PUBLIC clarity_service clarity_ui)
+  # Handlers of long calls run on the library's worker thread (DESIGN 5.12).
+  find_package(Threads REQUIRED)
+  target_link_libraries(clarity_desktop PUBLIC Threads::Threads)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(clarity_desktop PRIVATE -Wall -Wextra)
   endif()
 endif()
+
+# A program on Clarity.UI finds the library beside it: copied there after
+# each build, and looked for there (rpath $ORIGIN, @loader_path; Windows
+# looks beside the program by itself).
+function(clarity_ui_beside target)
+  add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CLARITY_UI_SHARED} $<TARGET_FILE_DIR:${target}>)
+  if(APPLE)
+    set_target_properties(${target} PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE INSTALL_RPATH "@loader_path")
+  elseif(NOT WIN32)
+    set_target_properties(${target} PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE INSTALL_RPATH "$ORIGIN")
+  endif()
+endfunction()
+
+# The files Clarity.UI draws from, compiled into `target`: the windows and
+# app frames as markup (windows/*.cxaml, apps/*.cxaml), the themes
+# (themes/*.json) and the resources (resources/...) under `folder`, as the
+# list clarity_ui_files the program hands to the desktop (shell::UiFile).
+# The themes' names after `folder` give their order, the one the program
+# starts with first; without them, every theme in the folder.
+function(clarity_ui_files target folder)
+  file(GLOB windows ${folder}/windows/*.cxaml)
+  file(GLOB apps ${folder}/apps/*.cxaml)
+  if(ARGN)
+    set(themes "")
+    foreach(theme IN LISTS ARGN)
+      list(APPEND themes ${folder}/themes/${theme}.json)
+    endforeach()
+  else()
+    file(GLOB themes ${folder}/themes/*.json)
+  endif()
+  file(GLOB_RECURSE resources ${folder}/resources/*)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${windows} ${apps} ${themes} ${resources} ${folder}/windows ${folder}/apps ${folder}/themes)
+  set(arrays "")
+  set(entries "")
+  set(n 0)
+  foreach(kind window app theme resource)
+    if(kind STREQUAL "window")
+      set(found ${windows})
+    elseif(kind STREQUAL "app")
+      set(found ${apps})
+    elseif(kind STREQUAL "theme")
+      set(found ${themes})
+    else()
+      set(found ${resources})
+    endif()
+    foreach(path IN LISTS found)
+      if(kind STREQUAL "resource")
+        file(RELATIVE_PATH name ${folder}/resources ${path})
+      else()
+        get_filename_component(name ${path} NAME_WLE)
+      endif()
+      file(READ ${path} hex HEX)
+      string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," bytes "${hex}")
+      string(APPEND arrays "static const unsigned char file${n}[] = {${bytes}0x00};\n")
+      string(LENGTH "${hex}" digits)
+      math(EXPR size "${digits} / 2")
+      string(APPEND entries "    {\"${kind}\", \"${name}\", file${n}, ${size}},\n")
+      math(EXPR n "${n} + 1")
+    endforeach()
+  endforeach()
+  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/clarity_ui_files.cpp "/* The files Clarity.UI draws from, from ${folder}. */\n#include \"shell/shell.hpp\"\n\n${arrays}\nextern const clarity::shell::UiFile clarity_ui_files[] = {\n${entries}    {nullptr, nullptr, nullptr, 0},\n};\n")
+  target_sources(${target} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/clarity_ui_files.cpp)
+endfunction()
 
 # HTTP calls from code (DESIGN 5.23), through libcurl: only in a project
 # whose runtime copy has them, that is, one whose code calls out.
@@ -108,12 +172,12 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/engine/engine.cpp)
     set(WASM3_DIR ${CMAKE_CURRENT_LIST_DIR}/../c/third_party/wasm3)
   endif()
   file(GLOB WASM3_SOURCES CONFIGURE_DEPENDS ${WASM3_DIR}/*.c)
-  add_library(clarity_engine STATIC ${CMAKE_CURRENT_LIST_DIR}/engine/engine.cpp ${WASM3_SOURCES})
+  add_library(clarity_engine STATIC ${CMAKE_CURRENT_LIST_DIR}/engine/engine.cpp ${CMAKE_CURRENT_LIST_DIR}/engine/screen.cpp ${WASM3_SOURCES})
   target_include_directories(clarity_engine PUBLIC ${CMAKE_CURRENT_LIST_DIR} ${WASM3_DIR})
   target_link_libraries(clarity_engine PUBLIC clarity m)
   # wasm3 is taken as released; its own warnings are not the runtime's.
   set_source_files_properties(${WASM3_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/engine/engine.cpp PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
+    set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/engine/engine.cpp ${CMAKE_CURRENT_LIST_DIR}/engine/screen.cpp PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
   endif()
 endif()

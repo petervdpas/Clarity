@@ -108,6 +108,8 @@ struct Message {
 struct OpenRequest {
     std::string window;
     nlohmann::json with = nlohmann::json::object();
+    /// It opens in a desktop window of its own (`open ... in new window`).
+    bool new_window = false;
 };
 
 /// `ask ... then handler(values)` (DESIGN 5.14): a question the screen asks
@@ -156,6 +158,10 @@ struct Reply {
     /// Whether the runtime refused what the person typed (a list field's
     /// item), so the screen keeps the typed text and marks it.
     bool refused = false;
+    /// The program ends: every window closes (the built-in `quit` run by code).
+    bool quit = false;
+    /// Clarity's keys window opens (the built-in `keys` run by code).
+    bool keys = false;
 };
 
 /// A record a reference field can point at, as a dropdown shows it.
@@ -273,8 +279,14 @@ public:
     void set_shown(const std::string& data, Text text) { shown_[data] = std::move(text); }
     /// Asks the screen to open `window` with its data filled by name, as the values are now.
     void open(const std::string& window, nlohmann::json with) { open_.push_back({window, std::move(with)}); }
+    /// open Window in new window: in a desktop window of its own where the screen gives them.
+    void open_new(const std::string& window, nlohmann::json with) { open_.push_back({window, std::move(with), true}); }
     /// Asks the screen to close the window.
     void close() { close_ = true; }
+    /// Ends the program once the handler is done: every window closes (the built-in `quit`).
+    void quit() { quit_ = true; }
+    /// Opens Clarity's keys window once the handler is done (the built-in `keys`).
+    void show_keys() { keys_ = true; }
     /// Closes the dialog with `value`, which the handler that asked for it gets.
     void close_with(nlohmann::json value) {
         close_ = true;
@@ -315,6 +327,8 @@ private:
     std::map<std::string, Text> shown_;
     std::vector<OpenRequest> open_;
     bool close_ = false;
+    bool quit_ = false;
+    bool keys_ = false;
 };
 
 /// The state of `window` when it opens: its loaded data with `with` filled

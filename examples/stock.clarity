@@ -1,6 +1,6 @@
 project Stock
     title "Stock"
-    stack go webview desktop cli
+    stack go desktop cli
     output "out"
     language "en"
     datasource main sqlite "data/stock.db"

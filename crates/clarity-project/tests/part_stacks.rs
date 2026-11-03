@@ -19,10 +19,10 @@ fn misfits(stack: &str) -> Vec<String> {
 
 #[test]
 fn each_stack_takes_the_parts_of_its_language() {
-    assert_eq!(misfits("cpp webview desktop"), ["Dotnet", "Gopher", "Rusty"]);
-    assert_eq!(misfits("c webview desktop"), ["Dotnet", "Gopher", "Rusty"]);
+    assert_eq!(misfits("cpp desktop"), ["Dotnet", "Gopher", "Rusty"]);
+    assert_eq!(misfits("c desktop"), ["Dotnet", "Gopher", "Rusty"]);
     assert_eq!(misfits("rust desktop"), ["Dotnet", "Gopher", "Native"]);
-    assert_eq!(misfits("go webview desktop"), ["Dotnet", "Native", "Rusty"]);
+    assert_eq!(misfits("go desktop"), ["Dotnet", "Native", "Rusty"]);
     assert_eq!(misfits("csharp desktop"), ["Gopher", "Native", "Rusty"]);
     assert!(problems("rust desktop").iter().any(|m| m == "part Native is C or C++ (native), but the project is written in Rust: write it as a crate, crate \"folder\""), "{:?}", problems("rust desktop"));
 }
@@ -37,8 +37,8 @@ fn each_stack_takes_the_libraries_of_its_language() {
         found.sort();
         found
     };
-    assert_eq!(misfits("cpp webview desktop"), ["B", "C", "D"]);
+    assert_eq!(misfits("cpp desktop"), ["B", "C", "D"]);
     assert_eq!(misfits("rust desktop"), ["A", "C", "D"]);
-    assert_eq!(misfits("go webview desktop"), ["A", "B", "D"]);
+    assert_eq!(misfits("go desktop"), ["A", "B", "D"]);
     assert_eq!(misfits("csharp desktop"), ["A", "B", "C"]);
 }

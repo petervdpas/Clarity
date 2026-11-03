@@ -3,10 +3,12 @@
 //! migration steps of every database, in a module that requires Clarity's
 //! Go runtime module (github.com/petervdpas/Clarity/runtimes/go) and imports
 //! the package of each server database it uses. Windows are structs of their
-//! data with their handlers as methods; the runtime's package `shell` shows
-//! them with Wails v3 and the web renderer every web stack ships. While
-//! working on the runtime, a go.work next to the module builds it on the
-//! runtime in Clarity's repository.
+//! data with their handlers as methods; the runtime's package `shell` answers
+//! the screen's commands. On the desktop, Clarity.UI draws the windows in the
+//! program's own process (package ui, through cgo, DESIGN 7.9); the web
+//! target serves the shared web screen to a browser. While working on the
+//! runtime, a go.work next to the module builds it on the runtime in
+//! Clarity's repository.
 
 mod cli;
 mod logic;
@@ -95,12 +97,21 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     };
     let servers: Vec<&Server> = SERVERS.iter().filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql)).collect();
     let engines = crate::engines(project);
-    // A program served to a browser alone links nothing of the desktop toolkit.
+    // The desktop program is Clarity.UI's (DESIGN 7.9); a program served to a browser shows the shared web screen.
     let desktop = has_desktop(settings);
-    let groups = groups(project, &servers, desktop);
+    // On Clarity.UI the engines beside the screen run in the program (DESIGN 5.12).
+    let screen_engines = if desktop { crate::screen_engines(project) } else { Vec::new() };
+    let groups = groups(project, &servers, !screen_engines.is_empty());
     let mut files = vec![text("model.json", crate::web::model_json(project))];
-    // Clarity's screen, the themes, the resources and the windows as markup (DESIGN 7.8), in ui/.
-    files.extend(crate::web::renderer_files(project));
+    if desktop {
+        // The windows and app frames as markup, the themes and the resources, which Clarity.UI reads, in ui/.
+        files.extend(clarity_files(project));
+        files.push(text("facts.json", crate::rust::facts_json(project)));
+        files.extend(crate::screen_engine_files(project, "engines"));
+    } else {
+        // Clarity's screen, the themes, the resources and the windows as markup (DESIGN 7.8), in ui/.
+        files.extend(crate::web::renderer_files(project));
+    }
     let mut owners = Vec::new();
     for file in &project.files {
         let Some(m) = &file.module else { continue };
@@ -123,9 +134,9 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         return Err(errors);
     }
     files.push(text("schema.go", schema_go(project, &owned)?));
-    if !engines.is_empty() {
+    if !engines.is_empty() || !screen_engines.is_empty() {
         files.extend(crate::engine_files(project, "engines"));
-        files.push(text("engines.go", engines_go(project)));
+        files.push(text("engines.go", engines_go(project, &screen_engines)));
     }
     // Each library's module, its function types written from its declaration (DESIGN 5.21).
     for library in crate::libraries::libraries(project) {
@@ -150,9 +161,6 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     files.push(text("main.go", main_go(project, settings, &databases, &servers, &owners, &main_window)));
     // The modules the code imports itself, which go.mod lists as direct.
     let mut direct = vec![RUNTIME_MODULE];
-    if desktop {
-        direct.push("github.com/wailsapp/wails/v3");
-    }
     if files.iter().any(|f| f.path.ends_with(".go") && f.text.contains("\t\"github.com/shopspring/decimal\"\n")) {
         direct.push("github.com/shopspring/decimal");
     }
@@ -193,7 +201,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
 /// The engines of the application (DESIGN 5.11): each embedded, loaded once,
 /// and checked when the application starts; a typed function for each of
 /// their functions, which code calls like any call that can fail.
-fn engines_go(project: &Project) -> String {
+fn engines_go(project: &Project, screen: &[&clarity_spec::code::EngineDecl]) -> String {
     let mut body = String::new();
     let mut checks = String::new();
     for engine in crate::engines(project) {
@@ -240,9 +248,27 @@ fn engines_go(project: &Project) -> String {
             ));
         }
     }
+    // The engines beside the screen, each made new for every canvas that runs it (DESIGN 5.12).
+    if !screen.is_empty() {
+        let mut makes = String::new();
+        for e in screen {
+            let var = format!("{}Screen", names::local(&e.name.name));
+            body.push_str(&format!("//go:embed engines/{file}\nvar {var}Wasm []byte\n\n", file = e.file));
+            makes.push_str(&format!(
+                "\t{name}: func() (*engine.ScreenEngine, error) {{\n\t\treturn engine.LoadScreen({name}, {var}Wasm, []string{{{uses}}}, {opens}, engine.Limits{{Seconds: {seconds}, Megabytes: {megabytes}}})\n\t}},\n",
+                name = string(&e.name.name),
+                uses = e.uses.iter().map(|u| string(&u.name)).collect::<Vec<_>>().join(", "),
+                opens = e.opens,
+                seconds = e.seconds(),
+                megabytes = e.megabytes(),
+            ));
+        }
+        body.push_str(&format!("// screenEngines are the engines beside the screen, which Clarity.UI's canvases run.\nvar screenEngines = &engine.Screens{{Make: map[string]func() (*engine.ScreenEngine, error){{\n{makes}}}}}\n\n"));
+    }
     let decimal = if body.contains("decimal.") { "\n\t\"github.com/shopspring/decimal\"" } else { "" };
+    let sync = if body.contains("sync.") { "\n\t\"sync\"" } else { "" };
     format!(
-        "// Code generated by Clarity. DO NOT EDIT: change the project in Clarity instead.\n\npackage main\n\nimport (\n\t_ \"embed\"\n\t\"sync\"\n\n\t\"{RUNTIME_MODULE}/engine\"{decimal}\n)\n\n{body}// checkEngines loads every engine, so one whose file does not fit stops the application at start.\nfunc checkEngines() error {{\n{checks}\treturn nil\n}}\n"
+        "// Code generated by Clarity. DO NOT EDIT: change the project in Clarity instead.\n\npackage main\n\nimport (\n\t_ \"embed\"{sync}\n\n\t\"{RUNTIME_MODULE}/engine\"{decimal}\n)\n\n{body}// checkEngines loads every engine, so one whose file does not fit stops the application at start.\nfunc checkEngines() error {{\n{checks}\treturn nil\n}}\n"
     )
 }
 
@@ -266,18 +292,16 @@ fn text(path: &str, body: String) -> OutFile {
 }
 
 /// The groups of the runtime's packages a program imports, by the names
-/// modules.txt records them under: the base always; the desktop window,
-/// secret settings (DESIGN 5.27), engines (DESIGN 5.11) and each server
+/// modules.txt records them under: the base always (the desktop on
+/// Clarity.UI needs nothing more); secret settings (DESIGN 5.27), engines
+/// (DESIGN 5.11, and beside the screen on the desktop) and each server
 /// database only when the program uses them.
-fn groups(project: &Project, servers: &[&Server], desktop: bool) -> Vec<&'static str> {
+fn groups(project: &Project, servers: &[&Server], screen_engines: bool) -> Vec<&'static str> {
     let mut groups = vec!["base"];
-    if desktop {
-        groups.push("desktop");
-    }
     if !project.secret_settings().is_empty() {
         groups.push("secrets");
     }
-    if !crate::engines(project).is_empty() {
+    if !crate::engines(project).is_empty() || screen_engines {
         groups.push("engine");
     }
     groups.extend(servers.iter().map(|s| s.package));
@@ -451,22 +475,16 @@ fn schema_go(project: &Project, sources: &[(String, Sql)]) -> Result<String, Vec
 /// shell asks the program's `windows` for their data and handlers.
 /// `--check` stops after the databases.
 fn main_go(project: &Project, settings: &Settings, databases: &[(String, Sql, String)], servers: &[&Server], owners: &[logic::Owner], main_window: &str) -> String {
-    // The program's custom parts, for the part host (DESIGN 5.19).
-    let register_parts = if parts::go_parts(project).is_empty() { "" } else { "\tregisterParts()\n" };
-    // The runtime's packages and Wails, by path as gofmt keeps them; a server
+    // The program's custom parts, registered with Clarity.UI before its first window opens (DESIGN 5.19).
+    let register_parts = if parts::go_parts(project).is_empty() { "" } else { "\tif err := registerParts(); err != nil {\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}\n" };
+    // The runtime's packages, by path as gofmt keeps them; a server
     // database's package turns its driver on when it is imported.
     let mut imports: Vec<(String, String)> = vec![(format!("{RUNTIME_MODULE}/clarity"), String::new()), (format!("{RUNTIME_MODULE}/shell"), String::new())];
-    // The desktop window and its Wails service; a program served to a browser alone has neither.
+    // The desktop program is Clarity.UI's, through package ui; a program served to a browser has none.
     let desktop = has_desktop(settings);
     if desktop {
-        imports.push((format!("{RUNTIME_MODULE}/desktop"), String::new()));
-        imports.push(("github.com/wailsapp/wails/v3/pkg/application".to_string(), String::new()));
+        imports.push((format!("{RUNTIME_MODULE}/ui"), String::new()));
     }
-    let bind = if desktop {
-        "// Clarity is the service the renderer calls, as main.Clarity.Invoke.\ntype Clarity struct {\n\t*shell.Service\n}\n\n// bind makes the Wails service of the shell's service.\nfunc bind(s *shell.Service) application.Service {\n\treturn application.NewService(&Clarity{s})\n}\n\n"
-    } else {
-        ""
-    };
     imports.extend(servers.iter().map(|s| (format!("{RUNTIME_MODULE}/{}", s.package), "_ ".to_string())));
     // Secret settings (DESIGN 5.27): the system's protected store, set before anything reads a setting.
     let use_secrets = if project.secret_settings().is_empty() {
@@ -487,20 +505,21 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, Sql, St
         .collect::<Vec<_>>()
         .join(", ");
     let ready = string(&format!("{}: the databases are ready.", pascal(&settings.name)));
-    // The web target (DESIGN 7.3): a server, by itself or with `--serve` beside the desktop window.
-    let run = "\tif err := desktop.Run(options, bind); err != nil {\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}\n";
+    // The desktop (DESIGN 7.9): Clarity.UI runs the windows until they closed, with what it draws from.
+    let watches = project.files.iter().flat_map(|f| &f.engines).any(|e| e.uses.iter().any(|u| u.name == clarity_spec::code::check::PROGRESS));
+    let watches = if watches { ", Watches: true" } else { "" };
+    let screen_engines = if desktop && !crate::screen_engines(project).is_empty() { ", Engines: screenEngines" } else { "" };
+    let run = format!(
+        "\t// Clarity.UI draws the windows in this process; CLARITY_HEADLESS drives them from standard input.\n\tcode, err := ui.Run(ui.Desktop{{Options: options, Files: files, Facts: facts{watches}{screen_engines}}})\n\tif err != nil {{\n\t\tfmt.Fprintln(os.Stderr, err)\n\t}}\n\tif code != 0 {{\n\t\tdb.Close()\n\t\tos.Exit(code)\n\t}}\n"
+    );
     // Where it listens: the project's port, unless started with --address or CLARITY_ADDRESS.
     let serve = format!(
         "\tif err := shell.Serve(options, shell.Address(os.Args[1:], {})); err != nil {{\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}}\n",
         string(&clarity_project::serve_address(settings))
     );
     let serve = serve.as_str();
-    let targets = &settings.stack.targets;
-    let serve = match (targets.contains(&clarity_project::Target::Web), targets.contains(&clarity_project::Target::Desktop)) {
-        (true, false) => serve.to_string(),
-        (true, true) => format!("\t// --serve runs it as a web server, for a browser, in place of its window.\n\tif slices.Contains(os.Args[1:], \"--serve\") {{\n\t{}\t\treturn\n\t}}\n{run}", serve.replace("\n\t", "\n\t\t")),
-        _ => run.to_string(),
-    };
+    // A project has the desktop program or the web program (clarity_project's checks).
+    let serve = if desktop { run } else { serve.to_string() };
     // An engine whose file does not fit its declaration stops the application at start.
     let check_engines = if crate::engines(project).is_empty() {
         String::new()
@@ -682,6 +701,22 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, Sql, St
     let main_window = string(main_window);
     // The settings and secrets are kept under the program's own name, alike on every stack.
     let program_text = string(&crate::settings_program(settings));
+    // The desktop carries Clarity.UI's files and the facts of the fields; the web target Clarity's screen.
+    let (files_doc, files_var, facts, assets) = if desktop {
+        (
+            "// embedded holds the windows and app frames as markup, the themes and the\n// resources in ui/ (DESIGN 7.9), which Clarity.UI draws from.",
+            "files",
+            "\n// facts are what the program knows of its fields and types, which Clarity.UI's\n// parts read beside the values.\n//\n//go:embed facts.json\nvar facts []byte\n",
+            "",
+        )
+    } else {
+        (
+            "// embedded holds Clarity's screen in ui/ with the themes, the resources and\n// the windows as markup (DESIGN 7.8), which the screen reads when it starts.",
+            "assets",
+            "",
+            ", Assets: assets",
+        )
+    };
     // Without a handler anywhere, Dispatch has no use for the screen.
     let new_ui = if dispatch.is_empty() && app_dispatch.is_empty() { "" } else { "\tui := clarity.NewUi(state)\n" };
     format!(
@@ -698,17 +733,16 @@ import (
 
 {imports})
 
-// renderer is Clarity's screen with the themes, the resources and the
-// windows as markup (DESIGN 7.8), which the screen reads when it starts.
+{files_doc}
 //
 //go:embed ui
-var renderer embed.FS
+var embedded embed.FS
 
-// model is the windows, frame and data dictionary the renderer draws from.
+// model is the windows, frame and data dictionary the screen draws from.
 //
 //go:embed model.json
 var model []byte
-
+{facts}
 // databases is the database of each data source: its name, its kind and where it is.
 var databases = []clarity.Source{{{sources}}}
 
@@ -737,7 +771,7 @@ func openDatabases() (*clarity.Db, error) {{
 {folder_stores}\treturn db, nil
 }}
 
-{bind}// windows is what the shell asks of the application's windows.
+// windows is what the shell asks of the application's windows.
 type windows struct{{}}
 
 // Open is the state of window when it opens, with with filled in.
@@ -818,15 +852,26 @@ func main() {{
 \t\tfmt.Println({ready})
 \t\treturn
 \t}}
-\tassets, err := fs.Sub(renderer, \"ui\")
+\t{files_var}, err := fs.Sub(embedded, \"ui\")
 \tif err != nil {{
 \t\tfmt.Fprintln(os.Stderr, err)
 \t\tos.Exit(1)
 \t}}
-{register_parts}\toptions := shell.Options{{Name: {program_text}, Title: {title}, Main: {main_window}, Width: {width}, Height: {height}, Model: model, Assets: assets, Db: db, Windows: windows{{}}{unconnected_options}}}
+{register_parts}\toptions := shell.Options{{Name: {program_text}, Title: {title}, Main: {main_window}, Width: {width}, Height: {height}, Model: model{assets}, Db: db, Windows: windows{{}}{unconnected_options}}}
 {serve}}}
 "
     )
+}
+
+/// The files of a desktop program on Clarity.UI (DESIGN 7.9), in ui/: the
+/// windows and app frames as `.cxaml` (the same markup the other stacks
+/// read), the themes the project offers as Clarity resolves them, and the
+/// project's resources. The program embeds them.
+fn clarity_files(project: &Project) -> Vec<OutFile> {
+    let mut files: Vec<OutFile> = crate::web_windows::window_files(project).into_iter().chain(crate::web_windows::app_files(project)).collect();
+    files.extend(crate::csharp::themes::resolved_files(project, "ui/themes"));
+    files.extend(crate::web::resource_files(project, "ui/resources"));
+    files
 }
 
 /// Whether the program has a desktop window: a program served to a browser

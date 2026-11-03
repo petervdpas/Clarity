@@ -41,7 +41,7 @@ page LoanBrowse: window
 ";
 
 const STACKS: [(Backend, Ui); 5] =
-    [(Backend::Rust, Ui::Clarity), (Backend::Csharp, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview)];
+    [(Backend::Rust, Ui::Clarity), (Backend::Csharp, Ui::Clarity), (Backend::Go, Ui::Clarity), (Backend::C, Ui::Clarity), (Backend::Cpp, Ui::Clarity)];
 
 fn project() -> Project {
     let project = load_sources([("music.clarity", MUSIC), ("loans.clarity", LOANS)]);
@@ -66,7 +66,7 @@ fn tables_that_refer_to_each_other_get_their_references_afterwards() {
     let project = project();
     let mut settings = starter("Records", "records");
     settings.stack.backend = Backend::Go;
-    settings.stack.ui = Ui::Webview;
+    settings.stack.ui = Ui::Clarity;
     settings.datasources[0].kind = SourceKind::Postgres;
     settings.datasources[0].url = "env:RECORDS_DATABASE".into();
     let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));

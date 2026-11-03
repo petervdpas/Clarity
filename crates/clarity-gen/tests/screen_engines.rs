@@ -19,7 +19,8 @@ fn web_files(backend: Backend) -> Vec<OutFile> {
     let mut settings: Settings = starter("Play", "play");
     settings.stack.backend = backend;
     settings.stack.ui = clarity_project::usual_ui(backend);
-    if backend == Backend::Rust {
+    // The desktop programs of Rust, Go, C and C++ are Clarity.UI's: their web program serves the shared screen.
+    if matches!(backend, Backend::Rust | Backend::Go | Backend::C | Backend::Cpp) {
         settings.stack.targets = vec![clarity_project::Target::Web];
     }
     generated_with(settings)
@@ -105,6 +106,22 @@ fn a_clarity_engine_beside_the_screen_is_carried_compiled() {
     assert!(files.iter().any(|f| f.path == "Engines/sky.wasm"));
 }
 
+/// Go on Clarity.UI carries the engine's file in the program and gives each
+/// canvas that runs it an instance of its own through the runtime's
+/// `engine.Screens`, which package ui asks by number.
+#[test]
+fn go_on_clarity_ui_gives_each_canvas_an_instance_of_its_engine() {
+    let files = files(Backend::Go, Ui::Clarity);
+    assert!(files.iter().any(|f| f.path == "engines/screen.wasm" && f.bytes.is_some()));
+    let engines = file(&files, "engines.go");
+    assert!(engines.contains("//go:embed engines/screen.wasm\nvar screenScreenWasm []byte\n"), "{engines}");
+    assert!(engines.contains("var screenEngines = &engine.Screens{Make: map[string]func() (*engine.ScreenEngine, error){\n\t\"Screen\": func() (*engine.ScreenEngine, error) {\n\t\treturn engine.LoadScreen(\"Screen\", screenScreenWasm, []string{\"log\"}, true, engine.Limits{Seconds: 1, Megabytes: 256})\n\t},\n}}\n"), "{engines}");
+    // No engine of the backend, so nothing imports sync.
+    assert!(!engines.contains("\"sync\""), "{engines}");
+    assert!(file(&files, "main.go").contains("ui.Run(ui.Desktop{Options: options, Files: files, Facts: facts, Engines: screenEngines})"));
+    assert!(file(&files, "go.mod").contains("github.com/tetratelabs/wazero"), "the engine group's modules");
+}
+
 /// Rust on Clarity.UI carries the engine's file in the program and gives
 /// each canvas that runs it an instance of its own through the runtime's
 /// `ScreenEngine`, opened by `Program::engine_open` and kept by number.
@@ -123,4 +140,40 @@ fn rust_on_clarity_ui_gives_each_canvas_an_instance_of_its_engine() {
     // The runtime's engines run it, though the backend loads none.
     assert!(file(&files, "Cargo.toml").contains("\"engines\""));
     assert!(!files.iter().any(|f| f.path == "src/engines.rs"));
+}
+
+/// C++ on Clarity.UI carries the engine's file in the program and gives each
+/// canvas that runs it an instance of its own through the runtime's
+/// engine host (`clarity::ScreenInstances`), by its number.
+#[test]
+fn cpp_on_clarity_ui_gives_each_canvas_an_instance_of_its_engine() {
+    let files = files(Backend::Cpp, Ui::Clarity);
+    let engines = file(&files, "src/screen_engines.cpp");
+    assert!(engines.contains("const unsigned char screen_wasm[] = {\n    0x00, 0x61, 0x73, 0x6d"), "{}", &engines[..300.min(engines.len())]);
+    assert!(engines.contains("    if (name == \"Screen\") return clarity::ScreenEngine::load(\"Screen\", std::vector<uint8_t>(std::begin(screen_wasm), std::end(screen_wasm)), {\"log\"}, true, clarity::EngineLimits{1, 256});"), "{engines}");
+    let main = file(&files, "src/main.cpp");
+    assert!(main.contains("        clarity::ScreenInstances screen_instances(play::screen_engines::make);\n        options.screen_engines = [&screen_instances]"), "{main}");
+    assert!(file(&files, "CMakeLists.txt").contains("clarity_engine"));
+    assert!(files.iter().any(|f| f.path == "clarity-runtime/engine/screen.cpp"));
+}
+
+/// C on Clarity.UI carries the engine's file in the program and gives each
+/// canvas that runs it an instance of its own through the runtime's
+/// engine host (`clarity_screen_answer`), by its number.
+#[test]
+fn c_on_clarity_ui_gives_each_canvas_an_instance_of_its_engine() {
+    let files = files(Backend::C, Ui::Clarity);
+    let engines = file(&files, "src/screen_engines.c");
+    assert!(engines.contains("static const uint8_t screen_wasm[] = {\n    0x00, 0x61, 0x73, 0x6d"), "{}", &engines[..300.min(engines.len())]);
+    assert!(engines.contains("static const char* const screen_uses[] = {\"log\"};\n"), "{engines}");
+    assert!(
+        engines.contains("    if (strcmp(name, \"Screen\") == 0) return clarity_screen_engine_load(\"Screen\", screen_wasm, sizeof screen_wasm, 1, screen_uses, true, (ClarityEngineLimits){1, 256}, out);"),
+        "{engines}"
+    );
+    let main = file(&files, "src/main.c");
+    assert!(main.contains("#include \"screen_engines.h\"\n") && main.contains("    screen_engines_start();\n"), "{main}");
+    assert!(main.contains("program_facts(), NULL, false, NULL, screen_engines_answer});"), "{main}");
+    assert!(file(&files, "CMakeLists.txt").contains("clarity_engine"));
+    assert!(files.iter().any(|f| f.path == "clarity-runtime/engine/screen.c"));
+    assert!(files.iter().any(|f| f.path == "clarity-runtime/engine/engine.c"));
 }

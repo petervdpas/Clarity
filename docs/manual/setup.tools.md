@@ -35,7 +35,7 @@ Install Go from [go.dev/dl](https://go.dev/dl), or in a terminal:
 winget install GoLang.Go
 ```
 
-A Go program needs no C compiler on Windows: Wails draws with WebView2, and Clarity's runtime calls Windows without cgo.
+A Go desktop program calls Clarity.UI's library through cgo, so it needs a C compiler: GCC from MSYS2's UCRT64 shell, as for C and C++ below (`pacman -S mingw-w64-ucrt-x86_64-gcc`), with that shell's `bin` folder on `PATH`.
 
 ### C and C++ on Windows
 
@@ -51,11 +51,7 @@ pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w
 3. A project whose code calls web APIs also needs libcurl: `pacman -S --needed mingw-w64-ucrt-x86_64-curl`.
 4. In **Clarity settings**, **Environment**, point the C compiler, the C++ compiler, CMake and Ninja at the copies in `C:\msys64\ucrt64\bin`.
 
-Take every C and C++ tool from that one folder, never a mix: two compilers of different versions in one project do not link. A custom part drawn by a native library needs that library from the same shell too, such as `mingw-w64-ucrt-x86_64-sfml` for SFML.
-
-### WebView2 on Windows
-
-The window of a Go, C or C++ program shows its page in WebView2. Its runtime ships with Windows 11; on Windows 10, install the Evergreen runtime from [developer.microsoft.com](https://developer.microsoft.com/microsoft-edge/webview2). A C or C++ build fetches the WebView2 SDK it compiles against by itself, the first time.
+Take every C and C++ tool from that one folder, never a mix: two compilers of different versions in one project do not link. A custom part that uses a native library needs that library from the same shell too.
 
 ## Linux
 
@@ -71,14 +67,6 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 A Rust program draws its windows with Clarity.UI and needs nothing more: cargo downloads Skia's prebuilt library.
 
-### WebKitGTK on Linux
-
-The window of a Go, C or C++ program shows its page in WebKitGTK, and builds against its development files:
-
-```
-sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev
-```
-
 ### .NET on Linux
 
 Install the .NET 10 SDK as [learn.microsoft.com](https://learn.microsoft.com/dotnet/core/install/linux) describes for your system, from its packages or with the install script.
@@ -91,14 +79,14 @@ sudo dotnet workload install wasm-tools
 
 ### Go on Linux
 
-Install Go from [go.dev/dl](https://go.dev/dl); the distribution's own package is often older than a project needs. A Go program also needs WebKitGTK; see [WebKitGTK on Linux](#webkitgtk-on-linux).
+Install Go from [go.dev/dl](https://go.dev/dl); the distribution's own package is often older than a project needs. A Go desktop program calls Clarity.UI's library through cgo, so it also needs a C compiler (Debian and Ubuntu: `sudo apt install gcc`).
 
 ### C and C++ on Linux
 
 The compiler, CMake, Ninja and every library a C or C++ program builds with:
 
 ```
-sudo apt install build-essential cmake ninja-build pkg-config libsqlite3-dev libwebkit2gtk-4.1-dev libgtk-3-dev nlohmann-json3-dev
+sudo apt install build-essential cmake ninja-build pkg-config libsqlite3-dev nlohmann-json3-dev
 ```
 
 A project whose code calls web APIs also needs libcurl: `sudo apt install libcurl4-openssl-dev`.
@@ -121,7 +109,7 @@ sudo dotnet workload install wasm-tools
 
 ### Go on macOS
 
-Install Go from [go.dev/dl](https://go.dev/dl).
+Install Go from [go.dev/dl](https://go.dev/dl), and the Xcode Command Line Tools (`xcode-select --install`) for the C compiler cgo uses.
 
 ### C and C++ on macOS
 

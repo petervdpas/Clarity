@@ -1,12 +1,9 @@
-// The service of the shell: it answers the renderer's commands, for the
-// desktop window (shell.cpp) and for a browser (serve.cpp). It needs nothing
-// of the desktop toolkit: what belongs to a desktop window it asks of the
-// hooks `run` sets, and a web server sets none.
+// The service: it answers the screen's commands, for the desktop program on
+// Clarity.UI (desktop.cpp) and for a browser (serve.cpp).
 
 #include "shell/shell.hpp"
 
 #include <algorithm>
-#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <set>
@@ -150,41 +147,12 @@ Reply Service::edited(const WindowState& state, const std::string& part, const s
     return reply;
 }
 
-bool Service::watches(const std::string& command) {
-    static const std::set<std::string> watched{"start_app", "open_window", "close_window", "return_to", "dispatch_event", "answer_event", "edit_event",
-                                                "reorder_event", "item_event", "range_event", "step_event", "canvas_event"};
-    return watched.contains(command);
-}
-
-json Service::invoke(const std::string& command, const json& args, Desktop* caller) {
-    // The person stops the handler that runs, which holds the lock.
-    if (command == "stop_call") {
-        stop();
-        return value(nullptr);
-    }
+json Service::invoke(const std::string& command, const json& args) {
     std::lock_guard lock(mutex_);
-    if (!watches(command) || !caller || !caller->shows()) return answer(command, args, caller);
-    // The handler's engine calls say how far they are: to the screen at most
-    // ten times a second, and that it ended once it did.
-    stop_ = std::make_shared<std::atomic<bool>>(false);
-    std::optional<std::chrono::steady_clock::time_point> last;
-    EngineWatch watch{[&](int64_t done, int64_t total) {
-                          auto now = std::chrono::steady_clock::now();
-                          if (last && now - *last < std::chrono::milliseconds(100) && done < total) return;
-                          last = now;
-                          caller->show("window.dispatchEvent(new CustomEvent(\"clarity-progress\", {detail: {\"done\":" + std::to_string(done) + ",\"total\":" + std::to_string(total) + "}}))");
-                      },
-                      stop_};
-    json answered;
-    {
-        Watching watching(watch);
-        answered = answer(command, args, caller);
-    }
-    if (last) caller->show("window.dispatchEvent(new CustomEvent(\"clarity-progress\", {detail: null}))");
-    return answered;
+    return answer(command, args);
 }
 
-json Service::answer(const std::string& command, const json& args, Desktop* caller) {
+json Service::answer(const std::string& command, const json& args) {
     Db& db = *options_.db;
     try {
         WindowState state = args.contains("state") ? args["state"].get<WindowState>() : WindowState{};
@@ -194,7 +162,6 @@ json Service::answer(const std::string& command, const json& args, Desktop* call
             auto or_null = [](const std::string& text) { return text.empty() ? json(nullptr) : json(text); };
             if (options_.unconnected) {
                 started["unconnected"] = {{"handler", or_null(options_.unconnected_handler)}, {"window", or_null(options_.unconnected_window)}, {"problem", json(*options_.unconnected)}};
-                to_screen_ = true;
             }
             return value(started);
         }
@@ -208,7 +175,6 @@ json Service::answer(const std::string& command, const json& args, Desktop* call
             }
             options_.db = connected_.get();
             options_.unconnected.reset();
-            to_screen_ = false;
             return value(nullptr);
         }
         // The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
@@ -424,16 +390,8 @@ json Service::answer(const std::string& command, const json& args, Desktop* call
             set_language(args.contains("language") && args["language"].is_string() ? std::optional(args["language"].get<std::string>()) : std::nullopt);
             return value(nullptr);
         }
-        if (command == "choose_folder") {
-            // A folder part's button: the system's folder picker over the window it is in.
-            if (!caller) return json{{"error", "this window has no folder picker"}};
-            auto folder = caller->choose_folder(text_of(args, "title"));
-            return value(folder ? json(*folder) : json(nullptr));
-        }
-        if (command == "set_title") {
-            if (caller) caller->set_title(text_of(args, "title"));
-            return value(nullptr);
-        }
+        // The browser's title is the page's own.
+        if (command == "set_title") return value(nullptr);
         if (command == "open_link") {
             std::string address = text_of(args, "address");
             if (!link_opens(address)) return {{"error", "a link opens only an http, https or mailto address, not " + address}};
@@ -442,49 +400,6 @@ json Service::answer(const std::string& command, const json& args, Desktop* call
         }
         if (command == "log_line") {
             if (log_line) log_line(text_of(args, "line"));
-            return value(nullptr);
-        }
-        if (command == "quit_app") {
-            to_screen_ = false;
-            if (quit) quit();
-            return value(nullptr);
-        }
-        if (command == "open_apart") {
-            if (!caller || !open_desktop) return {{"error", "a window of its own needs the desktop"}};
-            std::string name = "apart-" + std::to_string(++next_);
-            apart_[name] = {text_of(args, "window"), with, caller->name()};
-            open_desktop(*caller, name, window_size({args.value("width", 0), args.value("height", 0)}));
-            return value(nullptr);
-        }
-        if (command == "apart_start") {
-            auto found = caller ? apart_.find(caller->name()) : apart_.end();
-            if (found == apart_.end()) return value(nullptr);
-            return value({{"window", found->second.window}, {"with", found->second.with}});
-        }
-        // Custom parts (DESIGN 6.5): where each is and what it is given, for the part host.
-        if (command == "place_part") {
-            uint64_t instance = args.value("instance", uint64_t(0));
-            if (caller) parts_windows_[instance] = caller->name();
-            if (parts.place) parts.place(instance, text_of(args, "part"), text_of(args, "kind"), caller ? caller->part_parent() : 0, args.value("x", 0), args.value("y", 0),
-                         args.value("width", 0), args.value("height", 0), args.value("shown", false));
-            return value(nullptr);
-        }
-        if (command == "set_part") {
-            if (parts.set) parts.set(args.value("instance", uint64_t(0)), text_of(args, "part"), text_of(args, "name"), args.contains("value") ? args["value"].dump() : "null");
-            return value(nullptr);
-        }
-        if (command == "hear_part") {
-            if (parts.hear) parts.hear(args.value("instance", uint64_t(0)), text_of(args, "part"), text_of(args, "hear"), args.contains("values") ? args["values"].dump() : "[]");
-            return value(nullptr);
-        }
-        if (command == "close_parts") {
-            uint64_t instance = args.value("instance", uint64_t(0));
-            if (parts.close) parts.close(instance);
-            parts_windows_.erase(instance);
-            return value(nullptr);
-        }
-        if (command == "close_apart") {
-            if (caller) caller->close();
             return value(nullptr);
         }
         return {{"error", "there is no command " + command}};
@@ -499,22 +414,6 @@ json Service::answer(const std::string& command, const json& args, Desktop* call
 Size window_size(Size size) {
     if (size.width <= 0 || size.height <= 0) return {1100, 760};
     return size;
-}
-
-std::optional<std::string> Service::parts_window(uint64_t instance) {
-    std::lock_guard lock(mutex_);
-    auto found = parts_windows_.find(instance);
-    if (found == parts_windows_.end()) return std::nullopt;
-    return found->second;
-}
-
-std::optional<std::string> Service::closed(const std::string& name) {
-    std::lock_guard lock(mutex_);
-    auto found = apart_.find(name);
-    if (found == apart_.end()) return std::nullopt;
-    std::string opener = found->second.opener;
-    apart_.erase(found);
-    return opener;
 }
 
 }  // namespace clarity::shell

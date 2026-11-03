@@ -43,7 +43,7 @@ fn rust_asks_in_the_reply_and_answers_through_its_own_command() {
 
 #[test]
 fn go_asks_in_the_reply_and_answers_through_its_windows() {
-    let code = generated(Backend::Go, Ui::Webview);
+    let code = generated(Backend::Go, Ui::Clarity);
     has(&code, "ui.Ask(");
     has(&code, "clarity.Confirm(clarity.Button(");
     has(&code, "clarity.ValueForm(\"record\", clarity.Named(\"Friend\"), clarity.IDs(w.Friends), nil)");
@@ -56,7 +56,7 @@ fn go_asks_in_the_reply_and_answers_through_its_windows() {
 
 #[test]
 fn c_asks_in_the_reply_and_answers_through_its_windows() {
-    let code = generated(Backend::C, Ui::Webview);
+    let code = generated(Backend::C, Ui::Clarity);
     has(&code, "clarity_ui_ask(ui, ");
     has(&code, "clarity_ask_confirm(");
     has(&code, "clarity_ask_value(\"record\", \"Friend\", ");
@@ -69,7 +69,7 @@ fn c_asks_in_the_reply_and_answers_through_its_windows() {
 
 #[test]
 fn cpp_asks_in_the_reply_and_answers_through_its_windows() {
-    let code = generated(Backend::Cpp, Ui::Webview);
+    let code = generated(Backend::Cpp, Ui::Clarity);
     has(&code, "ui.ask(");
     has(&code, "clarity::ask_confirm(");
     has(&code, "clarity::ask_value(\"record\", std::string(\"Friend\"), ");

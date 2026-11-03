@@ -959,12 +959,6 @@ pub fn last_build(dir: &std::path::Path, fingerprint: &str) -> Option<bool> {
     }
 }
 
-/// The commands that run in a generated project's folder before its build:
-/// the native parts' (`parts::steps_before`).
-pub fn steps_before(out: &std::path::Path, backend: Backend) -> Vec<Vec<String>> {
-    parts::steps_before(out, backend)
-}
-
 /// How the build tools of a stack build its generated project in `out/`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Toolchain {
@@ -972,7 +966,7 @@ pub struct Toolchain {
     pub tool: &'static str,
     pub args: Vec<String>,
     /// Environment the tool needs for plain line output.
-    pub env: Vec<(&'static str, &'static str)>,
+    pub env: Vec<(&'static str, String)>,
     /// The program the build makes, relative to `out/`.
     pub program: std::path::PathBuf,
     /// What to say when the tool cannot be started.
@@ -994,7 +988,7 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
                 tool: "cargo",
                 args,
                 // No progress bars, which only make sense in a terminal.
-                env: vec![("CARGO_TERM_PROGRESS_WHEN", "never")],
+                env: vec![("CARGO_TERM_PROGRESS_WHEN", "never".into())],
                 program: exe(format!("target/{profile}/{}", rust::crate_name(settings))),
                 missing: "is Rust installed?",
             })
@@ -1006,7 +1000,7 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
                 tool: "dotnet",
                 // `-tl:off`: plain lines, not the terminal logger.
                 args: ["build", "--nologo", "-tl:off", "-c", configuration].map(String::from).to_vec(),
-                env: vec![("DOTNET_CLI_TELEMETRY_OPTOUT", "1"), ("DOTNET_NOLOGO", "1")],
+                env: vec![("DOTNET_CLI_TELEMETRY_OPTOUT", "1".into()), ("DOTNET_NOLOGO", "1".into())],
                 program: exe(format!("{folder}bin/{configuration}/{}/{program}", csharp::TARGET_FRAMEWORK)),
                 missing: "is the .NET SDK installed?",
             })
@@ -1017,18 +1011,19 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
             // `.exe` on Windows and all.
             let program = exe(format!("bin/{}", go::module_name(settings)));
             let built = program.to_string_lossy().into_owned();
-            // -v names each package as it is built: a first build compiles
-            // WebKit's bindings for minutes, and is silent otherwise.
+            // -v names each package as it is built: a first build is silent otherwise.
             let mut args = vec!["build".to_string(), "-v".to_string()];
             if release {
-                // Wails' production build, without debug information.
-                args.extend(["-tags", "production", "-trimpath", "-ldflags=-s -w"].map(String::from));
+                // Without debug information.
+                args.extend(["-trimpath", "-ldflags=-s -w"].map(String::from));
             }
             args.extend(["-o".to_string(), built, ".".to_string()]);
+            // The desktop program links Clarity.UI's library, from the folder CLARITY_UI names (DESIGN 7.9).
+            let env = if settings.stack.has(clarity_project::Target::Desktop) { go_cgo_env(std::env::var_os("CLARITY_UI").as_deref().map(std::path::Path::new), std::env::consts::OS) } else { Vec::new() };
             Some(Toolchain {
                 tool: "go",
                 args,
-                env: vec![],
+                env,
                 program,
                 missing: "is Go installed?",
             })
@@ -1048,6 +1043,25 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
         // C# with the web renderer is not generated.
         Backend::Csharp => None,
     }
+}
+
+/// What cgo needs to build a Go desktop program on Clarity.UI's library in
+/// `clarity_ui` (a folder with include/clarity_ui.h and lib/), on system
+/// `os`: the header's folder, the library's, and where the program finds
+/// the shared library when it runs: beside it (where a shipped program has
+/// it, as C's and C++'s builds copy it), else in that folder. Nothing when
+/// the folder is not named: the build then says the header is missing.
+pub fn go_cgo_env(clarity_ui: Option<&std::path::Path>, os: &str) -> Vec<(&'static str, String)> {
+    let Some(folder) = clarity_ui else { return Vec::new() };
+    let lib = folder.join("lib");
+    let lib = lib.display();
+    // Windows finds the DLL beside the program or on PATH; it has no rpath.
+    let found = match os {
+        "windows" => String::new(),
+        "macos" => format!(" -Wl,-rpath,@executable_path -Wl,-rpath,{lib}"),
+        _ => format!(" -Wl,-rpath,$ORIGIN -Wl,-rpath,{lib}"),
+    };
+    vec![("CGO_ENABLED", "1".into()), ("CGO_CFLAGS", format!("-I{}", folder.join("include").display())), ("CGO_LDFLAGS", format!("-L{lib}{found}"))]
 }
 
 /// A command line typed in Clarity (Run on a command-line program) as the
@@ -1085,7 +1099,7 @@ pub fn cli_toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
             Toolchain {
                 tool: "dotnet",
                 args: ["build", "--nologo", "-tl:off", "-c", configuration].map(String::from).to_vec(),
-                env: vec![("DOTNET_CLI_TELEMETRY_OPTOUT", "1"), ("DOTNET_NOLOGO", "1")],
+                env: vec![("DOTNET_CLI_TELEMETRY_OPTOUT", "1".into()), ("DOTNET_NOLOGO", "1".into())],
                 program: exe(format!("bin/{configuration}/{}/{program}", csharp::TARGET_FRAMEWORK)),
                 missing: "is the .NET SDK installed?",
             }

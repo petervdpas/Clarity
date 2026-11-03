@@ -47,7 +47,7 @@ fn csharp_builds_with_dotnet() {
 
 #[test]
 fn go_builds_with_go_build() {
-    let settings = shop(Backend::Go, Ui::Webview);
+    let settings = shop(Backend::Go, Ui::Clarity);
     let debug = clarity_gen::toolchain(&settings, false).unwrap();
     assert_eq!(debug.tool, "go");
     // `go build -o` writes the name it is given, so the program is built
@@ -57,15 +57,33 @@ fn go_builds_with_go_build() {
     assert_eq!(debug.args, ["build", "-v", "-o", built.as_str(), "."]);
     assert_eq!(debug.program, exe("bin/shop"));
     let release = clarity_gen::toolchain(&settings, true).unwrap();
-    // Wails' production build, without debug information.
-    assert_eq!(release.args, ["build", "-v", "-tags", "production", "-trimpath", "-ldflags=-s -w", "-o", built.as_str(), "."]);
+    // Without debug information.
+    assert_eq!(release.args, ["build", "-v", "-trimpath", "-ldflags=-s -w", "-o", built.as_str(), "."]);
     assert!(debug.missing.contains("Go"), "{}", debug.missing);
+}
+
+/// A Go desktop program links Clarity.UI's library through cgo, from the
+/// folder CLARITY_UI names; it finds the shared library beside it, else in
+/// that folder (DESIGN 7.9).
+#[test]
+fn go_takes_clarity_ui_from_the_folder_clarity_ui_names() {
+    use clarity_gen::go_cgo_env;
+    assert!(go_cgo_env(None, "linux").is_empty());
+    let folder = std::path::Path::new("/opt/clarity-ui");
+    let linux = go_cgo_env(Some(folder), "linux");
+    let value = |env: &[(&str, String)], name: &str| env.iter().find(|(n, _)| *n == name).map(|(_, v)| v.clone()).unwrap_or_default();
+    assert_eq!(value(&linux, "CGO_ENABLED"), "1");
+    assert_eq!(value(&linux, "CGO_CFLAGS"), format!("-I{}", folder.join("include").display()));
+    let lib = folder.join("lib").display().to_string();
+    assert_eq!(value(&linux, "CGO_LDFLAGS"), format!("-L{lib} -Wl,-rpath,$ORIGIN -Wl,-rpath,{lib}"));
+    assert_eq!(value(&go_cgo_env(Some(folder), "macos"), "CGO_LDFLAGS"), format!("-L{lib} -Wl,-rpath,@executable_path -Wl,-rpath,{lib}"));
+    assert_eq!(value(&go_cgo_env(Some(folder), "windows"), "CGO_LDFLAGS"), format!("-L{lib}"));
 }
 
 #[test]
 fn c_and_cpp_build_with_a_cmake_workflow() {
     for backend in [Backend::C, Backend::Cpp] {
-        let settings = shop(backend, Ui::Webview);
+        let settings = shop(backend, Ui::Clarity);
         let debug = clarity_gen::toolchain(&settings, false).unwrap();
         assert_eq!(debug.tool, "cmake");
         assert_eq!(debug.args, ["--workflow", "--preset", "debug"]);
@@ -87,14 +105,14 @@ fn stacks_without_a_generator_have_no_toolchain() {
 fn the_command_line_program_builds_with_the_same_tools() {
     let rust = clarity_gen::cli_toolchain(&shop(Backend::Rust, Ui::Clarity), false).unwrap();
     assert_eq!((rust.tool, rust.program.clone()), ("cargo", exe("target/debug/shop")));
-    let go = clarity_gen::cli_toolchain(&shop(Backend::Go, Ui::Webview), true).unwrap();
+    let go = clarity_gen::cli_toolchain(&shop(Backend::Go, Ui::Clarity), true).unwrap();
     assert_eq!(go.tool, "go");
     assert_eq!(go.program, exe("bin/shop"));
     assert!(!go.args.contains(&"production".to_string()), "{:?}", go.args);
     let csharp = clarity_gen::cli_toolchain(&shop(Backend::Csharp, Ui::Clarity), false).unwrap();
     assert_eq!((csharp.tool, csharp.program.clone()), ("dotnet", exe("bin/Debug/net10.0/shop")));
     for backend in [Backend::C, Backend::Cpp] {
-        let release = clarity_gen::cli_toolchain(&shop(backend, Ui::Webview), true).unwrap();
+        let release = clarity_gen::cli_toolchain(&shop(backend, Ui::Clarity), true).unwrap();
         assert_eq!((release.tool, release.program.clone()), ("cmake", exe("build/release/shop")));
     }
 }

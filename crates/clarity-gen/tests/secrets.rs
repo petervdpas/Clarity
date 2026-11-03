@@ -34,7 +34,7 @@ fn generated(backend: Backend, ui: Ui, connection: &str) -> String {
     files.iter().map(|f| format!("// {}\n{}\n", f.path, f.text)).collect()
 }
 
-const STACKS: [(Backend, Ui); 5] = [(Backend::Rust, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::Csharp, Ui::Clarity), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview)];
+const STACKS: [(Backend, Ui); 5] = [(Backend::Rust, Ui::Clarity), (Backend::Go, Ui::Clarity), (Backend::Csharp, Ui::Clarity), (Backend::C, Ui::Clarity), (Backend::Cpp, Ui::Clarity)];
 
 /// C and C++ store records in SQLite only, for now, so they have no
 /// connection to keep secret yet.
@@ -53,7 +53,7 @@ fn the_secrets_are_named_to_the_settings() {
     let rust = generated(Backend::Rust, Ui::Clarity, "data/shop.db");
     assert!(rust.contains("const SECRETS: &[&str] = &[\"shopDb\"];"));
     assert!(rust.contains("clarity_runtime::settings::read_with(PROGRAM, SECRETS)"));
-    let go = generated(Backend::Go, Ui::Webview, "data/shop.db");
+    let go = generated(Backend::Go, Ui::Clarity, "data/shop.db");
     assert!(go.contains("clarity.Secrets = secrets.System{}"));
     let csharp = generated(Backend::Csharp, Ui::Clarity, "data/shop.db");
     assert!(csharp.contains("KeptSettings.Read(ProgramName, Secrets)"));
@@ -103,7 +103,7 @@ fn the_app_handles_its_databases_not_opening() {
     assert!(rust.contains("    fn connect(&self) -> Answer<()> {\n        let db = open_databases().map_err(|err| clarity_runtime::unconnected_reason(&err))?;"));
     // Clarity.UI shows what the handler opens first, or the window that keeps the connection (DESIGN 7.9).
     assert!(rust.contains("program::Unconnected { handler: UNCONNECTED_HANDLER.map(String::from), window: CONNECTION_WINDOW.map(String::from), problem }"));
-    let go = handled(Backend::Go, Ui::Webview);
+    let go = handled(Backend::Go, Ui::Clarity);
     assert!(go.contains("unconnected = &shell.Unconnected{Handler: \"notConnected\", Window: \"Main\", Problem: clarity.UnconnectedReason(err)}"));
     assert!(go.contains("reason, err := clarity.Answer[string](values[0])"));
     let csharp = handled(Backend::Csharp, Ui::Clarity);
@@ -120,7 +120,7 @@ fn c_and_cpp_handle_their_database_not_opening() {
     for backend in [Backend::C, Backend::Cpp] {
         let mut settings: Settings = starter("Shop", "shop");
         settings.stack.backend = backend;
-        settings.stack.ui = Ui::Webview;
+        settings.stack.ui = Ui::Clarity;
         let source = format!("{SHOP}{HANDLED}");
         let project = clarity_spec::load_in([("shop.clarity", source.as_str())], [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
         let files: Vec<OutFile> = generate(&project, &settings).unwrap_or_else(|e| panic!("{backend:?}: {e:#?}"));
@@ -176,7 +176,7 @@ fn an_unconnected_app_builds_in_rust() {
 #[test]
 #[ignore = "builds the Go program"]
 fn an_unconnected_app_builds_in_go() {
-    let out = written(Backend::Go, Ui::Webview);
+    let out = written(Backend::Go, Ui::Clarity);
     let runtime = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/go").canonicalize().unwrap();
     let go = include_str!("../../../runtimes/go/go.mod").lines().find(|l| l.starts_with("go ")).unwrap();
     std::fs::write(out.join("go.work"), format!("{go}\n\nuse .\n\nreplace github.com/petervdpas/Clarity/runtimes/go => {}\n", clarity_project::slashed(&runtime))).unwrap();
@@ -234,7 +234,7 @@ fn every_stack_keeps_under_the_one_program_name() {
                     (Backend::Go, false) => format!("shell.Options{{Name: \"{program}\","),
                     (Backend::Go, true) => format!("const program = \"{program}\""),
                     (Backend::Csharp, _) => format!("const string ProgramName = \"{program}\";"),
-                    (Backend::C, false) => format!("ClarityShellOptions options = {{\"{program}\","),
+                    (Backend::C, false) => format!("ClarityServiceOptions options = {{\"{program}\","),
                     (Backend::C, true) => format!("#define PROGRAM \"{program}\""),
                     (Backend::Cpp, false) => format!("clarity::shell::Options options{{\"{program}\","),
                     (Backend::Cpp, true) => format!("const std::string PROGRAM = \"{program}\";"),

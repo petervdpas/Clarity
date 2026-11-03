@@ -105,6 +105,14 @@ public:
     /// call_in, telling `watch` how far the call is and stopping when it says so.
     nlohmann::json call_watched(uint64_t window, const std::string& function, const nlohmann::json& args, const EngineWatch& watch) const;
 
+    /// Calls `function` on the engine's one instance, as an engine beside the
+    /// screen is called (DESIGN 5.12): what its answer tells goes on `tells`
+    /// ({"tell", "values"}), and a refusal is an EngineError in its words.
+    nlohmann::json call_telling(const std::string& function, const nlohmann::json& args, nlohmann::json& tells) const;
+
+    /// Whether the module exports `function`.
+    bool exports(const std::string& function) const;
+
     /// Drops the instance window `window` had, when it closes.
     void close_window(uint64_t window) const;
 
@@ -126,6 +134,8 @@ public:
     }
 
 private:
+    /// Runs `function` and gives the engine's whole answer.
+    nlohmann::json answer_of(uint64_t window, const std::string& function, const nlohmann::json& args, const EngineWatch& watch) const;
     struct Loaded;
     Engine(std::string name, std::shared_ptr<Loaded> loaded) : name_(std::move(name)), loaded_(std::move(loaded)) {}
     std::string name_;

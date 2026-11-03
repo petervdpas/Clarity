@@ -122,7 +122,6 @@
   "runtimes/web/src/screen/calls.ts",
   "runtimes/web/src/screen/colors.ts",
   "runtimes/web/src/screen/columnWidths.ts",
-  "runtimes/web/src/screen/customParts.ts",
   "runtimes/web/src/screen/designer.svelte.ts",
   "runtimes/web/src/screen/display.ts",
   "runtimes/web/src/screen/drawing.ts",
@@ -156,5 +155,5 @@
   "runtimes/web/src/screen/windowData.ts",
   "runtimes/web/src/screen/windowMarkup.ts"
  ],
- "fnv1a64": "b7855f6fe8cb1b01"
+ "fnv1a64": "b4a9f1cda0867fd1"
 }

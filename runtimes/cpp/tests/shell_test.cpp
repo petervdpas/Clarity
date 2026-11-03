@@ -1,5 +1,7 @@
-// The shell's commands, run without a window: the same commands and JSON as
-// the Tauri and Wails shells.
+// The service's commands, run without a window: the commands and JSON of
+// the screen's wire (DESIGN 7.3).
+
+#include <functional>
 
 #include "check.hpp"
 #include "clarity/watch.hpp"
@@ -25,8 +27,8 @@ struct Memo {
     static Memo from_values(int64_t id, const Row& v) { return {id, sql::get_text("text", v[0])}; }
 };
 
-/// The service a long handler stops, as the person's Stop does while it runs.
-shell::Service* stopping = nullptr;
+/// What a long handler runs while it runs, as the person's Stop does.
+std::function<void()> while_planning;
 
 class Cards final : public shell::Windows {
 public:
@@ -73,7 +75,7 @@ public:
             const EngineWatch* watch = current_watch();
             for (int64_t day = 1;; ++day) {
                 watch->progress(day, 365);
-                if (day == 3 && stopping) stopping->invoke("stop_call", json::object());
+                if (day == 3 && while_planning) while_planning();
                 if (watch->stop->load()) throw EngineError("engine Planner failed in plan: it was stopped");
             }
         }
@@ -99,27 +101,6 @@ public:
         if (id == 1) return Bytes{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
         return std::nullopt;
     }
-};
-
-class Fake final : public shell::Desktop {
-public:
-    std::string title;
-    bool closed = false;
-    std::string name() const override { return "main"; }
-    void set_title(const std::string& t) override { title = t; }
-    void close() override { closed = true; }
-    // The system's folder picker: the person chooses a folder, or cancels.
-    std::optional<std::string> choose_folder(const std::string& title) override {
-        if (title == "Choose a folder") return "/home/ada/Pictures";
-        return std::nullopt;
-    }
-};
-
-class NoPicker final : public shell::Desktop {
-public:
-    std::string name() const override { return "main"; }
-    void set_title(const std::string&) override {}
-    void close() override {}
 };
 
 }  // namespace
@@ -166,32 +147,6 @@ TEST(the_shell_answers_the_renderers_commands) {
     CHECK_EQ(service.invoke("log_line", {{"line", "engine Screen: level 2"}}), json::parse(R"({"value":null})"));
     CHECK_EQ(logged, "engine Screen: level 2");
 
-    // The window a command came from takes its title, and a window of its own starts where it was opened.
-    Fake main;
-    service.invoke("set_title", {{"title", "Customer card"}}, &main);
-    CHECK_EQ(main.title, "Customer card");
-    // A folder part's button opens the folder picker of the window it is in: the folder chosen, or none.
-    CHECK_EQ(service.invoke("choose_folder", {{"title", "Choose a folder"}}, &main), json::parse(R"({"value":"/home/ada/Pictures"})"));
-    CHECK_EQ(service.invoke("choose_folder", {{"title", "Cancelled"}}, &main), json::parse(R"({"value":null})"));
-    NoPicker plain;
-    CHECK_EQ(service.invoke("choose_folder", {{"title", "Choose a folder"}}, &plain), json::parse(R"({"error":"this window has no folder picker"})"));
-    std::string opened_name;
-    shell::Size opened_size{};
-    service.open_desktop = [&](shell::Desktop&, const std::string& name, shell::Size size) {
-        opened_name = name;
-        opened_size = size;
-    };
-    service.invoke("open_apart", {{"window", "Card"}, {"with", {{"name", "Linus"}}}}, &main);
-    CHECK_EQ(opened_name, "apart-1");
-    // Without a size from the renderer, the standard one; with one, that.
-    CHECK_EQ(opened_size.width, 1100);
-    CHECK_EQ(opened_size.height, 760);
-    service.invoke("open_apart", {{"window", "Card"}, {"with", json::object()}, {"width", 320}, {"height", 460}}, &main);
-    CHECK_EQ(opened_size.width, 320);
-    CHECK_EQ(opened_size.height, 460);
-    CHECK(service.closed("apart-1") == std::optional<std::string>("main"));
-    service.invoke("close_apart", json::object(), &main);
-    CHECK(main.closed);
 }
 
 // A window that closes is reported once its own `on close` has run, so an
@@ -224,50 +179,10 @@ TEST(an_unconnected_start_says_why_and_connects_later) {
     shell::Service service(options);
     CHECK_EQ(service.invoke("start", json::object()),
              json::parse(R"({"value":{"model":{"project":{}},"main":"Card","unconnected":{"handler":null,"window":"Preferences","problem":{"key":"unconnectedNotKept"}}}})"));
-    // While unconnected, the title bar's close goes to the screen, which connects again.
-    CHECK(service.closes_to_screen());
     CHECK_EQ(service.invoke("connect", json::object()),
              json::parse(R"({"error":{"key":"unconnectedFailed","values":{"problem":{"kind":"text","value":"still not kept"}}}})"));
     CHECK_EQ(service.invoke("connect", json::object()), json::parse(R"({"value":null})"));
-    CHECK(!service.closes_to_screen());
     CHECK_EQ(service.invoke("start", json::object()), json::parse(R"({"value":{"model":{"project":{}},"main":"Card"}})"));
-}
-
-namespace {
-
-/// A window whose screen keeps the scripts the shell runs on it.
-class Shown final : public shell::Desktop {
-public:
-    std::vector<std::string> scripts;
-    std::string name() const override { return "main"; }
-    void set_title(const std::string&) override {}
-    void close() override {}
-    bool shows() const override { return true; }
-    void show(const std::string& js) override { scripts.push_back(js); }
-};
-
-}  // namespace
-
-// A long call on the screen (DESIGN 5.12): the handler's engine calls report
-// to the screen, at most ten times a second, until the handler ends; Stop
-// comes in while it runs.
-TEST(a_long_handler_shows_how_far_it_is_and_stops) {
-    Db db = Db::memory();
-    Cards cards;
-    shell::Service service({"shop", "Shop", "Card", R"({"project":{}})", "", &db, &cards});
-    stopping = &service;
-    Shown screen;
-    json state = {{"window", "Card"}, {"data", {{"name", "Ada"}}}};
-    json answer = service.invoke("dispatch_event", {{"state", state}, {"handler", "plan"}}, &screen);
-    CHECK_EQ(answer, json::parse(R"({"error":"engine Planner failed in plan: it was stopped"})"));
-    REQUIRE(screen.scripts.size() >= 2);
-    CHECK_EQ(screen.scripts.front(), std::string(R"(window.dispatchEvent(new CustomEvent("clarity-progress", {detail: {"done":1,"total":365}})))"));
-    CHECK_EQ(screen.scripts.back(), std::string(R"(window.dispatchEvent(new CustomEvent("clarity-progress", {detail: null})))"));
-    // A handler that reports nothing tells the screen nothing.
-    screen.scripts.clear();
-    service.invoke("dispatch_event", {{"state", state}, {"handler", "opened"}}, &screen);
-    CHECK(screen.scripts.empty());
-    stopping = nullptr;
 }
 
 // Undo (DESIGN 5.29): the runtime keeps the window's edits, each with the
@@ -315,11 +230,6 @@ struct Running {
 json card_with(json data) { return {{"window", "Card"}, {"instance", 8}, {"data", std::move(data)}}; }
 
 }  // namespace
-
-// The person's actions the runtime decides (DESIGN 1.7) are watched handlers, as an edit is.
-TEST(the_runtime_watches_the_actions_it_decides) {
-    for (const char* command : {"reorder_event", "item_event", "range_event", "step_event", "canvas_event"}) CHECK(shell::Service::watches(command));
-}
 
 // A dragged row (DESIGN 5.30): the runtime gives the list its new order and
 // numbers, chooses the moved row and runs on reorder, as one edit.
@@ -509,7 +419,6 @@ const json tree_view = json::parse(R"({"kind":"tree","list":"tasks","parent":"up
 // changes the part's view and answers the window, never as an edit.
 TEST(the_runtime_changes_a_view_for_the_person) {
     Running app;
-    CHECK(!shell::Service::watches("view_event"));
     json state = board({{"taskTable", table_view}, {"taskTree", tree_view}});
     // Nothing to do: the views are filled.
     json filled = app.service.invoke("view_event", {{"state", state}, {"part", "taskTable"}, {"action", json::object()}})["value"]["state"];

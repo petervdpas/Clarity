@@ -13,14 +13,9 @@ const SHOWN_WINDOW: &str = include_str!("../../../app/src/lib/ShownWindow.svelte
 const PAGE_DESIGNER: &str = include_str!("../../../app/src/lib/PageDesigner.svelte");
 const APP: &str = include_str!("../../../app/src/App.svelte");
 
-/// The shells of the stacks whose runtime opens the window itself.
-const SHELLS: [(&str, &str); 4] = [
-    ("Go", include_str!("../../../runtimes/go/desktop/desktop.go")),
-    // C# shows its windows through the one Clarity.UI library (DESIGN 7.9), whose desktop host this is.
-    ("C#", include_str!("../../../runtimes/rust-ui/src/desktop/mod.rs")),
-    ("C", include_str!("../../../runtimes/c/shell/service.c")),
-    ("C++", include_str!("../../../runtimes/cpp/shell/service.cpp")),
-];
+/// Every language opens its windows through the one Clarity.UI library
+/// (DESIGN 7.9), whose desktop host this is.
+const SHELLS: [(&str, &str); 1] = [("Clarity.UI", include_str!("../../../runtimes/rust-ui/src/desktop/mod.rs"))];
 
 /// The number a `const NAME = 123;` line in `source` gives.
 fn constant(source: &str, name: &str) -> u32 {

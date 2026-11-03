@@ -70,6 +70,29 @@ func TestAHandlerRepliesAsTheRustRuntimeDoes(t *testing.T) {
 	equal(t, string(fresh), fmt.Sprintf(`{"window":"Card","instance":%d,"data":{},"parts":{},"selected":{}}`, opened.Instance))
 }
 
+// Quitting, the keys window and a window of its own go in the reply only
+// when code asks for them, as the Rust runtime writes them.
+func TestAReplySaysQuitKeysAndANewWindowOnlyWhenAsked(t *testing.T) {
+	plain, err := NewUi(NewWindowState("Main", nil)).Reply("Main", nil)
+	must(t, err)
+	wire, _ := json.Marshal(plain)
+	if strings.Contains(string(wire), "quit") || strings.Contains(string(wire), "keys") || strings.Contains(string(wire), "new_window") {
+		t.Fatalf("a plain reply said more: %s", wire)
+	}
+	ui := NewUi(NewWindowState("Main", nil))
+	ui.Quit()
+	ui.ShowKeys()
+	ui.OpenNew("Other", map[string]any{"note": "hi"})
+	asked, err := ui.Reply("Main", nil)
+	must(t, err)
+	wire, _ = json.Marshal(asked)
+	for _, said := range []string{`"quit":true`, `"keys":true`, `"open":[{"window":"Other","with":{"note":"hi"},"new_window":true}]`} {
+		if !strings.Contains(string(wire), said) {
+			t.Fatalf("the reply does not say %s: %s", said, wire)
+		}
+	}
+}
+
 // A window opens with its loaded data and with filled in by name; data
 // that does not fit the window is refused.
 func TestAWindowOpensWithItsDataAndWith(t *testing.T) {

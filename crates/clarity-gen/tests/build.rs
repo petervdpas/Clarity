@@ -43,14 +43,14 @@ fn patch(out: &Path) {
 }
 
 /// Generates the example `name` (examples/<name>.clarity) as Rust with
-/// Tauri and builds it with cargo, on `runtime`.
+/// Clarity.UI and builds it with cargo, on `runtime`.
 fn builds_with_cargo(name: &str, runtime: Runtime) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let file = root.join(format!("examples/{name}.clarity"));
     let project = clarity_spec::load_dir(&clarity_project::module_dir(&file)).unwrap();
     let settings = clarity_project::load(&file).settings.expect("the example has a project file");
     // An example builds on the stack its project file names, and no other.
-    assert_eq!((settings.stack.backend, settings.stack.ui), (clarity_project::Backend::Rust, clarity_project::Ui::Webview), "{name} is not a Rust example");
+    assert_eq!((settings.stack.backend, settings.stack.ui), (clarity_project::Backend::Rust, clarity_project::Ui::Clarity), "{name} is not a Rust example");
     let files = clarity_gen::generate(&project, &settings).unwrap();
 
     // The runtime is part of the name: the same example is built on both,
@@ -517,7 +517,7 @@ fn an_engine_written_in_clarity_runs() {
     let project = clarity_spec::load_dir(&clarity_project::module_dir(&file)).unwrap();
     let mut settings = clarity_project::load(&file).settings.expect("the fixture has a project file");
     settings.stack.backend = clarity_project::Backend::Rust;
-    settings.stack.ui = clarity_project::Ui::Webview;
+    settings.stack.ui = clarity_project::Ui::Clarity;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch().join(format!("clarity-gen-board-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
@@ -549,7 +549,7 @@ fn questions_and_their_answers_build_in_rust() {
     let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
     let mut settings = clarity_project::starter("Music", "music");
     settings.stack.backend = clarity_project::Backend::Rust;
-    settings.stack.ui = clarity_project::Ui::Webview;
+    settings.stack.ui = clarity_project::Ui::Clarity;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch().join(format!("clarity-gen-build-asks-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);

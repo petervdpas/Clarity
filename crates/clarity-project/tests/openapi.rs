@@ -149,7 +149,7 @@ components:
 "##;
 
 const PROJECT: &str = r#"project Forms
-    stack go webview desktop
+    stack go desktop
     datasource main sqlite "data/forms.db"
     datasource forms rest "https://forms.example.com/api"
         auth bearer "env:FORMS_TOKEN"

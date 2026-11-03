@@ -20,6 +20,8 @@ struct ClarityUi {
     cJSON* hears;
     const ClarityText* copied;
     bool close;
+    bool quit;
+    bool keys;
 };
 
 uint64_t clarity_ui_instance(const ClarityUi* ui) {
@@ -396,10 +398,19 @@ void clarity_ui_set_shown(ClarityUi* ui, const char* data, const ClarityText* te
 
 void clarity_ui_open(ClarityUi* ui, const char* window, cJSON* with) {
     clarity_grow((void**)&ui->open, &ui->open_room, ui->open_count, sizeof *ui->open);
-    ui->open[ui->open_count++] = (ClarityOpen){clarity_copy(window), with ? with : cJSON_CreateObject()};
+    ui->open[ui->open_count++] = (ClarityOpen){clarity_copy(window), with ? with : cJSON_CreateObject(), false};
+}
+
+void clarity_ui_open_new(ClarityUi* ui, const char* window, cJSON* with) {
+    clarity_ui_open(ui, window, with);
+    ui->open[ui->open_count - 1].new_window = true;
 }
 
 void clarity_ui_close(ClarityUi* ui) { ui->close = true; }
+
+void clarity_ui_quit(ClarityUi* ui) { ui->quit = true; }
+
+void clarity_ui_show_keys(ClarityUi* ui) { ui->keys = true; }
 
 void clarity_ui_close_with(ClarityUi* ui, cJSON* value) {
     ui->close = true;
@@ -456,6 +467,8 @@ ClarityReply* clarity_ui_reply(const ClarityUi* ui, const char* window, cJSON* d
     r->result = ui->result;
     r->hears = ui->hears;
     r->copy = ui->copied;
+    r->quit = ui->quit;
+    r->keys = ui->keys;
     return r;
 }
 
@@ -611,6 +624,7 @@ cJSON* clarity_reply_json(const ClarityReply* r) {
         cJSON* o = cJSON_CreateObject();
         cJSON_AddStringToObject(o, "window", r->open[i].window);
         cJSON_AddItemToObject(o, "with", cJSON_Duplicate(r->open[i].with, true));
+        if (r->open[i].new_window) cJSON_AddTrueToObject(o, "new_window");
         cJSON_AddItemToArray(open, o);
     }
     cJSON_AddBoolToObject(out, "close", r->close);
@@ -619,6 +633,8 @@ cJSON* clarity_reply_json(const ClarityReply* r) {
     if (r->copy) cJSON_AddItemToObject(out, "copy", clarity_text_json(r->copy));
     if (r->step) cJSON_AddNumberToObject(out, "step", (double)r->step);
     if (r->refused) cJSON_AddTrueToObject(out, "refused");
+    if (r->quit) cJSON_AddTrueToObject(out, "quit");
+    if (r->keys) cJSON_AddTrueToObject(out, "keys");
     if (r->ask_count > 0) {
         cJSON* asks = cJSON_AddArrayToObject(out, "asks");
         for (size_t i = 0; i < r->ask_count; ++i) {

@@ -1,6 +1,7 @@
 #include "clarity/store.hpp"
 
 #include <cstdlib>
+#include <filesystem>
 
 #include "clarity/errors.hpp"
 #include "clarity/settings.hpp"
@@ -27,8 +28,18 @@ std::string location(const std::string& text) {
     return value;
 }
 
+std::string data_folder_sqlite(const std::string& location, const std::function<const char*(const char*)>& env) {
+    if (location.rfind("env:", 0) == 0 || location.rfind("setting:", 0) == 0 || location == ":memory:") return location;
+    const char* folder = env ? env(data_variable) : std::getenv(data_variable);
+    if (!folder || !*folder) return location;
+    std::filesystem::path name = std::filesystem::path(location).filename();
+    if (name.empty() || name == "." || name == "..") return location;
+    return (std::filesystem::path(folder) / name).string();
+}
+
 std::unique_ptr<Driver> open_driver(Dialect dialect, const std::string& at) {
-    std::string where = location(at);
+    // An SQLite file opens in the folder CLARITY_DATA names, when it is set.
+    std::string where = location(dialect == Dialect::Sqlite ? data_folder_sqlite(at) : at);
     if (dialect == Dialect::Sqlite) return open_sqlite(where);
     throw StorageError("this application was built without " + label(dialect));
 }

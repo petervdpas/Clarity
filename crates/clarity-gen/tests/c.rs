@@ -66,7 +66,7 @@ code OrderForm
 fn settings() -> Settings {
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = Backend::C;
-    settings.stack.ui = Ui::Webview;
+    settings.stack.ui = Ui::Clarity;
     settings
 }
 
@@ -88,13 +88,13 @@ fn has(text: &str, expected: &str) {
 fn writes_a_cmake_project_with_the_runtime_copied_in() {
     let files = files();
     let cmake = file(&files, "CMakeLists.txt");
-    has(cmake, "project(shop LANGUAGES C CXX)");
+    has(cmake, "project(shop LANGUAGES C)");
     has(cmake, "set(CMAKE_C_STANDARD 17)");
     has(cmake, "add_executable(shop ${PROGRAM_SOURCES})");
     has(cmake, "include(clarity-runtime/clarity.cmake)");
     has(file(&files, "CMakePresets.json"), "\"workflowPresets\"");
     assert_eq!(file(&files, "clarity-runtime/clarity/db.h"), include_str!("../../../runtimes/c/clarity/db.h"));
-    assert!(files.iter().any(|f| f.path == "clarity-runtime/third_party/webview/webview.h"));
+    assert!(files.iter().any(|f| f.path == "clarity-runtime/desktop/desktop.c"));
     assert!(files.iter().any(|f| f.path == "clarity-runtime/third_party/cjson/cJSON.c"));
     assert!(files.iter().any(|f| f.path == "README.md"));
     // The runtime's own tests stay behind.
@@ -106,7 +106,7 @@ fn writes_a_cmake_project_with_the_runtime_copied_in() {
 fn every_c_runtime_source_file_is_copied() {
     let files = files();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/c");
-    for folder in ["clarity", "shell", "third_party/webview", "third_party/cjson"] {
+    for folder in ["clarity", "service", "desktop", "third_party/cjson"] {
         for entry in std::fs::read_dir(root.join(folder)).unwrap() {
             let name = entry.unwrap().file_name().to_string_lossy().to_string();
             assert!(files.iter().any(|f| f.path == format!("clarity-runtime/{folder}/{name}")), "{folder}/{name} is not copied");
@@ -163,12 +163,39 @@ fn handlers_are_functions_of_their_window() {
     has(main, "        for (size_t i = 0; i < all.count; i++) clarity_add_option(*out, all.items[i].id, all.items[i].name);");
 }
 
-/// The renderer's page carries its script and styles, since the webview
-/// shows a page and no folder.
+/// The desktop carries what Clarity.UI draws from (DESIGN 7.9): the windows
+/// and app frames as markup, the themes and the resources, put into the
+/// program in the order the project gives them, the model and the facts of
+/// its fields; and Clarity.UI's library goes beside the program.
+#[test]
+fn the_desktop_carries_its_files_for_clarity_ui() {
+    let files = files();
+    assert!(files.iter().any(|f| f.path == "windows/OrderForm.cxaml"), "{:?}", files.iter().map(|f| &f.path).collect::<Vec<_>>());
+    assert!(!files.iter().any(|f| f.path.starts_with("ui/")), "no web screen on the desktop");
+    let cmake = file(&files, "CMakeLists.txt");
+    has(cmake, "target_link_libraries(shop PRIVATE clarity clarity_desktop)");
+    has(cmake, "clarity_carry(shop\n  WINDOWS");
+    has(cmake, "    windows/OrderForm.cxaml");
+    has(cmake, "clarity_beside(shop)");
+    assert!(!cmake.contains("page_html"), "{cmake}");
+    has(file(&files, "src/facts.c"), "const char* program_facts(void) {");
+    has(file(&files, "src/facts.c"), "Order.total");
+    has(file(&files, "src/model.c"), "const char* program_model(void) {");
+    let main = file(&files, "src/main.c");
+    has(main, "#include \"desktop/desktop.h\"");
+    has(main, "    int status = clarity_desktop_start(&(ClarityDesktopOptions){options, &clarity_carried, program_facts(), NULL, false, NULL});\n");
+    // The library comes from the folder CLARITY_UI names, which the README says.
+    has(file(&files, "README.md"), "CLARITY_UI");
+}
+
+/// The web target's page carries its script and styles.
 #[test]
 fn the_page_carries_the_renderer() {
     // Clarity's screen is one page in ui/, which CMake compiles into the program with the windows' markup (DESIGN 7.8).
-    let files = files();
+    let project = load_sources([("sales.clarity", SALES)]);
+    let mut settings = settings();
+    settings.stack.targets = vec![clarity_project::Target::Web];
+    let files = generate(&project, &settings).unwrap();
     let page = file(&files, "src/page.c");
     has(page, "clarity_page_html");
     has(page, "const char* page_html(void) {");
@@ -176,6 +203,7 @@ fn the_page_carries_the_renderer() {
     has(cmake, "file(GLOB CLARITY_WINDOWS ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/*.cxaml)");
     has(cmake, "string(REPLACE \"<!--clarity-windows-->\" \"${CLARITY_MARKUP}\" CLARITY_PAGE \"${CLARITY_PAGE}\")");
     has(cmake, "target_sources(shop PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/page_html.c)");
+    assert!(!cmake.contains("clarity_carry"), "{cmake}");
     // Clarity's screen as one page, with the place for the windows, and the windows' markup beside it.
     let page = file(&files, "ui/index.html");
     has(page, "<script type=\"module\">");
@@ -206,12 +234,12 @@ fn rows_read_again_lose_their_selected_row() {
 #[test]
 fn the_desktop_window_opens_at_the_main_windows_size() {
     let code: String = files().iter().filter(|f| f.path.ends_with(".c")).map(|f| f.text.as_str()).collect();
-    has(&code, "page_model(), page_html(), db, &windows, 1100, 760};");
+    has(&code, "program_model(), NULL, db, &windows, 1100, 760};");
     let sized = SALES.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n");
     assert_ne!(sized, SALES);
     let project = load_sources([("sales.clarity", sized.as_str())]);
     let code: String = generate(&project, &settings()).unwrap().iter().filter(|f| f.path.ends_with(".c")).map(|f| f.text.clone()).collect();
-    has(&code, "page_model(), page_html(), db, &windows, 640, 480};");
+    has(&code, "program_model(), NULL, db, &windows, 640, 480};");
 }
 
 /// A click can pass values to its handler: each written call is a case of
@@ -359,12 +387,16 @@ fn an_engine_brings_its_host_and_wasm3() {
     clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes }]);
     let mut settings = clarity_project::starter("Shop", "shop");
     settings.stack.backend = clarity_project::Backend::C;
-    settings.stack.ui = clarity_project::Ui::Webview;
+    settings.stack.ui = clarity_project::Ui::Clarity;
     let with = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/c");
     for folder in ["engine", "third_party/wasm3"] {
         for entry in std::fs::read_dir(root.join(folder)).unwrap() {
             let name = entry.unwrap().file_name().to_string_lossy().to_string();
+            // The host of engines beside the screen comes with such an engine alone (tests/screen_engines.rs).
+            if folder == "engine" && name.starts_with("screen.") {
+                continue;
+            }
             assert!(with.iter().any(|f| f.path == format!("clarity-runtime/{folder}/{name}")), "{folder}/{name} is not copied");
         }
     }
@@ -392,25 +424,25 @@ fn the_web_target_serves_the_renderer() {
         let mut settings = settings();
         settings.stack.targets = targets;
         let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
-        assert!(files.iter().any(|f| f.path == "clarity-runtime/shell/serve.c"), "the server is copied in");
+        assert!(files.iter().any(|f| f.path == "clarity-runtime/service/serve.c"), "the server is copied in");
         file(&files, "src/main.c").to_string()
     };
     let desktop = main_of(vec![Target::Desktop]);
-    has(&desktop, "    int status = clarity_shell_run(&options);\n");
+    has(&desktop, "    int status = clarity_desktop_start(");
     assert!(!desktop.contains("clarity_serve("), "a desktop program serves nothing");
     let web = main_of(vec![Target::Web]);
     has(&web, "    int status = clarity_serve(&options, clarity_serve_address(argc, argv, \"127.0.0.1:8080\"));\n");
-    assert!(!web.contains("clarity_shell_run"), "a web program opens no window");
-    // Nor does it link the desktop toolkit: only the service, without the webview.
+    assert!(!web.contains("clarity_desktop_start"), "a web program opens no window");
+    // Nor does it link Clarity.UI: only the service.
     let mut settings = settings();
     settings.stack.targets = vec![Target::Web];
     let files = generate(&project, &settings).unwrap();
     has(file(&files, "CMakeLists.txt"), "target_link_libraries(shop PRIVATE clarity clarity_service)");
-    for path in ["clarity-runtime/shell/shell.c", "clarity-runtime/shell/webview.cc", "clarity-runtime/third_party/webview/webview.h"] {
+    for path in ["clarity-runtime/desktop/desktop.c", "clarity-runtime/desktop/desktop.h"] {
         assert!(!files.iter().any(|f| f.path == path), "{path}");
     }
     let both = main_of(vec![Target::Desktop, Target::Web]);
-    has(&both, "    if (serving)\n        status = clarity_serve(&options, clarity_serve_address(argc, argv, \"127.0.0.1:8080\"));\n    else\n        status = clarity_shell_run(&options);\n");
+    has(&both, "    if (serving)\n        status = clarity_serve(&options, clarity_serve_address(argc, argv, \"127.0.0.1:8080\"));\n    else\n        status = clarity_desktop_start(");
 }
 
 // A canvas with a mode (DESIGN 5.31): its tool, brush and ink are part state
@@ -475,4 +507,64 @@ fn a_canvas_keeps_its_tool_brush_and_ink_and_says_what_is_selected() {
     has(&all, "clarity_ui_tool(ui, \"drawing\", \"select\")");
     // The moved object is the record of the list at the chosen place.
     has(&all, "clarity_ui_selected(ui, \"diagram\", w->types.count, &");
+}
+
+const GAUGES: &str = "module game
+
+part Gauge
+    native \"parts/Gauge\"
+    binds integer
+    title: text
+    running: bool
+    tells reached(level: integer, by: text)
+    hears reset(level: integer)
+    size 4 x 2
+
+page Game: window
+    data level: integer
+    Gauge name gauge at 1,1 span 4 rows 2 bind level title \"Speed\" on reached: gaugeReached
+
+code Game
+    handler gaugeReached(level: integer, by: text)
+        gauge.reset(level)
+";
+
+/// A custom part of a C program is a kind of part of Clarity.UI (DESIGN 7.9):
+/// a C library of the project implementing the header written from its
+/// declaration, built into the program and registered as a table of callbacks.
+#[test]
+fn a_custom_part_is_a_kind_of_part_of_clarity_ui() {
+    let mut project = clarity_spec::keyed::load_keyed([("game.clarity", GAUGES)], &[], "en");
+    let starter = clarity_gen::parts::c_starter(&project.files[0].parts[0]);
+    let paths: Vec<&str> = starter.iter().map(|(p, _)| p.as_str()).collect();
+    assert_eq!(paths, ["CMakeLists.txt", "Gauge.c", "clarity/Gauge.h"]);
+    let header = &starter[2].1;
+    for line in [
+        "GaugePart* Gauge_create(void);",
+        "void Gauge_draw(GaugePart* part, ClarityCanvas* canvas, double x, double y, double width, double height);",
+        "void Gauge_show_value(GaugePart* part, int64_t value, ClarityCustomCx* cx);",
+        "void Gauge_show_title(GaugePart* part, const char* title, ClarityCustomCx* cx);",
+        "void Gauge_on_reset(GaugePart* part, ClarityCustomCx* cx, int64_t level);",
+        "bool Gauge_focusable(GaugePart* part);",
+        "void Gauge_changed(ClarityCustomCx* cx, int64_t value);",
+        "void Gauge_reached(ClarityCustomCx* cx, int64_t level, const char* by);",
+    ] {
+        has(header, line);
+    }
+    let files = starter.into_iter().map(|(path, text)| clarity_spec::native::PartFile { part: "Gauge".into(), path, bytes: text.into_bytes() }).collect();
+    clarity_spec::native::attach(&mut project, files);
+    assert!(!project.has_errors(), "{:?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(file(&files, "parts/Gauge/clarity/Gauge.h"), "GaugePart* Gauge_create(void);");
+    assert!(files.iter().any(|f| f.path == "parts/Gauge/Gauge.c"));
+    // No part host of native windows: the library draws the part.
+    assert!(!files.iter().any(|f| f.path.starts_with("parts/host/")));
+    let glue = file(&files, "src/parts.c");
+    has(glue, "clarity_custom_register(\"Gauge\", 5, &gauge);");
+    has(glue, "else if (is(name, name_length, \"title\")) Gauge_show_title(part, text_of(given, room, sizeof room), cx);");
+    has(glue, "Gauge_on_reset(part, cx, integer_of(cJSON_GetArrayItem(given, 0)));");
+    has(glue, "tell(cx, \"reached\", values);");
+    let cmake = file(&files, "CMakeLists.txt");
+    has(cmake, "add_subdirectory(parts/Gauge)\ntarget_link_libraries(Gauge PUBLIC clarity_ui)\ntarget_link_libraries(shop PRIVATE Gauge)");
+    has(file(&files, "src/main.c"), ", program_parts_register});");
 }

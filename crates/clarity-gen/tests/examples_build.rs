@@ -24,13 +24,13 @@ fn every_example_is_here() {
 const EXAMPLES: [&str; 15] = ["calculator", "dial", "dice", "invaders", "ledger", "modelling", "noughts", "orbs", "pills", "records", "shop", "stock", "todo", "walker", "waves"];
 
 #[test]
-#[ignore = "builds the calculator example (go webview desktop); run with --ignored, one at a time"]
+#[ignore = "builds the calculator example (go desktop); run with --ignored, one at a time"]
 fn the_calculator_example_builds_without_warnings() {
     builds_without_warnings("calculator");
 }
 
 #[test]
-#[ignore = "builds the dial example (go webview desktop); run with --ignored, one at a time"]
+#[ignore = "builds the dial example (go desktop); run with --ignored, one at a time"]
 fn the_dial_example_builds_without_warnings() {
     builds_without_warnings("dial");
 }
@@ -42,7 +42,7 @@ fn the_dice_example_builds_without_warnings() {
 }
 
 #[test]
-#[ignore = "builds the invaders example (go webview web); run with --ignored, one at a time"]
+#[ignore = "builds the invaders example (go web); run with --ignored, one at a time"]
 fn the_invaders_example_builds_without_warnings() {
     builds_without_warnings("invaders");
 }
@@ -66,19 +66,19 @@ fn the_noughts_example_builds_without_warnings() {
 }
 
 #[test]
-#[ignore = "builds the orbs example (cpp webview desktop); run with --ignored, one at a time"]
+#[ignore = "builds the orbs example (cpp desktop); run with --ignored, one at a time"]
 fn the_orbs_example_builds_without_warnings() {
     builds_without_warnings("orbs");
 }
 
 #[test]
-#[ignore = "builds the pills example (go webview desktop); run with --ignored, one at a time"]
+#[ignore = "builds the pills example (go desktop); run with --ignored, one at a time"]
 fn the_pills_example_builds_without_warnings() {
     builds_without_warnings("pills");
 }
 
 #[test]
-#[ignore = "builds the records example (go webview desktop); run with --ignored, one at a time"]
+#[ignore = "builds the records example (go desktop); run with --ignored, one at a time"]
 fn the_records_example_builds_without_warnings() {
     builds_without_warnings("records");
 }
@@ -90,7 +90,7 @@ fn the_shop_example_builds_without_warnings() {
 }
 
 #[test]
-#[ignore = "builds the stock example (go webview desktop cli); run with --ignored, one at a time"]
+#[ignore = "builds the stock example (go desktop cli); run with --ignored, one at a time"]
 fn the_stock_example_builds_without_warnings() {
     builds_without_warnings("stock");
 }
@@ -108,7 +108,7 @@ fn the_walker_example_builds_without_warnings() {
 }
 
 #[test]
-#[ignore = "builds the waves example (go webview desktop); run with --ignored, one at a time"]
+#[ignore = "builds the waves example (go desktop); run with --ignored, one at a time"]
 fn the_waves_example_builds_without_warnings() {
     builds_without_warnings("waves");
 }

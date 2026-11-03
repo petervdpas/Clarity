@@ -1,5 +1,5 @@
 //! The Go command-line program (DESIGN 5.20): a module of its own in
-//! `out/cli`, on the runtime module without Wails, with the project's
+//! `out/cli`, on the runtime module without Clarity.UI, with the project's
 //! records, actions and commands, and a main that reads the command line
 //! and runs the command it names.
 
@@ -102,7 +102,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     files.push(text("schema.go", super::schema_go(project, &owned)?));
     if !engines.is_empty() {
         files.extend(crate::engine_files(project, "engines"));
-        files.push(text("engines.go", super::engines_go(project)));
+        files.push(text("engines.go", super::engines_go(project, &[])));
     }
     files.push(text("main.go", main_go(project, settings, &databases, &servers)));
     let mut direct = vec![RUNTIME_MODULE];

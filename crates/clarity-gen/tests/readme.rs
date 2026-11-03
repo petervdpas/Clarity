@@ -80,15 +80,36 @@ fn a_server_database_is_named_by_its_variable() {
 fn a_go_project_says_what_it_needs_and_how_to_build_it() {
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = Backend::Go;
-    settings.stack.ui = Ui::Webview;
+    settings.stack.ui = Ui::Clarity;
     let text = readme(&settings);
-    has(&text, "Go with the web renderer");
+    has(&text, "Go with Clarity.UI");
     has(&text, "- Go, from https://go.dev/dl\n");
-    has(&text, "    go build -tags production -trimpath -ldflags=\"-s -w\" -o bin/shop .\n");
+    assert!(!text.contains("WebKitGTK") && !text.contains("production"), "{text}");
+    // Clarity.UI's library comes from the folder CLARITY_UI names, through cgo.
+    has(&text, "    export CGO_CFLAGS=\"-I$CLARITY_UI/include\"\n");
+    has(&text, "ship it beside the program");
+    has(&text, "    go build -trimpath -ldflags=\"-s -w\" -o bin/shop .\n");
     has(&text, "    go run .\n");
     // The runtime comes as a Go module, or from Clarity's repository while working on it.
     has(&text, &format!("Clarity's runtime comes as the Go module github.com/petervdpas/Clarity/runtimes/go ({})", clarity_gen::go_runtime_version()));
     has(&text, "    go work init .\n    go work edit -replace github.com/petervdpas/Clarity/runtimes/go=<Clarity>/runtimes/go\n");
+    // The web program serves the shared web screen, and needs no library.
+    settings.stack.targets = vec![clarity_project::Target::Web];
+    let web = readme(&settings);
+    has(&web, "Go with the web renderer");
+    assert!(!web.contains("CGO_CFLAGS"), "{web}");
+}
+
+/// Every runtime opens an SQLite file in the folder CLARITY_DATA names, so
+/// every stack's README says so.
+#[test]
+fn every_stack_says_clarity_data_moves_its_sqlite_file() {
+    for backend in [Backend::Rust, Backend::Go, Backend::Csharp, Backend::C, Backend::Cpp] {
+        let mut settings = starter("Shop", "shop");
+        settings.stack.backend = backend;
+        settings.stack.ui = Ui::Clarity;
+        has(&readme(&settings), "Set the environment variable `CLARITY_DATA` to a folder to open it there instead, under its own file name.");
+    }
 }
 
 /// A file store says where its pictures are, and which variable names it.

@@ -68,7 +68,7 @@ page OrderForm: window
 fn settings() -> Settings {
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = Backend::Go;
-    settings.stack.ui = Ui::Webview;
+    settings.stack.ui = Ui::Clarity;
     settings
 }
 
@@ -155,8 +155,8 @@ fn a_module_gets_the_drivers_of_its_databases_only() {
         assert!(!file(&plain, "main.go").contains(&import(package)), "{package}");
         assert!(!file(&plain, "go.mod").contains(module), "{module}");
     }
-    // Shared with the SQLite driver and Wails, so it stays.
-    has(file(&plain, "go.mod"), "golang.org/x/crypto ");
+    // What only a driver needs stays out: the desktop on Clarity.UI brings no module of its own.
+    assert!(!file(&plain, "go.mod").contains("golang.org/x/crypto "), "{}", file(&plain, "go.mod"));
 
     for (kind, package, module) in drivers {
         let mut settings = settings();
@@ -376,28 +376,29 @@ fn windows() -> Vec<OutFile> {
     generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"))
 }
 
-/// Clarity's screen, the one every web stack ships, with the windows as
-/// markup it reads when it starts (DESIGN 7.8); the Go shell serves it with
-/// Wails (G3b). Nothing of it is built in the project.
+/// The desktop program is Clarity.UI's (DESIGN 7.9): the windows and app
+/// frames as markup, the themes and the facts of the fields, embedded, and
+/// main runs package ui; nothing of the web screen or a webview.
 #[test]
-fn a_wails_application_with_the_web_renderer() {
+fn a_desktop_program_on_clarity_ui() {
     let files = windows();
-    for path in ["ui/index.html", "ui/runtime.js", "ui/runtime.css", "ui/themes/clarity.css", "model.json"] {
-        assert!(files.iter().any(|f| f.path == path), "no {path}");
+    for path in ["ui/windows/OrderForm.cxaml", "ui/apps/Shop.cxaml", "facts.json", "model.json"] {
+        assert!(files.iter().any(|f| f.path == path), "no {path} in {:?}", files.iter().map(|f| &f.path).collect::<Vec<_>>());
     }
-    assert!(files.iter().any(|f| f.path.starts_with("ui/windows/") && f.path.ends_with(".cxaml")), "the windows as markup");
+    assert!(!files.iter().any(|f| f.path == "ui/index.html" || f.path == "ui/runtime.js"), "no web screen on the desktop");
     assert!(!files.iter().any(|f| f.path.ends_with("package.json")), "nothing for npm");
-    has(file(&files, "go.mod"), "github.com/wailsapp/wails/v3 v3.0.0-alpha.84");
+    assert!(!file(&files, "go.mod").contains("wails"), "no Wails");
+    let facts: serde_json::Value = serde_json::from_str(file(&files, "facts.json")).unwrap();
+    assert!(facts["windows"]["OrderForm"].is_object(), "{facts}");
     let main = file(&files, "main.go");
-    has(main, "//go:embed ui\nvar renderer embed.FS");
+    has(main, "//go:embed ui\nvar embedded embed.FS");
     has(main, "//go:embed model.json\nvar model []byte");
-    has(main, "\tassets, err := fs.Sub(renderer, \"ui\")");
-    // The renderer calls the service the program binds: main.Clarity.Invoke.
-    has(main, "type Clarity struct {\n\t*shell.Service\n}");
-    has(main, "options := shell.Options{Name: \"shop\", Title: \"Shop\", Main: \"OrderForm\", Width: 1100, Height: 760, Model: model, Assets: assets, Db: db, Windows: windows{}}\n");
-    has(main, "\tif err := desktop.Run(options, bind); err != nil {");
-    assert!(!main.contains("shell.Serve"), "a desktop program serves nothing");
-    has(main, "func bind(s *shell.Service) application.Service {\n\treturn application.NewService(&Clarity{s})\n}");
+    has(main, "//go:embed facts.json\nvar facts []byte");
+    has(main, "\tfiles, err := fs.Sub(embedded, \"ui\")");
+    has(main, "\t\"github.com/petervdpas/Clarity/runtimes/go/ui\"\n");
+    has(main, "options := shell.Options{Name: \"shop\", Title: \"Shop\", Main: \"OrderForm\", Width: 1100, Height: 760, Model: model, Db: db, Windows: windows{}}\n");
+    has(main, "\tcode, err := ui.Run(ui.Desktop{Options: options, Files: files, Facts: facts})\n");
+    assert!(!main.contains("shell.Serve") && !main.contains("wails") && !main.contains("/desktop\""), "a desktop program serves nothing:\n{main}");
 }
 
 #[test]
@@ -715,7 +716,7 @@ fn a_step_without_statements_is_written_as_gofmt_writes_it() {
 }
 
 /// The web target (DESIGN 7.3): the program serves the renderer to a
-/// browser; beside the desktop target it serves with `--serve`.
+/// browser, and links nothing of the desktop.
 #[test]
 fn the_web_target_serves_the_renderer() {
     use clarity_project::Target;
@@ -728,10 +729,10 @@ fn the_web_target_serves_the_renderer() {
     };
     let web = main_of(vec![Target::Web]);
     has(&web, "\tif err := shell.Serve(options, shell.Address(os.Args[1:], \"127.0.0.1:8080\")); err != nil {");
-    assert!(!web.contains("desktop.Run(options"), "a web program opens no window");
-    // Nor does it link the desktop toolkit.
-    assert!(!web.contains("wails") && !web.contains("/desktop\""), "{web}");
-    let both = main_of(vec![Target::Desktop, Target::Web]);
-    has(&both, "\tif slices.Contains(os.Args[1:], \"--serve\") {\n\t\tif err := shell.Serve(options, shell.Address(os.Args[1:], \"127.0.0.1:8080\")); err != nil {");
-    has(&both, "\tif err := desktop.Run(options, bind); err != nil {");
+    assert!(!web.contains("ui.Run("), "a web program opens no window");
+    // Nor does it link Clarity.UI.
+    assert!(!web.contains("runtimes/go/ui\"") && !web.contains("facts"), "{web}");
+    has(&web, "//go:embed ui\nvar embedded embed.FS");
+    has(&web, "\tassets, err := fs.Sub(embedded, \"ui\")");
+    has(&web, "Model: model, Assets: assets, Db: db,");
 }

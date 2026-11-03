@@ -40,35 +40,35 @@ fn every_part_builds_without_warnings_in_rust_on_the_web() {
 #[test]
 #[ignore = "builds a Go program with every part; run with --ignored, one at a time"]
 fn every_part_builds_without_warnings_in_go() {
-    builds_without_warnings("go webview desktop cli");
+    builds_without_warnings("go desktop cli");
 }
 
 #[test]
 #[ignore = "builds a Go web program with every part; run with --ignored, one at a time"]
 fn every_part_builds_without_warnings_in_go_on_the_web() {
-    builds_without_warnings("go webview web cli");
+    builds_without_warnings("go web cli");
 }
 
 #[test]
 #[ignore = "builds a C program with every part; run with --ignored, one at a time"]
 fn every_part_builds_without_warnings_in_c() {
-    builds_without_warnings("c webview desktop cli");
+    builds_without_warnings("c desktop cli");
 }
 
 #[test]
 #[ignore = "builds a C web program with every part; run with --ignored, one at a time"]
 fn every_part_builds_without_warnings_in_c_on_the_web() {
-    builds_without_warnings("c webview web cli");
+    builds_without_warnings("c web cli");
 }
 
 #[test]
 #[ignore = "builds a C++ program with every part; run with --ignored, one at a time"]
 fn every_part_builds_without_warnings_in_cpp() {
-    builds_without_warnings("cpp webview desktop cli");
+    builds_without_warnings("cpp desktop cli");
 }
 
 #[test]
 #[ignore = "builds a C++ web program with every part; run with --ignored, one at a time"]
 fn every_part_builds_without_warnings_in_cpp_on_the_web() {
-    builds_without_warnings("cpp webview web cli");
+    builds_without_warnings("cpp web cli");
 }

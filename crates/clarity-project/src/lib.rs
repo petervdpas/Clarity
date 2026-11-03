@@ -90,7 +90,8 @@ impl Stack {
     }
 
     /// Whether the stack line names its UI: a program with a window on the
-    /// shared web screen does (`stack go webview desktop`); Clarity.UI is never named.
+    /// shared web screen would (`webview`), which no language offers any more;
+    /// Clarity.UI is never named.
     pub fn names_ui(&self) -> bool {
         self.has_ui() && self.ui != Ui::Clarity
     }
@@ -456,16 +457,14 @@ pub fn validate(settings: &Settings) -> Vec<String> {
     let stack = &settings.stack;
     let backend = backend_info(stack.backend);
     if !backend.uis.contains(&stack.ui) {
-        // A backend that draws with Clarity.UI only says what to write instead.
-        let instead = if backend.uis == [Ui::Clarity] { format!("; write {}", stack_line(&Stack { ui: Ui::Clarity, ..stack.clone() })) } else { String::new() };
+        // Every language draws with Clarity.UI only, unnamed (DESIGN 7.9): settings that carry another UI say what to write instead.
         problems.push(format!(
-            "{} is a UI for {}, not for {}{instead}",
-            ui_label(stack.ui),
-            ui_backend_label(stack.ui),
-            backend.label
+            "{} draws its windows with Clarity.UI and names no UI; write {}",
+            backend.label,
+            stack_line(&Stack { ui: Ui::Clarity, ..stack.clone() })
         ));
     } else if stack.ui == Ui::Clarity && stack.has(Target::Web) && stack.has(Target::Desktop) && !clarity_ui_on_the_web(stack.backend) {
-        // Rust's web program is the shared web screen's server until Clarity.UI draws in the browser (G8d).
+        // The web program of Rust, Go, C and C++ is the shared web screen's server until Clarity.UI draws in the browser (G8d).
         let alone = |target| stack_line(&Stack { targets: vec![target], ..stack.clone() });
         problems.push(format!(
             "the web program of {} is not generated beside its desktop program yet; write {}, or {} for the web program alone",
@@ -665,16 +664,16 @@ pub fn usual_ui(backend: Backend) -> Ui {
     backend_info(backend).uis[0]
 }
 
-/// The UIs a backend offers, its usual one first. C# and Rust draw with
-/// Clarity.UI only (DESIGN 7.9); Rust's web target serves the shared web
-/// screen until Clarity.UI draws in the browser (G8d).
+/// The UIs a backend offers, its usual one first. Every language draws with
+/// Clarity.UI only (DESIGN 7.9); the web targets of Rust, Go, C and C++ serve
+/// the shared web screen until Clarity.UI draws in the browser.
 pub(crate) fn backend_uis(backend: Backend) -> &'static [Ui] {
     match backend {
         Backend::Rust => &[Ui::Clarity],
-        Backend::Go => &[Ui::Webview],
+        Backend::Go => &[Ui::Clarity],
         Backend::Csharp => &[Ui::Clarity],
-        Backend::C => &[Ui::Webview],
-        Backend::Cpp => &[Ui::Webview],
+        Backend::C => &[Ui::Clarity],
+        Backend::Cpp => &[Ui::Clarity],
     }
 }
 
@@ -690,8 +689,8 @@ fn backend_info(backend: Backend) -> BackendInfo {
 }
 
 /// Whether Clarity generates the web target of `backend` on Clarity.UI:
-/// C# does; Rust's web program serves the shared web screen, alone, until
-/// G8d (DESIGN 7.9).
+/// C# does; the web program of Rust, Go, C and C++ serves the shared web
+/// screen, alone, until G8d (DESIGN 7.9).
 fn clarity_ui_on_the_web(backend: Backend) -> bool {
     backend == Backend::Csharp
 }
@@ -703,13 +702,6 @@ fn ui_label(ui: Ui) -> &'static str {
     }
 }
 
-/// The backends a UI belongs to, for messages.
-fn ui_backend_label(ui: Ui) -> &'static str {
-    match ui {
-        Ui::Webview => "Go, C and C++",
-        Ui::Clarity => "the C# and Rust backends",
-    }
-}
 
 pub fn catalog() -> Catalog {
     let source = |id, label, url_label, url_example, has_auth| SourceInfo {
@@ -841,7 +833,7 @@ fn with_cli(stack: &Stack) -> String {
     stack_line(&stack)
 }
 
-/// The stack line as the project file has it: `stack go webview desktop`.
+/// The stack line as the project file has it: `stack go desktop cli`.
 pub(crate) fn stack_line(stack: &Stack) -> String {
     let mut line = format!("stack {}", backend_word(stack.backend));
     if stack.names_ui() {

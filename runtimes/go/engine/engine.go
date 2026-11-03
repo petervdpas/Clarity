@@ -274,6 +274,12 @@ func (e *Engine) CallIn(window uint64, function string, args ...any) (any, error
 // CallWatched calls function in open window window as CallIn does, telling
 // watch how far it is and stopping when it says so.
 func (e *Engine) CallWatched(window uint64, watch Watch, function string, args ...any) (any, error) {
+	return e.run(window, watch, function, args, nil)
+}
+
+// run calls function in window as CallWatched does; what the answer tells
+// goes to told, when given (an engine beside the screen, DESIGN 5.12).
+func (e *Engine) run(window uint64, watch Watch, function string, args []any, told *[]Tell) (any, error) {
 	state := &call{name: e.name, clock: e.services.Clock, random: rand.Uint64(), log: e.services.Log, progress: watch.Progress}
 	if e.services.Seed != nil {
 		state.random = *e.services.Seed
@@ -347,7 +353,43 @@ func (e *Engine) CallWatched(window uint64, watch Watch, function string, args .
 	} else {
 		l.module.Close(context.Background())
 	}
+	if told != nil {
+		if err := tells(output, told, failed); err != nil {
+			return nil, err
+		}
+	}
 	return answer(output, failed)
+}
+
+// Tell is what an engine beside the screen told its window: the handler
+// wired to it runs with its values.
+type Tell struct {
+	Tell   string `json:"tell"`
+	Values []any  `json:"values"`
+}
+
+// tells adds what an answer tells to told.
+func tells(output []byte, told *[]Tell, failed func(string) error) error {
+	var answer struct {
+		Tells []struct {
+			Tell   *string `json:"tell"`
+			Values []any   `json:"values"`
+		} `json:"tells"`
+	}
+	if json.Unmarshal(output, &answer) != nil {
+		return nil
+	}
+	for _, t := range answer.Tells {
+		if t.Tell == nil || *t.Tell == "" {
+			return failed("it told something without a name")
+		}
+		values := t.Values
+		if values == nil {
+			values = []any{}
+		}
+		*told = append(*told, Tell{Tell: *t.Tell, Values: values})
+	}
+	return nil
 }
 
 // instance is a new instance of the module, opened when the engine has `on open`.

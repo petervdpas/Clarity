@@ -1,6 +1,6 @@
-//! Native custom parts in the output (DESIGN 5.19 and 6.5): the header each
-//! part's library implements, the glue, and the parts folder every stack
-//! builds into the shared library clarity_parts.
+//! Custom parts in the output (DESIGN 5.19 and 6.5): each stack's part is a
+//! library in its own language, drawn by Clarity.UI, and code sets, reads
+//! and hears it.
 
 use clarity_gen::parts;
 use clarity_spec::keyed::load_keyed;
@@ -35,7 +35,7 @@ code Game
 ";
 
 fn settings() -> clarity_project::Settings {
-    clarity_project::parse("project Game\n    stack cpp webview desktop\n    datasource main sqlite \"data/game.db\"\n").unwrap()
+    clarity_project::parse("project Game\n    stack cpp desktop\n    datasource main sqlite \"data/game.db\"\n").unwrap()
 }
 
 fn generated() -> Vec<clarity_gen::OutFile> {
@@ -46,30 +46,27 @@ fn text<'a>(files: &'a [clarity_gen::OutFile], path: &str) -> &'a str {
     &files.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("no {path}")).text
 }
 
-/// The test's own library for the part: it tells `scored` after a few
-/// frames, and says on standard error what it is given and hears.
-const TEST_PART: &str = r#"#include <cstdio>
+const TEST_PART_CPP: &str = r#"#include <cstdio>
 
 #include "clarity/Arena.h"
 
-struct ArenaPart {
-    ArenaHost* host;
-    int frames = 0;
+namespace {
+
+class Arena final : public ArenaPart {
+public:
+    void draw(clarity::ui::Canvas& canvas, double x, double y, double width, double height) override { canvas.fill(x, y, width, height, 0xFF2040A0); }
+    void click(clarity::ui::Cx& cx) override { scored(cx, 7, "test"); }
+    void show_value(int64_t, clarity::ui::Cx&) override {}
+    void show_speed(int64_t speed, clarity::ui::Cx&) override { std::fprintf(stderr, "arena speed %lld\n", (long long)speed); }
+    void show_title(const std::string& title, clarity::ui::Cx&) override { std::fprintf(stderr, "arena title %s\n", title.c_str()); }
+    void show_running(bool, clarity::ui::Cx&) override {}
+    void on_restart(clarity::ui::Cx&, int64_t level) override { std::fprintf(stderr, "arena restart %lld\n", (long long)level); }
+    void on_say(clarity::ui::Cx&, const std::string&, bool) override {}
 };
 
-ArenaPart* Arena_create(void*, int, int, ArenaHost* host) { return new ArenaPart{host}; }
-void Arena_resize(ArenaPart*, int, int) {}
-void Arena_frame(ArenaPart* part) {
-    if (++part->frames == 20) Arena_scored(part->host, 7, "test");
-}
-void Arena_destroy(ArenaPart* part) { delete part; }
-void Arena_set_enabled(ArenaPart*, bool) {}
-void Arena_set_value(ArenaPart*, int64_t) {}
-void Arena_set_speed(ArenaPart*, int64_t speed) { fprintf(stderr, "arena speed %lld\n", (long long)speed); }
-void Arena_set_title(ArenaPart*, const char* title) { fprintf(stderr, "arena title %s\n", title); }
-void Arena_set_running(ArenaPart*, bool) {}
-void Arena_restart(ArenaPart*, int64_t level) { fprintf(stderr, "arena restart %lld\n", (long long)level); }
-void Arena_say(ArenaPart*, const char*, bool) {}
+}  // namespace
+
+std::unique_ptr<ArenaPart> make_Arena() { return std::make_unique<Arena>(); }
 "#;
 
 /// The test's part in Go.
@@ -80,27 +77,24 @@ import (
 	"os"
 )
 
-type part struct {
-	host   Host
-	frames int
+type part struct{}
+
+func New() Part { return &part{} }
+
+func (p *part) Draw(canvas Canvas, x, y, width, height float64) {
+	canvas.Fill(x, y, width, height, canvas.LookColor("accent"), 0)
 }
 
-func New(window Window, width, height int, host Host) Part { return &part{host: host} }
+// Click tells scored, as the C and C++ test parts do.
+func (p *part) Click(cx Cx) { Scored(cx, 7, "test") }
 
-func (p *part) Resize(width, height int) {}
-func (p *part) Frame() {
-	p.frames++
-	if p.frames == 20 {
-		p.host.Scored(7, "test")
-	}
-}
-func (p *part) SetEnabled(enabled bool)       {}
-func (p *part) SetValue(value int64)          {}
-func (p *part) SetSpeed(speed int64)          { fmt.Fprintf(os.Stderr, "arena speed %d\n", speed) }
-func (p *part) SetTitle(title string)         { fmt.Fprintf(os.Stderr, "arena title %s\n", title) }
-func (p *part) SetRunning(running bool)       {}
-func (p *part) Restart(level int64)           { fmt.Fprintf(os.Stderr, "arena restart %d\n", level) }
-func (p *part) Say(words string, loud bool)   {}
+func (p *part) SetEnabled(enabled bool, cx Cx) {}
+func (p *part) SetValue(value int64, cx Cx)    {}
+func (p *part) SetSpeed(speed int64, cx Cx)    { fmt.Fprintf(os.Stderr, "arena speed %d\n", speed) }
+func (p *part) SetTitle(title string, cx Cx)   { fmt.Fprintf(os.Stderr, "arena title %s\n", title) }
+func (p *part) SetRunning(running bool, cx Cx) {}
+func (p *part) Restart(level int64, cx Cx)     { fmt.Fprintf(os.Stderr, "arena restart %d\n", level) }
+func (p *part) Say(words string, loud bool, cx Cx) {}
 "#;
 
 /// The game, its part written in the language of `backend`.
@@ -110,11 +104,18 @@ fn project_for(backend: clarity_project::Backend) -> clarity_spec::Project {
         // A Rust part is a control of Clarity.UI: its starter as declaring it writes it.
         Backend::Rust => ("crate \"parts/Arena\"", "", ""),
         Backend::Go => ("go \"parts/arena\"", "arena.go", TEST_PART_GO),
-        _ => ("native \"parts/Arena\"", "Arena.cpp", TEST_PART),
+        Backend::Cpp => ("native \"parts/Arena\"", "Arena.cpp", TEST_PART_CPP),
+        // A C part as declaring it in a C project writes it.
+        _ => ("native \"parts/Arena\"", "", ""),
     };
     let text = GAME.replace("native \"parts/Arena\"", line);
     let mut p = load_keyed([("game.clarity", text.as_str())], &[], "en");
-    let starter = parts::starter_for(&p.files[0].parts[0]);
+    // A C or C++ project's part is a control of Clarity.UI.
+    let starter = match backend {
+        Backend::Cpp => parts::cpp_starter(&p.files[0].parts[0]),
+        Backend::C => parts::c_starter(&p.files[0].parts[0]),
+        _ => parts::starter_for(&p.files[0].parts[0]),
+    };
     let files = starter
         .into_iter()
         .map(|(path, text)| {
@@ -132,65 +133,6 @@ fn project() -> clarity_spec::Project {
 }
 
 #[test]
-fn the_header_types_the_declaration() {
-    let p = project();
-    let h = parts::header(&p.files[0].parts[0]);
-    for line in [
-        "ArenaPart* Arena_create(void* parent, int width, int height, ArenaHost* host);",
-        "void Arena_frame(ArenaPart* part);",
-        "void Arena_set_value(ArenaPart* part, int64_t value);",
-        "void Arena_set_speed(ArenaPart* part, int64_t speed);",
-        "void Arena_set_title(ArenaPart* part, const char* title);",
-        "void Arena_set_running(ArenaPart* part, bool running);",
-        "void Arena_restart(ArenaPart* part, int64_t level);",
-        "void Arena_say(ArenaPart* part, const char* words, bool loud);",
-        "void Arena_changed(ArenaHost* host, int64_t value);",
-        "void Arena_scored(ArenaHost* host, int64_t points, const char* by);",
-    ] {
-        assert!(h.contains(line), "{line}\n{h}");
-    }
-}
-
-#[test]
-fn the_parts_folder_has_the_host_the_glue_and_each_part() {
-    let p = project();
-    let files = parts::out_files(&p, &["../bin"]);
-    let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
-    for path in ["parts/CMakeLists.txt", "parts/glue.c", "parts/host/clarity_parts.c", "parts/host/cJSON.h", "parts/Arena/CMakeLists.txt", "parts/Arena/Arena.cpp", "parts/Arena/clarity/Arena.h"] {
-        assert!(paths.contains(&path), "{path} in {paths:?}");
-    }
-    let cmake = &files.iter().find(|f| f.path == "parts/CMakeLists.txt").unwrap().text;
-    assert!(cmake.contains("add_subdirectory(Arena)") && cmake.contains("${CMAKE_CURRENT_SOURCE_DIR}/../bin"), "{cmake}");
-}
-
-#[test]
-#[ignore = "builds the parts folder with CMake; run with --ignored"]
-fn the_parts_folder_builds_into_one_shared_library() {
-    let p = project();
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/generated/native-parts");
-    let _ = std::fs::remove_dir_all(&dir);
-    for file in parts::out_files(&p, &["../bin"]) {
-        let path = dir.join(&file.path);
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        match &file.bytes {
-            Some(bytes) => std::fs::write(&path, bytes).unwrap(),
-            None => std::fs::write(&path, &file.text).unwrap(),
-        }
-    }
-    for step in parts::build_steps() {
-        let status = std::process::Command::new(&step[0]).args(&step[1..]).current_dir(&dir).status().unwrap();
-        assert!(status.success(), "{step:?}");
-    }
-    let library = dir.join(if cfg!(target_os = "linux") { "bin/libclarity_parts.so" } else { "bin/clarity_parts" });
-    assert!(library.exists(), "{}", library.display());
-    let symbols = std::process::Command::new("nm").arg("-D").arg(&library).output().unwrap();
-    let symbols = String::from_utf8_lossy(&symbols.stdout);
-    for symbol in ["clarity_parts_start", "clarity_parts_place", "clarity_parts_set", "clarity_parts_hear", "clarity_parts_close"] {
-        assert!(symbols.contains(symbol), "{symbol}");
-    }
-}
-
-#[test]
 fn cpp_code_sets_reads_and_tells_a_custom_part() {
     let files = generated();
     let logic = files.iter().filter(|f| f.path.starts_with("src/") && f.path.ends_with(".cpp")).map(|f| f.text.as_str()).collect::<String>();
@@ -199,8 +141,23 @@ fn cpp_code_sets_reads_and_tells_a_custom_part() {
     assert!(logic.contains("ui.part_value(\"arena\", \"speed\").value_or(nlohmann::json::parse(\"5\")).get<int64_t>()"), "{logic}");
     // The tell's handler runs with the tell's values, as an answer's does.
     assert!(logic.contains("if (handler == \"arenaScored\")"), "{logic}");
-    assert!(text(&files, "CMakeLists.txt").contains("add_subdirectory(parts)"));
-    assert!(files.iter().any(|f| f.path == "parts/glue.c"));
+    // Each part is built into the program and registered with Clarity.UI by its name.
+    assert!(text(&files, "CMakeLists.txt").contains("add_subdirectory(parts/Arena)\ntarget_link_libraries(Arena PUBLIC clarity_desktop)\ntarget_link_libraries(game PRIVATE Arena)"));
+    assert!(text(&files, "src/parts.cpp").contains("clarity::ui::register_part(\"Arena\", [] { return std::unique_ptr<clarity::ui::CustomPart>(make_Arena()); });"));
+    assert!(!files.iter().any(|f| f.path == "parts/glue.c" || f.path.starts_with("parts/host/")), "no part host of native windows");
+    // The header is the class the part implements, typed from the declaration.
+    let h = text(&files, "parts/Arena/clarity/Arena.h");
+    for line in [
+        "class ArenaPart : public clarity::ui::CustomPart {",
+        "    virtual void show_value(int64_t value, clarity::ui::Cx& cx) = 0;",
+        "    virtual void show_title(const std::string& title, clarity::ui::Cx& cx) = 0;",
+        "    virtual void on_say(clarity::ui::Cx& cx, const std::string& words, bool loud) = 0;",
+        "        else if (name == \"speed\") show_speed(integer_of(given), cx);",
+        "    void scored(clarity::ui::Cx& cx, int64_t points, const std::string& by) { cx.tell(\"scored\", nlohmann::json::array({points, by}).dump()); }",
+        "std::unique_ptr<ArenaPart> make_Arena();",
+    ] {
+        assert!(h.contains(line), "{line}\n{h}");
+    }
 }
 
 /// Generates the game for `backend` into target/generated, builds it with
@@ -231,77 +188,64 @@ fn built(backend: clarity_project::Backend, build: &[&str]) -> std::path::PathBu
         let go = include_str!("../../../runtimes/go/go.mod").lines().find(|l| l.starts_with("go ")).unwrap();
         std::fs::write(dir.join("go.work"), format!("{go}\n\nuse .\n\nreplace github.com/petervdpas/Clarity/runtimes/go => {}\n", runtime.display())).unwrap();
     }
-    for step in clarity_gen::parts::steps_before(&dir, backend) {
-        let out = std::process::Command::new(&step[0]).args(&step[1..]).current_dir(&dir).output().unwrap();
-        assert!(out.status.success(), "{step:?}: {}", String::from_utf8_lossy(&out.stderr));
-    }
     // C# builds on the runtime's own projects in this repository.
     let runtime = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/csharp");
-    let out = std::process::Command::new(build[0]).args(&build[1..]).current_dir(&dir).env_remove("GOWORK").env("CLARITY_RUNTIME", runtime).output().unwrap();
+    // A Go desktop program links Clarity.UI's library through cgo, as Clarity's build does.
+    let cgo = if backend == clarity_project::Backend::Go { clarity_gen::go_cgo_env(std::env::var_os("CLARITY_UI").as_deref().map(std::path::Path::new), std::env::consts::OS) } else { Vec::new() };
+    let out = std::process::Command::new(build[0]).args(&build[1..]).current_dir(&dir).env_remove("GOWORK").env("CLARITY_RUNTIME", runtime).envs(cgo).output().unwrap();
     assert!(out.status.success(), "{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     dir
 }
 
-/// Runs `program` in a virtual X server (Xvfb) with the part host tracing,
-/// and waits until it placed the game's part: the renderer measured it, the
-/// shell gave the webview's window, and the part host made its window.
-fn places_its_part(dir: &std::path::Path, program: &str, display: &str) {
-    places(dir, program, display, "arena");
-}
-
-fn places(dir: &std::path::Path, program: &str, display: &str, part: &str) {
-    let mut xvfb = std::process::Command::new("Xvfb").args([display, "-screen", "0", "1280x800x24"]).spawn().expect("Xvfb is installed");
-    std::thread::sleep(std::time::Duration::from_secs(1));
-    let log = dir.join("parts.log");
-    let mut app = std::process::Command::new(dir.join(program))
-        .current_dir(dir)
-        .env("DISPLAY", display)
-        .env("CLARITY_PARTS_TRACE", "1")
-        .stderr(std::fs::File::create(&log).unwrap())
+/// A C++ program on Clarity.UI with its part, driven without a window
+/// (CLARITY_HEADLESS): the window's values reach the part, a click on it
+/// tells `scored`, and the handler's hear and values come back. Needs
+/// CLARITY_UI (the library's folder) for the build.
+#[test]
+#[ignore = "builds a C++ program with a custom part and drives it; run with --ignored"]
+fn a_cpp_program_drives_its_custom_part() {
+    use std::io::Write;
+    let dir = built(clarity_project::Backend::Cpp, &["cmake", "--workflow", "--preset", "debug"]);
+    let mut app = std::process::Command::new(dir.join("build/debug/game"))
+        .current_dir(&dir)
+        .env("CLARITY_HEADLESS", "1")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    let mut placed = String::new();
-    for _ in 0..60 {
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        placed = std::fs::read_to_string(&log).unwrap_or_default();
-        if placed.contains("arena title test") {
-            break;
-        }
-    }
-    let _ = app.kill();
-    let _ = app.wait();
-    let _ = xvfb.kill();
-    let _ = xvfb.wait();
-    // Placed in the webview's native window, shown: the window's number is the stack's own.
-    let line = placed.lines().find(|l| l.starts_with(&format!("clarity parts: place {part} (Arena) of window "))).unwrap_or_else(|| panic!("{placed}"));
-    assert!(line.contains(" in 0x") && line.ends_with(" shown"), "{line}");
-    // The window's values reach the part; its tell runs the handler, whose hear and values come back.
-    for said in ["arena speed 5", "arena restart 7", "arena speed 6", "arena title test"] {
-        assert!(placed.contains(said), "{said} in\n{placed}");
+    let steps = "{\"do\":\"click\",\"part\":\"arena\"}\n{\"do\":\"settle\",\"ms\":50}\n{\"do\":\"read\"}\n{\"do\":\"quit\"}\n";
+    app.stdin.take().unwrap().write_all(steps.as_bytes()).unwrap();
+    let out = app.wait_with_output().unwrap();
+    let said = String::from_utf8_lossy(&out.stderr);
+    for line in ["arena speed 5", "arena restart 7", "arena speed 6", "arena title test"] {
+        assert!(said.contains(line), "{line} in\n{said}\n{}", String::from_utf8_lossy(&out.stdout));
     }
 }
 
+/// A Go program on Clarity.UI with its part written in Go, driven without a
+/// window (CLARITY_HEADLESS), as the C++ one is. Needs CLARITY_UI (the
+/// library's folder) for the build.
 #[test]
-#[ignore = "builds a C++ program with a native part and runs it in Xvfb; run with --ignored"]
-fn a_cpp_program_places_its_native_part() {
-    let dir = built(clarity_project::Backend::Cpp, &["cmake", "--workflow", "--preset", "debug"]);
-    assert!(dir.join("build/debug/libclarity_parts.so").exists());
-    places_its_part(&dir, "build/debug/game", ":93");
-}
-
-#[test]
-#[ignore = "builds a C program with a native part and runs it in Xvfb; run with --ignored"]
-fn a_c_program_places_its_native_part() {
-    let dir = built(clarity_project::Backend::C, &["cmake", "--workflow", "--preset", "debug"]);
-    assert!(dir.join("build/debug/libclarity_parts.so").exists());
-    places_its_part(&dir, "build/debug/game", ":94");
-}
-
-#[test]
-#[ignore = "builds a Go program with a part written in Go and runs it in Xvfb; slow; run with --ignored"]
-fn a_go_program_places_its_go_part() {
+#[ignore = "builds a Go program with a part written in Go and drives it; slow; run with --ignored"]
+fn a_go_program_drives_its_go_part() {
+    use std::io::Write;
     let dir = built(clarity_project::Backend::Go, &["go", "build", "-o", "bin/game", "."]);
-    places_its_part(&dir, "bin/game", ":96");
+    let mut app = std::process::Command::new(dir.join("bin/game"))
+        .current_dir(&dir)
+        .env("CLARITY_HEADLESS", "1")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let steps = "{\"do\":\"click\",\"part\":\"arena\"}\n{\"do\":\"settle\",\"ms\":50}\n{\"do\":\"read\"}\n{\"do\":\"quit\"}\n";
+    app.stdin.take().unwrap().write_all(steps.as_bytes()).unwrap();
+    let out = app.wait_with_output().unwrap();
+    let said = String::from_utf8_lossy(&out.stderr);
+    for line in ["arena speed 5", "arena restart 7", "arena speed 6", "arena title test"] {
+        assert!(said.contains(line), "{line} in\n{said}\n{}", String::from_utf8_lossy(&out.stdout));
+    }
 }
 
 #[test]
@@ -310,7 +254,7 @@ fn the_go_interface_types_the_declaration() {
     // A Rust part's interface is Clarity.UI's (tests/rust_clarity_parts.rs).
     let go = parts::starter_for(&project_for(Backend::Go).files[0].parts[0]);
     let go = &go.iter().find(|(p, _)| p == "clarity.go").unwrap().1;
-    for line in ["package arena", "\tSetSpeed(speed int64)", "\tSay(words string, loud bool)", "func (h Host) Scored(points int64, by string) {"] {
+    for line in ["package arena", "\tSetSpeed(speed int64, cx Cx)", "\tSay(words string, loud bool, cx Cx)", "func Scored(cx Cx, points int64, by string) { cx.Tell(\"scored\", points, by) }", "\tDraw(canvas Canvas, x, y, width, height float64)", "\tClicker interface {\n\t\tClick(cx Cx)\n\t}"] {
         assert!(go.contains(line), "{line}\n{go}");
     }
 }
@@ -493,19 +437,19 @@ fn a_csharp_program_with_a_dotnet_part_builds() {
 fn a_dotnet_part_on_another_stack_is_refused() {
     let mut settings = notes_settings();
     settings.stack.backend = clarity_project::Backend::Go;
-    settings.stack.ui = clarity_project::Ui::Webview;
+    settings.stack.ui = clarity_project::Ui::Clarity;
     let refused = clarity_gen::generate(&notes_project(), &settings).unwrap_err();
     assert!(refused.iter().any(|e| e.contains("part Notes is .NET, but the project is written in Go")), "{refused:?}");
 }
 
-/// A custom part draws in a native window of the desktop (DESIGN 6.5), which a
+/// A custom part draws in a window of the desktop (DESIGN 6.5), which a
 /// program served to a browser alone has not: generating it says so, on each
 /// stack, and the same project with a desktop window generates.
 #[test]
 fn a_program_served_to_a_browser_alone_has_no_native_parts() {
     use clarity_project::{Backend, Target};
     // Rust names no UI; its desktop program is drawn by Clarity.UI and its web program stands alone.
-    for (backend, web, desktop) in [(Backend::Cpp, "cpp webview web", "cpp webview desktop web"), (Backend::Rust, "rust web", "rust desktop"), (Backend::Go, "go webview web", "go webview desktop web")] {
+    for (backend, web, desktop) in [(Backend::Cpp, "cpp web", "cpp desktop"), (Backend::Rust, "rust web", "rust desktop"), (Backend::Go, "go web", "go desktop")] {
         let project = project_for(backend);
         let web = clarity_project::parse(&format!("project Game\n    stack {web}\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
         assert_eq!(web.stack.targets, [Target::Web]);

@@ -55,7 +55,7 @@ pub fn serves(dir: &Path, program: &Path, args: &[&str], address: &str) {
 }
 
 /// A program served to a browser alone links nothing of the desktop
-/// toolkit: on Linux, neither WebKitGTK nor GTK (as ldd lists them).
+/// toolkit: on Linux, neither Clarity.UI's library nor WebKitGTK or GTK (as ldd lists them).
 #[allow(dead_code)]
 pub fn links_no_desktop_toolkit(program: &Path) {
     if let Some(linked) = toolkit(program) {
@@ -71,12 +71,14 @@ pub fn links_the_desktop_toolkit(program: &Path) {
     }
 }
 
-/// Whether `program` links WebKitGTK or GTK, as ldd lists them; none off Linux.
+/// Whether `program` links Clarity.UI's library (or a webview's WebKitGTK or
+/// GTK), as ldd lists them; none off Linux.
 fn toolkit(program: &Path) -> Option<bool> {
     if !cfg!(target_os = "linux") {
         return None;
     }
-    let out = Command::new("ldd").arg(program).output().unwrap_or_else(|e| panic!("ldd: {e}"));
+    // Without cargo's LD_LIBRARY_PATH, which would point ldd at target/debug.
+    let out = Command::new("ldd").arg(program).env_remove("LD_LIBRARY_PATH").output().unwrap_or_else(|e| panic!("ldd: {e}"));
     let linked = String::from_utf8_lossy(&out.stdout);
-    Some(linked.contains("libwebkit") || linked.contains("libgtk"))
+    Some(linked.contains("libclarity_ui") || linked.contains("libwebkit") || linked.contains("libgtk"))
 }

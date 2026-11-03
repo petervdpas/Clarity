@@ -104,6 +104,8 @@ typedef struct {
 typedef struct {
     const char* window;
     cJSON* with;
+    /// It opens in a desktop window of its own (`open ... in new window`).
+    bool new_window;
 } ClarityOpen;
 
 /// `ask ... then handler(values)` (DESIGN 5.14): a question the screen asks
@@ -157,6 +159,10 @@ typedef struct {
     /// The runtime refused what the person gave (a list field's typed item):
     /// the screen keeps it and marks it.
     bool refused;
+    /// The program ends: every window closes (the built-in `quit` run by code).
+    bool quit;
+    /// Clarity's keys window opens (the built-in `keys` run by code).
+    bool keys;
 } ClarityReply;
 
 /// What a handler can do to the screen.
@@ -271,8 +277,14 @@ void clarity_ui_copy(ClarityUi* ui, const ClarityText* text);
 void clarity_ui_set_shown(ClarityUi* ui, const char* data, const ClarityText* text);
 /// Asks the screen to open `window` with its data filled by name, as the values are now.
 void clarity_ui_open(ClarityUi* ui, const char* window, cJSON* with);
+/// open Window in new window: in a desktop window of its own where the screen gives them.
+void clarity_ui_open_new(ClarityUi* ui, const char* window, cJSON* with);
 /// Asks the screen to close the window.
 void clarity_ui_close(ClarityUi* ui);
+/// Ends the program once the handler is done: every window closes (the built-in `quit`).
+void clarity_ui_quit(ClarityUi* ui);
+/// Opens Clarity's keys window once the handler is done (the built-in `keys`).
+void clarity_ui_show_keys(ClarityUi* ui);
 /// Closes the dialog with `value` (which it takes), for the handler that asked for it.
 void clarity_ui_close_with(ClarityUi* ui, cJSON* value);
 /// Asks `question` when the handler has finished; the answer runs `handler`

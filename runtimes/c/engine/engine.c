@@ -459,7 +459,9 @@ bool clarity_engine_call_in(ClarityEngine* engine, uint64_t window, const char* 
     return clarity_engine_call_watched(engine, window, function, args, clarity_current_watch(), out);
 }
 
-bool clarity_engine_call_watched(ClarityEngine* engine, uint64_t window, const char* function, cJSON* args, const ClarityEngineWatch* watch, cJSON** out) {
+/// Runs `function` and gives the engine's whole answer ({"value"} or
+/// {"error"}, and maybe "tells"); false for what went wrong running it.
+static bool answer_of(ClarityEngine* engine, uint64_t window, const char* function, cJSON* args, const ClarityEngineWatch* watch, cJSON** out) {
     if (watch && watch->stop && *watch->stop) return clarity_fail(CLARITY_ENGINE, "engine %s failed in %s: it was stopped", engine->name, function);
     watching = watch;
     const char* input = cJSON_PrintUnformatted(args);
@@ -491,6 +493,13 @@ bool clarity_engine_call_watched(ClarityEngine* engine, uint64_t window, const c
         return clarity_fail(CLARITY_ENGINE, "engine %s failed in %s: it ran longer than %u second%s", engine->name, function, seconds, seconds == 1 ? "" : "s");
     }
     if (failed) return clarity_fail(CLARITY_ENGINE, "engine %s failed in %s: %s", engine->name, function, failed);
+    *out = answer;
+    return true;
+}
+
+bool clarity_engine_call_watched(ClarityEngine* engine, uint64_t window, const char* function, cJSON* args, const ClarityEngineWatch* watch, cJSON** out) {
+    cJSON* answer = NULL;
+    if (!answer_of(engine, window, function, args, watch, &answer)) return false;
     const cJSON* error = cJSON_GetObjectItemCaseSensitive(answer, "error");
     // An engine refuses by the key of its text (its `says`), or in its own words.
     if (cJSON_IsString(error)) return clarity_refuse(clarity_key_text(error->valuestring));
@@ -498,6 +507,38 @@ bool clarity_engine_call_watched(ClarityEngine* engine, uint64_t window, const c
     if (!value) return clarity_fail(CLARITY_ENGINE, "engine %s failed in %s: its answer has no value", engine->name, function);
     *out = value;
     return true;
+}
+
+bool clarity_engine_call_telling(ClarityEngine* engine, const char* function, cJSON* args, cJSON* tells, cJSON** out) {
+    cJSON* answer = NULL;
+    if (!answer_of(engine, 0, function, args, NULL, &answer)) return false;
+    // Beside the screen a refusal ends the engine as any failure does, in the engine's words.
+    const cJSON* error = cJSON_GetObjectItemCaseSensitive(answer, "error");
+    if (cJSON_IsString(error)) return clarity_fail(CLARITY_ENGINE, "engine %s failed in %s: %s", engine->name, function, error->valuestring);
+    const cJSON* told = cJSON_GetObjectItemCaseSensitive(answer, "tells");
+    if (!cJSON_IsArray(told)) told = NULL;
+    const cJSON* each;
+    cJSON_ArrayForEach(each, told) {
+        const cJSON* name = cJSON_GetObjectItemCaseSensitive(each, "tell");
+        if (!cJSON_IsString(name) || !*name->valuestring) return clarity_fail(CLARITY_ENGINE, "engine %s failed in %s: it told something without a name", engine->name, function);
+        const cJSON* values = cJSON_GetObjectItemCaseSensitive(each, "values");
+        cJSON* tell = cJSON_CreateObject();
+        cJSON_AddStringToObject(tell, "tell", name->valuestring);
+        cJSON_AddItemToObject(tell, "values", cJSON_IsArray(values) ? cJSON_Duplicate(values, true) : cJSON_CreateArray());
+        cJSON_AddItemToArray(tells, tell);
+    }
+    cJSON* value = cJSON_DetachItemFromObjectCaseSensitive(answer, "value");
+    if (!value) return clarity_fail(CLARITY_ENGINE, "engine %s failed in %s: its answer has no value", engine->name, function);
+    *out = value;
+    return true;
+}
+
+const char* clarity_engine_name(const ClarityEngine* engine) { return engine->name; }
+
+bool clarity_engine_exports(const ClarityEngine* engine, const char* function) {
+    const char* import;
+    bool exported = false;
+    return read_module(engine->bytes, engine->size, &import, function, 0, &exported) && exported;
 }
 
 void clarity_engine_serve(ClarityEngine* engine, ClarityEngineServices services) {

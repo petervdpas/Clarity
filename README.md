@@ -17,9 +17,9 @@ crates/clarity-cli/      the `clarity` command
 runtimes/rust/           the runtime of generated Rust applications (the clarity-runtime crate)
 runtimes/rust-engine/    what an engine written in Rust stands on (the clarity-engine crate): the engine interface, typed functions, services
 runtimes/csharp/         the runtime of generated C# applications, with Clarity.UI
-runtimes/go/             the runtime of generated Go applications, with Wails
-runtimes/c/              the runtime of generated C applications, with webview and cJSON
-runtimes/cpp/            the runtime of generated C++ applications, with webview
+runtimes/go/             the runtime of generated Go applications, on Clarity.UI through cgo
+runtimes/c/              the runtime of generated C applications, with cJSON
+runtimes/cpp/            the runtime of generated C++ applications
 conformance/             cases every runtime and renderer must pass alike
 editors/vscode/          colors for .clarity files in VS Code (and JetBrains, through TextMate bundles)
 app/                     Clarity: Tauri 2 + Svelte 5
@@ -34,7 +34,7 @@ examples/                example projects, each a project file with a folder of 
   noughts                noughts and crosses against an engine written in Clarity that keeps each window's game
   ledger                 a command-line program alone: accounts and what is booked on them, in C#
   stock                  a stock list with a window and a command line over the same items, in Go
-  orbs                   a game whose field of orbs a native library draws with SFML (a custom part), in C++
+  orbs                   a game whose field of orbs a custom part draws, in C++
   dice                   dice thrown on a table drawn in 3D with Bevy (a custom part in Rust), with sound and a history of rolls
   waves                  water whose waves meet, drawn by a Go package into a buffer of pixels (a custom part in Go)
   pills                  a game like Arkanoid, breaking a wall of pills: its engine beside the screen, written in Clarity and run by its interpreter, in Go
@@ -50,9 +50,9 @@ Generated applications get their runtime as a package: Rust from crates.io (`cla
 - Rust 1.88 or newer (edition 2024)
 - Node.js 20 or newer
 - On Linux: the Tauri system libraries (WebKitGTK 4.1, GTK 3, libsoup 3)
-- For C applications: CMake 3.25 or newer, a C17 compiler and a C++ compiler (for the webview), pkg-config, and the SQLite 3 development package (`libsqlite3-dev` on Debian)
+- For C applications: CMake 3.25 or newer, a C17 compiler, pkg-config, and the SQLite 3 development package (`libsqlite3-dev` on Debian)
 - For C++ applications: CMake 3.25 or newer, a C++20 compiler, pkg-config, and the SQLite 3 and nlohmann-json development packages (`libsqlite3-dev nlohmann-json3-dev` on Debian)
-- On Windows, for C and C++ applications: the WebView2 SDK, which the webview builds against (the `Microsoft.Web.WebView2` NuGet package; the runtime itself ships with Windows 11)
+- For Go, C and C++ applications with a window: the Clarity.UI library (`libclarity_ui`, built from `runtimes/rust-ui-ffi`) and its header, in the folder the environment variable `CLARITY_UI` names (`include/` and `lib/`)
 - For C# applications: the .NET 10 SDK; for one with the web target (`stack csharp web`), also .NET's WebAssembly tools, which link Clarity.UI's drawing (Skia) into the browser program: `dotnet workload install wasm-tools` (with `sudo` where .NET is installed for the whole system, as on Linux in `/usr/share/dotnet`)
 
 ### Setting up the tools
@@ -128,4 +128,4 @@ npm run check
 
 ## License
 
-MIT; see [LICENSE](LICENSE). The C and C++ runtimes include cJSON and webview under their own MIT licenses (`runtimes/c/third_party`, `runtimes/cpp/third_party`).
+MIT; see [LICENSE](LICENSE). The C runtime includes cJSON under its own MIT license (`runtimes/c/third_party`).

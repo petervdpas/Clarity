@@ -71,7 +71,7 @@ project Shop
 | Setting | Required | Meaning |
 |---|---|---|
 | `title "text"` | no | The name people see. When it is left out, it is derived from the project name. |
-| `stack language ui target...` | yes | The stack the project is transpiled into, read by position. Languages: `rust`, `go`, `csharp`, `c`, `cpp`. Go, C and C++ name the UI next: `webview`, the shared screen in a webview or a browser. C# and Rust name no UI (their windows are drawn by Clarity.UI), so their targets follow the language: `stack csharp desktop`, `stack rust desktop`. Targets: `desktop` for the program with windows, `web` for a web server that serves it to a browser (every language; Rust's web program serves the shared screen and is generated alone, `stack rust web`, until Clarity.UI draws in the browser; with both, `--serve` serves in place of the window; `--address host:port` says where), and `cli` for a command-line program beside it (`stack go webview desktop cli`); a project whose only target is `cli` names no UI (`stack go cli`). See [Commands](#commands). |
+| `stack language ui target...` | yes | The stack the project is transpiled into, read by position. Languages: `rust`, `go`, `csharp`, `c`, `cpp`. No language names a UI (the windows are drawn by Clarity.UI), so the targets follow the language: `stack csharp desktop`, `stack go desktop`. Targets: `desktop` for the program with windows, `web` for a web server that serves it to a browser (every language; the web program of Rust, Go, C and C++ serves the shared screen and is generated alone, `stack go web`, until Clarity.UI draws in the browser; with both, `--serve` serves in place of the window; `--address host:port` says where), and `cli` for a command-line program beside it (`stack go desktop cli`); a project whose only target is `cli` names no UI (`stack go cli`). See [Commands](#commands). |
 | `output "folder"` | no | Where the generated application goes, relative to the project folder. The default is `out`. |
 | `output keeps "name", ...` | no | Folders in the output that are the project's own, which Clarity leaves alone: each the name of one folder, not a path. |
 | `language "tag"` | no | The language the project's texts are written in, as a language tag: `"en"`, `"nl-NL"`. Dates and numbers follow the locale of the person using the application; this language where the system names none. |
@@ -89,7 +89,7 @@ project Shop
 
 Each setting appears once, except `datasource` and `filestore`. An unknown setting or value is an error that names the line and lists the accepted words.
 
-Five stacks are generated today: C# and Rust with Clarity.UI, Go with the shared screen (Wails), and C and C++ with the shared screen (webview; SQLite only for now).
+Five stacks are generated today: C#, Rust and Go with Clarity.UI, and C and C++ with the shared screen (webview; SQLite only for now).
 
 ### Translations
 
@@ -1011,7 +1011,7 @@ code Table
 
 ### Custom parts
 
-A custom part is a part an outside library draws: a game scene drawn with SFML, a map, a code editor. It is declared in a module, so the checker, code and the designer treat it as a built-in part, and placed in a window by its name. DESIGN 5.19 and 6.5 have the whole design; the `orbs` example has one drawn with SFML in C++, the `dice` example one drawn with Bevy in Rust.
+A custom part is a part an outside library draws: a game scene drawn with SFML, a map, a code editor. It is declared in a module, so the checker, code and the designer treat it as a built-in part, and placed in a window by its name. DESIGN 5.19 and 6.5 have the whole design; the `orbs` example has one in C++, drawn on Clarity.UI's canvas, the `dice` example one drawn with Bevy in Rust.
 
 ```clarity
 part Arena

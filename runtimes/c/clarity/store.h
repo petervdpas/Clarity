@@ -49,6 +49,16 @@ const char* clarity_applied_sql(int version);
 /// variable `env:NAME` names, so passwords stay out of the program.
 bool clarity_location(const char* text, const char** out);
 
+/// The environment variable that names the folder a program's SQLite databases open in.
+#define CLARITY_DATA_VARIABLE "CLARITY_DATA"
+/// The file of an SQLite database at `location`, with `env` reading the
+/// environment (the process's when NULL): in the folder CLARITY_DATA names,
+/// under its own file name, or where the project put it when the variable
+/// is unset or empty. A location from the environment (`env:`) or a secret
+/// setting (`setting:`) is as it says, and so is SQLite's own `:memory:`.
+/// The same as the Rust and C# runtimes.
+const char* clarity_data_folder_sqlite(const char* location, const char* (*env)(const char* name));
+
 /// Why the databases did not open, as the person reads it (DESIGN 5.27,
 /// conformance/unconnected.json): in Clarity's own words, which the project
 /// translates, with this runtime's message in the slot.

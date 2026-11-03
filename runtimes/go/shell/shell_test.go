@@ -242,10 +242,6 @@ func TestReferenceOptionsAndCommandsWithoutAWindow(t *testing.T) {
 	if got := wire(t, call(t, c, "ref_options", `{"entity":"Customer"}`)); got != `{"value":[{"id":1,"text":"Ada"}]}` {
 		t.Fatal(got)
 	}
-	// A window opened in place of its own has no start window.
-	if got := wire(t, call(t, c, "apart_start", `{}`)); got != `{"value":null}` {
-		t.Fatal(got)
-	}
 	// The app's own events run in a window of no name, with a number like any.
 	started := call(t, c, "start_app", `{}`)
 	if reply, ok := started.Value.(clarity.Reply); started.Error != nil || !ok || reply.State.Window != "" || reply.State.Instance == 0 || len(reply.Open) != 0 || reply.Close {
@@ -409,13 +405,16 @@ func (d *linkDesktop) Command(_ context.Context, command string, a Args) (Answer
 
 func TestWithoutADesktopItsCommandsDoNothingOrSaySo(t *testing.T) {
 	c, _ := service(t)
-	for _, command := range []string{"set_title", "quit_app", "apart_start", "close_apart", "close_parts"} {
+	for _, command := range []string{"set_title", "quit_app"} {
 		if got := wire(t, call(t, c, command, `{}`)); got != `{"value":null}` {
 			t.Fatal(command, got)
 		}
 	}
-	if got := wire(t, call(t, c, "open_apart", `{"window":"Card"}`)); got != `{"error":"a window of its own needs the desktop"}` {
-		t.Fatal(got)
+	// The webview desktops' native windows and parts are gone: Clarity.UI draws them.
+	for _, command := range []string{"open_apart", "apart_start", "close_apart", "place_part", "set_part", "hear_part", "close_parts"} {
+		if got := wire(t, call(t, c, command, `{}`)); got != `{"error":"there is no command `+command+`"}` {
+			t.Fatal(command, got)
+		}
 	}
 }
 

@@ -157,6 +157,8 @@ type Message struct {
 type OpenRequest struct {
 	Window string                     `json:"window"`
 	With   map[string]json.RawMessage `json:"with"`
+	// NewWindow opens it in a desktop window of its own (`open ... in new window`).
+	NewWindow bool `json:"new_window,omitempty"`
 }
 
 // Reply is what the screen does after a handler ran.
@@ -183,6 +185,10 @@ type Reply struct {
 	// item for a list that is no value of its kind): the screen keeps the
 	// text and marks it.
 	Refused bool `json:"refused,omitempty"`
+	// Quit ends the program: every window closes (the built-in quit run by code).
+	Quit bool `json:"quit,omitempty"`
+	// Keys opens Clarity's keys window (the built-in keys run by code).
+	Keys bool `json:"keys,omitempty"`
 }
 
 // RefOption is a record a reference field can point at, as a dropdown shows it.
@@ -207,6 +213,8 @@ type Ui struct {
 	hears    []Hear
 	copied   *Text
 	close    bool
+	quit     bool
+	keys     bool
 	err      error
 }
 
@@ -577,8 +585,20 @@ func (u *Ui) Open(window string, with map[string]any) {
 		}
 		values[name] = text
 	}
-	u.open = append(u.open, OpenRequest{window, values})
+	u.open = append(u.open, OpenRequest{Window: window, With: values})
 }
+
+// OpenNew is open Window in new window: in a desktop window of its own where the screen gives them.
+func (u *Ui) OpenNew(window string, with map[string]any) {
+	u.Open(window, with)
+	u.open[len(u.open)-1].NewWindow = true
+}
+
+// Quit ends the program once the handler is done: every window closes.
+func (u *Ui) Quit() { u.quit = true }
+
+// ShowKeys opens Clarity's keys window once the handler is done.
+func (u *Ui) ShowKeys() { u.keys = true }
 
 // Close asks the screen to close the window.
 func (u *Ui) Close() { u.close = true }
@@ -608,6 +628,8 @@ func (u *Ui) Reply(window string, data any) (Reply, error) {
 		Result:   u.result,
 		Hears:    u.hears,
 		Copy:     u.copied,
+		Quit:     u.quit,
+		Keys:     u.keys,
 	}, nil
 }
 

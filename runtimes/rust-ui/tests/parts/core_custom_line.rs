@@ -66,3 +66,16 @@ fn a_value_code_no_longer_sets_goes_back_to_its_line() {
     let set = &probe(&screen).set;
     assert_eq!(set.iter().filter(|s| s.starts_with("count=")).cloned().collect::<Vec<_>>(), ["count=2", "count=3", "count=2"], "{set:?}");
 }
+
+/// A text on its line written as a key (`title @speedTitle`) arrives in the
+/// language shown, not as the key.
+#[test]
+fn a_text_written_as_a_key_arrives_translated() {
+    clarity_runtime::i18n::load(r#"{"project":{"locale":{"language":"en"},"translations":{"en":{"probeSpeedTitle":"Speed"}}}}"#);
+    custom::register("Probe", || Box::new(Probe::default()));
+    let line = r#"<Custom name="board" part="Probe" at="1,1" span="4" values="{&quot;title&quot;:{&quot;kind&quot;:&quot;text&quot;,&quot;value&quot;:&quot;@probeSpeedTitle&quot;}}" />"#;
+    let mut screen = window_of(line, TestHost::new());
+    Shot::of(&mut screen, 400, 120, 1.0);
+    let set = &probe(&screen).set;
+    assert!(set.contains(&"title=\"Speed\"".to_string()), "{set:?}");
+}

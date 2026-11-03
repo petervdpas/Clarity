@@ -997,8 +997,10 @@ mod tests {
         let base = std::env::temp_dir().join(format!("clarity-refused-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
+        // Every language draws with Clarity.UI: the shared web screen is refused.
         let stack = Stack {
             backend: Backend::Go,
+            ui: Ui::Webview,
             ..csharp()
         };
         assert!(write_new_project(&base.join("shop.clarity"), stack).unwrap_err().contains("Clarity.UI"));
@@ -1034,10 +1036,10 @@ mod tests {
         assert!(settings_change(&file, &version, &settings).unwrap().is_none(), "nothing changed");
         assert!(settings_change(&file, "stale", &settings).unwrap_err().contains("changed on disk"));
 
-        // Go has no Clarity.UI yet; Rust and C# have.
+        // Every language draws with Clarity.UI only: the shared web screen is refused.
         settings.stack.backend = Backend::Go;
-        settings.stack.ui = Ui::Clarity;
-        assert!(settings_change(&file, &version, &settings).unwrap_err().contains("C#"));
+        settings.stack.ui = Ui::Webview;
+        assert!(settings_change(&file, &version, &settings).unwrap_err().contains("Go draws its windows with Clarity.UI"));
 
         settings.stack = csharp();
         let change = settings_change(&file, &version, &settings).unwrap().unwrap();

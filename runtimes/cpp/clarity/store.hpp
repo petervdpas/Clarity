@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -35,6 +36,16 @@ std::string applied(int version);
 /// Where a database or store is: as written, or from the environment
 /// variable `env:NAME` names, so passwords stay out of the program.
 std::string location(const std::string& text);
+
+/// The environment variable that names the folder a program's SQLite databases open in.
+inline constexpr const char* data_variable = "CLARITY_DATA";
+/// The file of an SQLite database at `location`, with `env` reading the
+/// environment (the process's when empty): in the folder CLARITY_DATA
+/// names, under its own file name, or where the project put it when the
+/// variable is unset or empty. A location from the environment (`env:`) or
+/// a secret setting (`setting:`) is as it says, and so is SQLite's own
+/// `:memory:`. The same as the Rust and C# runtimes.
+std::string data_folder_sqlite(const std::string& location, const std::function<const char*(const char*)>& env = {});
 /// Connects to the database of a data source.
 std::unique_ptr<Driver> open_driver(Dialect dialect, const std::string& at);
 std::unique_ptr<Driver> open_sqlite(const std::string& path);

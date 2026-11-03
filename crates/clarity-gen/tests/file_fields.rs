@@ -39,9 +39,9 @@ fn every_stack_reads_and_saves_a_file_with_its_name() {
     has(&rust, "sql::get_file(\"booklet\", &values[");
     has(&rust, "PictureColumn { column: \"booklet\", store: None, name: Some(\"booklet_name\") }");
     has(&rust, "fn field_bytes(");
-    has(&generated(Backend::Go, Ui::Webview), "clarity.FileContent(r.Booklet), clarity.FileNameValue(r.Booklet)");
-    has(&generated(Backend::C, Ui::Webview), "clarity_get_file(\"booklet\"");
-    has(&generated(Backend::Cpp, Ui::Webview), "clarity::get_file(\"booklet\"");
+    has(&generated(Backend::Go, Ui::Clarity), "clarity.FileContent(r.Booklet), clarity.FileNameValue(r.Booklet)");
+    has(&generated(Backend::C, Ui::Clarity), "clarity_get_file(\"booklet\"");
+    has(&generated(Backend::Cpp, Ui::Clarity), "clarity::get_file(\"booklet\"");
     let csharp = generated(Backend::Csharp, Ui::Clarity);
     has(&csharp, "public RecordFile? Booklet");
     has(&csharp, "new(\"booklet\", null, \"booklet_name\")");

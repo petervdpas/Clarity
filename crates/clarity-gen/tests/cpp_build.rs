@@ -47,7 +47,7 @@ fn builds_and_runs_in_cpp(name: &str, program: &str) {
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
     // An example builds on the stack its project file names, and no other.
-    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Cpp, Ui::Webview), "{name} is not a C++ example");
+    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Cpp, Ui::Clarity), "{name} is not a C++ example");
     let out = scratch().join(format!("clarity-gen-cpp-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
@@ -63,9 +63,9 @@ fn builds_and_runs_in_cpp(name: &str, program: &str) {
     // The program's own code builds without a warning.
     let own: Vec<&str> = said.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();
     assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
-    // A program with native parts has them built beside it.
-    if !clarity_gen::parts::native_parts(&project).is_empty() {
-        assert!(out.join("build/debug/libclarity_parts.so").exists(), "the parts library is not beside {name}");
+    // A desktop program has Clarity.UI's library beside it.
+    if cfg!(target_os = "linux") {
+        assert!(out.join("build/debug/libclarity_ui.so").exists(), "Clarity.UI's library is not beside {name}");
     }
     let said = run(&out, &out.join("build/debug").join(name).display().to_string(), &["--check"]);
     assert!(said.contains(&format!("{program}: the databases are ready.")), "{said}");
@@ -76,8 +76,8 @@ fn builds_and_runs_in_cpp(name: &str, program: &str) {
     remove(&out);
 }
 
-/// The game whose field of orbs a native library draws with SFML (a custom
-/// part, DESIGN 5.19): the program builds with its parts library beside it.
+/// The game whose field of orbs a C++ library draws on Clarity.UI's canvas
+/// (a custom part, DESIGN 5.19): the program builds with it inside.
 #[test]
 #[ignore]
 fn the_orbs_example_builds_and_runs_in_cpp() {
@@ -159,7 +159,7 @@ fn an_engine_answers_in_the_generated_application_in_cpp() {
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = clarity_project::starter("Shop", "shop");
     settings.stack.backend = Backend::Cpp;
-    settings.stack.ui = Ui::Webview;
+    settings.stack.ui = Ui::Clarity;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = scratch().join(format!("clarity-gen-cpp-engine-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
@@ -264,7 +264,7 @@ fn board_runs_in_cpp(interpreted: bool) {
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     let mut settings = clarity_project::load(&file).settings.expect("the fixture has a project file");
     settings.stack.backend = Backend::Cpp;
-    settings.stack.ui = Ui::Webview;
+    settings.stack.ui = Ui::Clarity;
     settings.datasources[0].url = "data/app.db".into();
     settings.engines_interpreted = interpreted;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
@@ -297,7 +297,7 @@ fn questions_and_their_answers_build_in_cpp() {
     let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
     let mut settings = clarity_project::starter("Music", "music");
     settings.stack.backend = Backend::Cpp;
-    settings.stack.ui = Ui::Webview;
+    settings.stack.ui = Ui::Clarity;
     let out = scratch().join(format!("clarity-gen-cpp-asks-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
@@ -317,7 +317,7 @@ fn the_web_target_serves_in_cpp() {
     let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
     let mut settings = clarity_project::starter("Music", "music");
     settings.stack.backend = Backend::Cpp;
-    settings.stack.ui = Ui::Webview;
+    settings.stack.ui = Ui::Clarity;
     settings.stack.targets = vec![clarity_project::Target::Web];
     let out = scratch().join(format!("clarity-gen-cpp-web-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
@@ -329,11 +329,17 @@ fn the_web_target_serves_in_cpp() {
     assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
     served::links_no_desktop_toolkit(&out.join("build/debug/music"));
     served::serves(&out, &out.join("build/debug/music"), &[], "127.0.0.1:18733");
-    // The same project for the desktop does link it, so the check can tell.
+    // The same project for the desktop links Clarity.UI's library, found beside it.
     settings.stack.targets = vec![clarity_project::Target::Desktop];
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     clarity_gen::write_out(&out, &files, &["build", "data"]).unwrap();
     run(&out, "cmake", &["--workflow", "--preset", "debug"]);
-    served::links_the_desktop_toolkit(&out.join("build/debug/music"));
+    if cfg!(target_os = "linux") {
+        // Without cargo's LD_LIBRARY_PATH, which points at target/debug and would win over the program's own path.
+        let ldd = Command::new("ldd").arg("build/debug/music").current_dir(&out).env_remove("LD_LIBRARY_PATH").output().unwrap();
+        let linked = String::from_utf8_lossy(&ldd.stdout).to_string();
+        let found = linked.lines().find(|l| l.contains("libclarity_ui.so => ")).unwrap_or_else(|| panic!("{linked}"));
+        assert!(found.contains("/build/debug/libclarity_ui.so"), "{linked}");
+    }
     remove(&out);
 }

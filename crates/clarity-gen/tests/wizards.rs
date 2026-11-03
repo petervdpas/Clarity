@@ -30,13 +30,13 @@ fn the_web_stacks_read_and_set_the_step_in_the_parts_state() {
     let rust = generated(Backend::Rust, Ui::Clarity);
     has(&rust, "ui.step(\"wizard\")");
     has(&rust, "ui.set_step(\"wizard\", 3");
-    let go = generated(Backend::Go, Ui::Webview);
+    let go = generated(Backend::Go, Ui::Clarity);
     has(&go, "ui.Step(\"wizard\")");
     has(&go, "ui.SetStep(\"wizard\", 3)");
-    let c = generated(Backend::C, Ui::Webview);
+    let c = generated(Backend::C, Ui::Clarity);
     has(&c, "clarity_ui_step(ui, \"wizard\")");
     has(&c, "clarity_ui_set_step(ui, \"wizard\", 3");
-    let cpp = generated(Backend::Cpp, Ui::Webview);
+    let cpp = generated(Backend::Cpp, Ui::Clarity);
     has(&cpp, "ui.step(\"wizard\")");
     has(&cpp, "ui.set_step(\"wizard\", int64_t{3});");
 }

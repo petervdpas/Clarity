@@ -54,7 +54,7 @@ fn a_picture_column_holds_the_picture_or_the_path_of_its_file() {
         (SourceKind::Mysql, "`cover` LONGBLOB", "`photo` VARCHAR(400)"),
         (SourceKind::Mssql, "[cover] VARBINARY(MAX)", "[photo] NVARCHAR(400)"),
     ] {
-        let schema = text(&files(Backend::Go, Ui::Webview, kind), "schema.go").to_string();
+        let schema = text(&files(Backend::Go, Ui::Clarity, kind), "schema.go").to_string();
         has(&schema, picture);
         has(&schema, path);
     }
@@ -65,7 +65,7 @@ fn a_picture_column_holds_the_picture_or_the_path_of_its_file() {
 fn a_store_must_be_in_the_project_settings() {
     let mut settings = starter("Records", "records");
     settings.stack.backend = Backend::Go;
-    settings.stack.ui = Ui::Webview;
+    settings.stack.ui = Ui::Clarity;
     let errors = generate(&project(), &settings).unwrap_err();
     assert_eq!(errors, ["Album.photo is kept in file store 'photos', which the project settings do not have"]);
 }
@@ -102,7 +102,7 @@ fn csharp_records_hold_their_pictures() {
 
 #[test]
 fn go_records_hold_their_pictures() {
-    let files = files(Backend::Go, Ui::Webview, SourceKind::Sqlite);
+    let files = files(Backend::Go, Ui::Clarity, SourceKind::Sqlite);
     let music = text(&files, "music_module.go");
     has(music, "\tCover *clarity.Picture `json:\"cover\"`\n");
     has(music, "clarity.PictureValue(r.Cover), clarity.PictureValue(r.Photo)}");
@@ -175,16 +175,16 @@ fn code_copies_a_picture_and_a_file_from_another_record() {
     let rust = all(&copies(Backend::Rust, Ui::Clarity));
     has(&rust, "db.copied_picture::<Album>(&other.cover, other.id, \"cover\", None, Some(\"photos\"))?");
     has(&rust, "db.copied_file::<Album>(&other.booklet, other.id, \"booklet\", None, None)?");
-    let go = all(&copies(Backend::Go, Ui::Webview));
+    let go = all(&copies(Backend::Go, Ui::Clarity));
     has(&go, "clarity.CopiedPicture[Album](db, w.Other.Cover, w.Other.ID, \"cover\", \"\", \"photos\")");
     has(&go, "clarity.CopiedFile[Album](db, w.Other.Booklet, w.Other.ID, \"booklet\", \"\", \"\")");
     let csharp = all(&copies(Backend::Csharp, Ui::Clarity));
     has(&csharp, "Album.Photo = Db.CopiedPicture<Album>(Other.Cover, Other.Id, \"cover\", null, \"photos\");");
     has(&csharp, "Album.Booklet = Db.CopiedFile<Album>(Other.Booklet, Other.Id, \"booklet\", null, null);");
-    let c = all(&copies(Backend::C, Ui::Webview));
+    let c = all(&copies(Backend::C, Ui::Clarity));
     has(&c, "clarity_copied_picture(db, &album_entity, w->other.cover, w->other.id, \"cover\", NULL, \"photos\", &");
     has(&c, "clarity_copied_file(db, &album_entity, w->other.booklet, w->other.id, \"booklet\", NULL, NULL, &");
-    let cpp = all(&copies(Backend::Cpp, Ui::Webview));
+    let cpp = all(&copies(Backend::Cpp, Ui::Clarity));
     has(&cpp, "album.photo = db.copied_picture<Album>(other.cover, other.id, \"cover\", std::nullopt, \"photos\");");
     has(&cpp, "album.booklet = db.copied_file<Album>(other.booklet, other.id, \"booklet\", std::nullopt, std::nullopt);");
 }

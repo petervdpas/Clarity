@@ -1,13 +1,11 @@
-// Custom part OrbField: a field of orbs drawn with SFML in the native
-// window Clarity gives it. An orb grows, then shrinks away; a click on it
-// catches it. A round lasts thirty seconds, then tells how many were caught.
-
-#include <SFML/Graphics.hpp>
+// Custom part OrbField: a field of orbs drawn on the canvas Clarity.UI
+// gives. An orb grows, then shrinks away; a click on it catches it. A round
+// lasts thirty seconds, then tells how many were caught.
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <optional>
 #include <random>
 #include <vector>
 
@@ -15,166 +13,138 @@
 
 namespace {
 
-constexpr float ROUND_SECONDS = 30.f;
-constexpr float ORB_SECONDS = 2.5f;
+constexpr double ROUND_SECONDS = 30.0;
+constexpr double ORB_SECONDS = 2.5;
+/// How often the field moves on: about 60 times a second.
+constexpr double FRAME_MS = 16.0;
 
 struct Orb {
-    sf::Vector2f at;
-    sf::Vector2f moving;
-    float age = 0.f;
-    sf::Color color;
+    double x, y;
+    double dx, dy;
+    double age = 0.0;
+    uint32_t color;
 };
 
-const sf::Color COLORS[] = {sf::Color(244, 114, 94), sf::Color(250, 204, 21), sf::Color(74, 222, 128), sf::Color(96, 165, 250), sf::Color(192, 132, 252)};
+constexpr uint32_t COLORS[] = {0xFFF4725E, 0xFFFACC15, 0xFF4ADE80, 0xFF60A5FA, 0xFFC084FC};
 
-}  // namespace
-
-struct OrbFieldPart {
-    OrbFieldHost* host;
-    sf::RenderWindow window;
-    bool enabled = true;
-    int64_t speed = 3;
-    int64_t points = 0;
-    float played = 0.f;
-    bool over = false;
-    float until_next = 0.f;
-    std::vector<Orb> orbs;
-    std::mt19937 random{std::random_device{}()};
-    sf::Clock clock;
-
-    float between(float low, float high) { return std::uniform_real_distribution<float>(low, high)(random); }
-
-    /// How big an orb is at its age: it grows for a fifth of its life, then shrinks.
-    static float radius(const Orb& orb) {
-        float life = orb.age / ORB_SECONDS;
-        float size = life < 0.2f ? life / 0.2f : 1.f - (life - 0.2f) / 0.8f;
-        return 34.f * std::max(0.f, size);
+class OrbField final : public OrbFieldPart {
+public:
+    void start(clarity::ui::Cx& cx) override {
+        restart();
+        cx.wake_in(FRAME_MS);
     }
 
-    void restart() {
-        points = 0;
-        played = 0.f;
-        over = false;
-        orbs.clear();
-        until_next = 0.f;
-        clock.restart();
+    void stop() override { stopped = true; }
+
+    void show_enabled(bool on, clarity::ui::Cx& cx) override {
+        enabled = on;
+        cx.invalidate();
     }
 
-    void click(sf::Vector2f where) {
+    void show_speed(int64_t value, clarity::ui::Cx&) override { speed = std::clamp<int64_t>(value, 1, 10); }
+
+    void on_restart(clarity::ui::Cx& cx) override {
+        restart();
+        cx.invalidate();
+    }
+
+    void wake(clarity::ui::Cx& cx) override {
+        if (stopped) return;
+        auto now = std::chrono::steady_clock::now();
+        double dt = std::min(std::chrono::duration<double>(now - last).count(), 0.1);
+        last = now;
+        auto place = cx.bounds();
+        step(dt, place.width, place.height, cx);
+        cx.invalidate();
+        cx.wake_in(FRAME_MS);
+    }
+
+    void pointer_pressed(const clarity::ui::Pointer& at, clarity::ui::Cx& cx) override {
         if (!enabled || over) return;
+        auto place = cx.bounds();
+        double x = at.x - place.x, y = at.y - place.y;
         for (auto it = orbs.begin(); it != orbs.end(); ++it) {
-            sf::Vector2f d = where - it->at;
-            if (d.x * d.x + d.y * d.y <= radius(*it) * radius(*it)) {
+            double r = radius(*it);
+            if ((x - it->x) * (x - it->x) + (y - it->y) * (y - it->y) <= r * r) {
                 orbs.erase(it);
-                OrbField_caught(host, ++points);
+                caught(cx, ++points);
+                cx.invalidate();
                 return;
             }
         }
     }
 
-    void step(float dt) {
+    void draw(clarity::ui::Canvas& canvas, double x, double y, double width, double height) override {
+        canvas.fill(x, y, width, height, 0xFF111827, 6);
+        canvas.clip(x, y, width, height);
+        // How much of the round is left, as a bar along the top.
+        double left = over ? 0.0 : 1.0 - played / ROUND_SECONDS;
+        canvas.fill(x, y, left * width, 6, 0xFF60A5FA);
+        for (const auto& orb : orbs) {
+            double r = radius(orb);
+            canvas.oval(x + orb.x - r, y + orb.y - r, 2 * r, 2 * r, enabled ? orb.color : 0xFF787878);
+        }
+        canvas.restore();
+    }
+
+private:
+    bool enabled = true;
+    bool stopped = false;
+    int64_t speed = 3;
+    int64_t points = 0;
+    double played = 0.0;
+    bool over = false;
+    double until_next = 0.0;
+    std::vector<Orb> orbs;
+    std::mt19937 random{std::random_device{}()};
+    std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
+
+    double between(double low, double high) { return std::uniform_real_distribution<double>(low, high)(random); }
+
+    /// How big an orb is at its age: it grows for a fifth of its life, then shrinks.
+    static double radius(const Orb& orb) {
+        double life = orb.age / ORB_SECONDS;
+        double size = life < 0.2 ? life / 0.2 : 1.0 - (life - 0.2) / 0.8;
+        return 34.0 * std::max(0.0, size);
+    }
+
+    void restart() {
+        points = 0;
+        played = 0.0;
+        over = false;
+        orbs.clear();
+        until_next = 0.0;
+        last = std::chrono::steady_clock::now();
+    }
+
+    void step(double dt, double width, double height, clarity::ui::Cx& cx) {
         if (over) return;
         played += dt;
         if (played >= ROUND_SECONDS) {
             over = true;
             orbs.clear();
-            OrbField_finished(host, points);
+            finished(cx, points);
             return;
         }
-        sf::Vector2u size = window.getSize();
         until_next -= dt;
-        if (until_next <= 0.f && size.x > 80 && size.y > 80) {
-            float pace = 20.f + 12.f * static_cast<float>(speed);
-            orbs.push_back({{between(40.f, size.x - 40.f), between(40.f, size.y - 40.f)}, {between(-pace, pace), between(-pace, pace)}, 0.f, COLORS[random() % 5]});
-            until_next = 1.1f - 0.08f * static_cast<float>(speed);
+        if (until_next <= 0.0 && width > 80 && height > 80) {
+            double pace = 20.0 + 12.0 * static_cast<double>(speed);
+            orbs.push_back({between(40, width - 40), between(40, height - 40), between(-pace, pace), between(-pace, pace), 0.0, COLORS[random() % 5]});
+            until_next = 1.1 - 0.08 * static_cast<double>(speed);
         }
         for (auto& orb : orbs) {
             orb.age += dt;
-            orb.at += orb.moving * dt;
-            if (orb.at.x < 0.f || orb.at.x > size.x) orb.moving.x = -orb.moving.x;
-            if (orb.at.y < 0.f || orb.at.y > size.y) orb.moving.y = -orb.moving.y;
+            orb.x += orb.dx * dt;
+            orb.y += orb.dy * dt;
+            if (orb.x < 0 || orb.x > width) orb.dx = -orb.dx;
+            if (orb.y < 0 || orb.y > height) orb.dy = -orb.dy;
         }
         orbs.erase(std::remove_if(orbs.begin(), orbs.end(), [](const Orb& o) { return o.age >= ORB_SECONDS; }), orbs.end());
     }
-
-    void draw() {
-        window.clear(sf::Color(17, 24, 39));
-        sf::Vector2u size = window.getSize();
-        // How much of the round is left, as a bar along the top.
-        float left = over ? 0.f : 1.f - played / ROUND_SECONDS;
-        sf::RectangleShape bar({left * static_cast<float>(size.x), 6.f});
-        bar.setFillColor(sf::Color(96, 165, 250));
-        window.draw(bar);
-        for (const auto& orb : orbs) {
-            float r = radius(orb);
-            sf::CircleShape circle(r);
-#if SFML_VERSION_MAJOR >= 3
-            circle.setOrigin({r, r});
-#else
-            circle.setOrigin(r, r);
-#endif
-            circle.setPosition(orb.at);
-            circle.setFillColor(enabled ? orb.color : sf::Color(120, 120, 120));
-            window.draw(circle);
-        }
-        window.display();
-    }
 };
 
-OrbFieldPart* OrbField_create(void* parent, int width, int height, OrbFieldHost* host) {
-    // The window Clarity gives: an HWND on Windows, an X11 window on Linux
-    // (clarity/OrbField.h says which per system).
-#if defined(_WIN32)
-    auto handle = static_cast<sf::WindowHandle>(parent);
-#else
-    auto handle = static_cast<sf::WindowHandle>(reinterpret_cast<uintptr_t>(parent));
-#endif
-    auto* part = new OrbFieldPart{host, sf::RenderWindow(handle)};
-    OrbField_resize(part, width, height);
-    part->restart();
-    return part;
-}
+}  // namespace
 
-void OrbField_resize(OrbFieldPart* part, int width, int height) {
-#if SFML_VERSION_MAJOR >= 3
-    part->window.setView(sf::View(sf::FloatRect({0.f, 0.f}, {static_cast<float>(width), static_cast<float>(height)})));
-#else
-    part->window.setView(sf::View(sf::FloatRect(0.f, 0.f, static_cast<float>(width), static_cast<float>(height))));
-#endif
-}
-
-void OrbField_frame(OrbFieldPart* part) {
-#if SFML_VERSION_MAJOR >= 3
-    // SFML 3 gives an event of its own type, or nothing.
-    while (const std::optional event = part->window.pollEvent()) {
-        if (const auto* pressed = event->getIf<sf::Event::MouseButtonPressed>(); pressed && pressed->button == sf::Mouse::Button::Left) {
-            part->click(part->window.mapPixelToCoords(pressed->position));
-        }
-    }
-#else
-    sf::Event event;
-    while (part->window.pollEvent(event)) {
-        if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
-            part->click(part->window.mapPixelToCoords({event.mouseButton.x, event.mouseButton.y}));
-        }
-    }
-#endif
-    part->step(std::min(part->clock.restart().asSeconds(), 0.1f));
-    part->draw();
-}
-
-void OrbField_destroy(OrbFieldPart* part) {
-    delete part;
-}
-
-void OrbField_set_enabled(OrbFieldPart* part, bool enabled) {
-    part->enabled = enabled;
-}
-
-void OrbField_set_speed(OrbFieldPart* part, int64_t speed) {
-    part->speed = std::clamp<int64_t>(speed, 1, 10);
-}
-
-void OrbField_restart(OrbFieldPart* part) {
-    part->restart();
+std::unique_ptr<OrbFieldPart> make_OrbField() {
+    return std::make_unique<OrbField>();
 }

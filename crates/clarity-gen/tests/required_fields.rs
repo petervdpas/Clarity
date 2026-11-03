@@ -31,7 +31,7 @@ fn generated(backend: Backend) -> String {
     let mut settings: Settings = starter("Shop", "shop");
     settings.stack.backend = backend;
     // Rust and C# draw with Clarity.UI; Go, C and C++ keep the webview until theirs exists.
-    settings.stack.ui = if matches!(backend, Backend::Rust | Backend::Csharp) { Ui::Clarity } else { Ui::Webview };
+    settings.stack.ui = Ui::Clarity;
     let files: Vec<OutFile> = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     files.iter().map(|f| format!("// {}\n{}\n", f.path, f.text)).collect()
 }

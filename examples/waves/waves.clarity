@@ -7,7 +7,7 @@ entity Swell
 
 // Water drawn by a Go package: waves run out from a few sources and meet,
 // and the part colours every pixel by how high the water stands there. The
-// part draws into a buffer of its own and the system puts it on the screen.
+// part draws into a buffer of its own and puts it on Clarity.UI's canvas.
 part WaveField
     go "parts/WaveField"
     speed: integer, min 1, max 10, default 4

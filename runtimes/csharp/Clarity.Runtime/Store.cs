@@ -99,10 +99,10 @@ public static class DataFolder
     /// <summary>The environment variable that names the folder.</summary>
     public const string Variable = "CLARITY_DATA";
 
-    /// <summary>The file of an SQLite database at <paramref name="location"/>; <paramref name="env"/> reads the environment (the process's when none).</summary>
+    /// <summary>The file of an SQLite database at <paramref name="location"/> (SQLite's own :memory: stays); <paramref name="env"/> reads the environment (the process's when none).</summary>
     public static string Sqlite(string location, Func<string, string?>? env = null)
     {
-        if (location.StartsWith("env:", StringComparison.Ordinal) || location.StartsWith("setting:", StringComparison.Ordinal))
+        if (location.StartsWith("env:", StringComparison.Ordinal) || location.StartsWith("setting:", StringComparison.Ordinal) || location == ":memory:")
             return location;
         var folder = (env ?? Environment.GetEnvironmentVariable)(Variable);
         return string.IsNullOrEmpty(folder) ? location : Path.Combine(folder, Path.GetFileName(location));

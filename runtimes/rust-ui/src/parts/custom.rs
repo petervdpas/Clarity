@@ -142,7 +142,7 @@ fn wired(spec: &PartSpec, tell: &str) -> bool {
 
 /// The values written on a part's line (`values` in its markup), each
 /// read by its kind as the web screen and C# read them: a number, true or
-/// false, else the text as written.
+/// false, a key's text in the language shown, else the text as written.
 fn line_values(spec: &PartSpec) -> Vec<(String, Value)> {
     let values = match spec.json("values") {
         Some(Value::Object(map)) => map.clone(),
@@ -156,7 +156,11 @@ fn line_values(spec: &PartSpec) -> Vec<(String, Value)> {
             let value = match written.get("kind").and_then(Value::as_str) {
                 Some("number" | "integer" | "decimal") => text.parse::<i64>().map(Value::from).or_else(|_| text.parse::<f64>().map(Value::from)).unwrap_or(Value::Null),
                 Some("bool") => Value::Bool(text == "true"),
-                _ => Value::from(text),
+                // A text written as a key (`@speedTitle`) arrives in the language shown.
+                _ => match text.strip_prefix('@') {
+                    Some(key) => Value::from(clarity_runtime::i18n::value(key).unwrap_or_else(|| key.to_string())),
+                    None => Value::from(text),
+                },
             };
             (name, value)
         })

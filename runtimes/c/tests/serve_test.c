@@ -1,11 +1,11 @@
-// The web target (DESIGN 7.3): the shell as a web server, which serves the
+// The web target (DESIGN 7.3): the service as a web server, which serves the
 // renderer's page to a browser and answers its commands over HTTP with the
-// same service the desktop window binds into its webview.
+// same service Clarity.UI asks on the desktop.
 
 #include <stdlib.h>
 
 #include "check.h"
-#include "shell/serve.h"
+#include "service/serve.h"
 #include "tests.h"
 
 static const ClarityWindows nothing = {0};
@@ -24,14 +24,14 @@ void the_server_serves_the_page_and_answers_its_commands(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
     const char* page = "<html><head><title>Shop</title></head><body></body></html>";
-    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", page, db, &nothing};
+    ClarityServiceOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", page, db, &nothing};
     ClarityService* s = clarity_service_new(&options);
     // The page says where it sends its commands.
     const char* got = answered(s, page, "GET / HTTP/1.1\r\nHost: x\r\n\r\n");
     CHECK(strncmp(got, "HTTP/1.1 200 OK\r\n", 17) == 0);
     CHECK(strstr(got, "Content-Type: text/html; charset=utf-8\r\n") != NULL);
     CHECK(strstr(got, "<script>window.clarityServer = \"/clarity/invoke\";</script></head>") != NULL);
-    // A command and its arguments, answered as the desktop shell answers them.
+    // A command and its arguments, answered as the service answers them on the desktop.
     got = answered(s, page, post("{\"command\": \"start\", \"args\": {}}"));
     CHECK(strncmp(got, "HTTP/1.1 200 OK\r\n", 17) == 0);
     CHECK(strstr(got, "\r\n\r\n{\"value\":{\"model\":{\"project\":{}},\"main\":\"Card\"}}") != NULL);

@@ -69,8 +69,13 @@
     X(a_reply_carries_the_texts_shown_in_text_values)             \
     X(code_texts_are_translated_as_every_runtime_does)            \
     X(a_window_opens_with_its_data_and_with)                      \
-    X(the_shell_answers_the_renderers_commands)                   \
-    X(a_long_handler_shows_how_far_it_is_and_stops)              \
+    X(the_service_answers_the_wires_commands)                     \
+    X(the_layer_answers_the_librarys_commands)                    \
+    X(a_long_call_says_how_far_it_is_and_stops)                   \
+    X(the_layer_answers_several_threads_at_once)                  \
+    X(the_layer_runs_engines_beside_the_screen)                   \
+    X(a_c_program_runs_on_clarity_ui)                             \
+    X(a_command_inside_a_parts_callback_keeps_its_values)         \
     X(the_runtime_keeps_the_edits_and_ctrl_z_takes_them_back)  \
     X(the_runtime_reorders_a_list_and_ctrl_z_puts_it_back)     \
     X(the_runtime_adds_a_typed_item_or_refuses_it)             \
@@ -103,6 +108,12 @@
     X(an_engine_uses_the_services_it_declares)                    \
     X(an_engine_with_state_keeps_its_instance_from_call_to_call)  \
     X(an_engine_with_state_per_window_keeps_an_instance_for_each_window) \
+    X(each_frame_gives_the_canvas_its_shapes)                     \
+    X(a_frame_that_fails_or_runs_too_long_ends_the_engine)        \
+    X(pointer_keys_and_hears_reach_the_engine_before_its_tick_and_it_tells) \
+    X(an_engine_beside_the_screen_written_in_clarity_runs)        \
+    X(an_engine_beside_the_screen_logs_and_exports_its_frame_loop) \
+    X(instances_go_by_number_and_a_gone_one_says_so)              \
     X(a_question_travels_in_the_reply_as_from_the_other_runtimes) \
     X(a_dialog_is_asked_for_and_closes_with_its_value)            \
     X(the_command_line_words_are_the_shared_ones)                 \
@@ -116,7 +127,12 @@
     X(settings_keep_their_secrets_out_of_the_file) \
     X(a_database_connects_with_a_secret_setting) \
     X(a_secret_connection_not_kept_says_so) \
-    X(any_other_failure_says_the_runtimes_message)
+    X(any_other_failure_says_the_runtimes_message) \
+    X(clarity_data_moves_an_sqlite_file_into_its_folder) \
+    X(a_database_opens_in_the_folder_clarity_data_names) \
+    X(a_reply_says_quit_and_keys_only_when_code_asks) \
+    X(an_open_says_new_window_only_when_asked) \
+    X(code_quits_and_opens_the_keys_window_through_the_layer)
 
 #define CLARITY_DECLARED(name) void name(void);
 CLARITY_TESTS(CLARITY_DECLARED)

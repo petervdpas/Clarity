@@ -301,3 +301,30 @@ TEST(a_handler_copies_the_last_text_it_copies) {
     nlohmann::json quiet = clarity::Ui(clarity::WindowState{}).reply("Main", nlohmann::json::object());
     CHECK(!quiet.contains("copy"));
 }
+
+// Quitting and the keys window go in the reply only when code asks for
+// them (the built-in quit and keys run by a handler), as the Rust runtime
+// writes them.
+TEST(a_reply_says_quit_and_keys_only_when_code_asks) {
+    WindowState state{"Main", json::object()};
+    json plain = Ui(state).reply("Main", json::object());
+    CHECK(!plain.contains("quit") && !plain.contains("keys"));
+    Ui ui(state);
+    ui.quit();
+    ui.show_keys();
+    json asked = ui.reply("Main", json::object());
+    CHECK_EQ(asked["quit"], json(true));
+    CHECK_EQ(asked["keys"], json(true));
+    CHECK_EQ(asked["close"], json(false));
+}
+
+// open ... in new window says new_window on that open only.
+TEST(an_open_says_new_window_only_when_asked) {
+    Ui ui(WindowState{"Main", json::object()});
+    ui.open("Card", json::object());
+    ui.open_new("Other", {{"note", "hi"}});
+    json reply = ui.reply("Main", json::object());
+    json open = reply["open"];
+    CHECK(!open[0].contains("new_window"));
+    CHECK_EQ(open[1], json({{"window", "Other"}, {"with", {{"note", "hi"}}}, {"new_window", true}}));
+}

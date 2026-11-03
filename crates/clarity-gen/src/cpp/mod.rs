@@ -3,14 +3,17 @@
 //! that use each other need no includes between them; each module's
 //! functions, actions, data events and windows are in `src/modules/<module>.cpp`,
 //! declared together in `src/app.hpp`. The runtime is copied in as
-//! `clarity-runtime/`, with the webview that shows the web renderer every
-//! web stack ships. `CMakePresets.json` lets one command configure and
-//! build it: `cmake --workflow --preset debug`.
+//! `clarity-runtime/`. On the desktop Clarity.UI draws the windows (DESIGN
+//! 7.9): the program links its library, found where `CLARITY_UI` says, and
+//! carries the windows, app frames, themes and resources of `ui/`. On the
+//! web it serves the shared web screen. `CMakePresets.json` lets one
+//! command configure and build it: `cmake --workflow --preset debug`.
 
 mod cli;
 mod logic;
 mod model;
 mod names;
+pub(crate) mod parts;
 
 use std::fmt::Write as _;
 
@@ -92,8 +95,8 @@ const RUNTIME_FILES: [(&str, &str); 61] = [
     ("clarity/values.hpp", include_str!("../../../../runtimes/cpp/clarity/values.hpp")),
 ];
 
-/// The service that answers the renderer's commands, and its web server
-/// (the web target): nothing of the desktop toolkit.
+/// The service that answers the screen's commands, and its web server
+/// (the web target): nothing of the desktop.
 const SERVICE_FILES: [(&str, &str); 4] = [
     ("shell/shell.hpp", include_str!("../../../../runtimes/cpp/shell/shell.hpp")),
     ("shell/service.cpp", include_str!("../../../../runtimes/cpp/shell/service.cpp")),
@@ -101,15 +104,13 @@ const SERVICE_FILES: [(&str, &str); 4] = [
     ("shell/serve.hpp", include_str!("../../../../runtimes/cpp/shell/serve.hpp")),
 ];
 
-/// The desktop shell and the webview it shows the renderer in; a program
-/// served to a browser alone has neither.
-const SHELL_FILES: [(&str, &str); 6] = [
-    ("shell/shell.cpp", include_str!("../../../../runtimes/cpp/shell/shell.cpp")),
-    ("shell/parts.cpp", include_str!("../../../../runtimes/cpp/shell/parts.cpp")),
-    ("shell/parts.hpp", include_str!("../../../../runtimes/cpp/shell/parts.hpp")),
-    ("third_party/webview/LICENSE", include_str!("../../../../runtimes/cpp/third_party/webview/LICENSE")),
-    ("third_party/webview/README.md", include_str!("../../../../runtimes/cpp/third_party/webview/README.md")),
-    ("third_party/webview/webview.h", include_str!("../../../../runtimes/cpp/third_party/webview/webview.h")),
+/// The desktop program on Clarity.UI and the C++ layer over its library; a
+/// program served to a browser alone has neither.
+const DESKTOP_FILES: [(&str, &str); 4] = [
+    ("shell/desktop.cpp", include_str!("../../../../runtimes/cpp/shell/desktop.cpp")),
+    ("shell/desktop.hpp", include_str!("../../../../runtimes/cpp/shell/desktop.hpp")),
+    ("ui/ui.cpp", include_str!("../../../../runtimes/cpp/ui/ui.cpp")),
+    ("ui/ui.hpp", include_str!("../../../../runtimes/cpp/ui/ui.hpp")),
 ];
 
 /// Engines (DESIGN 5.11): the host, copied with wasm3 (shared with the C
@@ -128,9 +129,11 @@ pub(crate) const HTTP_FILES: [(&str, &str); 2] = [
     ("http/http.hpp", include_str!("../../../../runtimes/cpp/http/http.hpp")),
 ];
 
-const ENGINE_FILES: [(&str, &str); 2] = [
+const ENGINE_FILES: [(&str, &str); 4] = [
     ("engine/engine.cpp", include_str!("../../../../runtimes/cpp/engine/engine.cpp")),
     ("engine/engine.hpp", include_str!("../../../../runtimes/cpp/engine/engine.hpp")),
+    ("engine/screen.cpp", include_str!("../../../../runtimes/cpp/engine/screen.cpp")),
+    ("engine/screen.hpp", include_str!("../../../../runtimes/cpp/engine/screen.hpp")),
 ];
 
 /// The name of the generated program, and of its namespace.
@@ -162,16 +165,33 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     };
     let engines = !crate::engines(project).is_empty();
     let desktop = settings.stack.has(clarity_project::Target::Desktop);
+    let web = settings.stack.has(clarity_project::Target::Web);
+    // Engines beside the screen run in the desktop program, on the runtime's engine host (DESIGN 5.12).
+    let screen_engines = desktop && !crate::screen_engines(project).is_empty();
+    let parts = parts::parts(project);
+    // The themes the project offers, in its order, as Clarity.UI reads them (`shop.light`).
+    let themes: Vec<String> = crate::csharp::themes::resolved_files(project, "ui/themes")
+        .iter()
+        .filter_map(|f| f.path.strip_prefix("ui/themes/").and_then(|n| n.strip_suffix(".json")).map(str::to_string))
+        .collect();
     let mut files = vec![
-        text("CMakeLists.txt", cmake_lists(&program, engines, !crate::parts::native_parts(project).is_empty(), project.calls_out(), !project.secret_settings().is_empty(), desktop) + &crate::libraries::cmake_lines(project, &program)),
+        text(
+            "CMakeLists.txt",
+            cmake_lists(&program, engines || screen_engines, project.calls_out(), !project.secret_settings().is_empty(), desktop, web, &themes) + &parts::cmake_lines(&program, &parts) + &crate::libraries::cmake_lines(project, &program),
+        ),
         text("CMakePresets.json", PRESETS.to_string()),
     ];
-    files.extend(crate::parts::out_files(project, &[]));
-    let engine_files = ENGINE_FILES.iter().chain(&crate::c::WASM3_FILES).filter(|_| engines);
+    if desktop {
+        files.extend(parts::out_files(project));
+        if !parts.is_empty() {
+            files.push(text("src/parts.cpp", parts::glue(&program, &parts)));
+        }
+    }
+    let engine_files = ENGINE_FILES.iter().chain(&crate::c::WASM3_FILES).filter(|_| engines || screen_engines);
     let http_files = HTTP_FILES.iter().filter(|_| project.calls_out());
     let secret_files = SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
-    let shell_files = SHELL_FILES.iter().filter(|_| desktop);
-    for (path, body) in RUNTIME_FILES.iter().chain(&SERVICE_FILES).chain(shell_files).chain(engine_files).chain(http_files).chain(secret_files) {
+    let desktop_files = DESKTOP_FILES.iter().filter(|_| desktop);
+    for (path, body) in RUNTIME_FILES.iter().chain(&SERVICE_FILES).chain(desktop_files).chain(engine_files).chain(http_files).chain(secret_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
 
@@ -229,14 +249,25 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         files.push(text("src/engines.hpp", namespaced(&program, "#pragma once\n\n#include \"engine/engine.hpp\"\n", &header)));
         files.push(text("src/engines.cpp", namespaced(&program, "#include <iterator>\n\n#include \"engines.hpp\"\n", &source)));
     }
+    if screen_engines {
+        files.push(text("src/screen_engines.cpp", namespaced(&program, "#include <iterator>\n#include <memory>\n#include <string>\n\n#include \"engine/screen.hpp\"\n", &screen_engines_cpp(project))));
+    }
     files.push(text("src/schema.hpp", namespaced(&program, "#pragma once\n\n#include <string>\n#include <vector>\n\n#include \"clarity/db.hpp\"\n", SCHEMA_HPP)));
     files.push(text("src/schema.cpp", schema_cpp(project, &program, &owned)?));
-    files.push(text("src/page.cpp", page_cpp(project, &program)));
-    // Clarity's screen as one page, and the windows as markup beside it, which CMake puts into the page (DESIGN 7.8).
-    files.push(text("ui/index.html", crate::web::single_page(project)));
+    files.push(text("src/page.cpp", page_cpp(project, &program, web, desktop)));
+    // The windows and app frames as markup (DESIGN 7.8), which Clarity.UI
+    // reads on the desktop and CMake puts into the web screen's page.
     files.extend(crate::web_windows::window_files(project));
     files.extend(crate::web_windows::app_files(project));
-    files.push(text("src/main.cpp", main_cpp(project, settings, &program, &databases, &owners, &main_window)));
+    if web {
+        files.push(text("ui/index.html", crate::web::single_page(project)));
+    }
+    if desktop {
+        // The themes the project offers as Clarity resolves them, and its resources, for Clarity.UI.
+        files.extend(crate::csharp::themes::resolved_files(project, "ui/themes"));
+        files.extend(crate::web::resource_files(project, "ui/resources"));
+    }
+    files.push(text("src/main.cpp", main_cpp(project, settings, &program, &databases, &owners, &main_window, !parts.is_empty())));
     Ok(files)
 }
 
@@ -294,35 +325,56 @@ fn engines_cpp(project: &Project) -> (String, String) {
     (header, source)
 }
 
-fn cmake_lists(program: &str, engines: bool, parts: bool, http: bool, secrets: bool, desktop: bool) -> String {
-    // The desktop window links the shell and its webview; a program served to a browser alone only the service.
-    let shell = if desktop { "clarity_shell" } else { "clarity_service" };
+/// The engines beside the screen (DESIGN 5.12): each file as bytes in the
+/// program, and `make`, which loads a new instance of one by its name for a
+/// canvas; none for a name the program has no engine of.
+fn screen_engines_cpp(project: &Project) -> String {
+    let mut out = String::from("namespace screen_engines {\n\n");
+    let mut arms = String::new();
+    for engine in crate::screen_engines(project) {
+        let var = snake(&engine.name.name);
+        let bytes = project.engines.as_deref().unwrap_or_default().iter().find(|f| f.name == engine.file).map(|f| f.bytes.as_slice()).unwrap_or_default();
+        let rows: Vec<String> = bytes.chunks(20).map(|row| row.iter().map(|b| format!("0x{b:02x}")).collect::<Vec<_>>().join(", ")).collect();
+        let _ = write!(out, "/// Engine {}, from {}.\nconst unsigned char {var}_wasm[] = {{\n    {}\n}};\n\n", engine.name.name, engine.file, rows.join(",\n    "));
+        let _ = writeln!(
+            arms,
+            "    if (name == {quoted}) return clarity::ScreenEngine::load({quoted}, std::vector<uint8_t>(std::begin({var}_wasm), std::end({var}_wasm)), {{{uses}}}, {opens}, clarity::EngineLimits{{{seconds}, {megabytes}}});",
+            quoted = string(&engine.name.name),
+            uses = engine.uses.iter().map(|u| string(&u.name)).collect::<Vec<_>>().join(", "),
+            opens = engine.opens,
+            seconds = engine.seconds(),
+            megabytes = engine.megabytes(),
+        );
+    }
+    let _ = write!(out, "/// A new instance of the engine beside the screen named `name`, for a canvas; none for no engine of that name.\nstd::unique_ptr<clarity::ScreenEngine> make(const std::string& name) {{\n{arms}    return nullptr;\n}}\n\n}}  // namespace screen_engines\n");
+    out
+}
+
+fn cmake_lists(program: &str, engines: bool, http: bool, secrets: bool, desktop: bool, web: bool, themes: &[String]) -> String {
+    // The desktop program links Clarity.UI's layer; a program served to a browser alone only the service.
+    let shell = if desktop { "clarity_desktop" } else { "clarity_service" };
     let engine = if engines { " clarity_engine" } else { "" };
     let http = if http { " clarity_http" } else { "" };
     // Secret settings (DESIGN 5.27): the system's protected store.
     let http = if secrets { format!("{http} clarity_secrets") } else { http.to_string() };
-    // The native custom parts (DESIGN 6.5), built beside the program, which loads them.
-    let parts = if parts { "\n# The custom parts drawn by native libraries, which the program loads.\nadd_subdirectory(parts)\n" } else { "" };
-    format!(
-        "# Generated by Clarity. Do not edit: change the project in Clarity instead.
-#
-# Configure and build with one command (CMake 3.25 or newer):
-#   cmake --workflow --preset debug      (or release)
-# The program is then build/debug/{program}. See README.md for what to install.
-cmake_minimum_required(VERSION 3.25)
-project({program} LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-include(clarity-runtime/clarity.cmake)
-
-file(GLOB PROGRAM_SOURCES CONFIGURE_DEPENDS src/*.cpp src/modules/*.cpp)
-add_executable({program} ${{PROGRAM_SOURCES}})
-target_include_directories({program} PRIVATE src)
-target_link_libraries({program} PRIVATE clarity {shell}{engine}{http})
-
-# The screen's page (ui/index.html) with the windows as markup (ui/windows/*.cxaml)
+    let what = if desktop { "See README.md for what to install, and CLARITY_UI for where\n# Clarity.UI's library is: a folder with include/clarity_ui.h and lib/\n# (cmake -DCLARITY_UI=... or the environment variable)." } else { "See README.md for what to install." };
+    let desktop_lines = if desktop {
+        format!(
+            "
+# The windows, app frames, themes and resources Clarity.UI draws from (ui/),
+# compiled into the program, and Clarity.UI's library beside it (DESIGN 7.9).
+clarity_ui_files({program} ${{CMAKE_CURRENT_SOURCE_DIR}}/ui{})
+clarity_ui_beside({program})
+",
+            themes.iter().map(|t| format!(" {t}")).collect::<String>()
+        )
+    } else {
+        String::new()
+    };
+    let web_lines = if web {
+        format!(
+            "
+# The web screen's page (ui/index.html) with the windows as markup (ui/windows/*.cxaml)
 # put into it, which the screen reads when it starts (DESIGN 7.8), compiled
 # into the program.
 set(CLARITY_PAGE_FILE ${{CMAKE_CURRENT_SOURCE_DIR}}/ui/index.html)
@@ -349,7 +401,30 @@ file(READ ${{CMAKE_CURRENT_BINARY_DIR}}/page.html CLARITY_PAGE_HEX HEX)
 string(REGEX REPLACE \"([0-9a-f][0-9a-f])\" \"0x\\\\1,\" CLARITY_PAGE_BYTES \"${{CLARITY_PAGE_HEX}}\")
 file(WRITE ${{CMAKE_CURRENT_BINARY_DIR}}/page_html.cpp \"/* The screen's page, from ui/index.html and ui/windows. */\\nextern const unsigned char clarity_page_html[] = {{${{CLARITY_PAGE_BYTES}}0x00}};\\n\")
 target_sources({program} PRIVATE ${{CMAKE_CURRENT_BINARY_DIR}}/page_html.cpp)
-{parts}"
+"
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        "# Generated by Clarity. Do not edit: change the project in Clarity instead.
+#
+# Configure and build with one command (CMake 3.25 or newer):
+#   cmake --workflow --preset debug      (or release)
+# The program is then build/debug/{program}. {what}
+cmake_minimum_required(VERSION 3.25)
+project({program} LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+include(clarity-runtime/clarity.cmake)
+
+file(GLOB PROGRAM_SOURCES CONFIGURE_DEPENDS src/*.cpp src/modules/*.cpp)
+add_executable({program} ${{PROGRAM_SOURCES}})
+target_include_directories({program} PRIVATE src)
+target_link_libraries({program} PRIVATE clarity {shell}{engine}{http})
+{desktop_lines}{web_lines}"
     )
 }
 
@@ -421,12 +496,25 @@ fn long_text(text: &str) -> String {
     format!("    static const char* const parts[] = {{\n{},\n    }};\n    std::string out;\n    for (const char* part : parts) out += part;\n    return out;\n", parts.join(",\n"))
 }
 
-fn page_cpp(project: &Project, program: &str) -> String {
-    let body = format!(
-        "/// The windows, frame and data dictionary the renderer draws from.\nconst std::string& model() {{\n    static const std::string text = [] {{\n{}    }}();\n    return text;\n}}\n\n/// The screen's page, built in ui/ and compiled in by CMake (page_html.cpp).\nconst std::string& page() {{\n    static const std::string text(reinterpret_cast<const char*>(clarity_page_html));\n    return text;\n}}\n",
+fn page_cpp(project: &Project, program: &str, web: bool, desktop: bool) -> String {
+    let mut body = format!(
+        "/// The windows, frame and data dictionary the screen draws from.\nconst std::string& model() {{\n    static const std::string text = [] {{\n{}    }}();\n    return text;\n}}\n",
         indent_lines(&long_text(&crate::web::model_json(project)), 1)
     );
-    namespaced(program, "#include <string>\n\n// The screen's page, compiled in by CMake (page_html.cpp).\nextern const unsigned char clarity_page_html[];\n", &body)
+    if desktop {
+        // What the program knows of its fields and types, which Clarity.UI's parts read (DESIGN 7.9).
+        let _ = write!(
+            body,
+            "\n/// The facts of the fields and types, which Clarity.UI's parts read beside the values.\nconst std::string& facts() {{\n    static const std::string text = [] {{\n{}    }}();\n    return text;\n}}\n",
+            indent_lines(&long_text(&crate::rust::facts_json(project)), 1)
+        );
+    }
+    let mut includes = String::from("#include <string>\n");
+    if web {
+        body.push_str("\n/// The web screen's page, built in ui/ and compiled in by CMake (page_html.cpp).\nconst std::string& page() {\n    static const std::string text(reinterpret_cast<const char*>(clarity_page_html));\n    return text;\n}\n");
+        includes.push_str("\n// The web screen's page, compiled in by CMake (page_html.cpp).\nextern const unsigned char clarity_page_html[];\n");
+    }
+    namespaced(program, &includes, &body)
 }
 
 fn indent_lines(text: &str, depth: usize) -> String {
@@ -434,7 +522,48 @@ fn indent_lines(text: &str, depth: usize) -> String {
     text.lines().map(|l| if l.is_empty() { "\n".to_string() } else { format!("{pad}{l}\n") }).collect()
 }
 
-fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[(String, Sql, String)], owners: &[logic::Owner], main_window: &str) -> String {
+fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[(String, Sql, String)], owners: &[logic::Owner], main_window: &str, parts: bool) -> String {
+    use clarity_project::Target;
+    let (web, desktop) = (settings.stack.has(Target::Web), settings.stack.has(Target::Desktop));
+    // The web server serves the page; the desktop program runs on Clarity.UI with its files and facts.
+    let mut includes = String::new();
+    let mut declared = String::from("const std::string& model();\n");
+    if web {
+        includes.push_str("#include \"shell/serve.hpp\"\n");
+        declared.push_str("const std::string& page();\n");
+    }
+    if desktop {
+        includes.push_str("#include \"shell/desktop.hpp\"\n");
+        declared.push_str("const std::string& facts();\n");
+        if parts {
+            declared.push_str("void register_parts();\n");
+        }
+        if !crate::screen_engines(project).is_empty() {
+            includes.push_str("#include \"engine/screen.hpp\"\n");
+            declared.push_str("namespace screen_engines {\nstd::unique_ptr<clarity::ScreenEngine> make(const std::string& name);\n}\n");
+        }
+    }
+    let ui_files = if desktop { "\n// The files Clarity.UI draws from, compiled in by CMake (clarity_ui_files.cpp).\nextern const clarity::shell::UiFile clarity_ui_files[];\n" } else { "" };
+    let html = if web { format!("{program}::page()") } else { "\"\"".to_string() };
+    let mut desktop_options = String::new();
+    if desktop {
+        // An engine that says how far a long call is (DESIGN 5.12): handlers run off the screen's thread, with Stop.
+        let watches = crate::engines(project).iter().any(|e| e.uses.iter().any(|u| u.name == clarity_spec::code::check::PROGRESS));
+        let _ = write!(desktop_options, "        options.ui_files = clarity_ui_files;\n        options.facts = {program}::facts();\n");
+        if watches {
+            desktop_options.push_str("        options.watches = true;\n");
+        }
+        if parts {
+            let _ = writeln!(desktop_options, "        options.register_parts = {program}::register_parts;");
+        }
+        // Engines beside the screen: each canvas's instance by its number (DESIGN 5.12).
+        if !crate::screen_engines(project).is_empty() {
+            let _ = write!(
+                desktop_options,
+                "        clarity::ScreenInstances screen_instances({program}::screen_engines::make);\n        options.screen_engines = [&screen_instances](const std::string& command, const nlohmann::json& args) {{ return screen_instances.answer(command, args); }};\n"
+            );
+        }
+    }
     // Secret settings (DESIGN 5.27): the system's protected store, before anything reads a setting.
     let (secrets_include, use_secrets) = if project.secret_settings().is_empty() {
         (String::new(), String::new())
@@ -614,14 +743,11 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
 
 #include "app.hpp"
 #include "schema.hpp"
-#include "shell/serve.hpp"
-#include "shell/shell.hpp"
-
+{includes}#include "shell/shell.hpp"
+{ui_files}
 namespace {program} {{
 
-const std::string& model();
-const std::string& page();
-
+{declared}
 namespace {{
 
 /// The database of each data source: its name, its kind and where it is.
@@ -689,8 +815,8 @@ public:
             }}
         }}
         {program}::AppWindows windows;
-        clarity::shell::Options options{{{name}, {title}, {main}, {program}::model(), {program}::page(), &db, &windows, {{{width}, {height}}}}};
-{unconnected_options}{run}
+        clarity::shell::Options options{{{name}, {title}, {main}, {program}::model(), {html}, &db, &windows, {{{width}, {height}}}}};
+{desktop_options}{unconnected_options}{run}
     }} catch (const std::exception& e) {{
         std::cerr << e.what() << "\n";
         return 1;
@@ -702,7 +828,7 @@ public:
         run = web_run(settings),
         name = string(&crate::settings_program(settings)),
         main = string(main_window),
-        // The desktop window opens at the main window's size.
+        // The main window opens at its own size.
         width = crate::window_size(project, main_window).0,
         height = crate::window_size(project, main_window).1
     )

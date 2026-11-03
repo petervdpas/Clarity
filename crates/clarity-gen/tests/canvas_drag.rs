@@ -71,7 +71,7 @@ fn every_stack_reads_where_a_drag_started() {
     has(&rust, "ui.background(\"sheet\", \"panel\")");
     has(&rust, "ui.dot_size(\"sheet\", 3)");
     has(&rust, "ui.set_dot_color(\"sheet\", ");
-    let go = generated(Backend::Go, Ui::Webview);
+    let go = generated(Backend::Go, Ui::Clarity);
     has(&go, "ui.FromX(\"sheet\")");
     has(&go, "\"op\": \"link\"");
     has(&go, "ui.Via(\"sheet\")");
@@ -80,7 +80,7 @@ fn every_stack_reads_where_a_drag_started() {
     has(&go, "ui.SetGrid(\"sheet\", ");
     has(&go, "ui.SetBackground(\"sheet\", ");
     has(&go, "ui.DotSize(\"sheet\", 3)");
-    let c = generated(Backend::C, Ui::Webview);
+    let c = generated(Backend::C, Ui::Clarity);
     has(&c, "clarity_ui_from_x(ui, \"sheet\")");
     has(&c, "clarity_json_integers(");
     has(&c, "clarity_ui_via(ui, \"sheet\")");
@@ -89,7 +89,7 @@ fn every_stack_reads_where_a_drag_started() {
     has(&c, "clarity_ui_set_grid(ui, \"sheet\", ");
     has(&c, "clarity_ui_set_background(ui, \"sheet\", ");
     has(&c, "clarity_ui_set_dot_size(ui, \"sheet\", ");
-    let cpp = generated(Backend::Cpp, Ui::Webview);
+    let cpp = generated(Backend::Cpp, Ui::Clarity);
     has(&cpp, "ui.from_x(\"sheet\")");
     has(&cpp, "{\"op\", \"link\"}");
     has(&cpp, "ui.bent(\"sheet\")");

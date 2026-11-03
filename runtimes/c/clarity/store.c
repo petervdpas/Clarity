@@ -28,7 +28,24 @@ bool clarity_location(const char* text, const char** out) {
     return true;
 }
 
+static const char* process_env(const char* name) { return getenv(name); }
+
+const char* clarity_data_folder_sqlite(const char* location, const char* (*env)(const char* name)) {
+    if (strncmp(location, "env:", 4) == 0 || strncmp(location, "setting:", 8) == 0 || strcmp(location, ":memory:") == 0) return location;
+    const char* folder = (env ? env : process_env)(CLARITY_DATA_VARIABLE);
+    if (!folder || !*folder) return location;
+    const char* name = location;
+    for (const char* c = location; *c; ++c)
+        if (*c == '/' || *c == '\\') name = c + 1;
+    if (!*name || strcmp(name, ".") == 0 || strcmp(name, "..") == 0) return location;
+    size_t length = strlen(folder);
+    bool slashed = folder[length - 1] == '/' || folder[length - 1] == '\\';
+    return clarity_format("%s%s%s", folder, slashed ? "" : "/", name);
+}
+
 bool clarity_open_driver(ClarityDialect dialect, const char* at, ClarityDriver** out) {
+    // An SQLite file opens in the folder CLARITY_DATA names, when it is set.
+    if (dialect == CLARITY_SQLITE) at = clarity_data_folder_sqlite(at, NULL);
     const char* where = NULL;
     if (!clarity_location(at, &where)) return false;
     if (dialect == CLARITY_SQLITE) return clarity_open_sqlite(where, out);

@@ -396,17 +396,12 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
         if stack.has(clarity_project::Target::Web) {
             tools.missing.extend(tools.web_missing.clone());
         }
-        // Native parts are built with CMake and a C++ compiler, whatever the stack.
-        let parts = out.join(clarity_gen::parts::FOLDER).join("CMakeLists.txt").exists();
-        let tools_missing = parts && ["cmake", "c++"].iter().any(|tool| clarity_gen::tools::Probe::find(&clarity_gen::tools::System, tool).is_none());
         match cannot_build(&tools, &out) {
             Some(why) => Err(why),
-            None if tools_missing => Err(format!("the project is generated in {}; its custom parts need CMake and a C++ compiler", out.display())),
-            // The native parts are built first, where the stack's own build does not build them.
-            None => Ok((clarity_gen::steps_before(&out, stack.backend), generated, serves)),
+            None => Ok((generated, serves)),
         }
     });
-    let (before, generated, serves) = match found {
+    let (generated, serves) = match found {
         Ok(found) => found,
         Err(err) => {
             state.busy.store(false, Ordering::SeqCst);
@@ -423,48 +418,13 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
             // Run starts the last build when nothing changed since: the
             // generated files, the engines and the parts are as it had them.
             Ok(false) if run && let Some((toolchain, _)) = &generated.built => build(&app, &generated, toolchain, false, run, serves, command_line.as_deref()),
-            Ok(_) => match before.iter().find_map(|step| run_step(&app, &generated.out, step).err()) {
-                Some(message) => BuildDone { ok: false, message, binary: None },
-                None => build(&app, &generated, &generated.toolchain, true, run, serves, command_line.as_deref()),
-            },
+            Ok(_) => build(&app, &generated, &generated.toolchain, true, run, serves, command_line.as_deref()),
             Err(message) => BuildDone { ok: false, message, binary: None },
         };
         app.state::<BuildState>().busy.store(false, Ordering::SeqCst);
         send_done(&app, done);
     });
     Ok(())
-}
-
-/// Runs one step before the build, such as building the native parts with
-/// CMake, its output in the Output panel.
-fn run_step(app: &AppHandle, out: &Path, step: &[String]) -> Result<(), String> {
-    let Some((tool, args)) = step.split_first() else { return Ok(()) };
-    send_line(app, format!("{tool} {} (in {})", args.join(" "), out.display()));
-    let mut child = Command::new(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, tool).unwrap_or_else(|| tool.into()))
-        .args(args)
-        .env("PATH", clarity_gen::tools::tool_path())
-        // The C and C++ compilers chosen in the Environment settings, for CMake.
-        .envs(clarity_gen::tools::tool_env())
-        .current_dir(out)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|err| format!("cannot start {tool}: {err}; is CMake installed?"))?;
-    let stdout = child.stdout.take().map(|stdout| {
-        let app = app.clone();
-        std::thread::spawn(move || send_lines(&app, stdout))
-    });
-    if let Some(stderr) = child.stderr.take() {
-        send_lines(app, stderr);
-    }
-    if let Some(reader) = stdout {
-        let _ = reader.join();
-    }
-    match child.wait() {
-        Ok(status) if status.success() => Ok(()),
-        _ => Err("the custom parts did not build; see the output".to_string()),
-    }
 }
 
 /// Builds the generated program with `toolchain` (unless `building` is
@@ -525,7 +485,7 @@ fn build_with(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain) -
         .env("PATH", clarity_gen::tools::tool_path())
         // The C and C++ compilers chosen in the Environment settings, for CMake.
         .envs(clarity_gen::tools::tool_env())
-        .envs(toolchain.env.iter().copied())
+        .envs(toolchain.env.iter().cloned())
         .current_dir(out)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

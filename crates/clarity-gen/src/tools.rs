@@ -295,7 +295,7 @@ fn writable(folder: &Path) -> bool {
 pub fn generates(backend: Backend, ui: Ui) -> bool {
     matches!(
         (backend, ui),
-        (Backend::Rust, Ui::Clarity) | (Backend::Go, Ui::Webview) | (Backend::Csharp, Ui::Clarity) | (Backend::C, Ui::Webview) | (Backend::Cpp, Ui::Webview)
+        (Backend::Rust, Ui::Clarity) | (Backend::Go, Ui::Clarity) | (Backend::Csharp, Ui::Clarity) | (Backend::C, Ui::Clarity) | (Backend::Cpp, Ui::Clarity)
     )
 }
 
@@ -356,31 +356,26 @@ const DOTNET_GUIDE: Guide = Guide { windows: "net-on-windows", linux: "net-on-li
 const GO_GUIDE: Guide = Guide { windows: "go-on-windows", linux: "go-on-linux", macos: "go-on-macos" };
 /// The compilers, CMake, make or Ninja, and the C and C++ libraries.
 const NATIVE_GUIDE: Guide = Guide { windows: "c-and-c-on-windows", linux: "c-and-c-on-linux", macos: "c-and-c-on-macos" };
-/// WebKitGTK is Linux's alone.
-const WEBKIT_GUIDE: Guide = Guide { windows: "webview2-on-windows", linux: "webkitgtk-on-linux", macos: "webkitgtk-on-linux" };
 
 /// Every heading of the setup page the check can point at, on any system.
 pub fn guide_headings() -> Vec<&'static str> {
-    [RUST_GUIDE, DOTNET_GUIDE, GO_GUIDE, NATIVE_GUIDE, WEBKIT_GUIDE].iter().flat_map(|g| [g.windows, g.linux, g.macos]).collect()
+    [RUST_GUIDE, DOTNET_GUIDE, GO_GUIDE, NATIVE_GUIDE].iter().flat_map(|g| [g.windows, g.linux, g.macos]).collect()
 }
 
 /// What to install for each tool, with where to get it: the words of
 /// `check`, `clarity tools`, the app and every generated README.md.
 const RUST: &str = "Rust with cargo, from https://rustup.rs";
-const WEBKIT: &str = "the WebKitGTK development files and pkg-config (Debian and Ubuntu: libwebkit2gtk-4.1-dev; see https://wails.io/docs/gettingstarted/installation)";
 const GO: &str = "Go, from https://go.dev/dl";
+/// A Go desktop program calls Clarity.UI's library through cgo.
+const CGO: &str = "a C compiler for cgo, as the desktop program calls Clarity.UI's library: GCC or Clang (on Windows, MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-gcc)";
 const CMAKE: &str = "CMake, from https://cmake.org/download (Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-cmake)";
 const MAKE: &str = "make or Ninja, to build what CMake writes (Ninja: https://ninja-build.org; Windows: pacman -S mingw-w64-ucrt-x86_64-ninja)";
 const SQLITE: &str = "the SQLite development files (Debian and Ubuntu: libsqlite3-dev; Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-sqlite3; elsewhere https://sqlite.org/download.html)";
-const WEBKIT_GTK: &str = "the WebKitGTK and GTK 3 development files and pkg-config (Debian and Ubuntu: libwebkit2gtk-4.1-dev libgtk-3-dev)";
 const NLOHMANN: &str = "nlohmann-json (Debian and Ubuntu: nlohmann-json3-dev; Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-nlohmann-json; elsewhere https://github.com/nlohmann/json)";
-/// The webview draws with WebView2 on Windows, whose SDK headers the shell
-/// builds against; MSYS2 does not package them.
-const WEBVIEW2: &str = "the WebView2 SDK, from https://developer.microsoft.com/microsoft-edge/webview2 (the Microsoft.Web.WebView2 NuGet package); the runtime itself ships with Windows 11";
 /// HTTP calls from C and C++ code (DESIGN 5.23) go through libcurl.
 pub const LIBCURL: &str = "the libcurl development files, as the code calls web APIs (Debian and Ubuntu: libcurl4-openssl-dev; Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-curl; macOS brings it)";
-/// The webview of a C program is one C++ file.
-const WEBVIEW_CXX: &str = "a C++ compiler for the webview's one C++ file: GCC (g++) or Clang (clang++)";
+/// The library C, C++ and Go desktop programs draw with (DESIGN 7.9).
+pub const CLARITY_UI_LIBRARY: &str = "Clarity.UI's library, for a desktop program: a folder with include/clarity_ui.h and, in lib/, the library for the system, named by the environment variable CLARITY_UI";
 
 fn dotnet() -> String {
     format!("the .NET {} SDK, from https://dotnet.microsoft.com/download", dotnet_major())
@@ -398,24 +393,15 @@ pub fn requirements(backend: Backend) -> Vec<String> {
     match backend {
         Backend::Rust => vec![RUST.to_string()],
         Backend::Csharp => vec![dotnet()],
-        Backend::Go => vec![GO.to_string(), format!("on Linux, {WEBKIT}")],
-        Backend::C => vec![
-            compiler_needed(backend),
-            WEBVIEW_CXX.to_string(),
-            CMAKE.to_string(),
-            MAKE.to_string(),
-            SQLITE.to_string(),
-            format!("on Linux, {WEBKIT_GTK}"),
-            format!("on Windows, {WEBVIEW2}"),
-        ],
+        Backend::Go => vec![GO.to_string(), CGO.to_string(), CLARITY_UI_LIBRARY.to_string()],
+        Backend::C => vec![compiler_needed(backend), CMAKE.to_string(), MAKE.to_string(), SQLITE.to_string(), CLARITY_UI_LIBRARY.to_string()],
         Backend::Cpp => vec![
             compiler_needed(backend),
             CMAKE.to_string(),
             MAKE.to_string(),
             SQLITE.to_string(),
             NLOHMANN.to_string(),
-            format!("on Linux, {WEBKIT_GTK}"),
-            format!("on Windows, {WEBVIEW2}"),
+            CLARITY_UI_LIBRARY.to_string(),
         ],
     }
 }
@@ -462,9 +448,10 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
                 Some(version) => found.push(first_line(&version)),
                 None => missing.push((GO.to_string(), GO_GUIDE)),
             }
-            // Wails draws with WebKitGTK on Linux too, through cgo.
-            if cfg!(target_os = "linux") && probe.run("pkg-config", &["--exists", "webkit2gtk-4.1"]).is_none() {
-                missing.push((WEBKIT.to_string(), WEBKIT_GUIDE));
+            // The desktop program calls Clarity.UI's library through cgo, which needs a C compiler.
+            match compiler(probe, &["cc", "gcc", "clang"]) {
+                Some(version) => found.push(version),
+                None => missing.push((CGO.to_string(), NATIVE_GUIDE)),
             }
         }
         Backend::C | Backend::Cpp => {
@@ -472,12 +459,6 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
             match compiler(probe, &compilers) {
                 Some(version) => found.push(version),
                 None => missing.push((compiler_needed(backend), NATIVE_GUIDE)),
-            }
-            if backend == Backend::C {
-                match compiler(probe, &["c++", "g++", "clang++"]) {
-                    Some(version) => found.push(version),
-                    None => missing.push((WEBVIEW_CXX.to_string(), NATIVE_GUIDE)),
-                }
             }
             // The generated project is a CMake project (CMakeLists.txt), built with make or Ninja.
             match probe.run("cmake", &["--version"]) {
@@ -493,7 +474,8 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
             }
             // The libraries CMake finds, through pkg-config on Linux.
             if cfg!(target_os = "linux") {
-                let mut libraries = vec![("sqlite3", SQLITE, NATIVE_GUIDE), ("webkit2gtk-4.1", WEBKIT_GTK, WEBKIT_GUIDE)];
+                // C and C++ programs draw with Clarity.UI's library, which needs no WebKitGTK.
+                let mut libraries = vec![("sqlite3", SQLITE, NATIVE_GUIDE)];
                 if backend == Backend::Cpp {
                     libraries.push(("nlohmann_json", NLOHMANN, NATIVE_GUIDE));
                 }

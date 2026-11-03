@@ -42,7 +42,7 @@ fn writes_no_engine_code(files: &[OutFile]) {
 
 #[test]
 fn every_stack_carries_a_clarity_engine_as_a_file() {
-    for (backend, ui) in [(Backend::Rust, Ui::Clarity), (Backend::Go, Ui::Webview), (Backend::C, Ui::Webview), (Backend::Cpp, Ui::Webview), (Backend::Csharp, Ui::Clarity)] {
+    for (backend, ui) in [(Backend::Rust, Ui::Clarity), (Backend::Go, Ui::Clarity), (Backend::C, Ui::Clarity), (Backend::Cpp, Ui::Clarity), (Backend::Csharp, Ui::Clarity)] {
         let files = files(backend, ui);
         carries_the_board(&files);
         writes_no_engine_code(&files);
@@ -70,7 +70,7 @@ fn the_project_chooses_compiled_or_interpreted_engines() {
         let project = clarity_spec::load_dir(&clarity_project::module_dir(&file)).unwrap();
         let mut settings = clarity_project::load(&file).settings.expect("the fixture has a project file");
         settings.stack.backend = Backend::Go;
-        settings.stack.ui = Ui::Webview;
+        settings.stack.ui = Ui::Clarity;
         settings.engines_interpreted = interpreted;
         let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
         files.into_iter().find(|f| f.path.ends_with("board.wasm")).and_then(|f| f.bytes).expect("board.wasm").into_owned()

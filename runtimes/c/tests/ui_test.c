@@ -201,3 +201,33 @@ void a_dialog_is_asked_for_and_closes_with_its_value(void) {
     CHECK(cJSON_IsTrue(cJSON_GetObjectItem(closed, "close")));
     CHECK_JSON(cJSON_GetObjectItem(closed, "result"), "{\"id\":3,\"name\":\"Ada\"}");
 }
+
+// Quitting and the keys window go in the reply only when code asks for
+// them (the built-in quit and keys run by a handler), as the Rust runtime
+// writes them.
+void a_reply_says_quit_and_keys_only_when_code_asks(void) {
+    ClarityWindowState state = {.window = "Main", .data = cJSON_CreateObject()};
+    cJSON* plain = clarity_reply_json(clarity_ui_reply(clarity_ui(&state), "Main", NULL));
+    CHECK(!cJSON_GetObjectItem(plain, "quit"));
+    CHECK(!cJSON_GetObjectItem(plain, "keys"));
+    ClarityUi* ui = clarity_ui(&state);
+    clarity_ui_quit(ui);
+    clarity_ui_show_keys(ui);
+    cJSON* asked = clarity_reply_json(clarity_ui_reply(ui, "Main", NULL));
+    CHECK(cJSON_IsTrue(cJSON_GetObjectItem(asked, "quit")));
+    CHECK(cJSON_IsTrue(cJSON_GetObjectItem(asked, "keys")));
+    CHECK(cJSON_IsFalse(cJSON_GetObjectItem(asked, "close")));
+}
+
+// open ... in new window says new_window on that open only.
+void an_open_says_new_window_only_when_asked(void) {
+    ClarityWindowState state = {.window = "Main", .data = cJSON_CreateObject()};
+    ClarityUi* ui = clarity_ui(&state);
+    clarity_ui_open(ui, "Card", NULL);
+    cJSON* with = cJSON_CreateObject();
+    cJSON_AddStringToObject(with, "note", "hi");
+    clarity_ui_open_new(ui, "Other", with);
+    cJSON* open = cJSON_GetObjectItem(clarity_reply_json(clarity_ui_reply(ui, "Main", NULL)), "open");
+    CHECK(!cJSON_GetObjectItem(cJSON_GetArrayItem(open, 0), "new_window"));
+    CHECK_JSON(cJSON_GetArrayItem(open, 1), "{\"window\":\"Other\",\"with\":{\"note\":\"hi\"},\"new_window\":true}");
+}

@@ -27,6 +27,8 @@ struct Engine::Loaded {
     EngineLimits limits{};
     EngineState state = EngineState::none;
     bool opens = false;
+    /// The functions the module exports.
+    std::vector<std::string> exported;
     /// The instances an engine with state keeps between calls, by window (one,
     /// at 0, for state per app), and the turn its calls take.
     std::mutex turn;
@@ -301,6 +303,7 @@ Engine Engine::load(const std::string& name, std::vector<uint8_t> bytes, const E
     loaded->uses = uses;
     loaded->state = state;
     loaded->opens = opens;
+    loaded->exported = sections.functions;
     // A window that closes takes its instance along.
     if (state == EngineState::per_window) {
         loaded->listening = on_window_closed([kept = loaded.get()](uint64_t window) {
@@ -387,13 +390,15 @@ static Runtime instance(IM3Environment environment, const std::vector<uint8_t>& 
     return runtime;
 }
 
+bool Engine::exports(const std::string& function) const { return std::find(loaded_->exported.begin(), loaded_->exported.end(), function) != loaded_->exported.end(); }
+
 void Engine::close_window(uint64_t window) const {
     if (loaded_->state != EngineState::per_window) return;
     std::lock_guard<std::mutex> turn(loaded_->turn);
     loaded_->kept.erase(window);
 }
 
-nlohmann::json Engine::call_watched(uint64_t window, const std::string& function, const nlohmann::json& args, const EngineWatch& watch) const {
+nlohmann::json Engine::answer_of(uint64_t window, const std::string& function, const nlohmann::json& args, const EngineWatch& watch) const {
     auto seconds = loaded_->limits.seconds;
     auto failed = [&](const std::string& why) {
         if (why == stopped) return EngineError("engine " + name_ + " failed in " + function + ": it was stopped");
@@ -434,8 +439,29 @@ nlohmann::json Engine::call_watched(uint64_t window, const std::string& function
     }
     // The engine answered, even with a refusal, so its memory is whole.
     if (keeps) loaded_->kept.emplace(key, std::move(runtime));
+    return answer;
+}
+
+nlohmann::json Engine::call_watched(uint64_t window, const std::string& function, const nlohmann::json& args, const EngineWatch& watch) const {
+    nlohmann::json answer = answer_of(window, function, args, watch);
     // An engine refuses by the key of its text (its `says`), or in its own words.
     if (answer.contains("error") && answer["error"].is_string()) refuse(Text::key(answer["error"].get<std::string>()));
+    if (!answer.contains("value")) throw EngineError("engine " + name_ + " failed in " + function + ": its answer has no value");
+    return answer["value"];
+}
+
+nlohmann::json Engine::call_telling(const std::string& function, const nlohmann::json& args, nlohmann::json& tells) const {
+    static const EngineWatch none;
+    nlohmann::json answer = answer_of(0, function, args, none);
+    auto failed = [&](const std::string& why) { return EngineError("engine " + name_ + " failed in " + function + ": " + why); };
+    // Beside the screen a refusal ends the engine as any failure does, in the engine's words.
+    if (answer.contains("error") && answer["error"].is_string()) throw failed(answer["error"].get<std::string>());
+    if (answer.contains("tells") && answer["tells"].is_array()) {
+        for (const auto& told : answer["tells"]) {
+            if (!told.is_object() || !told.contains("tell") || !told["tell"].is_string() || told["tell"].get<std::string>().empty()) throw failed("it told something without a name");
+            tells.push_back({{"tell", told["tell"]}, {"values", told.contains("values") && told["values"].is_array() ? told["values"] : nlohmann::json::array()}});
+        }
+    }
     if (!answer.contains("value")) throw failed("its answer has no value");
     return answer["value"];
 }

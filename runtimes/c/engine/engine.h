@@ -89,6 +89,18 @@ bool clarity_engine_call_in(ClarityEngine* engine, uint64_t window, const char* 
 /// clarity_engine_call_in, telling `watch` how far the call is and stopping when it says so.
 bool clarity_engine_call_watched(ClarityEngine* engine, uint64_t window, const char* function, cJSON* args, const ClarityEngineWatch* watch, cJSON** out);
 
+/// Calls `function` as an engine beside the screen does: a refusal fails
+/// alike (CLARITY_ENGINE, "engine <Name> failed in <function>: <why>"), and
+/// what the answer tells is added to `tells`, a JSON array, as
+/// {"tell", "values"}. Calls no watch.
+bool clarity_engine_call_telling(ClarityEngine* engine, const char* function, cJSON* args, cJSON* tells, cJSON** out);
+
+/// The engine's name, as it was loaded.
+const char* clarity_engine_name(const ClarityEngine* engine);
+
+/// Whether the engine's module exports function `function`.
+bool clarity_engine_exports(const ClarityEngine* engine, const char* function);
+
 /// Drops the instance window `window` had, when it closes.
 void clarity_engine_close_window(ClarityEngine* engine, uint64_t window);
 

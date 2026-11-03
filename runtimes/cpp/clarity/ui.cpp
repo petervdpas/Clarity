@@ -83,7 +83,10 @@ std::string Ui::error(const std::string& part) const {
 
 Reply Ui::reply(const std::string& window, nlohmann::json data) const {
     if (!data.is_object()) data = nlohmann::json::object();
-    return Reply{WindowState{window, std::move(data), parts_, selected_, instance_, views_}, messages_, shown_, open_, close_, asks_, result_, hears_, copied_};
+    Reply reply{WindowState{window, std::move(data), parts_, selected_, instance_, views_}, messages_, shown_, open_, close_, asks_, result_, hears_, copied_};
+    reply.quit = quit_;
+    reply.keys = keys_;
+    return reply;
 }
 
 std::optional<nlohmann::json> Ui::part_value(const std::string& part, const std::string& name) const {
@@ -204,7 +207,11 @@ void to_json(nlohmann::json& out, const Reply& r) {
     nlohmann::json messages = nlohmann::json::array();
     for (const auto& m : r.messages) messages.push_back({{"level", level_name(m.level)}, {"text", m.text}});
     nlohmann::json open = nlohmann::json::array();
-    for (const auto& o : r.open) open.push_back({{"window", o.window}, {"with", o.with}});
+    for (const auto& o : r.open) {
+        nlohmann::json one = {{"window", o.window}, {"with", o.with}};
+        if (o.new_window) one["new_window"] = true;
+        open.push_back(one);
+    }
     out = {{"state", r.state}, {"messages", messages}, {"open", open}, {"close", r.close}};
     if (!r.shown.empty()) {
         nlohmann::json shown = nlohmann::json::object();
@@ -215,6 +222,8 @@ void to_json(nlohmann::json& out, const Reply& r) {
     if (r.copy) out["copy"] = *r.copy;
     if (r.step) out["step"] = r.step;
     if (r.refused) out["refused"] = true;
+    if (r.quit) out["quit"] = true;
+    if (r.keys) out["keys"] = true;
     if (!r.asks.empty()) {
         nlohmann::json asks = nlohmann::json::array();
         for (const auto& a : r.asks) asks.push_back({{"question", a.question}, {"form", a.form}, {"handler", a.handler}, {"values", a.values}});

@@ -43,13 +43,13 @@ fn code_reads_and_sets_a_sidebar_on_every_stack() {
     let rust = files(Backend::Rust, Ui::Clarity);
     has(text(&rust, "src/modules/shop.rs"), "if ui.collapsed(\"nav\", true) {");
     has(text(&rust, "src/modules/shop.rs"), "ui.set_maximized(\"nav\", !ui.maximized(\"nav\"));");
-    let go = files(Backend::Go, Ui::Webview);
+    let go = files(Backend::Go, Ui::Clarity);
     has(text(&go, "shop_module.go"), "if ui.Collapsed(\"nav\", true) {");
     has(text(&go, "shop_module.go"), "ui.SetMaximized(\"nav\", !ui.Maximized(\"nav\"))");
-    let c = files(Backend::C, Ui::Webview);
+    let c = files(Backend::C, Ui::Clarity);
     has(text(&c, "src/modules/shop.c"), "if (clarity_ui_collapsed(ui, \"nav\", true)) {");
     has(text(&c, "src/modules/shop.c"), "clarity_ui_set_maximized(ui, \"nav\", !clarity_ui_maximized(ui, \"nav\"));");
-    let cpp = files(Backend::Cpp, Ui::Webview);
+    let cpp = files(Backend::Cpp, Ui::Clarity);
     has(text(&cpp, "src/modules/shop.cpp"), "if (ui.collapsed(\"nav\", true)) {");
     has(text(&cpp, "src/modules/shop.cpp"), "ui.set_maximized(\"nav\", !ui.maximized(\"nav\"));");
 }

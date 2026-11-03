@@ -1,87 +1,27 @@
 <script lang="ts">
-  // A custom part (DESIGN 5.19): an outside library draws it in a native
-  // window the shell keeps over this place. In a running application the
-  // part follows where this box is and whether it shows, and gets its values;
-  // on the design canvas and in the Preview it is a box with its name, or its
-  // picture.
+  // A custom part (DESIGN 5.19): a library in the stack's own language draws
+  // it on Clarity.UI's canvas. On this screen (the design canvas, the
+  // Preview and a web target) it is a box with its name, or its picture.
 
-  import { onDestroy } from "svelte";
-  import type { JsonValue } from "../generated/serde_json/JsonValue.ts";
-  import type { WidgetProps } from "../generated/WidgetProps.ts";
-  import type { Live } from "../screen/live.ts";
-  import { OVERLAY_CLASS, changedValues, covered, placeOf, shownValues, type Place } from "../screen/customParts.ts";
   import { pictureUrl } from "../screen/pictures.svelte.ts";
 
   let {
-    p,
-    live,
-    value,
-    hidden,
-    disabled,
+    kind,
     preview: picture,
-    words,
   }: {
-    p: WidgetProps;
-    /** The running application; none on the design canvas and in the Preview. */
-    live: Live | undefined;
-    /** What it binds, or undefined when it binds nothing. */
-    value: JsonValue | undefined;
-    hidden: boolean;
-    disabled: boolean;
+    kind: string;
     /** Its picture of the resources, from its declaration's `preview`. */
     preview: string | null;
-    words: (text: string) => string;
   } = $props();
 
-  let box = $state<HTMLDivElement | null>(null);
-  const kind = $derived(p.part ?? "");
   const pictured = $derived(picture ? pictureUrl(picture) : null);
-
-  // Where the part is and whether it shows, given again when either changes.
-  let placed: { place: Place; shown: boolean } | null = null;
-  let frame = 0;
-
-  function follow() {
-    frame = requestAnimationFrame(follow);
-    if (!box || !live || !p.name) return;
-    const rect = box.getBoundingClientRect();
-    const overlays = [...document.getElementsByClassName(OVERLAY_CLASS)].map((e) => e.getBoundingClientRect());
-    const shown = !hidden && box.offsetParent !== null && rect.width > 0 && rect.height > 0 && !covered(rect, overlays);
-    const place = placeOf(rect, window.devicePixelRatio || 1);
-    if (placed && placed.shown === shown && JSON.stringify(placed.place) === JSON.stringify(place)) return;
-    placed = { place, shown };
-    live.placePart(p.name, kind, place, shown);
-  }
-
-  $effect(() => {
-    if (!live || !box) return;
-    frame = requestAnimationFrame(follow);
-    return () => cancelAnimationFrame(frame);
-  });
-
-  onDestroy(() => {
-    if (live && p.name && placed) live.placePart(p.name, kind, placed.place, false);
-  });
-
-  // Its values: written on its line, set by code, what it binds and whether it can be used.
-  let given: Record<string, JsonValue> | null = null;
-  $effect(() => {
-    if (!live || !p.name) return;
-    const now = shownValues(p.values, live.parts[p.name]?.values, words);
-    if (value !== undefined) now.value = value;
-    now.enabled = !disabled;
-    for (const [name, next] of changedValues(given, now)) live.setPartValue(p.name, name, next);
-    given = now;
-  });
 </script>
 
-<div class="custom-part" bind:this={box}>
-  {#if !live}
-    {#if pictured}
-      <img src={pictured} alt={kind} />
-    {:else}
-      <span>{kind}</span>
-    {/if}
+<div class="custom-part">
+  {#if pictured}
+    <img src={pictured} alt={kind} />
+  {:else}
+    <span>{kind}</span>
   {/if}
 </div>
 

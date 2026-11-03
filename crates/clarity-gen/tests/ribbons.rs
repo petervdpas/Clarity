@@ -51,11 +51,11 @@ fn code_reads_and_sets_a_ribbon_on_every_stack() {
     has(code, "if (ui.tab(\"mainRibbon\") == 1i64) {");
     has(code, "ui.set_tab(\"mainRibbon\", 2i64);");
     has(code, "ui.set_visible(\"clipboardGroup\", false);");
-    let go = files(Backend::Go, Ui::Webview);
+    let go = files(Backend::Go, Ui::Clarity);
     has(text(&go, "shop_module.go"), "ui.SetTab(\"mainRibbon\", 2)");
-    let c = files(Backend::C, Ui::Webview);
+    let c = files(Backend::C, Ui::Clarity);
     has(text(&c, "src/modules/shop.c"), "clarity_ui_set_tab(ui, \"mainRibbon\", 2);");
-    let cpp = files(Backend::Cpp, Ui::Webview);
+    let cpp = files(Backend::Cpp, Ui::Clarity);
     has(text(&cpp, "src/modules/shop.cpp"), "ui.set_tab(\"mainRibbon\", int64_t{2});");
 }
 

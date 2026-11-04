@@ -103,11 +103,13 @@ struct Site {
     /// A page around it, which shows it in a frame (`/page`); none: it is the page.
     outer: Option<String>,
     main: &'static str,
+    /// The program's model (files.json's `model`), empty for none.
+    model: &'static str,
     answers: Answers,
 }
 
 /// The program on the server: it starts (no app), opens Main, and its `greet` puts the answer in the window's data.
-fn answer(command: &str, args: &Value) -> Value {
+pub(super) fn answer(command: &str, args: &Value) -> Value {
     let reply = |state: WindowState| json!({ "value": serde_json::to_value(super::core_windows_fake::reply(state)).unwrap() });
     match command {
         "started" => json!({ "value": { "main": "Main" } }),
@@ -115,6 +117,7 @@ fn answer(command: &str, args: &Value) -> Value {
         "open_window" => {
             let mut data = Map::new();
             data.insert("answer".into(), json!(""));
+            data.insert("greeting".into(), json!({ "id": 1, "note": "" }));
             // The answer brings the page's settings back: the page keeps them.
             let mut answered = reply(WindowState::new(args["window"].as_str().unwrap_or("Main"), data));
             answered["settings"] = json!({ "seen": "yes" });
@@ -127,6 +130,8 @@ fn answer(command: &str, args: &Value) -> Value {
             }
             reply(state)
         }
+        // The person's edit: the window as it came, as a program answers an edit without a change handler.
+        "edit_event" => reply(serde_json::from_value(args["state"].clone()).unwrap()),
         other => json!({ "error": format!("The test's program does not answer {other}.") }),
     }
 }
@@ -163,7 +168,7 @@ fn serve(stream: TcpStream, files: &Path, site: &Site, asked: &Mutex<Vec<String>
         "/" => respond(stream, "200 OK", "text/html; charset=utf-8", site.outer.as_ref().unwrap_or(&site.page).as_bytes()),
         "/page" => respond(stream, "200 OK", "text/html; charset=utf-8", site.page.as_bytes()),
         "/clarity/files.json" => {
-            let served = json!({ "title": "Greeter", "windows": { "Main": site.main }, "apps": {}, "themes": {}, "model": "", "resources": [] });
+            let served = json!({ "title": "Greeter", "windows": { "Main": site.main }, "apps": {}, "themes": {}, "model": site.model, "resources": [] });
             respond(stream, "200 OK", "application/json", served.to_string().as_bytes())
         }
         "/clarity/invoke" => {
@@ -286,7 +291,7 @@ fn save_shot(scratch: &Path, name: &str, shot: &Value) {
 #[test]
 #[ignore = "needs the browser files (Emscripten) and Chromium"]
 fn a_click_in_the_browser_runs_the_servers_handler_and_its_reply_is_drawn() {
-    let site = Site { page: PAGE.to_string(), outer: None, main: MAIN, answers: Arc::new(answer) };
+    let site = Site { page: PAGE.to_string(), outer: None, main: MAIN, model: "", answers: Arc::new(answer) };
     let Opened { scratch, asked, posted, results, _browser } = open("click", site, &["--window-size=900,600", "--force-device-scale-factor=1"]);
     let result = results.recv_timeout(Duration::from_secs(90)).expect("the page reported within 90 s");
     assert!(result.get("error").is_none(), "the page failed: {}", result["error"]);
@@ -332,7 +337,7 @@ fn a_click_in_the_browser_runs_the_servers_handler_and_its_reply_is_drawn() {
 #[ignore = "needs the browser files (Emscripten) and Chromium"]
 fn on_the_page_thread_a_click_runs_the_servers_handler_too() {
     let page = PAGE.replace("<script src=\"clarity-ui-page.js\"></script>", "<script>window.clarityUiOptions = { thread: \"page\" };</script><script src=\"clarity-ui-page.js\"></script>");
-    let site = Site { page, outer: None, main: MAIN, answers: Arc::new(answer) };
+    let site = Site { page, outer: None, main: MAIN, model: "", answers: Arc::new(answer) };
     let Opened { scratch, asked, results, _browser, .. } = open("page-thread", site, &["--window-size=900,600", "--force-device-scale-factor=1"]);
     let result = results.recv_timeout(Duration::from_secs(90)).expect("the page reported within 90 s");
     assert!(result.get("error").is_none(), "the page failed: {}", result["error"]);
@@ -357,7 +362,7 @@ fn a_phone_sized_page_draws_sharp_fills_the_page_and_a_tap_clicks() {
     assert_ne!(page, PAGE);
     // A headless window is at least 500 wide: the phone's page is a frame of a phone's size in it.
     let outer = r#"<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0"><iframe src="/page" width="390" height="844" style="border:0;display:block"></iframe></body></html>"#;
-    let site = Site { page, outer: Some(outer.to_string()), main: MAIN, answers: Arc::new(answer) };
+    let site = Site { page, outer: Some(outer.to_string()), main: MAIN, model: "", answers: Arc::new(answer) };
     let Opened { scratch, asked, results, _browser, .. } = open("phone", site, &["--window-size=900,1000", "--force-device-scale-factor=2", "--touch-events=enabled"]);
     let result = results.recv_timeout(Duration::from_secs(90)).expect("the page reported within 90 s");
     assert!(result.get("error").is_none(), "the page failed: {}", result["error"]);
@@ -498,7 +503,7 @@ fn long_answers(watches: Arc<Mutex<Watches>>) -> Answers {
 #[ignore = "needs the browser files (Emscripten) and Chromium"]
 fn a_long_call_in_the_browser_shows_its_bar_and_stop_stops_it() {
     let watches: Arc<Mutex<Watches>> = Arc::default();
-    let site = Site { page: LONG_PAGE.to_string(), outer: None, main: LONG_MAIN, answers: long_answers(watches.clone()) };
+    let site = Site { page: LONG_PAGE.to_string(), outer: None, main: LONG_MAIN, model: "", answers: long_answers(watches.clone()) };
     let Opened { scratch, asked, results, _browser, .. } = open("long", site, &["--window-size=900,600", "--force-device-scale-factor=1"]);
     let result = results.recv_timeout(Duration::from_secs(90)).expect("the page reported within 90 s");
     assert!(result.get("error").is_none(), "the page failed: {}", result["error"]);
@@ -619,7 +624,7 @@ fn silent_wav() -> String {
 #[ignore = "needs the browser files (Emscripten) and Chromium"]
 fn the_pages_keys_touch_sound_and_links_in_the_browser() {
     let page = INPUT_PAGE.replace("__WAV__", &silent_wav());
-    let site = Site { page, outer: None, main: MAIN, answers: Arc::new(answer) };
+    let site = Site { page, outer: None, main: MAIN, model: "", answers: Arc::new(answer) };
     let Opened { results, _browser, .. } = open("input", site, &["--window-size=900,600", "--force-device-scale-factor=1", "--autoplay-policy=no-user-gesture-required"]);
     let r = results.recv_timeout(Duration::from_secs(90)).expect("the page reported within 90 s");
     assert!(r.get("error").is_none(), "the page failed: {}", r["error"]);
@@ -648,4 +653,382 @@ fn the_pages_keys_touch_sound_and_links_in_the_browser() {
     assert_eq!(r["soundEnded"], json!(true), "the page's sound did not end");
     // Only the web page and the PDF opened: no javascript:, data: or HTML.
     assert_eq!(r["opened"], json!(["https", "blob:"]));
+}
+
+/// A window for the mirror: a heading, a button, labelled inputs: one the
+/// program writes, one of a field of the model that the person writes (an
+/// edit the server is told of, `edit_event`).
+pub(super) const ACCESS_MAIN: &str = r#"<Window name="Main">
+  <Heading name="title" at="1,1" span="12" caption="Clarity.UI in the browser" />
+  <Button name="greet" at="1,2" span="4" caption="Greet" onclick="greet" />
+  <Label name="answerLabel" at="1,3" span="3" caption="Answer" for="answer" />
+  <Textbox name="answer" at="4,3" span="8" bind="answer" />
+  <Label name="noteLabel" at="1,4" span="3" caption="Note" for="note" />
+  <Textbox name="note" at="4,4" span="8" bind="greeting.note" undoScope="note" />
+</Window>
+"#;
+
+/// The model of the mirror's window: its `greeting` record, whose `note` the person writes.
+pub(super) const ACCESS_MODEL: &str = r##"{
+  "project": {
+    "locale": { "language": "en" },
+    "files": [{
+      "pages": [ { "name": { "name": "Main" }, "kind": "window", "title": "Greeter",
+        "data": [ { "name": { "name": "greeting" }, "of": { "kind": "record", "entity": { "name": "Greeting" } } } ] } ],
+      "apps": [], "enums": [], "records": [],
+      "entities": [ { "name": { "name": "Greeting" }, "fields": [ { "name": { "name": "note" }, "type": { "kind": "text" }, "label": "Note", "modifiers": {} } ] } ]
+    }]
+  }
+}"##;
+
+/// The page's accessible mirror (A1 phase 2) as a screen reader uses it:
+/// the roles and names are there; a click on the mirrored button runs its
+/// handler; text typed into the mirrored input is typed, a value set on it
+/// is written; the DOM's focus follows the screen's (Tab from the keys).
+const ACCESS_PAGE: &str = r#"<!doctype html>
+<html><head><meta charset="utf-8"><title>Clarity.UI</title>
+<style>html, body { margin: 0; height: 100%; overflow: hidden; } #clarity-ui { width: 100vw; height: 100vh; }</style>
+</head><body><canvas id="clarity-ui"></canvas>
+<script>window.addEventListener("error", (e) => fetch("/result", { method: "POST", body: JSON.stringify({ error: e.message + " at " + e.filename + ":" + e.lineno }) }));</script>
+<script src="clarity-ui-page.js"></script>
+<script>
+(async () => {
+  const report = (what) => fetch("/result", { method: "POST", body: JSON.stringify(what) });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const until = async (what, test) => {
+    for (let i = 0; i < 100; i++) {
+      const found = await test();
+      if (found) return found;
+      await sleep(50);
+    }
+    const active = document.activeElement;
+    throw new Error("waited in vain for " + what + "; the DOM's focus on " + (active ? active.outerHTML.slice(0, 200) : "nothing") + "; seen " + JSON.stringify(window.lastSeen));
+  };
+  try {
+    const ui = window.clarityUi;
+    await ui.started;
+    const mirror = ui.mirror;
+    const sent = [];
+    const post = ui.worker.postMessage.bind(ui.worker);
+    ui.worker.postMessage = (message, transfer) => { if (message.type !== "step") sent.push(message); post(message, transfer); };
+    window.sent = sent;
+    const button = await until("the mirrored button", () => mirror.querySelector('[role="button"][aria-label="Greet"]'));
+    const nodes = [mirror, ...mirror.querySelectorAll("[data-clarity-node]")].map((e) => ({ tag: e.tagName.toLowerCase(), role: e.getAttribute("role"), label: e.getAttribute("aria-label"), text: e.firstChild && e.firstChild.nodeType === 3 ? e.firstChild.data : null, at: [e.offsetLeft, e.offsetTop, e.offsetWidth, e.offsetHeight] }));
+    const read = await ui.step({ do: "read" });
+
+    // A screen reader's click on the mirrored button.
+    button.click();
+    const clicked = await until("the handler's answer", async () => { const r = await ui.step({ do: "read" }); return r.data && r.data.answer ? r : null; });
+
+    // Its focus on the mirrored input, then text typed, then a value set.
+    const input = mirror.querySelector('input[aria-label="Note"]');
+    input.focus();
+    const focusedInput = await until("the screen's focus on the input", async () => { const r = await ui.step({ do: "read" }); return r.focused === "note" ? r : null; });
+    input.value = input.value + "!";
+    input.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: "!" }));
+    // Typed where the screen's caret is: the screen's input holds it, and the mirror shows what the screen holds.
+    const typed = await until("the typed text in the mirror", async () => {
+      const node = (await ui.step({ do: "access" })).access.nodes.find((n) => n.part === "note");
+      window.lastSeen = [node && node.value, input.value, window.sent.slice(-6)];
+      return node && node.value && node.value.includes("!") && input.value === node.value ? node.value : null;
+    });
+    input.value = "Grace";
+    input.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertReplacementText" }));
+    const set = await until("the value set", async () => {
+      const node = (await ui.step({ do: "access" })).access.nodes.find((n) => n.part === "note");
+      const data = (await ui.step({ do: "read" })).data;
+      window.lastSeen = [node && node.value, input.value, data, window.sent.slice(-3)];
+      return node && node.value === "Grace" && input.value === "Grace" && data.greeting && data.greeting.note === "Grace" ? data : null;
+    });
+
+    // The input the program filled, bound to the window's own data: set too.
+    const filled = mirror.querySelector('input[aria-label="Answer"]');
+    filled.focus();
+    await sleep(200);
+    filled.value = filled.value + "?";
+    filled.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: "?" }));
+    await sleep(200);
+    filled.value = "Ada";
+    filled.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertReplacementText" }));
+    let answerSet = null;
+    for (let i = 0; i < 40 && !(answerSet && answerSet.answer === "Ada"); i++) { await sleep(50); answerSet = (await ui.step({ do: "read" })).data; }
+    const answerShown = filled.value;
+
+    // The person's Tab moves the screen's focus, and the DOM's follows.
+    const before = document.activeElement.getAttribute("data-clarity-node");
+    const tab = (type) => document.activeElement.dispatchEvent(new KeyboardEvent(type, { key: "Tab", code: "Tab", bubbles: true, cancelable: true }));
+    tab("keydown");
+    tab("keyup");
+    const after = await until("the DOM's focus to move", () => { const now = document.activeElement.getAttribute("data-clarity-node"); return now && now !== before ? now : null; });
+    const access = (await ui.step({ do: "access" })).access;
+    report({ nodes, read, typed, answerSet, answerShown, clicked: clicked.data, focusedInput: focusedInput.focused, set, inputValue: input.value, before, after, treeFocus: String(access.focus), active: document.activeElement.getAttribute("aria-label"), live: [...document.querySelectorAll("[data-clarity-live]")].map((e) => e.getAttribute("role")) });
+  } catch (why) {
+    report({ error: String(why && why.stack || why) });
+  }
+})();
+</script></body></html>
+"#;
+
+/// The DevTools protocol of the test's Chromium, over a WebSocket of its own
+/// (text frames, masked with zeros, as a client must mask).
+struct Devtools {
+    stream: TcpStream,
+    next: u64,
+}
+
+impl Devtools {
+    /// The page's session: the port Chromium wrote into the profile, its page's socket.
+    fn page(profile: &Path) -> Devtools {
+        let started = Instant::now();
+        let port: u16 = loop {
+            if let Some(port) = std::fs::read_to_string(profile.join("DevToolsActivePort")).ok().and_then(|t| t.lines().next().and_then(|l| l.trim().parse().ok())) {
+                break port;
+            }
+            assert!(started.elapsed() < Duration::from_secs(20), "Chromium wrote no DevToolsActivePort");
+            std::thread::sleep(Duration::from_millis(100));
+        };
+        let mut list = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        write!(list, "GET /json/list HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").unwrap();
+        // Read by its length: the DevTools server may keep the connection open.
+        list.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        let mut reader = BufReader::new(list);
+        let mut length = 0;
+        loop {
+            let mut header = String::new();
+            reader.read_line(&mut header).unwrap();
+            if header.trim().is_empty() {
+                break;
+            }
+            if let Some((name, value)) = header.split_once(':')
+                && name.eq_ignore_ascii_case("content-length")
+            {
+                length = value.trim().parse().unwrap_or(0);
+            }
+        }
+        let mut body = vec![0u8; length];
+        reader.read_exact(&mut body).unwrap();
+        let targets: Value = serde_json::from_slice(&body).expect("the targets read");
+        let url = targets.as_array().unwrap().iter().find(|t| t["type"] == json!("page")).and_then(|t| t["webSocketDebuggerUrl"].as_str()).expect("a page target").to_string();
+        let path = url.splitn(4, '/').nth(3).map(|p| format!("/{p}")).unwrap();
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        write!(stream, "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").unwrap();
+        let mut head = Vec::new();
+        let mut byte = [0u8; 1];
+        while !head.ends_with(b"\r\n\r\n") {
+            stream.read_exact(&mut byte).unwrap();
+            head.push(byte[0]);
+        }
+        assert!(head.starts_with(b"HTTP/1.1 101"), "{}", String::from_utf8_lossy(&head));
+        stream.set_read_timeout(Some(Duration::from_secs(30))).unwrap();
+        Devtools { stream, next: 0 }
+    }
+
+    fn frame(&mut self) -> (u8, bool, Vec<u8>) {
+        let mut two = [0u8; 2];
+        self.stream.read_exact(&mut two).unwrap();
+        let len = match two[1] & 0x7f {
+            126 => {
+                let mut b = [0u8; 2];
+                self.stream.read_exact(&mut b).unwrap();
+                u16::from_be_bytes(b) as usize
+            }
+            127 => {
+                let mut b = [0u8; 8];
+                self.stream.read_exact(&mut b).unwrap();
+                u64::from_be_bytes(b) as usize
+            }
+            n => n as usize,
+        };
+        let mut payload = vec![0u8; len];
+        self.stream.read_exact(&mut payload).unwrap();
+        (two[0] & 0x0f, two[0] & 0x80 != 0, payload)
+    }
+
+    /// Calls `method` and waits for its answer, past the events that come between.
+    fn call(&mut self, method: &str, params: Value) -> Value {
+        self.next += 1;
+        let text = json!({ "id": self.next, "method": method, "params": params }).to_string();
+        let mut out = vec![0x81u8];
+        match text.len() {
+            n if n < 126 => out.push(0x80 | n as u8),
+            n if n < 65536 => {
+                out.push(0x80 | 126);
+                out.extend_from_slice(&(n as u16).to_be_bytes());
+            }
+            n => {
+                out.push(0x80 | 127);
+                out.extend_from_slice(&(n as u64).to_be_bytes());
+            }
+        }
+        out.extend_from_slice(&[0, 0, 0, 0]);
+        out.extend_from_slice(text.as_bytes());
+        self.stream.write_all(&out).unwrap();
+        loop {
+            let mut message = Vec::new();
+            loop {
+                let (_, last, payload) = self.frame();
+                message.extend_from_slice(&payload);
+                if last {
+                    break;
+                }
+            }
+            let Ok(answer) = serde_json::from_slice::<Value>(&message) else { continue };
+            if answer["id"] == json!(self.next) {
+                return answer;
+            }
+        }
+    }
+}
+
+#[test]
+#[ignore = "needs the browser files (Emscripten) and Chromium"]
+fn screen_readers_read_and_use_the_pages_mirror() {
+    let site = Site { page: ACCESS_PAGE.to_string(), outer: None, main: ACCESS_MAIN, model: ACCESS_MODEL, answers: Arc::new(answer) };
+    let Opened { scratch, results, asked, _browser, .. } = open("access", site, &["--window-size=900,600", "--force-device-scale-factor=1", "--remote-debugging-port=0"]);
+    let r = results.recv_timeout(Duration::from_secs(90)).expect("the page reported within 90 s");
+    assert!(r.get("error").is_none(), "the page failed: {}; the server was asked {:?}", r["error"], asked.lock().unwrap());
+
+    // Roles and names: the window as an application, the heading, the button, the label as plain text, the input.
+    let nodes = r["nodes"].as_array().unwrap();
+    let has = |tag: &str, role: Value, label: Value| nodes.iter().any(|n| n["tag"] == json!(tag) && n["role"] == role && n["label"] == label);
+    assert!(has("div", json!("application"), json!("Greeter")), "{nodes:?}");
+    assert!(has("div", json!("heading"), json!("Clarity.UI in the browser")), "{nodes:?}");
+    assert!(has("div", json!("button"), json!("Greet")), "{nodes:?}");
+    assert!(has("input", Value::Null, json!("Answer")), "{nodes:?}");
+    assert!(nodes.iter().any(|n| n["role"].is_null() && n["label"].is_null() && n["text"] == json!("Answer")), "the label is plain text: {nodes:?}");
+    // Placed where the parts show.
+    let greet = nodes.iter().find(|n| n["label"] == json!("Greet")).unwrap();
+    let shown: Vec<f64> = r["read"]["shown"]["greet"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+    let at: Vec<f64> = greet["at"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+    assert!((at[0] - shown[0]).abs() <= 1.0 && (at[1] - shown[1]).abs() <= 1.0 && (at[2] - shown[2]).abs() <= 1.0, "{at:?} {shown:?}");
+
+    // The click ran the handler; the input took typed text and a set value; the focus followed.
+    assert_eq!(r["clicked"]["answer"], json!(ANSWER));
+    assert_eq!(r["focusedInput"], json!("note"));
+    assert!(r["typed"].as_str().is_some_and(|t| t.contains('!')), "{}", r["typed"]);
+    // Written to the model's field and told to the server as the person's edit.
+    assert_eq!(r["set"]["greeting"]["note"], json!("Grace"), "{}", r["set"]);
+    assert!(asked.lock().unwrap().contains(&"edit_event".to_string()), "{:?}", asked.lock().unwrap());
+    // The input bound to the window's own data (no field of the model): typed into, then set, it keeps the value.
+    assert_eq!(r["answerSet"]["answer"], json!("Ada"), "{}", r["answerSet"]);
+    assert_eq!(r["answerShown"], json!("Ada"));
+    assert_eq!(r["inputValue"], json!("Grace"));
+    assert_ne!(r["before"], r["after"]);
+    assert_eq!(r["after"], r["treeFocus"], "the DOM's focus is on the tree's");
+    assert_eq!(r["live"], json!(["status", "alert"]));
+
+    // Chromium's own accessibility tree names them, as a screen reader gets it.
+    let profile = scratch.join("profile-access");
+    let mut devtools = Devtools::page(&profile);
+    devtools.call("Accessibility.enable", json!({}));
+    let tree = devtools.call("Accessibility.getFullAXTree", json!({}));
+    let ax = tree["result"]["nodes"].as_array().unwrap_or_else(|| panic!("{tree}"));
+    let named = |role: &str, name: &str| ax.iter().any(|n| n["role"]["value"] == json!(role) && n["name"]["value"] == json!(name) && n["ignored"] != json!(true));
+    let seen: Vec<(Value, Value)> = ax.iter().filter(|n| n["ignored"] != json!(true)).map(|n| (n["role"]["value"].clone(), n["name"]["value"].clone())).collect();
+    assert!(named("button", "Greet"), "{seen:?}");
+    assert!(named("textbox", "Answer"), "{seen:?}");
+    assert!(named("textbox", "Note"), "{seen:?}");
+    assert!(named("heading", "Clarity.UI in the browser"), "{seen:?}");
+    assert!(named("application", "Greeter"), "{seen:?}");
+}
+
+/// A window with every kind of part, for the mirror's cost per frame.
+const EVERY: &str = r#"<Window name="Main">
+<Heading name="title" at="1,1" span="6" caption="Every part" />
+<Label name="label" at="1,2" span="2" caption="Name" for="name" />
+<Textbox name="name" at="3,2" span="4" bind="name" />
+<Label name="passLabel" at="7,2" span="2" caption="Password" for="pass" />
+<Password name="pass" at="9,2" span="4" bind="pass" />
+<Label name="ownerLabel" at="1,3" span="2" caption="Owner" />
+<Dropdown name="owner" at="3,3" span="4" bind="owner" />
+<Label name="countLabel" at="7,3" span="2" caption="Count" />
+<Number name="count" at="9,3" span="4" bind="count" />
+<Checkbox name="done" at="1,4" span="3" bind="done" caption="Done" />
+<Switch name="urgent" at="4,4" span="3" bind="urgent" caption="Urgent" />
+<Radio name="kind" at="7,4" span="6" bind="kind" />
+<Slider name="level" at="1,5" span="6" bind="level" />
+<Progress name="part" at="7,5" span="6" bind="level" />
+<Button name="greet" at="1,6" span="2" caption="Greet" onclick="greet" />
+<Button name="cancel" at="3,6" span="2" caption="Cancel" />
+<Date name="due" at="7,6" span="6" bind="due" />
+<Memo name="notes" at="1,7" span="6" rows="2" bind="notes" />
+<Color name="tint" at="7,7" span="6" bind="tint" />
+<Tabs name="pages" at="1,9" span="12" rows="3">
+  <Tab title="One"><Label name="first" at="1,1" span="3" caption="First page" /></Tab>
+  <Tab title="Two"><Label name="second" at="1,1" span="3" caption="Second page" /></Tab>
+</Tabs>
+</Window>
+"#;
+
+/// The mirror's cost per drawn frame on a window with every kind of part,
+/// on the page's thread (where the test can time the library's frames):
+/// Tab moves the focus each time, so each frame draws and the tree changes
+/// (the mirror is told and moves the DOM's focus); timed with the mirror on and off.
+const COST_PAGE: &str = r#"<!doctype html>
+<html><head><meta charset="utf-8"><title>Clarity.UI</title>
+<style>html, body { margin: 0; height: 100%; overflow: hidden; } #clarity-ui { width: 100vw; height: 100vh; }</style>
+</head><body><canvas id="clarity-ui"></canvas>
+<script>
+window.clarityUiOptions = { thread: "page" };
+const frames = [];
+const raf = window.requestAnimationFrame.bind(window);
+window.requestAnimationFrame = (act) => raf((t) => { const from = performance.now(); act(t); frames.push(performance.now() - from); });
+</script>
+<script src="clarity-ui-page.js"></script>
+<script>
+(async () => {
+  const report = (what) => fetch("/result", { method: "POST", body: JSON.stringify(what) });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    const ui = window.clarityUi;
+    await ui.started;
+    for (let i = 0; i < 100 && !ui.mirror.querySelector('[role="button"]'); i++) await sleep(50);
+    let applied = 0;
+    const onmessage = ui.worker.onmessage;
+    ui.worker.onmessage = (event) => { const from = performance.now(); onmessage(event); if (event.data.tell === "access") applied += performance.now() - from; };
+    const run = async () => {
+      frames.length = 0;
+      applied = 0;
+      const typing = document.querySelector("textarea[data-clarity-typing]");
+      for (let i = 0; i < 30; i++) {
+        for (const type of ["keydown", "keyup"]) typing.dispatchEvent(new KeyboardEvent(type, { key: "Tab", code: "Tab", bubbles: true, cancelable: true }));
+        await sleep(40);
+      }
+      const drawn = frames.filter((f) => f > 0.5);
+      return { frames: drawn.length, ms: drawn.reduce((a, b) => a + b, 0) / Math.max(drawn.length, 1), applied: applied / 30 };
+    };
+    await run();
+    const on = await run();
+    const nodes = ui.mirror.querySelectorAll("[data-clarity-node]").length;
+    ui.worker.postMessage({ type: "access", on: false });
+    await sleep(100);
+    const off = await run();
+    report({ on, off, nodes, roles: [...new Set([ui.mirror, ...ui.mirror.querySelectorAll("[role]")].map((e) => e.getAttribute("role")))], inputs: [...ui.mirror.querySelectorAll("input, textarea")].map((e) => e.tagName.toLowerCase() + ":" + e.type) });
+  } catch (why) {
+    report({ error: String(why && why.stack || why) });
+  }
+})();
+</script></body></html>
+"#;
+
+#[test]
+#[ignore = "needs the browser files (Emscripten) and Chromium"]
+fn the_mirror_costs_little_per_frame_on_every_kind_of_part() {
+    let site = Site { page: COST_PAGE.to_string(), outer: None, main: EVERY, model: "", answers: Arc::new(answer) };
+    let Opened { results, _browser, .. } = open("access-cost", site, &["--window-size=1000,700", "--force-device-scale-factor=1"]);
+    let r = results.recv_timeout(Duration::from_secs(120)).expect("the page reported within 120 s");
+    assert!(r.get("error").is_none(), "the page failed: {}", r["error"]);
+    eprintln!("mirror cost on every kind of part ({} nodes): on {} / off {}", r["nodes"], r["on"], r["off"]);
+    let roles = r["roles"].as_array().unwrap();
+    for role in ["application", "heading", "button", "checkbox", "switch", "radiogroup", "slider", "progressbar", "spinbutton", "combobox", "tablist", "tab"] {
+        assert!(roles.contains(&json!(role)), "no {role} in {roles:?}");
+    }
+    let inputs = r["inputs"].as_array().unwrap();
+    for input in ["input:text", "input:password", "textarea:textarea"] {
+        assert!(inputs.contains(&json!(input)), "no {input} in {inputs:?}");
+    }
+    let (on, off) = (r["on"]["ms"].as_f64().unwrap(), r["off"]["ms"].as_f64().unwrap());
+    assert!(r["on"]["frames"].as_u64().unwrap() > 5 && r["off"]["frames"].as_u64().unwrap() > 5, "{r}");
+    assert!(r["on"]["applied"].as_f64().unwrap() > 0.0, "the mirror was told: {r}");
+    assert!(on < off * 2.0 + 4.0, "the mirror costs too much a frame: {on:.2} ms on, {off:.2} ms off");
 }

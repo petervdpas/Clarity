@@ -585,6 +585,18 @@ impl Screen {
         self.settle(cx);
     }
 
+    /// What the person typed in the part with the focus is taken, as when they leave it.
+    pub fn take_typed(&mut self) {
+        let focused = self.focused;
+        let mut cx = self.cx();
+        let tree: &mut dyn Element = match self.overlays.iter_mut().rev().find(|o| focused.is_some_and(|f| element::find(o.content.as_ref(), f).is_some())) {
+            Some(overlay) => overlay.content.as_mut(),
+            None => self.root.as_mut(),
+        };
+        element::take_typed_from(tree, focused, &mut cx);
+        self.settle(cx);
+    }
+
     /// Gives the focus to the element of that id, or takes it away.
     pub fn focus(&mut self, id: Option<ElementId>) {
         let mut cx = self.cx();

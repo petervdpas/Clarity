@@ -2,7 +2,7 @@
 name = "clarity-ui"
 description = "Clarity.UI: Clarity's own UI framework, drawn with Skia, the one library behind the programs Clarity generates in every language"
 # Released on its own (tag runtimes/rust-ui/vX.Y.Z), after the clarity-runtime it names.
-version = "0.3.0"
+version = "0.4.0"
 edition.workspace = true
 license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"
@@ -17,7 +17,7 @@ include = ["src/**", "fonts/**", "themes/**", "catalog/**", "README.md", "LICENS
 # build leaves it out by its target: the `browser` host takes its place.
 [features]
 default = ["desktop"]
-desktop = ["dep:winit", "dep:glutin", "dep:glutin-winit", "dep:arboard", "dep:rodio"]
+desktop = ["dep:winit", "dep:glutin", "dep:glutin-winit", "dep:arboard", "dep:rodio", "dep:accesskit_winit"]
 
 [dependencies]
 clarity-runtime = { path = "../rust", version = "0.44.0", default-features = false }
@@ -33,6 +33,9 @@ skia-safe = { version = "0.156", features = ["gl", "textlayout"] }
 # choice, 2026-11-02); brings usvg and tiny-skia. Skia's own SVG module has
 # no prebuilt binaries for every system with this feature set.
 resvg = "0.49"
+# Screen readers (DESIGN 7.9, A1, user's choice 2026-11-04): the accessibility
+# tree as AccessKit's nodes, on every system and in the browser build.
+accesskit = "0.25"
 
 # The desktop host's crates; a browser build (wasm32-unknown-emscripten) has
 # none of them: the page does the window, clipboard, sound and files there.
@@ -46,3 +49,7 @@ arboard = { version = "3.7", optional = true }
 # choice, 2026-11-02). Playback only, no decoders: Clarity makes its own
 # samples (tones and melodies) and plays them as they are.
 rodio = { version = "0.23", optional = true, default-features = false, features = ["playback"] }
+# The accessibility tree handed to the system's screen reader: AT-SPI on
+# Linux, UI Automation on Windows, the accessibility API on macOS; the
+# version made for winit 0.30.
+accesskit_winit = { version = "0.34", optional = true }

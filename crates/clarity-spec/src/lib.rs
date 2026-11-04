@@ -187,11 +187,14 @@ fn make_undo_scopes(files: &mut [model::SpecFile]) {
 /// Each placed custom part grows when its declaration says `grows`
 /// (DESIGN 5.19), worked out once for every screen and the designer.
 fn make_custom_grows(files: &mut [model::SpecFile]) {
-    let growing: Vec<String> = files.iter().flat_map(|f| &f.parts).filter(|p| p.grows).map(|p| p.name.name.clone()).collect();
-    fn set(widgets: &mut [model::Widget], growing: &[String]) {
+    let growing: Vec<(String, bool, Option<String>)> = files.iter().flat_map(|f| &f.parts).map(|p| (p.name.name.clone(), p.grows, p.description.clone())).collect();
+    fn set(widgets: &mut [model::Widget], growing: &[(String, bool, Option<String>)]) {
         for w in widgets.iter_mut() {
             if w.props.kind == widgets::WidgetKind::Custom {
-                w.props.grows = w.props.part.as_ref().is_some_and(|p| growing.contains(p));
+                let declared = w.props.part.as_ref().and_then(|p| growing.iter().find(|(name, _, _)| name == p));
+                w.props.grows = declared.is_some_and(|d| d.1);
+                // Its description for screen readers, from the declaration too (DESIGN 7.9, A1).
+                w.props.description = declared.and_then(|d| d.2.clone());
             }
             set(&mut w.children, growing);
             for inner in &mut w.pages {
@@ -199,7 +202,7 @@ fn make_custom_grows(files: &mut [model::SpecFile]) {
             }
         }
     }
-    fn frame(frame: &mut model::Frame, growing: &[String]) {
+    fn frame(frame: &mut model::Frame, growing: &[(String, bool, Option<String>)]) {
         for sidebar in &mut frame.sidebars {
             set(&mut sidebar.widgets, growing);
         }

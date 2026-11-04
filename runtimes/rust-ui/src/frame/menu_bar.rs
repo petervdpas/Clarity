@@ -201,6 +201,11 @@ impl FrameMenuBar {
         FrameMenuBar { node, core, pointer: None }
     }
 
+    /// The host its captions are translated over.
+    pub fn host(&self) -> &Rc<dyn crate::parts::PartHost> {
+        self.core.frame.host()
+    }
+
     pub fn menu(&self) -> &MenuSpec {
         self.core.menu()
     }

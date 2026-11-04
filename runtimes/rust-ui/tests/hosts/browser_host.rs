@@ -492,3 +492,130 @@ fn a_models_facts_are_known_by_its_text() {
     let other = super::core_windows_fake::MODEL.replacen('{', "{\"other\": 1, ", 1);
     assert!(!Arc::ptr_eq(&ModelFacts::of(&one), &ModelFacts::of(&other)));
 }
+
+fn drawn(host: &mut BrowserHost) {
+    host.frame();
+    let mut surface = skia_safe::surfaces::raster_n32_premul((900, 600)).unwrap();
+    host.draw(surface.canvas());
+}
+
+fn updates(said: &Arc<Mutex<Vec<Value>>>) -> Vec<Value> {
+    let all = tells(said, "access").into_iter().map(|t| t["update"].clone()).collect();
+    said.lock().unwrap().retain(|m| m["tell"] != json!("access"));
+    all
+}
+
+fn node_of<'a>(update: &'a Value, role: &str, name: &str) -> &'a Value {
+    update["nodes"].as_array().unwrap().iter().find(|n| n["role"] == json!(role) && n["name"] == json!(name)).unwrap_or_else(|| panic!("no {role} {name} in {update}"))
+}
+
+/// The page's accessible mirror (A1 phase 2): off until the page asks; then
+/// the whole tree after the next drawn frame, only changes after that,
+/// nothing when nothing changed; the mirror's actions run as the person's
+/// input; a message is said; a reload sends the whole tree again; off, it
+/// is told nothing.
+#[test]
+fn the_page_is_told_the_trees_changes_and_its_actions_run() {
+    let _turn = one_host();
+    let fake = Arc::new(Fake::default());
+    let program: Arc<dyn Program> = fake.clone();
+    let (tell, said) = told();
+    let mut host = BrowserHost::start(program, FILES, 900.0, 600.0, 1.0, false, tell);
+    drawn(&mut host);
+    assert!(updates(&said).is_empty(), "no mirror until the page asks");
+
+    host.set_access(true);
+    assert!(host.frame(), "turning the mirror on draws again");
+    let mut surface = skia_safe::surfaces::raster_n32_premul((900, 600)).unwrap();
+    host.draw(surface.canvas());
+    let first = updates(&said);
+    assert_eq!(first.len(), 1);
+    let whole = &first[0];
+    assert_eq!(whole["whole"], json!(true));
+    let save = node_of(whole, "button", "Save")["id"].as_str().expect("ids as text").to_string();
+    assert_eq!(node_of(whole, "window", "Orders")["id"], whole["root"]);
+    drawn(&mut host);
+    assert!(updates(&said).is_empty(), "nothing changed, nothing told");
+
+    // Focus from the mirror: the screen's moves, and the page is told.
+    assert!(host.access_act(&save, "focus", None));
+    drawn(&mut host);
+    let moved = updates(&said);
+    assert_eq!(moved.last().unwrap()["focus"], json!(save));
+    assert_eq!(moved.last().unwrap()["whole"], json!(false));
+
+    // A click from the mirror runs the handler; the message it brings is said.
+    fake.calls();
+    let warn = node_of(whole, "button", "Warn")["id"].as_str().unwrap().to_string();
+    assert!(host.access_act(&warn, "click", None));
+    assert_eq!(fake.calls(), ["dispatch warn"]);
+    drawn(&mut host);
+    let said_now: Vec<Value> = updates(&said).iter().flat_map(|u| u["say"].as_array().unwrap().clone()).collect();
+    assert!(said_now.iter().any(|s| s["text"].as_str().unwrap_or_default().contains("Careful")), "{said_now:?}");
+    // No such node, no such action: nothing done.
+    assert!(!host.access_act("12345678", "click", None));
+    assert!(!host.access_act(&save, "fly", None));
+    assert!(!host.access_act("not a number", "click", None));
+
+    // A reload is a new screen: the whole tree again.
+    host.reload(FILES);
+    drawn(&mut host);
+    let again = updates(&said);
+    assert_eq!(again.first().map(|u| u["whole"].clone()), Some(json!(true)), "{again:?}");
+
+    host.set_access(false);
+    host.access_act(&save, "focus", None);
+    drawn(&mut host);
+    assert!(updates(&said).is_empty(), "off: nothing told");
+}
+
+/// The program on the browser page test's server, asked in place; what it was asked.
+struct PageServer(Arc<Mutex<Vec<String>>>);
+
+impl clarity_ui::program_wire::Asks for PageServer {
+    fn ask(&self, command: &str, args: serde_json::Map<String, Value>) -> Option<Value> {
+        self.0.lock().unwrap().push(command.to_string());
+        Some(super::browser_page::answer(command, &Value::Object(args)))
+    }
+}
+
+/// A value set from the mirror on an input bound to a field of the model is
+/// written to the window's data, told to the server as the person's edit
+/// (`edit_event` over the wire) and kept, as in the browser: after the
+/// handler filled another input and the person typed into this one.
+#[test]
+fn a_value_set_from_the_mirror_on_a_bound_input_is_kept() {
+    let _turn = one_host();
+    let served = json!({ "title": "Greeter", "windows": { "Main": super::browser_page::ACCESS_MAIN }, "apps": {}, "themes": {}, "model": super::browser_page::ACCESS_MODEL, "resources": [] });
+    let files = clarity_ui::browser::files_from_json(&served, &|_| None);
+    let asked: Arc<Mutex<Vec<String>>> = Arc::default();
+    let program: Arc<dyn Program> = Arc::new(clarity_ui::program_wire::WireProgram::new(PageServer(asked.clone())));
+    let (tell, said) = told();
+    let mut host = BrowserHost::start(program, files, 900.0, 600.0, 1.0, false, tell);
+    host.set_access(true);
+    drawn(&mut host);
+    let whole = updates(&said).remove(0);
+    let answer = whole["nodes"].as_array().unwrap().iter().find(|n| n["part"] == json!("note")).expect("the bound input")["id"].as_str().unwrap().to_string();
+    // As in the browser: the handler fills it, the person types into it, then a value is set.
+    let greet = whole["nodes"].as_array().unwrap().iter().find(|n| n["part"] == json!("greet")).unwrap()["id"].as_str().unwrap().to_string();
+    assert!(host.access_act(&greet, "click", None));
+    drawn(&mut host);
+    assert_eq!(host.step(&json!({ "do": "read" }))["data"]["answer"], json!("Hello from the server"));
+    assert!(host.access_act(&answer, "focus", None));
+    host.text("!");
+    drawn(&mut host);
+    let later = |host: &mut BrowserHost| {
+        host.screen().wake_due(std::time::Instant::now() + std::time::Duration::from_secs(5));
+        drawn(host);
+    };
+    later(&mut host);
+    assert!(host.access_act(&answer, "setValue", Some("Grace")));
+    drawn(&mut host);
+    later(&mut host);
+    let read = host.step(&json!({ "do": "read" }));
+    assert_eq!(read["data"]["greeting"]["note"], json!("Grace"), "{read}");
+    assert!(asked.lock().unwrap().contains(&"edit_event".to_string()), "{:?}", asked.lock().unwrap());
+    let tree = host.step(&json!({ "do": "access" }));
+    let node = tree["access"]["nodes"].as_array().unwrap().iter().find(|n| n["part"] == json!("note")).unwrap().clone();
+    assert_eq!(node["value"], json!("Grace"));
+}

@@ -5,6 +5,7 @@
 //! the same conformance cases, and runs a generated program through
 //! `clarity_runtime::program::Program`.
 
+pub mod access;
 pub mod app_files;
 pub mod browser;
 pub mod choices;

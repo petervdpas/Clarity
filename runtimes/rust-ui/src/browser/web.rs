@@ -245,6 +245,16 @@ pub fn file_chosen(name: &str, bytes: Vec<u8>) {
     with(|web| web.host.file_chosen(name, bytes))
 }
 
+/// The page keeps an accessible mirror of the screen (A1 phase 2) or not.
+pub fn access(on: bool) {
+    with(|web| web.host.set_access(on))
+}
+
+/// A screen reader's action on the mirror's node (its id as text): whether it was done.
+pub fn act(node: &str, action: &str, value: Option<&str>) -> bool {
+    with(|web| web.host.access_act(node, action, value))
+}
+
 /// A frame: time goes on and the screen is drawn when it changed. Whether it drew.
 pub fn frame() -> bool {
     with(|web| {

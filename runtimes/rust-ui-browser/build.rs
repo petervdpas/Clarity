@@ -24,6 +24,8 @@ const EXPORTED: &[&str] = &[
     "_clarity_ui_next_wake",
     "_clarity_ui_step",
     "_clarity_ui_shot",
+    "_clarity_ui_access",
+    "_clarity_ui_act",
     "_clarity_ui_string_free",
 ];
 

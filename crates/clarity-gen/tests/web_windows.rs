@@ -153,6 +153,17 @@ fn a_custom_part_that_grows_says_so_in_the_markup() {
     assert!(markup.contains("<Custom name=\"dial\" at=\"7,1\" span=\"6\" rows=\"2\" undoScope=\"dial\" part=\"Dial\" />"), "{markup}");
 }
 
+/// A custom part's declared description (DESIGN 7.9, A1) is in its
+/// markup, so every Clarity.UI gives it to screen readers.
+#[test]
+fn a_custom_part_s_description_is_in_the_markup() {
+    let source = "module m\n\npart Dial\n    crate \"parts/Dial\"\n    description @dialAbout\n\npage Main: window\n    Dial name dial at 1,1 span 6 rows 2\n";
+    let project = clarity_spec::keyed::load_keyed([("m.clarity", source)], &[], "en");
+    let page = project.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == "Main").unwrap();
+    let markup = clarity_gen::web_windows::window_markup(page);
+    assert!(markup.contains("part=\"Dial\" description=\"@dialAbout\""), "{markup}");
+}
+
 /// A web program's browser files (round B, DESIGN 7.9): the page, titled as
 /// the app, and files.json with what the library draws from, the same as a
 /// desktop program carries, in the project's order.

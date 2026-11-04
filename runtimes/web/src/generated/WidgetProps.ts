@@ -302,4 +302,10 @@ tells: Array<TellHandler>,
  * its window has left. Worked out when the project loads, for every
  * screen and the designer; it is never written back.
  */
-grows: boolean, };
+grows: boolean, 
+/**
+ * A custom part's description for screen readers, from its
+ * declaration's `description`. Worked out when the project loads, as
+ * `grows` is; it is never written back.
+ */
+description: string | null, };

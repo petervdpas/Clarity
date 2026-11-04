@@ -39,7 +39,7 @@ export type Layout = { parts: LaidPart[]; grids: LaidGrid[] };
 export type Shown = { window: string } | { app: string };
 
 /** Options of the page script for one canvas. */
-export type StartOptions = { files: string; server: string; resources: string; input: boolean; storage: string; choices: string; chosen: Chosen };
+export type StartOptions = { files: string; server: string; resources: string; input: boolean; access: boolean; storage: string; choices: string; chosen: Chosen };
 
 /** The person's choices the drawing starts with, over the kept ones: the IDE's language. */
 export type Chosen = { language?: string };
@@ -105,6 +105,8 @@ export function startOptions(base: string, shown: Shown, design: boolean, revisi
     resources: `${base}resources/`,
     // On the design canvas the drawn parts take no input: the designer's layer does.
     input: !design,
+    // Screen readers read the preview through the page's accessible mirror; the design canvas has none.
+    access: !design,
     // The preview keeps its choices apart from the IDE's own.
     storage: "clarity.preview.settings",
     choices: "clarity.preview.choices",

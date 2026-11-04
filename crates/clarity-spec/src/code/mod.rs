@@ -649,6 +649,9 @@ pub struct PartDecl {
     pub grows: bool,
     /// `preview "arena.png"`: its picture on the design canvas, from the resources.
     pub preview: Option<String>,
+    /// `description @arenaDescription`: what a screen reader says of it
+    /// besides its name (DESIGN 7.9, A1), a text people read.
+    pub description: Option<String>,
     pub span: Span,
 }
 

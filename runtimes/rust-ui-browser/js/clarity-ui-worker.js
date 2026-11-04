@@ -18,9 +18,12 @@
 //   file    {name, bytes}               sound-ended {id}
 //   step    {id, step}                  shot {id}
 //   reload  {id, files, choices}        layout {id}
+//   access  {on}                        act {node, action, value}
 // (reload starts the program again from new files on the same canvas, as the
 // IDE's designer does after a change; layout says where the design's parts
-// and grids show).
+// and grids show; access turns the page's accessible mirror on or off, and
+// while it is on the host tells the tree's changes as {tell: "access",
+// update}; act is a screen reader's action on a node of it, by its id as text).
 // Every request of the wire is {"command", "args", "browser", "settings"}:
 // `browser` names this tab, `settings` are the person's settings as the page
 // keeps them. An answer that carries "settings" changed them: the worker
@@ -245,6 +248,11 @@ function clarityUiWorker(scope) {
       post({ type: "reloaded", id: m.id, why });
     },
     layout: (m) => post({ type: "laid", id: m.id, layout: JSON.parse(taken(ui._clarity_ui_layout()) || "{}") }),
+    access: (m) => ui._clarity_ui_access(m.on ? 1 : 0),
+    act: (m) =>
+      withText(m.node, (node) =>
+        withText(m.action, (action) => (m.value == null ? ui._clarity_ui_act(node, action, 0) : withText(m.value, (value) => ui._clarity_ui_act(node, action, value)))),
+      ),
   };
 
   return (message) => {

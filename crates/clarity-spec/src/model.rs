@@ -748,6 +748,11 @@ pub struct WidgetProps {
     /// screen and the designer; it is never written back.
     #[serde(default)]
     pub grows: bool,
+    /// A custom part's description for screen readers, from its
+    /// declaration's `description`. Worked out when the project loads, as
+    /// `grows` is; it is never written back.
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 /// `on scored: arenaScored`: the handler a custom part's tell runs, given its values.

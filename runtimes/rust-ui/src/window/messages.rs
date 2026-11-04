@@ -213,7 +213,7 @@ impl Element for SaidDialog {
 }
 
 /// The dialog's OK: it has the focus, so Enter takes the dialog away.
-struct OkButton {
+pub(crate) struct OkButton {
     node: Node,
     dialog: crate::element::ElementId,
 }

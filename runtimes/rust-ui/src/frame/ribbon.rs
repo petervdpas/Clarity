@@ -135,6 +135,11 @@ impl FrameRibbon {
         FrameRibbon { node, core, buttons: Vec::new(), groups: Vec::new() }
     }
 
+    /// The host its titles are translated over.
+    pub fn host(&self) -> &Rc<dyn crate::parts::PartHost> {
+        self.core.frame.host()
+    }
+
     pub fn ribbon(&self) -> &RibbonSpec {
         self.core.ribbon()
     }

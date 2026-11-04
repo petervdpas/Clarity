@@ -117,6 +117,18 @@ mod entry {
         web::answered(id, (!answer.is_null()).then(|| text(answer)));
     }
 
+    /// The page keeps an accessible mirror (1) or not (0): while on, the page is told the tree's changes (`access`).
+    #[unsafe(no_mangle)]
+    pub extern "C" fn clarity_ui_access(on: i32) {
+        web::access(on != 0);
+    }
+
+    /// A screen reader's `action` on the mirror's `node` (its id as text), with `value` (NULL for none): 1 when done.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn clarity_ui_act(node: *const c_char, action: *const c_char, value: *const c_char) -> i32 {
+        web::act(text(node), text(action), (!value.is_null()).then(|| text(value))) as i32
+    }
+
     /// A frame: 1 when it drew.
     #[unsafe(no_mangle)]
     pub extern "C" fn clarity_ui_frame() -> i32 {

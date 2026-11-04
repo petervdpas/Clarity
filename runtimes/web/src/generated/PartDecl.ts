@@ -43,4 +43,9 @@ grows: boolean,
 /**
  * `preview "arena.png"`: its picture on the design canvas, from the resources.
  */
-preview: string | null, span: Span, };
+preview: string | null, 
+/**
+ * `description @arenaDescription`: what a screen reader says of it
+ * besides its name (DESIGN 7.9, A1), a text people read.
+ */
+description: string | null, span: Span, };

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { cellsOf, commandsOf, heldBy, layerOf, placeIn } from "./designLayer.ts";
-import { chosenOf, filesAddress } from "./clarityWindow.ts";
+import { chosenOf, filesAddress, startOptions } from "./clarityWindow.ts";
 import type { Page } from "@clarity/ui/generated/Page.ts";
 import type { Widget } from "@clarity/ui/generated/Widget.ts";
 import type { Frame } from "@clarity/ui/generated/Frame.ts";
@@ -135,4 +135,13 @@ test("the IDE's language is the drawing's choice", () => {
     filesAddress("http://x/s/", { window: "Main" }, true, 4, { pages: { 50: 1, 70: 0 }, draft: true, open: ["pick"] }),
     "http://x/s/files.json?window=Main&design=1&pages=50.1,70.0&draft=1&open=pick&revision=4",
   );
+});
+
+test("the preview takes input and has the accessible mirror; the design canvas neither", () => {
+  const preview = startOptions("http://x/s/", { window: "Main" }, false, 1);
+  assert.equal(preview.input, true);
+  assert.equal(preview.access, true);
+  const design = startOptions("http://x/s/", { window: "Main" }, true, 1);
+  assert.equal(design.input, false);
+  assert.equal(design.access, false);
 });

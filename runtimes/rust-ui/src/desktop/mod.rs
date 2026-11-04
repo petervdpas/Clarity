@@ -194,7 +194,8 @@ pub fn show(screen: Screen, mut options: ShowOptions) -> ExitCode {
     host.theme_following = None;
     for win in host.wins.iter_mut() {
         let _ = catch_unwind(AssertUnwindSafe(|| win.screen.dispose()));
-        // Skia's context goes before the window it draws in.
+        // The screen reader's adapter and Skia's context go before the window.
+        win.reader = None;
         win.shown = None;
     }
     match (ran, host.failure) {
@@ -253,12 +254,28 @@ fn untold_moves(event_loop: &EventLoop<Wake>) -> bool {
 /// What wakes the host from outside its loop: work off a screen's thread
 /// is done, or the system's light or dark changed (as following it tells
 /// where the window system does not, X11).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 enum Wake {
     Done,
     Dark(bool),
     /// Woken from another thread (`wake`): every window draws anew.
     Outside,
+    /// The system's screen reader asks for the tree, or for an action (DESIGN 7.9, A1).
+    Access(accesskit_winit::Event),
+}
+
+impl From<accesskit_winit::Event> for Wake {
+    fn from(event: accesskit_winit::Event) -> Wake {
+        Wake::Access(event)
+    }
+}
+
+/// A window's link to the system's screen reader: AccessKit's adapter,
+/// whether a screen reader reads it now, and the tree it was told last.
+struct Reader {
+    adapter: accesskit_winit::Adapter,
+    active: bool,
+    told: Option<crate::access::AccessTree>,
 }
 
 /// The loop that runs now, to wake from another thread; none while none runs.
@@ -428,6 +445,8 @@ struct Win {
     /// Its own number, by which the windows opened over it know it.
     key: u64,
     screen: Screen,
+    /// What the system's screen reader reads of it; none until it shows. It goes before the window.
+    reader: Option<Reader>,
     shown: Option<Shown>,
     title: String,
     size: (f64, f64),
@@ -562,6 +581,7 @@ impl Host {
             presses: PressCounter::new(),
             caret: None,
             sidebars: None,
+            reader: None,
         });
     }
 
@@ -600,7 +620,9 @@ impl Host {
                 .with_title(win.title.clone())
                 .with_inner_size(LogicalSize::new(win.size.0.max(120.0), win.size.1.max(80.0)))
                 .with_resizable(!win.modal)
-                .with_window_icon(self.icon.clone());
+                .with_window_icon(self.icon.clone())
+                // Shown once the screen reader's adapter is made, as AccessKit asks.
+                .with_visible(false);
             if let Some(over) = over {
                 if let Ok(at) = over.window.outer_position() {
                     let there = over.window.outer_size();
@@ -614,6 +636,9 @@ impl Host {
             match Shown::open(event_loop, attributes, self.config.as_ref(), first, software) {
                 Ok((shown, context)) => {
                     self.context = context;
+                    let adapter = accesskit_winit::Adapter::with_event_loop_proxy(event_loop, &shown.window, self.proxy.clone());
+                    shown.window.set_visible(true);
+                    self.wins[i].reader = Some(Reader { adapter, active: false, told: None });
                     if self.config.is_none() {
                         self.config = Some(shown.config.clone());
                         // Where the window system says nothing (X11), the system is asked as C# asks it, and followed by its change event or every 3 s.
@@ -905,8 +930,60 @@ impl Host {
         }
     }
 
+    /// The screen reader, while one reads the window, is told what changed in its tree.
+    fn tell_reader(&mut self, i: usize) {
+        let win = &mut self.wins[i];
+        let (Some(reader), Some(shown)) = (win.reader.as_mut(), win.shown.as_ref()) else { return };
+        if !reader.active {
+            return;
+        }
+        let now = crate::access::tree(&win.screen);
+        if reader.told.as_ref() == Some(&now) {
+            return;
+        }
+        let update = crate::access::kit::update(reader.told.as_ref(), &now, shown.per_unit());
+        reader.adapter.update_if_active(|| update);
+        reader.told = Some(now);
+    }
+
+    /// The screen reader asked for the whole tree, for an action (done as the person's input), or stopped.
+    fn on_reader(&mut self, event: accesskit_winit::Event) {
+        let Some(i) = self.wins.iter().position(|w| w.shown.as_ref().is_some_and(|s| s.window.id() == event.window_id)) else { return };
+        match event.window_event {
+            accesskit_winit::WindowEvent::InitialTreeRequested => {
+                if let Some(reader) = self.wins[i].reader.as_mut() {
+                    reader.active = true;
+                    reader.told = None;
+                }
+                self.tell_reader(i);
+            }
+            accesskit_winit::WindowEvent::ActionRequested(request) => {
+                if self.blocked(i) {
+                    return;
+                }
+                if let Some((node, action, value)) = crate::access::kit::request(&request) {
+                    crate::access::act::act(&mut self.wins[i].screen, node, action, value.as_deref());
+                }
+                if let Some(shown) = &self.wins[i].shown {
+                    shown.window.request_redraw();
+                }
+            }
+            accesskit_winit::WindowEvent::AccessibilityDeactivated => {
+                if let Some(reader) = self.wins[i].reader.as_mut() {
+                    reader.active = false;
+                    reader.told = None;
+                }
+            }
+        }
+    }
+
     /// What the system says of a window, and what the person did on it.
     fn on_window(&mut self, event_loop: &ActiveEventLoop, i: usize, event: WindowEvent) {
+        // The screen reader's adapter hears every event first (the window's focus and place).
+        let win = &mut self.wins[i];
+        if let (Some(reader), Some(shown)) = (win.reader.as_mut(), win.shown.as_ref()) {
+            reader.adapter.process_event(&shown.window, &event);
+        }
         // Where the pointer is, kept also while a dialog over the window takes its input.
         match &event {
             WindowEvent::CursorEntered { .. } => {
@@ -945,7 +1022,10 @@ impl Host {
             }
             WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => self.fit(i),
             WindowEvent::ThemeChanged(theme) => self.follow_theme(Some(theme)),
-            WindowEvent::RedrawRequested => self.draw(i),
+            WindowEvent::RedrawRequested => {
+                self.draw(i);
+                self.tell_reader(i);
+            }
             WindowEvent::ModifiersChanged(modifiers) => self.wins[i].held = modifiers_of(modifiers.state()),
             WindowEvent::Focused(false) => {
                 let win = &mut self.wins[i];
@@ -1043,6 +1123,13 @@ impl ApplicationHandler<Wake> for Host {
 
     /// Work off a screen's thread is done: what it gave goes to its element.
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: Wake) {
+        let event = match event {
+            Wake::Access(asked) => {
+                self.safely(|host| host.on_reader(asked));
+                return;
+            }
+            other => other,
+        };
         if let Wake::Dark(dark) = event {
             self.safely(|host| host.follow_theme(Some(if dark { Theme::Dark } else { Theme::Light })));
             for win in self.wins.iter() {

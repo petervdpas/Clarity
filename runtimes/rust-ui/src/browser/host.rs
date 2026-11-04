@@ -72,6 +72,8 @@ pub struct BrowserHost {
     cursor: Option<Cursor>,
     caret: Option<Option<Rect>>,
     ended: bool,
+    /// The page's accessible mirror (A1 phase 2): none while it is off, else the tree it was last told.
+    access: Option<Option<crate::access::AccessTree>>,
 }
 
 impl BrowserHost {
@@ -121,6 +123,7 @@ impl BrowserHost {
             cursor: None,
             caret: None,
             ended: false,
+            access: None,
         };
         host.tell_changes();
         host
@@ -174,8 +177,45 @@ impl BrowserHost {
         self.cursor = None;
         self.caret = None;
         self.ended = false;
+        // A new screen: the page's mirror starts again from its whole tree.
+        if self.access.is_some() {
+            self.access = Some(None);
+        }
         self.screen().take_later();
+        self.screen().invalidate();
         self.tell_changes();
+    }
+
+    /// The page keeps an accessible mirror of the screen (true) or not:
+    /// while on, each drawn frame tells it what changed in the
+    /// accessibility tree (`access`, see `access::mirror::update`), the
+    /// whole tree first.
+    pub fn set_access(&mut self, on: bool) {
+        self.access = on.then_some(None);
+        if on {
+            self.screen().invalidate();
+        }
+    }
+
+    /// What a screen reader asked of the mirror's node `node` (its id as
+    /// text): `action` by its word (`click`, `setValue`...), with `value`
+    /// for setValue. Done as the person's input (`access::act`); false when
+    /// there is no such node or it does not take that action now.
+    pub fn access_act(&mut self, node: &str, action: &str, value: Option<&str>) -> bool {
+        let (Ok(id), Some(action)) = (node.parse::<u64>(), crate::access::AccessAction::from_word(action)) else { return false };
+        let done = crate::access::act::act(self.screen(), id, action, value);
+        self.after();
+        done
+    }
+
+    /// Tells the page what changed in the tree since it was told last, when it keeps a mirror.
+    fn tell_access(&mut self) {
+        let Some(last) = self.access.as_ref() else { return };
+        let now = crate::access::tree(self.driven.screen());
+        if let Some(update) = crate::access::mirror::update(last.as_ref(), &now) {
+            (self.tell)(json!({ "tell": "access", "update": update }));
+        }
+        self.access = Some(Some(now));
     }
 
     /// Where the design's parts and grids show (the driven `layout` step), for the IDE's designer.
@@ -317,6 +357,8 @@ impl BrowserHost {
     /// Draws the screen on `canvas`, which is the canvas's whole size in device pixels.
     pub fn draw(&mut self, canvas: &skia_safe::Canvas) {
         self.screen().draw(canvas);
+        // Laid out as drawn: the mirror's places are those shown.
+        self.tell_access();
     }
 
     /// A step as a driven program takes it (DESIGN 1.6: `read`, `click`, `type`...): how a test looks at the page's screen.

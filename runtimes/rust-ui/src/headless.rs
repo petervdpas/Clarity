@@ -29,6 +29,13 @@
 //! - `dark`: the system shows dark when `dark` is true.
 //! - `file`: the next file or folder a picker asks for is `path`.
 //! - `read`: what shows (below).
+//! - `access`: the accessibility tree as screen readers get it (DESIGN 7.9,
+//!   A1), as `access`: `root`, `focus` and `nodes`, each with its `id`,
+//!   `role`, `name`, `value`, `description`, `states`, place `at`,
+//!   `actions` and `children`.
+//! - `act`: the action `action` (`click`, `focus`, `setValue` with `value`,
+//!   `increment`, `decrement`, `expand`, `collapse`, `scrollIntoView`) on
+//!   the node `node` of that tree, as a screen reader asks it.
 //! - `shot`: the screen as a PNG at `path`.
 //! - `quit`: the run ends.
 //!
@@ -264,6 +271,19 @@ impl Driven {
             }
             "read" => answer = self.read(),
             "layout" => answer = self.layout(),
+            "access" => {
+                answer.insert("access".into(), crate::access::tree(&self.screen).json());
+            }
+            "act" => {
+                // A number, or its text (a JavaScript number does not hold a row's id).
+                let node = step.get("node").and_then(|n| n.as_u64().or_else(|| n.as_str().and_then(|t| t.parse().ok()))).ok_or("the step has no node")?;
+                let word = step.get("action").and_then(Value::as_str).unwrap_or("click");
+                let action = crate::access::AccessAction::from_word(word).ok_or_else(|| format!("no action {word}"))?;
+                if !crate::access::act::act(&mut self.screen, node, action, step.get("value").and_then(Value::as_str)) {
+                    return Err(format!("node {node} does not {word} now"));
+                }
+                self.settle(Duration::ZERO);
+            }
             "shot" => {
                 let path = step.get("path").and_then(Value::as_str).ok_or("the step has no path")?;
                 let png = self.png().ok_or("the screen could not be drawn")?;

@@ -873,6 +873,7 @@ pub(crate) fn parse_part(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pars
         size: None,
         grows: false,
         preview: None,
+        description: None,
         span: node.span(),
     };
     for child in &node.children {
@@ -944,12 +945,20 @@ pub(crate) fn parse_part(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pars
                     line.next();
                     part.grows = true;
                 }
+                // `description @arenaDescription`: what a screen reader says of it; `description: text` is a property.
+                "description" if matches!(line.peek_at(1).map(|t| t.kind), Some(TokenKind::Str | TokenKind::Key)) => {
+                    if part.description.is_some() {
+                        return Err(line.error_here("'description' is written twice"));
+                    }
+                    line.next();
+                    part.description = Some(line.expect_text("what a screen reader says of it, as in description @arenaDescription")?);
+                }
                 "preview" => {
                     line.next();
                     part.preview = Some(line.expect_string("a picture of the resources, as in preview \"arena.png\"")?);
                 }
                 _ => {
-                    let name = line.expect_ident("a property, as in speed: integer, or native, crate, go, nuget, dll, binds, tells, hears, size, grows or preview")?;
+                    let name = line.expect_ident("a property, as in speed: integer, or native, crate, go, nuget, dll, binds, tells, hears, size, grows, preview or description")?;
                     line.expect(TokenKind::Colon, "':' and a type, as in speed: integer")?;
                     let ty = parse_type_ref(&mut line)?;
                     let mut property = PartProperty { name, ty, default: None, min: None, max: None, span: child.span() };

@@ -1311,6 +1311,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         values: Default::default(),
         tells: Vec::new(),
         grows: false,
+        description: None,
     }
 }
 

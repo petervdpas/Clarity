@@ -362,3 +362,21 @@ fn the_ide_sets_whether_a_part_grows() {
     assert_eq!(apply(&on, &Edit::SetPartGrows { item, grows: false }).unwrap().text, GAME);
     assert_eq!(apply(GAME, &Edit::SetPartGrows { item, grows: false }).unwrap().text, GAME);
 }
+
+/// `description @key` is what a screen reader says of the part besides its
+/// name (DESIGN 7.9, A1); `description: text` stays a property, and each
+/// placed part takes the declaration's description.
+#[test]
+fn a_part_declares_its_description_for_screen_readers() {
+    let source = "module m\n\npart Dial\n    crate \"parts/Dial\"\n    description @dialAbout\n    description: text\n\npage Main: window\n    Dial name dial at 1,1 span 6 rows 2\n";
+    let (file, diagnostics) = parse(source, "m.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let part = &file.parts[0];
+    assert_eq!(part.description.as_deref(), Some("@dialAbout"));
+    assert_eq!(part.properties.iter().map(|p| p.name.name.as_str()).collect::<Vec<_>>(), ["description"]);
+    let twice = "module m\n\npart Dial\n    crate \"parts/Dial\"\n    description @a\n    description @b\n";
+    assert!(parse(twice, "m.clarity").1.iter().any(|d| d.message.contains("'description' is written twice")));
+    let project = load_keyed([("m.clarity", source)], &[], "en");
+    let placed = project.files.iter().flat_map(|f| &f.pages).flat_map(|p| &p.widgets).find(|w| w.props.kind == WidgetKind::Custom).unwrap();
+    assert_eq!(placed.props.description.as_deref(), Some("@dialAbout"));
+}

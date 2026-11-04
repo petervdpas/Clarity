@@ -97,6 +97,11 @@ impl FrameButton {
         &self.item
     }
 
+    /// What it says, translated as drawn; empty for an icon alone.
+    pub fn caption(&self) -> String {
+        self.frame.host().text(self.item.text("caption"))
+    }
+
     /// What a menu it opens belongs to: its region and its place there.
     pub fn owner(&self) -> MenuOwner {
         self.owner

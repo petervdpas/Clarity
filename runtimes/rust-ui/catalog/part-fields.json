@@ -11,6 +11,7 @@
   "col": "number",
   "columns": "texts",
   "default": "bool",
+  "description": "text",
   "digits": "number",
   "dotColor": "text",
   "dotSize": "number",

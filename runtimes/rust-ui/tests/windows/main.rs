@@ -12,6 +12,7 @@ mod core_windows_fake;
 #[path = "../common/dialogs_fake.rs"]
 mod dialogs_fake;
 
+mod access;
 mod core_choices;
 mod core_dialogs;
 mod core_frame;

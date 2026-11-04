@@ -1639,6 +1639,7 @@ fn parse_widget_props(
         values: Default::default(),
         tells: Vec::new(),
         grows: false,
+        description: None,
     };
     // A chart's first word is its kind; an icon part's the icon it shows, no text people read.
     if kind == WidgetKind::Chart {

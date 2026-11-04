@@ -98,7 +98,8 @@ fn a_clarity_engine_beside_the_screen_is_carried_compiled() {
     };
     for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
         let files = generated(backend, clarity_project::usual_ui(backend));
-        let carried = files.iter().any(|f| f.text.contains("\"screenEngines\":[{\"name\":\"Sky\"") || f.text.contains("\\\"screenEngines\\\":[{\\\"name\\\":\\\"Sky\\\""));
+        // C carries the model in pieces of text, which may part anywhere: read them joined.
+        let carried = files.iter().map(|f| f.text.replace("\",\n    \"", "")).any(|t| t.contains("\"screenEngines\":[{\"name\":\"Sky\"") || t.contains("\\\"screenEngines\\\":[{\\\"name\\\":\\\"Sky\\\""));
         assert!(carried, "{backend:?} carries the compiled engine in its model");
     }
     let files = generated(Backend::Csharp, Ui::Clarity);

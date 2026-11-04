@@ -1,16 +1,37 @@
 //! How a window's grid places its parts, as every version of Clarity.UI does
-//! (conformance/grid-layout.json): the columns share the width; a row is 36
-//! high, and the rows of a part that grows share the height left over, never
-//! less than 36; a part that does not grow keeps its own height at the top
-//! of its place. A part that holds a grid of its own (a splitter, tabs, a
+//! (conformance/grid-layout.json): the columns share the width; a row is as
+//! high as the project says (`row height`, 36 without it), and the rows of a
+//! part that grows share the height left over, never less than a row; a part
+//! that does not grow keeps its own height at the top of its place. A part that holds a grid of its own (a splitter, tabs, a
 //! panel) adds room around it (`around`): its rows are made high enough for both.
 
+use std::cell::Cell;
 use std::collections::BTreeSet;
 
 use crate::geometry::Rect;
 
-/// The height of a row.
+/// The height of a row when the project says none (`row height`).
 pub const ROW_HEIGHT: f64 = 36.0;
+
+/// The least and most a project's row height may be.
+pub const ROW_HEIGHTS: (f64, f64) = (24.0, 64.0);
+
+thread_local! {
+    static ROW: Cell<f64> = const { Cell::new(ROW_HEIGHT) };
+}
+
+/// How high a row is in the windows shown now: the project's `row height`,
+/// which every window's markup carries (`rowHeight`), else `ROW_HEIGHT`.
+pub fn row_height() -> f64 {
+    ROW.with(Cell::get)
+}
+
+/// The row height the windows are laid out by, kept within `ROW_HEIGHTS`;
+/// a window sets it from its markup as it is made.
+pub fn set_row_height(height: f64) {
+    let height = if height.is_finite() { height.clamp(ROW_HEIGHTS.0, ROW_HEIGHTS.1) } else { ROW_HEIGHT };
+    ROW.with(|r| r.set(height));
+}
 
 /// The gap between columns and rows.
 pub const GAP: f64 = 8.0;
@@ -42,8 +63,13 @@ pub struct GridPlacement {
     pub rows: Vec<f64>,
 }
 
-/// Places `items` in a grid of `columns` over `width` and `height`.
+/// Places `items` in a grid of `columns` over `width` and `height`, its rows as high as `row_height()`.
 pub fn place(items: &[GridItem], columns: i64, width: f64, height: f64, gap: f64) -> GridPlacement {
+    place_rows(items, columns, width, height, gap, row_height())
+}
+
+/// `place` with rows `row_size` high.
+pub fn place_rows(items: &[GridItem], columns: i64, width: f64, height: f64, gap: f64, row_size: f64) -> GridPlacement {
     let columns = columns.max(1);
     let rows = if items.is_empty() { 1 } else { items.iter().map(|i| i.row + i.height.max(1) - 1).max().unwrap_or(1).max(1) } as usize;
     let mut growing = BTreeSet::new();
@@ -57,12 +83,12 @@ pub fn place(items: &[GridItem], columns: i64, width: f64, height: f64, gap: f64
         let high = item.height.max(1).clamp(1, (rows - row) as i64) as usize;
         (row, high)
     };
-    // The least height of each row: 36, more where a part needs room around its rows.
-    let mut least = vec![ROW_HEIGHT; rows];
+    // The least height of each row: a row, more where a part needs room around its rows.
+    let mut least = vec![row_size; rows];
     for item in items.iter().filter(|i| i.around > 0.0) {
         let (row, high) = span(item);
         let have: f64 = least[row..row + high].iter().sum::<f64>() + (high as f64 - 1.0) * gap;
-        let missing = high as f64 * ROW_HEIGHT + (high as f64 - 1.0) * gap + item.around - have;
+        let missing = high as f64 * row_size + (high as f64 - 1.0) * gap + item.around - have;
         if missing > 0.0 {
             least[row + high - 1] += missing;
         }
@@ -101,7 +127,7 @@ pub fn place(items: &[GridItem], columns: i64, width: f64, height: f64, gap: f64
             let h = if item.grows {
                 heights[row..row + high].iter().sum::<f64>() + gap * (high as f64 - 1.0)
             } else {
-                high as f64 * ROW_HEIGHT + (high as f64 - 1.0) * gap + item.around
+                high as f64 * row_size + (high as f64 - 1.0) * gap + item.around
             };
             Rect::new(x, tops[row], w, h)
         })

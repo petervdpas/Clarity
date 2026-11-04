@@ -5,7 +5,7 @@
 import type { Edit } from "../generated/Edit.ts";
 import type { Widget } from "../generated/Widget.ts";
 
-/** Height of one grid row and the gap between cells, in pixels. */
+/** Height of one grid row where the project says no `row height`, and the gap between cells, in pixels. */
 export const ROW_HEIGHT = 36;
 export const GAP = 8;
 /** The size a window opens at on every stack, which the designer shows, and the space around its grid. */
@@ -44,7 +44,8 @@ export const POPOVER_COLUMN = 80;
 /**
  * The row of `grid` at `offset` pixels from its top, as the screen shows
  * it: rows that grow are taller than the others, and the window may be
- * scaled to fit. Below the last row, rows of the usual height follow.
+ * scaled to fit. Below the last row, rows of the project's height follow,
+ * as the grid says (`data-row-height`), else ROW_HEIGHT.
  */
 export function rowAt(grid: HTMLElement, offset: number, shownHeight: number): number {
   const scale = grid.offsetHeight > 0 ? shownHeight / grid.offsetHeight : 1;
@@ -52,18 +53,18 @@ export function rowAt(grid: HTMLElement, offset: number, shownHeight: number): n
     .gridTemplateRows.split(" ")
     .map((t) => parseFloat(t))
     .filter((t) => !Number.isNaN(t));
-  return rowIn(tracks, offset / scale);
+  return rowIn(tracks, offset / scale, Number(grid.dataset.rowHeight) || ROW_HEIGHT);
 }
 
-/** The row at `offset` among rows of the heights `tracks`, with GAP between them. */
-export function rowIn(tracks: number[], offset: number): number {
+/** The row at `offset` among rows of the heights `tracks`, with GAP between them; past them, rows are `row` high. */
+export function rowIn(tracks: number[], offset: number, row = ROW_HEIGHT): number {
   let top = 0;
   for (let i = 0; i < tracks.length; i++) {
     const bottom = top + tracks[i] + GAP;
     if (offset < bottom) return i + 1;
     top = bottom;
   }
-  return tracks.length + Math.max(0, Math.floor((offset - top) / (ROW_HEIGHT + GAP))) + 1;
+  return tracks.length + Math.max(0, Math.floor((offset - top) / (row + GAP))) + 1;
 }
 
 /**

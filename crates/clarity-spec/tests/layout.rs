@@ -7,6 +7,7 @@ use clarity_spec::layout::{BUTTON_SIDES, CONTENT_PADDING, GAP, INPUT_SIDES, MESS
 const GRID_TS: &str = include_str!("../../../runtimes/web/src/screen/grid.ts");
 /// The running window of every generated program: Clarity.UI (DESIGN 7.9).
 const MESSAGES_RS: &str = include_str!("../../../runtimes/rust-ui/src/window/messages.rs");
+const GRID_RS: &str = include_str!("../../../runtimes/rust-ui/src/grid.rs");
 const VIEW_RS: &str = include_str!("../../../runtimes/rust-ui/src/window/view.rs");
 const SIDEBARS_TS: &str = include_str!("../../../runtimes/web/src/frame/sidebars.ts");
 const RENDER_CSS: &str = include_str!("../../../runtimes/web/src/screen/render.css");
@@ -30,6 +31,10 @@ fn constant(source: &str, name: &str) -> u32 {
 #[test]
 fn the_web_renderer_uses_the_shared_values() {
     assert_eq!(constant(GRID_TS, "ROW_HEIGHT"), ROW_HEIGHT);
+    // Clarity.UI's rows, and the row heights a project may say.
+    let (least, most) = clarity_spec::layout::ROW_HEIGHTS;
+    assert!(GRID_RS.contains(&format!("pub const ROW_HEIGHT: f64 = {ROW_HEIGHT}.0;")), "Clarity.UI's standard row");
+    assert!(GRID_RS.contains(&format!("pub const ROW_HEIGHTS: (f64, f64) = ({least}.0, {most}.0);")), "Clarity.UI's row heights");
     assert_eq!(constant(GRID_TS, "GAP"), GAP);
     assert_eq!(constant(GRID_TS, "WINDOW_WIDTH"), WINDOW_WIDTH);
     assert_eq!(constant(GRID_TS, "WINDOW_HEIGHT"), WINDOW_HEIGHT);

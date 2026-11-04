@@ -17,6 +17,20 @@ fn has(source: &str, text: &str, kind: PieceKind) {
     assert!(found.iter().any(|(t, k)| t == text && *k == kind), "no {text:?} as {kind:?} in {found:#?}");
 }
 
+/// `row height 30` at the start of a project file's line is the setting;
+/// `row` anywhere else is a name code gives (`for row in rows`).
+#[test]
+fn row_height_is_a_setting_and_row_alone_a_name() {
+    let project = "project Shop\n    stack go desktop\n    row height 30\n";
+    has(project, "row", PieceKind::Keyword);
+    has(project, "height", PieceKind::Keyword);
+    let code = "module m\n\nfunction total(rows: list<integer>) -> integer\n    let sum = 0\n    for row in rows\n        sum = sum + row\n    let height = 3\n    return sum\n";
+    assert!(!pieces(code).iter().any(|(t, k)| (t == "row" || t == "height") && *k == PieceKind::Keyword), "{:#?}", pieces(code));
+    assert!(!clarity_spec::highlight::keywords().iter().any(|w| w == "row" || w == "height"));
+    let grammar = clarity_spec::highlight::textmate_grammar();
+    assert_eq!(grammar["repository"]["setting"]["match"], "^\\s*(row)\\s+(height)\\b");
+}
+
 #[test]
 fn declarations_and_their_names() {
     let source = "module game\n\nengine Board\n    keep squares: list<integer> = [0, 0]\n";

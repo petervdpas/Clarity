@@ -3,6 +3,7 @@
 ## 0.1.28
 
 - Colors the words it lacked: `port` (the project's web port), `editable`, `grows` and `keys`.
+- Colors `row height` at the start of a project file's line, the setting for how high a row of the windows' grid is; `row` elsewhere stays a name.
 
 ## 0.1.27
 

@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use crate::element::{Cx, Element, GridPanel, Node};
 use crate::geometry::Rect;
-use crate::grid::{GridItem, ROW_HEIGHT};
+use crate::grid::{row_height, GridItem};
 use crate::input::Modifiers;
 use crate::painter::{Painter, TextAlign};
 use crate::parts;
@@ -13,8 +13,12 @@ use crate::parts;
 use super::spec::FooterSpec;
 use super::{plate, WindowFrame};
 
-/// How high a footer is with parts, and with its status alone.
-pub const PARTS_HEIGHT: f64 = ROW_HEIGHT + 8.0;
+/// How high a footer is with parts: a row of the project's height, and room around it.
+pub fn parts_height() -> f64 {
+    row_height() + 8.0
+}
+
+/// How high a footer is with its status alone.
 pub const STATUS_HEIGHT: f64 = 28.0;
 
 pub struct FrameFooter {
@@ -53,7 +57,7 @@ impl FrameFooter {
     }
 
     pub fn wanted(&self) -> f64 {
-        if self.footer().parts.is_empty() { STATUS_HEIGHT } else { PARTS_HEIGHT }
+        if self.footer().parts.is_empty() { STATUS_HEIGHT } else { parts_height() }
     }
 
     /// Where the status text is.
@@ -70,7 +74,8 @@ impl Element for FrameFooter {
         let width = self.status().map(|s| cx.fonts().measure(&s, "text", cx.look().size("small"), false) + 16.0).unwrap_or(0.0);
         self.status_box = Rect::new(area.x + 4.0, area.y, width, area.height);
         let x = self.status_box.right() + if width > 0.0 { 6.0 } else { 4.0 };
-        self.node.children_mut()[0].arrange(Rect::new(x, area.y + (area.height - ROW_HEIGHT) / 2.0, (area.right() - 8.0 - x).max(0.0), ROW_HEIGHT), cx);
+        let row = row_height();
+        self.node.children_mut()[0].arrange(Rect::new(x, area.y + (area.height - row) / 2.0, (area.right() - 8.0 - x).max(0.0), row), cx);
     }
 
     fn on_wheel(&mut self, _dx: f64, _dy: f64, _held: Modifiers, _cx: &mut Cx) -> bool {

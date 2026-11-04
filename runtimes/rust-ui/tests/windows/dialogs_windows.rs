@@ -176,6 +176,19 @@ fn it_says_its_text_and_ok_without_a_heading() {
     assert_eq!(20.0 + 20.0 + 20.0 + ROW_HEIGHT + 20.0, said.panel().height);
 }
 
+/// Its OK button is a row of the project's height, as the window's buttons are.
+#[test]
+fn its_ok_is_as_high_as_the_project_s_rows() {
+    clarity_ui::grid::set_row_height(30.0);
+    let dialog = SaidDialog::new(Message { level: Level::Error, text: Text::plain("The game is over") });
+    let mut screen = Screen::new(Box::new(dialog), ThemeLook::clarity(false));
+    screen.resize(800.0, 400.0, 1.0);
+    clarity_ui::testing::Shot::of(&mut screen, 800, 400, 1.0);
+    let said = screen.root().as_any().downcast_ref::<SaidDialog>().unwrap();
+    assert_eq!(20.0 + 20.0 + 20.0 + 30.0 + 20.0, said.panel().height);
+    clarity_ui::grid::set_row_height(ROW_HEIGHT);
+}
+
 #[test]
 fn a_note_s_x_says_dismiss_and_shows_a_hand() {
     let (mut screen, _) = started();

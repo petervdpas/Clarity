@@ -30,7 +30,7 @@ use serde_json::{Map, Value};
 
 use crate::element::{Cx, Element, ElementId, Node};
 use crate::geometry::Rect;
-use crate::grid::ROW_HEIGHT;
+use crate::grid::row_height;
 use crate::input::{Key, KeyInput, Modifiers, PointerInput};
 use crate::locale;
 use crate::markup::PartSpec;
@@ -214,7 +214,7 @@ impl Core {
     fn lay_out(&mut self, cx: &mut Cx) {
         let area = self.area;
         let size = cx.look().size("text");
-        let line = CHIP_HEIGHT.max(area.height.min(ROW_HEIGHT));
+        let line = CHIP_HEIGHT.max(area.height.min(row_height()));
         let chip_top = (line - CHIP_HEIGHT) / 2.0;
         let (mut x, mut y) = (area.x, area.y);
         for chip in self.chips.iter_mut() {

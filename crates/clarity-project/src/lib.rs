@@ -200,6 +200,15 @@ pub struct Settings {
     /// none for DEFAULT_PORT.
     #[serde(default)]
     pub port: Option<u16>,
+    /// How high a row of the windows' grid is, in pixels: `row height 30`;
+    /// none for `clarity_spec::layout::ROW_HEIGHT`.
+    #[serde(default)]
+    pub row_height: Option<u32>,
+}
+
+/// How high a row of the windows' grid of `settings` is, in pixels.
+pub fn row_height(settings: &Settings) -> u32 {
+    settings.row_height.unwrap_or(clarity_spec::layout::ROW_HEIGHT)
 }
 
 /// The port a web application listens on when the project names none.
@@ -343,6 +352,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
         keys_editable: false,
         engines_interpreted: false,
         port: None,
+        row_height: None,
     }
 }
 
@@ -454,6 +464,9 @@ pub fn validate(settings: &Settings) -> Vec<String> {
     problems.extend(settings.keeps.iter().filter_map(|folder| file::kept_problem(folder)));
     problems.extend(settings.language.as_deref().and_then(language_problem));
     problems.extend(settings.currency.as_deref().and_then(currency_problem));
+    if settings.row_height.is_some_and(|h| !clarity_spec::layout::row_height_fits(h)) {
+        problems.push(clarity_spec::layout::row_height_problem());
+    }
     let stack = &settings.stack;
     let backend = backend_info(stack.backend);
     if !backend.uis.contains(&stack.ui) {
@@ -800,6 +813,7 @@ fn hand_over(dir: &Path, project: &mut clarity_spec::Project) {
     }
     if let Some(settings) = settings {
         project.keys_editable = settings.keys_editable;
+        project.row_height = row_height(&settings);
         project.locale = clarity_spec::model::Locale {
             language: settings.language,
             currency: settings.currency,

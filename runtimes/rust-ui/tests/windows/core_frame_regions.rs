@@ -352,7 +352,7 @@ fn its_parts_sit_on_one_row_beside_the_status() {
     );
     draw(&mut screen).save(shot_path("core-frame-footer")).unwrap();
     let footer = view(&screen).footer().unwrap();
-    assert_eq!(footer.node().bounds.height, frame::footer::PARTS_HEIGHT);
+    assert_eq!(footer.node().bounds.height, frame::footer::parts_height());
     let status = footer.status_box();
     let label = screen.element(clarity_ui::testing::part_named(&screen, "count")).unwrap().node().bounds;
     let sync = screen.element(clarity_ui::testing::part_named(&screen, "sync")).unwrap().node().bounds;

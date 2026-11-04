@@ -13,7 +13,7 @@ use std::rc::Rc;
 use crate::element::{self, Cx, Element, ElementId, GridPanel, Node};
 use crate::frame::{self, Access, FrameFooter, FrameMenuBar, FrameRibbon, FrameSidebar, FrameSpec, FrameToolbar, Showing, ShownFrame, WindowFrame};
 use crate::geometry::Rect;
-use crate::grid::ROW_HEIGHT;
+use crate::grid::row_height;
 use crate::input::{Key, KeyInput, Modifiers, PointerInput};
 use crate::markup::{CommandSpec, WindowSpec};
 use crate::painter::{Painter, TextAlign};
@@ -59,6 +59,8 @@ impl WindowView {
     /// The window of `spec` over `host`: each of its parts made by its kind,
     /// at its place in the grid, in the frame of its own regions.
     pub fn new(spec: &WindowSpec, host: Rc<dyn PartHost>) -> WindowView {
+        // Its rows, and what follows them, are as high as its project says.
+        crate::grid::set_row_height(spec.row_height);
         let mut grid = GridPanel::new(spec.columns).owned(spec.item.as_deref());
         for part in &spec.parts {
             let made = parts::make(part.clone(), host.clone());
@@ -130,7 +132,7 @@ impl WindowView {
 
     /// A window whose markup could not be read: it says why in its place.
     pub fn failed(problem: String, host: Rc<dyn PartHost>) -> WindowView {
-        let spec = WindowSpec { frame: Vec::new(), parts: Vec::new(), name: None, columns: crate::markup::STANDARD_COLUMNS, item: None };
+        let spec = WindowSpec { frame: Vec::new(), parts: Vec::new(), name: None, columns: crate::markup::STANDARD_COLUMNS, item: None, row_height: crate::grid::row_height() };
         WindowView { problem: Some(problem), ..WindowView::new(&spec, host) }
     }
 
@@ -313,7 +315,8 @@ impl WindowView {
 
     /// One page down (1) or up (-1): the height shown, less a row, as PageDown does.
     pub fn page(&mut self, by: f64, cx: &mut Cx) -> bool {
-        let step = ROW_HEIGHT.max(self.inside().height - ROW_HEIGHT);
+        let row = row_height();
+        let step = row.max(self.inside().height - row);
         self.scroll_to(self.scroll_y + by * step, cx)
     }
 
@@ -526,7 +529,7 @@ impl Element for WindowView {
             p.fill(bar, p.look.color(if wide { "muted" } else { "strong_border" }), bar.width / 2.0);
         }
         if let Some(problem) = &self.problem {
-            p.text(problem, Rect::new(inside.x, inside.y, inside.width, ROW_HEIGHT), p.look.color("error"), p.look.size("text"), "text", false, TextAlign::Left);
+            p.text(problem, Rect::new(inside.x, inside.y, inside.width, row_height()), p.look.color("error"), p.look.size("text"), "text", false, TextAlign::Left);
         }
         for region in self.regions() {
             if region.is_shown() {

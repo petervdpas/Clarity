@@ -83,6 +83,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         diagrams: Vec::new(),
         resource_keys: Default::default(),
         keys_editable: false,
+        row_height: layout::ROW_HEIGHT,
         engines: None,
         part_files: None,
         stores: None,

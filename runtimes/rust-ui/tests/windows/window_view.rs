@@ -79,6 +79,28 @@ fn its_parts_are_in_a_grid_of_twelve_inside_the_content_padding() {
     assert_eq!(parts[2].node().bounds.y, 12.0 + ROW_HEIGHT + GAP);
 }
 
+/// The project's row height (`row height 30`) is on the window's root: its
+/// rows, and the table rows and dialogs that follow them, are that high; a
+/// window without it has rows of 36 again.
+#[test]
+fn a_window_s_rows_are_as_high_as_its_project_says() {
+    assert_eq!(markup::read(r#"<Window name="A" />"#).unwrap().row_height, ROW_HEIGHT);
+    assert_eq!(markup::read(r#"<Window name="A" rowHeight="30" />"#).unwrap().row_height, 30.0);
+    // Past the ends a row is as high as it may be.
+    assert_eq!(markup::read(r#"<Window name="A" rowHeight="8" />"#).unwrap().row_height, 24.0);
+    assert_eq!(markup::read(r#"<Window name="A" rowHeight="400" />"#).unwrap().row_height, 64.0);
+    assert_eq!(markup::read(r#"<Window name="A" rowHeight="tall" />"#).unwrap().row_height, ROW_HEIGHT);
+    let thirty = ORDERS.replace(r#"<Window name="Orders">"#, r#"<Window name="Orders" rowHeight="30">"#);
+    let (screen, _) = shown(&thirty, 800.0, 400.0);
+    let parts = view(&screen).parts();
+    assert_eq!(parts[0].node().bounds.height, 30.0);
+    assert_eq!(parts[2].node().bounds.y, 12.0 + 30.0 + GAP);
+    assert_eq!(clarity_ui::grid::row_height(), 30.0);
+    let (screen, _) = shown(ORDERS, 800.0, 400.0);
+    assert_eq!(view(&screen).parts()[0].node().bounds.height, ROW_HEIGHT);
+    assert_eq!(clarity_ui::grid::row_height(), ROW_HEIGHT);
+}
+
 #[test]
 fn a_window_that_names_its_columns_has_a_grid_of_them() {
     assert_eq!(markup::read(r#"<Window name="A" />"#).unwrap().columns, 12);

@@ -80,7 +80,7 @@ pub fn window_files(project: &Project) -> Vec<OutFile> {
         .iter()
         .flat_map(|f| &f.pages)
         .filter(|p| p.kind != PageKind::View)
-        .map(|page| OutFile { path: format!("{WINDOWS_FOLDER}/{}.cxaml", page.name.name), text: window_markup(page), bytes: None })
+        .map(|page| OutFile { path: format!("{WINDOWS_FOLDER}/{}.cxaml", page.name.name), text: window_markup_rows(page, project.row_height), bytes: None })
         .collect()
 }
 
@@ -200,7 +200,20 @@ fn footer_element(footer: &Footer, depth: usize, out: &mut String) {
 /// markup (Clarity.UI) runs them from here, and its grid leaves them out. A grid of other than twelve columns
 /// says so on the root: `<Window name="Main" columns="6">`.
 pub fn window_markup(page: &Page) -> String {
+    window_markup_rows(page, clarity_spec::layout::ROW_HEIGHT)
+}
+
+/// The project's row height on a window's root, where it is not the
+/// standard one: ` rowHeight="30"`.
+pub fn row_height_attribute(row_height: u32) -> String {
+    if row_height == clarity_spec::layout::ROW_HEIGHT { String::new() } else { attribute("rowHeight", &Value::from(row_height)) }
+}
+
+/// `window_markup` of a project whose rows are `row_height` high, which
+/// the root says when it is not the standard: `<Window name="Main" rowHeight="30">`.
+pub fn window_markup_rows(page: &Page, row_height: u32) -> String {
     let columns = if page.columns == clarity_spec::model::DEFAULT_PAGE_COLUMNS { String::new() } else { attribute("columns", &Value::from(page.columns)) };
+    let columns = columns + &row_height_attribute(row_height);
     let mut body = String::new();
     frame_elements(&page.frame, 1, &mut body);
     for widget in &page.widgets {

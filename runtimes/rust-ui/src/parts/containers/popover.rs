@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use crate::element::{draw_children, Cx, Element, ElementId, Node};
 use crate::geometry::Rect;
-use crate::grid::{GAP, ROW_HEIGHT};
+use crate::grid::{row_height, GAP};
 use crate::markup::PartSpec;
 use crate::overlay::Overlay;
 use crate::painter::Painter;
@@ -53,7 +53,7 @@ impl PopoverPart {
         let columns = container::columns_of(&self.base.spec) as f64;
         let rows = self.base.spec.number("height").unwrap_or(1.0).max(1.0).floor();
         let around = 2.0 * (2.0 * look.padding() + look.border());
-        (Self::COLUMN * columns + GAP * (columns - 1.0) + around, ROW_HEIGHT * rows + GAP * (rows - 1.0) + around)
+        (Self::COLUMN * columns + GAP * (columns - 1.0) + around, row_height() * rows + GAP * (rows - 1.0) + around)
     }
 
     /// Where it lies on the screen `whole`: under the part it is for (`near`),

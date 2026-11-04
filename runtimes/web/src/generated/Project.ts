@@ -31,6 +31,11 @@ resource_keys: { [key in string]: { [key in string]: string } },
  */
 keysEditable: boolean, 
 /**
+ * How high a row of the windows' grid is, in pixels, as the project
+ * file says (`row height 30`); `layout::ROW_HEIGHT` without the line.
+ */
+rowHeight: number, 
+/**
  * The themes the application offers, the first being the one it starts
  * with; empty when the project file names none (design section 1.5, T1).
  */

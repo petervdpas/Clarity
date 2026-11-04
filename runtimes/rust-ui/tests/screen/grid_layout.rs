@@ -1,14 +1,16 @@
 //! The grid against the cases every version of Clarity.UI shares
 //! (conformance/grid-layout.json), and the room a part needs around its rows.
 
-use clarity_ui::grid::{place, GridItem, ROW_HEIGHT};
+use clarity_ui::grid::{place, place_rows, GridItem, ROW_HEIGHT};
 use serde_json::Value;
 
 #[test]
 fn a_grid_places_its_parts_as_every_version_does() {
     let file: Value = serde_json::from_str(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../conformance/grid-layout.json")).unwrap()).unwrap();
     assert_eq!(ROW_HEIGHT, file["row_height"].as_f64().unwrap());
-    for case in file["cases"].as_array().unwrap() {
+    let cases = file["cases"].as_array().unwrap();
+    assert!(cases.iter().any(|c| c["row_height"].as_f64().is_some_and(|r| r != ROW_HEIGHT)), "cases at another row height");
+    for case in cases {
         let what = case["what"].as_str().unwrap();
         let parts: Vec<GridItem> = case["parts"]
             .as_array()
@@ -16,7 +18,12 @@ fn a_grid_places_its_parts_as_every_version_does() {
             .iter()
             .map(|p| GridItem::new(p["col"].as_i64().unwrap(), p["row"].as_i64().unwrap(), p["width"].as_i64().unwrap(), p["height"].as_i64().unwrap(), p["grows"].as_bool().unwrap()))
             .collect();
-        let placed = place(&parts, case["columns"].as_i64().unwrap(), case["width"].as_f64().unwrap(), case["height"].as_f64().unwrap(), case["gap"].as_f64().unwrap());
+        let row = case["row_height"].as_f64().unwrap_or(ROW_HEIGHT);
+        let placed = place_rows(&parts, case["columns"].as_i64().unwrap(), case["width"].as_f64().unwrap(), case["height"].as_f64().unwrap(), case["gap"].as_f64().unwrap(), row);
+        // The same as the windows lay out once the project's row height is set.
+        clarity_ui::grid::set_row_height(row);
+        assert_eq!(placed, place(&parts, case["columns"].as_i64().unwrap(), case["width"].as_f64().unwrap(), case["height"].as_f64().unwrap(), case["gap"].as_f64().unwrap()), "{what}");
+        clarity_ui::grid::set_row_height(ROW_HEIGHT);
         let gives = &case["gives"];
         assert!((gives["content"].as_f64().unwrap() - placed.content).abs() < 0.001, "{what}: content {}", placed.content);
         let boxes = gives["boxes"].as_array().unwrap();

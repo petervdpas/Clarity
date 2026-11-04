@@ -631,8 +631,9 @@ impl TablePart {
 
     // -- Layout -------------------------------------------------------------------
 
+    /// A row fits its text, and is never higher than a row of the window's grid (the project's `row height`).
     fn row_height(&self) -> f64 {
-        self.look.text + 18.0
+        (self.look.text + 18.0).min(crate::grid::row_height())
     }
 
     fn inner(&self) -> Rect {

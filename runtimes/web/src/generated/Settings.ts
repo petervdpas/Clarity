@@ -62,4 +62,9 @@ engines_interpreted: boolean,
  * The port a web application listens on (DESIGN 7.3): `port 8080`;
  * none for DEFAULT_PORT.
  */
-port: number | null, };
+port: number | null, 
+/**
+ * How high a row of the windows' grid is, in pixels: `row height 30`;
+ * none for `clarity_spec::layout::ROW_HEIGHT`.
+ */
+row_height: number | null, };

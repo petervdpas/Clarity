@@ -22,6 +22,9 @@
           "include": "#text"
         },
         {
+          "include": "#setting"
+        },
+        {
           "include": "#key"
         },
         {
@@ -88,6 +91,18 @@
     "number": {
       "match": "(?<![A-Za-z0-9_])-?[0-9]+(\\.[0-9]+)?\\b",
       "name": "constant.numeric.clarity"
+    },
+    "setting": {
+      "captures": {
+        "1": {
+          "name": "keyword.other.clarity"
+        },
+        "2": {
+          "name": "keyword.other.clarity"
+        }
+      },
+      "comment": "Settings of two words at the start of a project file's line: `row height 30`. Alone, `row` is a name.",
+      "match": "^\\s*(row)\\s+(height)\\b"
     },
     "text": {
       "begin": "\"",

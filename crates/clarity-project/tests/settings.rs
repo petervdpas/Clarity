@@ -60,6 +60,7 @@ fn shop() -> Settings {
         keys_editable: false,
         engines_interpreted: false,
         port: None,
+        row_height: None,
     }
 }
 
@@ -143,7 +144,7 @@ fn names_the_expected_values_for_an_unknown_one() {
 #[test]
 fn refuses_unknown_settings_and_a_wrong_shape() {
     let err = parse(&SHOP.replace("    stack", "    frontend svelte\n    stack")).unwrap_err();
-    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, stack, output, language, currency, theme, datasource and filestore");
+    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, stack, output, language, currency, theme, keys, engines, port, row height, datasource and filestore");
     assert_eq!(parse("module shop\n").unwrap_err(), "line 1: a project file starts with 'project Name'");
     assert_eq!(
         parse("project Shop\n    datasource main sqlite \"x.db\"\n").unwrap_err(),
@@ -757,6 +758,32 @@ fn the_project_says_which_port_it_serves_on() {
     assert!(!off.contains("port"), "{off}");
     assert_eq!(parse(&format!("{SHOP}    port 0\n")).unwrap_err(), "line 11: write 'port' and a number from 1 to 65535: where the web application listens");
     assert_eq!(parse(&format!("{SHOP}    port web\n")).unwrap_err(), "line 11: write 'port' and a number from 1 to 65535: where the web application listens");
+}
+
+/// How high a row of the windows' grid is (`row height 30`): a whole
+/// number from 24 to 64; without the line, 36, so a project keeps its look.
+#[test]
+fn the_project_says_how_high_a_row_is() {
+    let text = format!("{SHOP}    row height 30\n");
+    let settings = parse(&text).unwrap();
+    assert_eq!(settings.row_height, Some(30));
+    assert_eq!(parse(SHOP).unwrap().row_height, None);
+    assert_eq!(clarity_project::row_height(&parse(SHOP).unwrap()), 36);
+    assert_eq!(clarity_project::row_height(&settings), 30);
+    let written = write(Some(SHOP), &settings).unwrap();
+    assert!(written.contains("\n    row height 30\n"), "{written}");
+    assert_eq!(parse(&written).unwrap(), settings);
+    let off = write(Some(&written), &Settings { row_height: None, ..settings.clone() }).unwrap();
+    assert!(!off.contains("row height"), "{off}");
+    let problem = "line 11: write 'row height' and a whole number from 24 to 64: how high a row of the windows' grid is, in pixels (36 without the line)";
+    for wrong in ["row height 20", "row height 65", "row height 30.5", "row height big", "row height", "row 30", "row height 30 40"] {
+        assert_eq!(parse(&format!("{SHOP}    {wrong}\n")).unwrap_err(), problem, "{wrong}");
+    }
+    assert_eq!(parse(&format!("{SHOP}    row height 24\n")).unwrap().row_height, Some(24));
+    assert_eq!(parse(&format!("{SHOP}    row height 64\n")).unwrap().row_height, Some(64));
+    assert!(parse(&format!("{SHOP}    row height 30\n    row height 32\n")).unwrap_err().contains("set twice"));
+    // A settings change the file cannot take is refused before it is written.
+    assert!(write(Some(SHOP), &Settings { row_height: Some(80), ..settings }).is_err());
 }
 
 /// How a web API hands out a long list, said once under its data source

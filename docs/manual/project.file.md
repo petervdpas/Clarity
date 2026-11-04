@@ -33,6 +33,7 @@ Only `stack` is required. Each setting appears once, except `datasource` and `fi
 - `theme Name...`: the themes the application offers; the first is the one it starts with. Without any, the application looks as Clarity does. See [Themes](themes.md).
 - `keys editable`: the people using the application set its shortcut keys themselves, in Clarity's keys window (`on click -> keys`). In Project settings it is the switch "People set the shortcut keys themselves". See [The app and its frame](design.frame.md).
 - `engines interpreted`: the engines written in Clarity run with Clarity's interpreter instead of compiled; without the line (or with `engines compiled`) they are compiled to WebAssembly. Both give the same answers on every stack. In Project settings it is the **Engines** choice.
+- `row height 30`: how high a row of the windows' grid is, in pixels: a whole number from 24 to 64. Without the line a row is 36 high. Inputs and buttons are a row high, and a table's rows are never higher. The design canvas, the preview and the application all lay out by it. Clarity's own fields are 30 high, so `row height 30` makes an application's fields match them. In Project settings it is the **Row height** field.
 - `filestore name "folder"`: a folder that keeps pictures and files. See [Pictures and files](data.pictures-files.md).
 
 ## Data sources
@@ -58,7 +59,7 @@ On the **Project** tab, click **Settings** (or the app folder or the stack in th
 
 - Project: Name, Title, the project's Folder, and the App folder (the `output` setting), chosen with Browse and set back to `out` with Default, and the folder Generate writes to.
 - Stack: Backend, UI and Targets, and the Build tools row with Environment..., which opens Clarity settings where the tools are chosen.
-- Language, formats and theme: Language, Currency, and the themes that are offered, with the one the application starts with.
+- Language, formats and theme: Language, Currency, Keys, Engines, Row height, Port (for the `web` target), and the themes that are offered, with the one the application starts with.
 - Data sources: a row per source with its kind, location, auth and the External and Read-only boxes; Import and Own for an external SQLite database; API for a web API, which picks what the application uses of its description; Add data source.
 - File stores: a row per store, with Browse; Add file store.
 - Below them, the Migrations of each database and the Translations table.

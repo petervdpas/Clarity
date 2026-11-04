@@ -13,7 +13,7 @@ use crate::element::{self, Cx, Element, ElementId, Node};
 use crate::geometry::Rect;
 use crate::element::GridPanel;
 use crate::fonts::Fonts;
-use crate::grid::{GAP, ROW_HEIGHT};
+use crate::grid::{row_height, GAP};
 use crate::markup::{PartSpec, STANDARD_COLUMNS};
 use crate::theme::ThemeLook;
 use crate::input::KeyInput;
@@ -63,7 +63,7 @@ pub fn dialog_size_in(view: &WindowView, size: Option<(f64, f64)>, fonts: &Fonts
     }
     let width = content_width(view, fonts, look).clamp(DIALOG_WIDTH, MAX_DIALOG_WIDTH);
     let rows = view.content_height(width);
-    (width, rows.clamp(ROW_HEIGHT + 2.0 * CONTENT_PADDING, 720.0))
+    (width, rows.clamp(row_height() + 2.0 * CONTENT_PADDING, 720.0))
 }
 
 /// The width a window's grid needs so each part's caption fits in the
@@ -143,7 +143,7 @@ impl Element for DialogOverlay {
         }
         let (width, height) = dialog_size_in(self.view(), self.size, cx.fonts(), cx.look());
         let width = width.min((area.width - 32.0).max(160.0));
-        let height = (height + TITLE_HEIGHT).min((area.height - 32.0).max(TITLE_HEIGHT + ROW_HEIGHT));
+        let height = (height + TITLE_HEIGHT).min((area.height - 32.0).max(TITLE_HEIGHT + row_height()));
         self.panel = Rect::new(area.x + (area.width - width) / 2.0, area.y + (area.height - height) / 2.0, width, height);
         let inside = Rect::new(self.panel.x, self.panel.y + TITLE_HEIGHT, self.panel.width, self.panel.height - TITLE_HEIGHT);
         self.view_mut().arrange(inside, cx);

@@ -111,6 +111,7 @@
       class="grid"
       data-grid={grid.item}
       data-columns={grid.columns}
+      data-row-height={preview.project.rowHeight}
       data-inside={grid.inside.join(" ")}
       style="{where(grid.box)} grid-template-rows: {grid.rows.map((r) => `${r}px`).join(' ')}; row-gap: {grid.gap}px;"
     >
@@ -120,7 +121,7 @@
         {/each}
       {/if}
       {#if pageDesigner.hover && pageDesigner.hover.container === grid.item}
-        <span class="ghost" style={where(placeIn(grid, pageDesigner.hover))}></span>
+        <span class="ghost" style={where(placeIn(grid, pageDesigner.hover, preview.project.rowHeight))}></span>
       {/if}
     </div>
   {/each}

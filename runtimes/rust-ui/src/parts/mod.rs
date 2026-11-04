@@ -24,7 +24,7 @@ use clarity_runtime::ui::{Level, PartState, Text};
 use serde_json::{Map, Value};
 
 use crate::element::{Element, Node};
-use crate::grid::{GridItem, ROW_HEIGHT};
+use crate::grid::{row_height, GridItem};
 use crate::locale;
 use crate::markup::{CommandSpec, HandlerCall, PartSpec};
 use crate::painter::{Painter, TextAlign};
@@ -618,7 +618,7 @@ impl Element for MissingPart {
         let bounds = self.base.node.bounds;
         let line = p.look.color(if self.why.is_none() { "border" } else { "error" });
         p.stroke(bounds, line, 1.0, p.look.radius("input"));
-        let row = crate::geometry::Rect { height: bounds.height.min(ROW_HEIGHT), ..bounds };
+        let row = crate::geometry::Rect { height: bounds.height.min(row_height()), ..bounds };
         p.text(&self.says(), row.inset(6.0), p.look.color(if self.why.is_none() { "muted" } else { "error" }), p.look.size("small"), "text", false, TextAlign::Left);
     }
 }

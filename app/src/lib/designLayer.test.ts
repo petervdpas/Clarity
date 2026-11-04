@@ -1,5 +1,6 @@
 // The designer's layer placed by what Clarity.UI reports of the window it drew.
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { cellsOf, commandsOf, heldBy, layerOf, placeIn } from "./designLayer.ts";
 import { chosenOf, filesAddress } from "./clarityWindow.ts";
@@ -72,6 +73,29 @@ test("cells and a drop place follow the rows as Clarity.UI laid them out", () =>
   assert.deepEqual(placeIn(grid, { col: 2, row: 2, width: 3, height: 2 }), { x: column + 8, y: 44, width: 3 * column + 16, height: 116 + 8 + 36 });
   // Past the last row, rows are 36 high.
   assert.equal(placeIn(grid, { col: 1, row: 5, width: 1, height: 1 }).y, 36 + 8 + 116 + 8 + 36 + 8 + 36 + 8);
+});
+
+test("past the last row, a drop place follows the project's row height", () => {
+  const grid = layerOf(layout, page).grids[0];
+  assert.equal(placeIn(grid, { col: 1, row: 5, width: 1, height: 2 }, 30).y, 36 + 8 + 116 + 8 + 36 + 8 + 30 + 8);
+  assert.equal(placeIn(grid, { col: 1, row: 5, width: 1, height: 2 }, 30).height, 30 + 8 + 30);
+});
+
+// conformance/grid-layout.json: where the designer places a part on a grid
+// of rows it does not grow is where Clarity.UI lays it, at every row height.
+test("a drop place is where every Clarity.UI lays a part out", () => {
+  type Case = { what: string; columns: number; width: number; gap: number; row_height?: number; parts: { col: number; row: number; width: number; height: number; grows: boolean }[]; gives: { boxes: number[][] } };
+  const file = JSON.parse(readFileSync(new URL("../../../conformance/grid-layout.json", import.meta.url), "utf8")) as { row_height: number; cases: Case[] };
+  const kept = file.cases.filter((c) => c.parts.length > 0 && !c.parts.some((p) => p.grows));
+  assert.ok(kept.some((c) => (c.row_height ?? file.row_height) !== 36), "a case at another row height");
+  for (const c of kept) {
+    const grid = { item: 1, columns: c.columns, gap: c.gap, box: { x: 0, y: 0, width: c.width, height: 0 }, rows: [], inside: [] };
+    c.parts.forEach((p, i) => {
+      const box = placeIn(grid, p, c.row_height ?? file.row_height);
+      const want = c.gives.boxes[i];
+      for (const [k, v] of [box.x, box.y, box.width, box.height].entries()) assert.ok(Math.abs(v - want[k]) < 0.001, `${c.what}: part ${i + 1} ${JSON.stringify(box)}`);
+    });
+  }
 });
 
 test("a frame's buttons are known by the window's own frame or its app's, a container's pages and a table's columns come along", () => {

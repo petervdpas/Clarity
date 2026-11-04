@@ -64,7 +64,8 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
     let Ok(mut files) = serde_json::from_str::<Value>(&text) else { return text };
     let item = project.apps().find(|a| a.name.name == *name).filter(|_| design).map(|a| format!(" designItem=\"{}\"", a.span.start)).unwrap_or_default();
     if let Some(windows) = files.get_mut("windows").and_then(Value::as_object_mut) {
-        windows.insert(name.clone(), Value::String(format!("<Window name=\"{}\"{item} />\n", escaped(name))));
+        let rows = crate::web_windows::row_height_attribute(project.row_height);
+        windows.insert(name.clone(), Value::String(format!("<Window name=\"{}\"{rows}{item} />\n", escaped(name))));
     }
     files.to_string() + "\n"
 }

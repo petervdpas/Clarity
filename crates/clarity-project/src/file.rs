@@ -185,6 +185,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let mut keys_editable = None;
     let mut engines_interpreted = None;
     let mut port = None;
+    let mut row_height = None;
     let mut themes: Option<Vec<String>> = None;
     let mut datasources: Vec<DataSource> = Vec::new();
     let mut filestores: Vec<FileStore> = Vec::new();
@@ -308,6 +309,14 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     _ => None,
                 };
                 port = Some(number.ok_or_else(|| format!("line {line}: write 'port' and a number from 1 to 65535: where the web application listens"))?);
+            }
+            "row" => {
+                once(row_height.is_some())?;
+                let number = match a.as_slice() {
+                    [h, t] if word(h) == Some("height") && t.kind == TokenKind::Number => t.text.parse::<u32>().ok().filter(|n| clarity_spec::layout::row_height_fits(*n)),
+                    _ => None,
+                };
+                row_height = Some(number.ok_or_else(|| format!("line {line}: {}", clarity_spec::layout::row_height_problem()))?);
             }
             "currency" => {
                 once(currency.is_some())?;
@@ -450,7 +459,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
             "auth" => return Err(format!("line {line}: 'auth' belongs under a datasource line, indented")),
             other => {
                 return Err(format!(
-                    "line {line}: unknown setting '{other}'; the settings are title, stack, output, language, currency, theme, datasource and filestore"
+                    "line {line}: unknown setting '{other}'; the settings are title, stack, output, language, currency, theme, keys, engines, port, row height, datasource and filestore"
                 ));
             }
         }
@@ -472,6 +481,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         keys_editable: keys_editable.unwrap_or(false),
         engines_interpreted: engines_interpreted.unwrap_or(false),
         port,
+        row_height,
     })
 }
 
@@ -573,6 +583,12 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
     }
     if let Some(port) = settings.port {
         lines.push(("port".into(), 1, format!("port {port}")));
+    }
+    if let Some(height) = settings.row_height {
+        if !clarity_spec::layout::row_height_fits(height) {
+            return Err(clarity_spec::layout::row_height_problem());
+        }
+        lines.push(("row".into(), 1, format!("row height {height}")));
     }
     for source in &settings.datasources {
         lines.push((

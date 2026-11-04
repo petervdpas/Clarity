@@ -1,5 +1,5 @@
 {
-  "about": "How a window's grid places its parts (DESIGN 7.9): every version of Clarity.UI, and the shared screen, lays out alike. The columns share the width equally, with the gap between them. A row is 36 high; a row that holds a part that grows (a table, a panel holding one) shares the height left over with the other growing rows, but never gets less than 36. A part that does not grow keeps its own height (its rows at 36 each, with the gaps between) at the top of its place, even when a part beside it makes its rows grow. When the rows need more height than there is, every row keeps its least height and the content is taller than the window (`content`). A part is at `col` and `row` (from 1), `width` columns wide and `height` rows high; `gap` is 8, or 0 in a joined grid. Each box is x, y, width, height, from the grid's top left, to a thousandth. `made` cases give each part as its window markup writes it, at its place: each version makes the part from it and asks the part whether it grows, so a custom part grows when its markup says `grows=\"true\"` (its declaration's `grows`), as a canvas does, and keeps its rows without it.",
+  "about": "How a window's grid places its parts (DESIGN 7.9): every version of Clarity.UI, and the shared screen, lays out alike. The columns share the width equally, with the gap between them. A row is as high as the project says (`row height`): the file's `row_height`, 36, or a case's own `row_height`; a row that holds a part that grows (a table, a panel holding one) shares the height left over with the other growing rows, but never gets less than a row. A part that does not grow keeps its own height (its rows at a row each, with the gaps between) at the top of its place, even when a part beside it makes its rows grow. When the rows need more height than there is, every row keeps its least height and the content is taller than the window (`content`). A part is at `col` and `row` (from 1), `width` columns wide and `height` rows high; `gap` is 8, or 0 in a joined grid. Each box is x, y, width, height, from the grid's top left, to a thousandth. `made` cases give each part as its window markup writes it, at its place: each version makes the part from it and asks the part whether it grows, so a custom part grows when its markup says `grows=\"true\"` (its declaration's `grows`), as a canvas does, and keeps its rows without it.",
   "row_height": 36,
   "cases": [
     {
@@ -239,6 +239,196 @@
         "content": 36,
         "boxes": []
       }
+    },
+    {
+      "what": "at a row height of 30 (row height 30), rows of parts that do not grow are 30 high, at the top",
+      "columns": 4,
+      "width": 800,
+      "height": 600,
+      "gap": 8,
+      "parts": [
+        {
+          "col": 1,
+          "row": 1,
+          "width": 4,
+          "height": 1,
+          "grows": false
+        },
+        {
+          "col": 1,
+          "row": 2,
+          "width": 2,
+          "height": 1,
+          "grows": false
+        },
+        {
+          "col": 3,
+          "row": 2,
+          "width": 2,
+          "height": 2,
+          "grows": false
+        }
+      ],
+      "gives": {
+        "content": 106.0,
+        "boxes": [
+          [
+            0.0,
+            0.0,
+            800.0,
+            30
+          ],
+          [
+            0.0,
+            38.0,
+            396.0,
+            30
+          ],
+          [
+            404.0,
+            38.0,
+            396.0,
+            68
+          ]
+        ]
+      },
+      "row_height": 30
+    },
+    {
+      "what": "at a row height of 30, a part beside a growing one keeps its own rows of 30",
+      "columns": 2,
+      "width": 400,
+      "height": 300,
+      "gap": 8,
+      "parts": [
+        {
+          "col": 1,
+          "row": 1,
+          "width": 1,
+          "height": 3,
+          "grows": true
+        },
+        {
+          "col": 2,
+          "row": 1,
+          "width": 1,
+          "height": 1,
+          "grows": false
+        },
+        {
+          "col": 2,
+          "row": 2,
+          "width": 1,
+          "height": 1,
+          "grows": false
+        }
+      ],
+      "gives": {
+        "content": 300.0,
+        "boxes": [
+          [
+            0.0,
+            0.0,
+            196.0,
+            300.0
+          ],
+          [
+            204.0,
+            0.0,
+            196.0,
+            30
+          ],
+          [
+            204.0,
+            102.667,
+            196.0,
+            30
+          ]
+        ]
+      },
+      "row_height": 30
+    },
+    {
+      "what": "at a row height of 30, in too little height every row keeps 30 and the content is taller",
+      "columns": 1,
+      "width": 200,
+      "height": 50,
+      "gap": 8,
+      "parts": [
+        {
+          "col": 1,
+          "row": 1,
+          "width": 1,
+          "height": 2,
+          "grows": true
+        },
+        {
+          "col": 1,
+          "row": 3,
+          "width": 1,
+          "height": 1,
+          "grows": false
+        }
+      ],
+      "gives": {
+        "content": 106.0,
+        "boxes": [
+          [
+            0.0,
+            0.0,
+            200.0,
+            68
+          ],
+          [
+            0.0,
+            76.0,
+            200.0,
+            30
+          ]
+        ]
+      },
+      "row_height": 30
+    },
+    {
+      "what": "at a row height of 64, the rows of a part that grows share the height left",
+      "columns": 2,
+      "width": 400,
+      "height": 300,
+      "gap": 8,
+      "parts": [
+        {
+          "col": 1,
+          "row": 1,
+          "width": 2,
+          "height": 1,
+          "grows": false
+        },
+        {
+          "col": 1,
+          "row": 2,
+          "width": 2,
+          "height": 3,
+          "grows": true
+        }
+      ],
+      "gives": {
+        "content": 300.0,
+        "boxes": [
+          [
+            0.0,
+            0.0,
+            400.0,
+            64
+          ],
+          [
+            0.0,
+            72.0,
+            400.0,
+            228.0
+          ]
+        ]
+      },
+      "row_height": 64
     }
   ],
   "made": [

@@ -10,7 +10,7 @@ use clarity_runtime::ui::{Level, Message};
 use crate::element::{Cx, Element, Node};
 use crate::fonts::Fonts;
 use crate::geometry::Rect;
-use crate::grid::ROW_HEIGHT;
+use crate::grid::row_height;
 use crate::input::{Cursor, Key, KeyInput, PointerInput};
 use crate::locale;
 use crate::painter::{Painter, TextAlign};
@@ -179,9 +179,10 @@ impl Element for SaidDialog {
         self.node.bounds = area;
         let width = DIALOG_WIDTH.min((area.width - 32.0).max(160.0));
         let lines = wrap(&self.message.text.show(), width - 40.0, cx.fonts(), cx.look().size("text")).len() as f64;
-        let height = 20.0 + lines * LINE + 20.0 + ROW_HEIGHT + 20.0;
+        let row = row_height();
+        let height = 20.0 + lines * LINE + 20.0 + row + 20.0;
         self.panel = Rect::new(area.x + (area.width - width) / 2.0, area.y + ((area.height - height) / 2.0).max(16.0), width, height);
-        let ok = Rect::new(self.panel.right() - 20.0 - 96.0, self.panel.bottom() - 20.0 - ROW_HEIGHT, 96.0, ROW_HEIGHT);
+        let ok = Rect::new(self.panel.right() - 20.0 - 96.0, self.panel.bottom() - 20.0 - row, 96.0, row);
         self.node.children_mut()[0].arrange(ok, cx);
     }
 

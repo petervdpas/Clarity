@@ -4,6 +4,7 @@
 // project (its item, the offset the designer's edits name). Pure, so the
 // placing is tested without a browser.
 
+import { ROW_HEIGHT } from "@clarity/ui/screen/grid.ts";
 import type { Command } from "@clarity/ui/generated/Command.ts";
 import type { Frame } from "@clarity/ui/generated/Frame.ts";
 import type { Page } from "@clarity/ui/generated/Page.ts";
@@ -126,11 +127,10 @@ export function cellsOf(grid: LayerGrid): Box[] {
   return out;
 }
 
-/** Where a part dropped at `col`, `row`, `width` columns by `height` rows would be, in the grid's own pixels; rows past the last are 36 high. */
-export function placeIn(grid: LayerGrid, at: { col: number; row: number; width: number; height: number }): Box {
-  const ROW = 36;
+/** Where a part dropped at `col`, `row`, `width` columns by `height` rows would be, in the grid's own pixels; rows past the last are `row` high, the project's row height. */
+export function placeIn(grid: LayerGrid, at: { col: number; row: number; width: number; height: number }, row = ROW_HEIGHT): Box {
   const column = (grid.box.width - grid.gap * (grid.columns - 1)) / grid.columns;
-  const rowHeight = (r: number) => grid.rows[r - 1] ?? ROW;
+  const rowHeight = (r: number) => grid.rows[r - 1] ?? row;
   let top = 0;
   for (let r = 1; r < at.row; r++) top += rowHeight(r) + grid.gap;
   let height = 0;

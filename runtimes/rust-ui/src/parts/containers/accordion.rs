@@ -119,6 +119,14 @@ impl AccordionPart {
 impl Element for AccordionPart {
     part_element!();
 
+    /// The room it needs beyond its rows: its headers and the open section's padding over its highest section.
+    fn around(&self) -> f64 {
+        let count = self.shared.count;
+        let headers = count as f64 * SECTION_HEIGHT + count.saturating_sub(1) as f64 * BETWEEN;
+        let highest = self.grids().into_iter().map(container::least_of).fold(0.0, f64::max);
+        container::around_for(&self.base.spec, headers + 4.0 * self.look.get().padding, highest)
+    }
+
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
         self.base.node.bounds = area;
         let look = LookNow::of(cx.look());

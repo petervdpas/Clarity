@@ -26,8 +26,22 @@ pub fn window_size_problem() -> String {
     )
 }
 
-/// The height of a grid row that does not grow, in pixels.
+/// The height of a grid row that does not grow, in pixels, when the
+/// project file says no `row height`.
 pub const ROW_HEIGHT: u32 = 36;
+
+/// The least and most a project's `row height` may be, in pixels.
+pub const ROW_HEIGHTS: (u32, u32) = (24, 64);
+
+/// Whether `height` is a row height a project may have.
+pub fn row_height_fits(height: u32) -> bool {
+    (ROW_HEIGHTS.0..=ROW_HEIGHTS.1).contains(&height)
+}
+
+/// What is said when a row height does not fit.
+pub fn row_height_problem() -> String {
+    format!("write 'row height' and a whole number from {} to {}: how high a row of the windows' grid is, in pixels ({} without the line)", ROW_HEIGHTS.0, ROW_HEIGHTS.1, ROW_HEIGHT)
+}
 
 /// The space between grid columns and rows, in pixels.
 pub const GAP: u32 = 8;

@@ -215,6 +215,9 @@ pub struct WindowSpec {
     pub columns: i64,
     /// What it is in the design (`designItem`, see `DESIGN_ITEM`); none in a program's own markup.
     pub item: Option<String>,
+    /// How high a row of its grid is: the project's `row height`, which the
+    /// root says where it is not the standard (`rowHeight="30"`), within `grid::ROW_HEIGHTS`.
+    pub row_height: f64,
 }
 
 /// The attribute the IDE's designer gives each window, part, page and menu
@@ -259,7 +262,8 @@ pub fn read(markup: &str) -> Result<WindowSpec, MarkupError> {
             parts.push(part_of(element)?);
         }
     }
-    Ok(WindowSpec { frame, parts, name: root.attribute("name").map(str::to_string), columns, item: root.attribute(DESIGN_ITEM).map(str::to_string) })
+    let row_height = root.attribute("rowHeight").and_then(|h| h.trim().parse::<f64>().ok()).filter(|h| h.is_finite()).map(|h| h.clamp(crate::grid::ROW_HEIGHTS.0, crate::grid::ROW_HEIGHTS.1)).unwrap_or(crate::grid::ROW_HEIGHT);
+    Ok(WindowSpec { frame, parts, name: root.attribute("name").map(str::to_string), columns, item: root.attribute(DESIGN_ITEM).map(str::to_string), row_height })
 }
 
 /// An app's frame as its markup writes it: its regions.

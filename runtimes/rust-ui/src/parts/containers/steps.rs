@@ -160,6 +160,12 @@ impl StepsPart {
 impl Element for StepsPart {
     part_element!();
 
+    /// The room it needs beyond its rows: the line of titles, the line of buttons and their padding over its highest step.
+    fn around(&self) -> f64 {
+        let highest = self.pages().into_iter().map(|p| container::least_of(p.grid())).fold(0.0, f64::max);
+        container::around_for(&self.base.spec, Self::TITLES_HEIGHT + Self::BUTTONS_HEIGHT + 4.0 * self.look.get().padding, highest)
+    }
+
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
         self.base.node.bounds = area;
         self.look.set(LookNow::of(cx.look()));

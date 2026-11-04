@@ -155,6 +155,12 @@ fn word_kind(tokens: &[Token], i: usize) -> PieceKind {
     if LITERALS.contains(&word) {
         return PieceKind::Literal;
     }
+    // `row height 30`, the project's setting, at the start of its line; `row` alone is a name code gives.
+    if (i == 0 && word == "row" && tokens.get(1).is_some_and(|t| t.kind == TokenKind::Ident && t.text == "height"))
+        || (i == 1 && word == "height" && tokens[0].kind == TokenKind::Ident && tokens[0].text == "row")
+    {
+        return PieceKind::Keyword;
+    }
     // A member, or a word set, called, indexed or reached into.
     if before.is_some_and(|t| t.kind == TokenKind::Dot)
         || matches!(after, Some(TokenKind::Assign | TokenKind::LParen | TokenKind::LBracket | TokenKind::Dot))
@@ -268,6 +274,7 @@ pub fn textmate_grammar() -> serde_json::Value {
                 "patterns": [
                     { "include": "#comment" },
                     { "include": "#text" },
+                    { "include": "#setting" },
                     { "include": "#key" },
                     { "include": "#number" },
                     { "include": "#name" },
@@ -275,6 +282,11 @@ pub fn textmate_grammar() -> serde_json::Value {
                     { "include": "#type" },
                     { "include": "#keyword" }
                 ]
+            },
+            "setting": {
+                "comment": "Settings of two words at the start of a project file's line: `row height 30`. Alone, `row` is a name.",
+                "match": "^\\s*(row)\\s+(height)\\b",
+                "captures": { "1": { "name": "keyword.other.clarity" }, "2": { "name": "keyword.other.clarity" } }
             },
             "comment": { "match": "//.*$", "name": "comment.line.double-slash.clarity" },
             "text": {

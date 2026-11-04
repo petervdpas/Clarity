@@ -1020,6 +1020,11 @@ pub struct Project {
     #[serde(rename = "keysEditable")]
     #[ts(rename = "keysEditable")]
     pub keys_editable: bool,
+    /// How high a row of the windows' grid is, in pixels, as the project
+    /// file says (`row height 30`); `layout::ROW_HEIGHT` without the line.
+    #[serde(rename = "rowHeight")]
+    #[ts(rename = "rowHeight")]
+    pub row_height: u32,
     /// The themes the application offers, the first being the one it starts
     /// with; empty when the project file names none (design section 1.5, T1).
     pub themes: Vec<String>,

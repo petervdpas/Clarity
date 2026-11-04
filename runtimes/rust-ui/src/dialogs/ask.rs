@@ -19,7 +19,7 @@ use crate::dialogs::{backdrop, DialogButton};
 use crate::element::{Cx, Element, ElementId, Node};
 use crate::facts::ModelFacts;
 use crate::geometry::Rect;
-use crate::grid::ROW_HEIGHT;
+use crate::grid::row_height;
 use crate::input::{Key, KeyInput, Modifiers};
 use crate::locale;
 use crate::markup::{self, HandlerCall};
@@ -231,20 +231,21 @@ impl Element for AskDialog {
         let width = question.clamp(MIN_WIDTH, MAX_WIDTH).min((area.width - 32.0).max(200.0));
         let inner = width - 40.0;
         let lines = self.lines(inner, cx.fonts(), cx.look().size("text")).len() as f64;
-        let input_room = if self.has_input { ROW_HEIGHT + 16.0 } else { 0.0 };
-        let height = 20.0 + lines * LINE + 16.0 + input_room + ROW_HEIGHT + 20.0;
+        let row = row_height();
+        let input_room = if self.has_input { row + 16.0 } else { 0.0 };
+        let height = 20.0 + lines * LINE + 16.0 + input_room + row + 20.0;
         self.panel = Rect::new(area.x + (area.width - width) / 2.0, area.y + ((area.height - height) / 2.0).max(16.0), width, height);
         let mut y = self.panel.y + 20.0 + lines * LINE + 16.0;
         let panel = self.panel;
         let children = self.node.children_mut();
         let count = children.len();
         if self.has_input {
-            children[0].arrange(Rect::new(panel.x + 20.0, y, inner, ROW_HEIGHT), cx);
-            y += ROW_HEIGHT + 16.0;
+            children[0].arrange(Rect::new(panel.x + 20.0, y, inner, row), cx);
+            y += row + 16.0;
         }
-        let ok = Rect::new(panel.right() - 20.0 - BUTTON_WIDTH, y, BUTTON_WIDTH, ROW_HEIGHT);
+        let ok = Rect::new(panel.right() - 20.0 - BUTTON_WIDTH, y, BUTTON_WIDTH, row);
         children[count - 1].arrange(ok, cx);
-        children[count - 2].arrange(Rect::new(ok.x - 8.0 - BUTTON_WIDTH, y, BUTTON_WIDTH, ROW_HEIGHT), cx);
+        children[count - 2].arrange(Rect::new(ok.x - 8.0 - BUTTON_WIDTH, y, BUTTON_WIDTH, row), cx);
     }
 
     fn draw(&self, p: &Painter) {

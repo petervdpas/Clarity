@@ -688,6 +688,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let mut project = compile_engines(with_resource_texts(&consts::inlined(&calls::filled(project))), settings)?;
     // The keys window and the person's keys, where the project file allows them (DESIGN 5.28).
     project.keys_editable = settings.keys_editable;
+    // How high the windows' rows are, which their markup carries.
+    project.row_height = clarity_project::row_height(settings);
     let project = &project;
     let mut files = match settings.stack.backend {
         Backend::Rust if settings.stack.ui == clarity_project::Ui::Clarity => rust::generate(project, settings)?,

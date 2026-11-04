@@ -117,6 +117,29 @@ fn a_window_s_columns_are_on_its_root_when_not_twelve() {
     assert!(twelve.contains("<Window name=\"Other\">"), "{twelve}");
 }
 
+/// The project's row height (`row height 30`) is on every window's root,
+/// where Clarity.UI reads it, and in the preview's and designer's files;
+/// the standard 36 writes nothing, so a project without the line keeps its markup.
+#[test]
+fn a_project_s_row_height_is_on_every_window_s_root() {
+    let (_, mut project) = todo();
+    assert_eq!(project.row_height, 36);
+    for file in clarity_gen::web_windows::window_files(&project) {
+        assert!(!file.text.contains("rowHeight"), "{}", file.text);
+    }
+    project.row_height = 30;
+    let files_written = clarity_gen::web_windows::window_files(&project);
+    assert!(!files_written.is_empty());
+    for file in &files_written {
+        let root = file.text.lines().find(|l| l.starts_with("<Window ")).unwrap();
+        assert!(root.contains(" rowHeight=\"30\""), "{root}");
+    }
+    let designed = files(&preview::files_json(&project, "Todo", &Shown::Window("Main".into()), true, &Default::default()));
+    assert!(designed["windows"]["Main"].as_str().unwrap().contains("<Window name=\"Main\" rowHeight=\"30\" designItem="), "{designed}");
+    let app = files(&preview::files_json(&project, "Todo", &Shown::App("Todo".into()), true, &Default::default()));
+    assert!(app["windows"]["Todo"].as_str().unwrap().starts_with("<Window name=\"Todo\" rowHeight=\"30\" designItem="), "{app}");
+}
+
 /// A custom part declared with `grows` (DESIGN 5.19) says so in the markup,
 /// so every Clarity.UI lays it out as a growing part; one without it keeps
 /// its rows and writes nothing.

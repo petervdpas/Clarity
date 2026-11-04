@@ -16,7 +16,7 @@ use std::time::Duration;
 use crate::dialogs::DialogButton;
 use crate::element::{Cx, Element, Node};
 use crate::geometry::Rect;
-use crate::grid::ROW_HEIGHT;
+use crate::grid::row_height;
 use crate::input::{Key, KeyInput, Modifiers};
 use crate::locale;
 use crate::painter::{Painter, TextAlign};
@@ -114,7 +114,8 @@ impl LongCallBar {
     /// Stop at its place in the note once the call says how far it is; until then where nothing presses it.
     fn place_stop(&mut self, cx: &mut Cx) {
         let stop = if self.says() {
-            Rect::new(self.note.right() - 12.0 - BUTTON_WIDTH, self.note.y + (HEIGHT - ROW_HEIGHT) / 2.0, BUTTON_WIDTH, ROW_HEIGHT)
+            let row = row_height().min(HEIGHT);
+            Rect::new(self.note.right() - 12.0 - BUTTON_WIDTH, self.note.y + (HEIGHT - row) / 2.0, BUTTON_WIDTH, row)
         } else {
             Rect::new(-10_000.0, -10_000.0, 0.0, 0.0)
         };

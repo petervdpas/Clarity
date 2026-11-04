@@ -16,7 +16,7 @@ use skia_safe::{Color, Paint, PaintStyle, Path, Point};
 
 use crate::element::{draw_children, Cx, Element, GridPanel, Node};
 use crate::geometry::Rect;
-use crate::grid::{GAP, ROW_HEIGHT};
+use crate::grid::{row_height, GAP};
 use crate::input::{Key, KeyInput};
 use crate::markup::PartSpec;
 use crate::painter::{Painter, TextAlign};
@@ -82,7 +82,7 @@ pub fn grid_grows(grid: &GridPanel) -> bool {
     grid.node().children().iter().any(|c| c.as_part().is_some_and(|p| p.grows()))
 }
 
-/// How high a grid is at the least: its rows at 36, and the room its own containers ask around theirs.
+/// How high a grid is at the least: its rows of the project's height, and the room its own containers ask around theirs.
 pub fn least_of(grid: &GridPanel) -> f64 {
     if grid.places().is_empty() {
         return 0.0;
@@ -93,7 +93,7 @@ pub fn least_of(grid: &GridPanel) -> f64 {
 /// How high a part's own rows are at the least.
 pub fn own_least(spec: &PartSpec) -> f64 {
     let rows = spec.place(false).height.max(1) as f64;
-    rows * ROW_HEIGHT + (rows - 1.0) * GAP
+    rows * row_height() + (rows - 1.0) * GAP
 }
 
 /// The room a part asks beyond its rows: what it puts around its grid plus what the grid needs more than the rows give, never less than nothing.

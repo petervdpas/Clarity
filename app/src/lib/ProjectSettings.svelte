@@ -276,6 +276,21 @@
             <option value="interpreted">Interpreted</option>
           </select>
           <p class="form-help">How the engines written in Clarity run. Compiled turns their code into WebAssembly and runs fastest; interpreted carries their code into the file and runs it with Clarity's interpreter. Both give the same answers on every stack.</p>
+          <label class="form-label" for="project-row-height">Row height</label>
+          <input
+            id="project-row-height"
+            class="mono"
+            type="number"
+            min="24"
+            max="64"
+            value={settings.row_height ?? ""}
+            placeholder="36"
+            onchange={(e) => {
+              const height = Number(e.currentTarget.value);
+              save({ row_height: e.currentTarget.value.trim() === "" ? null : Number.isInteger(height) && height >= 24 && height <= 64 ? height : settings.row_height });
+            }}
+          />
+          <p class="form-help">How high a row of the windows' grid is, in pixels, from 24 to 64: inputs and buttons are a row high. Empty is 36. Clarity's own fields are 30.</p>
           {#if settings.stack.targets.includes("web")}
             <label class="form-label" for="project-port">Port</label>
             <input

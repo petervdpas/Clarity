@@ -24,6 +24,12 @@ test("below the last row, rows of the usual height follow", () => {
   assert.equal(rowIn([], 0), 1);
 });
 
+test("below the last row, rows of the project's height follow", () => {
+  const end = 2 * (30 + GAP);
+  assert.equal(rowIn([30, 30], end + 30 + GAP - 1, 30), 3);
+  assert.equal(rowIn([30, 30], end + 30 + GAP, 30), 4);
+});
+
 // A container's parts sit on its own grid, as many columns as it is wide:
 // resizing it scales its parts across with it, so its content keeps its shape.
 

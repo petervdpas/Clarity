@@ -209,6 +209,10 @@ public class CanvasEventTests
         sheet.DotSize = 3;
         sheet.DotColor = "muted";
         Assert.Equal((3L, "muted"), (sheet.DotSize, sheet.DotColor));
+        // A line tool: false until code sets canvas.connecting.
+        Assert.False(sheet.Connecting);
+        sheet.Connecting = true;
+        Assert.True(sheet.Connecting);
     }
 
     [Fact]
@@ -233,5 +237,26 @@ public class CanvasEventTests
         Assert.Equal(["IsFolded", "IsOpen"], changed);
         details.IsOpen = true;
         Assert.False(details.IsFolded);
+    }
+
+    [Fact]
+    public void A_links_ends_label_and_style_and_a_texts_style_go_to_the_screen()
+    {
+        var board = new PartState("board");
+        board.BeginDrawing();
+        board.Draw(new Shape.Link("r1", 10, 20, 300, 40, [], "muted", 2, "one", "zeroOrMany", Text.Plain("orders"), "dashed"));
+        board.Draw(new Shape.Words(10, 20, Text.Plain("Id"), "accent", 11, "left", "bold mono"));
+        board.Draw(new Shape.Link("r2", 10, 20, 300, 40, [], "muted"));
+        board.EndDrawing();
+        var drawing = (JsonArray)WireJson.Part(board, null)["drawing"]!;
+        var link = (JsonObject)drawing[0]!;
+        Assert.Equal(("link", "one", "zeroOrMany", "dashed"), (link["op"]!.GetValue<string>(), link["start"]!.GetValue<string>(), link["end"]!.GetValue<string>(), link["style"]!.GetValue<string>()));
+        Assert.Equal("orders", WireJson.ReadText(link["label"]).Template);
+        Assert.Equal("bold mono", drawing[1]!["style"]!.GetValue<string>());
+        // Left out, a link's ends, label and style are empty.
+        Assert.Equal(("", ""), (drawing[2]!["start"]!.GetValue<string>(), drawing[2]!["style"]!.GetValue<string>()));
+        // A shape read back keeps them.
+        var read = Assert.IsType<Shape.Link>(Shape.Of(link));
+        Assert.Equal(("one", "zeroOrMany", "dashed"), (read.Start, read.End, read.Style));
     }
 }

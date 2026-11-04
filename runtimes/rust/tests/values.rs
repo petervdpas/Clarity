@@ -231,6 +231,18 @@ fn a_canvas_keeps_the_grid_and_snap_code_sets() {
     assert_eq!((ui.dot_size("sheet", 2), ui.dot_color("sheet", "")), (3, "muted".to_string()));
 }
 
+/// A canvas with `on connect` draws a new line from any press on a box while code set `connecting`; false until then.
+#[test]
+fn a_canvas_keeps_the_connecting_code_sets() {
+    use clarity_runtime::ui::{Ui, WindowState};
+    let mut ui = Ui::from_state(&WindowState::default());
+    assert!(!ui.connecting("sheet"));
+    ui.set_connecting("sheet", true);
+    assert!(ui.connecting("sheet"));
+    let reply = ui.reply("Main", serde_json::Map::new());
+    assert_eq!(serde_json::json!(true), serde_json::to_value(&reply.state.parts["sheet"]).unwrap()["connecting"]);
+}
+
 /// `copy text`: the reply hands the text to the screen for its clipboard; of several, the last.
 #[test]
 fn a_handler_copies_the_last_text_it_copies() {

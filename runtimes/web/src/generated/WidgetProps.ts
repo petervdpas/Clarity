@@ -286,6 +286,11 @@ default: boolean,
  */
 cancel: boolean, 
 /**
+ * Sticks to the bottom of its grid: when no row grows, its rows and
+ * those below move down by the height to spare (`bottom`).
+ */
+bottom: boolean, 
+/**
  * A custom part (DESIGN 5.19): the name it is declared by, as in `Arena`.
  */
 part: string | null, 

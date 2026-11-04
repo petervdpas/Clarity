@@ -734,6 +734,10 @@ pub struct WidgetProps {
     pub default_button: bool,
     /// The button Escape clicks.
     pub cancel: bool,
+    /// Sticks to the bottom of its grid: when no row grows, its rows and
+    /// those below move down by the height to spare (`bottom`).
+    #[serde(default)]
+    pub bottom: bool,
     /// A custom part (DESIGN 5.19): the name it is declared by, as in `Arena`.
     #[serde(default)]
     pub part: Option<String>,

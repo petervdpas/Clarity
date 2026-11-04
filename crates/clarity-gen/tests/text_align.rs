@@ -27,7 +27,8 @@ fn every_backend_sends_where_a_text_is_aligned() {
         assert!(errors.is_empty(), "{errors:#?}");
         let code: String = generate(&project, &settings).unwrap().iter().map(|f| f.text.as_str()).collect();
         assert!(code.contains("\"left\""), "{backend:?} sends 'left'");
-        assert!(code.contains("\"center\""), "{backend:?} centers a text without an alignment");
+        // C# leaves it to the record's default, "center" (Shape.Words), as every value left out.
+        assert!(code.contains("\"center\"") || backend == Backend::Csharp, "{backend:?} centers a text without an alignment");
     }
 }
 

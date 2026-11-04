@@ -97,6 +97,18 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 - [x] Engines written in Clarity on the backend: `an_engine_written_in_clarity_runs_in_{go,c,cpp,csharp}` and `an_interpreted_engine_runs_in_{go,c,cpp,csharp}` (ignored build tests) pass on Windows.
   - 2026-10-28 on Windows: all eight pass. The C++ and C# tests at first failed only when removing their build folder ("being used by another process", WebView2's unpacked files or dotnet's build servers); they now retry the removal for up to ten seconds (`remove` in cpp_build.rs and csharp_build.rs).
 
+## 5c. One Clarity.UI for every language, WYSIWYG and screen readers (2026-11-04)
+
+Built and tried on Linux only. The released library is 0.4.0 (GitHub release `runtimes/rust-ui-ffi/v0.4.0`), C# 0.75.0.
+
+- [ ] The library's own tests: `cargo test -p clarity-ui` passes (the `windows` test binary holds the screen reader tests, `access.rs`).
+- [ ] A generated program per language opens its main window, drawn by Clarity.UI: Rust, Go, C, C++ and C# (the todo example, or any other). Go, C and C++ fetch `clarity-ui-0.4.0-win-x64.tar.gz` themselves when `CLARITY_UI` is not set; check the build finds `clarity_ui.dll` and the program starts with it beside the exe.
+- [ ] The same program's web target, opened in Edge: the window draws in the page (the browser files from `clarity-ui-0.4.0-browser.tar.gz`), clicks and typing work.
+- [ ] Narrator (Ctrl+Win+Enter) in a desktop program: Tab through the parts. A button says its caption, an input its label and value, a check box whether it is ticked, a password field never its text. A status message or alert is read when it appears.
+- [ ] Narrator in Edge on the web target: the same, read from the page's hidden mirror.
+- [ ] The IDE (WebView2): the preview and the design canvas draw with Clarity.UI from the localhost preview server (127.0.0.1); moving a part in the designer shows in the preview.
+- [ ] Row height: `row height 30` in a project's file (or the Project tab) makes rows lower in the designer and in the running program alike.
+
 ## 6. Not done, so not to be tested
 
 - On macOS, Ctrl in a generated application's keys is the Control key, not Cmd.

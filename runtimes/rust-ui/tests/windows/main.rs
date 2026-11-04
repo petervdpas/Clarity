@@ -36,6 +36,7 @@ mod looks_system_theme_follow;
 mod looks_system_theme_watch;
 mod window_stack;
 mod window_view;
+mod windows_canvas_drag;
 mod windows_cases;
 mod windows_field_facts;
 mod windows_life;

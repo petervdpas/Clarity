@@ -169,6 +169,37 @@ function arrow(link: Link) -> text
         return "..>"
     return "-->"
 
+// What the ends of a line between two types show on a diagram, by its
+// kind: a diamond at the whole of an aggregation (hollow) or a composition
+// (filled), an arrow at the end of an association or a dependency, which is
+// dashed.
+function link_start(link: Link) -> text
+    if link == Aggregation
+        return "diamond"
+    if link == Composition
+        return "filledDiamond"
+    return ""
+
+function link_end(link: Link) -> text
+    if link == Association or link == Dependency
+        return "arrow"
+    return ""
+
+function link_style(link: Link) -> text
+    if link == Dependency
+        return "dashed"
+    return ""
+
+// What the end of an ERD line shows on a diagram, by how many there are on that side.
+function side_end(side: Cardinality) -> text
+    if side == ZeroOrOne
+        return "zeroOrOne"
+    if side == ZeroOrMore
+        return "zeroOrMany"
+    if side == OneOrMore
+        return "oneOrMany"
+    return "one"
+
 // The end of an ERD line at its left side, by how many there are.
 function left_end(side: Cardinality) -> text
     if side == ZeroOrOne

@@ -601,6 +601,8 @@ Every part sits on the grid of the window or of the container it is in:
 
 Rows have a fixed height in the designer. In a running application the columns share the width of the window, and rows that hold something that grows (a table, a list, an image, a canvas, a custom part declared with `grows`, or a container with one of these inside) share the extra height. Everything else keeps its height, also in a row that grows: it stands at the top of its rows, as high as they are at their least.
 
+When no row of a grid grows and the grid is higher than its rows, `bottom` on a part sticks it to the bottom: the rows from the first row of a part with `bottom` down move down by the height to spare, keeping their heights. Buttons under a form in a pane that a list beside it makes taller sit at the bottom of the pane: `button @saveCaption name save at 3,11 span 2 bottom`. Where a row grows, `bottom` changes nothing.
+
 The checker reports parts that start outside the grid, run past its last column, or overlap another part in the same container.
 
 ## 6. Parts
@@ -620,6 +622,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `"caption"` | The text it shows, right after the kind, for the kinds that have one. |
 | `name n` | The part's name, unique in its window (sidebars, footer, menu, toolbar and ribbon included). Handlers refer to the part by it. The designer names new parts after their purpose (`vatNumberLabel`, `ordersTable`, `addLine`), or `button1` until it knows it; templates name inputs after their field. |
 | `at col,row`, `span n`, `rows n` | Place and size on the grid; see [the grid](#the-grid). |
+| `bottom` | Sticks to the bottom of its grid when no row grows; see [the grid](#the-grid). |
 | `tooltip "text"` | Shown when the pointer rests on the part. |
 | `style name` | A style of the project's theme: its colors, and the size, font and alignment of its text. See [Themes](#themes). |
 | `on event: handler` | Runs `handler` in the window's code behind when `event` happens. Each event is wired at most once per part. |
@@ -969,7 +972,7 @@ button @saveCaption name saveButton split at 7,1 span 2 on click: save
         item @saveAsItem name saveAsItem on click: saveAs
 ```
 
-Any part can have a context menu: a `menu` block indented under it, with items written as the frame's menu items are (`item`, `separator`, submenus, `on click: handler` or `on click -> Target`). A right click opens it at the pointer; on a table or list it chooses the row under the pointer first, so the handler finds it as `grid.selected`. Named items hide and disable as any part does.
+Any part can have a context menu: a `menu` block indented under it, with items written as the frame's menu items are (`item`, `separator`, submenus, `on click: handler` or `on click -> Target`). A right click opens it at the pointer; on a table or list it chooses the row under the pointer first, so the handler finds it as `grid.selected`. On a canvas the handler finds where it was opened as `canvas.x` and `canvas.y`, in the canvas's units, to act on the box there. Named items hide and disable as any part does.
 
 ```clarity
 table name grid at 1,1 span 12 rows 6 bind albums columns title
@@ -1042,7 +1045,7 @@ part Arena
 | `grows` | Placed in a window, it takes the height the window has left, as a table or a canvas does (see [The grid](#the-grid)). Without it, it keeps the height of its rows. The designer's Grows with the window sets it. |
 | `preview "file"` | Its picture on the design canvas, from the resources; without it a box with its name. |
 
-A part's name starts with a capital, which no built-in part does. Its properties cannot be named after a word every part has: `at`, `span`, `rows`, `bind`, `name`, `on`, `tooltip`, `taborder`, `visible`, `enabled` or `value`.
+A part's name starts with a capital, which no built-in part does. Its properties cannot be named after a word every part has: `at`, `span`, `rows`, `bottom`, `bind`, `name`, `on`, `tooltip`, `taborder`, `visible`, `enabled` or `value`.
 
 ```clarity
 page Game: window
@@ -1268,7 +1271,7 @@ code CustomerForm
 
 Every part the person edits takes back its own edits with Ctrl+Z, and does them again with Ctrl+Y (or Ctrl+Shift+Z), on every stack, with nothing to write:
 
-- **What one edit is.** A click on a canvas, its drag and drop (from the first drag to the drop), a bent line, a table cell, a change of an input (bound or not), a picture loaded into an image or removed, a row moved in a part that reorders. A list or tree that does not reorder only selects, so it has no undo, nor a custom part, which brings its own, nor a canvas's `on pointer` and `on key`. Its undo puts back the window's data as it was before the edit, and what the handler of that edit (`on drop`, `on bend`, `on change`, `on reorder`) saved or deleted, cascades included.
+- **What one edit is.** A click on a canvas, its drag and drop (from the first drag to the drop), a bent line, a new line drawn between boxes, a table cell, a change of an input (bound or not), a picture loaded into an image or removed, a row moved in a part that reorders. A list or tree that does not reorder only selects, so it has no undo, nor a custom part, which brings its own, nor a canvas's `on pointer` and `on key`. Its undo puts back the window's data as it was before the edit, and what the handler of that edit (`on drop`, `on bend`, `on connect`, `on change`, `on reorder`) saved or deleted, cascades included.
 - **Where.** Ctrl+Z acts on the part with the focus. In a `form` or a `panel`, it walks back the fields one by one, the last first. In a text input, its own text undo comes first while it has something to take back.
 - **A menu item or a button** reaches it with the built-in targets `undo` and `redo`: `item @undoItem name undoItem key "Ctrl+Z" on click -> undo`. They act on the part that had the focus last.
 - **Not taken back:** moving around (a tab, folding, zoom and pan, the selected row), what a click or a timer did, and effects outside the databases and the window (files written, messages, the clipboard, calls to other services).
@@ -1373,8 +1376,8 @@ code Main
 | `canvas.rect(x, y, width, height, color)` | | A filled rectangle. |
 | `canvas.circle(x, y, r, color)` | | A filled circle around x, y. |
 | `canvas.ring(x, y, r, color, width)` | width 1 when left out | A circle's outline. |
-| `canvas.text(x, y, text, color, size, align)` | color `"text"`, size 10 and align `"center"` when left out | Text centered on x, y, or with `"left"` starting at x and with `"right"` ending there; slots are filled in the person's format, like a message. |
-| `canvas.link(name, x1, y1, x2, y2, via, color, width)` | width 1 when left out | A line people bend, from x1, y1 through its bend points to x2, y2. `via` is a `list<integer>` of the points, x, y, x, y, ... (`[]` for straight); `name` is plain text the code knows it by, as `"a{association.id}"`. See `on bend` below. |
+| `canvas.text(x, y, text, color, size, align, style)` | color `"text"`, size 10, align `"center"` and no style when left out | Text centered on x, y, or with `"left"` starting at x and with `"right"` ending there; slots are filled in the person's format, like a message. `style` is any of `"bold"`, `"italic"` and `"mono"` (the theme's code font), together as `"bold mono"`. |
+| `canvas.link(name, x1, y1, x2, y2, via, color, width, start, end, label, style)` | width 1, plain ends, no label and solid when left out | A line people bend, from x1, y1 through its bend points to x2, y2. `via` is a `list<integer>` of the points, x, y, x, y, ... (`[]` for straight); `name` is plain text the code knows it by, as `"a{association.id}"`. See `on bend` below. An end that lies in a box (as `on connect` finds boxes) is drawn at the edge of that box, so a line from the middle of one box to the middle of another runs between their edges. `start` and `end` say what its ends show: `"arrow"`, `"triangle"` (hollow, a base type), `"diamond"` and `"filledDiamond"` (a whole), or a data model's `"one"`, `"many"` (a crow's foot), `"zeroOrOne"`, `"zeroOrMany"` and `"oneOrMany"`. `label` is a text halfway along it, in quiet italics, which moves with it. `style` is `"dashed"` or `"dotted"`. The checker knows the words. |
 | `canvas.image(x, y, width, height, picture)` | | A picture of the resources folder by its name (`"pill.svg"`, or a picture constant), stretched to fill the box whose top left corner is x, y. |
 | `canvas.ellipse(x, y, rx, ry, color)` | | A filled ellipse around x, y, rx across and ry high from its center. |
 | `canvas.path(points, color, width)` | width 1 when left out | An open line through its points, a `list<integer>` x, y, x, y, .... |
@@ -1406,7 +1409,8 @@ code Game
         status = "Square {square}"
 ```
 - `zoom` on a canvas lets the person zoom and pan its drawing, as Clarity's own diagram designer does, for a drawing larger than the part shows well, such as a diagram. It starts whole, fitted in proportion. The wheel pans (with Shift sideways), Ctrl (Cmd on macOS) with the wheel or a touchpad's pinch zooms around the pointer, and three buttons in its top right corner zoom out, show the zoom it is at (a click shows it whole again) and zoom in, named in Clarity's words `zoomOut`, `zoomWhole` and `zoomIn`. It zooms from a quarter of its size up to three times (further when the whole drawing is smaller or larger than that), and pans past its edges. The view stays while the canvas is drawn anew. `canvas.x` and `canvas.y` stay in the canvas's units, whatever is in view.
-- `on drag: handler` runs while the pointer moves on the canvas with its button down, and `on drop: handler` once when it is let go. Both read where the pointer is (`canvas.x`, `canvas.y`, at the canvas's nearest edge when it is beside it) and where it was pressed (`canvas.fromX`, `canvas.fromY`), in the canvas's units. A press that does not move is a click. The handler runs with the latest place: moves that come while it runs are not queued one by one. The canvas is drawn anew after each, so code that moves what it draws by `canvas.x - canvas.fromX` shows it moving; the drop is the place to save. On a canvas with `zoom`, a drag pans instead when there is no drag handler, or when the handler's first run leaves the drawing as it was (a press on nothing it moves); that drag has no drop.
+- `on drag: handler` runs while the pointer moves on the canvas with its button down, and `on drop: handler` once when it is let go. Both read where the pointer is (`canvas.x`, `canvas.y`, at the canvas's nearest edge when it is beside it) and where it was pressed (`canvas.fromX`, `canvas.fromY`), in the canvas's units. A press that does not move is a click. The handler runs with the latest place: moves that come while it runs are not queued one by one. The canvas is drawn anew after each, so code that moves what it draws by `canvas.x - canvas.fromX` shows it moving; the drop is the place to save. On a canvas with `zoom`, a drag pans instead when there is no drag handler, or when it starts on empty paper; a press on something drawn (a box, a circle, an ellipse, a ring, a picture or an object; not lines or text) is the handler's drag, whatever the handler does with it, as in Clarity's diagram designer. A panning drag has no drop.
+- `on drop` without `on drag`: the canvas carries a box itself, as Clarity's diagram designer does. A press on a box (as `on connect` finds boxes, below) and a drag move the box and everything drawn inside it with the pointer, by whole grid steps when the canvas has `snap`, and the end of a link that lies in the box comes along; no handler runs while it moves, so a large drawing moves as smoothly as a small one. When the person lets go, `on drop` runs once with where it was pressed (`canvas.fromX`, `canvas.fromY`) and where that point was carried to (`canvas.x`, `canvas.y`), so the code moves the box it was pressed on by `canvas.x - canvas.fromX` and saves it. The canvas shows the box where it was put until the drawing comes back. Let go where it was, nothing runs. A drag on empty paper pans a canvas with `zoom`.
 - `grid 20` shows a dot every 20 of the canvas's units over the whole view, behind the shapes: after the drawing's `clear`, first when it has none, in the theme's `border` color. Zoomed out, dots closer than 8 pixels are thinned to every second, fourth and so on. `snap` (with a grid) says that what is moved lands on the grid; the pointer itself stays free, and code puts the moved thing on the grid with `snapped(value, step)`, the multiple of step nearest to value (a half rounds up; a step of 0 gives the value): `boxX = snapped(sheet.x - grabX, sheet.grid)`. Code reads and sets both while the app runs: `sheet.grid` (0 for none) and `sheet.snap`, as the line says until a handler sets them, so an app can offer Show grid and Snap to grid.
 - `background panel` (a theme color by name, or written out: `background "#f5f0e1"`) is what `clear()` without a color fills the canvas with; without it, the theme's `panel`. Code reads and sets it as `canvas.background`, as the line says until a handler sets it; an empty one is the theme's panel again. A person's chosen color can so reach a canvas through a setting: `sheet.background = settings.diagramColor`.
 - `dots 3 muted` says how many pixels across a grid's dots are (1 to 20; 2 without it) and their color (a theme color by name, or written out; the theme's `border` without it, and the color can be left out: `dots 3`). They are the same size whatever the zoom. Code reads and sets them as `canvas.dotSize` and `canvas.dotColor`, as the line says until a handler sets them; an empty color is the theme's border again.
@@ -1435,6 +1439,29 @@ code Sheet
     handler dropped
         startX = 0
         startY = 0
+```
+- `on connect: handler` lets people draw a new line from one box to another, as Clarity's diagram designer does. A box is a shape the canvas can hit (a rect, circle, ellipse, ring, picture or object), together with the shapes under it that hold it whole, so a box drawn as an outline, a body and a header is one box; a shape over the whole paper is the paper. While the pointer is over a box, a small dot in the theme's accent shows in the middle of each side, with a crosshair over a dot. A press on a dot starts a new line (before the box's drag and before a bend): a dashed line follows the pointer and the box under it is outlined. No handler runs while it is drawn. When the person lets go, the handler runs once and reads where the line started (`canvas.fromX`, `canvas.fromY`: the middle of the box it started from) and where it was let go (`canvas.x`, `canvas.y`), in the canvas's units as a drop reads them, so the code finds the two boxes the way its drag finds the one it moves. Let go on the same box or on empty paper, it still runs and the code decides; let go where it was pressed, nothing runs. `canvas.connecting` (a bool, false until code sets it) makes any press on a box start a new line instead of a drag, from where it was pressed, so an app can offer a line tool as the designer's palette does. The dots and the line are drawn over the drawing, never in it, and look the same on every surface. A new line is one edit for undo, like a drop. The right button draws a new line too, from anywhere on a box, without the line tool: a right press and drag from one box to another is the same new line, and a right click that does not move opens the canvas's `menu` instead. Only a canvas whose code draws it has `on connect`: the checker refuses it on a canvas with a `mode` or one an engine draws, and without `on connect` a canvas shows no dots and its pointer works as before.
+
+```clarity
+page Diagram: window
+    data types: list<ClassType>
+    canvas name sheet at 1,1 span 12 rows 10 units 4000 x 3000 zoom on draw: drawTypes on connect: typesConnected
+    button "Line" name lineTool at 1,11 span 2 on click: lineToolClicked
+
+code Diagram
+    handler typesConnected
+        let sourceId = 0
+        let targetId = 0
+        for t in types
+            if sheet.fromX >= t.x and sheet.fromX <= t.x + 200 and sheet.fromY >= t.y and sheet.fromY <= t.y + 100
+                sourceId = t.id
+            if sheet.x >= t.x and sheet.x <= t.x + 200 and sheet.y >= t.y and sheet.y <= t.y + 100
+                targetId = t.id
+        if sourceId != 0 and targetId != 0 and sourceId != targetId
+            message "From {sourceId} to {targetId}"
+
+    handler lineToolClicked
+        sheet.connecting = not sheet.connecting
 ```
 - `sin(degrees)` and `cos(degrees)` give a decimal, rounded to 10 decimals.
 

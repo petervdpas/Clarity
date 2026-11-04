@@ -1635,6 +1635,7 @@ fn parse_widget_props(
         shortcut: None,
         default_button: false,
         cancel: false,
+        bottom: false,
         part: None,
         values: Default::default(),
         tells: Vec::new(),
@@ -1727,6 +1728,10 @@ fn parse_widget_props(
             }
             "span" => props.width = cursor.expect_number("a number of columns")?,
             "rows" => props.height = cursor.expect_number("a number of rows")?,
+            "bottom" if matches!(kind, WidgetKind::Sound | WidgetKind::Timer | WidgetKind::Popover) => {
+                return Err(Diagnostic::error(format!("a {name} has no place in the window's grid, so no 'bottom'"), clause.span));
+            }
+            "bottom" => props.bottom = true,
             "bind" => {
                 if widgets::info(kind).bind == BindTarget::Nothing {
                     return Err(Diagnostic::error(

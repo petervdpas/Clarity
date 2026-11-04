@@ -37,6 +37,8 @@ struct PartState {
     // A canvas's grid in its units (0 for none) and whether code snaps to it, as a handler set them.
     std::optional<int64_t> grid;
     std::optional<bool> snap;
+    // Whether a press anywhere on a box of a canvas with `on connect` draws a new line, as a handler set it.
+    std::optional<bool> connecting;
     // What a canvas's clear() fills it with, as a handler set it; empty is the theme's panel.
     std::optional<std::string> background;
     // A canvas's grid dots, as a handler set them: pixels across, and color (empty is the theme's border).
@@ -221,6 +223,9 @@ public:
     void set_grid(const std::string& part, int64_t value) { parts_[part].grid = value; }
     bool snap(const std::string& part, bool design) const;
     void set_snap(const std::string& part, bool value) { parts_[part].snap = value; }
+    /// Whether a press anywhere on a box draws a new line (`canvas.connecting`), false until a handler sets it.
+    bool connecting(const std::string& part) const;
+    void set_connecting(const std::string& part, bool value) { parts_[part].connecting = value; }
     /// What a canvas's clear() fills it with (`canvas.background`), as its line says until a handler sets it.
     std::string background(const std::string& part, const std::string& design) const;
     void set_background(const std::string& part, const std::string& value) { parts_[part].background = value; }

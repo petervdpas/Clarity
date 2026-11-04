@@ -108,6 +108,14 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     }
     bool snap;
 
+    /// <summary>Whether a press anywhere on a box of a canvas with <c>on connect</c> draws a new line, as a line tool does: <c>canvas.connecting</c>, false until a handler sets it.</summary>
+    public bool Connecting
+    {
+        get => connecting;
+        set => SetProperty(ref connecting, value);
+    }
+    bool connecting;
+
     /// <summary>What a canvas's clear() fills it with: <c>canvas.background</c>; empty is the theme's panel.</summary>
     public string Background
     {

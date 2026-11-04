@@ -618,3 +618,15 @@ fn names_every_part_that_has_none() {
     // Named already: nothing changes.
     assert_eq!(edit(&text, Edit::NameParts).0, text);
 }
+
+/// The properties panel's "Stick to bottom" sets `bottom` on the part.
+#[test]
+fn updating_a_widget_sticks_it_to_the_bottom() {
+    let mut props = new_props(WidgetKind::Textbox, 3, 2);
+    props.caption = None;
+    props.width = 6;
+    props.bind = Some("c.name".into());
+    props.bottom = true;
+    let (text, _) = edit(PAGE, Edit::UpdateWidget { item: at(PAGE, "textbox"), container: None, props });
+    assert!(text.contains("    textbox name textbox1 at 3,2 span 6 bottom bind c.name // the name\n"), "{text}");
+}

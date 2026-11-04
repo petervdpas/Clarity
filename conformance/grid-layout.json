@@ -1,5 +1,5 @@
 {
-  "about": "How a window's grid places its parts (DESIGN 7.9): every version of Clarity.UI, and the shared screen, lays out alike. The columns share the width equally, with the gap between them. A row is as high as the project says (`row height`): the file's `row_height`, 36, or a case's own `row_height`; a row that holds a part that grows (a table, a panel holding one) shares the height left over with the other growing rows, but never gets less than a row. A part that does not grow keeps its own height (its rows at a row each, with the gaps between) at the top of its place, even when a part beside it makes its rows grow. When the rows need more height than there is, every row keeps its least height and the content is taller than the window (`content`). A part is at `col` and `row` (from 1), `width` columns wide and `height` rows high; `gap` is 8, or 0 in a joined grid. Each box is x, y, width, height, from the grid's top left, to a thousandth. `made` cases give each part as its window markup writes it, at its place: each version makes the part from it and asks the part whether it grows, so a custom part grows when its markup says `grows=\"true\"` (its declaration's `grows`), as a canvas does, and keeps its rows without it.",
+  "about": "How a window's grid places its parts (DESIGN 7.9): every version of Clarity.UI, and the shared screen, lays out alike. The columns share the width equally, with the gap between them. A row is as high as the project says (`row height`): the file's `row_height`, 36, or a case's own `row_height`; a row that holds a part that grows (a table, a panel holding one) shares the height left over with the other growing rows, but never gets less than a row. A part that does not grow keeps its own height (its rows at a row each, with the gaps between) at the top of its place, even when a part beside it makes its rows grow. When the rows need more height than there is, every row keeps its least height and the content is taller than the window (`content`). A part is at `col` and `row` (from 1), `width` columns wide and `height` rows high; `gap` is 8, or 0 in a joined grid. Each box is x, y, width, height, from the grid's top left, to a thousandth. `made` cases give each part as its window markup writes it, at its place: each version makes the part from it and asks the part whether it grows, so a custom part grows when its markup says `grows=\"true\"` (its declaration's `grows`), as a canvas does, and keeps its rows without it. A part marked `bottom` (`bottom=\"true\"` in its markup) sticks to the bottom: when no row grows and the grid has height to spare, every row from the first row of a bottom part down moves down by the spare, the rows keeping their heights, so the content is the grid's height; where a row grows, `bottom` changes nothing.",
   "row_height": 36,
   "cases": [
     {
@@ -429,6 +429,210 @@
         ]
       },
       "row_height": 64
+    },
+    {
+      "what": "parts marked bottom move down by the height to spare, with every part on their rows and below",
+      "columns": 4,
+      "width": 800,
+      "height": 600,
+      "gap": 8,
+      "parts": [
+        {
+          "col": 1,
+          "row": 1,
+          "width": 4,
+          "height": 3,
+          "grows": false
+        },
+        {
+          "col": 1,
+          "row": 11,
+          "width": 2,
+          "height": 1,
+          "grows": false
+        },
+        {
+          "col": 3,
+          "row": 11,
+          "width": 1,
+          "height": 1,
+          "grows": false,
+          "bottom": true
+        },
+        {
+          "col": 4,
+          "row": 11,
+          "width": 1,
+          "height": 1,
+          "grows": false,
+          "bottom": true
+        }
+      ],
+      "gives": {
+        "content": 600,
+        "boxes": [
+          [
+            0.0,
+            0,
+            800.0,
+            124
+          ],
+          [
+            0.0,
+            564,
+            396.0,
+            36
+          ],
+          [
+            404.0,
+            564,
+            194.0,
+            36
+          ],
+          [
+            606.0,
+            564,
+            194.0,
+            36
+          ]
+        ]
+      }
+    },
+    {
+      "what": "rows from the first row of a bottom part down move, the rows above stay at the top",
+      "columns": 2,
+      "width": 400,
+      "height": 300,
+      "gap": 8,
+      "parts": [
+        {
+          "col": 1,
+          "row": 1,
+          "width": 2,
+          "height": 1,
+          "grows": false
+        },
+        {
+          "col": 1,
+          "row": 3,
+          "width": 1,
+          "height": 1,
+          "grows": false,
+          "bottom": true
+        },
+        {
+          "col": 1,
+          "row": 4,
+          "width": 2,
+          "height": 1,
+          "grows": false
+        }
+      ],
+      "gives": {
+        "content": 300,
+        "boxes": [
+          [
+            0.0,
+            0,
+            400.0,
+            36
+          ],
+          [
+            0.0,
+            220,
+            196.0,
+            36
+          ],
+          [
+            0.0,
+            264,
+            400.0,
+            36
+          ]
+        ]
+      }
+    },
+    {
+      "what": "where a row grows, a part marked bottom stays where the rows put it",
+      "columns": 2,
+      "width": 400,
+      "height": 300,
+      "gap": 8,
+      "parts": [
+        {
+          "col": 1,
+          "row": 1,
+          "width": 2,
+          "height": 3,
+          "grows": true
+        },
+        {
+          "col": 1,
+          "row": 4,
+          "width": 1,
+          "height": 1,
+          "grows": false,
+          "bottom": true
+        }
+      ],
+      "gives": {
+        "content": 300,
+        "boxes": [
+          [
+            0.0,
+            0,
+            400.0,
+            256.0
+          ],
+          [
+            0.0,
+            264,
+            196.0,
+            36
+          ]
+        ]
+      }
+    },
+    {
+      "what": "in too little height a part marked bottom stays where the rows put it",
+      "columns": 1,
+      "width": 200,
+      "height": 100,
+      "gap": 8,
+      "parts": [
+        {
+          "col": 1,
+          "row": 1,
+          "width": 1,
+          "height": 2,
+          "grows": false
+        },
+        {
+          "col": 1,
+          "row": 3,
+          "width": 1,
+          "height": 1,
+          "grows": false,
+          "bottom": true
+        }
+      ],
+      "gives": {
+        "content": 124,
+        "boxes": [
+          [
+            0.0,
+            0,
+            200.0,
+            80
+          ],
+          [
+            0.0,
+            88,
+            200.0,
+            36
+          ]
+        ]
+      }
     }
   ],
   "made": [
@@ -498,6 +702,34 @@
             44,
             196.0,
             256.0
+          ]
+        ]
+      }
+    },
+    {
+      "what": "a part whose markup says bottom=\"true\" sticks to the bottom",
+      "columns": 2,
+      "width": 400,
+      "height": 300,
+      "gap": 8,
+      "parts": [
+        "<Label name=\"note\" caption=\"Note\" at=\"1,1\" span=\"2\" />",
+        "<Button name=\"save\" caption=\"Save\" at=\"2,3\" span=\"1\" bottom=\"true\" />"
+      ],
+      "gives": {
+        "content": 300,
+        "boxes": [
+          [
+            0.0,
+            0,
+            400.0,
+            36
+          ],
+          [
+            204.0,
+            264,
+            196.0,
+            36
           ]
         ]
       }

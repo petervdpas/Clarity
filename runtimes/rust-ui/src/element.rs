@@ -371,6 +371,21 @@ pub trait Element: Any {
         let _ = (at, cx);
     }
 
+    /// Whether a right press at a point (from its top left) is a drag it
+    /// takes, as the left one is (a canvas draws a new line with it); else
+    /// the right press opens its menu.
+    fn right_drags(&self, x: f64, y: f64) -> bool {
+        let _ = (x, y);
+        false
+    }
+
+    /// The right button went up after a press it took: true when that was a
+    /// drag it used, false to open its menu where it was pressed.
+    fn on_right_released(&mut self, at: PointerInput, cx: &mut Cx) -> bool {
+        let _ = (at, cx);
+        false
+    }
+
     /// The pointer it held was taken away before the button went up (the
     /// window lost the focus mid-drag): what the press started ends without
     /// its release and without a click.

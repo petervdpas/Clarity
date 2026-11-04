@@ -285,6 +285,10 @@ pub struct PartState {
     pub grid: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snap: Option<bool>,
+    /// Whether a press anywhere on a box of a canvas with `on connect` draws a
+    /// new line, as a line tool does, as a handler set it; none is false.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connecting: Option<bool>,
     /// What a canvas's clear() fills it with, as a handler set it; empty is the theme's panel.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background: Option<String>,
@@ -657,6 +661,15 @@ impl Ui {
 
     pub fn set_snap(&mut self, part: &str, value: bool) {
         self.parts.entry(part.to_string()).or_default().snap = Some(value);
+    }
+
+    /// Whether a press anywhere on a box draws a new line: `canvas.connecting`, false until a handler sets it.
+    pub fn connecting(&self, part: &str) -> bool {
+        self.parts.get(part).and_then(|p| p.connecting).unwrap_or(false)
+    }
+
+    pub fn set_connecting(&mut self, part: &str, value: bool) {
+        self.parts.entry(part.to_string()).or_default().connecting = Some(value);
     }
 
     /// What a canvas's clear() fills it with: `canvas.background`.

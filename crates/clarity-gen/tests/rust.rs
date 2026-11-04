@@ -829,7 +829,7 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     assert!(sales.contains("clarity_runtime::cos(w.angle)"), "{sales}");
     assert!(sales.contains("\"width\": (3i64) as f64}));"), "{sales}");
     // Left out: the text's color and size.
-    assert!(sales.contains("\"color\": \"text\", \"size\": 10.0, \"align\": \"center\"}));"), "{sales}");
+    assert!(sales.contains("\"color\": \"text\", \"size\": 10.0, \"align\": \"center\", \"style\": \"\"}));"), "{sales}");
     let main = &program(&files);
     assert!(main.contains("ui.begin_drawing(\"dial\");\n            modules::sales::dial__draw_dial(db, &mut w, &mut ui)?;"), "{main}");
     assert!(main.contains("redraw(db, "), "{main}");

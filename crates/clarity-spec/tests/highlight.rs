@@ -202,4 +202,5 @@ fn the_words_of_a_part_line_are_keywords() {
     let source = "module m\n\npage P: window\n    data items: list<Item>\n    list name l at 1,1 span 4 bind items show title cards\n";
     has(source, "cards", PieceKind::Keyword);
     has(source, "show", PieceKind::Keyword);
+    has("module m\n\npage P: window\n    button \"Save\" name save at 1,11 span 2 bottom\n", "bottom", PieceKind::Keyword);
 }

@@ -370,6 +370,14 @@ func TestACanvasKeepsTheGridAndSnapCodeSets(t *testing.T) {
 	if ui.DotSize("sheet", 2) != 3 || ui.DotColor("sheet", "") != "muted" {
 		t.Fatal("the dots code set")
 	}
+	// A line tool: false until code sets canvas.connecting.
+	if ui.Connecting("sheet") {
+		t.Fatal("not connecting before code sets it")
+	}
+	ui.SetConnecting("sheet", true)
+	if !ui.Connecting("sheet") {
+		t.Fatal("connecting once code set it")
+	}
 }
 
 // Copy hands the text to the screen for its clipboard; of several, the last.

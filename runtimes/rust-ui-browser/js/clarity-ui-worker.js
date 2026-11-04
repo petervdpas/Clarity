@@ -19,6 +19,7 @@
 //   step    {id, step}                  shot {id}
 //   reload  {id, files, choices}        layout {id}
 //   access  {on}                        act {node, action, value}
+//   stop    (on the page's thread: its terminate sends it)
 // (reload starts the program again from new files on the same canvas, as the
 // IDE's designer does after a change; layout says where the design's parts
 // and grids show; access turns the page's accessible mirror on or off, and
@@ -48,6 +49,10 @@ function clarityUiWorker(scope) {
   let scheduled = false;
   let waking = null;
   let canvas = null;
+  // The WebGL context and Emscripten's handle of it, released at stop.
+  let gl = null;
+  let context = 0;
+  let ended = false;
   // This tab's own number, so the server tells its pages apart.
   const browser = globalThis.crypto && globalThis.crypto.randomUUID ? globalThis.crypto.randomUUID() : String(Math.random()).slice(2) + String(Date.now());
 
@@ -184,7 +189,8 @@ function clarityUiWorker(scope) {
     canvas = message.canvas;
     size(message.width, message.height, message.dpr);
     const ClarityUi = await scope.load(message.script || "clarity-ui.js");
-    ui = await ClarityUi({
+    if (ended) return;
+    const made = await ClarityUi({
       clarityAsk: ask,
       clarityAskLater: askLater,
       clarityTell: (json) => post(Object.assign({ type: "tell" }, JSON.parse(json))),
@@ -194,12 +200,16 @@ function clarityUiWorker(scope) {
       print: (line) => console.log(line),
       printErr: (line) => console.error(line),
     });
-    const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, depth: false, stencil: true, premultipliedAlpha: true, preserveDrawingBuffer: false });
+    // Stopped while the module was made: it is let go unused.
+    if (ended) return;
+    ui = made;
+    gl = canvas.getContext("webgl2", { alpha: false, antialias: false, depth: false, stencil: true, premultipliedAlpha: true, preserveDrawingBuffer: false });
     if (!gl) {
       post({ type: "failed", what: "This browser gives no WebGL2." });
       return;
     }
-    ui.GL.makeContextCurrent(ui.GL.registerContext(gl, { majorVersion: 2, minorVersion: 0 }));
+    context = ui.GL.registerContext(gl, { majorVersion: 2, minorVersion: 0 });
+    ui.GL.makeContextCurrent(context);
     const files = get(message.files || "clarity/files.json", false);
     if (files == null) {
       post({ type: "failed", what: "The program's files did not come: " + (message.files || "clarity/files.json") });
@@ -213,6 +223,23 @@ function clarityUiWorker(scope) {
     }
     post({ type: "started" });
     want();
+  }
+
+  // Ends it on the page's thread, where no terminate frees it: no more
+  // frames, the WebGL context lost and the library's module let go, so the
+  // page gets their memory back (the IDE starts a canvas per view it opens).
+  function stop() {
+    ended = true;
+    clearTimeout(waking);
+    waking = null;
+    scheduled = true;
+    if (ui && context) ui.GL.deleteContext(context);
+    const lose = gl && gl.getExtension("WEBGL_lose_context");
+    if (lose) lose.loseContext();
+    ui = null;
+    gl = null;
+    context = 0;
+    canvas = null;
   }
 
   const handlers = {
@@ -257,6 +284,7 @@ function clarityUiWorker(scope) {
 
   return (message) => {
     const handler = handlers[message.type];
+    if (message.type === "stop") return stop();
     if (!handler || (!ui && message.type !== "start")) return;
     try {
       handler(message);
@@ -307,7 +335,10 @@ if (typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScop
       base: script,
     });
     face.postMessage = (message) => later(() => !face.ended && handle(message));
-    face.terminate = () => (face.ended = true);
+    face.terminate = () => {
+      face.ended = true;
+      handle({ type: "stop" });
+    };
     return face;
   };
 }

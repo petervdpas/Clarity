@@ -335,3 +335,69 @@ code Main
     assert_has(&errors(&sheet.replace("points, \"border\", 2)", "\"x\", \"border\", 2)")), "via of 'link' is a list of whole numbers");
     assert_has(&errors(&sheet.replace("        points = sheet.via\n", "        sheet.via = points\n")), "sheet.via is read, not set");
 }
+
+/// A link can show what its ends are (a data model's crow's feet, an
+/// arrow, a base type's triangle), be dashed and carry a label; a text can
+/// be bold, italic and in the code font. Words written out are checked.
+#[test]
+fn a_link_has_ends_a_label_and_a_style_and_a_text_a_style() {
+    let sheet = "module diagram
+
+page Main: window
+    data label: text
+    canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom on draw: drawSheet
+
+code Main
+    handler drawSheet
+        sheet.clear()
+        sheet.link(\"r1\", 100, 100, 600, 400, [], \"border\", 1, \"many\", \"one\", label, \"dashed\")
+        sheet.link(\"r2\", 600, 400, 900, 100, [], \"border\", 1, \"\", \"triangle\")
+        sheet.text(100, 100, \"Order\", \"text\", 12, \"left\", \"bold mono\")
+";
+    assert!(errors(sheet).is_empty(), "{:#?}", errors(sheet));
+    assert_has(&errors(&sheet.replace("\"many\", \"one\"", "\"lots\", \"one\"")), "start of 'link' is \"arrow\", \"triangle\", \"diamond\", \"filledDiamond\", \"one\", \"many\", \"zeroOrOne\", \"zeroOrMany\" or \"oneOrMany\" or left empty, not \"lots\"");
+    assert_has(&errors(&sheet.replace("\"dashed\")", "\"wavy\")")), "style of 'link' is \"solid\", \"dashed\" or \"dotted\" or left empty, not \"wavy\"");
+    assert_has(&errors(&sheet.replace("\"bold mono\"", "\"bold huge\"")), "style of 'text' is made of \"bold\", \"italic\" and \"mono\", not \"huge\"");
+    assert_has(&errors(&sheet.replace("\"left\"", "\"middle\"")), "align of 'text' is \"center\", \"left\" or \"right\" or left empty, not \"middle\"");
+}
+
+/// A canvas lets people draw a new line between two boxes: with `on connect`
+/// a press on a box's handle (or anywhere on a box while code set
+/// `canvas.connecting`) drags a line to where it is let go, and the handler
+/// runs with where it started (`fromX`, `fromY`) and ended (`x`, `y`).
+#[test]
+fn a_canvas_connects_boxes_people_draw_a_line_between() {
+    let sheet = "module diagram
+
+page Main: window
+    data linked: integer
+    data lineTool: bool
+    canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom on draw: drawSheet on connect: connected
+    button \"Line\" name lineButton at 7,1 span 2 on click: lineClicked
+
+code Main
+    handler drawSheet
+        sheet.clear()
+        sheet.rect(100, 100, 200, 100, \"raised\")
+
+    handler connected
+        if sheet.fromX < sheet.x and sheet.fromY < sheet.y
+            linked = linked + 1
+        sheet.connecting = false
+
+    handler lineClicked
+        sheet.connecting = not sheet.connecting
+        lineTool = sheet.connecting
+";
+    let (file, diags) = parse(sheet, "diagram.clarity");
+    assert!(diags.is_empty(), "{diags:#?}");
+    assert_eq!(file.pages[0].widgets[0].props.handlers[1].event, Event::Connect);
+    assert_eq!(widget_line(&file.pages[0].widgets[0].props), "canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom on draw: drawSheet on connect: connected");
+    assert!(errors(sheet).is_empty(), "{:#?}", errors(sheet));
+    assert!(!errors(&sheet.replace("        sheet.connecting = false\n", "        sheet.connecting = 3\n")).is_empty());
+    assert!(!errors(&sheet.replace("sheet.connecting = not sheet.connecting", "lineButton.connecting = true")).is_empty());
+    // Only a canvas with `on connect` has `connecting`.
+    assert!(!errors(&sheet.replace(" on connect: connected", "")).is_empty());
+    // A canvas with a mode has no boxes its code draws to connect.
+    assert_has(&errors(&sheet.replace(" zoom on draw", " zoom mode vector on draw")), "'on connect' draws lines between the boxes");
+}

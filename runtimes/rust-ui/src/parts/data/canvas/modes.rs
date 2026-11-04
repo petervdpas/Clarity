@@ -118,7 +118,7 @@ pub fn shape_of(shape: &Map<String, Value>) -> Option<Shape> {
         "line" => Shape::Line { x1: n(shape, "x1"), y1: n(shape, "y1"), x2: n(shape, "x2"), y2: n(shape, "y2"), color, width: n(shape, "width") },
         "ellipse" => Shape::Ellipse { x: n(shape, "x"), y: n(shape, "y"), rx: n(shape, "rx"), ry: n(shape, "ry"), color },
         "path" => Shape::Path { points: super::wholes(shape.get("points")), color, width: n(shape, "width") },
-        "text" => Shape::Words { x: n(shape, "x"), y: n(shape, "y"), text: s(shape, "text", "").to_string(), color, size: n(shape, "size"), align: "center".into() },
+        "text" => Shape::Words { x: n(shape, "x"), y: n(shape, "y"), text: s(shape, "text", "").to_string(), color, size: n(shape, "size"), align: "center".into(), style: String::new() },
         _ => return None,
     })
 }
@@ -737,7 +737,7 @@ impl CanvasPart {
                 for (i, shape) in shapes.iter().enumerate() {
                     if let Some(shape) = shape_of(shape) {
                         let shape = if Some(i) == chosen { shape.translated(by_x, by_y) } else { shape };
-                        draw_shape(p, &shape, v.scale, &at, &pictures);
+                        draw_shape(p, &shape, v.scale, &at, &pictures, &self.paper());
                     }
                 }
                 if let Some(b) = chosen.and_then(|c| shapes.get(c)).and_then(box_of) {
@@ -752,7 +752,7 @@ impl CanvasPart {
                 }
                 if let Some(w) = self.modes.sketching.as_ref().filter(|w| w.moved && self.tool_in_hand() != "select") {
                     if let Some(preview) = self.sketched(self.tool_in_hand(), w.from, w.to, &w.points).as_ref().and_then(Value::as_object).and_then(shape_of) {
-                        draw_shape(p, &preview, v.scale, &at, &pictures);
+                        draw_shape(p, &preview, v.scale, &at, &pictures, &self.paper());
                     }
                 }
                 if let Some((_, editor)) = &self.modes.typing {

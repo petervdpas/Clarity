@@ -32,8 +32,8 @@ const PAGE_KINDS: [(&str, &str); 4] = [("Tab", "tab"), ("Step", "step"), ("Secti
 const REGIONS: [&str; 5] = ["Menu", "Toolbar", "Ribbon", "Sidebar", "Footer"];
 
 /// The events a part's `on...` attribute may name.
-const EVENTS: [&str; 21] = [
-    "click", "change", "enter", "leave", "select", "open", "pointer", "key", "close", "return", "start", "submit", "draw", "drag", "drop", "bend", "next", "finish", "reorder", "tick", "unconnected",
+const EVENTS: [&str; 22] = [
+    "click", "change", "enter", "leave", "select", "open", "pointer", "key", "close", "return", "start", "submit", "draw", "drag", "drop", "bend", "connect", "next", "finish", "reorder", "tick", "unconnected",
 ];
 
 fn catalog(cell: &'static OnceLock<Map<String, Value>>, text: &str) -> &'static Map<String, Value> {
@@ -166,10 +166,11 @@ impl PartSpec {
         self.text("name")
     }
 
-    /// Where it is in its grid: column and row from 1, columns wide and rows high.
+    /// Where it is in its grid: column and row from 1, columns wide and rows
+    /// high, and whether it sticks to the bottom (`bottom`).
     pub fn place(&self, grows: bool) -> GridItem {
         let n = |field: &str| self.number(field).map(|v| v as i64).unwrap_or(1);
-        GridItem::new(n("col"), n("row"), n("width"), n("height"), grows)
+        GridItem::new(n("col"), n("row"), n("width"), n("height"), grows).at_bottom(self.flag("bottom"))
     }
 
     /// A text field; none when it has none.

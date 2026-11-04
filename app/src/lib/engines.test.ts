@@ -141,4 +141,8 @@ test("a canvas runs an engine beside the screen, which draws it and tells throug
   // While an engine draws it, the canvas offers no draw event.
   assert.deepEqual(canvasEvents(["draw", "pointer", "click"], "Screen"), ["pointer", "click"]);
   assert.deepEqual(canvasEvents(["draw", "pointer"], null), ["draw", "pointer"]);
+  // A new line joins boxes its code draws: no connect with an engine or a mode.
+  assert.deepEqual(canvasEvents(["draw", "connect"], null), ["draw", "connect"]);
+  assert.deepEqual(canvasEvents(["draw", "connect"], "Screen"), []);
+  assert.deepEqual(canvasEvents(["draw", "connect", "change"], null, "paint"), ["draw", "change"]);
 });

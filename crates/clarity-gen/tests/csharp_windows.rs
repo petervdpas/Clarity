@@ -501,8 +501,10 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     has(vm, "        Dial.Draw(new Shape.Clear(\"#101810\"));");
     has(vm, "Dial.Draw(new Shape.Line((double)(50L), (double)(50L), Numbers.Units((50L + (35L * Numbers.Cos(Angle))))");
     has(vm, "\"text\", (double)(3L)));");
-    // Left out: the text's color and size.
-    has(vm, ", \"text\", 10, \"center\"));");
+    // Left out, the text's color, size, alignment and style take the record's defaults, so code
+    // that uses no newer value builds on an older runtime.
+    has(vm, "new Text(\"{speed} km/h\").With(\"speed\", Slot.OfInteger(Speed, null))));");
+    lacks(vm, "\"center\"");
     has(vm, "    protected override void Redraw()\n    {\n        Dial.BeginDrawing();\n        OnDrawDial();\n        Dial.EndDrawing();\n    }");
 }
 

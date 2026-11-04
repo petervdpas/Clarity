@@ -16,8 +16,11 @@ fn a_grid_places_its_parts_as_every_version_does() {
             .as_array()
             .unwrap()
             .iter()
-            .map(|p| GridItem::new(p["col"].as_i64().unwrap(), p["row"].as_i64().unwrap(), p["width"].as_i64().unwrap(), p["height"].as_i64().unwrap(), p["grows"].as_bool().unwrap()))
+            .map(|p| GridItem::new(p["col"].as_i64().unwrap(), p["row"].as_i64().unwrap(), p["width"].as_i64().unwrap(), p["height"].as_i64().unwrap(), p["grows"].as_bool().unwrap()).at_bottom(p["bottom"].as_bool().unwrap_or(false)))
             .collect();
+        if what.contains("bottom") {
+            assert!(parts.iter().any(|p| p.bottom), "{what}: a part marked bottom");
+        }
         let row = case["row_height"].as_f64().unwrap_or(ROW_HEIGHT);
         let placed = place_rows(&parts, case["columns"].as_i64().unwrap(), case["width"].as_f64().unwrap(), case["height"].as_f64().unwrap(), case["gap"].as_f64().unwrap(), row);
         // The same as the windows lay out once the project's row height is set.
@@ -87,4 +90,15 @@ fn an_empty_grid_is_one_row_high() {
     let placed = place(&[], 12, 800.0, 600.0, 8.0);
     assert!(placed.boxes.is_empty());
     assert_eq!(ROW_HEIGHT, placed.content);
+}
+
+/// The designer draws its rows by their heights: the height a part marked
+/// `bottom` moves down by shows as the row above it.
+#[test]
+fn the_rows_above_a_part_at_the_bottom_take_the_spare_height_for_the_designer() {
+    let parts = [GridItem::new(1, 1, 1, 1, false), GridItem::new(1, 3, 1, 1, false).at_bottom(true)];
+    let placed = place_rows(&parts, 1, 200.0, 300.0, 8.0, 36.0);
+    assert_eq!(placed.rows, vec![36.0, 36.0 + 176.0, 36.0]);
+    assert_eq!(placed.boxes[1].y, 264.0);
+    assert_eq!(placed.content, 300.0);
 }

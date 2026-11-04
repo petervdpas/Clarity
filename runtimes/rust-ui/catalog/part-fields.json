@@ -1,6 +1,7 @@
 {
   "background": "text",
   "bind": "text",
+  "bottom": "bool",
   "brush": "number",
   "by": "text",
   "cancel": "bool",

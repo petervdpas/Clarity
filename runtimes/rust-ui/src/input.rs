@@ -88,7 +88,7 @@ impl Key {
     }
 }
 
-/// Where the pointer is, on the screen and from the element's top left, the keys held and how many clicks it is.
+/// Where the pointer is, on the screen and from the element's top left, the keys held, how many clicks it is and the button held (the right one only for a part that takes right drags).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PointerInput {
     pub screen_x: f64,
@@ -97,6 +97,7 @@ pub struct PointerInput {
     pub y: f64,
     pub modifiers: Modifiers,
     pub clicks: u32,
+    pub button: PointerButton,
 }
 
 /// The shape of the mouse pointer over a place: each host shows it as its system's.

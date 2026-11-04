@@ -33,6 +33,7 @@ bool Ui::folded(const std::string& part, bool design) const { return part_or(par
 bool Ui::collapsed(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::collapsed, design); }
 int64_t Ui::grid(const std::string& part, int64_t design) const { return part_or(parts_, part, &PartState::grid, design); }
 bool Ui::snap(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::snap, design); }
+bool Ui::connecting(const std::string& part) const { return part_or(parts_, part, &PartState::connecting, false); }
 std::string Ui::background(const std::string& part, const std::string& design) const { return part_or(parts_, part, &PartState::background, design); }
 int64_t Ui::dot_size(const std::string& part, int64_t design) const { return part_or(parts_, part, &PartState::dot_size, design); }
 std::string Ui::dot_color(const std::string& part, const std::string& design) const { return part_or(parts_, part, &PartState::dot_color, design); }
@@ -142,6 +143,7 @@ void to_json(nlohmann::json& out, const PartState& p) {
     if (p.collapsed) out["collapsed"] = *p.collapsed;
     if (p.grid) out["grid"] = *p.grid;
     if (p.snap) out["snap"] = *p.snap;
+    if (p.connecting) out["connecting"] = *p.connecting;
     if (p.background) out["background"] = *p.background;
     if (p.dot_size) out["dotSize"] = *p.dot_size;
     if (p.dot_color) out["dotColor"] = *p.dot_color;
@@ -172,6 +174,7 @@ void from_json(const nlohmann::json& in, PartState& p) {
     take("collapsed", p.collapsed);
     take("grid", p.grid);
     take("snap", p.snap);
+    take("connecting", p.connecting);
     take("background", p.background);
     take("dotSize", p.dot_size);
     take("dotColor", p.dot_color);

@@ -1722,6 +1722,30 @@ pub const ROUND: &str = "round";
 pub const SIN: &str = "sin";
 pub const COS: &str = "cos";
 
+/// What the end of a link shows: nothing; an arrow; the hollow triangle of a
+/// base type; a hollow or filled diamond of a whole; a data model's one,
+/// many (a crow's foot), zero or one, zero or many and one or many.
+pub const LINK_ENDS: [&str; 10] = ["", "arrow", "triangle", "diamond", "filledDiamond", "one", "many", "zeroOrOne", "zeroOrMany", "oneOrMany"];
+
+/// How a link is drawn: solid (empty or "solid"), "dashed" or "dotted".
+pub const LINK_STYLES: [&str; 4] = ["", "solid", "dashed", "dotted"];
+
+/// The words of a text's style, any of them together: "bold mono".
+pub const TEXT_STYLES: [&str; 3] = ["bold", "italic", "mono"];
+
+/// Where a text's x is.
+pub const TEXT_ALIGNS: [&str; 3] = ["center", "left", "right"];
+
+/// The words a named value of a shape takes, when they are a known few; none for any text.
+pub fn shape_words(shape: &str, value: &str) -> Option<&'static [&'static str]> {
+    match (shape, value) {
+        ("link", "start" | "end") => Some(&LINK_ENDS),
+        ("link", "style") => Some(&LINK_STYLES),
+        ("text", "align") => Some(&TEXT_ALIGNS),
+        _ => None,
+    }
+}
+
 /// What a value of a shape is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShapeValue {
@@ -1795,6 +1819,8 @@ pub const SHAPES: [Shape; 11] = [
             ("size", ShapeValue::Number, Some("10")),
             // Where x is: the text's "center", or its "left" or "right" end.
             ("align", ShapeValue::Name, Some("center")),
+            // Its look: "bold", "italic", "mono" (the theme's code font), together as "bold mono".
+            ("style", ShapeValue::Name, Some("")),
         ],
     },
     // A line people bend, from one point to another through its points; named, so `on bend` says which.
@@ -1809,6 +1835,13 @@ pub const SHAPES: [Shape; 11] = [
             ("via", ShapeValue::Points, None),
             ("color", ShapeValue::Color, None),
             ("width", ShapeValue::Number, Some("1")),
+            // What its ends show (LINK_ENDS): an arrow, a diagram's crow's foot.
+            ("start", ShapeValue::Name, Some("")),
+            ("end", ShapeValue::Name, Some("")),
+            // A text halfway along it, which moves with it.
+            ("label", ShapeValue::Text, Some("")),
+            // "dashed" or "dotted"; solid without.
+            ("style", ShapeValue::Name, Some("")),
         ],
     },
     // The box of an object of a canvas in mode objects (DESIGN 5.31): what is
@@ -1861,6 +1894,15 @@ fn and_list(words: &[&str]) -> String {
         [] => String::new(),
         [one] => one.to_string(),
         [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
+/// "a, b or c".
+fn or_list(words: &[&str]) -> String {
+    match words {
+        [] => String::new(),
+        [one] => one.to_string(),
+        [rest @ .., last] => format!("{} or {last}", rest.join(", ")),
     }
 }
 
@@ -2137,6 +2179,18 @@ impl<'a> BodyChecker<'_, 'a> {
             };
             if let Some(wanted) = problem {
                 self.error(format!("{name} of '{}' is {wanted}, not {}", shape.name, ty.name()), arg.span);
+            }
+            // A word written out is one the shape knows.
+            if let crate::code::ExprKind::Str { value } = &arg.kind {
+                if let Some(words) = shape_words(&shape.name, name).filter(|w| !w.contains(&value.as_str())) {
+                    let known: Vec<String> = words.iter().filter(|w| !w.is_empty()).map(|w| format!("\"{w}\"")).collect();
+                    let known: Vec<&str> = known.iter().map(String::as_str).collect();
+                    self.error(format!("{name} of '{}' is {} or left empty, not \"{value}\"", shape.name, or_list(&known)), arg.span);
+                } else if shape.name == "text" && *name == "style" {
+                    if let Some(word) = value.split_whitespace().find(|w| !TEXT_STYLES.contains(w)) {
+                        self.error(format!("style of 'text' is made of \"bold\", \"italic\" and \"mono\", not \"{word}\""), arg.span);
+                    }
+                }
             }
         }
         for arg in args.iter().skip(found.values.len()) {
@@ -3036,6 +3090,8 @@ impl<'a> BodyChecker<'_, 'a> {
             // A canvas's grid, in its units (0 for none), and whether code snaps to it: as its line says, until code sets them.
             "grid" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas) => value(Ty::Integer),
             "snap" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas) => value(Ty::Bool),
+            // Whether a press anywhere on a box draws a new line, as a line tool does: only on a canvas with `on connect`.
+            "connecting" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && p.handlers.iter().any(|h| h.event == crate::widgets::Event::Connect)) => value(Ty::Bool),
             // What its clear() fills it with; empty is the theme's panel.
             "background" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas) => value(Ty::Text),
             // Its grid's dots: how many pixels across, and their color (empty is the theme's border).
@@ -3055,7 +3111,7 @@ impl<'a> BodyChecker<'_, 'a> {
             "x" | "y" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Canvas) => {
                 Some(Place::Value { ty: Ty::Integer, writable: Err(format!("{name}.{property} is read, not set: it is where the canvas was clicked")) })
             }
-            // Where a drag on a canvas started, in its own units.
+            // Where a drag (or a new line) on a canvas started, in its own units.
             "fromX" | "fromY" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Canvas) => {
                 Some(Place::Value { ty: Ty::Integer, writable: Err(format!("{name}.{property} is read, not set: it is where a drag on the canvas started")) })
             }

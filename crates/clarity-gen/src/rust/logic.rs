@@ -567,6 +567,7 @@ impl<'a> Emitter<'a> {
             "fromY" => "from_y",
             "grid" => "grid",
             "snap" => "snap",
+            "connecting" => "connecting",
             "bent" => "bent",
             "via" => "via",
             "background" => "background",

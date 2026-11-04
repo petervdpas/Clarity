@@ -488,7 +488,7 @@ internal sealed class ProgramWire : IDesktop
         // A readonly part's change is taken back: the reply shows the value the window still has.
         if (given["readonly"]?.GetValue<bool>() == true)
             return Reply(window);
-        // A canvas's drag, drop or bend goes through its command, which makes it the edit the generator wrote (a drag one that goes on).
+        // A canvas's drag, drop, bend or new line goes through its command, which makes it the edit the generator wrote (a drag one that goes on).
         if (handler is { Length: > 0 } && window.Markup.PointerOf(handler, part) is not null)
         {
             window.Apply(state);
@@ -512,6 +512,7 @@ internal sealed class ProgramWire : IDesktop
         ["drag"] = "DragAt_",
         ["drop"] = "DropAt_",
         ["bend"] = "BendAt_",
+        ["connect"] = "ConnectAt_",
     };
 
     /// <summary>

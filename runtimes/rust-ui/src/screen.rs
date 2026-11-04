@@ -51,6 +51,8 @@ pub struct Screen {
     focused: Option<ElementId>,
     hovered: Option<ElementId>,
     pressed: Option<ElementId>,
+    /// The button that pressed it: the right one for a part that takes right drags.
+    held: PointerButton,
     overlays: Vec<Overlay>,
     wakes: HashMap<ElementId, Instant>,
     animating: HashSet<ElementId>,
@@ -111,6 +113,7 @@ impl Screen {
             cursor: Cursor::Default,
             cursor_changed: false,
             context_menus: crate::frame::menus::FrameMenus::new(),
+            held: PointerButton::Left,
             key_taken: false,
             pointing: false,
             now: Box::new(Instant::now),
@@ -710,8 +713,12 @@ impl Screen {
     }
 
     fn input(e: &dyn Element, x: f64, y: f64, modifiers: Modifiers, clicks: u32) -> PointerInput {
+        Self::input_of(e, x, y, modifiers, clicks, PointerButton::Left)
+    }
+
+    fn input_of(e: &dyn Element, x: f64, y: f64, modifiers: Modifiers, clicks: u32, button: PointerButton) -> PointerInput {
         let b = e.node().bounds;
-        PointerInput { screen_x: x, screen_y: y, x: x - b.x, y: y - b.y, modifiers, clicks }
+        PointerInput { screen_x: x, screen_y: y, x: x - b.x, y: y - b.y, modifiers, clicks, button }
     }
 
     /// The tree an element is in: the top overlay that holds it, else the window.
@@ -753,8 +760,9 @@ impl Screen {
     pub fn pointer_moved(&mut self, x: f64, y: f64) {
         self.mark();
         let mut cx = self.cx();
+        let held = self.held;
         if let Some(e) = self.pressed.and_then(|p| self.element_mut(p)) {
-            let input = Self::input(e, x, y, Modifiers::NONE, 1);
+            let input = Self::input_of(e, x, y, Modifiers::NONE, 1, held);
             element::safely(e, &mut cx, (), |e, cx| e.on_pointer_moved(input, cx));
         }
         let at = self.at(x, y);
@@ -822,13 +830,24 @@ impl Screen {
         if !self.element(at).is_some_and(element::enabled_in_tree) {
             return;
         }
-        if button == PointerButton::Right {
+        // A right press is a drag of a part that takes right drags (a canvas draws a line with it); else it opens the menu there.
+        let right_drag = button == PointerButton::Right
+            && self.element(at).is_some_and(|e| {
+                let b = e.node().bounds;
+                element::safely_read(e, false, |e| e.right_drags(x - b.x, y - b.y))
+            });
+        if button == PointerButton::Right && !right_drag {
             self.context_pressed(at, x, y);
             return;
         }
-        if button != PointerButton::Left {
+        if button != PointerButton::Left && !right_drag {
             return;
         }
+        // A right drag holds the pointer until the right button goes up.
+        if self.pressed.is_some() && self.held == PointerButton::Right {
+            return;
+        }
+        self.held = button;
         // Focus by the pointer: what was pressed stays where it is (no scrolling into view), so the release lands on it.
         self.pointing = true;
         let mut cx = self.cx();
@@ -839,7 +858,7 @@ impl Screen {
         self.set_flag(Some(at), |n| n.pressed = true);
         let mut cx = self.cx();
         if let Some(e) = self.element_mut(at) {
-            let input = Self::input(e, x, y, modifiers, clicks.max(1));
+            let input = Self::input_of(e, x, y, modifiers, clicks.max(1), button);
             element::safely(e, &mut cx, (), |e, cx| e.on_pointer_pressed(input, cx));
         }
         self.settle(cx);
@@ -875,8 +894,11 @@ impl Screen {
     }
 
     pub fn pointer_released(&mut self, x: f64, y: f64, button: PointerButton) {
-        if button != PointerButton::Left {
+        if button != self.held || self.pressed.is_none() {
             return;
+        }
+        if button == PointerButton::Right {
+            return self.right_released(x, y);
         }
         let Some(was) = self.pressed.take() else { return };
         self.set_flag(Some(was), |n| n.pressed = false);
@@ -899,10 +921,34 @@ impl Screen {
         self.shape(shape);
     }
 
+    /// The right button went up on a right drag: the part used it, or it opens its menu where it was pressed.
+    fn right_released(&mut self, x: f64, y: f64) {
+        self.held = PointerButton::Left;
+        let Some(was) = self.pressed.take() else { return };
+        self.set_flag(Some(was), |n| n.pressed = false);
+        let mut cx = self.cx();
+        let used = match self.element_mut(was) {
+            Some(e) => {
+                let input = Self::input_of(e, x, y, Modifiers::NONE, 1, PointerButton::Right);
+                element::safely(e, &mut cx, true, |e, cx| e.on_right_released(input, cx))
+            }
+            None => true,
+        };
+        self.settle(cx);
+        self.redraw = true;
+        if !used {
+            self.context_pressed(was, x, y);
+        }
+        self.mark();
+        let shape = self.shape_at(self.at(x, y), x, y);
+        self.shape(shape);
+    }
+
     /// The pointer was taken away mid-press (the window lost the focus
     /// during a drag): what holds it lets go without a release and without a
     /// click, so a drag in progress is dropped, not committed.
     pub fn pointer_cancelled(&mut self) {
+        self.held = PointerButton::Left;
         let Some(was) = self.pressed.take() else { return };
         self.set_flag(Some(was), |n| n.pressed = false);
         let mut cx = self.cx();

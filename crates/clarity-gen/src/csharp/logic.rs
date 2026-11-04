@@ -192,6 +192,7 @@ fn part_property(property: &str) -> Option<&'static str> {
         "fromY" => "FromY",
         "grid" => "Grid",
         "snap" => "Snap",
+        "connecting" => "Connecting",
         "background" => "Background",
         "dotSize" => "DotSize",
         "dotColor" => "DotColor",
@@ -456,13 +457,18 @@ impl<'a> Emitter<'a> {
                         },
                         (ShapeValue::Number, Err(default)) => default.to_string(),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Ok(arg)) => self.value(arg),
-                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text | ShapeValue::Name | ShapeValue::Points, Err(default)) => string(default),
+                        // A text left out is an empty one (a link's label).
+                        (ShapeValue::Text, Err(default)) => format!("Text.Plain({})", string(default)),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Err(default)) => string(default),
                         // An object sends its record's id (DESIGN 5.31).
                         (ShapeValue::Record, Ok(arg)) => self.value(&clarity_spec::code::check::object_id(arg)),
                         (ShapeValue::Record, Err(_)) => "null".to_string(),
                         (ShapeValue::Text, Ok(arg)) => self.shown(arg),
                     });
                 }
+                // The values left out at the end take the record's defaults, so code that uses no newer value builds on an older runtime.
+                // A clear's color has no default in the record, so it always goes.
+                values.truncate(args.len().max(if shape.name == "clear" { 1 } else { 0 }));
                 out.push_str(&format!("{pad}{}.Draw(new Shape.{record}({}));\n", member(&canvas.name), values.join(", ")));
             }
             StmtKind::Copy { text } => {

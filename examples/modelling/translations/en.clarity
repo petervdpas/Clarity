@@ -216,6 +216,7 @@ translation en
     settingsApiAddressLabel "API address"
     settingsApiPathLabel "API path"
     settingsApiKeyLabel "API key"
+    diagramEditItem "Edit"
     arrangeCaption "Arrange"
     arrangeTooltip "Lay out every box again, in rows by name"
     importApiCaption "Import from API"
@@ -242,3 +243,5 @@ translation en
     engineTooLong "{engine} ran longer than {seconds} seconds and was stopped"
     engineStopped "{engine} was stopped"
     engineBroke "{engine} stopped working in {function}"
+    unconnectedNotKept "The database connection is not set yet"
+    unconnectedFailed "The database did not open: {problem}"

@@ -266,6 +266,10 @@ TEST(a_canvas_keeps_the_grid_and_snap_code_sets) {
     ui.set_dot_color("sheet", "muted");
     CHECK_EQ(ui.dot_size("sheet", 2), int64_t{3});
     CHECK_EQ(ui.dot_color("sheet", ""), std::string("muted"));
+    // A line tool: false until code sets canvas.connecting.
+    CHECK(!ui.connecting("sheet"));
+    ui.set_connecting("sheet", true);
+    CHECK(ui.connecting("sheet"));
 }
 
 // A canvas's tool, brush and ink (DESIGN 5.31): the design's until a handler

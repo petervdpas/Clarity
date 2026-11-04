@@ -145,6 +145,8 @@ pub enum Event {
     Drop,
     /// A person bent a line of a canvas, and let it go.
     Bend,
+    /// A person drew a new line from a box of a canvas, and let it go.
+    Connect,
     /// Next is pressed in a wizard, before it moves on; a refusal keeps the step.
     Next,
     /// Finish is pressed on a wizard's last step.
@@ -160,7 +162,7 @@ pub enum Event {
 
 /// The events a window has, in the order the designer lists them.
 /// Every event, in the order the language lists them.
-pub const ALL_EVENTS: [Event; 21] = [
+pub const ALL_EVENTS: [Event; 22] = [
     Event::Click,
     Event::Change,
     Event::Enter,
@@ -177,6 +179,7 @@ pub const ALL_EVENTS: [Event; 21] = [
     Event::Drag,
     Event::Drop,
     Event::Bend,
+    Event::Connect,
     Event::Next,
     Event::Finish,
     Event::Reorder,
@@ -208,6 +211,7 @@ impl Event {
             Event::Drag => "drag",
             Event::Drop => "drop",
             Event::Bend => "bend",
+            Event::Connect => "connect",
             Event::Next => "next",
             Event::Finish => "finish",
             Event::Reorder => "reorder",
@@ -234,6 +238,7 @@ impl Event {
             "drag" => Some(Event::Drag),
             "drop" => Some(Event::Drop),
             "bend" => Some(Event::Bend),
+            "connect" => Some(Event::Connect),
             "next" => Some(Event::Next),
             "finish" => Some(Event::Finish),
             "reorder" => Some(Event::Reorder),
@@ -952,7 +957,7 @@ const ENTRIES: &[Entry] = &[
         // a click runs a handler, which reads where as `canvas.x` and `canvas.y`;
         // a drag and a drop also read where it was pressed, `fromX` and `fromY`.
         // `on change`: an edit of a canvas with a mode ended (DESIGN 5.31).
-        events: &[Event::Draw, Event::Click, Event::Drag, Event::Drop, Event::Bend, Event::Pointer, Event::Key, Event::Change],
+        events: &[Event::Draw, Event::Click, Event::Drag, Event::Drop, Event::Bend, Event::Connect, Event::Pointer, Event::Key, Event::Change],
         properties: &[
             WidgetProperty::Units,
             WidgetProperty::NoUndo,
@@ -1023,7 +1028,7 @@ const ENTRIES: &[Entry] = &[
 ];
 
 /// The words every placed custom part may have, which its own properties cannot be named.
-pub const CUSTOM_PART_WORDS: [&str; 11] = ["at", "span", "rows", "bind", "name", "on", "tooltip", "taborder", "visible", "enabled", "value"];
+pub const CUSTOM_PART_WORDS: [&str; 12] = ["at", "span", "rows", "bottom", "bind", "name", "on", "tooltip", "taborder", "visible", "enabled", "value"];
 
 fn entry(kind: WidgetKind) -> &'static Entry {
     ENTRIES
@@ -1307,6 +1312,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         shortcut: None,
         default_button: false,
         cancel: false,
+        bottom: false,
         part: None,
         values: Default::default(),
         tells: Vec::new(),
@@ -1405,6 +1411,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     // one-row panel does not read back at its default height.
     if props.height != 1 || default_size(props.kind).1 != 1 {
         parts.push(format!("rows {}", props.height));
+    }
+    if props.bottom {
+        parts.push("bottom".to_string());
     }
     if let Some(orientation) = props.orientation {
         parts.push(orientation_keyword(orientation).to_string());
@@ -1634,7 +1643,10 @@ pub fn pane_columns(widget: &crate::model::Widget) -> Vec<u32> {
     }
 }
 
-/// A canvas's grid is 1 to 10000 units, and it snaps only to a grid it has.
+/// Why `on connect` is refused on a canvas with a mode or an engine: lines are drawn between the boxes its code draws.
+pub const CANVAS_CONNECT_PROBLEM: &str = "'on connect' draws lines between the boxes a canvas's code draws; a canvas with a mode or an engine has none";
+
+/// A canvas's grid is 1 to 10000 units, and it snaps only to a grid it has; it connects only the boxes its code draws.
 pub fn canvas_options(props: &WidgetProps) -> Result<(), String> {
     if props.grid.is_some_and(|g| !(1..=10000).contains(&g)) {
         return Err(CANVAS_GRID_PROBLEM.to_string());
@@ -1644,6 +1656,9 @@ pub fn canvas_options(props: &WidgetProps) -> Result<(), String> {
     }
     if props.snap && props.grid.is_none() {
         return Err("'snap' snaps to the grid; give the canvas one, as in grid 20".to_string());
+    }
+    if props.handlers.iter().any(|h| h.event == Event::Connect) && (props.mode.is_some() || props.runs.is_some()) {
+        return Err(CANVAS_CONNECT_PROBLEM.to_string());
     }
     Ok(())
 }
@@ -1676,6 +1691,9 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
             return Err(format!("a {name} has no click event"));
         }
         identifier("click target", target)?;
+    }
+    if props.bottom && matches!(props.kind, WidgetKind::Sound | WidgetKind::Timer | WidgetKind::Popover) {
+        return Err(format!("a {name} has no place in the window's grid, so no 'bottom'"));
     }
     if let Some(part) = &props.name {
         identifier("part name", part)?;

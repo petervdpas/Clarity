@@ -25,6 +25,8 @@ typedef struct {
     bool has_collapsed, collapsed;
     /// A canvas's grid in its units (0 for none) and whether code snaps to it, as a handler set them.
     bool has_grid, has_snap, snap;
+    /// Whether a press anywhere on a box of a canvas with `on connect` draws a new line, as a handler set it.
+    bool has_connecting, connecting;
     int64_t grid;
     /// What a canvas's clear() fills it with, as a handler set it (empty is the theme's panel); NULL keeps the design.
     const char* background;
@@ -219,6 +221,9 @@ int64_t clarity_ui_grid(const ClarityUi* ui, const char* part, int64_t design);
 void clarity_ui_set_grid(ClarityUi* ui, const char* part, int64_t value);
 bool clarity_ui_snap(const ClarityUi* ui, const char* part, bool design);
 void clarity_ui_set_snap(ClarityUi* ui, const char* part, bool value);
+/// Whether a press anywhere on a box draws a new line (`canvas.connecting`), false until a handler sets it.
+bool clarity_ui_connecting(const ClarityUi* ui, const char* part);
+void clarity_ui_set_connecting(ClarityUi* ui, const char* part, bool value);
 /// What a canvas's clear() fills it with (`canvas.background`), as its line says until a handler sets it.
 const char* clarity_ui_background(const ClarityUi* ui, const char* part, const char* design);
 void clarity_ui_set_background(ClarityUi* ui, const char* part, const char* value);

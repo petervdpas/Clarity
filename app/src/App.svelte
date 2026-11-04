@@ -126,7 +126,8 @@
   let nextToast = 0;
   function toast(text: string) {
     const id = nextToast++;
-    toasts = [...toasts, { id, text }];
+    // Untracked: an effect that shows a toast must not rerun on the list it adds to (a failed open looped forever).
+    toasts = [...untrack(() => toasts), { id, text }];
     setTimeout(() => dismissToast(id), TOAST_MS);
   }
   function dismissToast(id: number) {

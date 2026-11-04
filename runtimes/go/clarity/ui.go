@@ -31,6 +31,9 @@ type PartState struct {
 	// snaps to it, as a handler set them; nil keeps the design.
 	Grid *int64 `json:"grid,omitempty"`
 	Snap *bool  `json:"snap,omitempty"`
+	// Connecting is whether a press anywhere on a box of a canvas with
+	// `on connect` draws a new line, as a handler set it; nil is false.
+	Connecting *bool `json:"connecting,omitempty"`
 	// Background is what a canvas's clear() fills it with, as a handler set
 	// it; empty is the theme's panel.
 	Background *string `json:"background,omitempty"`
@@ -355,6 +358,19 @@ func (u *Ui) Snap(part string, design bool) bool {
 
 func (u *Ui) SetSnap(part string, value bool) {
 	u.part(part, func(p *PartState) { p.Snap = &value })
+}
+
+// Connecting is whether a press anywhere on a box draws a new line:
+// canvas.connecting, false until a handler sets it.
+func (u *Ui) Connecting(part string) bool {
+	if c := u.parts[part].Connecting; c != nil {
+		return *c
+	}
+	return false
+}
+
+func (u *Ui) SetConnecting(part string, value bool) {
+	u.part(part, func(p *PartState) { p.Connecting = &value })
 }
 
 // Background is what a canvas's clear() fills it with: canvas.background.

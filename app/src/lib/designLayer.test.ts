@@ -84,9 +84,10 @@ test("past the last row, a drop place follows the project's row height", () => {
 // conformance/grid-layout.json: where the designer places a part on a grid
 // of rows it does not grow is where Clarity.UI lays it, at every row height.
 test("a drop place is where every Clarity.UI lays a part out", () => {
-  type Case = { what: string; columns: number; width: number; gap: number; row_height?: number; parts: { col: number; row: number; width: number; height: number; grows: boolean }[]; gives: { boxes: number[][] } };
+  type Case = { what: string; columns: number; width: number; gap: number; row_height?: number; parts: { col: number; row: number; width: number; height: number; grows: boolean; bottom?: boolean }[]; gives: { boxes: number[][] } };
   const file = JSON.parse(readFileSync(new URL("../../../conformance/grid-layout.json", import.meta.url), "utf8")) as { row_height: number; cases: Case[] };
-  const kept = file.cases.filter((c) => c.parts.length > 0 && !c.parts.some((p) => p.grows));
+  // A part marked bottom moves with the height to spare, which the drop place does not know.
+  const kept = file.cases.filter((c) => c.parts.length > 0 && !c.parts.some((p) => p.grows || p.bottom));
   assert.ok(kept.some((c) => (c.row_height ?? file.row_height) !== 36), "a case at another row height");
   for (const c of kept) {
     const grid = { item: 1, columns: c.columns, gap: c.gap, box: { x: 0, y: 0, width: c.width, height: 0 }, rows: [], inside: [] };

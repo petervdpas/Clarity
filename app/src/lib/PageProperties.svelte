@@ -138,6 +138,9 @@
     wire({ op: "setOwnerEvent", owner: target, event, handler }, handler);
   }
 
+  /** Parts with no place in the window's grid, so no `bottom`. */
+  const UNPLACED: string[] = ["popover", "sound", "timer"];
+
   function update(changes: Partial<WidgetProps>) {
     if (!location || !p) return;
     onedit({ op: "updateWidget", item: location.widget.span.start, container: null, props: withProps(p, changes) });
@@ -206,8 +209,8 @@
 
   // What tells through the part: a custom part's declared tells, or its engine's.
   const tellsOffered = $derived(declared?.tells ?? running?.tells ?? []);
-  // The events offered: none to draw a canvas its engine draws.
-  const events = $derived(info && p ? canvasEvents(info.events, p.runs) : []);
+  // The events offered: none to draw a canvas its engine draws, connect only on one its code draws.
+  const events = $derived(info && p ? canvasEvents(info.events, p.runs, p.mode) : []);
 
   function setRuns(name: string | null) {
     if (!p) return;
@@ -753,14 +756,23 @@
       </fieldset>
     {/if}
 
-    <!-- A custom part (DESIGN 5.19): whether it grows, its declared properties, and its tells wired like events. -->
-    {#if p.kind === "custom" && declared}
+    <!-- Its place in the grid: a custom part's grows (DESIGN 5.19), and bottom for any part with a place. -->
+    {#if !UNPLACED.includes(p.kind)}
       <fieldset class="checks">
         <legend>Layout</legend>
-        <label title="It takes the height the window has left, as a table or a canvas does; set in the part's declaration, so for every place it is used"
-          ><input type="checkbox" checked={declared.grows} disabled={pageDesigner.saving} onchange={(e) => setGrows(e.currentTarget.checked)} /> Grows with the window</label
+        {#if p.kind === "custom" && declared}
+          <label title="It takes the height the window has left, as a table or a canvas does; set in the part's declaration, so for every place it is used"
+            ><input type="checkbox" checked={declared.grows} disabled={pageDesigner.saving} onchange={(e) => setGrows(e.currentTarget.checked)} /> Grows with the window</label
+          >
+        {/if}
+        <label title="When nothing in its grid grows, it moves down with the parts on its row and below, so they sit at the bottom"
+          ><input type="checkbox" checked={p.bottom} onchange={(e) => update({ bottom: e.currentTarget.checked })} /> Stick to bottom</label
         >
       </fieldset>
+    {/if}
+
+    <!-- A custom part (DESIGN 5.19): its declared properties, and its tells wired like events. -->
+    {#if p.kind === "custom" && declared}
       {#if declared.properties.length > 0}
         <fieldset class="checks">
           <legend>Properties</legend>

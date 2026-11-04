@@ -1,6 +1,8 @@
 //! Dragging on a canvas, on every stack: `on drag` and `on drop` run their
 //! handlers, which read where the pointer is (`x`, `y`) and where it was
-//! pressed (`fromX`, `fromY`), in the canvas's units.
+//! pressed (`fromX`, `fromY`), in the canvas's units. `on connect` runs
+//! when a person drew a new line from a box, and `connecting` is set by code
+//! as a line tool does.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Ui, starter};
@@ -42,7 +44,11 @@ code Main
 ";
 
 fn generated(backend: Backend, ui: Ui) -> String {
-    let project = clarity_spec::keyed::load_keyed([("diagram.clarity", SOURCE)], &[], "en");
+    generated_from(SOURCE, backend, ui)
+}
+
+fn generated_from(source: &str, backend: Backend, ui: Ui) -> String {
+    let project = clarity_spec::keyed::load_keyed([("diagram.clarity", source)], &[], "en");
     let mut settings = starter("Diagram", "diagram");
     settings.stack.backend = backend;
     settings.stack.ui = ui;
@@ -108,4 +114,45 @@ fn every_stack_reads_where_a_drag_started() {
     has(&csharp, "Sheet.FromX");
     has(&csharp, "new Shape.Link(");
     has(&csharp, "Sheet.Via");
+}
+
+const CONNECT: &str = "module diagram
+
+page Main: window
+    data links: integer
+    canvas name sheet at 1,1 span 12 rows 8 units 3000 x 2000 zoom on draw: drawSheet on connect: connected
+    button \"Line\" name lineButton at 1,9 span 2 on click: lineClicked
+
+code Main
+    handler drawSheet
+        sheet.clear(\"panel\")
+        sheet.rect(20, 20, 200, 100, \"raised\")
+
+    handler connected
+        if sheet.fromX < sheet.x
+            links = links + 1
+        sheet.connecting = false
+
+    handler lineClicked
+        sheet.connecting = not sheet.connecting
+";
+
+#[test]
+fn every_stack_runs_connect_and_keeps_connecting() {
+    let rust = generated_from(CONNECT, Backend::Rust, Ui::Clarity);
+    has(&rust, "ui.set_connecting(\"sheet\", false)");
+    has(&rust, "ui.connecting(\"sheet\")");
+    has(&rust, "onconnect=\"connected\"");
+    let go = generated_from(CONNECT, Backend::Go, Ui::Clarity);
+    has(&go, "ui.SetConnecting(\"sheet\", false)");
+    has(&go, "ui.Connecting(\"sheet\")");
+    let c = generated_from(CONNECT, Backend::C, Ui::Clarity);
+    has(&c, "clarity_ui_set_connecting(ui, \"sheet\", ");
+    has(&c, "clarity_ui_connecting(ui, \"sheet\")");
+    let cpp = generated_from(CONNECT, Backend::Cpp, Ui::Clarity);
+    has(&cpp, "ui.set_connecting(\"sheet\", ");
+    has(&cpp, "ui.connecting(\"sheet\")");
+    let csharp = generated_from(CONNECT, Backend::Csharp, Ui::Clarity);
+    has(&csharp, "Sheet.Connecting = false");
+    has(&csharp, "void ConnectAt_Sheet(Pointer at)");
 }

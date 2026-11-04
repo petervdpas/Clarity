@@ -721,7 +721,7 @@ impl<'a> Emitter<'a> {
                 }
                 if let Some((part, property)) = self.part_property(target) {
                     let function = match property.as_str() {
-                        "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "tab" | "step" | "grid" | "snap" | "background" => format!("clarity_ui_set_{property}"),
+                        "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "tab" | "step" | "grid" | "snap" | "connecting" | "background" => format!("clarity_ui_set_{property}"),
                         "dotSize" => "clarity_ui_set_dot_size".to_string(),
                         "dotColor" => "clarity_ui_set_dot_color".to_string(),
                         "tool" | "brush" | "ink" => format!("clarity_ui_set_{property}"),
@@ -1543,6 +1543,7 @@ impl<'a> Emitter<'a> {
             "collapsed" => format!("clarity_ui_collapsed(ui, {quoted}, {})", info.collapsed),
             "grid" => format!("clarity_ui_grid(ui, {quoted}, {})", info.grid),
             "snap" => format!("clarity_ui_snap(ui, {quoted}, {})", info.snap),
+            "connecting" => format!("clarity_ui_connecting(ui, {quoted})"),
             "background" => format!("clarity_ui_background(ui, {quoted}, {})", string(&info.background)),
             "dotSize" => format!("clarity_ui_dot_size(ui, {quoted}, {})", info.dot_size),
             "dotColor" => format!("clarity_ui_dot_color(ui, {quoted}, {})", string(&info.dot_color)),

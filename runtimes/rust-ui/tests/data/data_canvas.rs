@@ -274,14 +274,14 @@ fn a_drag_runs_its_handler_with_where_it_started_and_the_drop_after() {
 }
 
 #[test]
-fn a_drag_the_handler_does_nothing_with_pans_a_canvas_that_zooms() {
+fn a_drag_on_empty_paper_pans_a_canvas_that_zooms_and_asks_no_handler() {
     let (host, mut screen) = canvas_screen(&format!(r#"{UNITS} zoom="true" ondrag="moved""#));
     let before = the_canvas(&screen).viewport();
     press(&mut screen, 300.0, 200.0);
     screen.pointer_moved(320.0, 200.0);
     screen.pointer_moved(340.0, 200.0);
     release(&mut screen, 340.0, 200.0);
-    assert_eq!(1, host.points.borrow().len());
+    assert!(host.points.borrow().is_empty());
     assert!((before.x - 40.0 / before.scale - the_canvas(&screen).viewport().x).abs() < 1e-6);
 }
 
@@ -544,4 +544,174 @@ fn a_drawing_s_svg_is_read_into_its_shapes_as_every_runtime_reads_it() {
         }
         assert_eq!(serde_json::json!(read), case["shapes"], "{}", case["name"]);
     }
+}
+
+// -- New lines between boxes (`on connect`) ------------------------------------
+
+/// Two boxes: units 10..30 and 60..80 across, 40..60 down.
+fn two_boxes(host: &CanvasHost) {
+    host.draw("pad", vec![clear(), rect(10.0, 40.0, 20.0, 20.0, "raised"), rect(60.0, 40.0, 20.0, 20.0, "raised")]);
+}
+
+#[test]
+fn the_box_under_the_pointer_shows_its_handles_in_the_accent_over_the_drawing() {
+    let (host, mut screen) = canvas_screen(&format!(r#"{UNITS} onconnect="linked""#));
+    two_boxes(&host);
+    let accent = ThemeLook::clarity(false).color("accent");
+    // The right handle of the first box: unit 30, 50 is pixel 320, 200.
+    assert_ne!(accent, pixel(&mut screen, 320, 200), "no handles before the pointer is over a box");
+    screen.pointer_moved(280.0, 200.0);
+    let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
+    shot.save(format!("{SHOTS}/data-canvas-connect-handles.png")).unwrap();
+    assert_eq!(accent, shot.pixel(320, 200));
+    assert_eq!(accent, shot.pixel(280, 160), "the top handle");
+    assert_eq!(4, the_canvas(&screen).connect_handles().len());
+    assert_eq!(3, the_canvas(&screen).drawing_sent().len(), "the handles are not in the drawing");
+    screen.pointer_left();
+    assert!(the_canvas(&screen).connect_handles().is_empty(), "the pointer left: no handles");
+}
+
+#[test]
+fn a_line_drawn_from_a_handle_is_dashed_in_the_accent_and_outlines_its_target() {
+    let (host, mut screen) = canvas_screen(&format!(r#"{UNITS} onconnect="linked" ondrag="moved""#));
+    two_boxes(&host);
+    screen.pointer_moved(320.0, 200.0);
+    press(&mut screen, 320.0, 200.0);
+    screen.pointer_moved(400.0, 200.0);
+    screen.pointer_moved(480.0, 200.0);
+    let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
+    shot.save(format!("{SHOTS}/data-canvas-connect-line.png")).unwrap();
+    let accent = ThemeLook::clarity(false).color("accent");
+    // The target box's outline, 2 pixels outside its left edge at pixel 440.
+    assert_eq!(accent, shot.pixel(438, 220));
+    let dashed: usize = (330..430).filter(|x| shot.pixel(*x, 200) == accent).count();
+    assert!(dashed > 30 && dashed < 90, "a dashed line, accent and gaps: {dashed}");
+    assert!(host.points.borrow().is_empty(), "no handler while dragging");
+    release(&mut screen, 480.0, 200.0);
+    let points = host.points.borrow();
+    assert_eq!(vec!["connect"], points.iter().map(|p| p.1.clone()).collect::<Vec<_>>());
+    // From a handle the line starts at its box's middle, which the handler's hit test finds in the box.
+    assert_eq!(json!({"x": 70, "y": 50, "fromX": 20, "fromY": 50}), Value::Object(points[0].2.clone()));
+}
+
+#[test]
+fn a_box_drawn_as_an_outline_a_body_and_a_header_shows_one_set_of_handles_around_it_all() {
+    let (host, mut screen) = canvas_screen(&format!(r#"{UNITS} onconnect="linked""#));
+    // A full-paper rect is the paper, no box; the header is part of the box under it.
+    host.draw("pad", vec![rect(0.0, 0.0, 100.0, 100.0, "panel"), rect(9.0, 39.0, 22.0, 22.0, "border"), rect(10.0, 40.0, 20.0, 20.0, "raised"), rect(10.0, 40.0, 20.0, 5.0, "accent")]);
+    // Over the header, unit 20, 42.
+    screen.pointer_moved(280.0, 168.0);
+    let mut shown = the_canvas(&screen).connect_handles();
+    shown.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    assert_eq!(vec![(9.0, 50.0), (20.0, 39.0), (20.0, 61.0), (31.0, 50.0)], shown);
+    // On the paper beside it: none.
+    screen.pointer_moved(600.0, 300.0);
+    assert!(the_canvas(&screen).connect_handles().is_empty());
+}
+
+#[test]
+fn a_canvas_without_on_connect_shows_no_handles_and_drags_as_before() {
+    let (host, mut screen) = canvas_screen(&format!(r#"{UNITS} ondrag="moved" ondrop="dropped""#));
+    two_boxes(&host);
+    host.inner.set_state("pad", |s| s.connecting = Some(true));
+    let before = Shot::of(&mut screen, 800, 400, 1.0).pixel(320, 200);
+    screen.pointer_moved(280.0, 200.0);
+    assert!(the_canvas(&screen).connect_handles().is_empty());
+    assert!(!the_canvas(&screen).connecting());
+    assert_eq!(before, pixel(&mut screen, 320, 200), "nothing drawn over the box");
+    press(&mut screen, 318.0, 200.0);
+    screen.pointer_moved(400.0, 200.0);
+    release(&mut screen, 400.0, 200.0);
+    assert_eq!(vec!["drag", "drop"], host.events());
+}
+
+#[test]
+fn a_paint_canvas_with_a_box_under_the_pointer_shows_no_handles() {
+    let (host, mut screen) = canvas_screen(&format!(r#"{UNITS} mode="paint" bind="picture" onconnect="linked""#));
+    two_boxes(&host);
+    screen.pointer_moved(280.0, 200.0);
+    assert!(the_canvas(&screen).connect_handles().is_empty());
+    press(&mut screen, 320.0, 200.0);
+    screen.pointer_moved(480.0, 200.0);
+    release(&mut screen, 480.0, 200.0);
+    assert!(host.points.borrow().is_empty());
+    assert_eq!(1, host.actions.borrow().len(), "the stroke is painted as before");
+}
+
+// -- What a link's ends show, its label and style, a text's style -------------------
+
+#[test]
+fn a_link_and_a_text_read_their_ends_label_and_style() {
+    let link = Shape::of(&json!({"op": "link", "name": "r1", "x1": 1, "y1": 2, "x2": 3, "y2": 4, "via": [], "color": "border", "start": "many", "end": "one", "label": "orders", "style": "dashed"})).unwrap();
+    let Shape::Link { start, end, label, style, .. } = link else { panic!("{link:?}") };
+    assert_eq!(("many", "one", "orders", "dashed"), (start.as_str(), end.as_str(), label.as_str(), style.as_str()));
+    // Left out, they are empty, as a link drawn before them.
+    let Shape::Link { start, end, label, style, .. } = Shape::of(&json!({"op": "link", "name": "r1", "x1": 1, "y1": 2, "x2": 3, "y2": 4, "via": [], "color": "border"})).unwrap() else { panic!() };
+    assert!(start.is_empty() && end.is_empty() && label.is_empty() && style.is_empty());
+    let Shape::Words { style, .. } = Shape::of(&json!({"op": "text", "x": 1, "y": 2, "text": "Id", "style": "bold mono"})).unwrap() else { panic!() };
+    assert_eq!("bold mono", style);
+}
+
+#[test]
+fn a_link_ends_at_the_edge_of_the_box_it_starts_and_ends_in() {
+    let boxes = [canvas::UnitBox { x: 10.0, y: 40.0, width: 20.0, height: 20.0 }, canvas::UnitBox { x: 70.0, y: 40.0, width: 20.0, height: 20.0 }];
+    let link = Shape::of(&json!({"op": "link", "name": "r1", "x1": 20, "y1": 50, "x2": 80, "y2": 50, "via": [], "color": "border"})).unwrap();
+    let Shape::Link { x1, y1, x2, y2, .. } = canvas::links_to_edges(vec![link], &boxes).remove(0) else { panic!() };
+    assert_eq!((30.0, 50.0, 70.0, 50.0), (x1, y1, x2, y2));
+    // An end on empty paper stays where it is.
+    let free = Shape::of(&json!({"op": "link", "name": "r2", "x1": 20, "y1": 50, "x2": 50, "y2": 90, "via": [], "color": "border"})).unwrap();
+    let Shape::Link { x2, y2, .. } = canvas::links_to_edges(vec![free], &boxes).remove(0) else { panic!() };
+    assert_eq!((50.0, 90.0), (x2, y2));
+}
+
+#[test]
+fn a_many_end_draws_a_crow_s_foot_at_the_box_edge_and_no_line_over_the_box() {
+    // 100 x 100 units in 800 x 400 pixels: 4 pixels a unit, starting 200 pixels in.
+    let (host, mut screen) = canvas_screen(UNITS);
+    let drawing = |end: &str| {
+        vec![
+            clear(),
+            rect(10.0, 40.0, 20.0, 20.0, "raised"),
+            rect(70.0, 40.0, 20.0, 20.0, "raised"),
+            json!({"op": "link", "name": "r1", "x1": 20, "y1": 50, "x2": 80, "y2": 50, "via": [], "color": "#ff0000", "width": 1, "end": end}),
+        ]
+    };
+    host.draw("pad", drawing("many"));
+    let look = ThemeLook::clarity(false);
+    // A toe of the foot, just before the edge of the second box, 6.4 units off the line.
+    let toe = pixel(&mut screen, 200 + 69 * 4, (56.4f64 * 4.0).round() as i32);
+    assert!(toe.r() > 150 && toe.g() < 120, "the crow's foot spreads at the box: {toe:?}");
+    assert_eq!(look.color("raised"), pixel(&mut screen, 200 + 75 * 4, 200), "the link stops at the box edge, drawn after it or not");
+    let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
+    shot.save(format!("{SHOTS}/data-canvas-link-ends.png")).unwrap();
+    host.draw("pad", drawing(""));
+    assert_eq!(look.color("panel"), pixel(&mut screen, 200 + 69 * 4, (56.4f64 * 4.0).round() as i32), "a plain end shows nothing beside the line");
+}
+
+#[test]
+fn a_diagram_draws_boxes_with_columns_and_a_dashed_relationship_between_them() {
+    let host = Rc::new(CanvasHost::default());
+    let mut screen = alone(r#"<Canvas name="pad" units="{&quot;width&quot;:800,&quot;height&quot;:400}" />"#, host.clone(), 800.0, 400.0);
+    let text = |x: i64, y: i64, t: &str, color: &str, size: i64, align: &str, style: &str| json!({"op": "text", "x": x, "y": y, "text": t, "color": color, "size": size, "align": align, "style": style});
+    let mut drawing = vec![clear()];
+    drawing.push(json!({"op": "link", "name": "r1", "x1": 160, "y1": 120, "x2": 560, "y2": 200, "via": [], "color": "muted", "width": 2, "start": "one", "end": "zeroOrMany", "label": "project", "style": "dashed"}));
+    for (x, y, title, rows) in [(60, 60, "Project", vec![("text(80)", "name", "UK *"), ("text", "summary", ""), ("datetime", "created", "")]), (460, 140, "Association", vec![("ref Project", "project", "FK *"), ("text(60)", "label", "")])] {
+        let h = 36 + 22 * rows.len() as i64;
+        drawing.push(rect((x - 2) as f64, (y - 2) as f64, 204.0, (h + 4) as f64, "accent"));
+        drawing.push(rect(x as f64, y as f64, 200.0, h as f64, "raised"));
+        drawing.push(rect(x as f64, y as f64, 200.0, 30.0, "accent_soft"));
+        drawing.push(text(x + 100, y + 15, title, "text", 13, "center", "bold mono"));
+        for (i, (ty, name, keys)) in rows.iter().enumerate() {
+            let row = y + 41 + 22 * i as i64;
+            drawing.push(text(x + 12, row, ty, "accent", 11, "left", "mono"));
+            drawing.push(text(x + 100, row, name, "text", 11, "left", "mono"));
+            drawing.push(text(x + 188, row, keys, "muted", 11, "right", "mono"));
+        }
+    }
+    host.draw("pad", drawing);
+    let look = ThemeLook::clarity(false);
+    let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
+    shot.save(format!("{SHOTS}/data-canvas-diagram.png")).unwrap();
+    assert_eq!(look.color("accent_soft"), shot.pixel(64, 64), "the header");
+    assert_eq!(look.color("raised"), shot.pixel(560 + 80, 200), "the relationship ends at the box, not inside it");
 }

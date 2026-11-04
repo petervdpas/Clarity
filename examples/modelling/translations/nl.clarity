@@ -217,6 +217,7 @@ translation nl
     settingsApiAddressLabel "API-adres"
     settingsApiPathLabel "API-pad"
     settingsApiKeyLabel "API-sleutel"
+    diagramEditItem "Bewerken"
     arrangeCaption "Schikken"
     arrangeTooltip "Alle vakken opnieuw in rijen op naam zetten"
     importApiCaption "Importeren uit API"
@@ -243,3 +244,5 @@ translation nl
     engineTooLong "{engine} liep langer dan {seconds} seconden en is gestopt"
     engineStopped "{engine} is gestopt"
     engineBroke "{engine} werkt niet meer in {function}"
+    unconnectedNotKept ""
+    unconnectedFailed ""

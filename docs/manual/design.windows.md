@@ -65,6 +65,8 @@ In the designer, drag a part to move it and drag its corner handle to resize it.
 
 Rows have a fixed height in the designer. In the running application the columns share the window's width, and rows that hold something that grows (a table, a list, an image, a canvas, or a container with one of these inside) share the extra height. Everything else keeps its height, also in a row that grows: a button beside a list stays a button's height, at the top of its rows. To put a form beside a list, with a divider to set the list's width, place both in a `splitter` (see Parts).
 
+When nothing in a grid grows, its parts stay at the top and the spare height sits below them. Tick **Stick to bottom** under Layout in the properties (`bottom`) to move a part down to the bottom instead, together with every part on its row and below: `button @saveCaption name save at 3,11 span 2 bottom`. Where a row grows, it changes nothing.
+
 ## Opening windows
 
 A button, image, menu item or toolbar button can open a window without code:

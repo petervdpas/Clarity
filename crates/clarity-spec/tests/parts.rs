@@ -294,3 +294,19 @@ fn operator_keys_are_keys() {
     assert_eq!(shortcut_keys("+"), (vec![], "+"));
     assert_eq!(shortcut_keys("Ctrl+Shift+F2"), (vec!["Ctrl", "Shift"], "F2"));
 }
+
+/// `bottom` sticks a placed part to the bottom of its grid (DESIGN 2): it is
+/// read, written back after the place, and has no place on a popover.
+#[test]
+fn a_placed_part_sticks_to_the_bottom() {
+    let source = "module shop\npage P: window\n    button \"Save\" name save at 3,11 span 2 bottom default\n    label \"Note\" name note at 1,11 span 2\n";
+    let (file, diagnostics) = parse(source, "p.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    let save = &file.pages[0].widgets[0];
+    assert!(save.props.bottom);
+    assert!(!file.pages[0].widgets[1].props.bottom);
+    assert_eq!(widget_line(&save.props), "button \"Save\" name save at 3,11 span 2 bottom default");
+
+    let (_, diagnostics) = parse("module shop\npage P: window\n    sound name ding source \"ding.ogg\" bottom\n", "p.clarity");
+    assert!(diagnostics.iter().any(|d| d.message.contains("bottom")), "{diagnostics:#?}");
+}

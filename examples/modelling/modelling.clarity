@@ -58,7 +58,7 @@ app Modelling
 // The modelling projects: open one to work on its types and entities.
 page Projects: window
     title @projectsTitle
-    size 900 x 560
+    size 928 x 586
     data projects: list<Project>
     data current: Project
     on open: projectsOpened
@@ -73,10 +73,10 @@ page Projects: window
                 textbox name projectName at 3,1 span 6 bind current.name
                 memo name projectSummary at 3,2 span 6 rows 2 bind current.summary
             label name openNow at 1,5 span 8
-            button @newProjectCaption name newProject at 1,11 span 2 on click: newProjectClicked
-            button @saveProjectCaption name saveProject at 3,11 span 2 key "Ctrl+S" default on click: saveProjectClicked
-            button @deleteProjectCaption name deleteProject at 5,11 span 2 on click: deleteProjectClicked
-            button @openProjectButtonCaption name openProjectButton at 7,11 span 2 on click: openClicked
+            button @newProjectCaption name newProject at 1,11 span 2 bottom on click: newProjectClicked
+            button @saveProjectCaption name saveProject at 3,11 span 2 bottom key "Ctrl+S" default on click: saveProjectClicked
+            button @deleteProjectCaption name deleteProject at 5,11 span 2 bottom on click: deleteProjectClicked
+            button @openProjectButtonCaption name openProjectButton at 7,11 span 2 bottom on click: openClicked
 
 // The domains of the open project, each with the color its types and entities are drawn in.
 page Domains: window
@@ -98,9 +98,9 @@ page Domains: window
                 textbox name domainName at 3,1 span 6 bind current.name
                 color name domainColor at 3,2 span 3 bind current.color
                 memo name domainSummary at 3,3 span 6 rows 2 bind current.summary
-            button @newDomainCaption name newDomain at 1,11 span 2 on click: newDomainClicked
-            button @saveDomainCaption name saveDomain at 3,11 span 2 key "Ctrl+S" default on click: saveDomainClicked
-            button @deleteDomainCaption name deleteDomain at 5,11 span 2 on click: deleteDomainClicked
+            button @newDomainCaption name newDomain at 1,11 span 2 bottom on click: newDomainClicked
+            button @saveDomainCaption name saveDomain at 3,11 span 2 bottom key "Ctrl+S" default on click: saveDomainClicked
+            button @deleteDomainCaption name deleteDomain at 5,11 span 2 bottom on click: deleteDomainClicked
 
 // The types of the domain: the list on the left, the type on the right.
 page Types: window
@@ -193,20 +193,22 @@ page Diagrams: window
     data project: Project
     data types: list<ClassType>
     data entities: list<DataEntity>
-    // The box being dragged: its record's id (0 for none), where in it the pointer holds it, and where it is now.
-    data movingId: integer
-    data grabX: integer
-    data grabY: integer
-    data movedX: integer
-    data movedY: integer
     on open: diagramsOpened
     on return: gridFromSettings
 
     tabs name diagramTabs at 1,1 span 12 rows 11
         tab @diagramsClassDiagramTab
-            canvas name classCanvas at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawClasses on drag: classDragged on drop: classDropped on bend: classBent
+            canvas name classCanvas at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawClasses on drop: classDropped on bend: classBent on connect: classConnected
+                menu name classMenu
+                    item @diagramEditItem name classEditItem on click: classEditClicked
+                    separator
+                    item @arrangeCaption name classArrangeItem on click: arrangeClicked
         tab @diagramsEntityRelationshipDiagramTab
-            canvas name erdCanvas at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawEntities on drag: entityDragged on drop: entityDropped on bend: entityBent
+            canvas name erdCanvas at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawEntities on drop: entityDropped on bend: entityBent on connect: entityConnected
+                menu name erdMenu
+                    item @diagramEditItem name entityEditItem on click: entityEditClicked
+                    separator
+                    item @arrangeCaption name entityArrangeItem on click: arrangeClicked
     button @arrangeCaption name arrange at 11,12 span 2 tooltip @arrangeTooltip on click: arrangeClicked
 
 // The model as Mermaid and as an OpenAPI description, as they are now.
@@ -604,7 +606,7 @@ code Diagrams
         let top = 20
         for t in types
             if t.x != 0 or t.y != 0
-                let bottom = grid_up(t.y + box_height(count(class_lines(t))) + 40)
+                let bottom = grid_up(t.y + box_height(count(class_names(t))) + 40)
                 if bottom > top
                     top = bottom
         let left = 20
@@ -612,9 +614,8 @@ code Diagrams
         let placed = false
         for t in types
             if t.x == 0 and t.y == 0
-                let lines = class_lines(t)
-                let height = box_height(count(lines))
-                let width = box_width(t.name, lines)
+                let height = box_height(count(class_names(t)))
+                let width = class_width(t)
                 // A row is as wide as its boxes with 40 between them, until the canvas's 4000 units.
                 if left + width > 3980
                     left = 20
@@ -634,7 +635,7 @@ code Diagrams
         let top = 20
         for e in entities
             if e.x != 0 or e.y != 0
-                let bottom = grid_up(e.y + box_height(count(entity_lines(e))) + 40)
+                let bottom = grid_up(e.y + box_height(count(entity_names(e))) + 40)
                 if bottom > top
                     top = bottom
         let left = 20
@@ -642,9 +643,8 @@ code Diagrams
         let placed = false
         for e in entities
             if e.x == 0 and e.y == 0
-                let lines = entity_lines(e)
-                let height = box_height(count(lines))
-                let width = box_width(e.name, lines)
+                let height = box_height(count(entity_names(e)))
+                let width = entity_width(e)
                 // A row is as wide as its boxes with 40 between them, until the canvas's 4000 units.
                 if left + width > 3980
                     left = 20
@@ -678,7 +678,7 @@ code Diagrams
         classCanvas.dotColor = settings.gridDotColor
         erdCanvas.dotColor = settings.gridDotColor
 
-    // Every type as a box with its parameters, where it was put, and the lines between them.
+    // Every type as a box with its parameters, where it was put, and the lines between them, as Clarity's diagram designer draws them.
     handler drawClasses
         classCanvas.clear()
         let names: list<text> = []
@@ -688,23 +688,18 @@ code Diagrams
         let widths: list<integer> = []
         for t in types
             names = names + [t.name]
-            if t.id == movingId
-                xs = xs + [movedX]
-                ys = ys + [movedY]
-            else
-                xs = xs + [t.x]
-                ys = ys + [t.y]
-            let lines = class_lines(t)
-            heights = heights + [box_height(count(lines))]
-            widths = widths + [box_width(t.name, lines)]
-        // The lines first, so the boxes cover their ends.
+            xs = xs + [t.x]
+            ys = ys + [t.y]
+            heights = heights + [box_height(count(class_names(t)))]
+            widths = widths + [class_width(t)]
+        // The lines first; each ends at the edge of its boxes, with what its ends are.
         for t in types
             let from = place_of(names, t.name)
             if t.base != none
                 let base = t.base
                 let to = place_of(names, base.name)
-                // The line to its base bends too, named after the type: its own points keep where.
-                classCanvas.link("b{t.id}", xs[from] + widths[from] / 2, ys[from], xs[to] + widths[to] / 2, ys[to] + heights[to], t.base_via, "accent", 3)
+                // The line to its base bends too, named after the type: its own points keep where. Its triangle points at the base.
+                classCanvas.link("b{t.id}", xs[from] + widths[from] / 2, ys[from] + heights[from] / 2, xs[to] + widths[to] / 2, ys[to] + heights[to] / 2, t.base_via, "muted", 2, "", "triangle")
         let associations = find a in Association where a.project == project
         for a in associations
             let source = a.source
@@ -712,63 +707,74 @@ code Diagrams
             let from = place_of(names, source.name)
             let to = place_of(names, target.name)
             // A line people bend, named after its association, so a bend says which.
-            classCanvas.link("a{a.id}", xs[from] + widths[from] / 2, ys[from] + heights[from] / 2, xs[to] + widths[to] / 2, ys[to] + heights[to] / 2, a.via, "border", 2)
-            if a.label != ""
-                if count(a.via) >= 2
-                    classCanvas.text(a.via[1], a.via[2] - 8, a.label, "text", 11)
-                else
-                    classCanvas.text((xs[from] + widths[from] / 2 + xs[to] + widths[to] / 2) / 2, (ys[from] + ys[to] + heights[from] / 2 + heights[to] / 2) / 2 - 8, a.label, "text", 11)
+            classCanvas.link("a{a.id}", xs[from] + widths[from] / 2, ys[from] + heights[from] / 2, xs[to] + widths[to] / 2, ys[to] + heights[to] / 2, a.via, "muted", 2, link_start(a.link), link_end(a.link), a.label, link_style(a.link))
         let i = 1
         for t in types
-            let x = xs[i]
-            let y = ys[i]
-            // A type of a domain has its domain's color: its edge and its title bar.
-            let edge = "border"
-            let head = "accent"
+            // A type of a domain has its domain's color.
+            let color = ""
             if t.domain != none
                 let domain = t.domain
-                edge = domain.color
-                head = domain.color
-            let w = widths[i]
-            classCanvas.rect(x - 2, y - 2, w + 4, heights[i] + 4, edge)
-            classCanvas.rect(x, y, w, heights[i], "raised")
-            classCanvas.rect(x, y, w, 28, head)
-            classCanvas.text(x + w / 2, y + 14, t.name, "#ffffff", 13)
-            // Its members as a class box shows them: from the left, one a line.
-            let line = 0
-            for text in class_lines(t)
-                classCanvas.text(x + 12, y + 44 + line * 18, text, "text", 11, "left")
-                line = line + 1
+                color = domain.color
+            drawClassBox(t.name, color, xs[i], ys[i], widths[i], heights[i], class_types(t), class_names(t))
             i = i + 1
 
-    // A drag on a box moves it with the pointer; letting go keeps it there.
-    handler classDragged
-        if movingId == 0
-            for t in types
-                let lines = class_lines(t)
-                let height = box_height(count(lines))
-                if classCanvas.fromX >= t.x and classCanvas.fromX <= t.x + box_width(t.name, lines) and classCanvas.fromY >= t.y and classCanvas.fromY <= t.y + height
-                    movingId = t.id
-                    grabX = classCanvas.fromX - t.x
-                    grabY = classCanvas.fromY - t.y
-        if movingId != 0
-            movedX = at_least_zero(classCanvas.x - grabX)
-            movedY = at_least_zero(classCanvas.y - grabY)
-            // The box follows the pointer; its corner lands on the grid.
-            if classCanvas.snap
-                movedX = snapped(movedX, classCanvas.grid)
-                movedY = snapped(movedY, classCanvas.grid)
+    // A box as the designer draws it: its edge in its domain's color (the
+    // accent without one), a header with its name in bold, its types and
+    // names in columns of the code font.
+    handler drawClassBox(title: text, color: text, x: integer, y: integer, w: integer, h: integer, types: list<text>, names: list<text>)
+        let edge = "accent"
+        let head = "accent_soft"
+        let ink = "text"
+        if color != ""
+            edge = color
+            head = color
+            ink = "#ffffff"
+        classCanvas.rect(x - 2, y - 2, w + 4, h + 4, edge)
+        classCanvas.rect(x, y, w, h, "raised")
+        classCanvas.rect(x, y, w, 30, head)
+        classCanvas.text(x + w / 2, y + 15, title, ink, 13, "center", "bold mono")
+        let left = x + 28 + widest(types) * 7
+        let line = 1
+        for type in types
+            let row = y + 41 + (line - 1) * 22
+            classCanvas.text(x + 12, row, type, "accent", 11, "left", "mono")
+            classCanvas.text(left, row, names[line], "text", 11, "left", "mono")
+            line = line + 1
 
+    // The canvas carries a box while it is dragged; letting go moves the type it was pressed on by as much.
     handler classDropped
+        let id = class_at(types, classCanvas.fromX, classCanvas.fromY)
         for t in types
-            if t.id == movingId
-                t.x = movedX
-                t.y = movedY
+            if t.id == id
+                t.x = at_least_zero(t.x + classCanvas.x - classCanvas.fromX)
+                t.y = at_least_zero(t.y + classCanvas.y - classCanvas.fromY)
                 save t
-        movingId = 0
         types = find t in ClassType where t.project == project order by t.name
 
-    // Every entity as a box with its columns and keys, where it was put, and the relationships between them.
+    // The menu's Edit opens the type it was opened on.
+    handler classEditClicked
+        let id = class_at(types, classCanvas.x, classCanvas.y)
+        for t in types
+            if t.id == id
+                open Types with current = t
+
+    // A line drawn from one type's box to another's: an association between them.
+    handler classConnected
+        let sourceId = class_at(types, classCanvas.fromX, classCanvas.fromY)
+        let targetId = class_at(types, classCanvas.x, classCanvas.y)
+        if sourceId == 0 or targetId == 0 or sourceId == targetId
+            return
+        let association = new Association
+        association.project = project
+        for t in types
+            if t.id == sourceId
+                association.source = t
+            if t.id == targetId
+                association.target = t
+        save association
+        types = find t in ClassType where t.project == project order by t.name
+
+    // Every entity as a box with its columns and keys, where it was put, and the relationships between them, as Clarity's diagram designer draws them.
     handler drawEntities
         erdCanvas.clear()
         let names: list<text> = []
@@ -778,55 +784,54 @@ code Diagrams
         let widths: list<integer> = []
         for e in entities
             names = names + [e.name]
-            if e.id == movingId
-                xs = xs + [movedX]
-                ys = ys + [movedY]
-            else
-                xs = xs + [e.x]
-                ys = ys + [e.y]
-            let lines = entity_lines(e)
-            heights = heights + [box_height(count(lines))]
-            widths = widths + [box_width(e.name, lines)]
+            xs = xs + [e.x]
+            ys = ys + [e.y]
+            heights = heights + [box_height(count(entity_names(e)))]
+            widths = widths + [entity_width(e)]
+        // Dashed, each end showing how many there are on that side, the label halfway.
         let relationships = find r in Relationship where r.project == project
         for r in relationships
             let source = r.source
             let target = r.target
             let from = place_of(names, source.name)
             let to = place_of(names, target.name)
-            erdCanvas.link("r{r.id}", xs[from] + widths[from] / 2, ys[from] + heights[from] / 2, xs[to] + widths[to] / 2, ys[to] + heights[to] / 2, r.via, "border", 2)
-            let ends = left_end(r.source_side) + "--" + right_end(r.target_side)
-            if count(r.via) >= 2
-                erdCanvas.text(r.via[1], r.via[2] - 8, "{ends} {r.label}", "text", 11)
-            else
-                erdCanvas.text((xs[from] + widths[from] / 2 + xs[to] + widths[to] / 2) / 2, (ys[from] + ys[to] + heights[from] / 2 + heights[to] / 2) / 2 - 8, "{ends} {r.label}", "text", 11)
+            erdCanvas.link("r{r.id}", xs[from] + widths[from] / 2, ys[from] + heights[from] / 2, xs[to] + widths[to] / 2, ys[to] + heights[to] / 2, r.via, "muted", 2, side_end(r.source_side), side_end(r.target_side), r.label, "dashed")
         let i = 1
         for e in entities
-            let x = xs[i]
-            let y = ys[i]
             // An entity has its domain's color, or else the domain of the type it keeps.
-            let edge = "border"
-            let head = "accent"
+            let color = ""
             if e.domain != none
                 let domain = e.domain
-                edge = domain.color
-                head = domain.color
+                color = domain.color
             else if e.type != none
                 let type = e.type
                 if type.domain != none
                     let domain = type.domain
-                    edge = domain.color
-                    head = domain.color
-            let w = widths[i]
-            erdCanvas.rect(x - 2, y - 2, w + 4, heights[i] + 4, edge)
-            erdCanvas.rect(x, y, w, heights[i], "raised")
-            erdCanvas.rect(x, y, w, 28, head)
-            erdCanvas.text(x + w / 2, y + 14, e.name, "#ffffff", 13)
-            // Its columns from the left, one a line, the keys marked.
-            let line = 0
-            for text in entity_lines(e)
-                erdCanvas.text(x + 12, y + 44 + line * 18, text, "text", 11, "left")
-                line = line + 1
+                    color = domain.color
+            drawEntityBox(e.name, color, xs[i], ys[i], widths[i], heights[i], entity_types(e), entity_names(e), entity_keys(e))
             i = i + 1
+
+    // An entity's box as the designer draws it, its keys at the right.
+    handler drawEntityBox(title: text, color: text, x: integer, y: integer, w: integer, h: integer, types: list<text>, names: list<text>, keys: list<text>)
+        let edge = "accent"
+        let head = "accent_soft"
+        let ink = "text"
+        if color != ""
+            edge = color
+            head = color
+            ink = "#ffffff"
+        erdCanvas.rect(x - 2, y - 2, w + 4, h + 4, edge)
+        erdCanvas.rect(x, y, w, h, "raised")
+        erdCanvas.rect(x, y, w, 30, head)
+        erdCanvas.text(x + w / 2, y + 15, title, ink, 13, "center", "bold mono")
+        let left = x + 28 + widest(types) * 7
+        let line = 1
+        for type in types
+            let row = y + 41 + (line - 1) * 22
+            erdCanvas.text(x + 12, row, type, "accent", 11, "left", "mono")
+            erdCanvas.text(left, row, names[line], "text", 11, "left", "mono")
+            erdCanvas.text(x + w - 12, row, keys[line], "muted", 11, "right", "mono")
+            line = line + 1
 
     // A bent line keeps its points: the association it stands for saves them.
     handler classBent
@@ -846,29 +851,35 @@ code Diagrams
                 r.via = erdCanvas.via
                 save r
 
-    handler entityDragged
-        if movingId == 0
-            for e in entities
-                let lines = entity_lines(e)
-                let height = box_height(count(lines))
-                if erdCanvas.fromX >= e.x and erdCanvas.fromX <= e.x + box_width(e.name, lines) and erdCanvas.fromY >= e.y and erdCanvas.fromY <= e.y + height
-                    movingId = e.id
-                    grabX = erdCanvas.fromX - e.x
-                    grabY = erdCanvas.fromY - e.y
-        if movingId != 0
-            movedX = at_least_zero(erdCanvas.x - grabX)
-            movedY = at_least_zero(erdCanvas.y - grabY)
-            if erdCanvas.snap
-                movedX = snapped(movedX, erdCanvas.grid)
-                movedY = snapped(movedY, erdCanvas.grid)
-
     handler entityDropped
+        let id = entity_at(entities, erdCanvas.fromX, erdCanvas.fromY)
         for e in entities
-            if e.id == movingId
-                e.x = movedX
-                e.y = movedY
+            if e.id == id
+                e.x = at_least_zero(e.x + erdCanvas.x - erdCanvas.fromX)
+                e.y = at_least_zero(e.y + erdCanvas.y - erdCanvas.fromY)
                 save e
-        movingId = 0
+        entities = find e in DataEntity where e.project == project order by e.name
+
+    handler entityEditClicked
+        let id = entity_at(entities, erdCanvas.x, erdCanvas.y)
+        for e in entities
+            if e.id == id
+                open Entities with current = e
+
+    // A line drawn from one entity's box to another's: a relationship between them.
+    handler entityConnected
+        let sourceId = entity_at(entities, erdCanvas.fromX, erdCanvas.fromY)
+        let targetId = entity_at(entities, erdCanvas.x, erdCanvas.y)
+        if sourceId == 0 or targetId == 0 or sourceId == targetId
+            return
+        let relationship = new Relationship
+        relationship.project = project
+        for e in entities
+            if e.id == sourceId
+                relationship.source = e
+            if e.id == targetId
+                relationship.target = e
+        save relationship
         entities = find e in DataEntity where e.project == project order by e.name
 
 code Output
@@ -924,39 +935,98 @@ code Versions
     handler versionSelected
         current = versionGrid.selected
 
-// How tall a box is on a diagram, for its lines (parameters or columns).
-function box_height(lines: integer) -> integer
-    return 34 + 18 * lines
+// The type whose box is at a point of the class diagram, its id; 0 on empty paper. Its outline lies 2 outside it.
+action class_at(types: list<ClassType>, x: integer, y: integer) -> integer
+    effects db.read
+    let found = 0
+    for t in types
+        if x >= t.x - 2 and x <= t.x + class_width(t) + 2 and y >= t.y - 2 and y <= t.y + box_height(count(class_names(t))) + 2
+            found = t.id
+    return found
 
-// How wide a box is on a diagram: room for its widest text (a character of a
-// line takes about 7 units, of the bold title 8) and a margin each side, on
-// the grid of 20, never narrower than 200.
-function box_width(title: text, lines: list<text>) -> integer
-    let widest = length(title) * 8
-    for line in lines
-        if length(line) * 7 > widest
-            widest = length(line) * 7
-    let width = grid_up(widest + 28)
+// The entity whose box is at a point of the ERD, its id; 0 on empty paper.
+action entity_at(entities: list<DataEntity>, x: integer, y: integer) -> integer
+    effects db.read
+    let found = 0
+    for e in entities
+        if x >= e.x - 2 and x <= e.x + entity_width(e) + 2 and y >= e.y - 2 and y <= e.y + box_height(count(entity_names(e))) + 2
+            found = e.id
+    return found
+
+// How tall a box is on a diagram, for its lines (parameters or columns): a
+// header of 30, a line of 22 each and 6 under the last.
+function box_height(lines: integer) -> integer
+    return 36 + 22 * lines
+
+// The longest of some texts, in characters.
+function widest(texts: list<text>) -> integer
+    let most = 0
+    for t in texts
+        if length(t) > most
+            most = length(t)
+    return most
+
+// How wide a box is on a diagram: a margin, its types in one column, its
+// names in the next, room for its keys (`keys` characters) and a margin (a
+// character of the code font takes about 7 units); at least as wide as its
+// bold title (8 a character), on the grid of 20, never narrower than 200.
+function box_width(title: text, types: list<text>, names: list<text>, keys: integer) -> integer
+    let width = grid_up(12 + widest(types) * 7 + 16 + widest(names) * 7 + keys * 7 + 12)
+    let titled = grid_up(length(title) * 8 + 28)
+    if titled > width
+        width = titled
     if width < 200
         width = 200
     return width
 
-// The lines of a class's box: its constructor's parameters, in order.
-action class_lines(t: ClassType) -> list<text>
+// The types of a class's constructor's parameters, in order, and their names.
+action class_types(t: ClassType) -> list<text>
     effects db.read
-    let lines: list<text> = []
+    let types: list<text> = []
     for p in find p in Parameter where p.owner == t order by p.position
-        lines = lines + ["{p.type} {p.name}"]
-    return lines
+        types = types + [p.type]
+    return types
 
-// The lines of an entity's box: its columns, in order, the keys marked.
-action entity_lines(e: DataEntity) -> list<text>
+action class_names(t: ClassType) -> list<text>
     effects db.read
-    let lines: list<text> = []
+    let names: list<text> = []
+    for p in find p in Parameter where p.owner == t order by p.position
+        names = names + [p.name]
+    return names
+
+action class_width(t: ClassType) -> integer
+    effects db.read
+    return box_width(t.name, class_types(t), class_names(t), 0)
+
+// The types of an entity's columns, in order, their names, and their keys
+// with a star for a column that is required.
+action entity_types(e: DataEntity) -> list<text>
+    effects db.read
+    let types: list<text> = []
+    for c in find c in Column where c.owner == e order by c.position
+        types = types + [c.type]
+    return types
+
+action entity_names(e: DataEntity) -> list<text>
+    effects db.read
+    let names: list<text> = []
+    for c in find c in Column where c.owner == e order by c.position
+        names = names + [c.name]
+    return names
+
+action entity_keys(e: DataEntity) -> list<text>
+    effects db.read
+    let keys: list<text> = []
     for c in find c in Column where c.owner == e order by c.position
         let mark = key_mark(c.key)
-        lines = lines + ["{c.type} {c.name}{mark}"]
-    return lines
+        if c.mandatory
+            mark = mark + " *"
+        keys = keys + [mark]
+    return keys
+
+action entity_width(e: DataEntity) -> integer
+    effects db.read
+    return box_width(e.name, entity_types(e), entity_names(e), 6)
 
 // A place on a diagram rounded up to its grid of 20.
 function grid_up(n: integer) -> integer

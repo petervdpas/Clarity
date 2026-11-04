@@ -351,7 +351,7 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     has(code, "clarity::cos(angle)");
     has(code, "{\"width\", double(int64_t{3})}});");
     // Left out: the text's color and size.
-    has(code, "{\"color\", \"text\"}, {\"size\", 10.0}, {\"align\", \"center\"}});");
+    has(code, "{\"color\", \"text\"}, {\"size\", 10.0}, {\"align\", \"center\"}, {\"style\", \"\"}});");
     let main = file(&files, "src/main.cpp");
     has(main, "clarity::Reply redraw([[maybe_unused]] clarity::Db& db, clarity::Reply reply) override {");
     has(main, "            ui.begin_drawing(\"dial\");\n            w.draw_dial(db, ui);");

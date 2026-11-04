@@ -4,6 +4,8 @@
 //! part that grows share the height left over, never less than a row; a part
 //! that does not grow keeps its own height at the top of its place. A part that holds a grid of its own (a splitter, tabs, a
 //! panel) adds room around it (`around`): its rows are made high enough for both.
+//! When no row grows, a part marked `bottom` moves down by the height to
+//! spare, with every row from its own down.
 
 use std::cell::Cell;
 use std::collections::BTreeSet;
@@ -37,7 +39,8 @@ pub fn set_row_height(height: f64) {
 pub const GAP: f64 = 8.0;
 
 /// A part's place in a grid: at `col`, `row` (from 1), so many columns wide
-/// and rows high; `around` is the room it needs beyond its rows.
+/// and rows high; `around` is the room it needs beyond its rows; `bottom`
+/// sticks it, its rows and those below, to the bottom when no row grows.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GridItem {
     pub col: i64,
@@ -46,11 +49,17 @@ pub struct GridItem {
     pub height: i64,
     pub grows: bool,
     pub around: f64,
+    pub bottom: bool,
 }
 
 impl GridItem {
     pub fn new(col: i64, row: i64, width: i64, height: i64, grows: bool) -> GridItem {
-        GridItem { col, row, width, height, grows, around: 0.0 }
+        GridItem { col, row, width, height, grows, around: 0.0, bottom: false }
+    }
+
+    /// The same place, stuck to the bottom or not (`bottom`).
+    pub fn at_bottom(self, bottom: bool) -> GridItem {
+        GridItem { bottom, ..self }
     }
 }
 
@@ -115,6 +124,18 @@ pub fn place_rows(items: &[GridItem], columns: i64, width: f64, height: f64, gap
     let mut tops = vec![0.0; rows];
     for r in 1..rows {
         tops[r] = tops[r - 1] + heights[r - 1] + gap;
+    }
+    // No row grows: the rows from the first of a part marked `bottom` down
+    // move down by the height to spare, keeping their heights. The designer
+    // sees the spare as the row above them, when there is one.
+    let bottom = items.iter().filter(|i| i.bottom).map(|i| (i.row.clamp(1, rows as i64) - 1) as usize).min();
+    if let (Some(first), true) = (bottom, growing.is_empty() && spare > 0.0) {
+        for top in &mut tops[first..] {
+            *top += spare;
+        }
+        if first > 0 {
+            heights[first - 1] += spare;
+        }
     }
     let column = ((width - gap * (columns as f64 - 1.0)) / columns as f64).max(0.0);
     let boxes = items

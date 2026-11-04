@@ -184,6 +184,8 @@ internal static class WireJson
             state["grid"] = part.Grid;
         if (part.Snap)
             state["snap"] = true;
+        if (part.Connecting)
+            state["connecting"] = true;
         if (part.Background.Length > 0)
             state["background"] = part.Background;
         if (part.DotSize != 2)
@@ -227,6 +229,25 @@ internal static class WireJson
                 ["color"] = words.Color,
                 ["size"] = words.Size,
                 ["align"] = words.Align,
+                ["style"] = words.Style,
+            };
+        // A link's label goes as a text too.
+        if (shape is Shape.Link link)
+            return new JsonObject
+            {
+                ["op"] = "link",
+                ["name"] = link.Name,
+                ["x1"] = link.X1,
+                ["y1"] = link.Y1,
+                ["x2"] = link.X2,
+                ["y2"] = link.Y2,
+                ["via"] = new JsonArray([.. link.Via.Select(v => (JsonNode)v)]),
+                ["color"] = link.Color,
+                ["width"] = link.Width,
+                ["start"] = link.Start,
+                ["end"] = link.End,
+                ["label"] = link.Label is { } label ? Text(label) : "",
+                ["style"] = link.Style,
             };
         if (Value(shape) is not JsonObject fields)
             return null;

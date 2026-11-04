@@ -67,7 +67,7 @@ const KEYWORDS: &[&str] = &[
     // Engines beside the screen and written in Clarity (DESIGN 5.12).
     "record", "tell", "beside", "engines", "compiled", "interpreted", "const",
     // Parts and the frame.
-    "name", "at", "span", "rows", "bind", "placeholder", "tooltip", "taborder", "cancel", "horizontal", "vertical", "edit", "as",
+    "name", "at", "span", "rows", "bottom", "bind", "placeholder", "tooltip", "taborder", "cancel", "horizontal", "vertical", "edit", "as",
     "switch", "show", "surface", "on", "menu", "toolbar", "ribbon", "sidebar", "footer", "item", "separator", "icon",
     "large", "group", "tab", "step", "section", "pane", "width", "resizable", "collapsible", "collapsed", "maximizable", "foldable",
     "folded", "heading", "status", "sortable", "ask", "yes", "no", "then", "gives", "to", "max", "split", "labels",

@@ -541,3 +541,15 @@ fn the_designer_shows_the_page_it_switched_to_and_opens_the_popover_picked() {
     let program = PreviewProgram::new(project.clone(), &page.name.name).opening(vec![named.clone()]);
     assert_eq!(program.answer("open_window", &json!({ "window": page.name.name }))["value"]["state"]["parts"][&named], json!({ "visible": true }));
 }
+
+/// A part stuck to the bottom of its grid says so in the markup, which
+/// Clarity.UI lays out by (conformance/grid-layout.json).
+#[test]
+fn a_part_stuck_to_the_bottom_says_so_in_the_markup() {
+    let source = "module m\n\npage Main: window\n    button \"Save\" name save at 1,11 span 2 bottom\n    label \"Note\" name note at 3,11 span 2\n";
+    let (file, diagnostics) = clarity_spec::parser::parse(source, "m.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    let markup = clarity_gen::web_windows::window_markup(&file.pages[0]);
+    assert!(markup.contains("<Button name=\"save\" at=\"1,11\" span=\"2\" caption=\"Save\" bottom=\"true\" />"), "{markup}");
+    assert!(!markup.contains("<Label name=\"note\" at=\"3,11\" span=\"2\" caption=\"Note\" bottom"), "{markup}");
+}

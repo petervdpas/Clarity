@@ -13,7 +13,13 @@
 //! clear. With `on bend` its links bend: a press on one adds a point there or
 //! takes the point under it, dragging moves that point, a double click on a
 //! point takes it away, and letting go runs `on bend` with the link's name
-//! and its points. With a mode the person drags its objects, paints or draws
+//! and its points. With `on connect` (and no mode) the person draws a new
+//! line between boxes: the box under the pointer shows a handle in the
+//! middle of each side, a press on one (or anywhere on a box while code set
+//! `connecting`) drags a line that follows the pointer, and letting go runs
+//! `on connect` with where it started and ended; the handles and that line
+//! are drawn over the drawing, never in it. Without `on connect` none of it
+//! shows or takes the pointer. With a mode the person drags its objects, paints or draws
 //! (`canvas/modes.rs`). A canvas that `runs` an engine beside the screen is
 //! drawn by it (`canvas/engine.rs`). The window runs its handlers through
 //! its host (`PartHost::pointed`, `acted`).
@@ -35,7 +41,7 @@ use skia_safe::{Color, Font, FontHinting, Paint, PaintCap, PaintJoin, PaintStyle
 
 use crate::element::{Cx, Element};
 use crate::geometry::Rect;
-use crate::input::{Cursor, Modifiers, PointerInput};
+use crate::input::{Cursor, Modifiers, PointerButton, PointerInput};
 use crate::locale;
 use crate::markup::PartSpec;
 use crate::painter::{Painter, TextAlign};
@@ -51,6 +57,78 @@ pub const DEFAULT_UNITS: f64 = 100.0;
 
 /// A pointer moved this many pixels is a drag, not a click.
 const STILL: f64 = 4.0;
+
+/// How far from a connection handle, in pixels, a press still takes it.
+const HANDLE_NEAR: f64 = 7.0;
+
+/// The bounds of a box drawn on a canvas, in its units: what a new line connects.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct UnitBox {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl UnitBox {
+    /// Its connection handles: the middle of its top, right, bottom and left sides.
+    pub fn handles(&self) -> [(f64, f64); 4] {
+        let (cx, cy) = (self.x + self.width / 2.0, self.y + self.height / 2.0);
+        [(cx, self.y), (self.x + self.width, cy), (cx, self.y + self.height), (self.x, cy)]
+    }
+
+    /// Its middle, in whole units.
+    pub fn center(&self) -> (f64, f64) {
+        ((self.x + self.width / 2.0).floor(), (self.y + self.height / 2.0).floor())
+    }
+
+    fn contains(&self, other: &UnitBox) -> bool {
+        self.x <= other.x && self.y <= other.y && self.x + self.width >= other.x + other.width && self.y + self.height >= other.y + other.height
+    }
+}
+
+/// The box a shape the canvas hit-tests takes: a rect, a picture, an object, a circle, a ring or an ellipse.
+fn box_of_shape(shape: &Shape) -> Option<UnitBox> {
+    match shape {
+        Shape::Rect { x, y, width, height, .. } | Shape::Image { x, y, width, height, .. } | Shape::Object { x, y, width, height, .. } => {
+            Some(UnitBox { x: *x, y: *y, width: *width, height: *height })
+        }
+        Shape::Circle { x, y, r, .. } | Shape::Ring { x, y, r, .. } => Some(UnitBox { x: x - r, y: y - r, width: 2.0 * r, height: 2.0 * r }),
+        Shape::Ellipse { x, y, rx, ry, .. } => Some(UnitBox { x: x - rx, y: y - ry, width: 2.0 * rx, height: 2.0 * ry }),
+        _ => None,
+    }
+}
+
+/// Whether a unit is on a shape the canvas hit-tests (not the paper, lines or text).
+fn shape_hit(shape: &Shape, p: (f64, f64)) -> bool {
+    match shape {
+        Shape::Rect { x, y, width, height, .. } | Shape::Image { x, y, width, height, .. } | Shape::Object { x, y, width, height, .. } => p.0 >= *x && p.0 <= x + width && p.1 >= *y && p.1 <= y + height,
+        Shape::Circle { x, y, r, .. } | Shape::Ring { x, y, r, .. } => distance((*x, *y), p) <= *r,
+        Shape::Ellipse { x, y, rx, ry, .. } => *rx > 0.0 && *ry > 0.0 && ((p.0 - x) / rx).powi(2) + ((p.1 - y) / ry).powi(2) <= 1.0,
+        _ => false,
+    }
+}
+
+/// The boxes of a drawing of its units, the topmost first: each drawn shape
+/// grown to the shapes under it that hold it whole (a diagram's box is its
+/// outline, its body and its header). A shape over the whole paper is the
+/// paper, no box.
+pub fn boxes_of(shown: &[Shape], units: (f64, f64)) -> Vec<(UnitBox, Shape)> {
+    let paper = UnitBox { x: 0.0, y: 0.0, width: units.0, height: units.1 };
+    let all: Vec<(UnitBox, &Shape)> = shown.iter().filter_map(|s| box_of_shape(s).map(|b| (b, s))).filter(|(b, _)| !b.contains(&paper)).collect();
+    (0..all.len())
+        .rev()
+        .map(|i| {
+            let mut grown = all[i].0;
+            for (under, _) in all[..i].iter().rev() {
+                if under.contains(&grown) {
+                    grown = *under;
+                }
+            }
+            (grown, all[i].1.clone())
+        })
+        .collect()
+}
 
 /// What a canvas shows: the pixels a unit takes, and the unit at its top left corner.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -72,10 +150,13 @@ pub enum Shape {
     Circle { x: f64, y: f64, r: f64, color: String },
     Ring { x: f64, y: f64, r: f64, color: String, width: f64 },
     Ellipse { x: f64, y: f64, rx: f64, ry: f64, color: String },
-    Words { x: f64, y: f64, text: String, color: String, size: f64, align: String },
+    /// A text; its style any of "bold", "italic" and "mono" (the theme's code font).
+    Words { x: f64, y: f64, text: String, color: String, size: f64, align: String, style: String },
     Image { x: f64, y: f64, width: f64, height: f64, picture: String },
-    /// A line people bend: from x1, y1 to x2, y2 through its bend points `via` (x, y, x, y, ...).
-    Link { name: String, x1: f64, y1: f64, x2: f64, y2: f64, via: Vec<f64>, color: String, width: f64 },
+    /// A line people bend: from x1, y1 to x2, y2 through its bend points `via`
+    /// (x, y, x, y, ...); what its ends show (an arrow, a crow's foot), a
+    /// label halfway along it and its style ("dashed", "dotted").
+    Link { name: String, x1: f64, y1: f64, x2: f64, y2: f64, via: Vec<f64>, color: String, width: f64, start: String, end: String, label: String, style: String },
     /// An open line through its points (x, y, x, y, ...).
     Path { points: Vec<f64>, color: String, width: f64 },
     /// A record's box on a canvas with objects: it draws nothing itself.
@@ -113,7 +194,7 @@ impl Shape {
             "ellipse" => Shape::Ellipse { x: n("x")?, y: n("y")?, rx: n("rx")?, ry: n("ry")?, color: t("color", "text") },
             "text" => {
                 let text = sent.get("text").map(crate::locale::shown).unwrap_or_default();
-                Shape::Words { x: n("x")?, y: n("y")?, text, color: t("color", "text"), size: or("size", 10.0), align: t("align", "center") }
+                Shape::Words { x: n("x")?, y: n("y")?, text, color: t("color", "text"), size: or("size", 10.0), align: t("align", "center"), style: t("style", "") }
             }
             "image" => Shape::Image { x: n("x")?, y: n("y")?, width: n("width")?, height: n("height")?, picture: t("picture", "") },
             "link" => Shape::Link {
@@ -125,6 +206,10 @@ impl Shape {
                 via: wholes(sent.get("via")),
                 color: t("color", "text"),
                 width: or("width", 1.0),
+                start: t("start", ""),
+                end: t("end", ""),
+                label: sent.get("label").map(crate::locale::shown).unwrap_or_default(),
+                style: t("style", ""),
             },
             "path" => Shape::Path { points: wholes(sent.get("points")), color: t("color", "text"), width: or("width", 1.0) },
             "object" => Shape::Object { record: sent.get("record").cloned().unwrap_or(Value::Null), x: n("x")?, y: n("y")?, width: n("width")?, height: n("height")? },
@@ -262,7 +347,12 @@ pub fn color_of(look: &ThemeLook, color: &str) -> Color {
 
 /// The font of a canvas's text at a size on the screen: unhinted, so its letters and spaces scale with the zoom and keep their widths.
 pub fn words_font(fonts: &crate::fonts::Fonts, size: f64) -> Font {
-    let mut font = fonts.font("text", size, false);
+    words_font_of(fonts, "text", size, false)
+}
+
+/// The font of a canvas's text of a font role of the theme (`text`, `mono`), bold or not, as `words_font`.
+pub fn words_font_of(fonts: &crate::fonts::Fonts, role: &str, size: f64, bold: bool) -> Font {
+    let mut font = fonts.font(role, size, bold);
     font.set_hinting(FontHinting::None);
     font.set_linear_metrics(true);
     font.set_subpixel(true);
@@ -296,6 +386,110 @@ fn shape_paint(look: &ThemeLook, color: &str, stroke: Option<f64>) -> Paint {
     paint
 }
 
+/// The point halfway along a line through `points`.
+fn halfway(points: &[(f64, f64)]) -> (f64, f64) {
+    let total: f64 = points.windows(2).map(|w| distance(w[0], w[1])).sum();
+    let mut left = total / 2.0;
+    for w in points.windows(2) {
+        let length = distance(w[0], w[1]);
+        if length > 0.0 && left <= length {
+            let t = left / length;
+            return (w[0].0 + t * (w[1].0 - w[0].0), w[0].1 + t * (w[1].1 - w[0].1));
+        }
+        left -= length;
+    }
+    points[0]
+}
+
+/// What a link's end at `tip` shows (crate::LINK_ENDS in the spec), the line
+/// coming from `from`: an arrow, a hollow triangle, a diamond, or a data
+/// model's bars, circle and crow's foot. In units, 12 long and 7 to a side.
+#[allow(clippy::too_many_arguments)]
+fn link_end(p: &Painter, kind: &str, tip: (f64, f64), from: (f64, f64), color: &str, width: f64, scale: f64, paper: &str, at: &dyn Fn(f64, f64) -> Point) {
+    let length = distance(tip, from);
+    if kind.is_empty() || length <= 0.0 {
+        return;
+    }
+    // Along the line toward the tip, and across it.
+    let (dx, dy) = ((tip.0 - from.0) / length, (tip.1 - from.1) / length);
+    let (nx, ny) = (-dy, dx);
+    let back = |k: f64, side: f64| at(tip.0 - k * dx + side * nx, tip.1 - k * dy + side * ny);
+    let (long, wide) = (12.0, 7.0);
+    let stroke = shape_paint(p.look, color, Some(width.max(1.0)));
+    let hollow = shape_paint(p.look, if paper.is_empty() { "panel" } else { paper }, None);
+    let filled = shape_paint(p.look, color, None);
+    let polygon = |points: &[Point], fill: &Paint| {
+        let path = skia_safe::Path::polygon(points, true, None, None);
+        p.canvas.draw_path(&path, fill);
+        p.canvas.draw_path(&path, &stroke);
+    };
+    let bar = |k: f64| p.canvas.draw_line(back(k, wide), back(k, -wide), &stroke);
+    let ring = |k: f64| {
+        let r = (4.0 * scale) as f32;
+        p.canvas.draw_circle(back(k, 0.0), r, &hollow);
+        p.canvas.draw_circle(back(k, 0.0), r, &stroke);
+    };
+    let crow = || {
+        for side in [wide, 0.0, -wide] {
+            p.canvas.draw_line(back(long, 0.0), back(0.0, side), &stroke);
+        }
+    };
+    match kind {
+        "arrow" => {
+            p.canvas.draw_line(back(long, wide), back(0.0, 0.0), &stroke);
+            p.canvas.draw_line(back(long, -wide), back(0.0, 0.0), &stroke);
+        }
+        "triangle" => polygon(&[back(0.0, 0.0), back(long, wide), back(long, -wide)], &hollow),
+        "diamond" => polygon(&[back(0.0, 0.0), back(long, wide), back(2.0 * long, 0.0), back(long, -wide)], &hollow),
+        "filledDiamond" => polygon(&[back(0.0, 0.0), back(long, wide), back(2.0 * long, 0.0), back(long, -wide)], &filled),
+        "one" => {
+            bar(6.0);
+            bar(11.0);
+        }
+        "zeroOrOne" => {
+            bar(6.0);
+            ring(15.0);
+        }
+        "many" => crow(),
+        "oneOrMany" => {
+            crow();
+            bar(long + 4.0);
+        }
+        "zeroOrMany" => {
+            crow();
+            ring(long + 8.0);
+        }
+        _ => {}
+    }
+}
+
+/// The links of a drawing ending at the edge of the box each end lies in,
+/// not under it, so what their ends show is seen: a box as `boxes_of` finds them.
+pub fn links_to_edges(shapes: Vec<Shape>, boxes: &[UnitBox]) -> Vec<Shape> {
+    let inside = |b: &UnitBox, p: (f64, f64)| p.0 > b.x && p.0 < b.x + b.width && p.1 > b.y && p.1 < b.y + b.height;
+    // Where the line from p (in the box) to q (outside it) leaves it.
+    let edge = |b: &UnitBox, p: (f64, f64), q: (f64, f64)| {
+        let (dx, dy) = (q.0 - p.0, q.1 - p.1);
+        let across = |d: f64, from: f64, low: f64, high: f64| if d > 0.0 { (high - from) / d } else if d < 0.0 { (low - from) / d } else { f64::INFINITY };
+        let t = across(dx, p.0, b.x, b.x + b.width).min(across(dy, p.1, b.y, b.y + b.height)).clamp(0.0, 1.0);
+        (p.0 + t * dx, p.1 + t * dy)
+    };
+    let cut = |p: (f64, f64), q: (f64, f64)| boxes.iter().find(|b| inside(b, p) && !inside(b, q)).map(|b| edge(b, p, q)).unwrap_or(p);
+    shapes
+        .into_iter()
+        .map(|shape| match shape {
+            Shape::Link { name, x1, y1, x2, y2, via, color, width, start, end, label, style } => {
+                let points = link_points(x1, y1, x2, y2, &via);
+                let n = points.len();
+                let a = cut(points[0], points[1]);
+                let b = cut(points[n - 1], points[n - 2]);
+                Shape::Link { name, x1: a.0, y1: a.1, x2: b.0, y2: b.1, via, color, width, start, end, label, style }
+            }
+            other => other,
+        })
+        .collect()
+}
+
 /// A line through `points`; one point is a dot of its round cap.
 fn polyline(canvas: &skia_safe::Canvas, points: &[Point], paint: &Paint) {
     if points.is_empty() {
@@ -305,7 +499,8 @@ fn polyline(canvas: &skia_safe::Canvas, points: &[Point], paint: &Paint) {
 }
 
 /// Draws one shape of a drawing, in its units, `at` giving each unit's pixel.
-pub fn draw_shape(p: &Painter, shape: &Shape, scale: f64, at: &dyn Fn(f64, f64) -> Point, pictures: &dyn Fn(&str) -> Option<Picture>) {
+/// `paper` (a color, empty for the theme's panel) fills what is hollow at a link's end.
+pub fn draw_shape(p: &Painter, shape: &Shape, scale: f64, at: &dyn Fn(f64, f64) -> Point, pictures: &dyn Fn(&str) -> Option<Picture>, paper: &str) {
     let canvas = p.canvas;
     let look = p.look;
     let through = |points: &[(f64, f64)], paint: &Paint| {
@@ -331,8 +526,28 @@ pub fn draw_shape(p: &Painter, shape: &Shape, scale: f64, at: &dyn Fn(f64, f64) 
             let (rx, ry) = ((rx * scale) as f32, (ry * scale) as f32);
             canvas.draw_oval(skia_safe::Rect::new(c.x - rx, c.y - ry, c.x + rx, c.y + ry), &shape_paint(look, color, None));
         }
-        Shape::Link { x1, y1, x2, y2, via, color, width, .. } => {
-            through(&link_points(*x1, *y1, *x2, *y2, via), &shape_paint(look, color, Some(width * scale)));
+        Shape::Link { x1, y1, x2, y2, via, color, width, start, end, label, style, .. } => {
+            let points = link_points(*x1, *y1, *x2, *y2, via);
+            let mut line = shape_paint(look, color, Some(width * scale));
+            let dash = |on: f64, off: f64| skia_safe::PathEffect::dash(&[(on * scale) as f32, (off * scale) as f32], 0.0);
+            match style.as_str() {
+                "dashed" => {
+                    line.set_path_effect(dash(6.0, 4.0));
+                }
+                "dotted" => {
+                    line.set_path_effect(dash(0.1, 3.0 + width));
+                }
+                _ => {}
+            }
+            through(&points, &line);
+            let n = points.len();
+            link_end(p, start, points[0], points[1], color, width * scale, scale, paper, at);
+            link_end(p, end, points[n - 1], points[n - 2], color, width * scale, scale, paper, at);
+            if !label.is_empty() {
+                let (mx, my) = halfway(&points);
+                let words = Shape::Words { x: mx, y: my - 9.0, text: label.clone(), color: "muted".into(), size: 11.0, align: "center".into(), style: "italic".into() };
+                draw_shape(p, &words, scale, at, pictures, paper);
+            }
         }
         Shape::Path { points, color, width } if points.len() >= 2 => {
             let pairs: Vec<(f64, f64)> = points.chunks_exact(2).map(|q| (q[0], q[1])).collect();
@@ -344,20 +559,33 @@ pub fn draw_shape(p: &Painter, shape: &Shape, scale: f64, at: &dyn Fn(f64, f64) 
                 shown.draw(canvas, Rect::new(a.x as f64, a.y as f64, width * scale, height * scale));
             }
         }
-        Shape::Words { x, y, text, color, size, align } => {
+        Shape::Words { x, y, text, color, size, align, style } => {
             let size = size * scale;
             if text.is_empty() || !(size > 0.0) {
                 return;
             }
-            let font = words_font(p.fonts, size);
+            let has = |word: &str| style.split_whitespace().any(|w| w == word);
+            let role = if has("mono") { "mono" } else { "text" };
+            let bold = has("bold");
+            let font = words_font_of(p.fonts, role, size, bold);
             // Shaped as every text is (Arabic joined, Hebrew right to left), unhinted as the zoom needs.
-            let shaped = p.fonts.shape_unhinted(text, "text", size, false, true);
+            let shaped = p.fonts.shape_unhinted(text, role, size, bold, true);
             let width = shaped.width();
             let (_, metrics) = font.metrics();
             let a = at(*x, *y);
             // Centered on its point down, by its alignment across.
             let baseline = a.y - (metrics.ascent + metrics.descent) / 2.0;
-            shaped.draw(canvas, a.x as f64 - text_left(align, width), baseline as f64, &shape_paint(look, color, None), 0.0);
+            let left = a.x as f64 - text_left(align, width);
+            if has("italic") {
+                // Slanted from its baseline, as a face without italics is.
+                canvas.save();
+                canvas.translate((left as f32, baseline));
+                canvas.skew((-0.2, 0.0));
+                shaped.draw(canvas, 0.0, 0.0, &shape_paint(look, color, None), 0.0);
+                canvas.restore();
+            } else {
+                shaped.draw(canvas, left, baseline as f64, &shape_paint(look, color, None), 0.0);
+            }
         }
         // An object's box draws nothing itself: the shapes after it show it; a clear is the drawing's.
         _ => {}
@@ -405,7 +633,7 @@ pub fn paint(
             }
             continue;
         }
-        draw_shape(p, shape, v.scale, &at, pictures);
+        draw_shape(p, shape, v.scale, &at, pictures, paper);
     }
 }
 
@@ -430,6 +658,67 @@ struct BendPress {
     moved: bool,
 }
 
+/// A new line being drawn from a box: where it started (in whole units, the
+/// box's middle from a handle), where its line shows from (the handle, or
+/// where it was pressed), the box, where the pointer was pressed, where it is
+/// now in units and whether it moved.
+#[derive(Debug, Clone)]
+struct ConnectPress {
+    from: (f64, f64),
+    shown_from: (f64, f64),
+    from_box: UnitBox,
+    at_x: f64,
+    at_y: f64,
+    to: (f64, f64),
+    moved: bool,
+}
+
+/// A box the canvas carries itself (`on drop` without `on drag`): the box,
+/// where it was pressed in whole units and on the part, how far it is
+/// carried (in whole grid steps when it snaps) and whether it moved.
+#[derive(Debug, Clone)]
+struct CarryPress {
+    from_box: UnitBox,
+    from: UnitPoint,
+    at_x: f64,
+    at_y: f64,
+    by: (f64, f64),
+    moved: bool,
+}
+
+/// A shape of a box carried by `by`: one that lies in the box moves, a link
+/// keeps an end outside it where it is. Lines and text count as in it when
+/// all their points are.
+fn carried_shape(shape: Shape, of: &UnitBox, by: (f64, f64)) -> Shape {
+    let inside = |x: f64, y: f64| x >= of.x - 0.5 && x <= of.x + of.width + 0.5 && y >= of.y - 0.5 && y <= of.y + of.height + 0.5;
+    let all_inside = |points: &[f64]| points.chunks(2).all(|p| p.len() == 2 && inside(p[0], p[1]));
+    let moves = match &shape {
+        Shape::Link { x1, y1, x2, y2, via, .. } => {
+            let (a, b) = (inside(*x1, *y1), inside(*x2, *y2));
+            if !(a || b) {
+                return shape;
+            }
+            let (x1, y1) = if a { (x1 + by.0, y1 + by.1) } else { (*x1, *y1) };
+            let (x2, y2) = if b { (x2 + by.0, y2 + by.1) } else { (*x2, *y2) };
+            let via = if a && b { via.chunks(2).flat_map(|p| [p[0] + by.0, p.get(1).copied().unwrap_or(0.0) + by.1]).collect() } else { via.clone() };
+            let mut moved = shape.clone();
+            if let Shape::Link { x1: a1, y1: b1, x2: a2, y2: b2, via: v, .. } = &mut moved {
+                (*a1, *b1, *a2, *b2, *v) = (x1, y1, x2, y2, via);
+            }
+            return moved;
+        }
+        Shape::Line { x1, y1, x2, y2, .. } => all_inside(&[*x1, *y1, *x2, *y2]),
+        Shape::Path { points, .. } => !points.is_empty() && all_inside(points),
+        Shape::Words { x, y, .. } => inside(*x, *y),
+        other => box_of_shape(other).is_some_and(|b| of.contains(&b)),
+    };
+    if moves {
+        shape.translated(by.0, by.1)
+    } else {
+        shape
+    }
+}
+
 pub struct CanvasPart {
     base: PartBase,
     /// Where the person zoomed and panned to; none while it shows whole.
@@ -444,6 +733,14 @@ pub struct CanvasPart {
     /// The link last pressed, whose bend points show.
     in_hand: Option<String>,
     bend_press: Option<BendPress>,
+    connect_press: Option<ConnectPress>,
+    /// Whether the new line being drawn came from the right button: let go without moving, it opens the menu.
+    connect_right: bool,
+    carry_press: Option<CarryPress>,
+    /// A box carried and let go, shown where it was put until the drawing comes back.
+    carried: Option<(UnitBox, (f64, f64))>,
+    /// The box whose handles show, as last drawn, to draw anew only when it changes.
+    hover_seen: Option<UnitBox>,
     pressed: bool,
     press_at: (f64, f64),
     from: Option<UnitPoint>,
@@ -451,7 +748,6 @@ pub struct CanvasPart {
     moved: bool,
     // Whether the drag moves the view, and whether its first run said so yet.
     moves_view: bool,
-    decided: bool,
     pictures: RefCell<HashMap<String, Option<Picture>>>,
     modes: modes::ModeState,
 }
@@ -509,13 +805,17 @@ impl CanvasPart {
             bending: None,
             in_hand: None,
             bend_press: None,
+            connect_press: None,
+            connect_right: false,
+            carry_press: None,
+            carried: None,
+            hover_seen: None,
             pressed: false,
             press_at: (0.0, 0.0),
             from: None,
             view_at: Viewport { scale: 1.0, x: 0.0, y: 0.0 },
             moved: false,
             moves_view: false,
-            decided: false,
             pictures: RefCell::new(HashMap::new()),
             modes: modes::ModeState::default(),
         }
@@ -636,15 +936,150 @@ impl CanvasPart {
 
     /// The drawing as it shows: an object dragged moved, a link being bent with the points the pointer gives it.
     pub fn shown(&self) -> Vec<Shape> {
+        let carry = self.carry_press.as_ref().filter(|c| c.moved).map(|c| (c.from_box, c.by)).or(self.carried);
         self.mode_shapes(self.drawing())
             .into_iter()
+            .map(|shape| match carry {
+                Some((of, by)) => carried_shape(shape, &of, by),
+                None => shape,
+            })
             .map(|shape| match (&self.bending, shape) {
-                (Some((bent, via)), Shape::Link { name, x1, y1, x2, y2, color, width, .. }) if &name == bent => {
-                    Shape::Link { name, x1, y1, x2, y2, via: via.iter().flat_map(|p| [p.0.round(), p.1.round()]).collect(), color, width }
+                (Some((bent, via)), Shape::Link { name, x1, y1, x2, y2, color, width, start, end, label, style, .. }) if &name == bent => {
+                    Shape::Link { name, x1, y1, x2, y2, via: via.iter().flat_map(|p| [p.0.round(), p.1.round()]).collect(), color, width, start, end, label, style }
                 }
                 (_, shape) => shape,
             })
             .collect()
+    }
+
+    /// Whether something is drawn at a unit: a box, a circle, an ellipse, a ring, a picture or an object (not the paper, lines or text).
+    fn drawn_at(&self, p: (f64, f64)) -> bool {
+        self.shown().iter().any(|shape| shape_hit(shape, p))
+    }
+
+    /// The boxes a new line joins, the topmost first: each drawn shape grown
+    /// to the shapes under it that hold it whole (a diagram's box is its
+    /// outline, its body and its header). A shape over the whole paper is
+    /// the paper, no box.
+    fn boxes(&self) -> Vec<(UnitBox, Shape)> {
+        boxes_of(&self.shown(), self.units())
+    }
+
+    /// The box at a unit: of the topmost shape drawn there, grown as `boxes` grows it.
+    pub fn box_at(&self, p: (f64, f64)) -> Option<UnitBox> {
+        self.boxes().into_iter().find(|(_, shape)| shape_hit(shape, p)).map(|(b, _)| b)
+    }
+
+    // -- Boxes the canvas carries -----------------------------------------------------
+
+    /// Whether it carries a box itself: it has `on drop` and no `on drag`
+    /// (which gets every move), draws by code, may be used and changed.
+    fn carries(&self) -> bool {
+        self.handles("drop") && !self.handles("drag") && self.mode().is_empty() && self.base.enabled() && !self.base.read_only()
+    }
+
+    /// Whether a box carried moves by whole grid steps: as code set `snap`, else its line.
+    fn snaps(&self) -> bool {
+        self.base.state().and_then(|s| s.snap).unwrap_or_else(|| self.base.spec.flag("snap"))
+    }
+
+    /// A press on a box of a canvas that carries boxes takes it.
+    fn carry_pressed(&mut self, at: &PointerInput) -> bool {
+        if !self.carries() {
+            return false;
+        }
+        let p = self.unit_at(at.x, at.y);
+        let Some(from_box) = self.box_at(p) else { return false };
+        self.carried = None;
+        self.carry_press = Some(CarryPress { from_box, from: (p.0.floor() as i64, p.1.floor() as i64), at_x: at.x, at_y: at.y, by: (0.0, 0.0), moved: false });
+        true
+    }
+
+    /// How far the pointer carried the box, in whole units, in whole grid steps when it snaps.
+    fn carried_by(&self, press: &CarryPress, x: f64, y: f64) -> (f64, f64) {
+        let scale = self.viewport().scale;
+        let (dx, dy) = ((x - press.at_x) / scale, (y - press.at_y) / scale);
+        let grid = self.grid();
+        if self.snaps() && grid > 0.0 {
+            ((dx / grid).round() * grid, (dy / grid).round() * grid)
+        } else {
+            (dx.round(), dy.round())
+        }
+    }
+
+    // -- New lines between boxes -----------------------------------------------------
+
+    /// Whether the person draws new lines on it: it has `on connect`, draws by code (no mode), may be used and changed.
+    fn connects(&self) -> bool {
+        self.handles("connect") && self.mode().is_empty() && self.base.enabled() && !self.base.read_only()
+    }
+
+    /// Whether a press anywhere on a box draws a new line, as code set `connecting`; only with `on connect`.
+    pub fn connecting(&self) -> bool {
+        self.connects() && self.base.state().and_then(|s| s.connecting).unwrap_or(false)
+    }
+
+    /// The box whose handles show: the one under the pointer, or the one with a handle beside it.
+    fn hovered_box(&self, px: f64, py: f64) -> Option<UnitBox> {
+        if !self.connects() {
+            return None;
+        }
+        if let Some(found) = self.box_at(self.unit_at(px, py)) {
+            return Some(found);
+        }
+        self.boxes().into_iter().map(|(b, _)| b).find(|b| self.handle_of(b, px, py).is_some())
+    }
+
+    /// The handle of a box beside a pixel of the part, in units.
+    fn handle_of(&self, of: &UnitBox, px: f64, py: f64) -> Option<(f64, f64)> {
+        let v = self.viewport();
+        of.handles().into_iter().find(|h| distance(((h.0 - v.x) * v.scale, (h.1 - v.y) * v.scale), (px, py)) <= HANDLE_NEAR)
+    }
+
+    /// The handle under a pixel of the part, and its box.
+    fn handle_at(&self, px: f64, py: f64) -> Option<(UnitBox, (f64, f64))> {
+        let of = self.hovered_box(px, py)?;
+        self.handle_of(&of, px, py).map(|h| (of, h))
+    }
+
+    /// The connection handles showing, in units: those of the box under the pointer while nothing is pressed.
+    pub fn connect_handles(&self) -> Vec<(f64, f64)> {
+        if self.connect_press.is_some() || self.base.node.pressed || !self.base.node.hovered {
+            return Vec::new();
+        }
+        self.pointer_at.and_then(|(px, py)| self.hovered_box(px, py)).map(|b| b.handles().to_vec()).unwrap_or_default()
+    }
+
+    /// The new line being drawn, in units: from its handle (or where it was pressed) to the pointer.
+    pub fn connect_line(&self) -> Option<((f64, f64), (f64, f64))> {
+        self.connect_press.as_ref().filter(|c| c.moved).map(|c| (c.shown_from, c.to))
+    }
+
+    /// The box the new line would end on: the one under the pointer, other than the one it started on.
+    pub fn connect_target(&self) -> Option<UnitBox> {
+        let press = self.connect_press.as_ref().filter(|c| c.moved)?;
+        self.box_at(press.to).filter(|b| *b != press.from_box)
+    }
+
+    /// A press that starts a new line: on a handle, anywhere on a box with
+    /// the right button or while `connecting`.
+    fn connect_pressed(&mut self, at: &PointerInput, cx: &mut Cx) -> bool {
+        if !self.connects() {
+            return false;
+        }
+        let p = self.unit_at(at.x, at.y);
+        let right = at.button == PointerButton::Right;
+        // From a handle the line starts at its box's middle, which any hit test finds in the box; else where it was pressed.
+        let start = match self.handle_at(at.x, at.y) {
+            Some((of, handle)) => Some((of, of.center(), handle)),
+            None if self.connecting() || right => self.box_at(p).map(|of| (of, (p.0.floor(), p.1.floor()), p)),
+            None => None,
+        };
+        self.connect_right = right;
+        let Some((from_box, from, shown_from)) = start else { return false };
+        self.connect_press = Some(ConnectPress { from, shown_from, from_box, at_x: at.x, at_y: at.y, to: p, moved: false });
+        cx.invalidate();
+        true
     }
 
     /// The link under a unit, the topmost first: its bend point there, else a new one on the segment pressed.
@@ -723,13 +1158,13 @@ impl CanvasPart {
         self.base.fire(event)
     }
 
-    /// Whether drags, drops and bends on it are edits with undo, so Ctrl+Z takes back its own as a press gives it the focus.
+    /// Whether drags, drops, bends and new lines on it are edits with undo, so Ctrl+Z takes back its own as a press gives it the focus.
     fn keeps_edits(&self) -> bool {
         self.base.enabled()
             && !self.base.read_only()
             && self.base.name().is_some()
             && !self.base.spec.flag("noUndo")
-            && (matches!(self.mode().as_str(), "objects" | "paint") || self.handles("drag") || self.handles("drop") || self.handles("bend"))
+            && (matches!(self.mode().as_str(), "objects" | "paint") || self.handles("drag") || self.handles("drop") || self.handles("bend") || self.handles("connect"))
     }
 
     /// The window changed: a drawing drawn anew keeps a drag going and stops showing a bend of its own.
@@ -743,6 +1178,7 @@ impl CanvasPart {
         if self.seen.as_ref() != Some(&drawing) {
             self.seen = Some(drawing);
             self.bending = None;
+            self.carried = None;
             self.drawing_changed();
         }
     }
@@ -804,7 +1240,9 @@ impl CanvasPart {
         if !(v.scale > 0.0) || !v.scale.is_finite() {
             return;
         }
-        let shapes = self.shown();
+        let shown = self.shown();
+        let boxes: Vec<UnitBox> = boxes_of(&shown, self.units()).into_iter().map(|(b, _)| b).collect();
+        let shapes = links_to_edges(shown, &boxes);
         let grid = |p: &Painter| self.draw_grid(p, v);
         let pictures = |name: &str| self.picture(name);
         let grid: Option<&dyn Fn(&Painter)> = if self.grid() > 0.0 { Some(&grid) } else { None };
@@ -824,8 +1262,48 @@ impl CanvasPart {
             p.canvas.draw_circle(at, 5.0, &face);
             p.canvas.draw_circle(at, 5.0, &rim);
         }
+        self.draw_connect(p, v);
         if self.zoom() {
             self.draw_zoom_buttons(p);
+        }
+    }
+
+    /// Over the drawing, never in it: the handles of the box under the
+    /// pointer, or the new line being drawn (dashed, in the accent) and the
+    /// box it would end on outlined.
+    fn draw_connect(&self, p: &Painter, v: Viewport) {
+        let accent = p.look.color("accent");
+        if let Some((from, to)) = self.connect_line() {
+            if let Some(target) = self.connect_target() {
+                let mut outline = Paint::default();
+                outline.set_color(accent);
+                outline.set_anti_alias(true);
+                outline.set_style(PaintStyle::Stroke);
+                outline.set_stroke_width(2.0);
+                let (a, b) = (self.at(v, target.x, target.y), self.at(v, target.x + target.width, target.y + target.height));
+                p.canvas.draw_rect(skia_safe::Rect::new(a.x - 2.0, a.y - 2.0, b.x + 2.0, b.y + 2.0), &outline);
+            }
+            let mut line = Paint::default();
+            line.set_color(accent);
+            line.set_anti_alias(true);
+            line.set_style(PaintStyle::Stroke);
+            line.set_stroke_width(2.0);
+            line.set_path_effect(skia_safe::PathEffect::dash(&[6.0, 4.0], 0.0));
+            p.canvas.draw_line(self.at(v, from.0, from.1), self.at(v, to.0, to.1), &line);
+            return;
+        }
+        let mut dot = Paint::default();
+        dot.set_color(accent);
+        dot.set_anti_alias(true);
+        let mut rim = Paint::default();
+        rim.set_color(p.look.color("panel"));
+        rim.set_anti_alias(true);
+        rim.set_style(PaintStyle::Stroke);
+        rim.set_stroke_width(1.5);
+        for handle in self.connect_handles() {
+            let at = self.at(v, handle.0, handle.1);
+            p.canvas.draw_circle(at, 4.5, &dot);
+            p.canvas.draw_circle(at, 4.5, &rim);
         }
     }
 }
@@ -872,7 +1350,7 @@ impl Element for CanvasPart {
         if !self.base.enabled() {
             return;
         }
-        if let Some(button) = self.zoom_button_at(at.screen_x, at.screen_y) {
+        if let Some(button) = self.zoom_button_at(at.screen_x, at.screen_y).filter(|_| at.button == PointerButton::Left) {
             if button == "zoomWhole" {
                 self.panned = None;
             } else {
@@ -881,10 +1359,20 @@ impl Element for CanvasPart {
             cx.invalidate();
             return;
         }
+        if self.connect_pressed(&at, cx) {
+            return;
+        }
+        // A right press that draws no line waits for its release, which opens the menu.
+        if at.button == PointerButton::Right {
+            return;
+        }
         if at.clicks >= 2 && self.unbend(at.x, at.y, cx) {
             return;
         }
         if self.mode_pressed(at, cx) {
+            return;
+        }
+        if self.carry_pressed(&at) {
             return;
         }
         if self.handles("bend") {
@@ -906,17 +1394,50 @@ impl Element for CanvasPart {
         let (uw, uh) = self.units();
         self.from = point_in(uw, uh, self.view_at, at.x, at.y);
         self.moved = false;
-        self.moves_view = !self.handles("drag");
-        self.decided = self.moves_view;
+        // What a drag does is known where it starts: on something drawn it is the
+        // drag handler's, on empty paper it moves the view of a canvas that zooms.
+        self.moves_view = !self.handles("drag") || (self.zoom() && !(self.from.is_some() && self.drawn_at(self.unit_at(at.x, at.y))));
     }
 
     fn on_pointer_moved(&mut self, at: PointerInput, cx: &mut Cx) {
         self.pointer_at = Some((at.x, at.y));
         if !self.base.node.pressed {
+            // The handles follow the pointer from box to box.
+            let hovered = self.hovered_box(at.x, at.y);
+            if hovered != self.hover_seen {
+                self.hover_seen = hovered;
+                cx.invalidate();
+            }
             return;
         }
         self.heard();
+        if let Some(press) = self.connect_press.as_mut() {
+            if !press.moved && distance((at.x, at.y), (press.at_x, press.at_y)) < STILL {
+                return;
+            }
+            press.moved = true;
+            let v = self.viewport();
+            if let Some(press) = self.connect_press.as_mut() {
+                press.to = (v.x + at.x / v.scale, v.y + at.y / v.scale);
+            }
+            cx.invalidate();
+            return;
+        }
         if self.mode_moved(at, cx) {
+            return;
+        }
+        if let Some(press) = self.carry_press.clone() {
+            if !press.moved && distance((at.x, at.y), (press.at_x, press.at_y)) < STILL {
+                return;
+            }
+            let by = self.carried_by(&press, at.x, at.y);
+            if let Some(carrying) = self.carry_press.as_mut() {
+                carrying.moved = true;
+                if carrying.by != by {
+                    carrying.by = by;
+                    cx.invalidate();
+                }
+            }
             return;
         }
         if let Some(press) = self.bend_press.as_mut() {
@@ -941,16 +1462,10 @@ impl Element for CanvasPart {
         self.moved = true;
         if !self.moves_view && self.handles("drag") {
             if let Some(from) = self.from {
-                let before = self.drawing_sent();
                 let mut pointer = pointer_at(self.held(at.x, at.y));
                 pointer.insert("fromX".into(), Value::from(from.0));
                 pointer.insert("fromY".into(), Value::from(from.1));
                 self.point("drag", pointer);
-                // The first run says what the drag does: a drawing that stayed the same moves the view.
-                if !self.decided {
-                    self.decided = true;
-                    self.moves_view = self.zoom() && before == self.drawing_sent();
-                }
             }
         }
         if self.moves_view && self.zoom() {
@@ -960,7 +1475,31 @@ impl Element for CanvasPart {
     }
 
     fn on_pointer_released(&mut self, at: PointerInput, cx: &mut Cx) {
+        if let Some(press) = self.connect_press.take() {
+            cx.invalidate();
+            // A line let go where it was pressed is none; else the handler decides what it connects.
+            if press.moved {
+                let mut pointer = pointer_at(self.held(at.x, at.y));
+                pointer.insert("fromX".into(), Value::from(press.from.0 as i64));
+                pointer.insert("fromY".into(), Value::from(press.from.1 as i64));
+                self.point("connect", pointer);
+            }
+            return;
+        }
         if self.mode_released(at, cx) {
+            return;
+        }
+        if let Some(press) = self.carry_press.take() {
+            cx.invalidate();
+            // Let go where it was, it stays; else the drop handler puts it where it was carried.
+            if press.moved && press.by != (0.0, 0.0) {
+                self.carried = Some((press.from_box, press.by));
+                self.seen = Some(self.drawing_sent());
+                let mut pointer = pointer_at((press.from.0 + press.by.0 as i64, press.from.1 + press.by.1 as i64));
+                pointer.insert("fromX".into(), Value::from(press.from.0));
+                pointer.insert("fromY".into(), Value::from(press.from.1));
+                self.point("drop", pointer);
+            }
             return;
         }
         if let Some(bent) = self.bend_press.take() {
@@ -994,6 +1533,31 @@ impl Element for CanvasPart {
         if let Some(point) = point_in(uw, uh, self.viewport(), at.x, at.y) {
             self.point("click", pointer_at(point));
         }
+    }
+
+    /// The right button draws a new line from a box on a canvas with `on
+    /// connect`; let go without moving, or on a canvas without, it opens
+    /// the canvas's menu with the pointer where it was pressed.
+    fn right_drags(&self, _x: f64, _y: f64) -> bool {
+        self.base.enabled() && (self.connects() || self.base.spec.menu.is_some())
+    }
+
+    fn on_right_released(&mut self, at: PointerInput, cx: &mut Cx) -> bool {
+        let press = self.connect_press.take();
+        cx.invalidate();
+        if let Some(press) = press.as_ref().filter(|p| p.moved) {
+            let mut pointer = pointer_at(self.held(at.x, at.y));
+            pointer.insert("fromX".into(), Value::from(press.from.0 as i64));
+            pointer.insert("fromY".into(), Value::from(press.from.1 as i64));
+            self.point("connect", pointer);
+            return true;
+        }
+        // The menu's handler finds where it was opened as the canvas's x and y.
+        let (x, y) = press.map(|p| (p.at_x, p.at_y)).unwrap_or((at.x, at.y));
+        if let (Some(name), Some(point)) = (self.base.name(), point_in(self.units().0, self.units().1, self.viewport(), x, y)) {
+            crate::parts::change_state(&*self.base.host, name, |s| s.pointer = Some(pointer_at(point)));
+        }
+        false
     }
 
     fn on_text(&mut self, text: &str, cx: &mut Cx) {
@@ -1034,6 +1598,24 @@ impl Element for CanvasPart {
         if self.typing_editor().is_some_and(|e| e.node().bounds.contains(x, y)) {
             return Some(Cursor::Text);
         }
+        // The crosshair where a press starts a new line: a handle, or any box while `connecting`.
+        if self.connects() {
+            let b = self.base.node.bounds;
+            let (px, py) = (x - b.x, y - b.y);
+            if self.connect_press.is_some() || self.handle_at(px, py).is_some() || (self.connecting() && self.box_at(self.unit_at(px, py)).is_some()) {
+                return Some(Cursor::Crosshair);
+            }
+        }
+        // The move cursor over a box it carries, and while carrying one.
+        if self.carry_press.is_some() {
+            return Some(Cursor::Move);
+        }
+        if self.carries() {
+            let b = self.base.node.bounds;
+            if self.box_at(self.unit_at(x - b.x, y - b.y)).is_some() {
+                return Some(Cursor::Move);
+            }
+        }
         (self.handles("click") && !self.base.read_only()).then_some(Cursor::Hand)
     }
 
@@ -1044,6 +1626,8 @@ impl Element for CanvasPart {
         self.moved = false;
         self.bend_press = None;
         self.bending = None;
+        self.connect_press = None;
+        self.carry_press = None;
         self.mode_cancelled();
         cx.invalidate();
     }

@@ -2,6 +2,7 @@
   "accordion": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -80,6 +81,7 @@
   "badge": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -158,6 +160,7 @@
   "busy": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -236,6 +239,7 @@
   "button": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -314,6 +318,7 @@
   "buttons": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -392,6 +397,7 @@
   "canvas": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -470,6 +476,7 @@
   "chart": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -550,6 +557,7 @@
   "checkbox": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -628,6 +636,7 @@
   "color": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -706,6 +715,7 @@
   "custom": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -784,6 +794,7 @@
   "date": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -862,6 +873,7 @@
   "display": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -940,6 +952,7 @@
   "dropdown": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -1018,6 +1031,7 @@
   "file": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -1096,6 +1110,7 @@
   "folder": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -1174,6 +1189,7 @@
   "form": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -1252,6 +1268,7 @@
   "heading": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -1330,6 +1347,7 @@
   "help": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -1408,6 +1426,7 @@
   "icon": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -1486,6 +1505,7 @@
   "image": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -1564,6 +1584,7 @@
   "label": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -1642,6 +1663,7 @@
   "link": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -1720,6 +1742,7 @@
   "list": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -1798,6 +1821,7 @@
   "markdown": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -1876,6 +1900,7 @@
   "memo": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -1954,6 +1979,7 @@
   "number": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -2032,6 +2058,7 @@
   "panel": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -2110,6 +2137,7 @@
   "password": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -2188,6 +2216,7 @@
   "popover": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -2266,6 +2295,7 @@
   "progress": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -2344,6 +2374,7 @@
   "radio": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -2422,6 +2453,7 @@
   "scroll": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -2500,6 +2532,7 @@
   "separator": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -2578,6 +2611,7 @@
   "slider": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -2656,6 +2690,7 @@
   "sound": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -2734,6 +2769,7 @@
   "spinbox": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -2812,6 +2848,7 @@
   "splitter": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -2890,6 +2927,7 @@
   "steps": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -2968,6 +3006,7 @@
   "switch": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -3046,6 +3085,7 @@
   "table": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -3124,6 +3164,7 @@
   "tabs": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -3202,6 +3243,7 @@
   "tags": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -3280,6 +3322,7 @@
   "text": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -3358,6 +3401,7 @@
   "textbox": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -3436,6 +3480,7 @@
   "timer": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -3514,6 +3559,7 @@
   "toggle": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -3592,6 +3638,7 @@
   "tree": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -3670,6 +3717,7 @@
   "treeTable": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,
@@ -3748,6 +3796,7 @@
   "trend": {
     "background": null,
     "bind": null,
+    "bottom": false,
     "brush": null,
     "by": null,
     "cancel": false,

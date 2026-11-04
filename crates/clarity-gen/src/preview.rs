@@ -51,13 +51,15 @@ impl Shown {
 /// designer (`design`), every window, part, page and menu item carries its
 /// `designItem`; an app is shown as an empty window of its name, framed by
 /// it, which is the app itself in the design.
-pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool) -> String {
+/// `showing` gives each tabs, steps or accordion part (by its item) the page
+/// the designer switched to, from 0.
+pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, showing: &BTreeMap<u32, usize>) -> String {
     let size = match shown {
         Shown::Window(name) => crate::window_size(project, name),
         Shown::App(_) => (clarity_spec::layout::WINDOW_WIDTH, clarity_spec::layout::WINDOW_HEIGHT),
     };
     let write = || crate::web_browser::files_json_as(project, title, size);
-    let text = if design { crate::web_windows::designed(write) } else { write() };
+    let text = if design { crate::web_windows::designed_showing(showing, write) } else { write() };
     let Shown::App(name) = shown else { return text };
     let Ok(mut files) = serde_json::from_str::<Value>(&text) else { return text };
     let item = project.apps().find(|a| a.name.name == *name).filter(|_| design).map(|a| format!(" designItem=\"{}\"", a.span.start)).unwrap_or_default();
@@ -71,6 +73,11 @@ fn escaped(text: &str) -> String {
     text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
+/// `pages=50.1,70.0` (a container's item and the page it shows, from 0) as a map.
+pub fn showing_of(query: &BTreeMap<String, String>) -> BTreeMap<u32, usize> {
+    query.get("pages").map(|pages| pages.split(',').filter_map(|pair| pair.split_once('.')).filter_map(|(item, page)| Some((item.trim().parse().ok()?, page.trim().parse().ok()?))).collect()).unwrap_or_default()
+}
+
 /// The number the next window that opens gets.
 static NEXT_INSTANCE: AtomicU64 = AtomicU64::new(1);
 
@@ -80,6 +87,8 @@ pub struct PreviewProgram {
     samples: BTreeMap<String, Vec<Row>>,
     displays: BTreeMap<String, Vec<String>>,
     main: String,
+    /// The popovers shown open, by name: the one picked in the designer.
+    open: Vec<String>,
 }
 
 impl PreviewProgram {
@@ -87,7 +96,13 @@ impl PreviewProgram {
     pub fn new(project: Project, main: &str) -> PreviewProgram {
         let samples = clarity_spec::sample::sample_data(&project);
         let displays = clarity_spec::sample::display_values(&project);
-        PreviewProgram { project, samples, displays, main: main.to_string() }
+        PreviewProgram { project, samples, displays, main: main.to_string(), open: Vec::new() }
+    }
+
+    /// The popovers named in `open` show open in their windows, as the designer shows the one picked.
+    pub fn opening(mut self, open: Vec<String>) -> PreviewProgram {
+        self.open = open;
+        self
     }
 
     /// The program's answer to a command of the wire: `{"value"}` or `{"error"}`.
@@ -108,11 +123,17 @@ impl PreviewProgram {
                 if let Some(with) = args.get("with").and_then(Value::as_object) {
                     data.extend(with.clone());
                 }
-                reply(state(window, data), Vec::new())
+                let mut opened = state(window, data);
+                for name in self.open.iter().filter(|name| self.project.pages().filter(|p| p.name.name == window).any(|p| named_in(&p.widgets, name))) {
+                    opened["parts"][name] = json!({ "visible": true });
+                }
+                reply(opened, Vec::new())
             }
             "dispatch_event" | "answer_event" => {
                 let handler = args.get("handler").and_then(Value::as_str).unwrap_or_default();
-                let said = format!("{handler} runs in the program itself: Run starts it. The preview shows the windows with sample data.");
+                // Clarity's own words, in the person's language where the project translates them.
+                let (key, english) = clarity_spec::translations::PREVIEW_KEYS[0];
+                let said = json!({ "key": key, "text": english, "values": { "handler": { "kind": "text", "value": handler } } });
                 reply(sent_state(args), vec![json!({ "level": "info", "text": said })])
             }
             "ref_options" => {
@@ -177,6 +198,11 @@ impl PreviewProgram {
     }
 }
 
+/// Whether a part named `name` is among `widgets` or inside them.
+fn named_in(widgets: &[clarity_spec::model::Widget], name: &str) -> bool {
+    widgets.iter().any(|w| w.props.name.as_deref() == Some(name) || named_in(&w.children, name) || w.pages.iter().any(|p| named_in(&p.children, name)))
+}
+
 /// A plain value when its window opens: its default as written, else its type's empty value.
 fn start_value(ty: &clarity_spec::code::TypeRefKind, default: Option<&Literal>) -> Value {
     use clarity_spec::code::TypeRefKind as T;
@@ -235,6 +261,7 @@ pub type Library = Arc<dyn Fn() -> Result<PathBuf, String> + Send + Sync>;
 /// reads the project again; the wire answers from what was read last.
 pub struct Server {
     address: String,
+    serving: Arc<Serving>,
 }
 
 struct Serving {
@@ -243,6 +270,8 @@ struct Serving {
     /// The program of what was read last, by the window it starts with.
     program: Mutex<Option<Arc<PreviewProgram>>>,
     loaded: Mutex<Option<Loaded>>,
+    /// The project as the Design text being typed would make it (`set_draft`), drawn for `draft=1`.
+    draft: Mutex<Option<Project>>,
 }
 
 impl Server {
@@ -251,8 +280,9 @@ impl Server {
         let listener = TcpListener::bind("127.0.0.1:0")?;
         let port = listener.local_addr()?.port();
         let prefix = format!("/{secret}/");
-        let serving = Arc::new(Serving { loader, library, program: Mutex::new(None), loaded: Mutex::new(None) });
+        let serving = Arc::new(Serving { loader, library, program: Mutex::new(None), loaded: Mutex::new(None), draft: Mutex::new(None) });
         let below = prefix.clone();
+        let kept = serving.clone();
         std::thread::spawn(move || {
             for stream in listener.incoming().flatten() {
                 let serving = serving.clone();
@@ -263,7 +293,13 @@ impl Server {
                 });
             }
         });
-        Ok(Server { address: format!("http://127.0.0.1:{port}{prefix}") })
+        Ok(Server { address: format!("http://127.0.0.1:{port}{prefix}"), serving: kept })
+    }
+
+    /// The project as the unsaved Design text makes it, which a drawing asked
+    /// with `draft=1` shows; none when there is no such text.
+    pub fn set_draft(&self, draft: Option<Project>) {
+        *self.serving.draft.lock().unwrap_or_else(|p| p.into_inner()) = draft;
     }
 
     /// Where it serves, ending in `/`: `http://127.0.0.1:41234/<secret>/`.
@@ -396,10 +432,16 @@ fn serve(mut stream: TcpStream, below: &str, serving: &Serving) -> std::io::Resu
                 return respond(&mut stream, "400 Bad Request", "text/plain", b"files.json names a window or an app");
             };
             match (serving.loader)() {
-                Ok(loaded) => {
+                Ok(mut loaded) => {
                     let design = request.query.get("design").is_some_and(|d| d == "1");
-                    let text = files_json(&loaded.project, &loaded.title, &shown, design);
-                    *serving.program.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::new(PreviewProgram::new(loaded.project.clone(), shown.main())));
+                    if request.query.get("draft").is_some_and(|d| d == "1")
+                        && let Some(draft) = serving.draft.lock().unwrap_or_else(|p| p.into_inner()).clone()
+                    {
+                        loaded.project = draft;
+                    }
+                    let text = files_json(&loaded.project, &loaded.title, &shown, design, &showing_of(&request.query));
+                    let open: Vec<String> = request.query.get("open").map(|o| o.split(',').filter(|n| !n.is_empty()).map(str::to_string).collect()).unwrap_or_default();
+                    *serving.program.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::new(PreviewProgram::new(loaded.project.clone(), shown.main()).opening(open)));
                     *serving.loaded.lock().unwrap_or_else(|p| p.into_inner()) = Some(loaded);
                     respond(&mut stream, "200 OK", "application/json", text.as_bytes())
                 }

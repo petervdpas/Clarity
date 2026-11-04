@@ -219,7 +219,7 @@ fn files(text: &str) -> Value {
 fn the_designer_draws_markup_that_says_where_each_part_is_written() {
     let (_, project) = todo();
     let main = project.pages().find(|p| p.name.name == "Main").unwrap();
-    let designed = files(&preview::files_json(&project, "Todo", &Shown::Window("Main".into()), true));
+    let designed = files(&preview::files_json(&project, "Todo", &Shown::Window("Main".into()), true, &Default::default()));
     let markup = designed["windows"]["Main"].as_str().unwrap();
     assert!(markup.contains(&format!("<Window name=\"Main\" designItem=\"{}\">", main.span.start)), "{markup}");
     let add = main.widgets.iter().find(|w| w.props.name.as_deref() == Some("addButton")).unwrap();
@@ -227,7 +227,7 @@ fn the_designer_draws_markup_that_says_where_each_part_is_written() {
     // The app's menu items too.
     assert!(designed["apps"]["Todo"].as_str().unwrap().contains("designItem="));
     // The preview's markup is the program's own: no design items.
-    let shown = files(&preview::files_json(&project, "Todo", &Shown::Window("Users".into()), false));
+    let shown = files(&preview::files_json(&project, "Todo", &Shown::Window("Users".into()), false, &Default::default()));
     assert!(!shown["windows"].to_string().contains("designItem"));
     assert_eq!(shown["title"], json!("Todo"));
     assert_eq!((shown["width"].clone(), shown["height"].clone()), (json!(1100), json!(760)));
@@ -239,7 +239,7 @@ fn the_designer_draws_markup_that_says_where_each_part_is_written() {
 fn an_app_is_designed_as_an_empty_window_in_its_frame() {
     let (_, project) = todo();
     let app = project.apps().next().unwrap();
-    let designed = files(&preview::files_json(&project, "Todo", &Shown::App("Todo".into()), true));
+    let designed = files(&preview::files_json(&project, "Todo", &Shown::App("Todo".into()), true, &Default::default()));
     assert_eq!(designed["windows"]["Todo"], json!(format!("<Window name=\"Todo\" designItem=\"{}\" />\n", app.span.start)));
     let program = PreviewProgram::new(project, "Todo");
     assert_eq!(program.answer("started", &json!({})), json!({ "value": { "main": "Todo" } }));
@@ -268,8 +268,11 @@ fn the_preview_program_opens_windows_with_sample_data_and_runs_no_handler() {
     let state = opened["value"]["state"].clone();
     let clicked = program.answer("dispatch_event", &json!({ "state": state, "handler": "personSelected" }));
     assert_eq!(clicked["value"]["state"], state);
-    let said = clicked["value"]["messages"][0]["text"].as_str().unwrap();
-    assert!(said.starts_with("personSelected runs in the program itself"), "{said}");
+    // In Clarity's own words, by their key, the handler in its slot.
+    let said = &clicked["value"]["messages"][0]["text"];
+    assert_eq!(said["key"], json!("previewRunsNoHandler"));
+    assert_eq!(said["text"], json!(clarity_spec::translations::PREVIEW_KEYS[0].1));
+    assert_eq!(said["values"]["handler"]["value"], json!("personSelected"));
     // What the person changes stays as the screen sent it.
     assert_eq!(program.answer("edit_event", &json!({ "state": state, "part": "name" }))["value"]["state"], state);
     assert!(program.answer("open_window", &json!({ "window": "Nowhere" }))["error"].is_string());
@@ -318,6 +321,14 @@ fn the_preview_server_serves_the_library_the_windows_and_the_wire_below_its_secr
     assert!(files(&String::from_utf8_lossy(&body))["windows"]["Users"].as_str().unwrap().contains("designItem"));
     let (_, body) = ask(&address, "POST", &path("invoke"), r#"{"command":"started","args":{},"browser":"x","settings":{}}"#);
     assert_eq!(files(&String::from_utf8_lossy(&body)), json!({ "value": { "main": "Users" } }));
+    // The unsaved Design text's project is drawn when asked for.
+    let mut draft = clarity_project::load_modules(&dir).unwrap();
+    draft.files.iter_mut().flat_map(|f| &mut f.pages).find(|p| p.name.name == "Users").unwrap().title = Some("Drafted".into());
+    server.set_draft(Some(draft));
+    let (_, body) = ask(&address, "GET", &path("files.json?window=Users&design=1&draft=1"), "");
+    assert!(files(&String::from_utf8_lossy(&body))["model"].to_string().contains("Drafted"));
+    let (_, body) = ask(&address, "GET", &path("files.json?window=Users&design=1"), "");
+    assert!(!files(&String::from_utf8_lossy(&body))["model"].to_string().contains("Drafted"));
     // A page's preflight, and nothing outside the secret or the resources folder.
     let (head, _) = ask(&address, "OPTIONS", &path("invoke"), "");
     assert!(head.starts_with("HTTP/1.1 204") && head.contains("Access-Control-Allow-Headers: Content-Type"), "{head}");
@@ -470,4 +481,29 @@ fn the_ide_previews_and_designs_on_clarity_ui_in_a_browser() {
     assert_eq!(result["design"]["picked"], json!(true), "{result:#}");
     let text = std::fs::read_to_string(clarity_project::module_dir(&file).join("todo.clarity")).unwrap();
     assert!(text.contains("button @deleteButtonCaption name deleteButton at 7,11 span 2"), "the drag moved the button:\n{text}");
+    // A column's width dragged on the canvas, and a ribbon button picked there.
+    assert!(result["design"]["column"].as_str().is_some_and(|line| line.contains("title")), "{result:#}");
+    assert_eq!(result["design"]["command"], json!(true), "{result:#}");
+}
+
+#[test]
+fn the_designer_shows_the_page_it_switched_to_and_opens_the_popover_picked() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/records");
+    let project = clarity_project::load_modules(&dir).unwrap();
+    // A container with pages, wherever the example has one.
+    let page = project.pages().find(|p| p.widgets.iter().any(|w| !w.pages.is_empty())).expect("a window with tabs, steps or sections");
+    let container = page.widgets.iter().find(|w| !w.pages.is_empty()).unwrap();
+    let query = preview::query_of(&format!("window={}&pages={}.1,bad", page.name.name, container.span.start));
+    let showing = preview::showing_of(&query);
+    assert_eq!(showing, [(container.span.start, 1)].into_iter().collect());
+    let designed = files(&preview::files_json(&project, "Records", &Shown::Window(page.name.name.clone()), true, &showing));
+    let markup = designed["windows"][&page.name.name].as_str().unwrap();
+    assert!(markup.contains(&format!("designItem=\"{}\" designShown=\"2\"", container.span.start)), "{markup}");
+    // A popover picked shows open: its state says so when its window opens.
+    let program = PreviewProgram::new(project.clone(), &page.name.name).opening(vec!["nowhere".into()]);
+    let opened = program.answer("open_window", &json!({ "window": page.name.name }));
+    assert_eq!(opened["value"]["state"]["parts"], json!({}), "a name the window has not opens nothing");
+    let named = container.props.name.clone().unwrap();
+    let program = PreviewProgram::new(project.clone(), &page.name.name).opening(vec![named.clone()]);
+    assert_eq!(program.answer("open_window", &json!({ "window": page.name.name }))["value"]["state"]["parts"][&named], json!({ "visible": true }));
 }

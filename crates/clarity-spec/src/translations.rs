@@ -85,6 +85,9 @@ pub const CALENDAR_KEYS: [(&str, &str); 8] = [
     ("nextDecade", "Next decade"),
     ("calendarZoomOut", "Show more"),
 ];
+/// The IDE's preview, which runs no handler (DESIGN 8.1): what a click on a part that runs one says.
+pub const PREVIEW_KEYS: [(&str, &str); 1] = [("previewRunsNoHandler", "{handler} runs in the program itself: Run starts it. The preview shows the windows with sample data.")];
+
 /// Clarity's words of the desktop host when it cannot start or draws in
 /// software, and of the system theme it follows.
 pub const DESKTOP_KEYS: [(&str, &str); 6] = [
@@ -231,6 +234,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&RUNTIME_ERROR_KEYS)
         .chain(&ENGINE_ERROR_KEYS)
         .chain(&DESKTOP_KEYS)
+        .chain(&PREVIEW_KEYS)
 }
 
 /// The key a text names, without its `@`; none for a text written as it is.

@@ -13,13 +13,24 @@ export interface ClarityUi {
   step(step: object): Promise<Record<string, unknown>>;
   shot(): Promise<string | null>;
   /** Starts the program again from new files on the same canvas: null, or why it could not. */
-  reload(files: string): Promise<string | null>;
+  reload(files: string, chosen?: Chosen): Promise<string | null>;
   layout(): Promise<Layout>;
   stop(): void;
 }
 
 /** A part Clarity.UI drew, with where it is written in the project (`item`). */
-export type LaidPart = { item: string | null; name: string | null; kind: string; at: [number, number, number, number] };
+export type Place = [number, number, number, number];
+/** A part Clarity.UI drew, with where it is written in the project (`item`); a frame's button is of kind `command`. */
+export type LaidPart = {
+  item: string | null;
+  name: string | null;
+  kind: string;
+  at: Place;
+  /** A tabs, steps or accordion part's pages, each with the header that shows it, where it has one. */
+  pages?: { item: string | null; title: string | null; at: Place | null }[];
+  /** A table's columns, each where its header is. */
+  columns?: { field: string; at: Place }[];
+};
 /** A grid Clarity.UI laid out: what holds it, its columns, its place and the height of each row. */
 export type LaidGrid = { item: string | null; columns: number; gap: number; at: [number, number, number, number]; rows: number[] };
 export type Layout = { parts: LaidPart[]; grids: LaidGrid[] };
@@ -28,7 +39,22 @@ export type Layout = { parts: LaidPart[]; grids: LaidGrid[] };
 export type Shown = { window: string } | { app: string };
 
 /** Options of the page script for one canvas. */
-export type StartOptions = { files: string; server: string; resources: string; input: boolean; storage: string; choices: string };
+export type StartOptions = { files: string; server: string; resources: string; input: boolean; storage: string; choices: string; chosen: Chosen };
+
+/** The person's choices the drawing starts with, over the kept ones: the IDE's language. */
+export type Chosen = { language?: string };
+
+/** What the designer shows of the design beyond the saved window: the page each container shows, the draft, the popovers open. */
+export type Showing = { pages?: Record<number, number>; draft?: boolean; open?: string[] };
+
+/**
+ * The language the IDE shows a window in, as the drawing's choice: the
+ * system's (`undefined`, the drawing's own), as written (`null`), or a translation.
+ */
+export function chosenOf(language: string | null | undefined, written: string): Chosen {
+  if (language === undefined) return {};
+  return { language: language ?? written };
+}
 
 declare global {
   interface Window {
@@ -61,15 +87,20 @@ export function pageScript(base: string): Promise<NonNullable<Window["ClarityUiP
 }
 
 /** The address of files.json for what is shown, new for each change (`revision`), so nothing in between keeps an old one. */
-export function filesAddress(base: string, shown: Shown, design: boolean, revision: number): string {
+export function filesAddress(base: string, shown: Shown, design: boolean, revision: number, showing: Showing = {}): string {
   const what = "app" in shown ? `app=${encodeURIComponent(shown.app)}` : `window=${encodeURIComponent(shown.window)}`;
-  return `${base}files.json?${what}&design=${design ? 1 : 0}&revision=${revision}`;
+  const pages = Object.entries(showing.pages ?? {})
+    .map(([item, page]) => `${item}.${page}`)
+    .join(",");
+  const more = [pages ? `&pages=${pages}` : "", showing.draft ? "&draft=1" : "", showing.open?.length ? `&open=${showing.open.map(encodeURIComponent).join(",")}` : ""].join("");
+  return `${base}files.json?${what}&design=${design ? 1 : 0}${more}&revision=${revision}`;
 }
 
 /** The page script's options for a canvas of the preview (`design` false) or of the designer. */
-export function startOptions(base: string, shown: Shown, design: boolean, revision: number): StartOptions {
+export function startOptions(base: string, shown: Shown, design: boolean, revision: number, showing: Showing = {}, chosen: Chosen = {}): StartOptions {
   return {
-    files: filesAddress(base, shown, design, revision),
+    files: filesAddress(base, shown, design, revision, showing),
+    chosen,
     server: `${base}invoke`,
     resources: `${base}resources/`,
     // On the design canvas the drawn parts take no input: the designer's layer does.

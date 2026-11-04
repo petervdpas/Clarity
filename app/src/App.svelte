@@ -14,6 +14,7 @@
   import NewWindowDialog from "./lib/NewWindowDialog.svelte";
   import PageDesigner from "./lib/PageDesigner.svelte";
   import ClarityWindow from "./lib/ClarityWindow.svelte";
+  import { chosenOf } from "./lib/clarityWindow";
   import ProjectTree from "./lib/ProjectTree.svelte";
   import ResourceView from "./lib/ResourceView.svelte";
   import NewResourceDialog from "./lib/NewResourceDialog.svelte";
@@ -1640,7 +1641,7 @@
               </div>
               <!-- The window's client, at the height it opens at, drawn by Clarity.UI as the program draws it, with sample data. -->
               <div class="shown" style:height="{windowSize(page).height}px">
-                <ClarityWindow shown={{ window: page.name.name }} project={preview} />
+                <ClarityWindow shown={{ window: page.name.name }} project={preview} chosen={chosenOf(languageChoice.language, preview.project.locale.language ?? "en")} />
               </div>
             </ShownWindow>
           {:else if openApp}

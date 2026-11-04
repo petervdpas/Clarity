@@ -4,14 +4,23 @@
 // project (its item, the offset the designer's edits name). Pure, so the
 // placing is tested without a browser.
 
+import type { Command } from "@clarity/ui/generated/Command.ts";
+import type { Frame } from "@clarity/ui/generated/Frame.ts";
 import type { Page } from "@clarity/ui/generated/Page.ts";
 import type { Widget } from "@clarity/ui/generated/Widget.ts";
 import type { Layout } from "./clarityWindow";
 
 export type Box = { x: number; y: number; width: number; height: number };
 
-/** A part of the design as the layer shows it. */
-export type LayerPart = { item: number; name: string | null; kind: string; box: Box };
+/** A page of a container: the item of the page, and the header that shows it, where it has one. */
+export type LayerPage = { item: number; title: string | null; box: Box | null };
+
+/**
+ * A part of the design as the layer shows it; a frame's button is a
+ * `command`, the window's own (`own`) or its app's. A container's pages and
+ * a table's columns come with it.
+ */
+export type LayerPart = { item: number; name: string | null; kind: string; box: Box; own: boolean; pages: LayerPage[]; columns: { field: string; box: Box }[] };
 
 /** A grid of the design: what holds it (the window, a container, a page), its columns and rows, and the containers it lies in. */
 export type LayerGrid = { item: number; columns: number; gap: number; box: Box; rows: number[]; inside: number[] };
@@ -50,20 +59,47 @@ function partsOf(page: Page): Map<number, Widget> {
   return out;
 }
 
+/** The items of a frame's buttons and menu items, those of submenus too. */
+export function commandsOf(frame: Frame | null | undefined): number[] {
+  if (!frame) return [];
+  const out: number[] = [];
+  const visit = (items: Command[]) => {
+    for (const c of items) {
+      out.push(c.span.start);
+      visit(c.items);
+    }
+  };
+  if (frame.menu) visit(frame.menu.items);
+  if (frame.toolbar) visit(frame.toolbar.items);
+  for (const tab of frame.ribbon?.tabs ?? []) for (const group of tab.groups) visit(group.items);
+  return out;
+}
+
 /**
  * The layer's parts and grids from what Clarity.UI reports: only what the
  * design has (an item it knows), each part once (the first drawn), and each
  * grid with the parts it lies inside, so a part is never dropped into itself.
+ * A frame's buttons are known by the window's own frame, or else by its
+ * app's (`appFrame`), whose buttons are designed in the app.
  */
-export function layerOf(layout: Layout, page: Page): { parts: LayerPart[]; grids: LayerGrid[] } {
+export function layerOf(layout: Layout, page: Page, appFrame: Frame | null = null): { parts: LayerPart[]; grids: LayerGrid[] } {
   const known = partsOf(page);
+  const own = new Set(commandsOf(page.frame));
+  const app = new Set(commandsOf(appFrame));
   const seen = new Set<number>();
   const parts: LayerPart[] = [];
   for (const laid of layout.parts) {
     const item = itemOf(laid.item);
-    if (item === null || !known.has(item) || seen.has(item)) continue;
+    const command = laid.kind === "command";
+    if (item === null || seen.has(item)) continue;
+    if (command ? !own.has(item) && !app.has(item) : !known.has(item)) continue;
     seen.add(item);
-    parts.push({ item, name: laid.name, kind: laid.kind, box: boxOf(laid.at) });
+    const pages = (laid.pages ?? []).flatMap((p) => {
+      const at = itemOf(p.item);
+      return at === null ? [] : [{ item: at, title: p.title, box: p.at ? boxOf(p.at) : null }];
+    });
+    const columns = (laid.columns ?? []).map((c) => ({ field: c.field, box: boxOf(c.at) }));
+    parts.push({ item, name: laid.name, kind: laid.kind, box: boxOf(laid.at), own: command ? own.has(item) : true, pages, columns });
   }
   const within = new Map<number, number[]>();
   for (const widget of known.values()) {

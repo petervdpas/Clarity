@@ -1,9 +1,11 @@
 // The designer's layer placed by what Clarity.UI reports of the window it drew.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cellsOf, heldBy, layerOf, placeIn } from "./designLayer.ts";
+import { cellsOf, commandsOf, heldBy, layerOf, placeIn } from "./designLayer.ts";
+import { chosenOf, filesAddress } from "./clarityWindow.ts";
 import type { Page } from "@clarity/ui/generated/Page.ts";
 import type { Widget } from "@clarity/ui/generated/Widget.ts";
+import type { Frame } from "@clarity/ui/generated/Frame.ts";
 
 const span = (start: number) => ({ start, end: start + 1, line: 1, col: 1 });
 
@@ -70,4 +72,43 @@ test("cells and a drop place follow the rows as Clarity.UI laid them out", () =>
   assert.deepEqual(placeIn(grid, { col: 2, row: 2, width: 3, height: 2 }), { x: column + 8, y: 44, width: 3 * column + 16, height: 116 + 8 + 36 });
   // Past the last row, rows are 36 high.
   assert.equal(placeIn(grid, { col: 1, row: 5, width: 1, height: 1 }).y, 36 + 8 + 116 + 8 + 36 + 8 + 36 + 8);
+});
+
+test("a frame's buttons are known by the window's own frame or its app's, a container's pages and a table's columns come along", () => {
+  const command = (start: number, items: unknown[] = []) => ({ props: {}, items, span: span(start) });
+  const framed = { ...page, frame: { menu: { name: null, items: [command(200, [command(210)])], span: span(199) }, toolbar: null, ribbon: null, sidebars: [], footer: null } } as unknown as Page;
+  const app = { menu: null, toolbar: { name: null, items: [command(300)], span: span(299) }, ribbon: null, sidebars: [], footer: null } as unknown as Frame;
+  assert.deepEqual(commandsOf(framed.frame), [200, 210]);
+  const laid = {
+    parts: [
+      { item: "200", name: "fileItem", kind: "command", at: [0, 0, 40, 20] as [number, number, number, number] },
+      { item: "300", name: "tool", kind: "command", at: [50, 0, 40, 20] as [number, number, number, number] },
+      { item: "400", name: "stranger", kind: "command", at: [90, 0, 40, 20] as [number, number, number, number] },
+      { item: "50", name: "tabs", kind: "tabs", at: [0, 40, 300, 200] as [number, number, number, number], pages: [{ item: "60", title: "One", at: [0, 40, 60, 24] as [number, number, number, number] }, { item: "80", title: "Two", at: null }] },
+    ],
+    grids: [],
+  };
+  const layer = layerOf(laid, framed, app);
+  assert.deepEqual(
+    layer.parts.map((p) => [p.item, p.kind, p.own]),
+    [
+      [200, "command", true],
+      [300, "command", false],
+      [50, "tabs", true],
+    ],
+  );
+  assert.deepEqual(layer.parts[2].pages, [
+    { item: 60, title: "One", box: { x: 0, y: 40, width: 60, height: 24 } },
+    { item: 80, title: "Two", box: null },
+  ]);
+});
+
+test("the IDE's language is the drawing's choice", () => {
+  assert.deepEqual(chosenOf(undefined, "en"), {});
+  assert.deepEqual(chosenOf(null, "en"), { language: "en" });
+  assert.deepEqual(chosenOf("nl", "en"), { language: "nl" });
+  assert.equal(
+    filesAddress("http://x/s/", { window: "Main" }, true, 4, { pages: { 50: 1, 70: 0 }, draft: true, open: ["pick"] }),
+    "http://x/s/files.json?window=Main&design=1&pages=50.1,70.0&draft=1&open=pick&revision=4",
+  );
 });

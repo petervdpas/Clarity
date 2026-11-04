@@ -90,6 +90,24 @@ try {
   result.design.follows ??= true;
   await b.settle(300);
   await b.screenshot(join(folder, "design-moved.png"));
+
+  // A table's column, sized by its header's edge on the canvas.
+  const tableLine = () => readFileSync(file, "utf8").split("\n").find((l) => l.includes("table name grid")) ?? "";
+  const before = tableLine();
+  const edge = await b.at(`[data-design-layer] [data-column="title"]`);
+  await b.drag(edge, { x: edge.x + 60, y: edge.y }, 6);
+  const sized = Date.now() + 15000;
+  while (tableLine() === before && Date.now() < sized) await b.settle(200);
+  result.design.column = tableLine() !== before ? tableLine().trim() : null;
+  await b.screenshot(join(folder, "design-column.png"));
+
+  // The window Users has its own ribbon: its buttons are picked on the canvas.
+  await clickWhere(`[...document.querySelectorAll(".side-tabs [role=tab]")].find((t) => t.textContent.trim() === "Elements")`, "the Elements side tab");
+  await clickWhere(`document.querySelector('button.row[title^="Users in module"]')`, "the window Users");
+  await b.until(`document.querySelector('[data-design-layer] [data-command][data-part="mainButton"]')`, "the ribbon's buttons on the layer", 30000);
+  await b.click(`[data-design-layer] [data-command][data-part="mainButton"]`);
+  result.design.command = await b.eval(`!!document.querySelector('[data-design-layer] .part.command.selected[data-part="mainButton"]')`);
+  await b.screenshot(join(folder, "design-command.png"));
 } catch (why) {
   result.error = String(why && why.stack ? why.stack : why);
 }

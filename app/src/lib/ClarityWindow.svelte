@@ -6,18 +6,24 @@
   // change of the project (`project`, a new value for each) or of what is
   // shown draws again on the same canvas, without loading the library again.
   import { onMount, untrack } from "svelte";
-  import { filesAddress, pageScript, previewAddress, startOptions, type ClarityUi, type Layout, type Shown } from "./clarityWindow";
+  import { filesAddress, pageScript, previewAddress, startOptions, type Chosen, type ClarityUi, type Layout, type Shown, type Showing } from "./clarityWindow";
 
   let {
     shown,
     design = false,
     project,
+    showing = {},
+    chosen = {},
     onlayout,
   }: {
     shown: Shown;
     design?: boolean;
     /** The project as the IDE has it now: each new one draws the window again. */
     project: unknown;
+    /** The page each container shows, the unsaved draft, the popovers open (the designer's). */
+    showing?: Showing;
+    /** The language the IDE shows the window in. */
+    chosen?: Chosen;
     onlayout?: (layout: Layout) => void;
   } = $props();
 
@@ -46,7 +52,7 @@
         base = await previewAddress();
         const page = await pageScript(base);
         if (stopped || !canvas) return;
-        ui = page.start(canvas, startOptions(base, untrack(() => shown), design, revision));
+        ui = page.start(canvas, untrack(() => startOptions(base, shown, design, revision, showing, chosen)));
         // A test of the IDE drives the drawing as a driven program (DESIGN 1.6) through its canvas.
         (canvas as HTMLCanvasElement & { clarityUi?: ClarityUi }).clarityUi = ui;
         await ui.started;
@@ -70,11 +76,11 @@
   });
 
   // The project or what is shown changed: the same canvas draws it again.
-  const key = $derived(JSON.stringify(shown));
+  const key = $derived(JSON.stringify({ shown, showing, chosen }));
   let first = true;
   $effect(() => {
     void project;
-    const now = JSON.parse(key) as Shown;
+    const now = JSON.parse(key) as { shown: Shown; showing: Showing; chosen: Chosen };
     if (first) {
       first = false;
       return;
@@ -82,10 +88,10 @@
     untrack(() => void redraw(now));
   });
 
-  async function redraw(now: Shown) {
+  async function redraw(now: { shown: Shown; showing: Showing; chosen: Chosen }) {
     if (!ui || !ready) return;
     revision += 1;
-    const why = await ui.reload(filesAddress(base, now, design, revision));
+    const why = await ui.reload(filesAddress(base, now.shown, design, revision, now.showing), now.chosen);
     problem = why;
     await laid();
   }

@@ -4,7 +4,8 @@
   import ShownWindow from "./ShownWindow.svelte";
   import ClarityWindow from "./ClarityWindow.svelte";
   import DesignLayer from "./DesignLayer.svelte";
-  import type { Layout } from "./clarityWindow";
+  import { chosenOf, type Layout } from "./clarityWindow";
+  import { languageChoice } from "@clarity/ui/screen/i18n.svelte.ts";
   import PageOutline from "./PageOutline.svelte";
   import PageProperties from "./PageProperties.svelte";
   import CodePanel from "./CodePanel.svelte";
@@ -71,8 +72,8 @@
 
   let canvas: HTMLElement | undefined = $state();
 
-  // While the Design text is being typed, the designer's lists show the
-  // project as that text would make it; the canvas draws the saved project.
+  // While the Design text is being typed, the designer shows the project as
+  // that text would make it: its lists, and the drawing (the draft).
   const preview = $derived(pageDesigner.draft ?? savedPreview);
   // The canvas shows the project's theme, as the application will.
   const area = $derived(themeArea(themeOf(preview)));
@@ -158,6 +159,14 @@
   const entities = $derived(preview.project.files.flatMap((f) => f.entities));
   // Where Clarity.UI drew the window's parts and grids, for the design layer over it.
   let laid = $state<Layout | null>(null);
+  // A popover shows while it or a part in it is picked, as it opens when the program runs.
+  const popovers = $derived(allParts(page).filter((w) => w.props.kind === "popover"));
+  const openPopovers = $derived(
+    popovers.filter((w) => pageDesigner.selected !== null && pageDesigner.selected >= w.span.start && pageDesigner.selected < w.span.end && w.props.name).map((w) => w.props.name as string),
+  );
+  // What the drawing shows beyond the saved window: the page each container shows, the draft, the popover picked.
+  const showing = $derived({ pages: { ...pageDesigner.activeTabs }, draft: pageDesigner.draft !== null, open: openPopovers });
+  const chosen = $derived(chosenOf(languageChoice.language, preview.project.locale.language ?? "en"));
 
   async function apply(edit: Edit): Promise<void> {
     if (pageDesigner.draft) {
@@ -478,8 +487,8 @@
         role="presentation"
       >
         <!-- The window as Clarity.UI draws it, as it runs; the design layer over it takes the pointer. -->
-        <ClarityWindow shown={app ? { app: app.name.name } : { window: page.name.name }} design={true} project={savedPreview} onlayout={(l) => (laid = l)} />
-        <DesignLayer layout={laid} {page} {preview} />
+        <ClarityWindow shown={app ? { app: app.name.name } : { window: page.name.name }} design={true} project={pageDesigner.draft ?? savedPreview} {showing} {chosen} onlayout={(l) => (laid = l)} />
+        <DesignLayer layout={laid} {page} {preview} appFrame={app === null && page.kind === "window" ? (projectApp?.frame ?? null) : null} />
       </div>
       {#if app}
         <p class="main-hint">
@@ -489,16 +498,17 @@
       {/if}
     </ShownWindow>
     {#if !app}
-      <!-- Parts not seen (sounds, timers) have no place in the window: they wait here, as on C++ Builder's forms (DESIGN 5.22, 5.26). -->
-      {@const unplaced = page.widgets.filter((w) => w.props.kind === "sound" || w.props.kind === "timer")}
+      <!-- Parts not seen (sounds, timers) have no place in the window: they wait here, as on C++ Builder's forms (DESIGN 5.22, 5.26).
+           A popover is hidden until opened: it waits here too, marked so, and shows on the window while it is picked. -->
+      {@const unplaced = [...page.widgets.filter((w) => w.props.kind === "sound" || w.props.kind === "timer"), ...popovers]}
       {#if unplaced.length > 0}
         <div class="tray" role="listbox" aria-label="Parts without a place in the window">
           {#each unplaced as w (w.span.start)}
-            <span role="option" aria-selected={pageDesigner.selected === w.span.start} class:selected={pageDesigner.selected === w.span.start}>
+            <span role="option" aria-selected={pageDesigner.selected === w.span.start} class:selected={pageDesigner.selected === w.span.start} class:hidden-part={w.props.kind === "popover"} data-hidden-part={w.props.kind === "popover" ? w.props.name : undefined}>
               <PartTile
                 kind={w.props.kind}
                 name={w.props.name ?? w.props.kind}
-                title="{w.props.kind}{w.props.source ? ', plays ' + w.props.source : ''}{w.props.every ? ', every ' + w.props.every + ' s' : ''}. Pick it to set it in the inspector."
+                title="{w.props.kind}{w.props.source ? ', plays ' + w.props.source : ''}{w.props.every ? ', every ' + w.props.every + ' s' : ''}{w.props.kind === 'popover' ? ', hidden until opened: picked, it shows on the window' : ''}. Pick it to set it in the inspector."
                 onpointerdown={(e) => {
                   e.stopPropagation();
                   pageDesigner.selected = w.span.start;
@@ -604,6 +614,11 @@
     border: 1px dashed var(--border);
     border-radius: 6px;
     background: var(--panel);
+  }
+
+  .tray .hidden-part {
+    opacity: 0.6;
+    font-style: italic;
   }
 
   .tray .selected {

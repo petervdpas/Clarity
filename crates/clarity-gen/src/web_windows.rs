@@ -45,6 +45,8 @@ const OWN_FORM: [&str; 8] = ["kind", "name", "col", "row", "width", "height", "h
 thread_local! {
     /// Set while the IDE's designer has markup written (`designed`).
     static DESIGNED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// The page each tabs, steps or accordion part shows in the designer, by the part's item, from 0.
+    static SHOWING: std::cell::RefCell<std::collections::BTreeMap<u32, usize>> = std::cell::RefCell::new(std::collections::BTreeMap::new());
 }
 
 /// Writes markup as the IDE's designer draws it (DESIGN 8.1): each window,
@@ -52,9 +54,17 @@ thread_local! {
 /// project, so the designer's layer knows each box Clarity.UI draws. A
 /// program's own markup never has it.
 pub fn designed<R>(write: impl FnOnce() -> R) -> R {
+    designed_showing(&std::collections::BTreeMap::new(), write)
+}
+
+/// `designed`, each container in `showing` (by its item) on the page the
+/// designer switched to (from 0), as `designShown` (from 1).
+pub fn designed_showing<R>(showing: &std::collections::BTreeMap<u32, usize>, write: impl FnOnce() -> R) -> R {
     let before = DESIGNED.with(|d| d.replace(true));
+    let shown_before = SHOWING.with(|s| s.replace(showing.clone()));
     let written = write();
     DESIGNED.with(|d| d.set(before));
+    SHOWING.with(|s| *s.borrow_mut() = shown_before);
     written
 }
 
@@ -344,6 +354,9 @@ fn attributes(widget: &Widget) -> String {
         out.push_str(&attribute(&format!("on{}", h.event.keyword()), &Value::String(widgets::handler_call(h))));
     }
     out.push_str(&design_item(&widget.span));
+    if let Some(page) = DESIGNED.with(|d| d.get()).then(|| SHOWING.with(|s| s.borrow().get(&widget.span.start).copied())).flatten() {
+        let _ = write!(out, " designShown=\"{}\"", page + 1);
+    }
     out
 }
 

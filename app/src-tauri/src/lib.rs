@@ -373,12 +373,16 @@ fn highlight(text: String) -> Vec<clarity_spec::highlight::Piece> {
 }
 
 #[tauri::command]
-fn try_decl(path: String, item: u32, text: String, state: State<WatchState>) -> Result<DeclTrial, String> {
+fn try_decl(path: String, item: u32, text: String, state: State<WatchState>, server: State<PreviewServer>) -> Result<DeclTrial, String> {
     let (dir, file) = spec_file_of(&state, &path)?;
     let source = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {path}: {err}"))?;
     let after = clarity_spec::source::replace_decl(&source, item, &text).map_err(|err| err.to_string())?;
     let project = clarity_project::load_modules_with(&dir, &file, &after)
         .map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    // The design canvas draws the window as this text makes it (DESIGN 8.1).
+    if let Some(server) = &server.0 {
+        server.set_draft(Some(project.clone()));
+    }
     Ok(DeclTrial {
         problems: clarity_spec::source::problems_in_decl(&after, item, &file.display().to_string(), &project.diagnostics),
         preview: Preview::new(project),
@@ -517,7 +521,7 @@ fn open_project_of(state: &WatchState) -> Result<(PathBuf, PathBuf), String> {
 /// The server the IDE's preview and design canvas draw from (DESIGN 8.1,
 /// `clarity_gen::preview`): Clarity.UI's browser files, the open project's
 /// windows and a program answering with sample data. None when it could not start.
-struct PreviewServer(Option<String>);
+struct PreviewServer(Option<clarity_gen::preview::Server>);
 
 fn preview_server(app: AppHandle) -> PreviewServer {
     let loader: clarity_gen::preview::Loader = std::sync::Arc::new(move || {
@@ -526,13 +530,13 @@ fn preview_server(app: AppHandle) -> PreviewServer {
     });
     let repository = cfg!(debug_assertions).then(|| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")));
     let library: clarity_gen::preview::Library = std::sync::Arc::new(move || clarity_gen::web_browser::local_folder(repository.as_deref()));
-    PreviewServer(clarity_gen::preview::Server::start(loader, library, &clarity_gen::preview::secret()).ok().map(|s| s.address().to_string()))
+    PreviewServer(clarity_gen::preview::Server::start(loader, library, &clarity_gen::preview::secret()).ok())
 }
 
 /// Where the preview server serves, ending in `/`.
 #[tauri::command]
 fn preview_server_address(server: State<PreviewServer>) -> Result<String, String> {
-    server.0.clone().ok_or_else(|| "The preview's server could not start on this machine's loopback address.".to_string())
+    server.0.as_ref().map(|s| s.address().to_string()).ok_or_else(|| "The preview's server could not start on this machine's loopback address.".to_string())
 }
 
 /// Which way a change is replayed.

@@ -13,5 +13,8 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     watch: { ignored: ["**/src-tauri/**"] },
+    // The IDE's webview keeps no copy of the dev server's modules: a cached
+    // page would ask for files that were moved or removed since.
+    headers: { "Cache-Control": "no-store" },
   },
 });

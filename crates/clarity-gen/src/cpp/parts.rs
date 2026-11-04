@@ -246,3 +246,59 @@ pub fn starter(part: &PartDecl) -> Vec<(String, String)> {
     let _ = writeln!(cpp, "std::unique_ptr<{n}Part> make_{n}() {{\n    return std::make_unique<{n}>();\n}}");
     vec![(native::BUILD_FILE.to_string(), cmake), (format!("{n}.cpp"), cpp), (format!("{}/{n}.h", native::OWN_FOLDER), header(part))]
 }
+
+/// The pure virtual methods the part's class writes: those of
+/// `clarity/<Name>.h` and `draw` of Clarity.UI's CustomPart, each name and
+/// its line as the class writes it.
+fn pure_virtuals(part: &PartDecl) -> Vec<(String, String)> {
+    let mut out = vec![("draw".to_string(), "void draw(clarity::ui::Canvas& canvas, double x, double y, double width, double height) override".to_string())];
+    for line in header(part).lines() {
+        let Some(sig) = line.trim().strip_prefix("virtual ").and_then(|l| l.strip_suffix(" = 0;")) else { continue };
+        let Some(open) = sig.find('(') else { continue };
+        let name = sig[..open].rsplit(' ').next().unwrap_or_default().to_string();
+        out.push((name, format!("{sig} override")));
+    }
+    out
+}
+
+/// What a C++ part's own code lacks of `clarity/<Name>.h`, or still uses
+/// that Clarity no longer has, read from its code without building it.
+pub fn code_mismatches(project: &Project) -> Vec<String> {
+    use crate::part_code::{Lang, before, defines, find_word, is_ident, names_fn, sources};
+    const CPP: [&str; 9] = [".cpp", ".cc", ".cxx", ".c++", ".h", ".hpp", ".hh", ".hxx", ".c"];
+    let own = format!("{}/", native::OWN_FOLDER);
+    let mut found = Vec::new();
+    for p in parts(project) {
+        let n = &p.name.name;
+        let code = sources(project, p, Lang::C, |path| CPP.iter().any(|e| path.ends_with(e)) && !path.starts_with(&own));
+        if code.is_empty() {
+            continue;
+        }
+        let base = format!("{n}Part");
+        // A class whose bases name <Name>Part: `class X : public <Name>Part {`.
+        let derives = code.iter().any(|s| {
+            find_word(&s.code, &base).into_iter().any(|at| {
+                let head = before(&s.code, at);
+                let start = head.rfind([';', '{', '}']).map_or(0, |k| k + 1);
+                let head = &head[start..];
+                let words: Vec<&str> = head.split(|c: char| !is_ident(c)).collect();
+                (words.contains(&"class") || words.contains(&"struct")) && head.replace("::", "").contains(':')
+            })
+        });
+        if !derives {
+            found.push(format!("custom part {n}: no class of its code derives from {base} (clarity/{n}.h): write class {n} final : public {base} {{ .. }};"));
+        } else {
+            for (name, line) in pure_virtuals(p) {
+                if !code.iter().any(|s| names_fn(&s.code, &name).is_some()) {
+                    found.push(format!("custom part {n}: its class does not write {name}, which {base} asks: write {line} {{ .. }}"));
+                }
+            }
+        }
+        let make = format!("make_{n}");
+        if !code.iter().any(|s| defines(&s.code, &make).is_some()) {
+            found.push(format!("custom part {n}: its code does not define {make}, which makes the part: write std::unique_ptr<{base}> {make}() {{ return std::make_unique<{n}>(); }}"));
+        }
+        found.extend(crate::c::parts::old_api_uses(p, &code));
+    }
+    found
+}

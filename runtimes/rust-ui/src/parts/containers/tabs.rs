@@ -70,7 +70,7 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
     let columns = container::columns_of(&spec);
     let shared = Rc::new(Shared {
         part: PartBase::new(spec.clone(), host.clone()),
-        here: Cell::new(1),
+        here: Cell::new(crate::markup::design_shown(&spec)),
         visible: RefCell::new(vec![true; spec.pages.len()]),
         tabs: RefCell::new(Vec::new()),
     });
@@ -82,7 +82,7 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         base.node.add(Box::new(tab));
     }
     for page in &spec.pages {
-        let grid = container::grid_of(&page.children, columns, GAP, &host);
+        let grid = container::grid_of(&page.children, columns, GAP, &host).owned(page.item.as_deref());
         base.node.add(Box::new(Page::new(Box::new(ScrollView::new(Box::new(grid)).keeping_bar_room()))));
     }
     Box::new(TabsPart { base, shared, count: spec.pages.len(), look: Cell::new(LookNow::default()) })
@@ -256,18 +256,22 @@ impl Element for TabButton {
         let look = p.look;
         let b = self.node.bounds;
         let open = self.shared.open() == Some(self.number);
-        let values = look.part("tab", if self.node.hovered && !open { Some("hover") } else { None });
+        // The open tab in the theme's selected look, the others plain or hovered.
+        let state = if open { Some("selected") } else if self.node.hovered { Some("hover") } else { None };
+        let values = look.part("tab", state);
         let radius = values.radius.map(|r| r as f64).unwrap_or_else(|| look.radius("button"));
-        let background = if open { look.color("panel") } else { values.background.unwrap_or_else(|| look.color("raised")) };
-        let color = if open { look.color("text") } else { values.text.unwrap_or_else(|| look.color("muted")) };
-        // Its top corners rounded: the bottom runs on into the page under it.
+        let background = values.background.unwrap_or_else(|| look.color(if open { "panel" } else { "raised" }));
+        let color = values.text.unwrap_or_else(|| look.color(if open { "text" } else { "muted" }));
+        let line = values.border.unwrap_or_else(|| look.color("border"));
+        // Its top corners rounded: the bottom runs on into the page under it
+        // when the open tab has a border, else it stands on the page's edge.
+        let joins = open && line.a() > 0;
         let plate = Rect { height: b.height + radius, ..b };
         {
-            let _clip = p.clip(Rect { height: b.height + if open { look.border() } else { 0.0 }, ..b });
+            let _clip = p.clip(Rect { height: b.height + if joins { look.border() } else { 0.0 }, ..b });
             p.fill(plate, background, radius);
-            let line = if open { look.color("strong_border") } else { values.border.unwrap_or_else(|| look.color("border")) };
             p.stroke(plate, line, look.border(), radius);
-            if open {
+            if joins {
                 p.fill(Rect::new(b.x + look.border(), b.bottom() - look.border(), b.width - 2.0 * look.border(), 2.0 * look.border()), background, 0.0);
             }
         }

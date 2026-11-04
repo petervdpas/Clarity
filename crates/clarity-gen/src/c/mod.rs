@@ -199,6 +199,11 @@ pub use cli::generate as generate_cli;
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     let project = &crate::with_secret_settings(project, &crate::settings_program(settings));
+    // What the parts' code lacks of Clarity's files, read without building it (DESIGN 5.19).
+    let mismatches = parts::code_mismatches(project);
+    if !mismatches.is_empty() {
+        return Err(mismatches);
+    }
     let (databases, owned) = crate::databases(project, settings)?;
     let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
     if let Some((name, sql, _)) = databases.iter().find(|(_, sql, _)| *sql != Sql::Sqlite) {

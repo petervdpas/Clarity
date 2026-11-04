@@ -64,13 +64,13 @@ pub const RADII: [&str; 3] = ["input", "button", "panel"];
 /// `card_line` the lines under a card's title.
 pub const PART_KINDS: [&str; 8] = ["button", "input", "header", "tab", "menu", "list", "card", "card_line"];
 pub const STATES: [&str; 4] = ["hover", "pressed", "focus", "selected"];
-/// The parts that have rows to choose, so a `selected` look.
-pub const SELECTABLE: [&str; 3] = ["list", "card", "card_line"];
+/// The parts with a `selected` look: the rows to choose, and the tab open.
+pub const SELECTABLE: [&str; 4] = ["list", "card", "card_line", "tab"];
 
 /// What a style or a part look sets.
-const LOOK_WORDS: [&str; 5] = ["background", "text", "border", "radius", "weight"];
+const LOOK_WORDS: [&str; 6] = ["background", "text", "border", "radius", "weight", "size"];
 /// What only a style sets: how its text shows.
-const TEXT_WORDS: [&str; 3] = ["size", "font", "align"];
+const TEXT_WORDS: [&str; 2] = ["font", "align"];
 
 /// The source of Clarity's own theme, which sets every value.
 pub const BUILT_IN: &str = include_str!("../themes/clarity.clarity");
@@ -147,7 +147,7 @@ fn parse_look(cursor: &mut Cursor, what: &str) -> ParseResult<Look> {
         match word.name.as_str() {
             text if !style && TEXT_WORDS.contains(&text) => {
                 return Err(Diagnostic::error(
-                    format!("a part sets {}; size, font and align belong in a style", listed_str(&LOOK_WORDS)),
+                    format!("a part sets {}; font and align belong in a style", listed_str(&LOOK_WORDS)),
                     word.span,
                 ));
             }
@@ -308,7 +308,7 @@ fn parse_line(node: &Node, theme: &mut ThemeDecl) -> ParseResult<()> {
                     }
                     if t.text == "selected" && !SELECTABLE.contains(&kind.name.as_str()) {
                         return Err(Diagnostic::error(
-                            format!("only {} have a row selected, not '{}'", listed_str(&SELECTABLE), kind.name),
+                            format!("only {} have a selected look, not '{}'", listed_str(&SELECTABLE), kind.name),
                             t.span,
                         ));
                     }
@@ -399,8 +399,10 @@ pub(crate) fn check_decls(file: &SpecFile) -> Vec<Diagnostic> {
                 (format!("part {}{state}", p.kind), &p.look, p.span)
             }));
         for (what, look, span) in looks {
-            for value in [&look.background, &look.text, &look.border].into_iter().flatten() {
-                let known = is_hex(value) || names.contains(value) || (value == "none" && look.border.as_ref() == Some(value));
+            // A background or border can be `none`; a text cannot.
+            let slots = [(&look.background, true), (&look.text, false), (&look.border, true)];
+            for (value, may_be_none) in slots.into_iter().filter_map(|(v, n)| Some((v.as_ref()?, n))) {
+                let known = is_hex(value) || names.contains(value) || (value == "none" && may_be_none);
                 if !known {
                     found.push(Diagnostic::error(
                         format!("{what} uses color '{value}', which theme {name} does not have; its colors are {}", listed(&names)),

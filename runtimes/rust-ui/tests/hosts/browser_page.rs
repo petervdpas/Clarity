@@ -68,7 +68,12 @@ const PAGE: &str = r#"<!doctype html>
     }
     const shot = await ui.shot();
     const box = [ui.canvas.clientWidth, ui.canvas.clientHeight, window.innerWidth, window.innerHeight];
-    report({ read, after, before, shot, box, title: document.title, dpr: window.devicePixelRatio, kept: JSON.parse(localStorage.getItem("clarity.settings") || "null") });
+    const inPage = !(ui.worker instanceof Worker);
+    // New files on the same canvas (the IDE's designer after a change): the window opens again, and says where its parts are.
+    const reloaded = await ui.reload("clarity/files.json");
+    const again = await ui.step({ do: "read" });
+    const layout = await ui.layout();
+    report({ read, after, before, shot, box, title: document.title, dpr: window.devicePixelRatio, kept: JSON.parse(localStorage.getItem("clarity.settings") || "null"), inPage, reloaded, again: again.window, laid: layout.parts.map((p) => p.name) });
   } catch (why) {
     report({ error: String(why && why.stack || why) });
   }
@@ -318,6 +323,27 @@ fn a_click_in_the_browser_runs_the_servers_handler_and_its_reply_is_drawn() {
     assert!(changed > 50, "the answer's box shows no new text: {changed} pixels changed");
     // The page draws something: not one color all over.
     assert!(b.chunks(4).any(|p| p != &b[0..4]));
+}
+
+/// Where a worker cannot draw with WebGL2 (WebKitGTK, the webview of Tauri
+/// on Linux), the page draws on its own thread: the same worker script, the
+/// requests synchronous there too. Chromium told to, as WebKitGTK must.
+#[test]
+#[ignore = "needs the browser files (Emscripten) and Chromium"]
+fn on_the_page_thread_a_click_runs_the_servers_handler_too() {
+    let page = PAGE.replace("<script src=\"clarity-ui-page.js\"></script>", "<script>window.clarityUiOptions = { thread: \"page\" };</script><script src=\"clarity-ui-page.js\"></script>");
+    let site = Site { page, outer: None, main: MAIN, answers: Arc::new(answer) };
+    let Opened { scratch, asked, results, _browser, .. } = open("page-thread", site, &["--window-size=900,600", "--force-device-scale-factor=1"]);
+    let result = results.recv_timeout(Duration::from_secs(90)).expect("the page reported within 90 s");
+    assert!(result.get("error").is_none(), "the page failed: {}", result["error"]);
+    assert_eq!(result["inPage"], json!(true));
+    assert!(asked.lock().unwrap().contains(&"dispatch_event".to_string()));
+    assert_eq!(result["after"]["data"]["answer"], json!(ANSWER), "{}", result["after"]);
+    save_shot(&scratch, "page-thread.png", &result["shot"]);
+    // Reloaded from its files on the same canvas, it opens its window again and lays out its parts.
+    assert_eq!(result["reloaded"], Value::Null);
+    assert_eq!(result["again"], json!("Main"));
+    assert!(result["laid"].as_array().unwrap().contains(&json!("greet")), "{}", result["laid"]);
 }
 
 /// A phone-sized page at two device pixels per CSS pixel: the canvas fills

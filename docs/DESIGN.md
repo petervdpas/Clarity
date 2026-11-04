@@ -236,7 +236,7 @@ theme Shop
 ```
 
 - `mode` is `light`, `dark` or `system`; each color can have a value per mode (`color accent "#2f6fdf" dark "#5b8cff"`).
-- Clarity's own look is itself a theme, the built-in `theme Clarity` (2026-10-17), which sets every value: 21 color roles (surfaces, frame, text, borders, accent and its tints, selection, focus, inputs, error, warning, success) with a dark value each, fonts for text, headings and code, text sizes, radii per kind, padding, border width, a shadow, and the look of each kind of part (button, input, table header, tab, menu, list, card, card line) in its states (hover, pressed, focus, and selected for a list's rows and cards). Every theme starts from it and sets only what it changes; a new theme is a full copy of it. The application's own CSS reads only these values, and is kept apart from the designer's CSS.
+- Clarity's own look is itself a theme, the built-in `theme Clarity` (2026-10-17), which sets every value: 21 color roles (surfaces, frame, text, borders, accent and its tints, selection, focus, inputs, error, warning, success) with a dark value each, fonts for text, headings and code, text sizes, radii per kind, padding, border width, a shadow, and the look of each kind of part (button, input, table header, tab, menu, list, card, card line) in its states (hover, pressed, focus, and selected for a list's rows and cards). Every theme starts from it and sets only what it changes; a new theme is a full copy of it. The application's own CSS reads only these values, and is kept apart from the designer's CSS. Its values are the Clarity IDE's own look (2026-11-04), so a running app looks like the IDE: the IDE's colors light and dark, its fonts, sizes and radii, a table header in small muted bold text over a strong line, plain tabs with the open one in the soft accent (a tab's `selected` look), menus with a strong border; for that a part sets `size` and a background can be `none`.
 - Parts pick a named style, `button "Delete" style danger`, never raw colors, so a design stays consistent and the theme can change without touching windows.
 - The project file names the themes its application offers (`theme Shop Night`, 2026-10-17), the first one the one it starts with; people switch with the click target `theme`, by each theme's title, and the choice is kept for the next start. Every offered theme must have every style a part uses. A project without any gets Clarity's own, the look the renderer has today, which already follows the system's light or dark mode.
 - The web renderer turns a theme into CSS variables, and Clarity.UI reads it resolved (`Themes/*.light.json`, `*.dark.json`). The designer draws with the same renderer as the application, so the canvas shows the theme as it will ship.
@@ -244,7 +244,7 @@ theme Shop
 
 **Every stack, in its own idiom.** All of this is the transpiler's job: the project says what, and each stack gets it the way a developer of that stack would write it. There are two renderers, and each feature is done only when both have it:
 
-- **The web renderer**, the IDE's own: its designer and preview (`runtimes/web`). No generated program uses it since round B.
+- **The web renderer** (`runtimes/web`): since 2026-11-04 only the IDE's own model types and helpers; the designer and the preview draw with Clarity.UI too (section 8.1).
 - **Clarity.UI** (section 7.9), for every generated program of every language: on the desktop, and in the browser through WebAssembly.
 
 | | Web renderer | C# with Clarity.UI |
@@ -1193,12 +1193,12 @@ Raised by the user on 2026-10-23: a developer should be able to put a part in a 
 
 | Stack | Library line | The part is |
 |---|---|---|
-| C, C++ | `native "parts/Arena"` | C or C++ with its `CMakeLists.txt`, using SFML, SDL, raylib or anything CMake finds |
+| C, C++ | `native "parts/Arena"` | C or C++ with its `CMakeLists.txt`, using anything CMake finds |
 | Rust | `crate "parts/Arena"` | a Rust crate with its `Cargo.toml`, using any crate |
 | Go | `go "parts/arena"` | a Go package with its `go.mod`, using any module |
 | C# | `nuget "Package" version` or `dll "file"` | a custom control of Clarity.UI that uses that package or assembly, through a C# adapter (7.9) |
 
-A native, Rust or Go part draws into a native child window the host gives it at the part's place; a C# part is a Clarity.UI control (a class deriving from `CustomPart`) drawn in the window itself. A part whose library line does not fit the project's stack is a problem at the declaration, so changing stack shows each part that must be written again.
+Every part is a control of Clarity.UI (7.9), drawn in the window itself on the canvas Clarity.UI gives it, at the part's place, taking the pointer and keys as a built-in part does; a library that renders on its own (a game engine such as Bevy) draws into pixels the part puts on the canvas. A part whose library line does not fit the project's stack is a problem at the declaration, so changing stack shows each part that must be written again.
 
 **The declaration is Clarity.** What the rest of the project sees is declared in a module, so the checker, code, the Parts palette and the properties panel treat the part as they treat a built-in one, without knowing what is inside it. The words are the ones engines already use for talking with the screen (section 5.12):
 
@@ -1233,43 +1233,41 @@ page Game: window
 
 **The part's interface, in its language.** Clarity writes one file of the part's folder from the declaration, and writes it again whenever the declaration changes; the part implements what it asks, and one that no longer fits the declaration fails its build:
 
-- C or C++: `parts/Arena/clarity/Arena.h`, the functions below.
-- Rust: `parts/Arena/src/clarity.rs`, the trait `ArenaPart` that the crate's `Arena` implements, the `Window` it draws in (with the raw handle wgpu and Bevy take; a Bevy app runs without its own window loop and updates once a frame), and `ArenaHost` with a method per tell. The file needs nothing of Clarity's: the crate depends on `raw-window-handle` only.
-- Go: `parts/arena/clarity.go`, the interface `Part` that the package's `New(window, width, height, host)` makes, the `Window`, and `Host` with a method per tell; the package's module needs nothing of Clarity's either.
+- C: `parts/Arena/clarity/Arena.h`, the functions below. C++: the same file holds the abstract class `ArenaPart`, deriving from `clarity::ui::CustomPart` (`ui/ui.hpp`), with a pure virtual method per property and hear, and `make_Arena()` that the part defines.
+- Rust: `parts/Arena/src/clarity.rs`, the trait `ArenaPart` that the crate's type implements, wrapped as a `CustomPart` of clarity-ui (the crate depends on clarity-ui, whose version Clarity keeps in step); `make` there gives the part.
+- Go: `parts/arena/clarity.go`, the interface `Part` that the package's `New()` makes, with the `Canvas` it draws on and the `Cx` it tells through, as plain Go: the part's module needs nothing of Clarity's.
 - C#: the generated half of the adapter, below.
 
-In C and C++:
+In C (2026-11-04, on Clarity.UI):
 
 ```c
-ArenaPart *Arena_create(void *parent, int width, int height, ArenaHost *host);
-void Arena_resize(ArenaPart *part, int width, int height);
-void Arena_frame(ArenaPart *part);
+ArenaPart *Arena_create(void);
 void Arena_destroy(ArenaPart *part);
-void Arena_set_value(ArenaPart *part, int64_t value);
-void Arena_set_enabled(ArenaPart *part, bool enabled);
-void Arena_set_speed(ArenaPart *part, int64_t speed);
-void Arena_restart(ArenaPart *part, int64_t level);
-/* Given by the header, called by the library: */
-void Arena_changed(ArenaHost *host, int64_t value);
-void Arena_scored(ArenaHost *host, int64_t points);
+void Arena_draw(ArenaPart *part, ClarityCanvas *canvas, double x, double y, double width, double height);
+void Arena_pointer_pressed(ArenaPart *part, const ClarityPointer *at, ClarityCustomCx *cx);
+bool Arena_key(ArenaPart *part, const char *name, uint32_t modifiers, ClarityCustomCx *cx);
+void Arena_show_value(ArenaPart *part, int64_t value, ClarityCustomCx *cx);
+void Arena_show_speed(ArenaPart *part, int64_t speed, ClarityCustomCx *cx);
+void Arena_on_restart(ArenaPart *part, ClarityCustomCx *cx, int64_t level);
+/* Given by the header, called by the part: */
+void Arena_changed(ClarityCustomCx *cx, int64_t value);
+void Arena_scored(ClarityCustomCx *cx, int64_t points);
 ```
 
-- `parent` is the native child window the part draws into: an X11 window on Linux, an `HWND` on Windows, an `NSView` on macOS. SFML takes it as `sf::RenderWindow(handle)`.
+- The part draws with the `clarity_canvas_*` functions of `clarity_ui.h` and tells its window through the `cx` of the call; pointer, key, text and focus functions it leaves out are not called.
 - An integer is `int64_t`, a bool `bool`; every other value (text, decimal, money, date, an enum) is a `const char *` in its plain form, as the command line prints it (section 5.20).
-- The host calls everything on the UI thread. `Arena_frame` comes about 60 times a second while the part is shown, for a part that animates; a still part leaves it empty. The child window gets the mouse and keyboard itself, so the library reads them as it would in its own window.
-- A tell or change the library reports is queued and goes to the backend as an event, after the call it came in.
+- Every call comes on the screen's thread. A part that animates asks for its next frame through `cx`.
+- A tell or change the part reports goes to the backend as an event, after the call it came in.
 
 **Built with the program.** A C or C++ part's `CMakeLists.txt` makes a library named after the part, which the program's own CMake build takes in; a Rust part's crate is a path dependency of the program's; a Go part's module is required by the program's and replaced by its folder, its requirements and sums joining the program's. Declaring a part writes a starter in its language that builds without other libraries (it keeps its values and draws nothing). Clarity never writes over a file of the part's folder after the first, except its interface file.
 
 **A .NET part's adapter.** The library in the package is not Clarity's, so a small C# class sits between them: `parts/Notes/Notes.cs`, the developer's half of a partial class, drawing with the library and passing values to it and from it. The generated half (deriving from Clarity.UI's `CustomPart`) calls a partial method the adapter must write for the value (`ShowValue`), each property (`Show<Property>`) and each hear (`On<Hear>`), so the C# compiler reports an adapter that no longer fits its declaration, and gives the adapter a method per tell and `Changed(value)` to call. Declaring the part writes a starter adapter.
 
-**Above the page.** A native child window lies over the window's own drawing, so nothing of the window can show on top of it. While a Clarity dialog, popover, menu or open dropdown overlaps the part, the host hides the part, and shows it again when that closes. A .NET part is a Clarity.UI control drawn in the window itself and has no such limit.
-
 **On the design canvas** a part is a box with its name and size, or a picture of it (`preview "arena.png"` in the declaration, from the resources). Preview in the IDE shows the box too: the library is loaded only by the built program. Run shows the real part.
 
-**On Linux** a C, C++, Rust or Go part needs X11 for its child window, as SFML does. A program that holds one starts under X11 (XWayland on a Wayland desktop).
-
 **Checked.** A part's declaration is checked like an entity's; a window that sets an undeclared property, wires an undeclared tell or calls an undeclared hear gets an error; a missing library, one whose build fails or a .NET part on another stack is a problem at the declaration; the usability rules (section 5.18) apply to its properties as to a built-in part's.
+
+**The part's code, read when Clarity generates** (2026-11-04): before it writes the program, the generator reads each part's own code without building it, comments and strings left out (`crates/clarity-gen/src/part_code.rs` and each stack's `code_mismatches`), and refuses with every problem at once, each with its file and line where it has one and the line to write. Rust: a type implements `<Name>Part` of `src/clarity.rs` with every method that has no body there and no fn the trait lacks; no `<Name>Host` or `clarity_runtime::parts`. Go: the package has a method for each of `Part` in `clarity.go`, and `func New()` taking nothing; no `NewHost`. C: a `.c` file defines each function `clarity/<Name>.h` asks. C++: a class derives from `<Name>Part` and writes each pure virtual and `draw`, and `make_<Name>` is defined. C and C++: no name of the old part host's header (`<Name>Host`, `_resize`, `_frame`, `_set_enabled`, `_set_<property>`). C#: the adapter writes each partial method of `<Name>.g.cs`, and names no removed type (`CustomPlace`, `PartSpec`, ...), override (`Arrange`, `Made`) or namespace (`Clarity.Ui.Browser`, `Clarity.Ui.Drawing`). A scan reports only what it is sure of; a file it cannot read says nothing.
 
 **Not a sandbox.** An engine is a pure computation the host can stop; a custom part is the developer's library running in the program with its rights, as the owned files of RT1 are. Logic that only computes still belongs in an engine. A part receives data and tells; it does not call the backend, and the host gives it no way to.
 
@@ -1778,7 +1776,7 @@ Decided with the user on 2026-10-29: C++ gets a native toolkit, wxWidgets, in pl
 **Open choices.**
 
 - **Themes.** Native controls take most of their colors from the system, and on GTK and macOS refuse others. Proposed: a wxWidgets application follows the system's light or dark mode, and a Clarity theme sets its fonts and the colors of what Clarity draws (canvas, charts, display, the ribbon and sidebars); conformance/themes.json then gets cases that say what a native renderer keeps. To decide before G5d.
-- **The designer's preview** stays the web renderer, as for Avalonia: faithful in layout, not pixel for pixel (section 1.2).
+- **The designer's preview** draws with Clarity.UI's browser build since 2026-11-04 (section 8.1): pixel for pixel.
 
 **Slices.**
 
@@ -1970,6 +1968,7 @@ The designer is part of the desktop app and follows the Turbo C++ for Windows mo
 The design canvas is the working surface of the designer, the equivalent of Resource Workshop's dialog editor. For pages (section 5.6) it shows the snap grid: widgets are dragged from the palette onto grid cells, moved by dragging, resized by their corner handle, and edited in the properties panel (caption, binding, click target, position and the widget's own properties from the catalog). For screens it arranges entity fields in groups, rows and tabs as described below.
 
 - **Real widgets in edit mode.** The canvas renders the same components as the preview and the generated app, with a selection and drag layer on top. What is designed is exactly what runs.
+- **Built (2026-11-04): the preview and the canvas draw with Clarity.UI.** Both show the window as Clarity.UI's browser build draws it (`app/src/lib/ClarityWindow.svelte`), from the markup a program carries, so they are pixel for pixel what runs. The IDE serves the browser files, `files.json` and the wire from a server of its own on 127.0.0.1 below a secret path (`clarity_gen::preview::Server`; a webview's custom scheme does not answer a worker's synchronous request on every system); its program (`PreviewProgram`) opens windows with the sample data and runs no handler, it says where the handler runs (Run). The canvas's markup gives each window, part, page and menu item its `designItem` (`web_windows::designed`); Clarity.UI's `layout` step reports each part's and grid's box (with its columns and row heights), and the designer's layer (`DesignLayer.svelte`, `designLayer.ts`) lays its boxes there: pick, move, size, drop parts and fields, dock regions; the drawing takes no input. A change reloads the markup on the same canvas (`reload`), without loading the library again. WebKitGTK's workers cannot draw with WebGL2 (2.54, `AllowWebGLInWorkers` too), so on Linux the page script runs the worker script on the page's thread (`thread: "page"`, chosen by a probe). Not yet: the tab shown in a container and hidden parts on the canvas, picking a frame's menu items on it, the Design text's unsaved draft, the canvas's language choice.
 - **Insertion points, not coordinates.** Dragging shows insertion markers between items, inside groups, rows and tabs. Hovering a tab during a drag switches to it. Dropping rewrites the spec.
 - **Toolbox of unplaced fields.** The entity's fields that the screen does not show yet, dragged onto the canvas. Only fields from the dictionary can be placed.
 - **Properties panel.** For the selected element: group and tab titles, widget override, screen title. Dictionary properties (type, length, required, help) are shown read-only with a reference to the entity, so a screen cannot redefine a field.

@@ -210,11 +210,27 @@ fn deeper_theme_lines_are_checked() {
     ]);
 }
 
-/// Only a part with rows to choose has a `selected` look.
+/// Only a part with rows to choose, or a tab (the one open), has a `selected` look.
 #[test]
-fn only_a_list_and_its_cards_have_a_selected_look() {
+fn only_a_list_its_cards_and_a_tab_have_a_selected_look() {
     let bad = DEEP.replace("part button hover", "part button selected");
-    assert_eq!(errors(&project(&bad, &["Deep"])), ["only list, card and card_line have a row selected, not 'button'"]);
+    assert_eq!(errors(&project(&bad, &["Deep"])), ["only list, card, card_line and tab have a selected look, not 'button'"]);
+    let good = DEEP.replace("part button hover", "part tab selected");
+    assert!(errors(&project(&good, &["Deep"])).is_empty());
+}
+
+/// A part sets its text size (a table header's small text), and a
+/// background as well as a border can be `none`; a text cannot.
+#[test]
+fn a_part_sets_its_text_size_and_no_background() {
+    let theme = "theme Calc\n    part header size 12\n    part tab background none, border none\n";
+    let project = project_of(theme);
+    assert!(errors(&project).is_empty(), "{:#?}", errors(&project));
+    let resolved = themes::resolve(&project.files[0].themes[0], false);
+    assert_eq!(Some(12), resolved.parts["header"].size);
+    assert_eq!(Some("none"), resolved.parts["tab"].background.as_deref());
+    let text_none = errors(&project_of("theme Calc\n    part tab text none\n"));
+    assert!(text_none.len() == 1 && text_none[0].starts_with("part tab uses color 'none'"), "{text_none:?}");
 }
 
 #[test]
@@ -283,8 +299,8 @@ fn a_style_sets_the_size_font_and_alignment_of_its_text() {
     assert_eq!(bad("style display font fancy"), ["unknown font 'fancy'; a style takes a font of the theme: text, heading or mono"]);
     assert_eq!(bad("style display align middle"), ["unknown alignment 'middle'; text aligns left, center or right"]);
     assert_eq!(bad("style display size 0"), ["a text size is 6 to 200 pixels"]);
-    // A part keeps to its kind's own text; a style sets it.
-    assert_eq!(bad("part button size 20"), ["a part sets background, text, border, radius and weight; size, font and align belong in a style"]);
+    // A part keeps to its kind's own font; a style sets it.
+    assert_eq!(bad("part button font mono"), ["a part sets background, text, border, radius, weight and size; font and align belong in a style"]);
 }
 
 fn project_of(text: &str) -> Project {

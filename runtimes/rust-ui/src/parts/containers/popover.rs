@@ -96,7 +96,7 @@ impl PopoverPart {
             self.opened.set(None);
             cx.close(open);
         }
-        let grid = container::grid_of(&self.base.spec.children, container::columns_of(&self.base.spec), GAP, &self.base.host);
+        let grid = container::grid_of(&self.base.spec.children, container::columns_of(&self.base.spec), GAP, &self.base.host).owned(self.base.spec.text(crate::markup::DESIGN_ITEM));
         let mut frame = PopoverFrame { node: Node::new(), place: self.place.clone() };
         frame.node.add(Box::new(grid));
         let mut overlay = Overlay::new(Box::new(frame), place);

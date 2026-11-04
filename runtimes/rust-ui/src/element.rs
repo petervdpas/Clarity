@@ -851,11 +851,23 @@ pub struct GridPanel {
     pub gap: f64,
     /// How high its content is; more than its place when it needs to scroll.
     pub content: f64,
+    /// How high each of its rows is, as last placed.
+    pub rows: Vec<f64>,
+    /// What it is in the design it was made from (`designItem` in the
+    /// markup the IDE's designer draws): the window, a container or a page
+    /// that holds the grid. None in a program's own markup.
+    pub item: Option<String>,
 }
 
 impl GridPanel {
     pub fn new(columns: i64) -> GridPanel {
-        GridPanel { node: Node::new(), places: Vec::new(), columns: columns.max(1), gap: grid::GAP, content: 0.0 }
+        GridPanel { node: Node::new(), places: Vec::new(), columns: columns.max(1), gap: grid::GAP, content: 0.0, rows: Vec::new(), item: None }
+    }
+
+    /// The grid as held by the design's `item` (see `item`).
+    pub fn owned(mut self, item: Option<&str>) -> GridPanel {
+        self.item = item.map(str::to_string);
+        self
     }
 
     pub fn add(&mut self, part: Box<dyn Element>, place: GridItem) {
@@ -891,6 +903,7 @@ impl Element for GridPanel {
         self.node.bounds = area;
         let placed = grid::place(&self.asked(), self.columns, area.width, area.height, self.gap);
         self.content = placed.content;
+        self.rows = placed.rows;
         for (child, place) in self.node.children_mut().iter_mut().zip(placed.boxes) {
             arrange_safely(child.as_mut(), place.offset(area.x, area.y), cx);
         }

@@ -9,7 +9,6 @@ const GRID_TS: &str = include_str!("../../../runtimes/web/src/screen/grid.ts");
 const MESSAGES_RS: &str = include_str!("../../../runtimes/rust-ui/src/window/messages.rs");
 const VIEW_RS: &str = include_str!("../../../runtimes/rust-ui/src/window/view.rs");
 const SIDEBARS_TS: &str = include_str!("../../../runtimes/web/src/frame/sidebars.ts");
-const FRAME_VIEW: &str = include_str!("../../../runtimes/web/src/frame/FrameView.svelte");
 const RENDER_CSS: &str = include_str!("../../../runtimes/web/src/screen/render.css");
 const SHOWN_WINDOW: &str = include_str!("../../../app/src/lib/ShownWindow.svelte");
 const PAGE_DESIGNER: &str = include_str!("../../../app/src/lib/PageDesigner.svelte");
@@ -41,7 +40,6 @@ fn the_web_renderer_uses_the_shared_values() {
     // A sidebar's widths.
     let (narrowest, widest) = clarity_spec::model::SIDEBAR_WIDTHS;
     assert_eq!((constant(SIDEBARS_TS, "NARROWEST"), constant(SIDEBARS_TS, "WIDEST")), (narrowest, widest));
-    assert!(FRAME_VIEW.contains("sidebarWidth("), "FrameView sizes sidebars by sidebars.ts");
     // The space around a running window's grid, in Clarity.UI.
     assert!(VIEW_RS.contains(&format!("pub const CONTENT_PADDING: f64 = {CONTENT_PADDING}.0;")), "Clarity.UI pads a window's grid by CONTENT_PADDING");
 }
@@ -62,9 +60,9 @@ fn every_window_opens_at_the_size_the_designer_shows() {
     }
     assert!(SHOWN_WINDOW.contains("WINDOW_WIDTH"));
     // The designer and the preview both show the window so, at its own size
-    // (or the standard one) and with the running window's padding around its grid.
-    assert!(APP.contains("<ShownWindow") && APP.contains("clientWidth={windowSize(page).width}") && APP.contains("windowSize(page).height") && APP.contains("CONTENT_PADDING"), "preview");
+    // (or the standard one), drawn by Clarity.UI as it runs (DESIGN 8.1), its padding Clarity.UI's own.
+    assert!(APP.contains("<ShownWindow") && APP.contains("clientWidth={windowSize(page).width}") && APP.contains("windowSize(page).height") && APP.contains("<ClarityWindow"), "preview");
     // The designer shows the size a window's edge is dragged to while it is dragged.
     assert!(PAGE_DESIGNER.contains("const shownSize = $derived(sizing ?? windowSize(page));"), "designer");
-    assert!(PAGE_DESIGNER.contains("<ShownWindow {area} clientWidth={shownSize.width}") && PAGE_DESIGNER.contains("style:height=\"{shownSize.height}px\"") && PAGE_DESIGNER.contains("CONTENT_PADDING"), "designer");
+    assert!(PAGE_DESIGNER.contains("<ShownWindow {area} clientWidth={shownSize.width}") && PAGE_DESIGNER.contains("style:height=\"{shownSize.height}px\"") && PAGE_DESIGNER.contains("<ClarityWindow"), "designer");
 }

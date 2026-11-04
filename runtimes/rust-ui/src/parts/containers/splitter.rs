@@ -85,7 +85,7 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         if i > 0 {
             base.node.add(Box::new(Divider { node: Node::new(), split: split.clone(), index: i, grab: 0.0 }));
         }
-        let grid = container::grid_of(&page.children, columns[i], crate::grid::GAP, &host);
+        let grid = container::grid_of(&page.children, columns[i], crate::grid::GAP, &host).owned(page.item.as_deref());
         base.node.add(Box::new(ScrollView::new(Box::new(grid)).keeping_bar_room()));
     }
     Box::new(SplitterPart { base, split, look: Cell::new(LookNow::default()) })

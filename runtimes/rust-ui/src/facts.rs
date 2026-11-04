@@ -145,16 +145,30 @@ impl ModelFacts {
         out
     }
 
-    /// The facts of a program's model, read once for as long as the program runs.
-    pub fn of(model: &'static str) -> Arc<ModelFacts> {
-        static READ: Mutex<Vec<(usize, Arc<ModelFacts>)>> = Mutex::new(Vec::new());
+    /// The facts of a program's model, read once for each model: known by
+    /// its text, not where it lies, since a model the IDE's designer reloads
+    /// is dropped and another may come at the same place. The last few are kept.
+    pub fn of(model: &str) -> Arc<ModelFacts> {
+        static READ: Mutex<Vec<(u64, usize, Arc<ModelFacts>)>> = Mutex::new(Vec::new());
+        const KEPT: usize = 8;
+        let hash = {
+            use std::hash::{Hash, Hasher};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            model.hash(&mut hasher);
+            hasher.finish()
+        };
         let mut read = READ.lock().unwrap_or_else(|p| p.into_inner());
-        let at = model.as_ptr() as usize;
-        if let Some((_, facts)) = read.iter().find(|(m, _)| *m == at) {
-            return facts.clone();
+        if let Some(at) = read.iter().position(|(h, len, _)| *h == hash && *len == model.len()) {
+            let found = read.remove(at);
+            let facts = found.2.clone();
+            read.push(found);
+            return facts;
         }
         let facts = Arc::new(ModelFacts::read(model));
-        read.push((at, facts.clone()));
+        read.push((hash, model.len(), facts.clone()));
+        if read.len() > KEPT {
+            read.remove(0);
+        }
         facts
     }
 

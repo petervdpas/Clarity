@@ -59,7 +59,7 @@ impl WindowView {
     /// The window of `spec` over `host`: each of its parts made by its kind,
     /// at its place in the grid, in the frame of its own regions.
     pub fn new(spec: &WindowSpec, host: Rc<dyn PartHost>) -> WindowView {
-        let mut grid = GridPanel::new(spec.columns);
+        let mut grid = GridPanel::new(spec.columns).owned(spec.item.as_deref());
         for part in &spec.parts {
             let made = parts::make(part.clone(), host.clone());
             let place = parts::place_of(made.as_ref());
@@ -130,7 +130,7 @@ impl WindowView {
 
     /// A window whose markup could not be read: it says why in its place.
     pub fn failed(problem: String, host: Rc<dyn PartHost>) -> WindowView {
-        let spec = WindowSpec { frame: Vec::new(), parts: Vec::new(), name: None, columns: crate::markup::STANDARD_COLUMNS };
+        let spec = WindowSpec { frame: Vec::new(), parts: Vec::new(), name: None, columns: crate::markup::STANDARD_COLUMNS, item: None };
         WindowView { problem: Some(problem), ..WindowView::new(&spec, host) }
     }
 

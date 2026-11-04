@@ -114,6 +114,8 @@ pub struct PageSpec {
     pub title: Option<String>,
     pub columns: Option<i64>,
     pub children: Vec<PartSpec>,
+    /// What it is in the design (`designItem`, see `DESIGN_ITEM`); none in a program's own markup.
+    pub item: Option<String>,
 }
 
 /// An item of a menu: its fields (caption, name, key, handler or window it opens) and its items.
@@ -211,6 +213,23 @@ pub struct WindowSpec {
     pub parts: Vec<PartSpec>,
     pub name: Option<String>,
     pub columns: i64,
+    /// What it is in the design (`designItem`, see `DESIGN_ITEM`); none in a program's own markup.
+    pub item: Option<String>,
+}
+
+/// The attribute the IDE's designer gives each window, part, page and menu
+/// item of the markup it draws: where it is written in the project, so the
+/// designer's layer over the drawing knows what each box is (`layout`
+/// step). A part keeps it among its fields; a program's markup has none.
+pub const DESIGN_ITEM: &str = "designItem";
+
+/// The page a tabs, steps or accordion part shows first in the IDE's
+/// designer (`designShown="2"`, from 1): the one the designer switched to.
+pub const DESIGN_SHOWN: &str = "designShown";
+
+/// The page a container shows first: the designer's choice, else the first.
+pub fn design_shown(spec: &PartSpec) -> i64 {
+    spec.number(DESIGN_SHOWN).map(|n| n as i64).filter(|n| *n >= 1).unwrap_or(1)
 }
 
 /// The columns of a window that says none.
@@ -240,7 +259,7 @@ pub fn read(markup: &str) -> Result<WindowSpec, MarkupError> {
             parts.push(part_of(element)?);
         }
     }
-    Ok(WindowSpec { frame, parts, name: root.attribute("name").map(str::to_string), columns })
+    Ok(WindowSpec { frame, parts, name: root.attribute("name").map(str::to_string), columns, item: root.attribute(DESIGN_ITEM).map(str::to_string) })
 }
 
 /// An app's frame as its markup writes it: its regions.
@@ -285,6 +304,10 @@ pub fn part_of(element: &XmlElement) -> Result<PartSpec, MarkupError> {
             "rows" => {
                 props.insert("height".to_string(), number(value)?);
             }
+            // Kept as text, as the designer wrote it.
+            item if item == DESIGN_ITEM => {
+                props.insert(DESIGN_ITEM.to_string(), Value::from(value.as_str()));
+            }
             "none" => {
                 for empty in value.split_whitespace() {
                     props.insert(word(&PART_WORDS, empty).to_string(), Value::Null);
@@ -312,6 +335,7 @@ pub fn part_of(element: &XmlElement) -> Result<PartSpec, MarkupError> {
                 title: child.attribute("title").map(str::to_string),
                 columns: child.attribute("span").and_then(|s| s.trim().parse().ok()),
                 children: child.children.iter().map(part_of).collect::<Result<_, _>>()?,
+                item: child.attribute(DESIGN_ITEM).map(str::to_string),
             });
         } else {
             children.push(part_of(child)?);
@@ -328,7 +352,8 @@ pub fn command_of(element: &XmlElement) -> CommandSpec {
     let mut props = command_defaults().clone();
     for (written, value) in &element.attributes {
         let field = word(&COMMAND_WORDS, written);
-        let kind = command_fields().get(field).and_then(Value::as_str);
+        // Kept as text, as the designer wrote it.
+        let kind = if field == DESIGN_ITEM { Some("text") } else { command_fields().get(field).and_then(Value::as_str) };
         props.insert(field.to_string(), value_of(kind, value));
     }
     CommandSpec { props, items: element.children.iter().map(command_of).collect() }

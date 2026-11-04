@@ -55,6 +55,11 @@ impl PointerKind {
 /// The program's windows on the page's canvas.
 pub struct BrowserHost {
     driven: Driven,
+    program: Arc<dyn Program>,
+    kept: BTreeMap<String, String>,
+    asker: Option<crate::later::AskLater>,
+    /// What owns the files the screen is made of, when the host was given it.
+    owned: Option<super::OwnedFiles>,
     tell: Tell,
     started: Instant,
     presses: PressCounter,
@@ -82,10 +87,7 @@ impl BrowserHost {
     /// made goes to the page to keep (`choices`).
     #[allow(clippy::too_many_arguments)]
     pub fn start_kept(program: Arc<dyn Program>, files: AppFiles, width: f64, height: f64, scale: f32, dark: bool, tell: Tell, kept: BTreeMap<String, String>) -> BrowserHost {
-        crate::fonts::carry_fallbacks(files.resources);
-        let keeps = tell.clone();
-        let keeper: crate::choices::Keeper = Arc::new(move |choices: &BTreeMap<String, String>| keeps(json!({ "tell": "choices", "choices": choices })));
-        let mut driven = Driven::start_keeping(program, files, Some((kept, keeper)));
+        let mut driven = BrowserHost::driven(program.clone(), files, &tell, kept.clone());
         let clipboard: Rc<RefCell<Option<String>>> = Rc::default();
         let sounds: Rc<RefCell<Sounds>> = Rc::default();
         let page_files = Arc::new(PageFiles::new(tell.clone()));
@@ -104,6 +106,10 @@ impl BrowserHost {
         screen.resize(width.max(1.0), height.max(1.0), scale);
         let mut host = BrowserHost {
             driven,
+            program,
+            kept,
+            asker: None,
+            owned: None,
             tell,
             started: Instant::now(),
             presses: PressCounter::new(),
@@ -120,10 +126,68 @@ impl BrowserHost {
         host
     }
 
+    fn driven(program: Arc<dyn Program>, files: AppFiles, tell: &Tell, kept: BTreeMap<String, String>) -> Driven {
+        crate::fonts::carry_fallbacks(files.resources);
+        let keeps = tell.clone();
+        let keeper: crate::choices::Keeper = Arc::new(move |choices: &BTreeMap<String, String>| keeps(json!({ "tell": "choices", "choices": choices })));
+        Driven::start_keeping(program, files, Some((kept, keeper)))
+    }
+
+    /// Starts the program again from new files (its windows' markup, its
+    /// themes, its model) on the same canvas, at the same size, light or
+    /// dark as it was: how the IDE's designer and preview follow a change of
+    /// the design without loading the library again. The program is asked
+    /// to start again (`started`, `start_app`, its main window).
+    pub fn reload(&mut self, files: AppFiles) {
+        self.reload_owned(files, None);
+    }
+
+    /// The files the host started with are owned by `owned`, kept until the next reload.
+    pub fn keep_files(&mut self, owned: super::OwnedFiles) {
+        self.owned = Some(owned);
+    }
+
+    /// The person's choices (a language, a theme) the next reload starts with:
+    /// the IDE's designer and preview show the language chosen there.
+    pub fn choose(&mut self, kept: BTreeMap<String, String>) {
+        self.kept = kept;
+    }
+
+    /// `reload` with files owned by `owned`: the files before are given up
+    /// once the screen made of them is, so reloads do not build up.
+    pub fn reload_owned(&mut self, files: AppFiles, owned: Option<super::OwnedFiles>) {
+        let (width, height, scale, dark) = {
+            let screen = self.screen();
+            (screen.width(), screen.height(), screen.scale(), screen.dark())
+        };
+        self.driven = BrowserHost::driven(self.program.clone(), files, &self.tell, self.kept.clone());
+        let screen = self.driven.screen();
+        screen.set_clipboard(Box::new(PageClipboard::new(self.tell.clone(), self.clipboard.clone())));
+        screen.set_dark(dark);
+        screen.resize(width, height, scale);
+        if let Some(asker) = self.asker.clone() {
+            screen.set_asker(asker);
+        }
+        // The screen made of the files before is gone: so may they be.
+        drop(std::mem::replace(&mut self.owned, owned));
+        self.title = None;
+        self.cursor = None;
+        self.caret = None;
+        self.ended = false;
+        self.screen().take_later();
+        self.tell_changes();
+    }
+
+    /// Where the design's parts and grids show (the driven `layout` step), for the IDE's designer.
+    pub fn layout(&mut self) -> Value {
+        Value::Object(self.driven.layout())
+    }
+
     /// A long call's request goes to the server through `asker` without
     /// waiting: the page draws on, its bar asks how far it is and Stop
     /// stops it, and the answer is taken when it comes.
     pub fn set_asker(&mut self, asker: crate::later::AskLater) {
+        self.asker = Some(asker.clone());
         self.screen().set_asker(asker);
     }
 

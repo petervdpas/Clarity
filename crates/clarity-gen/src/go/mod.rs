@@ -92,6 +92,11 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let (databases, owned) = crate::databases(project, settings)?;
     let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
     let types = check::types(&project.files);
+    // What the parts' code lacks of Clarity's files, read without building it (DESIGN 5.19).
+    let mismatches = parts::code_mismatches(project);
+    if !mismatches.is_empty() {
+        return Err(mismatches);
+    }
     let mut errors = Vec::new();
     let Some(main_window) = main_window(project) else {
         return Err(vec!["the project has no window to start with".to_string()]);

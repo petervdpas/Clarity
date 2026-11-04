@@ -137,6 +137,11 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
 /// The desktop program, its windows drawn by the package `ui`.
 fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<Vec<OutFile>, Vec<String>> {
     let project = &crate::with_secret_settings(project, &crate::settings_program(settings));
+    // What the parts' code lacks of Clarity's files, read without building it (DESIGN 5.19).
+    let mismatches = parts::code_mismatches(project);
+    if !mismatches.is_empty() {
+        return Err(mismatches);
+    }
     let (databases, owned) = crate::databases(project, settings)?;
     let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
     if main_window(project).is_none() {

@@ -147,12 +147,8 @@ fn with<R: Default>(act: impl FnOnce(&mut Web) -> R) -> R {
 /// `choices` are the person's choices the page kept (JSON, an object of texts).
 pub fn start(files: &str, choices: &str, width: f64, height: f64, scale: f32, dark: bool) -> Result<(), String> {
     let files: Value = serde_json::from_str(files).map_err(|e| format!("files.json does not read: {e}"))?;
-    let kept: std::collections::BTreeMap<String, String> = serde_json::from_str::<Map<String, Value>>(choices)
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|(key, value)| value.as_str().map(|text| (key, text.to_string())))
-        .collect();
-    let files = super::files_from_json(&files, &resource);
+    let kept = kept_of(choices);
+    let (files, owned) = super::owned_files_from_json(&files, &resource);
     let interface = gpu::gl::Interface::new_native().ok_or("WebGL2 gives Skia no interface")?;
     let mut context = gpu::direct_contexts::make_gl(interface, None).ok_or("Skia cannot draw with this WebGL2 context")?;
     let pixels = device_pixels(width, height, scale);
@@ -161,8 +157,43 @@ pub fn start(files: &str, choices: &str, width: f64, height: f64, scale: f32, da
     let teller: Tell = Arc::new(tell);
     let mut host = catch_unwind(AssertUnwindSafe(|| BrowserHost::start_kept(program, files, width, height, scale, dark, teller, kept))).map_err(|p| panic_text(p.as_ref()))?;
     host.set_asker(std::rc::Rc::new(ask_later));
+    host.keep_files(owned);
     WEB.with(|web| *web.borrow_mut() = Some(Web { host, context, surface, pixels }));
     Ok(())
+}
+
+/// Starts the program again from new files (`files.json`'s text) on the
+/// same canvas: the IDE's designer and preview after a change of the design.
+/// Why it could not, when it could not.
+/// `choices` are the person's choices to start with (JSON, an object of texts): the language the IDE shows.
+pub fn reload(files: &str, choices: &str) -> Result<(), String> {
+    let files: Value = serde_json::from_str(files).map_err(|e| format!("files.json does not read: {e}"))?;
+    if WEB.with(|web| web.borrow().is_none()) {
+        return Err("the program has not started".to_string());
+    }
+    let (files, owned) = super::owned_files_from_json(&files, &resource);
+    let kept = kept_of(choices);
+    with(|web| {
+        web.host.choose(kept);
+        web.host.reload_owned(files, Some(owned));
+    });
+    Ok(())
+}
+
+fn kept_of(choices: &str) -> std::collections::BTreeMap<String, String> {
+    serde_json::from_str::<Map<String, Value>>(choices).unwrap_or_default().into_iter().filter_map(|(key, value)| value.as_str().map(|text| (key, text.to_string()))).collect()
+}
+
+/// Where the design's parts and grids show, as JSON (the driven `layout` step).
+/// Drawn first, so the places are those of the screen as it is now.
+pub fn layout() -> String {
+    with(|web| {
+        if let Some(surface) = web.surface.as_mut() {
+            web.host.draw(surface.canvas());
+            let _ = web.context.flush_and_submit();
+        }
+        web.host.layout().to_string()
+    })
 }
 
 /// The canvas is `width` by `height` CSS pixels at `scale` now; the worker sized the OffscreenCanvas to match.

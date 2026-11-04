@@ -10,6 +10,7 @@ pub mod calls;
 mod consts;
 pub mod libraries;
 pub mod parts;
+mod part_code;
 mod commands;
 mod csharp;
 mod ddl;
@@ -24,6 +25,7 @@ mod schema;
 pub mod web;
 pub mod web_windows;
 pub mod web_browser;
+pub mod preview;
 
 pub use csharp::runtime_version as csharp_runtime_version;
 pub use go::runtime_version as go_runtime_version;

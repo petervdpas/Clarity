@@ -382,7 +382,7 @@ impl Element for RibbonTabStrip {
             if open {
                 p.fill(*area, look.color("panel"), look.radius("button"));
             } else if hover {
-                p.fill(*area, look.part("tab", Some("hover")).background.unwrap_or_else(|| look.color("accent_soft")), look.radius("button"));
+                p.fill(*area, look.part_own("tab", Some("hover")).background.unwrap_or_else(|| look.color("accent_soft")), look.radius("button"));
             }
             let color = look.color(if open { "text" } else { "frame_text" });
             p.text(&host.text(Some(&self.core.ribbon().tabs[tab - 1].title)), *area, color, small, "text", open, TextAlign::Center);

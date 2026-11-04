@@ -321,3 +321,174 @@ fn files_without_a_size_start_on_the_canvas() {
     let read = host.step(&json!({ "do": "read" }));
     assert!(read["shown"]["go"].is_array(), "{read}");
 }
+
+/// A window as the IDE's designer gives it: each window, part and page with its `designItem`.
+const DESIGNED: &str = r#"<Window name="Main" designItem="10">
+  <Button name="save" at="1,1" span="3" caption="Save" designItem="20" />
+  <Label at="5,1" span="3" caption="Unnamed" designItem="25" />
+  <Panel name="box" at="1,2" span="6" rows="3" designItem="30">
+    <Textbox name="inner" at="1,1" span="4" designItem="40" />
+  </Panel>
+  <Tabs name="tabs" at="7,2" span="6" rows="3" designItem="50">
+    <Tab title="One" designItem="60">
+      <Checkbox name="ok" at="1,1" span="3" designItem="70" />
+    </Tab>
+    <Tab title="Two" designItem="80" />
+  </Tabs>
+</Window>
+"#;
+
+/// The same window after the designer moved the button and renamed its caption.
+const MOVED: &str = r#"<Window name="Main" designItem="10">
+  <Button name="save" at="4,5" span="3" caption="Store" designItem="20" />
+</Window>
+"#;
+
+fn designed(markup: &'static str) -> clarity_ui::AppFiles {
+    clarity_ui::AppFiles { windows: Box::leak(vec![("Main", markup)].into_boxed_slice()), ..super::core_windows_fake::FILES }
+}
+
+fn place(layout: &Value, list: &str, item: &str) -> Vec<f64> {
+    let found = layout[list].as_array().unwrap().iter().find(|p| p["item"] == json!(item)).unwrap_or_else(|| panic!("no {item} in {layout}"));
+    found["at"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect()
+}
+
+#[test]
+fn the_designers_layer_finds_each_part_and_grid_by_its_design_item() {
+    let _turn = one_host();
+    let program: Arc<dyn Program> = Arc::new(Fake::default());
+    let (tell, _) = told();
+    let mut host = BrowserHost::start(program, designed(DESIGNED), 900.0, 600.0, 1.0, false, tell);
+    let mut surface = skia_safe::surfaces::raster_n32_premul((900, 600)).unwrap();
+    host.draw(surface.canvas());
+    let layout = host.layout();
+    // Every part shows with its design item, an unnamed one too; its name and kind with it.
+    let save = layout["parts"].as_array().unwrap().iter().find(|p| p["item"] == json!("20")).unwrap_or_else(|| panic!("{layout}"));
+    assert_eq!((save["name"].clone(), save["kind"].clone()), (json!("save"), json!("button")));
+    let unnamed = layout["parts"].as_array().unwrap().iter().find(|p| p["item"] == json!("25")).unwrap();
+    assert_eq!(unnamed["name"], Value::Null);
+    let button = place(&layout, "parts", "20");
+    let label = place(&layout, "parts", "25");
+    assert!(label[0] > button[0] + button[2], "the label is right of the button: {layout}");
+    // The panel's child inside the panel, the shown tab's part inside the tabs; the hidden tab's grid shows not.
+    let panel = place(&layout, "parts", "30");
+    let inner = place(&layout, "parts", "40");
+    assert!(inner[0] >= panel[0] && inner[1] >= panel[1] && inner[1] + inner[3] <= panel[1] + panel[3] + 0.5, "{layout}");
+    place(&layout, "parts", "70");
+    // Each grid by what holds it: the window, the panel, the shown tab; with its columns and its rows.
+    let window = layout["grids"].as_array().unwrap().iter().find(|g| g["item"] == json!("10")).unwrap();
+    assert_eq!(window["columns"], json!(12));
+    assert_eq!(window["gap"], json!(8.0));
+    let rows: Vec<f64> = window["rows"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+    assert_eq!(rows.len(), 4, "{window}");
+    assert_eq!(rows[0], 36.0);
+    let panel_grid = layout["grids"].as_array().unwrap().iter().find(|g| g["item"] == json!("30")).unwrap();
+    assert_eq!(panel_grid["columns"], json!(6));
+    place(&layout, "grids", "60");
+    assert!(!layout["grids"].as_array().unwrap().iter().any(|g| g["item"] == json!("80")), "a hidden tab's grid shows not");
+}
+
+#[test]
+fn new_files_redraw_on_the_same_canvas_without_a_new_host() {
+    let _turn = one_host();
+    let fake = Arc::new(Fake::default());
+    let program: Arc<dyn Program> = fake.clone();
+    let (tell, said) = told();
+    let mut host = BrowserHost::start(program, designed(DESIGNED), 900.0, 600.0, 2.0, true, tell);
+    let mut surface = skia_safe::surfaces::raster_n32_premul((1800, 1200)).unwrap();
+    host.draw(surface.canvas());
+    let before = place(&host.layout(), "parts", "20");
+    fake.calls();
+    host.reload(designed(MOVED));
+    // The program started again; its window shows the new markup at the same size, still dark.
+    assert!(fake.calls().iter().any(|c| c.starts_with("open")), "the window opened again");
+    assert_eq!((host.screen().width(), host.screen().height(), host.screen().scale(), host.screen().dark()), (900.0, 600.0, 2.0, true));
+    assert!(host.frame(), "the new window is drawn");
+    host.draw(surface.canvas());
+    let layout = host.layout();
+    let after = place(&layout, "parts", "20");
+    assert!(after[0] > before[0] && after[1] > before[1], "moved: {before:?} -> {after:?}");
+    assert!(!layout["parts"].as_array().unwrap().iter().any(|p| p["item"] == json!("30")), "the panel is gone");
+    let read = host.step(&json!({ "do": "read" }));
+    assert_eq!(read["window"], json!("Main"));
+    // The page is told the title again, as for a new start.
+    assert_eq!(tells(&said, "title").len(), 2);
+}
+
+/// A window with tabs the designer switched to their second page, a table and a toolbar.
+const SWITCHED: &str = r#"<Window name="Main" designItem="10">
+  <Toolbar>
+    <Item name="saveTool" caption="Save" onclick="save" designItem="90" />
+  </Toolbar>
+  <Tabs name="tabs" at="1,1" span="6" rows="3" designItem="50" designShown="2">
+    <Tab title="One" designItem="60">
+      <Checkbox name="ok" at="1,1" span="3" designItem="70" />
+    </Tab>
+    <Tab title="Two" designItem="80">
+      <Textbox name="other" at="1,1" span="3" designItem="85" />
+    </Tab>
+  </Tabs>
+  <Table name="grid" at="1,4" span="12" rows="4" bind="orders" columns="note, status" designItem="95" />
+</Window>
+"#;
+
+#[test]
+fn the_designer_chooses_the_page_shown_and_finds_tabs_columns_and_frame_buttons() {
+    let _turn = one_host();
+    let program: Arc<dyn Program> = Arc::new(Fake::default());
+    let (tell, _) = told();
+    let mut host = BrowserHost::start(program, designed(SWITCHED), 900.0, 600.0, 1.0, false, tell);
+    let mut surface = skia_safe::surfaces::raster_n32_premul((900, 600)).unwrap();
+    host.draw(surface.canvas());
+    let layout = host.layout();
+    // The second tab shows, as the designer chose; each page with the header that shows it.
+    place(&layout, "parts", "85");
+    place(&layout, "grids", "80");
+    assert!(!layout["grids"].as_array().unwrap().iter().any(|g| g["item"] == json!("60")), "{layout}");
+    let tabs = layout["parts"].as_array().unwrap().iter().find(|p| p["item"] == json!("50")).unwrap();
+    let pages = tabs["pages"].as_array().unwrap();
+    assert_eq!(pages.iter().map(|p| p["item"].clone()).collect::<Vec<_>>(), [json!("60"), json!("80")]);
+    assert!(pages.iter().all(|p| p["at"].as_array().is_some_and(|a| a[2].as_f64().unwrap() > 0.0)), "{tabs}");
+    // A table's columns, by field, where their headers are.
+    let table = layout["parts"].as_array().unwrap().iter().find(|p| p["item"] == json!("95")).unwrap();
+    let columns = table["columns"].as_array().unwrap_or_else(|| panic!("{table}"));
+    assert_eq!(columns.iter().map(|c| c["field"].clone()).collect::<Vec<_>>(), [json!("note"), json!("status")]);
+    // A button of the window's toolbar, by its design item.
+    let tool = layout["parts"].as_array().unwrap().iter().find(|p| p["item"] == json!("90")).unwrap_or_else(|| panic!("{layout}"));
+    assert_eq!(tool["kind"], json!("command"));
+}
+
+#[test]
+fn reloaded_files_are_given_up_once_the_next_are_drawn() {
+    let _turn = one_host();
+    let program: Arc<dyn Program> = Arc::new(Fake::default());
+    let (tell, _) = told();
+    let served = |markup: &str| json!({ "title": "Orders", "width": 800, "height": 500, "windows": { "Main": markup }, "apps": {}, "themes": {}, "model": super::core_windows_fake::MODEL, "resources": [] });
+    let mut host = BrowserHost::start(program, designed(DESIGNED), 900.0, 600.0, 1.0, false, tell);
+    let (files, first) = clarity_ui::browser::owned_files_from_json(&served(DESIGNED), &|_| None);
+    let first_alive = first.alive();
+    host.reload_owned(files, Some(first));
+    assert!(first_alive.upgrade().is_some(), "the files drawn now are kept");
+    let (files, second) = clarity_ui::browser::owned_files_from_json(&served(MOVED), &|_| None);
+    let second_alive = second.alive();
+    host.reload_owned(files, Some(second));
+    assert!(first_alive.upgrade().is_none(), "the files before are given up");
+    assert!(second_alive.upgrade().is_some());
+    let mut surface = skia_safe::surfaces::raster_n32_premul((900, 600)).unwrap();
+    host.draw(surface.canvas());
+    assert!(host.layout()["parts"].as_array().unwrap().iter().any(|p| p["item"] == json!("20")));
+    // The person's choices win at the next reload: none here, the language as written.
+    host.choose(std::collections::BTreeMap::from([("language".to_string(), "xx".to_string())]));
+    host.reload(designed(MOVED));
+    assert_eq!(host.step(&json!({ "do": "read" }))["window"], json!("Main"));
+}
+
+#[test]
+fn a_models_facts_are_known_by_its_text() {
+    use clarity_ui::facts::ModelFacts;
+    let one = String::from(super::core_windows_fake::MODEL);
+    let again = String::from(super::core_windows_fake::MODEL);
+    assert!(Arc::ptr_eq(&ModelFacts::of(&one), &ModelFacts::of(&again)), "the same text, read once");
+    let other = super::core_windows_fake::MODEL.replacen('{', "{\"other\": 1, ", 1);
+    assert!(!Arc::ptr_eq(&ModelFacts::of(&one), &ModelFacts::of(&other)));
+}

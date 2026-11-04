@@ -100,17 +100,26 @@ fn weight_value(weight: Weight) -> &'static str {
     }
 }
 
+/// A color as a variable's value: `none` is transparent, so it works as a
+/// background and as a border's color alike.
+fn variable_color(written: &str) -> String {
+    if written == "none" { "transparent".into() } else { color_value(written) }
+}
+
 /// The variables of a part look: `--button-hover-bg: var(--accent-soft)`.
 fn part_variables(prefix: &str, look: &Look) -> Vec<String> {
     let mut lines = Vec::new();
     if let Some(v) = &look.background {
-        lines.push(format!("--{prefix}-bg: {}", color_value(v)));
+        lines.push(format!("--{prefix}-bg: {}", variable_color(v)));
     }
     if let Some(v) = &look.text {
-        lines.push(format!("--{prefix}-text: {}", color_value(v)));
+        lines.push(format!("--{prefix}-text: {}", variable_color(v)));
     }
     if let Some(v) = &look.border {
-        lines.push(format!("--{prefix}-border: {}", color_value(v)));
+        lines.push(format!("--{prefix}-border: {}", variable_color(v)));
+    }
+    if let Some(v) = look.size {
+        lines.push(format!("--{prefix}-size: {v}px"));
     }
     if let Some(v) = look.radius {
         lines.push(format!("--{prefix}-radius: {v}px"));
@@ -295,20 +304,4 @@ pub fn model_json(project: &Project) -> String {
     preview.samples.clear();
     preview.displays.clear();
     serde_json::to_string(&preview).unwrap_or_default() + "\n"
-}
-
-
-#[cfg(test)]
-mod color_roles {
-    /// A canvas's drawing names colors as the theme CSS does: the web
-    /// renderer keeps the same table (runtimes/web/src/screen/drawing.ts).
-    #[test]
-    fn the_renderer_names_the_color_roles_as_the_theme_css_does() {
-        let renderer = include_str!("../../../runtimes/web/src/screen/drawing.ts");
-        for (role, variable) in super::COLOR_VARIABLES {
-            assert!(renderer.contains(&format!("  {role}: \"{variable}\",")), "drawing.ts lacks {role}: {variable}");
-        }
-        let listed = renderer.lines().filter(|l| l.trim_start().contains(": \"--")).count();
-        assert_eq!(listed, super::COLOR_VARIABLES.len(), "drawing.ts lists a role the theme CSS does not have");
-    }
 }

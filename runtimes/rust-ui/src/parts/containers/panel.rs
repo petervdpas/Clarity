@@ -29,7 +29,7 @@ pub struct PanelPart {
 
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
     let columns = container::columns_of(&spec);
-    let grid = container::grid_of(&spec.children, columns, GAP, &host);
+    let grid = container::grid_of(&spec.children, columns, GAP, &host).owned(spec.text(crate::markup::DESIGN_ITEM));
     let folded_here = spec.flag("folded");
     let mut base = PartBase::new(spec, host);
     base.node.add(Box::new(Page::new(Box::new(grid))));

@@ -300,7 +300,8 @@ code Writing
 
 fn notes_project() -> clarity_spec::Project {
     let mut p = load_keyed([("notes.clarity", NOTES)], &[], "en");
-    clarity_spec::native::attach(&mut p, vec![PartFile { part: "Notes".into(), path: "Notes.cs".into(), bytes: b"// The adapter.\n".to_vec() }]);
+    let adapter = parts::dotnet_adapter(&p, "Notes").expect("the part is declared");
+    clarity_spec::native::attach(&mut p, vec![PartFile { part: "Notes".into(), path: "Notes.cs".into(), bytes: adapter.into_bytes() }]);
     assert!(!p.has_errors(), "{:?}", p.diagnostics);
     p
 }
@@ -333,7 +334,8 @@ fn a_dotnet_part_is_a_clarity_ui_control_with_its_package_its_adapter_and_its_ge
         assert!(half.contains(line), "{line}\n{half}");
     }
     assert_eq!(text(&files, "parts/Notes/Notes.cs"), "", "the adapter is copied as it is");
-    assert!(files.iter().any(|f| f.path == "parts/Notes/Notes.cs" && f.bytes.as_deref() == Some(b"// The adapter.\n".as_slice())));
+    let adapter = parts::dotnet_adapter(&notes_project(), "Notes").unwrap();
+    assert!(files.iter().any(|f| f.path == "parts/Notes/Notes.cs" && f.bytes.as_deref() == Some(adapter.as_bytes())));
     assert!(text(&files, "Notes.csproj").contains("<PackageReference Include=\"Newtonsoft.Json\" Version=\"13.0.1\" />"));
     // The window places it by its name, with its binding, its handlers and its wired tells.
     let window = text(&files, "Windows/Writing.cxaml");
@@ -351,10 +353,11 @@ fn a_dotnet_part_is_a_clarity_ui_control_with_its_package_its_adapter_and_its_ge
 fn a_dll_part_is_referenced_beside_its_adapter() {
     let text_ = NOTES.replace("nuget \"Newtonsoft.Json\" 13.0.1", "dll \"libs/Notes.Editor.dll\"");
     let mut p = load_keyed([("notes.clarity", text_.as_str())], &[], "en");
+    let adapter = parts::dotnet_adapter(&p, "Notes").expect("the part is declared");
     clarity_spec::native::attach(
         &mut p,
         vec![
-            PartFile { part: "Notes".into(), path: "Notes.cs".into(), bytes: b"// The adapter.\n".to_vec() },
+            PartFile { part: "Notes".into(), path: "Notes.cs".into(), bytes: adapter.into_bytes() },
             PartFile { part: "Notes".into(), path: "Notes.Editor.dll".into(), bytes: vec![0, 1, 2] },
         ],
     );
@@ -474,4 +477,138 @@ fn a_c_or_cpp_part_built_on_its_own_finds_the_library_header() {
         assert!(cmake.contains("if(NOT TARGET clarity_ui AND DEFINED ENV{CLARITY_UI})"), "{cmake}");
         assert!(cmake.contains("\"$ENV{CLARITY_UI}/include\""), "{cmake}");
     }
+}
+
+// -- Reading a part's code when Clarity generates (DESIGN 5.19) --------------
+
+/// The game with its part on `line` and the part's own files `own`, beside
+/// the build file each kind of part has.
+fn game_with_part(line: &str, own: &[(&str, &str)]) -> clarity_spec::Project {
+    let text = GAME.replace("native \"parts/Arena\"", line);
+    let mut p = load_keyed([("game.clarity", text.as_str())], &[], "en");
+    let mut files: Vec<PartFile> = own.iter().map(|(path, text)| PartFile { part: "Arena".into(), path: path.to_string(), bytes: text.as_bytes().to_vec() }).collect();
+    for manifest in ["Cargo.toml", "go.mod", "CMakeLists.txt"] {
+        files.push(PartFile { part: "Arena".into(), path: manifest.into(), bytes: b"\n".to_vec() });
+    }
+    clarity_spec::native::attach(&mut p, files);
+    assert!(!p.has_errors(), "{:?}", p.diagnostics);
+    p
+}
+
+fn stack(name: &str) -> clarity_project::Settings {
+    clarity_project::parse(&format!("project Game\n    stack {name} desktop\n    datasource main sqlite \"data/game.db\"\n")).unwrap()
+}
+
+fn refused(project: &clarity_spec::Project, name: &str) -> String {
+    clarity_gen::generate(project, &stack(name)).expect_err("the part's code is out of step").join("\n")
+}
+
+#[test]
+fn parts_that_fit_their_clarity_file_generate() {
+    use clarity_project::Backend;
+    for (backend, name) in [(Backend::Rust, "rust"), (Backend::Go, "go"), (Backend::Cpp, "cpp"), (Backend::C, "c")] {
+        let done = clarity_gen::generate(&project_for(backend), &stack(name));
+        assert!(done.is_ok(), "{name}: {:?}", done.err());
+    }
+    assert!(clarity_gen::generate(&notes_project(), &notes_settings()).is_ok());
+}
+
+#[test]
+fn a_rust_part_that_lacks_a_method_or_uses_the_old_host_is_refused() {
+    let lib = "mod clarity;
+pub use clarity::*;
+
+#[derive(Default)]
+pub struct Arena;
+
+impl ArenaPart for Arena {
+    fn draw(&self, painter: &Painter, area: Rect) {
+        fn helper() {}
+        let _ = \"fn show_value\";
+    }
+    // fn show_title is written in a comment only, which does not count.
+    fn show_speed(&mut self, speed: i64, cx: &mut CustomCx) {}
+    fn show_running(&mut self, running: bool, cx: &mut CustomCx) {}
+    fn on_restart(&mut self, level: i64, cx: &mut CustomCx) {}
+    fn on_say(&mut self, words: String, loud: bool, cx: &mut CustomCx) {}
+    fn frame(&mut self) {}
+}
+
+fn tell(host: &ArenaHost) {}
+";
+    let said = refused(&game_with_part("crate \"parts/Arena\"", &[("src/lib.rs", lib)]), "rust");
+    for line in [
+        "custom part Arena: parts/Arena/src/lib.rs:7 impl ArenaPart lacks show_value: write fn show_value(&mut self, value: i64, cx: &mut CustomCx) { .. }",
+        "lacks show_title: write fn show_title(&mut self, title: String, cx: &mut CustomCx)",
+        "parts/Arena/src/lib.rs:17 fn frame is not a method of ArenaPart",
+        "parts/Arena/src/lib.rs:20 uses ArenaHost, which Clarity no longer has",
+    ] {
+        assert!(said.contains(line), "{line}\n{said}");
+    }
+    assert!(!said.contains("helper") && !said.contains("lacks draw") && !said.contains("lacks show_speed"), "{said}");
+    // A crate with no impl of the trait at all.
+    let said = refused(&game_with_part("crate \"parts/Arena\"", &[("src/lib.rs", "mod clarity;\nuse clarity_runtime::parts::Host;\n")]), "rust");
+    assert!(said.contains("no type of its crate implements ArenaPart (src/clarity.rs): write impl ArenaPart for Arena { .. } in src/lib.rs"), "{said}");
+    assert!(said.contains("parts/Arena/src/lib.rs:2 uses clarity_runtime::parts"), "{said}");
+}
+
+#[test]
+fn a_go_part_that_lacks_a_method_or_takes_the_old_window_is_refused() {
+    let code = TEST_PART_GO
+        .replace("func (p *part) SetTitle(title string, cx Cx)   { fmt.Fprintf(os.Stderr, \"arena title %s\\n\", title) }\n", "// SetTitle is gone.\n")
+        .replace("func New() Part { return &part{} }", "func New(window Window, host Host) Part { _ = NewHost(nil); return &part{} }");
+    let said = refused(&game_with_part("go \"parts/arena\"", &[("arena.go", code.as_str())]), "go");
+    for line in [
+        "custom part Arena: its package has no method SetTitle, which Part in clarity.go asks: write func (p *part) SetTitle(title string, cx Cx) { .. }",
+        "custom part Arena: parts/arena/arena.go:10 func New takes (window Window, host Host), but Clarity.UI makes the part with nothing: write func New() Part",
+        "parts/arena/arena.go:10 uses NewHost",
+    ] {
+        assert!(said.contains(line), "{line}\n{said}");
+    }
+    assert!(!said.contains("SetSpeed"), "{said}");
+}
+
+#[test]
+fn a_cpp_part_that_lacks_an_override_or_uses_the_old_header_is_refused() {
+    let code = TEST_PART_CPP.replace("    void show_title(const std::string& title, clarity::ui::Cx&) override { std::fprintf(stderr, \"arena title %s\\n\", title.c_str()); }\n", "    // show_title(\n").replace("namespace {\n", "namespace {\nvoid step(ArenaPart* p) { Arena_frame(p); }\n");
+    let said = refused(&game_with_part("native \"parts/Arena\"", &[("Arena.cpp", code.as_str())]), "cpp");
+    assert!(said.contains("custom part Arena: its class does not write show_title, which ArenaPart asks: write void show_title(const std::string& title, clarity::ui::Cx& cx) override { .. }"), "{said}");
+    assert!(said.contains("parts/Arena/Arena.cpp:6 uses Arena_frame, which Clarity no longer has"), "{said}");
+    assert!(!said.contains("show_speed") && !said.contains("make_Arena"), "{said}");
+    // No class of Clarity.UI's at all.
+    let said = refused(&game_with_part("native \"parts/Arena\"", &[("Arena.cpp", "struct Arena {};\nArenaPart* make_Arena();\n")]), "cpp");
+    assert!(said.contains("no class of its code derives from ArenaPart (clarity/Arena.h): write class Arena final : public ArenaPart { .. };"), "{said}");
+    assert!(said.contains("its code does not define make_Arena"), "{said}");
+}
+
+#[test]
+fn a_c_part_that_lacks_a_function_or_uses_the_old_header_is_refused() {
+    let p = load_keyed([("game.clarity", GAME)], &[], "en");
+    let starter = parts::c_starter(&p.files[0].parts[0]);
+    let (path, code) = starter.iter().find(|(path, _)| path.ends_with(".c")).expect("a .c file");
+    assert!(code.contains("bool Arena_key("), "{code}");
+    let code = code.replace("bool Arena_key(", "bool Arena_key_typed(") + "\nvoid Arena_set_speed(ArenaPart* part, int64_t speed) {}\n";
+    let said = refused(&game_with_part("native \"parts/Arena\"", &[(path.as_str(), code.as_str())]), "c");
+    assert!(said.contains("custom part Arena: none of its .c files defines Arena_key, which clarity/Arena.h asks: write bool Arena_key(ArenaPart* part, const char* name, uint32_t modifiers, ClarityCustomCx* cx) { .. }"), "{said}");
+    assert!(said.contains(&format!("parts/Arena/{path}:")) && said.contains("uses Arena_set_speed, which Clarity no longer has: Arena_show_speed"), "{said}");
+    assert!(!said.contains("Arena_draw"), "{said}");
+}
+
+#[test]
+fn a_dotnet_adapter_that_lacks_a_method_or_uses_removed_types_is_refused() {
+    let mut p = load_keyed([("notes.clarity", NOTES)], &[], "en");
+    let adapter = parts::dotnet_adapter(&p, "Notes").unwrap();
+    assert!(adapter.contains("private partial void ShowWrap("), "{adapter}");
+    let adapter = format!("using Clarity.Ui.Browser;\n{}", adapter.replace("private partial void ShowWrap(", "private void ShowWrapped(")).replacen("    string shown", "    public override void Arrange(Box box) { }\n    CustomPlace place;\n    string shown", 1);
+    clarity_spec::native::attach(&mut p, vec![PartFile { part: "Notes".into(), path: "Notes.cs".into(), bytes: adapter.into_bytes() }]);
+    let said = clarity_gen::generate(&p, &notes_settings()).expect_err("out of step").join("\n");
+    for line in [
+        "custom part Notes: its adapter Notes.cs does not write ShowWrap, which Notes.g.cs asks: write private partial void ShowWrap(bool wrap) { .. }",
+        "parts/Notes/Notes.cs:1 names Clarity.Ui.Browser",
+        "overrides Arrange, which CustomPart no longer has",
+        "uses CustomPlace, which Clarity.UI no longer has",
+    ] {
+        assert!(said.contains(line), "{line}\n{said}");
+    }
+    assert!(!said.contains("ShowValue") && !said.contains("OnJump"), "{said}");
 }

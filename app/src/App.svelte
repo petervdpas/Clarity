@@ -11,10 +11,9 @@
   import logo from "../src-tauri/icons/icon.svg";
   import { loadPicturesWith } from "@clarity/ui/screen/pictures.svelte.ts";
   import { topicForTab } from "./lib/manual";
-  import FrameView from "@clarity/ui/frame/FrameView.svelte";
   import NewWindowDialog from "./lib/NewWindowDialog.svelte";
   import PageDesigner from "./lib/PageDesigner.svelte";
-  import PageView from "./lib/PageView.svelte";
+  import ClarityWindow from "./lib/ClarityWindow.svelte";
   import ProjectTree from "./lib/ProjectTree.svelte";
   import ResourceView from "./lib/ResourceView.svelte";
   import NewResourceDialog from "./lib/NewResourceDialog.svelte";
@@ -67,9 +66,8 @@
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
   import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
   import { pageDesigner } from "./lib/pageDesignerStore.svelte";
-  import { provideDesigner } from "@clarity/ui/screen/designer.svelte.ts";
-  import { findApp, frameForPage } from "@clarity/ui/screen/frame.ts";
-  import { CONTENT_PADDING, appAsPage, findPage, pageData, windowSize } from "@clarity/ui/screen/pages.ts";
+  import { findApp } from "@clarity/ui/screen/frame.ts";
+  import { appAsPage, findPage, windowSize } from "@clarity/ui/screen/pages.ts";
   import ShownWindow from "./lib/ShownWindow.svelte";
   import VaultSide from "./lib/VaultSide.svelte";
   import VaultView from "./lib/VaultView.svelte";
@@ -86,9 +84,6 @@
   import type { CodeView } from "@clarity/ui/generated/CodeView.ts";
   import { themeArea, themeOf, tr } from "@clarity/ui/screen/model.ts";
   import ThemeStyles from "./lib/ThemeStyles.svelte";
-
-  // Every window the IDE shows, designed or previewed, works with the page designer.
-  provideDesigner(pageDesigner);
 
   const LAST_PROJECT_KEY = "clarity.lastProject";
 
@@ -333,8 +328,6 @@
     ),
   );
   const designing = $derived(tab === "design" && (page !== undefined || openApp !== null));
-  // Widgets in the app's sidebars and footer see the app's data next to the window's.
-  const appData = $derived(preview && appPage ? pageData(preview, appPage) : {});
   const errors = $derived(preview?.project.diagnostics.filter((d) => d.severity === "error") ?? []);
   const warnings = $derived(preview?.project.diagnostics.filter((d) => d.severity === "warning") ?? []);
   const projectProblems = $derived(projectFile?.problems ?? []);
@@ -963,16 +956,6 @@
   function selectPage(p: Page) {
     stack = [{ kind: "window", name: p.name.name }];
     pageDesigner.selected = null;
-  }
-
-  /** Follows a button or menu item: opens the target window on top of the current one. */
-  function navigate(target: string) {
-    if (!preview) return;
-    if (target === "close") {
-      if (stack.length > 1) stack = stack.slice(0, -1);
-      return;
-    }
-    if (findPage(preview, target)) stack = [...stack, { kind: "window", name: target }];
   }
 
   async function addWindow(target: SpecFile, name: string, template: PageTemplate) {
@@ -1655,20 +1638,9 @@
                 <span>{page.title ? tr(preview, page.title) : page.name.name}</span>
                 <code>{page.name.name}: {page.kind}</code>
               </div>
-              <!-- The window's client, at the height it opens at. -->
+              <!-- The window's client, at the height it opens at, drawn by Clarity.UI as the program draws it, with sample data. -->
               <div class="shown" style:height="{windowSize(page).height}px">
-                <FrameView
-                  {preview}
-                  {page}
-                  frame={frameForPage(preview, page)}
-                  data={{ ...appData, ...pageData(preview, page) }}
-                  design={false}
-                  onnavigate={navigate}
-                >
-                  <div class="client" style:padding="{CONTENT_PADDING}px">
-                    <PageView {preview} {page} onnavigate={navigate} />
-                  </div>
-                </FrameView>
+                <ClarityWindow shown={{ window: page.name.name }} project={preview} />
               </div>
             </ShownWindow>
           {:else if openApp}
@@ -2458,11 +2430,4 @@
     flex-direction: column;
   }
 
-  .client {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: auto;
-  }
 </style>

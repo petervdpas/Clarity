@@ -514,6 +514,27 @@ fn open_project_of(state: &WatchState) -> Result<(PathBuf, PathBuf), String> {
         .ok_or_else(|| "no project is open".to_string())
 }
 
+/// The server the IDE's preview and design canvas draw from (DESIGN 8.1,
+/// `clarity_gen::preview`): Clarity.UI's browser files, the open project's
+/// windows and a program answering with sample data. None when it could not start.
+struct PreviewServer(Option<String>);
+
+fn preview_server(app: AppHandle) -> PreviewServer {
+    let loader: clarity_gen::preview::Loader = std::sync::Arc::new(move || {
+        let (file, dir) = open_project_of(&app.state::<WatchState>())?;
+        clarity_gen::preview::load(&file, &dir)
+    });
+    let repository = cfg!(debug_assertions).then(|| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")));
+    let library: clarity_gen::preview::Library = std::sync::Arc::new(move || clarity_gen::web_browser::local_folder(repository.as_deref()));
+    PreviewServer(clarity_gen::preview::Server::start(loader, library, &clarity_gen::preview::secret()).ok().map(|s| s.address().to_string()))
+}
+
+/// Where the preview server serves, ending in `/`.
+#[tauri::command]
+fn preview_server_address(server: State<PreviewServer>) -> Result<String, String> {
+    server.0.clone().ok_or_else(|| "The preview's server could not start on this machine's loopback address.".to_string())
+}
+
 /// Which way a change is replayed.
 #[derive(Clone, Copy)]
 enum Replay {
@@ -807,12 +828,8 @@ pub fn run() {
             if let Some(folder) = carried.or_else(repository) {
                 clarity_gen::clarity_ui::set_bundled_browser(folder);
             }
-            // Its browser files for web programs (DESIGN 7.9, round B), carried the same way.
-            let carried_browser = app.path().resource_dir().ok().map(|dir| dir.join("clarity-ui-browser")).filter(|dir| clarity_gen::clarity_ui::browser_complete(dir));
-            let repository_browser = || cfg!(debug_assertions).then(|| clarity_gen::clarity_ui::repository_browser(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")))).flatten();
-            if let Some(folder) = carried_browser.or_else(repository_browser) {
-                clarity_gen::clarity_ui::set_bundled_browser(folder);
-            }
+            // The preview and the design canvas draw with the same browser files (DESIGN 8.1).
+            app.manage(preview_server(app.handle().clone()));
             let info = app.package_info();
             if let Some(window) = app.get_webview_window("main") {
                 // F5, Ctrl+R, Ctrl+P and Ctrl+F are Clarity's, not the webview's.
@@ -840,6 +857,7 @@ pub fn run() {
         .manage(vault::VaultState::default())
         .manage(agent::AgentState::default())
         .invoke_handler(tauri::generate_handler![
+            preview_server_address,
             manual::manual_topics,
             manual::manual_page,
             manual::open_manual,

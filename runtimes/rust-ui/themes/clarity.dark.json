@@ -125,10 +125,10 @@
     "header": {
       "background": "#232832",
       "text": "#9aa3b5",
-      "border": null,
+      "border": "#434b5c",
       "radius": null,
       "weight": "bold",
-      "size": null,
+      "size": 12,
       "font": null,
       "align": null
     },
@@ -185,7 +185,7 @@
     "menu": {
       "background": "#1d2129",
       "text": "#e6e9ef",
-      "border": "#2f3542",
+      "border": "#434b5c",
       "radius": null,
       "weight": null,
       "size": null,
@@ -203,9 +203,9 @@
       "align": null
     },
     "tab": {
-      "background": "#232832",
+      "background": "none",
       "text": "#9aa3b5",
-      "border": "#2f3542",
+      "border": "none",
       "radius": null,
       "weight": null,
       "size": null,
@@ -214,6 +214,16 @@
     },
     "tab:hover": {
       "background": null,
+      "text": "#e6e9ef",
+      "border": null,
+      "radius": null,
+      "weight": null,
+      "size": null,
+      "font": null,
+      "align": null
+    },
+    "tab:selected": {
+      "background": "#233552",
       "text": "#e6e9ef",
       "border": null,
       "radius": null,

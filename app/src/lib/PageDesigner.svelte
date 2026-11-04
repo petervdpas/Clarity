@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import { commandAction, commandHandler, eventHandler, freePartName, handlerName, wireCommand, wireEvent } from "./codeParts";
-  import FrameView from "@clarity/ui/frame/FrameView.svelte";
-  import GridBox from "@clarity/ui/grid/GridBox.svelte";
   import ShownWindow from "./ShownWindow.svelte";
+  import ClarityWindow from "./ClarityWindow.svelte";
+  import DesignLayer from "./DesignLayer.svelte";
+  import type { Layout } from "./clarityWindow";
   import PageOutline from "./PageOutline.svelte";
   import PageProperties from "./PageProperties.svelte";
   import CodePanel from "./CodePanel.svelte";
@@ -28,9 +29,7 @@
   import { dataEntity, dataType, isList, valueField } from "@clarity/ui/screen/windowData.ts";
   import type { WidgetKind } from "@clarity/ui/generated/WidgetKind.ts";
   import { pageDesigner, type PageDragSource, type Placement } from "./pageDesignerStore.svelte";
-  import { provideDesigner } from "@clarity/ui/screen/designer.svelte.ts";
   import {
-    CONTENT_PADDING,
     windowSize,
     appAsPage,
     resizeEdits,
@@ -72,10 +71,8 @@
 
   let canvas: HTMLElement | undefined = $state();
 
-  // While the Design text is being typed, the designer shows the project as
-  // that text would make it.
-  // The grids and parts below are designed with this designer, not the idle one of a running application.
-  provideDesigner(pageDesigner);
+  // While the Design text is being typed, the designer's lists show the
+  // project as that text would make it; the canvas draws the saved project.
   const preview = $derived(pageDesigner.draft ?? savedPreview);
   // The canvas shows the project's theme, as the application will.
   const area = $derived(themeArea(themeOf(preview)));
@@ -159,6 +156,8 @@
         : shownFrame(projectApp, page.kind === "window" ? page.frame : null),
   );
   const entities = $derived(preview.project.files.flatMap((f) => f.entities));
+  // Where Clarity.UI drew the window's parts and grids, for the design layer over it.
+  let laid = $state<Layout | null>(null);
 
   async function apply(edit: Edit): Promise<void> {
     if (pageDesigner.draft) {
@@ -478,28 +477,16 @@
         onpointerdown={() => (pageDesigner.selected = null)}
         role="presentation"
       >
-        <FrameView {preview} {page} {frame} {data} design={true} onnavigate={() => {}}>
-          <div class="body" style:padding="{CONTENT_PADDING}px">
-            {#if app}
-              <p class="main-hint">
-                Each window's content goes here{app.main ? "; the app starts with " + app.main.name : ""}. Drag menus,
-                toolbars, a ribbon, sidebars and a footer onto the edges: every window shows them unless it has its own.
-              </p>
-            {:else}
-              <GridBox
-                {preview}
-                {page}
-                {data}
-                design={true}
-                widgets={page.widgets}
-                columns={page.columns}
-                container={page.span.start}
-                onnavigate={() => {}}
-              />
-            {/if}
-          </div>
-        </FrameView>
+        <!-- The window as Clarity.UI draws it, as it runs; the design layer over it takes the pointer. -->
+        <ClarityWindow shown={app ? { app: app.name.name } : { window: page.name.name }} design={true} project={savedPreview} onlayout={(l) => (laid = l)} />
+        <DesignLayer layout={laid} {page} {preview} />
       </div>
+      {#if app}
+        <p class="main-hint">
+          Each window's content goes in the window{app.main ? "; the app starts with " + app.main.name : ""}. Drag menus,
+          toolbars, a ribbon, sidebars and a footer onto the edges: every window shows them unless it has its own.
+        </p>
+      {/if}
     </ShownWindow>
     {#if !app}
       <!-- Parts not seen (sounds, timers) have no place in the window: they wait here, as on C++ Builder's forms (DESIGN 5.22, 5.26). -->
@@ -678,18 +665,8 @@
     opacity: 0.7;
   }
 
-  /* As the running window's client: its grid fills the height. */
-  .body {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: auto;
-  }
-
-
   .main-hint {
-    margin: 40px auto;
+    margin: 4px auto;
     max-width: 420px;
     text-align: center;
     color: var(--text-muted);
@@ -697,6 +674,7 @@
   }
 
   .client {
+    position: relative;
     display: flex;
     flex-direction: column;
     user-select: none;

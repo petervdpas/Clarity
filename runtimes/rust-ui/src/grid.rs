@@ -38,6 +38,8 @@ impl GridItem {
 pub struct GridPlacement {
     pub boxes: Vec<Rect>,
     pub content: f64,
+    /// How high each row is, from the first (the designer finds a row under the pointer by them).
+    pub rows: Vec<f64>,
 }
 
 /// Places `items` in a grid of `columns` over `width` and `height`.
@@ -104,5 +106,5 @@ pub fn place(items: &[GridItem], columns: i64, width: f64, height: f64, gap: f64
             Rect::new(x, tops[row], w, h)
         })
         .collect();
-    GridPlacement { boxes, content: tops[rows - 1] + heights[rows - 1] }
+    GridPlacement { boxes, content: tops[rows - 1] + heights[rows - 1], rows: heights }
 }

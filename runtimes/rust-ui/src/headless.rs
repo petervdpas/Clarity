@@ -263,6 +263,7 @@ impl Driven {
                 self.given.0.lock().map_err(|_| "the picker is not available")?.push(path.to_string());
             }
             "read" => answer = self.read(),
+            "layout" => answer = self.layout(),
             "shot" => {
                 let path = step.get("path").and_then(Value::as_str).ok_or("the step has no path")?;
                 let png = self.png().ok_or("the screen could not be drawn")?;
@@ -420,6 +421,60 @@ impl Driven {
             }
         }
         out.retain(|(says, _)| !says.is_empty());
+        out
+    }
+
+    /// Where the design's parts and grids show (the IDE's designer lays its
+    /// layer over the drawing by it): each part that shows, with what it is
+    /// in the design (`designItem`), its name and kind and its place; and
+    /// each grid, with what holds it, its columns, its place and how high
+    /// its rows are. A program's own markup has no design items: its parts
+    /// show by name.
+    pub fn layout(&self) -> Map<String, Value> {
+        let mut parts = Vec::new();
+        let mut grids = Vec::new();
+        for e in self.trees().into_iter().flat_map(shown_in) {
+            let b = e.node().bounds;
+            let at = json!([b.x, b.y, b.width, b.height]);
+            if let Some(grid) = e.as_any().downcast_ref::<crate::element::GridPanel>() {
+                grids.push(json!({ "item": grid.item, "columns": grid.columns, "gap": grid.gap, "at": at, "rows": grid.rows }));
+            } else if let Some(part) = e.as_part() {
+                let spec = &part.base().spec;
+                let item = spec.text(crate::markup::DESIGN_ITEM);
+                if item.is_some() || spec.name().is_some() {
+                    let mut laid = json!({ "item": item, "name": spec.name(), "kind": spec.kind, "at": at });
+                    if !spec.pages.is_empty() {
+                        laid["pages"] = Value::Array(design_pages(e, &spec.pages));
+                    }
+                    if let Some(table) = e.as_any().downcast_ref::<crate::parts::data::table::TablePart>() {
+                        let columns: Vec<Value> = table.columns().iter().filter_map(|c| table.header_box(&c.field).map(|b| json!({ "field": c.field, "at": [b.x, b.y, b.width, b.height] }))).collect();
+                        laid["columns"] = Value::Array(columns);
+                    }
+                    parts.push(laid);
+                }
+            } else {
+                // The buttons of a window's frame: its toolbar's, its ribbon's open tab's, its menu bar's.
+                let any = e.as_any();
+                let placed = if let Some(toolbar) = any.downcast_ref::<crate::frame::toolbar::FrameToolbar>() {
+                    toolbar.placed()
+                } else if let Some(ribbon) = any.downcast_ref::<crate::frame::ribbon::FrameRibbon>() {
+                    ribbon.buttons()
+                } else if let Some(bar) = any.downcast_ref::<crate::frame::menu_bar::FrameMenuBar>() {
+                    bar.placed()
+                } else {
+                    Vec::new()
+                };
+                for (command, b) in placed {
+                    let item = command.text(crate::markup::DESIGN_ITEM);
+                    if item.is_some() || command.text("name").is_some() {
+                        parts.push(json!({ "item": item, "name": command.text("name"), "kind": "command", "at": [b.x, b.y, b.width, b.height] }));
+                    }
+                }
+            }
+        }
+        let mut out = Map::new();
+        out.insert("parts".into(), Value::Array(parts));
+        out.insert("grids".into(), Value::Array(grids));
         out
     }
 
@@ -585,6 +640,28 @@ fn middle(b: Rect) -> (f64, f64) {
 
 fn part_name(e: &dyn Element) -> Option<&str> {
     e.as_part().and_then(|p| p.base().spec.name())
+}
+
+/// The pages of a tabs, accordion or steps part, each with what it is in the
+/// design and the place of the header that shows it (none where it has none to press).
+fn design_pages(e: &dyn Element, pages: &[crate::markup::PageSpec]) -> Vec<Value> {
+    use crate::parts::containers::{accordion::AccordionPart, tabs::TabsPart};
+    let any = e.as_any();
+    let headers: Vec<Option<Rect>> = if let Some(tabs) = any.downcast_ref::<TabsPart>() {
+        tabs.tabs().iter().map(|t| Some(t.node().bounds).filter(|b| b.width > 0.0)).collect()
+    } else if let Some(accordion) = any.downcast_ref::<AccordionPart>() {
+        accordion.headers().iter().map(|h| Some(h.node().bounds).filter(|b| b.width > 0.0)).collect()
+    } else {
+        Vec::new()
+    };
+    pages
+        .iter()
+        .enumerate()
+        .map(|(i, page)| {
+            let at = headers.get(i).copied().flatten().map(|b| json!([b.x, b.y, b.width, b.height]));
+            json!({ "item": page.item, "title": page.title, "at": at })
+        })
+        .collect()
 }
 
 /// Every element of a tree that shows (with a place), in the order drawn.

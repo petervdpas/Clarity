@@ -8,28 +8,37 @@ fn c(written: &str) -> Color {
     parse_color(written).unwrap()
 }
 
+/// Clarity's own theme as Clarity resolved it, for light or dark mode.
+fn carried(dark: bool) -> serde_json::Value {
+    serde_json::from_str(if dark { clarity_ui::theme::CLARITY_DARK } else { clarity_ui::theme::CLARITY_LIGHT }).unwrap()
+}
+
 #[test]
 fn clarity_s_own_theme_is_carried_for_light_and_dark() {
     let light = ThemeLook::clarity(false);
     let dark = ThemeLook::clarity(true);
     assert!(!light.dark());
     assert!(dark.dark());
-    assert_eq!(c("#1f5fbf"), light.color("accent"));
-    assert_eq!(c("#6fa3f2"), dark.color("accent"));
-    assert_eq!(14.0, light.size("text"));
-    assert_eq!(6.0, light.radius("button"));
-    assert_eq!(1.0, light.border());
-    assert_eq!(4.0, light.padding());
+    for (look, data) in [(&light, carried(false)), (&dark, carried(true))] {
+        for (role, color) in data["colors"].as_object().unwrap() {
+            assert_eq!(c(color.as_str().unwrap()), look.color(role), "{role}");
+        }
+        assert_eq!(data["sizes"]["text"].as_f64().unwrap(), look.size("text"));
+        assert_eq!(data["radii"]["button"].as_f64().unwrap(), look.radius("button"));
+        assert_eq!(data["border"].as_f64().unwrap(), look.border());
+        assert_eq!(data["padding"].as_f64().unwrap(), look.padding());
+    }
 }
 
 #[test]
 fn a_part_s_look_in_a_state_falls_back_to_the_part_s_own() {
     let look = ThemeLook::clarity(false);
+    let data = carried(false);
     let hover = look.part("button", Some("hover"));
-    assert_eq!(Some(c("#1f5fbf")), hover.border);
+    assert_eq!(Some(c(data["parts"]["button:hover"]["border"].as_str().unwrap())), hover.border);
     // What the hover leaves out is the button's.
-    assert_eq!(Some(c("#f6f7f9")), hover.background);
-    assert_eq!(Some(c("#1d2330")), hover.text);
+    assert_eq!(Some(c(data["parts"]["button"]["background"].as_str().unwrap())), hover.background);
+    assert_eq!(Some(c(data["parts"]["button"]["text"].as_str().unwrap())), hover.text);
     assert_eq!(None, look.part("no_such_part", None).background);
 }
 
@@ -50,8 +59,8 @@ fn a_project_s_theme_changes_only_what_it_sets() {
     assert_eq!(c("#2f6fdf"), look.color("accent"));
     assert_eq!(c("#f5c400"), look.color("brand"));
     // What it leaves out is Clarity's own.
-    assert_eq!(c("#eef0f3"), look.color("background"));
-    assert_eq!(Some(c("#1d2330")), look.style("loud").text);
+    assert_eq!(ThemeLook::clarity(false).color("background"), look.color("background"));
+    assert_eq!(Some(ThemeLook::clarity(false).color("text")), look.style("loud").text);
     assert_eq!(Some(c("#f5c400")), look.style("loud").background);
     assert_eq!("Inter", look.font("text"));
     assert_eq!(6.0, look.radius("button"));

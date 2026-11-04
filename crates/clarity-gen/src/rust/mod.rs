@@ -35,6 +35,13 @@ const RUNTIME_MANIFEST: &str = include_str!("../../../../runtimes/rust/Cargo.tom
 
 /// The version of the runtime crate a generated project requires: the one
 /// the runtime in this repository is.
+/// The skia-safe version Clarity.UI draws with, as its manifest names it.
+pub fn ui_skia_version() -> &'static str {
+    let start = UI_MANIFEST.find("\nskia-safe = { version = \"").expect("clarity-ui names skia-safe") + "\nskia-safe = { version = \"".len();
+    let end = UI_MANIFEST[start..].find('"').expect("the version is closed");
+    &UI_MANIFEST[start..start + end]
+}
+
 pub fn runtime_version() -> &'static str {
     let start = RUNTIME_MANIFEST.find("\nversion = \"").expect("the runtime's manifest sets its version") + "\nversion = \"".len();
     let end = RUNTIME_MANIFEST[start..].find('"').expect("the version is closed");
@@ -109,6 +116,12 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     // Custom parts written in Rust (DESIGN 5.19): the runtime's part host.
     let rust_parts = parts::crate_parts(project);
+    let mut mismatches = parts::ui_mismatches(project);
+    // What the part's code lacks of Clarity's file, read without building it.
+    mismatches.extend(parts::code_mismatches(project));
+    if !mismatches.is_empty() {
+        return Err(mismatches);
+    }
     // `stack rust desktop`: Clarity.UI draws the windows in the program's own process (DESIGN 7.9).
     // `stack rust web`: the program serves Clarity.UI's browser files and answers their wire;
     // with both, `--serve` serves.

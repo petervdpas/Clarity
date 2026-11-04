@@ -189,6 +189,16 @@ fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> Ex
         eprintln!("clarity: {} is not a project file; give one like shop.clarity", project_file.display());
         return ExitCode::from(2);
     }
+    // As Generate in Clarity: each part's folder follows its declaration first (DESIGN 5.19).
+    if let Ok(project) = load(project_file) {
+        match clarity_gen::parts::write_part_folders(&clarity_project::module_dir(project_file), &project) {
+            Ok(written) => written.iter().for_each(|path| eprintln!("wrote {}", path.display())),
+            Err(err) => {
+                eprintln!("clarity: cannot write the parts' folders: {err}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
     let project = match load(project_file) {
         Ok(project) => project,
         Err(code) => return code,

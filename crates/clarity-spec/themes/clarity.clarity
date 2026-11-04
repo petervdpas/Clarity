@@ -1,6 +1,6 @@
-// Clarity's own look: every value a theme can set. Every theme starts from
-// it; one that sets fewer values keeps these for the rest. "New theme" in
-// the Module view starts from a copy of it.
+// Clarity's own look, the same as the Clarity IDE's: every value a theme
+// can set. Every theme starts from it; one that sets fewer values keeps
+// these for the rest. "New theme" in the Module view starts from a copy of it.
 module clarity
 
 theme Clarity
@@ -54,10 +54,13 @@ theme Clarity
     part button pressed background accent_soft
     part input background input, text text, border strong_border
     part input focus border focus
-    part header background raised, text muted, weight bold
-    part tab background raised, text muted, border border
+    // As the IDE's own pages: a table header in small muted bold text over
+    // a strong line, tabs plain until open, the open one in the soft accent.
+    part header background raised, text muted, border strong_border, weight bold, size 12
+    part tab background none, text muted, border none
     part tab hover text text
-    part menu background panel, text text, border border
+    part tab selected background accent_soft, text text
+    part menu background panel, text text, border strong_border
     part menu hover background accent_soft
     // A list, its rows, and a list of cards: each row a card, its title
     // above its lines; the card chosen filled with the accent.

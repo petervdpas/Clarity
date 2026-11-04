@@ -14,18 +14,27 @@
 //   resources  its resources folder  ("clarity/resources/")
 //   storage    the localStorage key of the kept settings ("clarity.settings")
 //   choices    the localStorage key of the person's choices: language, theme, columns ("clarity.choices")
+//   thread     "worker" or "page"    (by itself: the worker where a worker can draw with WebGL2, else the page)
+//   input      false: the drawing takes no input (the IDE's designer lays its own layer over it)
+//   chosen     choices that win over the kept ones: {language: "nl"} (the IDE's language for its preview)
 // window.clarityUi then has `started` (a promise), `step(step)` and `shot()`
-// (promises of a driven step's answer and of the canvas as a base64 PNG).
+// (promises of a driven step's answer and of the canvas as a base64 PNG),
+// `reload(files)` (starts the program again from new files on the same
+// canvas), `layout()` (where the design's parts and grids show) and `stop()`.
+// window.ClarityUiPage.start(canvas, options) does the same for a canvas of
+// a page's own choosing (the IDE's preview and designer).
+//
+// The worker draws on an OffscreenCanvas with WebGL2. A browser whose
+// workers cannot (WebKitGTK, the webview of Tauri on Linux) runs the same
+// worker script on the page's thread instead (ClarityUiPageWorker), on the
+// page's own canvas; its requests to the server are synchronous there too.
 
 (function () {
   "use strict";
 
   const script = document.currentScript ? document.currentScript.src : location.href;
-  const options = Object.assign({}, window.clarityUiOptions || {});
   const here = (path) => new URL(path, script).href;
   const page = (path) => new URL(path, location.href).href;
-  const storageKey = options.storage || "clarity.settings";
-  const choicesKey = options.choices || "clarity.choices";
 
   function readKept(key) {
     try {
@@ -59,15 +68,72 @@
     return bytes;
   }
 
-  function start(canvas) {
+  // Whether a worker of this browser can draw with WebGL2 on an OffscreenCanvas.
+  let drawing = null;
+  function workerDraws() {
+    if (typeof OffscreenCanvas === "undefined" || !HTMLCanvasElement.prototype.transferControlToOffscreen || typeof Worker === "undefined") return Promise.resolve(false);
+    drawing =
+      drawing ||
+      new Promise((resolve) => {
+        let probe;
+        try {
+          const code = "try { postMessage(!!new OffscreenCanvas(1, 1).getContext('webgl2')); } catch (why) { postMessage(false); }";
+          probe = new Worker(URL.createObjectURL(new Blob([code], { type: "text/javascript" })));
+        } catch (why) {
+          resolve(false);
+          return;
+        }
+        const done = (yes) => {
+          probe.terminate();
+          resolve(yes);
+        };
+        probe.onmessage = (event) => done(event.data === true);
+        probe.onerror = () => done(false);
+        setTimeout(() => done(false), 3000);
+      });
+    return drawing;
+  }
+
+  // The worker script from another origin (the IDE's own server) starts in a worker of this page's.
+  function workerOf(url) {
+    if (new URL(url).origin === location.origin) return new Worker(url);
+    const code = "importScripts(" + JSON.stringify(url) + ");";
+    return new Worker(URL.createObjectURL(new Blob([code], { type: "text/javascript" })));
+  }
+
+  // The worker script on this page's thread, loaded once.
+  let pageScript = null;
+  function pageWorker(url) {
+    pageScript =
+      pageScript ||
+      new Promise((resolve, reject) => {
+        if (window.ClarityUiPageWorker) return resolve();
+        const element = document.createElement("script");
+        element.src = url;
+        element.onload = () => resolve();
+        element.onerror = () => reject(new Error("Clarity.UI's worker script did not load: " + url));
+        document.head.appendChild(element);
+      });
+    return pageScript.then(() => window.ClarityUiPageWorker());
+  }
+
+  function start(canvas, given) {
+    const options = Object.assign({}, window.clarityUiOptions || {}, given || {});
+    const storageKey = options.storage || "clarity.settings";
+    const choicesKey = options.choices || "clarity.choices";
+    const takesInput = options.input !== false;
     if (!canvas.style.width) canvas.style.width = "100%";
     if (!canvas.style.height) canvas.style.height = "100%";
     canvas.style.display = "block";
     canvas.style.touchAction = "none";
     canvas.style.outline = "none";
 
-    const worker = new Worker(options.worker ? page(options.worker) : here("clarity-ui-worker.js"));
-    const offscreen = canvas.transferControlToOffscreen();
+    const workerUrl = options.worker ? page(options.worker) : here("clarity-ui-worker.js");
+    const libraryUrl = options.library ? page(options.library) : here("clarity-ui.js");
+    // The worker, once it is known where the library runs; messages wait for it.
+    let worker = null;
+    const queued = [];
+    let stopped = false;
     const dark = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
     let answered = 0;
     const waiting = new Map();
@@ -76,9 +142,16 @@
       startedResolve = resolve;
       startedReject = reject;
     });
-    const send = (message, transfer) => worker.postMessage(message, transfer || []);
+    const send = (message, transfer) => (worker ? worker.postMessage(message, transfer || []) : queued.push([message, transfer || []]));
     const place = () => canvas.getBoundingClientRect();
     const box = () => ({ width: canvas.clientWidth || 1, height: canvas.clientHeight || 1, dpr: window.devicePixelRatio || 1 });
+    // A point of the page in the canvas's own CSS pixels, also where the canvas is shown scaled (the IDE fits a window to its room).
+    const within = (event) => {
+      const at = place();
+      const sx = at.width > 0 ? canvas.clientWidth / at.width : 1;
+      const sy = at.height > 0 ? canvas.clientHeight / at.height : 1;
+      return { x: (event.clientX - at.left) * sx, y: (event.clientY - at.top) * sy };
+    };
 
     // The hidden textarea takes keys, typed text, an input method's text and pastes.
     const typing = document.createElement("textarea");
@@ -87,7 +160,7 @@
     typing.setAttribute("spellcheck", "false");
     typing.setAttribute("aria-hidden", "true");
     Object.assign(typing.style, { position: "fixed", left: "0px", top: "0px", width: "1px", height: "1px", opacity: "0", border: "0", padding: "0", resize: "none", overflow: "hidden", pointerEvents: "none" });
-    document.body.appendChild(typing);
+    if (takesInput) document.body.appendChild(typing);
     const focusTyping = () => typing.focus({ preventScroll: true });
     // Whether the last press was a finger's.
     let touched = false;
@@ -175,7 +248,7 @@
       failed: (t) => console.error("Clarity.UI:", t.what),
     };
 
-    worker.onmessage = (event) => {
+    const onmessage = (event) => {
       const message = event.data;
       if (message.type === "tell") {
         const tell = tells[message.tell];
@@ -185,38 +258,58 @@
       } else if (message.type === "failed") {
         console.error("Clarity.UI:", message.what);
         startedReject(new Error(message.what));
-      } else if (message.type === "stepped" || message.type === "shot") {
+      } else if (["stepped", "shot", "reloaded", "laid"].includes(message.type)) {
         const done = waiting.get(message.id);
         waiting.delete(message.id);
-        if (done) done(message.type === "shot" ? message.png : message.answer);
+        const answers = { stepped: message.answer, shot: message.png, reloaded: message.why || null, laid: message.layout };
+        if (done) done(answers[message.type]);
       }
     };
 
-    const now = box();
-    send(
-      {
-        type: "start",
-        canvas: offscreen,
-        width: now.width,
-        height: now.height,
-        dpr: now.dpr,
-        dark: !!(dark && dark.matches),
-        script: here("clarity-ui.js"),
-        base: script,
-        files: page(options.files || "clarity/files.json"),
-        server: page(options.server || window.clarityServer || "/clarity/invoke"),
-        resources: page(options.resources || "clarity/resources/"),
-        settings: readKept(storageKey),
-        choices: readKept(choicesKey),
-      },
-      [offscreen],
-    );
+    const thread = options.thread === "page" || options.thread === "worker" ? Promise.resolve(options.thread === "worker") : workerDraws();
+    thread
+      .then((inWorker) => {
+        if (stopped) return;
+        const now = box();
+        const message = {
+          type: "start",
+          width: now.width,
+          height: now.height,
+          dpr: now.dpr,
+          dark: !!(dark && dark.matches),
+          script: libraryUrl,
+          base: libraryUrl,
+          files: page(options.files || "clarity/files.json"),
+          server: page(options.server || window.clarityServer || "/clarity/invoke"),
+          resources: page(options.resources || "clarity/resources/"),
+          settings: readKept(storageKey),
+          choices: Object.assign(readKept(choicesKey), options.chosen || {}),
+        };
+        if (inWorker) {
+          const offscreen = canvas.transferControlToOffscreen();
+          worker = workerOf(workerUrl);
+          worker.onmessage = onmessage;
+          worker.postMessage(Object.assign(message, { canvas: offscreen }), [offscreen]);
+          return;
+        }
+        return pageWorker(workerUrl).then((face) => {
+          if (stopped) return;
+          worker = face;
+          worker.onmessage = onmessage;
+          worker.postMessage(Object.assign(message, { canvas }));
+        });
+      })
+      .then(() => {
+        for (const [message, transfer] of queued.splice(0)) if (worker) worker.postMessage(message, transfer);
+      })
+      .catch((why) => startedReject(why));
 
-    if (window.ResizeObserver) {
-      new ResizeObserver(() => send(Object.assign({ type: "resize" }, box()))).observe(canvas);
-    }
-    window.addEventListener("resize", () => send(Object.assign({ type: "resize" }, box())));
-    if (dark && dark.addEventListener) dark.addEventListener("change", () => send({ type: "dark", dark: dark.matches }));
+    const resized = () => send(Object.assign({ type: "resize" }, box()));
+    const watching = window.ResizeObserver ? new ResizeObserver(resized) : null;
+    if (watching) watching.observe(canvas);
+    window.addEventListener("resize", resized);
+    const darkened = () => send({ type: "dark", dark: dark.matches });
+    if (dark && dark.addEventListener) dark.addEventListener("change", darkened);
 
     // One pointer at a time: a second finger is not a second mouse. A mouse
     // has one pointer, so a mouse event counts even when it does not say
@@ -225,36 +318,38 @@
     const primary = (event) => event.isPrimary || event.pointerType === "mouse" || event.pointerType === "";
     const pointer = (kind) => (event) => {
       if (!primary(event)) return;
-      const at = place();
-      send({ type: "pointer", kind, x: event.clientX - at.left, y: event.clientY - at.top, button: event.button, held: held(event) });
+      const at = within(event);
+      send({ type: "pointer", kind, x: at.x, y: at.y, button: event.button, held: held(event) });
     };
-    canvas.addEventListener("pointermove", pointer(0));
-    canvas.addEventListener("pointerdown", (event) => {
-      if (!primary(event)) return;
-      try {
-        canvas.setPointerCapture(event.pointerId);
-      } catch (why) {
-        // A pointer the page made up (a test's) cannot be captured.
-      }
-      if (audio && audio.state === "suspended") audio.resume();
-      pointer(1)(event);
-      event.preventDefault();
-      touched = event.pointerType === "touch";
-      if (!touched) focusTyping();
-    });
-    canvas.addEventListener("pointerup", pointer(2));
-    canvas.addEventListener("pointerleave", pointer(3));
-    canvas.addEventListener("pointercancel", pointer(4));
-    canvas.addEventListener("contextmenu", (event) => event.preventDefault());
-    canvas.addEventListener(
-      "wheel",
-      (event) => {
-        const at = place();
-        send({ type: "wheel", x: event.clientX - at.left, y: event.clientY - at.top, dx: event.deltaX, dy: event.deltaY, mode: event.deltaMode, held: held(event) });
+    if (takesInput) {
+      canvas.addEventListener("pointermove", pointer(0));
+      canvas.addEventListener("pointerdown", (event) => {
+        if (!primary(event)) return;
+        try {
+          canvas.setPointerCapture(event.pointerId);
+        } catch (why) {
+          // A pointer the page made up (a test's) cannot be captured.
+        }
+        if (audio && audio.state === "suspended") audio.resume();
+        pointer(1)(event);
         event.preventDefault();
-      },
-      { passive: false },
-    );
+        touched = event.pointerType === "touch";
+        if (!touched) focusTyping();
+      });
+      canvas.addEventListener("pointerup", pointer(2));
+      canvas.addEventListener("pointerleave", pointer(3));
+      canvas.addEventListener("pointercancel", pointer(4));
+      canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+      canvas.addEventListener(
+        "wheel",
+        (event) => {
+          const at = within(event);
+          send({ type: "wheel", x: at.x, y: at.y, dx: event.deltaX, dy: event.deltaY, mode: event.deltaMode, held: held(event) });
+          event.preventDefault();
+        },
+        { passive: false },
+      );
+    }
 
     // A key that writes text goes as a key and, through the textarea, as
     // text; the others (and shortcuts) only as a key. Ctrl+V waits for the
@@ -331,8 +426,10 @@
       send({ type: "key", down: true, key: key.key, code: key.code, held: key.held });
       send({ type: "key", down: false, key: key.key, code: key.code, held: key.held });
     });
-    canvas.tabIndex = 0;
-    canvas.addEventListener("focus", focusTyping);
+    if (takesInput) {
+      canvas.tabIndex = 0;
+      canvas.addEventListener("focus", focusTyping);
+    }
 
     function asked(type, extra) {
       return started.then(
@@ -346,13 +443,30 @@
     }
 
     return {
-      worker,
+      get worker() {
+        return worker;
+      },
       canvas,
       started,
       step: (step) => asked("step", { step }),
       shot: () => asked("shot", {}),
+      // Starts the program again from new files (a URL of files.json) on the same canvas, with
+      // choices that win over the kept ones (`chosen`, as the option): null, or why it could not.
+      reload: (files, chosen) => asked("reload", { files: page(files), choices: Object.assign(readKept(choicesKey), chosen || options.chosen || {}) }),
+      layout: () => asked("layout", {}),
+      // Ends it: no more frames, no more requests.
+      stop: () => {
+        stopped = true;
+        if (worker) worker.terminate();
+        if (watching) watching.disconnect();
+        window.removeEventListener("resize", resized);
+        if (dark && dark.removeEventListener) dark.removeEventListener("change", darkened);
+        typing.remove();
+      },
     };
   }
+
+  window.ClarityUiPage = { start };
 
   function boot() {
     const canvas = document.getElementById("clarity-ui");

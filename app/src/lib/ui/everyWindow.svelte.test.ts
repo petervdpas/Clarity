@@ -1,7 +1,7 @@
 // A guard for the IDE: every window of every example opens in the designer
-// and in the preview without an error, as the IDE gets them
-// (`clarity spec model --samples`). A part the designer cannot draw, such as
-// two parts with the same key, fails here and not in front of the person.
+// without an error, as the IDE gets them (`clarity spec model --samples`):
+// its lists, inspector and layer. The window itself is drawn by Clarity.UI
+// (DESIGN 8.1), whose markup every example is read with in its own tests.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
@@ -12,7 +12,6 @@ import { findApp } from "@clarity/ui/screen/frame.ts";
 import type { Preview } from "@clarity/ui/generated/Preview.ts";
 import PageDesigner from "../PageDesigner.svelte";
 import { appAsPage } from "@clarity/ui/screen/pages.ts";
-import PageView from "../PageView.svelte";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: async () => null }));
 globalThis.ResizeObserver ??= class {
@@ -50,13 +49,12 @@ function draws(part: Component<never>, props: Record<string, unknown>) {
 }
 
 for (const example of examples) {
-  test(`every window of ${example} opens in the designer and the preview`, () => {
+  test(`every window of ${example} opens in the designer`, () => {
     const preview = previewOf(example);
     const app = findApp(preview);
     for (const file of preview.project.files) {
       for (const page of file.pages) {
         draws(PageDesigner as Component<never>, { preview, page, file, onapplied: () => {} });
-        draws(PageView as Component<never>, { preview, page, onnavigate: () => {} });
       }
       if (app && file.apps.some((a) => a.name.name === app.name.name)) {
         draws(PageDesigner as Component<never>, { preview, page: appAsPage(app), app, file, onapplied: () => {} });

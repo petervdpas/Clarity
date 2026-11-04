@@ -1,4 +1,4 @@
-//! How Emscripten links the browser program: a module the worker loads
+//! How Emscripten links the browser program: a module the worker (or the page) loads
 //! (`ClarityUi`), WebGL2, the worker's functions the host imports
 //! (js/library.js) and the entry points the worker calls.
 
@@ -7,6 +7,8 @@ const EXPORTED: &[&str] = &[
     "_malloc",
     "_free",
     "_clarity_ui_start",
+    "_clarity_ui_reload",
+    "_clarity_ui_layout",
     "_clarity_ui_resize",
     "_clarity_ui_dark",
     "_clarity_ui_pointer",
@@ -34,7 +36,8 @@ fn main() {
     let args = [
         "-sMODULARIZE=1".to_string(),
         "-sEXPORT_NAME=ClarityUi".to_string(),
-        "-sENVIRONMENT=worker".to_string(),
+        // A worker, or the page itself where a worker cannot draw with WebGL2 (WebKitGTK).
+        "-sENVIRONMENT=web,worker".to_string(),
         "-sALLOW_MEMORY_GROWTH=1".to_string(),
         "-sSTACK_SIZE=2MB".to_string(),
         "-sMIN_WEBGL_VERSION=2".to_string(),

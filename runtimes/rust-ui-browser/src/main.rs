@@ -37,6 +37,22 @@ mod entry {
         }
     }
 
+    /// Starts the program again from new `files` (files.json's text) on the
+    /// same canvas, with the person's `choices` (JSON): NULL, or why it could not.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn clarity_ui_reload(files: *const c_char, choices: *const c_char) -> *mut c_char {
+        match web::reload(text(files), text(choices)) {
+            Ok(()) => std::ptr::null_mut(),
+            Err(why) => given(why),
+        }
+    }
+
+    /// Where the design's parts and grids show, as JSON.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn clarity_ui_layout() -> *mut c_char {
+        given(web::layout())
+    }
+
     #[unsafe(no_mangle)]
     pub extern "C" fn clarity_ui_resize(width: f64, height: f64, scale: f64) {
         web::resize(width, height, scale as f32);

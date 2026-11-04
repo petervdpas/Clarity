@@ -270,3 +270,71 @@ pub fn starter(part: &PartDecl) -> Vec<(String, String)> {
         (format!("{}/{n}.h", native::OWN_FOLDER), header(part)),
     ]
 }
+
+/// The functions `clarity/<Name>.h` asks the part's library to define:
+/// each name and its line, read from the header itself.
+fn asked(part: &PartDecl) -> Vec<(String, String)> {
+    let text = header(part);
+    let ours = text.split("// Called by the part").next().unwrap_or_default();
+    ours.lines()
+        .filter(|l| !l.starts_with("//") && !l.starts_with("typedef") && l.ends_with(");"))
+        .filter_map(|l| {
+            let name = l[..l.find('(')?].rsplit(|c: char| !crate::part_code::is_ident(c)).next()?.to_string();
+            Some((name, l.trim_end_matches(';').to_string()))
+        })
+        .collect()
+}
+
+/// The names of the header of the part host of native windows, which C and
+/// C++ parts implemented before they drew on Clarity.UI, and what takes each
+/// one's place.
+pub(crate) fn old_api(part: &PartDecl) -> Vec<(String, String)> {
+    let n = &part.name.name;
+    let mut out = vec![
+        (format!("{n}Host"), format!("the part tells its window through the cx of each call ({n}_changed(cx, ..) or a tell)")),
+        (format!("{n}_resize"), format!("{n}_draw gets its box with every call")),
+        (format!("{n}_frame"), format!("Clarity.UI calls {n}_draw when it draws; ask for frames with clarity_custom_animate")),
+        (format!("{n}_set_enabled"), format!("{n}_show_enabled")),
+        (format!("{n}_set_value"), format!("{n}_show_value")),
+    ];
+    for property in &part.properties {
+        let p = &property.name.name;
+        out.push((format!("{n}_set_{p}"), format!("{n}_show_{p}")));
+    }
+    out
+}
+
+/// Where each name of the old part host's header is still used in `code`.
+pub(crate) fn old_api_uses(part: &PartDecl, code: &[crate::part_code::Source]) -> Vec<String> {
+    let n = &part.name.name;
+    let mut found = Vec::new();
+    for (name, instead) in old_api(part) {
+        if let Some((k, at)) = crate::part_code::uses_name(code, &name) {
+            found.push(format!("custom part {n}: {} uses {name}, which Clarity no longer has: {instead}", code[k].at(at)));
+        }
+    }
+    found
+}
+
+/// What a C part's own code lacks of `clarity/<Name>.h`, or still uses that
+/// Clarity no longer has, read from its code without building it.
+pub fn code_mismatches(project: &Project) -> Vec<String> {
+    use crate::part_code::{Lang, defines, sources};
+    let own = format!("{}/", native::OWN_FOLDER);
+    let mut found = Vec::new();
+    for p in parts(project) {
+        let n = &p.name.name;
+        let code = sources(project, p, Lang::C, |path| (path.ends_with(".c") || path.ends_with(".h")) && !path.starts_with(&own));
+        let defining: Vec<&crate::part_code::Source> = code.iter().filter(|s| s.path.ends_with(".c")).collect();
+        if defining.is_empty() {
+            continue;
+        }
+        for (name, line) in asked(p) {
+            if !defining.iter().any(|s| defines(&s.code, &name).is_some()) {
+                found.push(format!("custom part {n}: none of its .c files defines {name}, which clarity/{n}.h asks: write {line} {{ .. }}"));
+            }
+        }
+        found.extend(old_api_uses(p, &code));
+    }
+    found
+}

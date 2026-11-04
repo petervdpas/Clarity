@@ -127,6 +127,10 @@ fn clarity_s_own_theme_is_the_base_every_theme_starts_from() {
         "  --button-bg: var(--panel-alt);\n",
         "  --button-hover-border: var(--accent);\n",
         "  --header-weight: 600;\n",
+        // As the IDE's own pages: a small table header, the open tab in the soft accent, the others plain.
+        "  --header-size: 12px;\n",
+        "  --tab-bg: transparent;\n",
+        "  --tab-selected-bg: var(--accent-soft);\n",
         // The base applies the values to the application itself.
         "  color: var(--text);\n",
         "  font-family: var(--font);\n",

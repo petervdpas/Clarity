@@ -69,7 +69,7 @@ pub struct AccordionPart {
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
     let columns = container::columns_of(&spec);
     let count = spec.pages.len();
-    let shared = Rc::new(Shared { part: PartBase::new(spec.clone(), host.clone()), here: Cell::new(1), count });
+    let shared = Rc::new(Shared { part: PartBase::new(spec.clone(), host.clone()), here: Cell::new(crate::markup::design_shown(&spec)), count });
     let mut base = PartBase::new(spec.clone(), host.clone());
     for (i, page) in spec.pages.iter().enumerate() {
         let number = i as i64 + 1;
@@ -84,7 +84,7 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         base.node.add(Box::new(header));
     }
     for page in &spec.pages {
-        base.node.add(Box::new(Page::new(Box::new(container::grid_of(&page.children, columns, GAP, &host)))));
+        base.node.add(Box::new(Page::new(Box::new(container::grid_of(&page.children, columns, GAP, &host).owned(page.item.as_deref())))));
     }
     Box::new(AccordionPart { base, shared, look: Cell::new(LookNow::default()) })
 }

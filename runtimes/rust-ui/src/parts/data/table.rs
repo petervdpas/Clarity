@@ -1104,7 +1104,7 @@ impl TablePart {
         let look = p.look;
         let shown = look.part("header", None);
         p.fill(header, shown.background.unwrap_or_else(|| look.color("raised")), 0.0);
-        p.fill(Rect { y: header.bottom() - look.border(), height: look.border(), ..header }, look.color("border"), 0.0);
+        p.fill(Rect { y: header.bottom() - look.border(), height: look.border(), ..header }, shown.border.unwrap_or_else(|| look.color("border")), 0.0);
         let lefts = self.lefts(self.header_row().x);
         let pad = look.padding() * 2.0;
         let size = shown.size.map(|s| s as f64).unwrap_or_else(|| look.size("text"));

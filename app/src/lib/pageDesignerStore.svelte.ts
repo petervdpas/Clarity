@@ -1,5 +1,5 @@
 // State of the page designer: selection and pointer-driven dragging on the
-// snap grid. A drag is a new widget from the palette, a field from the data
+// snap grid, over the window Clarity.UI draws (the design layer, DesignLayer.svelte). A drag is a new widget from the palette, a field from the data
 // list, a widget being moved, or a widget being resized. While dragging, the
 // pointer is translated into a cell of the innermost grid under it.
 
@@ -12,9 +12,16 @@ import type { WidgetProps } from "@clarity/ui/generated/WidgetProps.ts";
 import { GAP, rowAt } from "@clarity/ui/screen/pages.ts";
 
 
-// The drag and drop shapes are the screen package's, which the grid reads.
-export type { PageDragSource, Placement } from "@clarity/ui/screen/designer.svelte.ts";
-import type { Designer, PageDragSource, Placement } from "@clarity/ui/screen/designer.svelte.ts";
+/** What is dragged onto the window: a new part, a field, a part moved or sized, or a frame region. */
+export type PageDragSource =
+  | { kind: "new"; widget: WidgetKind; width: number; height: number; label: string; part?: string }
+  | { kind: "field"; widget: WidgetKind; bind: string; caption: string; width: number; height: number; label: string }
+  | { kind: "move"; item: number; from: number; props: WidgetProps; grab: { dc: number; dr: number }; label: string }
+  | { kind: "resize"; item: number; props: WidgetProps; label: string }
+  | { kind: "region"; region: RegionKind; docks: Dock[]; label: string };
+
+/** Where a drop would land: a container and the rectangle in its grid. */
+export type Placement = { container: number; columns: number; col: number; row: number; width: number; height: number };
 
 /** What the text panel shows of a window: its design or its code behind. */
 export type PanelView = "design" | "code";
@@ -23,7 +30,7 @@ const DRAG_THRESHOLD = 4;
 
 type Pending = { source: PageDragSource; x: number; y: number; onclick: () => void };
 
-class PageDesigner implements Designer {
+class PageDesigner {
   selected = $state<number | null>(null);
   activeTabs = $state<Record<number, number>>({});
   error = $state<string | null>(null);
@@ -169,15 +176,19 @@ class PageDesigner implements Designer {
   #gridAt(x: number, y: number, source: Exclude<PageDragSource, { kind: "region" }>): HTMLElement | null {
     if (!this.#canvas) return null;
     if (source.kind === "resize") {
-      // A resize stays in the widget's own container.
-      const widget = this.#canvas.querySelector(`[data-widget="${source.item}"]`);
-      return widget?.parentElement?.closest<HTMLElement>("[data-grid]") ?? null;
+      // A resize stays in the widget's own container, which its box on the design layer names.
+      const widget = this.#canvas.querySelector<HTMLElement>(`[data-widget="${source.item}"]`);
+      const container = widget?.dataset.container;
+      return container ? this.#canvas.querySelector<HTMLElement>(`[data-grid="${container}"]`) : null;
     }
-    const moving = source.kind === "move" ? source.item : null;
-    for (const el of document.elementsFromPoint(x, y)) {
-      const grid = el.closest<HTMLElement>("[data-grid]");
-      if (!grid || !this.#canvas.contains(grid)) continue;
-      if (moving !== null && grid.closest(`[data-widget="${moving}"]`)) continue;
+    const moving = source.kind === "move" ? String(source.item) : null;
+    // The innermost grid under the pointer: the layer lays them out over each other, the inner ones last.
+    const grids = [...this.#canvas.querySelectorAll<HTMLElement>("[data-grid]")].reverse();
+    for (const grid of grids) {
+      const at = grid.getBoundingClientRect();
+      if (x < at.left || x > at.right || y < at.top || y > at.bottom) continue;
+      // A part never goes into itself.
+      if (moving !== null && (grid.dataset.inside ?? "").split(" ").includes(moving)) continue;
       return grid;
     }
     return null;

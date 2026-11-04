@@ -68,6 +68,13 @@ fn json_of(text: &str) -> String {
 /// "width", "height", "windows", "apps", "themes", "model", "resources"}`),
 /// windows and themes in the project's order, the light theme before the dark.
 pub fn files_json(project: &Project, settings: &Settings) -> String {
+    let size = crate::main_window(project).map_or((clarity_spec::layout::WINDOW_WIDTH, clarity_spec::layout::WINDOW_HEIGHT), |main| crate::window_size(project, &main));
+    files_json_as(project, &clarity_project::title(settings), size)
+}
+
+/// `files_json` with its title and size given: the IDE's preview and
+/// designer show any window of the project (`crate::preview`).
+pub fn files_json_as(project: &Project, title: &str, (width, height): (u32, u32)) -> String {
     let markup = |files: Vec<OutFile>, folder: &str| -> String {
         object(files.into_iter().filter_map(|f| {
             let name = f.path.strip_prefix(folder)?.strip_prefix('/')?.strip_suffix(".cxaml")?.to_string();
@@ -82,9 +89,8 @@ pub fn files_json(project: &Project, settings: &Settings) -> String {
             .filter_map(|f| Some((f.path.strip_prefix("themes/")?.strip_suffix(".json")?.to_string(), json_of(&f.text)))),
     );
     let resources: Vec<Value> = project.resources.iter().flat_map(|r| &r.files).map(|f| Value::String(f.name.clone())).collect();
-    let (width, height) = crate::main_window(project).map_or((clarity_spec::layout::WINDOW_WIDTH, clarity_spec::layout::WINDOW_HEIGHT), |main| crate::window_size(project, &main));
     object([
-        ("title".to_string(), Value::String(clarity_project::title(settings)).to_string()),
+        ("title".to_string(), Value::String(title.to_string()).to_string()),
         ("width".to_string(), width.to_string()),
         ("height".to_string(), height.to_string()),
         ("windows".to_string(), windows),

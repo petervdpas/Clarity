@@ -17,7 +17,7 @@ pub struct ButtonsPart {
 }
 
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
-    let mut grid = container::grid_of(&spec.children, container::columns_of(&spec), 0.0, &host);
+    let mut grid = container::grid_of(&spec.children, container::columns_of(&spec), 0.0, &host).owned(spec.text(crate::markup::DESIGN_ITEM));
     // Its pushes in the order they stand, left to right: the first is round on the left, the last on the right.
     let mut order: Vec<(f64, usize)> = spec.children.iter().enumerate().map(|(i, c)| (c.number("col").unwrap_or(1.0), i)).collect();
     order.sort_by(|a, b| a.0.total_cmp(&b.0));

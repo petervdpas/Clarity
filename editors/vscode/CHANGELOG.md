@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.28
+
+- Colors the words it lacked: `port` (the project's web port), `editable`, `grows` and `keys`.
+
 ## 0.1.27
 
 - Colors `frame`, the option that gives a list, table or tree its own border inside a container.

@@ -163,3 +163,59 @@ pub fn files(project: &Project) -> Vec<crate::OutFile> {
     }
     files
 }
+
+/// Types of Clarity.UI that are gone (the drawing and browser assemblies
+/// before Clarity.UI was one library), which an adapter may still name.
+const REMOVED_TYPES: [&str; 5] = ["CustomPlace", "PartSpec", "WindowMarkup", "ShapedText", "PartKinds"];
+
+/// Members of the old CustomPart an adapter may still override.
+const REMOVED_OVERRIDES: [&str; 2] = ["Arrange", "Made"];
+
+/// Namespaces that are gone.
+const REMOVED_NAMESPACES: [&str; 2] = ["Clarity.Ui.Browser", "Clarity.Ui.Drawing"];
+
+/// What a .NET part's adapter lacks of `<Name>.g.cs`, or still uses that
+/// Clarity.UI no longer has, read from its code without building it.
+pub fn code_mismatches(project: &Project) -> Vec<String> {
+    use crate::part_code::{Lang, after, before, find_word, sources, uses_name};
+    let mut found = Vec::new();
+    for p in dotnet_parts(project) {
+        let n = &p.name.name;
+        let half = format!("{n}.g.cs");
+        let code = sources(project, p, Lang::CSharp, |path| path.ends_with(".cs") && path != half);
+        if code.is_empty() {
+            continue;
+        }
+        for show in shows(project, p) {
+            let name = crate::part_code::first_word(&show);
+            let written = code.iter().any(|s| find_word(&s.code, name).into_iter().any(|at| before(&s.code, at).ends_with("void") && after(&s.code, at + name.len()).starts_with('(')));
+            if !written {
+                found.push(format!("custom part {n}: its adapter {n}.cs does not write {name}, which {half} asks: write private partial void {show} {{ .. }}"));
+            }
+        }
+        for name in REMOVED_TYPES {
+            if let Some((k, at)) = uses_name(&code, name) {
+                found.push(format!("custom part {n}: {} uses {name}, which Clarity.UI no longer has: a part is a CustomPart that draws itself (Draw)", code[k].at(at)));
+            }
+        }
+        for source in &code {
+            for name in REMOVED_OVERRIDES {
+                let line_of = |at: usize| source.code[..at].rsplit('\n').next().unwrap_or_default().to_string();
+                if let Some(at) = find_word(&source.code, name).into_iter().find(|&at| !find_word(&line_of(at), "override").is_empty() && after(&source.code, at + name.len()).starts_with('(')) {
+                    found.push(format!("custom part {n}: {} overrides {name}, which CustomPart no longer has: Clarity.UI places the part (Bounds)", source.at(at)));
+                }
+            }
+            for space in REMOVED_NAMESPACES {
+                // `Clarity.Ui.Browser`, spaces between its names or not, and not a longer name.
+                let names = |at: usize| {
+                    let flat: String = source.code[at..].chars().filter(|c| !c.is_whitespace()).take(space.len() + 1).collect();
+                    flat.starts_with(space) && !flat[space.len()..].starts_with(crate::part_code::is_ident)
+                };
+                if let Some(at) = find_word(&source.code, "Clarity").into_iter().find(|&at| names(at)) {
+                    found.push(format!("custom part {n}: {} names {space}, which Clarity.UI no longer has: write using Clarity.Ui;", source.at(at)));
+                }
+            }
+        }
+    }
+    found
+}

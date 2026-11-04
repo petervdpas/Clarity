@@ -1208,10 +1208,10 @@ theme Shop
 | `radius n`, `radius input n`, `radius button n`, `radius panel n` | Corner radii in pixels: of everything, or of one kind. |
 | `padding n`, `border n` | The space inside inputs and buttons, and the width of borders, in pixels. |
 | `shadow none`, `shadow flat`, `shadow raised` | The shadow under menus, popups and messages. |
-| `part kind [state] look` | How a kind of part looks: `button`, `input`, `header` (of a table), `tab`, `menu`, `list` (its frame and rows), `card` (a row of a list with `cards`) or `card_line` (the lines under a card's title); with `hover`, `pressed` or `focus`, in that state, and a list, card or card line with `selected`, as the row chosen. A card's padding and the gap between cards follow the theme's `padding`. |
+| `part kind [state] look` | How a kind of part looks: `button`, `input`, `header` (of a table), `tab`, `menu`, `list` (its frame and rows), `card` (a row of a list with `cards`) or `card_line` (the lines under a card's title); with `hover`, `pressed` or `focus`, in that state, and a list, card or card line with `selected`, as the row chosen, a tab with `selected` as the one open. A card's padding and the gap between cards follow the theme's `padding`. |
 | `style name look` | A named style that parts pick with `style name`. |
 
-A look (of a part or a style) sets `background`, `text` and `border` to a color of the theme by name or written out (a border can be `none`), `radius n`, and `weight bold` or `weight normal`, separated by commas. A style also sets how its text shows: `size n` in pixels (6 to 200), `font` with a font of the theme (`text`, `heading` or `mono`), and `align left`, `align center` or `align right`; aligned text keeps an input's padding from the edge. A calculator's display:
+A look (of a part or a style) sets `background`, `text` and `border` to a color of the theme by name or written out (a background or border can be `none`), `radius n`, `weight bold` or `weight normal`, and `size n`, the text size in pixels (6 to 200), separated by commas. A style also sets how its text shows: `font` with a font of the theme (`text`, `heading` or `mono`), and `align left`, `align center` or `align right`; aligned text keeps an input's padding from the edge. A calculator's display:
 
 ```clarity
 theme Calculator

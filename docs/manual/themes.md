@@ -4,7 +4,7 @@ How to change the look of an application with themes: colors, fonts, sizes, part
 
 ## Clarity's own theme
 
-Every application starts from Clarity's own look, the built-in theme `Clarity`. It sets every value: colors for light and dark mode, fonts, sizes, corner radii, spacing, borders, a shadow, and the look of each kind of part in its states. It follows the system's light or dark mode.
+Every application starts from Clarity's own look, the built-in theme `Clarity`. It sets every value: colors for light and dark mode, fonts, sizes, corner radii, spacing, borders, a shadow, and the look of each kind of part in its states. It follows the system's light or dark mode, and looks like the Clarity IDE itself.
 
 A theme of your own sets only what it changes; the rest stays Clarity's. Without any theme, the application looks as Clarity does, and parts cannot have a `style`.
 
@@ -35,7 +35,7 @@ theme Shop
 - `font`, `font heading`, `font mono`: lists of font families.
 - `size`, `size small`, `size heading`: text sizes in pixels.
 - `radius`, and `radius input`, `radius button` or `radius panel` for one kind; `padding`, `border`; `shadow none`, `flat` or `raised`.
-- `part kind [state] look` changes a kind of part: `button`, `input`, `header` (of a table), `tab`, `menu`, `list`, `card` or `card_line`, optionally in the state `hover`, `pressed` or `focus`. A list, a card and a card line also have `selected`, the row chosen. A list with **Cards** shows each row as a `card`, its title in the card's text and weight, the lines under it as `card_line`:
+- `part kind [state] look` changes a kind of part: `button`, `input`, `header` (of a table), `tab`, `menu`, `list`, `card` or `card_line`, optionally in the state `hover`, `pressed` or `focus`. A list, a card and a card line also have `selected`, the row chosen; a tab has `selected` for the one open. A list with **Cards** shows each row as a `card`, its title in the card's text and weight, the lines under it as `card_line`:
 
 ```
     part card background panel, border border, radius 8
@@ -45,9 +45,9 @@ theme Shop
 ```
 - `style name look` declares a named style.
 
-A look sets `background`, `text` and `border` to a theme color by name or written out (a border can be `none`), `radius n`, and `weight bold` or `weight normal`, separated by commas.
+A look sets `background`, `text` and `border` to a theme color by name or written out (a background or border can be `none`), `radius n`, `weight bold` or `weight normal`, and `size n`, its text size in pixels, separated by commas.
 
-A style also sets how its text shows: `size n` in pixels, `font text`, `font heading` or `font mono` (a font of the theme), and `align left`, `center` or `right`. Aligned text keeps an input's padding from the edge. A calculator's display, large and on the right in an LCD green:
+A style also sets how its text shows: `font text`, `font heading` or `font mono` (a font of the theme), and `align left`, `center` or `right`. Aligned text keeps an input's padding from the edge. A calculator's display, large and on the right in an LCD green:
 
 ```clarity
 theme Calculator

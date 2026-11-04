@@ -85,6 +85,175 @@ pub fn package_of(project: &Project, part: &str) -> String {
         .unwrap_or_else(|| snake(part))
 }
 
+/// The crates of Clarity's that a part may name, with the version the program is built on.
+fn clarity_crates() -> [(&'static str, &'static str); 2] {
+    [("clarity-ui", super::ui_version()), ("clarity-runtime", super::runtime_version())]
+}
+
+/// The version requirement of `krate` in a Cargo.toml line, if the line names it with one.
+fn requirement<'a>(line: &'a str, krate: &str) -> Option<&'a str> {
+    let (key, value) = line.split_once('=')?;
+    if key.trim() != krate {
+        return None;
+    }
+    let value = value.trim();
+    // `x = "0.2.0"` or `x = { version = "0.2.0", ... }`; a path or git one is the person's own.
+    if value.starts_with('{') { value.split("version").nth(1)?.split('"').nth(1) } else { Some(value.trim_matches('"')) }
+}
+
+/// `manifest` with its lines of Clarity's own crates (clarity-ui,
+/// clarity-runtime) naming the versions the program is built on, where a line
+/// names one Cargo would not share with it; none when nothing needs a change.
+pub fn with_ui_version(manifest: &str) -> Option<String> {
+    let mut changed = false;
+    let lines: Vec<String> = manifest
+        .lines()
+        .map(|line| {
+            for (krate, version) in clarity_crates() {
+                if let Some(wanted) = requirement(line, krate) {
+                    if !ui_accepts(wanted, version) {
+                        changed = true;
+                        return line.replacen(&format!("\"{wanted}\""), &format!("\"{version}\""), 1);
+                    }
+                }
+            }
+            line.to_string()
+        })
+        .collect();
+    changed.then(|| {
+        let mut text = lines.join("\n");
+        if manifest.ends_with('\n') {
+            text.push('\n');
+        }
+        text
+    })
+}
+
+/// Whether Cargo takes `version` for the requirement `wanted`, as a caret
+/// requirement does: the same first number that is not 0 (0.1 and 0.2 differ).
+pub fn ui_accepts(wanted: &str, version: &str) -> bool {
+    let wanted = wanted.trim().trim_start_matches(['^', '=', '~']).trim();
+    let numbers = |v: &str| v.split('.').map(|n| n.trim().parse::<u64>().ok()).collect::<Option<Vec<_>>>();
+    let (Some(w), Some(v)) = (numbers(wanted), numbers(version)) else { return true };
+    let significant = w.iter().position(|n| *n != 0).unwrap_or(w.len().saturating_sub(1));
+    w.iter().zip(&v).take(significant + 1).all(|(a, b)| a == b) && v >= w
+}
+
+/// The parts whose Cargo.toml names a crate of Clarity's (clarity-ui,
+/// clarity-runtime) or Skia (skia-safe) at a version the program cannot share:
+/// Cargo would build two of them, and the part would not be the program's kind
+/// of part (or two Skias would link into one program).
+pub fn ui_mismatches(project: &Project) -> Vec<String> {
+    let skia = super::ui_skia_version();
+    let mut found = Vec::new();
+    for p in crate_parts(project) {
+        let n = &p.name.name;
+        let Some(manifest) = project.part_files.iter().flatten().find(|f| &f.part == n && f.path == "Cargo.toml") else { continue };
+        let text = String::from_utf8_lossy(&manifest.bytes);
+        for line in text.lines() {
+            for (krate, version) in clarity_crates() {
+                if let Some(wanted) = requirement(line, krate).filter(|w| !ui_accepts(w, version)) {
+                    found.push(format!("custom part {n} names {krate} {wanted} in its Cargo.toml, but the program is built on {krate} {version}: write {krate} = \"{version}\" there"));
+                }
+            }
+            if let Some(wanted) = requirement(line, "skia-safe").filter(|w| !ui_accepts(w, skia)) {
+                found.push(format!("custom part {n} names skia-safe {wanted} in its Cargo.toml, but Clarity.UI draws with skia-safe {skia}: use clarity_ui::skia_safe instead, or write skia-safe = \"{skia}\""));
+            }
+        }
+    }
+    found
+}
+
+/// The methods of trait `<Name>Part` in `src/clarity.rs`: each name, its
+/// line, and whether the part must write it (it has no body there).
+fn trait_methods(part: &PartDecl) -> Vec<(String, String, bool)> {
+    let text = ui_interface(part);
+    let head = format!("pub trait {}Part", part.name.name);
+    let Some(start) = text.find(&head) else { return Vec::new() };
+    let body = &text[start..];
+    let body = &body[..body.find("\n}\n").unwrap_or(body.len())];
+    body.lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            let rest = line.strip_prefix("fn ")?;
+            let name = crate::part_code::first_word(rest).to_string();
+            Some((name, line.trim_end_matches([';', '{']).trim().to_string(), line.ends_with(';')))
+        })
+        .collect()
+}
+
+/// What Clarity no longer has that a Rust part's code may still use: the
+/// name, and what takes its place.
+fn removed(part: &PartDecl) -> Vec<(String, String)> {
+    let n = &part.name.name;
+    vec![(format!("{n}Host"), format!("the part tells its window through cx: cx.changed(..) or a tell of {n}Tells"))]
+}
+
+/// What a Rust part's own code lacks of `src/clarity.rs`, or still uses that
+/// Clarity no longer has, read from its code without building it.
+pub fn code_mismatches(project: &Project) -> Vec<String> {
+    use crate::part_code::{Lang, after, before, close, find_word, first_word, sources, uses_name};
+    let mut found = Vec::new();
+    for p in crate_parts(project) {
+        let n = &p.name.name;
+        let code = sources(project, p, Lang::Rust, |path| path.ends_with(".rs") && path != "src/clarity.rs");
+        if code.is_empty() {
+            continue;
+        }
+        let methods = trait_methods(p);
+        let trait_name = format!("{n}Part");
+        // Each `impl <Name>Part for T { .. }`: the file, where, and the fns it writes.
+        let mut impls = Vec::new();
+        for source in &code {
+            for at in find_word(&source.code, &trait_name) {
+                // `impl`, `impl<T>` or `impl clarity::` before the name.
+                let mut b = before(&source.code, at);
+                while let Some(rest) = b.strip_suffix("::") {
+                    b = rest.trim_end().trim_end_matches(crate::part_code::is_ident).trim_end();
+                }
+                let is_impl = b.ends_with("impl") || b.rfind("impl<").is_some_and(|k| b.ends_with('>') && !b[k..].contains([';', '{', '}']));
+                if !is_impl || first_word(after(&source.code, at + trait_name.len())) != "for" {
+                    continue;
+                }
+                let Some(open) = source.code[at..].find('{').map(|k| at + k) else { continue };
+                let Some(end) = close(&source.code, open) else { continue };
+                let block = &source.code[open..end];
+                // The block's own fns, not those inside a method.
+                let depth = |k: usize| block[..k].matches('{').count() - block[..k].matches('}').count();
+                let fns: Vec<(String, usize)> = find_word(block, "fn").into_iter().filter(|&k| depth(k) == 1).map(|k| (first_word(after(block, k + 2)).to_string(), open + k)).filter(|(name, _)| !name.is_empty()).collect();
+                impls.push((source, at, fns));
+            }
+        }
+        if impls.is_empty() {
+            found.push(format!("custom part {n}: no type of its crate implements {trait_name} (src/clarity.rs): write impl {trait_name} for {n} {{ .. }} in src/lib.rs"));
+        }
+        for (source, at, fns) in &impls {
+            for (name, line, required) in &methods {
+                if *required && !fns.iter().any(|(f, _)| f == name) {
+                    found.push(format!("custom part {n}: {} impl {trait_name} lacks {name}: write {line} {{ .. }}", source.at(*at)));
+                }
+            }
+            for (name, k) in fns {
+                if !methods.iter().any(|(m, _, _)| m == name) {
+                    found.push(format!("custom part {n}: {} fn {name} is not a method of {trait_name} (src/clarity.rs) any more: remove it or move it to another impl", source.at(*k)));
+                }
+            }
+        }
+        for (name, instead) in removed(p) {
+            if let Some((k, at)) = uses_name(&code, &name) {
+                found.push(format!("custom part {n}: {} uses {name}, which Clarity no longer has: {instead}", code[k].at(at)));
+            }
+        }
+        // The runtime's part host of native windows is gone.
+        for source in &code {
+            if let Some(at) = find_word(&source.code, "clarity_runtime").into_iter().find(|&at| after(&source.code, at + "clarity_runtime".len()).strip_prefix("::").is_some_and(|r| first_word(r.trim_start()) == "parts")) {
+                found.push(format!("custom part {n}: {} uses clarity_runtime::parts, which Clarity no longer has: implement {trait_name} of src/clarity.rs, a control of Clarity.UI", source.at(at)));
+            }
+        }
+    }
+    found
+}
+
 // -- On Clarity.UI (DESIGN 7.9) ---------------------------------------------
 //
 // A part of a program on Clarity.UI is a control drawn on Clarity.UI's own
@@ -429,4 +598,41 @@ pub fn ui_glue(project: &Project) -> String {
         let _ = writeln!(registers, "    clarity_ui::parts::custom::register({n:?}, {package}::make);");
     }
     format!("// The program's custom parts written in Rust, controls of Clarity.UI (DESIGN 7.9).\n// Generated by Clarity.\n\n/// Tells Clarity.UI about every kind of part the program has, by its name.\npub fn register() {{\n{registers}}}\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ui_accepts, with_ui_version};
+
+    #[test]
+    fn a_parts_clarity_ui_line_follows_the_program() {
+        let version = super::super::ui_version();
+        let old = "[dependencies]\n# Clarity.UI\nclarity-ui = \"0.0.1\"\nbevy = \"0.16\"\n";
+        let new = with_ui_version(old).expect("an old version is changed");
+        assert_eq!(new, format!("[dependencies]\n# Clarity.UI\nclarity-ui = \"{version}\"\nbevy = \"0.16\"\n"));
+        let table = "clarity-ui = { version = \"0.0.1\", features = [] }";
+        assert_eq!(with_ui_version(table).unwrap(), format!("clarity-ui = {{ version = \"{version}\", features = [] }}"));
+        // Already right, or the person's own source: left alone.
+        assert_eq!(with_ui_version(&format!("clarity-ui = \"{version}\"\n")), None);
+        assert_eq!(with_ui_version("clarity-ui = { path = \"../ui\" }"), None);
+        // The runtime follows too.
+        let runtime = super::super::runtime_version();
+        assert_eq!(with_ui_version("clarity-runtime = \"0.0.1\"").unwrap(), format!("clarity-runtime = \"{runtime}\""));
+    }
+
+    #[test]
+    fn a_part_takes_clarity_ui_as_cargo_does() {
+        // 0.x: the minor number decides, as for Cargo's caret requirement.
+        assert!(ui_accepts("0.2.0", "0.2.0"));
+        assert!(ui_accepts("0.2", "0.2.3"));
+        assert!(ui_accepts("^0.2.1", "0.2.4"));
+        assert!(!ui_accepts("0.1.0", "0.2.0"));
+        assert!(!ui_accepts("0.2.5", "0.2.0"));
+        assert!(!ui_accepts("=0.3.0", "0.2.0"));
+        // 1 and up: the major number decides.
+        assert!(ui_accepts("1.0", "1.4.2"));
+        assert!(!ui_accepts("1.0", "2.0.0"));
+        // What it cannot read is left to Cargo.
+        assert!(ui_accepts("*", "0.2.0"));
+    }
 }

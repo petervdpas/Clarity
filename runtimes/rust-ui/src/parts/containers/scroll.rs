@@ -20,7 +20,7 @@ pub struct ScrollPart {
 }
 
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
-    let grid = container::grid_of(&spec.children, container::columns_of(&spec), GAP, &host);
+    let grid = container::grid_of(&spec.children, container::columns_of(&spec), GAP, &host).owned(spec.text(crate::markup::DESIGN_ITEM));
     let mut base = PartBase::new(spec, host);
     base.node.add(Box::new(ScrollView::new(Box::new(grid)).keeping_bar_room()));
     Box::new(ScrollPart { base })

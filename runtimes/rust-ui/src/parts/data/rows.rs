@@ -633,13 +633,26 @@ pub fn draw_drop(p: &Painter, row: Rect, at: DropAt) {
     }
 }
 
+/// How strong the stripe of a striped part's every other row is: the text
+/// color at this alpha, faint on a light look and on a dark one alike.
+pub const STRIPE_ALPHA: u8 = 12;
+
+/// Whether a part draws every other row with a stripe (`striped`).
+pub fn striped(base: &PartBase) -> bool {
+    base.spec.flag("striped")
+}
+
 /// A row's background in the list look: filled while it is chosen or under
-/// the pointer, a line along its bottom; gives the look its text is drawn in.
-pub fn draw_row_back(p: &Painter, row: Rect, state: Option<&str>) -> LookValues {
+/// the pointer, else with a faint stripe of the text color when `stripe`
+/// (every other row of a striped part), a line along its bottom; gives the
+/// look its text is drawn in.
+pub fn draw_row_back(p: &Painter, row: Rect, state: Option<&str>, stripe: bool) -> LookValues {
     let look = p.look;
     let shown = look.part("list", state);
-    if let Some(state) = state {
-        p.fill(row, shown.background.unwrap_or_else(|| look.color(if state == "selected" { "selection" } else { "accent_soft" })), 0.0);
+    match state {
+        Some(state) => p.fill(row, shown.background.unwrap_or_else(|| look.color(if state == "selected" { "selection" } else { "accent_soft" })), 0.0),
+        None if stripe => p.fill(row, look.color("text").with_a(STRIPE_ALPHA), 0.0),
+        None => {}
     }
     p.fill(Rect { y: row.bottom() - look.border(), height: look.border(), ..row }, look.color("border"), 0.0);
     shown

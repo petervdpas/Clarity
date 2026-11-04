@@ -193,6 +193,7 @@ fn part_property(property: &str) -> Option<&'static str> {
         "grid" => "Grid",
         "snap" => "Snap",
         "connecting" => "Connecting",
+        "resizable" => "Resizable",
         "background" => "Background",
         "dotSize" => "DotSize",
         "dotColor" => "DotColor",

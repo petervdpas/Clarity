@@ -34,6 +34,9 @@ type PartState struct {
 	// Connecting is whether a press anywhere on a box of a canvas with
 	// `on connect` draws a new line, as a handler set it; nil is false.
 	Connecting *bool `json:"connecting,omitempty"`
+	// Resizable is whether people resize the boxes of a canvas with
+	// `on resize` by their grip, as a handler set it; nil is true.
+	Resizable *bool `json:"resizable,omitempty"`
 	// Background is what a canvas's clear() fills it with, as a handler set
 	// it; empty is the theme's panel.
 	Background *string `json:"background,omitempty"`
@@ -371,6 +374,19 @@ func (u *Ui) Connecting(part string) bool {
 
 func (u *Ui) SetConnecting(part string, value bool) {
 	u.part(part, func(p *PartState) { p.Connecting = &value })
+}
+
+// Resizable is whether people resize a canvas's boxes by their grip:
+// canvas.resizable, true until a handler sets it.
+func (u *Ui) Resizable(part string) bool {
+	if r := u.parts[part].Resizable; r != nil {
+		return *r
+	}
+	return true
+}
+
+func (u *Ui) SetResizable(part string, value bool) {
+	u.part(part, func(p *PartState) { p.Resizable = &value })
 }
 
 // Background is what a canvas's clear() fills it with: canvas.background.

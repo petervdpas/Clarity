@@ -13,8 +13,8 @@ internal sealed class WindowMarkup
     readonly Dictionary<string, string> binds = [];
     readonly List<(string Part, string Event, string Handler)> pointers = [];
 
-    /// <summary>A canvas's pointer events, which the generator writes a command for each (ClickAt_, DragAt_, DropAt_, BendAt_, ConnectAt_).</summary>
-    static readonly string[] PointerEvents = ["click", "drag", "drop", "bend", "connect"];
+    /// <summary>A canvas's pointer events, which the generator writes a command for each (ClickAt_, DragAt_, DropAt_, BendAt_, ConnectAt_, ResizeAt_).</summary>
+    static readonly string[] PointerEvents = ["click", "drag", "drop", "bend", "connect", "resize"];
 
     public static readonly WindowMarkup None = new(null);
 

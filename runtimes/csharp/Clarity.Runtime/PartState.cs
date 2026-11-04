@@ -116,6 +116,14 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     }
     bool connecting;
 
+    /// <summary>Whether people resize the boxes of a canvas with <c>on resize</c> by their grip: <c>canvas.resizable</c>, true until a handler sets it.</summary>
+    public bool Resizable
+    {
+        get => resizable;
+        set => SetProperty(ref resizable, value);
+    }
+    bool resizable = true;
+
     /// <summary>What a canvas's clear() fills it with: <c>canvas.background</c>; empty is the theme's panel.</summary>
     public string Background
     {

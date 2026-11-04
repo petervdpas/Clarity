@@ -513,6 +513,7 @@ internal sealed class ProgramWire : IDesktop
         ["drop"] = "DropAt_",
         ["bend"] = "BendAt_",
         ["connect"] = "ConnectAt_",
+        ["resize"] = "ResizeAt_",
     };
 
     /// <summary>

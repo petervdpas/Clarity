@@ -65,7 +65,7 @@ impl SliderPart {
     pub fn value(&self) -> Option<String> {
         let held = match self.base.bound() {
             Some(path) => self.base.host.read(path),
-            None => Some(Value::String(self.base.state().and_then(|s| s.text).unwrap_or_else(|| self.kept.clone()))),
+            None => Some(Value::String(self.base.state().and_then(|s| s.text.clone()).unwrap_or_else(|| self.kept.clone()))),
         };
         held.as_ref().and_then(Exact::of).map(|e| e.text())
     }

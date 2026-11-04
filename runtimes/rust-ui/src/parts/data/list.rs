@@ -189,9 +189,9 @@ impl ListPart {
         cx.invalidate();
     }
 
-    fn draw_row(&self, p: &Painter, record: &Value, row: Rect, state: Option<&str>) {
+    fn draw_row(&self, p: &Painter, record: &Value, row: Rect, state: Option<&str>, stripe: bool) {
         let look = p.look;
-        let shown = rows::draw_row_back(p, row, state);
+        let shown = rows::draw_row_back(p, row, state, stripe);
         let pad = look.padding();
         let text = Rect { x: row.x + pad * 1.5, width: (row.width - pad * 3.0).max(0.0), height: row.height - look.border(), ..row };
         let size = shown.size.map(|s| s as f64).unwrap_or_else(|| look.size("text"));
@@ -263,6 +263,8 @@ impl Element for ListPart {
                 _ => None,
             };
             let chosen = self.rows.chosen(&self.base);
+            // Cards stand apart, so only rows are striped.
+            let striped = rows::striped(&self.base);
             let (height, gap) = self.row_size(&self.look);
             let (first, end) = self.rows.scroller.in_sight(height + gap, self.rows.records.len());
             for place in first..end {
@@ -278,7 +280,7 @@ impl Element for ListPart {
                 if cards {
                     self.draw_card(p, record, row, state);
                 } else {
-                    self.draw_row(p, record, row, state);
+                    self.draw_row(p, record, row, state, striped && place % 2 == 1);
                 }
                 if let Some((target, at)) = self.rows.drop {
                     if target == place {

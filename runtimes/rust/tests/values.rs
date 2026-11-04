@@ -243,6 +243,20 @@ fn a_canvas_keeps_the_connecting_code_sets() {
     assert_eq!(serde_json::json!(true), serde_json::to_value(&reply.state.parts["sheet"]).unwrap()["connecting"]);
 }
 
+/// A canvas with `on resize` lets people resize its boxes until code sets `resizable` false; true until then.
+#[test]
+fn a_canvas_keeps_the_resizable_code_sets() {
+    use clarity_runtime::ui::{Ui, WindowState};
+    let mut ui = Ui::from_state(&WindowState::default());
+    assert!(ui.resizable("sheet"));
+    let untouched = Ui::from_state(&WindowState::default()).reply("Main", serde_json::Map::new());
+    assert!(untouched.state.parts.get("sheet").is_none_or(|p| p.resizable.is_none()), "true is left out");
+    ui.set_resizable("sheet", false);
+    assert!(!ui.resizable("sheet"));
+    let reply = ui.reply("Main", serde_json::Map::new());
+    assert_eq!(serde_json::json!(false), serde_json::to_value(&reply.state.parts["sheet"]).unwrap()["resizable"]);
+}
+
 /// `copy text`: the reply hands the text to the screen for its clipboard; of several, the last.
 #[test]
 fn a_handler_copies_the_last_text_it_copies() {

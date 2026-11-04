@@ -209,7 +209,7 @@
 
   // What tells through the part: a custom part's declared tells, or its engine's.
   const tellsOffered = $derived(declared?.tells ?? running?.tells ?? []);
-  // The events offered: none to draw a canvas its engine draws, connect only on one its code draws.
+  // The events offered: none to draw a canvas its engine draws, connect and resize only on one its code draws.
   const events = $derived(info && p ? canvasEvents(info.events, p.runs, p.mode) : []);
 
   function setRuns(name: string | null) {
@@ -409,7 +409,14 @@
     {#if info.properties.includes("cards")}
       <label class="prop" title="Each row a small card: the first field shown is its title, the others lines below it">
         <span>Cards</span>
-        <input type="checkbox" checked={p.cards} onchange={(e) => update({ cards: e.currentTarget.checked })} />
+        <input type="checkbox" checked={p.cards} onchange={(e) => update(e.currentTarget.checked ? { cards: true, striped: false } : { cards: false })} />
+      </label>
+    {/if}
+    <!-- Cards stand apart, so a list of cards has no stripes. -->
+    {#if info.properties.includes("striped") && !p.cards}
+      <label class="prop" title="Every other row has a faint stripe; a chosen row shows as without it">
+        <span>Striped rows</span>
+        <input type="checkbox" checked={p.striped} onchange={(e) => update({ striped: e.currentTarget.checked })} />
       </label>
     {/if}
     {#if info.properties.includes("frame")}

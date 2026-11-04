@@ -401,3 +401,44 @@ code Main
     // A canvas with a mode has no boxes its code draws to connect.
     assert_has(&errors(&sheet.replace(" zoom on draw", " zoom mode vector on draw")), "'on connect' draws lines between the boxes");
 }
+
+/// A canvas lets people resize its boxes: with `on resize` a grip shows at
+/// the bottom-right corner of the box under the pointer, dragging it sizes
+/// the box, and the handler runs with where that corner was (`fromX`,
+/// `fromY`) and is now (`x`, `y`). `canvas.resizable` (true until code sets
+/// it) hides the grip.
+#[test]
+fn a_canvas_lets_people_resize_the_boxes_its_code_draws() {
+    let sheet = "module diagram
+
+page Main: window
+    data width: integer
+    data manual: bool
+    canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom on draw: drawSheet on resize: resized
+    button \"Manual\" name manualButton at 7,1 span 2 on click: manualClicked
+
+code Main
+    handler drawSheet
+        sheet.clear()
+        sheet.rect(100, 100, 200, 100, \"raised\")
+
+    handler resized
+        if sheet.fromX > 100 and sheet.fromY > 100
+            width = sheet.x - 100
+
+    handler manualClicked
+        sheet.resizable = not sheet.resizable
+        manual = sheet.resizable
+";
+    let (file, diags) = parse(sheet, "diagram.clarity");
+    assert!(diags.is_empty(), "{diags:#?}");
+    assert_eq!(file.pages[0].widgets[0].props.handlers[1].event, Event::Resize);
+    assert_eq!(widget_line(&file.pages[0].widgets[0].props), "canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom on draw: drawSheet on resize: resized");
+    assert!(errors(sheet).is_empty(), "{:#?}", errors(sheet));
+    assert!(!errors(&sheet.replace("sheet.resizable = not sheet.resizable", "sheet.resizable = 3")).is_empty());
+    assert!(!errors(&sheet.replace("sheet.resizable = not sheet.resizable", "manualButton.resizable = true")).is_empty());
+    // Only a canvas with `on resize` has `resizable`.
+    assert!(!errors(&sheet.replace(" on resize: resized", "")).is_empty());
+    // A canvas with a mode or an engine has no boxes its code draws to resize.
+    assert_has(&errors(&sheet.replace(" zoom on draw", " zoom mode vector on draw")), "'on resize' sizes the boxes");
+}

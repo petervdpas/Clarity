@@ -113,6 +113,8 @@ pub enum Cursor {
     ResizeLeftRight,
     /// An edge dragged up or down.
     ResizeUpDown,
+    /// A corner dragged both ways: a box's grip on a canvas.
+    ResizeCorner,
     Move,
     Crosshair,
     NotAllowed,

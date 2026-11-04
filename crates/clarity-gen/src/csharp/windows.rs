@@ -618,16 +618,16 @@ impl<'a> Window<'a> {
             let _ = write!(events, "    protected override void Redraw()\n    {{\n{body}    }}\n\n");
         }
 
-        // A click, a drag, a drop, a bend or a new line on a canvas: where it was, then its handler.
+        // A click, a drag, a drop, a bend, a new line or a box resized on a canvas: where it was, then its handler.
         for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Canvas) {
             let Some(canvas) = &widget.props.name else { continue };
             let scope = self.undo_scope(&widget.props);
-            for (event, command) in [(Event::Click, "ClickAt"), (Event::Drag, "DragAt"), (Event::Drop, "DropAt"), (Event::Bend, "BendAt"), (Event::Connect, "ConnectAt")] {
+            for (event, command) in [(Event::Click, "ClickAt"), (Event::Drag, "DragAt"), (Event::Drop, "DropAt"), (Event::Bend, "BendAt"), (Event::Connect, "ConnectAt"), (Event::Resize, "ResizeAt")] {
                 let Some(handler) = Self::handler(widget, event) else { continue };
                 let run = format!("Handle(() =>\n    {{\n        {c}.Pointer = at;\n        {}();\n    }}, [at])", on(&handler.handler), c = member(canvas));
-                // A drag, a drop, a bend and a new line are edits Ctrl+Z takes back (DESIGN 5.29); a drag starts one its drop ends.
+                // A drag, a drop, a bend, a new line and a resize are edits Ctrl+Z takes back (DESIGN 5.29); a drag starts one its drop ends.
                 let run = match (&scope, event) {
-                    (Some(scope), Event::Drag | Event::Drop | Event::Bend | Event::Connect | Event::Click) => {
+                    (Some(scope), Event::Drag | Event::Drop | Event::Bend | Event::Connect | Event::Resize | Event::Click) => {
                         format!("EditOf(\"{canvas}\", \"{scope}\", ends: {}, () => {run})", event != Event::Drag)
                     }
                     _ => run,

@@ -19,6 +19,10 @@ settings
     // The grid's dots: how many pixels across, and their color; none keeps the theme's.
     gridDotSize: integer, min 1, max 20, default 2, label @settingsGridDotSizeLabel
     gridDotColor: color, label @settingsGridDotColorLabel
+    // Every other line of a diagram's box a shade darker, as a table's rows.
+    stripedRows: bool, default true, label @settingsStripedRowsLabel
+    // Automatic: a diagram's boxes fit their text. Manual: each box keeps the size it is dragged to.
+    boxSizing: BoxSizing, default Automatic, label @settingsBoxSizingLabel
 
 app Modelling
     title @modellingTitle
@@ -198,15 +202,17 @@ page Diagrams: window
 
     tabs name diagramTabs at 1,1 span 12 rows 11
         tab @diagramsClassDiagramTab
-            canvas name classCanvas at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawClasses on drop: classDropped on bend: classBent on connect: classConnected
+            canvas name classCanvas at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawClasses on drop: classDropped on bend: classBent on connect: classConnected on resize: classResized
                 menu name classMenu
                     item @diagramEditItem name classEditItem on click: classEditClicked
+                    item @diagramRemoveLineItem name classRemoveLineItem on click: classLineRemoved
                     separator
                     item @arrangeCaption name classArrangeItem on click: arrangeClicked
         tab @diagramsEntityRelationshipDiagramTab
-            canvas name erdCanvas at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawEntities on drop: entityDropped on bend: entityBent on connect: entityConnected
+            canvas name erdCanvas at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawEntities on drop: entityDropped on bend: entityBent on connect: entityConnected on resize: entityResized
                 menu name erdMenu
                     item @diagramEditItem name entityEditItem on click: entityEditClicked
+                    item @diagramRemoveLineItem name entityRemoveLineItem on click: entityLineRemoved
                     separator
                     item @arrangeCaption name entityArrangeItem on click: arrangeClicked
     button @arrangeCaption name arrange at 11,12 span 2 tooltip @arrangeTooltip on click: arrangeClicked
@@ -258,7 +264,7 @@ page Versions: window
 page Preferences: dialog
     title @preferencesTitle
 
-    form name settingsForm at 1,1 span 12 rows 11 bind settings labels 3
+    form name settingsForm at 1,1 span 12 rows 13 bind settings labels 3
         dropdown name languageBox at 4,1 span 6 bind settings.language
         folder name exportsFolderBox at 4,2 span 9 bind settings.exportsFolder
         folder name codeFolderBox at 4,3 span 9 bind settings.codeFolder
@@ -270,7 +276,9 @@ page Preferences: dialog
         textbox name apiAddressBox at 4,9 span 6 bind settings.apiAddress
         textbox name apiPathBox at 4,10 span 9 bind settings.apiPath
         password name apiKeyBox at 4,11 span 6 bind settings.apiKey
-    button @closePreferencesCaption name closePreferences at 11,13 span 2 cancel on click -> close
+        checkbox name stripedRowsBox at 4,12 span 6 bind settings.stripedRows
+        dropdown name boxSizingBox at 4,13 span 4 bind settings.boxSizing
+    button @closePreferencesCaption name closePreferences at 11,14 span 2 cancel on click -> close
 
 code Projects
     handler projectsOpened
@@ -606,7 +614,7 @@ code Diagrams
         let top = 20
         for t in types
             if t.x != 0 or t.y != 0
-                let bottom = grid_up(t.y + box_height(count(class_names(t))) + 40)
+                let bottom = grid_up(t.y + class_box_height(t, settings.boxSizing == Manual) + 40)
                 if bottom > top
                     top = bottom
         let left = 20
@@ -614,8 +622,8 @@ code Diagrams
         let placed = false
         for t in types
             if t.x == 0 and t.y == 0
-                let height = box_height(count(class_names(t)))
-                let width = class_width(t)
+                let height = class_box_height(t, settings.boxSizing == Manual)
+                let width = class_box_width(t, settings.boxSizing == Manual)
                 // A row is as wide as its boxes with 40 between them, until the canvas's 4000 units.
                 if left + width > 3980
                     left = 20
@@ -635,7 +643,7 @@ code Diagrams
         let top = 20
         for e in entities
             if e.x != 0 or e.y != 0
-                let bottom = grid_up(e.y + box_height(count(entity_names(e))) + 40)
+                let bottom = grid_up(e.y + entity_box_height(e, settings.boxSizing == Manual) + 40)
                 if bottom > top
                     top = bottom
         let left = 20
@@ -643,8 +651,8 @@ code Diagrams
         let placed = false
         for e in entities
             if e.x == 0 and e.y == 0
-                let height = box_height(count(entity_names(e)))
-                let width = entity_width(e)
+                let height = entity_box_height(e, settings.boxSizing == Manual)
+                let width = entity_box_width(e, settings.boxSizing == Manual)
                 // A row is as wide as its boxes with 40 between them, until the canvas's 4000 units.
                 if left + width > 3980
                     left = 20
@@ -677,6 +685,9 @@ code Diagrams
         erdCanvas.dotSize = settings.gridDotSize
         classCanvas.dotColor = settings.gridDotColor
         erdCanvas.dotColor = settings.gridDotColor
+        // A box's corner grip sizes it only while boxes have a size of their own.
+        classCanvas.resizable = settings.boxSizing == Manual
+        erdCanvas.resizable = settings.boxSizing == Manual
 
     // Every type as a box with its parameters, where it was put, and the lines between them, as Clarity's diagram designer draws them.
     handler drawClasses
@@ -690,8 +701,8 @@ code Diagrams
             names = names + [t.name]
             xs = xs + [t.x]
             ys = ys + [t.y]
-            heights = heights + [box_height(count(class_names(t)))]
-            widths = widths + [class_width(t)]
+            heights = heights + [class_box_height(t, settings.boxSizing == Manual)]
+            widths = widths + [class_box_width(t, settings.boxSizing == Manual)]
         // The lines first; each ends at the edge of its boxes, with what its ends are.
         for t in types
             let from = place_of(names, t.name)
@@ -735,15 +746,23 @@ code Diagrams
         classCanvas.text(x + w / 2, y + 15, title, ink, 13, "center", "bold mono")
         let left = x + 28 + widest(types) * 7
         let line = 1
+        let shaded = false
         for type in types
             let row = y + 41 + (line - 1) * 22
+            // A box sized by hand shows the lines that fit in it.
+            if row + 11 > y + h
+                return
+            // Every other line shaded, a see-through grey on light and dark alike.
+            if shaded and settings.stripedRows
+                classCanvas.rect(x, row - 11, w, 22, "#8080801f")
+            shaded = not shaded
             classCanvas.text(x + 12, row, type, "accent", 11, "left", "mono")
             classCanvas.text(left, row, names[line], "text", 11, "left", "mono")
             line = line + 1
 
     // The canvas carries a box while it is dragged; letting go moves the type it was pressed on by as much.
     handler classDropped
-        let id = class_at(types, classCanvas.fromX, classCanvas.fromY)
+        let id = class_at(types, classCanvas.fromX, classCanvas.fromY, settings.boxSizing == Manual)
         for t in types
             if t.id == id
                 t.x = at_least_zero(t.x + classCanvas.x - classCanvas.fromX)
@@ -751,17 +770,45 @@ code Diagrams
                 save t
         types = find t in ClassType where t.project == project order by t.name
 
+    // A type's box resized by its corner grip: it keeps the new size, the
+    // box found just inside where its bottom-right corner was.
+    handler classResized
+        let id = class_at(types, classCanvas.fromX - 1, classCanvas.fromY - 1, settings.boxSizing == Manual)
+        for t in types
+            if t.id == id
+                t.width = classCanvas.x - t.x
+                t.height = classCanvas.y - t.y
+                if t.width < 40
+                    t.width = 40
+                if t.height < 40
+                    t.height = 40
+                save t
+        types = find t in ClassType where t.project == project order by t.name
+
+    // The menu's Remove line takes away the line it was opened on: an
+    // association, or the line to a base type, which the type then has no more.
+    handler classLineRemoved
+        for a in find a in Association where a.project == project
+            if "a{a.id}" == classCanvas.bent
+                delete a
+        for t in types
+            if "b{t.id}" == classCanvas.bent
+                t.base = none
+                t.base_via = []
+                save t
+        types = find t in ClassType where t.project == project order by t.name
+
     // The menu's Edit opens the type it was opened on.
     handler classEditClicked
-        let id = class_at(types, classCanvas.x, classCanvas.y)
+        let id = class_at(types, classCanvas.x, classCanvas.y, settings.boxSizing == Manual)
         for t in types
             if t.id == id
                 open Types with current = t
 
     // A line drawn from one type's box to another's: an association between them.
     handler classConnected
-        let sourceId = class_at(types, classCanvas.fromX, classCanvas.fromY)
-        let targetId = class_at(types, classCanvas.x, classCanvas.y)
+        let sourceId = class_at(types, classCanvas.fromX, classCanvas.fromY, settings.boxSizing == Manual)
+        let targetId = class_at(types, classCanvas.x, classCanvas.y, settings.boxSizing == Manual)
         if sourceId == 0 or targetId == 0 or sourceId == targetId
             return
         let association = new Association
@@ -786,8 +833,8 @@ code Diagrams
             names = names + [e.name]
             xs = xs + [e.x]
             ys = ys + [e.y]
-            heights = heights + [box_height(count(entity_names(e)))]
-            widths = widths + [entity_width(e)]
+            heights = heights + [entity_box_height(e, settings.boxSizing == Manual)]
+            widths = widths + [entity_box_width(e, settings.boxSizing == Manual)]
         // Dashed, each end showing how many there are on that side, the label halfway.
         let relationships = find r in Relationship where r.project == project
         for r in relationships
@@ -826,8 +873,15 @@ code Diagrams
         erdCanvas.text(x + w / 2, y + 15, title, ink, 13, "center", "bold mono")
         let left = x + 28 + widest(types) * 7
         let line = 1
+        let shaded = false
         for type in types
             let row = y + 41 + (line - 1) * 22
+            // A box sized by hand shows the lines that fit in it.
+            if row + 11 > y + h
+                return
+            if shaded and settings.stripedRows
+                erdCanvas.rect(x, row - 11, w, 22, "#8080801f")
+            shaded = not shaded
             erdCanvas.text(x + 12, row, type, "accent", 11, "left", "mono")
             erdCanvas.text(left, row, names[line], "text", 11, "left", "mono")
             erdCanvas.text(x + w - 12, row, keys[line], "muted", 11, "right", "mono")
@@ -852,7 +906,7 @@ code Diagrams
                 save r
 
     handler entityDropped
-        let id = entity_at(entities, erdCanvas.fromX, erdCanvas.fromY)
+        let id = entity_at(entities, erdCanvas.fromX, erdCanvas.fromY, settings.boxSizing == Manual)
         for e in entities
             if e.id == id
                 e.x = at_least_zero(e.x + erdCanvas.x - erdCanvas.fromX)
@@ -860,16 +914,37 @@ code Diagrams
                 save e
         entities = find e in DataEntity where e.project == project order by e.name
 
+    // An entity's box resized by its corner grip: it keeps the new size, the
+    // box found just inside where its bottom-right corner was.
+    handler entityResized
+        let id = entity_at(entities, erdCanvas.fromX - 1, erdCanvas.fromY - 1, settings.boxSizing == Manual)
+        for e in entities
+            if e.id == id
+                e.width = erdCanvas.x - e.x
+                e.height = erdCanvas.y - e.y
+                if e.width < 40
+                    e.width = 40
+                if e.height < 40
+                    e.height = 40
+                save e
+        entities = find e in DataEntity where e.project == project order by e.name
+
+    handler entityLineRemoved
+        for r in find r in Relationship where r.project == project
+            if "r{r.id}" == erdCanvas.bent
+                delete r
+        entities = find e in DataEntity where e.project == project order by e.name
+
     handler entityEditClicked
-        let id = entity_at(entities, erdCanvas.x, erdCanvas.y)
+        let id = entity_at(entities, erdCanvas.x, erdCanvas.y, settings.boxSizing == Manual)
         for e in entities
             if e.id == id
                 open Entities with current = e
 
     // A line drawn from one entity's box to another's: a relationship between them.
     handler entityConnected
-        let sourceId = entity_at(entities, erdCanvas.fromX, erdCanvas.fromY)
-        let targetId = entity_at(entities, erdCanvas.x, erdCanvas.y)
+        let sourceId = entity_at(entities, erdCanvas.fromX, erdCanvas.fromY, settings.boxSizing == Manual)
+        let targetId = entity_at(entities, erdCanvas.x, erdCanvas.y, settings.boxSizing == Manual)
         if sourceId == 0 or targetId == 0 or sourceId == targetId
             return
         let relationship = new Relationship
@@ -936,20 +1011,20 @@ code Versions
         current = versionGrid.selected
 
 // The type whose box is at a point of the class diagram, its id; 0 on empty paper. Its outline lies 2 outside it.
-action class_at(types: list<ClassType>, x: integer, y: integer) -> integer
+action class_at(types: list<ClassType>, x: integer, y: integer, manual: bool) -> integer
     effects db.read
     let found = 0
     for t in types
-        if x >= t.x - 2 and x <= t.x + class_width(t) + 2 and y >= t.y - 2 and y <= t.y + box_height(count(class_names(t))) + 2
+        if x >= t.x - 2 and x <= t.x + class_box_width(t, manual) + 2 and y >= t.y - 2 and y <= t.y + class_box_height(t, manual) + 2
             found = t.id
     return found
 
 // The entity whose box is at a point of the ERD, its id; 0 on empty paper.
-action entity_at(entities: list<DataEntity>, x: integer, y: integer) -> integer
+action entity_at(entities: list<DataEntity>, x: integer, y: integer, manual: bool) -> integer
     effects db.read
     let found = 0
     for e in entities
-        if x >= e.x - 2 and x <= e.x + entity_width(e) + 2 and y >= e.y - 2 and y <= e.y + box_height(count(entity_names(e))) + 2
+        if x >= e.x - 2 and x <= e.x + entity_box_width(e, manual) + 2 and y >= e.y - 2 and y <= e.y + entity_box_height(e, manual) + 2
             found = e.id
     return found
 
@@ -993,6 +1068,32 @@ action class_names(t: ClassType) -> list<text>
     for p in find p in Parameter where p.owner == t order by p.position
         names = names + [p.name]
     return names
+
+// A box's size on a diagram: the size it was given when boxes are sized by
+// hand (`manual`) and it has one, else as its text needs.
+action class_box_width(t: ClassType, manual: bool) -> integer
+    effects db.read
+    if manual and t.width > 0
+        return t.width
+    return class_width(t)
+
+action class_box_height(t: ClassType, manual: bool) -> integer
+    effects db.read
+    if manual and t.height > 0
+        return t.height
+    return box_height(count(class_names(t)))
+
+action entity_box_width(e: DataEntity, manual: bool) -> integer
+    effects db.read
+    if manual and e.width > 0
+        return e.width
+    return entity_width(e)
+
+action entity_box_height(e: DataEntity, manual: bool) -> integer
+    effects db.read
+    if manual and e.height > 0
+        return e.height
+    return box_height(count(entity_names(e)))
 
 action class_width(t: ClassType) -> integer
     effects db.read

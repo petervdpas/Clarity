@@ -255,11 +255,14 @@ pub struct PartBase {
     pub node: Node,
     pub spec: PartSpec,
     pub host: Rc<dyn PartHost>,
+    /// Its state as last read, with the window's change count then: read once
+    /// per change, not copied on every look (a canvas's state holds its whole drawing).
+    kept: RefCell<Option<(u64, Rc<PartState>)>>,
 }
 
 impl PartBase {
     pub fn new(spec: PartSpec, host: Rc<dyn PartHost>) -> PartBase {
-        PartBase { node: Node::new(), spec, host }
+        PartBase { node: Node::new(), spec, host, kept: RefCell::new(None) }
     }
 
     pub fn name(&self) -> Option<&str> {
@@ -267,8 +270,22 @@ impl PartBase {
     }
 
     /// Its state, which code sets by its name.
-    pub fn state(&self) -> Option<PartState> {
-        self.host.state(self.spec.name())
+    /// Its state as code set it, read again only when the window changed; a
+    /// host that counts no changes (0) is asked every time.
+    pub fn state(&self) -> Option<Rc<PartState>> {
+        let changes = self.host.changes();
+        if changes != 0 {
+            if let Some((at, kept)) = self.kept.borrow().as_ref() {
+                if *at == changes {
+                    return Some(kept.clone());
+                }
+            }
+        }
+        let read = Rc::new(self.host.state(self.spec.name())?);
+        if changes != 0 {
+            *self.kept.borrow_mut() = Some((changes, read.clone()));
+        }
+        Some(read)
     }
 
     /// Whether it shows: code may hide it.
@@ -300,7 +317,7 @@ impl PartBase {
 
     /// Its caption as shown: as code set it in its state, else as written, translated; none when it has none.
     pub fn caption(&self) -> Option<String> {
-        if let Some(caption) = self.state().and_then(|s| s.caption) {
+        if let Some(caption) = self.state().and_then(|s| s.caption.clone()) {
             if caption.key.is_some() || !caption.text.is_empty() {
                 return Some(caption.show());
             }

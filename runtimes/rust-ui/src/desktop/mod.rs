@@ -218,6 +218,7 @@ pub fn standard_of(cursor: Cursor) -> CursorIcon {
         Cursor::Text => CursorIcon::Text,
         Cursor::ResizeLeftRight => CursorIcon::EwResize,
         Cursor::ResizeUpDown => CursorIcon::NsResize,
+        Cursor::ResizeCorner => CursorIcon::NwseResize,
         Cursor::Move => CursorIcon::Move,
         Cursor::Crosshair => CursorIcon::Crosshair,
         Cursor::NotAllowed => CursorIcon::NotAllowed,

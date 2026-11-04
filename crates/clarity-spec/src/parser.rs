@@ -1549,8 +1549,8 @@ fn parse_widget_page(
 }
 
 /// The words of a part's line, which every editor colors as Clarity's own (the VS Code grammar too).
-pub const LINE_WORDS: [&str; 68] = [
-    "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
+pub const LINE_WORDS: [&str; 69] = [
+    "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "striped", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
     "children", "page", "typed", "cards", "frame", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
     "foldable", "folded", "taborder", "key", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window",
@@ -1581,6 +1581,7 @@ fn parse_widget_props(
         widths: Default::default(),
         resizable: false,
         sortable: false,
+        striped: false,
         reorder: None,
         mode: None,
         objects: None,
@@ -1826,6 +1827,10 @@ fn parse_widget_props(
             "sortable" => {
                 applies(WidgetProperty::Sortable)?;
                 props.sortable = true;
+            }
+            "striped" => {
+                applies(WidgetProperty::Striped)?;
+                props.striped = true;
             }
             "order" => {
                 applies(WidgetProperty::OrderBy)?;

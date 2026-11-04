@@ -186,6 +186,8 @@ internal static class WireJson
             state["snap"] = true;
         if (part.Connecting)
             state["connecting"] = true;
+        if (!part.Resizable)
+            state["resizable"] = false;
         if (part.Background.Length > 0)
             state["background"] = part.Background;
         if (part.DotSize != 2)

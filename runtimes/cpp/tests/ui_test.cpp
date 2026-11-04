@@ -270,6 +270,10 @@ TEST(a_canvas_keeps_the_grid_and_snap_code_sets) {
     CHECK(!ui.connecting("sheet"));
     ui.set_connecting("sheet", true);
     CHECK(ui.connecting("sheet"));
+    // Boxes people resize: true until code sets canvas.resizable.
+    CHECK(ui.resizable("sheet"));
+    ui.set_resizable("sheet", false);
+    CHECK(!ui.resizable("sheet"));
 }
 
 // A canvas's tool, brush and ink (DESIGN 5.31): the design's until a handler

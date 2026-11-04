@@ -145,6 +145,7 @@ fn the_pointer_takes_the_system_s_shape_of_what_is_under_it() {
     assert_eq!(CursorIcon::Text, standard_of(Cursor::Text));
     assert_eq!(CursorIcon::EwResize, standard_of(Cursor::ResizeLeftRight));
     assert_eq!(CursorIcon::NsResize, standard_of(Cursor::ResizeUpDown));
+    assert_eq!(CursorIcon::NwseResize, standard_of(Cursor::ResizeCorner));
     assert_eq!(CursorIcon::Move, standard_of(Cursor::Move));
     assert_eq!(CursorIcon::Crosshair, standard_of(Cursor::Crosshair));
     assert_eq!(CursorIcon::NotAllowed, standard_of(Cursor::NotAllowed));

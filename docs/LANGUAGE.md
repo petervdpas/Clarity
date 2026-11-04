@@ -697,10 +697,10 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
-| `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `order by field [desc]`; `reorder by field`; `page 50`; `frame` | `select`, `open`, `change`, `reorder` |
-| `list` | a list: `bind orders` | `show field, field, ...`; `cards`: each row a small card, the first field of `show` its title and the others lines below it, in the theme's `part card` and `part card_line` looks; `reorder by field`; `frame` | `select`, `open`, `reorder` |
-| `tree` | a list: `bind folders children children` | `children field`; `show field, ...`; `reorder by field`; `frame` | `select`, `open`, `reorder` |
-| `treetable` | a list: `bind folders children children` | `children field`; `columns field [width], ...`; `resizable`; `reorder by field` | `select`, `open`, `reorder` |
+| `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `order by field [desc]`; `reorder by field`; `page 50`; `striped`; `frame` | `select`, `open`, `change`, `reorder` |
+| `list` | a list: `bind orders` | `show field, field, ...`; `cards`: each row a small card, the first field of `show` its title and the others lines below it, in the theme's `part card` and `part card_line` looks; `reorder by field`; `striped`; `frame` | `select`, `open`, `reorder` |
+| `tree` | a list: `bind folders children children` | `children field`; `show field, ...`; `reorder by field`; `striped`; `frame` | `select`, `open`, `reorder` |
+| `treetable` | a list: `bind folders children children` | `children field`; `columns field [width], ...`; `resizable`; `reorder by field`; `striped` | `select`, `open`, `reorder` |
 | `chart` | a list: `chart bar ... bind orders by status count`; or a list of numbers, drawn as they are: `chart line ... bind readings` | `bar`, `line` or `pie` first; `by field`; `count`, `sum field` or `average field`; for a list of numbers `points n` (its last n) and `max n` (the top of the axis) | |
 | `trend` | an integer, decimal, money or duration: `bind cpu` | `points n`, the values it keeps, 60 without it; `max n`, the top of the axis; `every n`, seconds between values, 1 without it; see [Live graphs](#live-graphs) | none |
 
@@ -897,6 +897,7 @@ form name details at 1,1 span 12 rows 3 bind customer
 | `cancel` | buttons | Escape clicks this button. One per window. |
 | `horizontal`, `vertical` | radio, splitter | Side by side or stacked. |
 | `frame` | list, table, tree, tree table | Its own border in a container (a tab page, a pane, a panel, a form, a section, a step, a scroll box), which otherwise frames it alone. On the window it always has one. |
+| `striped` | list, table, tree, tree table | Every other row (the 2nd, the 4th, ...) has a faint stripe of the theme's text color, in a light theme and a dark one; a chosen row or the row under the pointer shows as without it. A list of `cards` has no stripes. Example: `table name orders at 1,1 span 12 rows 8 bind orders columns number, total striped`. |
 
 A key is written as modifiers, then one key, joined by `+`: `"Ctrl+S"`, `"Ctrl+Shift+F2"`, `"Alt+Delete"`. The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta`. The key is a letter, a digit, one of `+ - * / . , =`, `F1` to `F12`, or one of `Enter`, `Escape`, `Tab`, `Space`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`; `"Ctrl++"` is Ctrl and `+`. A key without Ctrl, Alt or Meta that is a character (`"7"`, `"+"`) is what is typed, from the keyboard or the number pad, on any keyboard layout; while the person types in a text input it is their typing and presses nothing.
 
@@ -972,7 +973,7 @@ button @saveCaption name saveButton split at 7,1 span 2 on click: save
         item @saveAsItem name saveAsItem on click: saveAs
 ```
 
-Any part can have a context menu: a `menu` block indented under it, with items written as the frame's menu items are (`item`, `separator`, submenus, `on click: handler` or `on click -> Target`). A right click opens it at the pointer; on a table or list it chooses the row under the pointer first, so the handler finds it as `grid.selected`. On a canvas the handler finds where it was opened as `canvas.x` and `canvas.y`, in the canvas's units, to act on the box there. Named items hide and disable as any part does.
+Any part can have a context menu: a `menu` block indented under it, with items written as the frame's menu items are (`item`, `separator`, submenus, `on click: handler` or `on click -> Target`). A right click opens it at the pointer; on a table or list it chooses the row under the pointer first, so the handler finds it as `grid.selected`. On a canvas the handler finds where it was opened as `canvas.x` and `canvas.y`, in the canvas's units, to act on the box there, and the line it was opened on as `canvas.bent` (its name, empty on a box or the paper) with its points as `canvas.via`, so a **Remove line** item knows which; the line is taken in hand as a press on it takes it. Named items hide and disable as any part does.
 
 ```clarity
 table name grid at 1,1 span 12 rows 6 bind albums columns title
@@ -1271,7 +1272,7 @@ code CustomerForm
 
 Every part the person edits takes back its own edits with Ctrl+Z, and does them again with Ctrl+Y (or Ctrl+Shift+Z), on every stack, with nothing to write:
 
-- **What one edit is.** A click on a canvas, its drag and drop (from the first drag to the drop), a bent line, a new line drawn between boxes, a table cell, a change of an input (bound or not), a picture loaded into an image or removed, a row moved in a part that reorders. A list or tree that does not reorder only selects, so it has no undo, nor a custom part, which brings its own, nor a canvas's `on pointer` and `on key`. Its undo puts back the window's data as it was before the edit, and what the handler of that edit (`on drop`, `on bend`, `on connect`, `on change`, `on reorder`) saved or deleted, cascades included.
+- **What one edit is.** A click on a canvas, its drag and drop (from the first drag to the drop), a bent line, a new line drawn between boxes, a box resized by its grip, a table cell, a change of an input (bound or not), a picture loaded into an image or removed, a row moved in a part that reorders. A list or tree that does not reorder only selects, so it has no undo, nor a custom part, which brings its own, nor a canvas's `on pointer` and `on key`. Its undo puts back the window's data as it was before the edit, and what the handler of that edit (`on drop`, `on bend`, `on connect`, `on resize`, `on change`, `on reorder`) saved or deleted, cascades included.
 - **Where.** Ctrl+Z acts on the part with the focus. In a `form` or a `panel`, it walks back the fields one by one, the last first. In a text input, its own text undo comes first while it has something to take back.
 - **A menu item or a button** reaches it with the built-in targets `undo` and `redo`: `item @undoItem name undoItem key "Ctrl+Z" on click -> undo`. They act on the part that had the focus last.
 - **Not taken back:** moving around (a tab, folding, zoom and pan, the selected row), what a click or a timer did, and effects outside the databases and the window (files written, messages, the clipboard, calls to other services).
@@ -1462,6 +1463,17 @@ code Diagram
 
     handler lineToolClicked
         sheet.connecting = not sheet.connecting
+```
+- `on resize: handler` lets people resize a box by dragging its corner, as Clarity's diagram designer does. A box is what `on connect` calls a box. While the pointer is over a box, a small square grip in the theme's accent shows at its bottom-right corner, with the resize cursor over it. A press on the grip (it comes before the box's dot, carry, bend and pan) starts a resize: a dashed outline of the box at its new size follows the pointer. The box's top-left corner stays; its right and bottom edges follow the pointer in whole units, on the grid when the canvas has `snap`, and it is never smaller than 40 by 30 units (on the grid, the next grid step past that). No handler runs while it is dragged. When the person lets go, the handler runs once and reads where the box's bottom-right corner was (`canvas.fromX`, `canvas.fromY`) and where it is now (`canvas.x`, `canvas.y`), in the canvas's units. The code finds the box whose corner was at `fromX`, `fromY` (a point just inside it, `fromX - 1`, `fromY - 1`, is in the box) and makes it `canvas.x - box.x` wide and `canvas.y - box.y` high. Let go at the size it had, nothing runs; a pointer taken away mid-drag drops it. A resize is one edit for undo, like a drop. `canvas.resizable` (a bool, true until code sets it) turns the grip off and on, so an app shows it only while its boxes have a size of their own. The grip and the outline are drawn over the drawing, never in it. Only a canvas whose code draws it has `on resize`: the checker refuses it on a canvas with a `mode` or one an engine draws, and without `on resize` a canvas shows no grip and its pointer works as before.
+
+```clarity
+code Diagram
+    handler typesResized
+        for t in types
+            if sheet.fromX - 1 >= t.x and sheet.fromX - 1 <= t.x + t.width and sheet.fromY - 1 >= t.y and sheet.fromY - 1 <= t.y + t.height
+                t.width = sheet.x - t.x
+                t.height = sheet.y - t.y
+                save t
 ```
 - `sin(degrees)` and `cos(degrees)` give a decimal, rounded to 10 decimals.
 
@@ -2168,7 +2180,7 @@ part          = kind [String] property*
 property      = "name" name | "at" col "," row | "span" n | "rows" n | "bind" path
               | "for" name | "placeholder" String | "tooltip" String | "style" name | "readonly" | "taborder" n
               | "key" String | "default" | "cancel" | "horizontal" | "vertical"
-              | "columns" name [Number] ("," name [Number])* | "resizable" | "sortable" | "order" "by" name ["desc"] | "edit" name ["as" "switch"] ("," name ["as" "switch"])* | "show" names | "source" String | "surface" word
+              | "columns" name [Number] ("," name [Number])* | "resizable" | "sortable" | "striped" | "order" "by" name ["desc"] | "edit" name ["as" "switch"] ("," name ["as" "switch"])* | "show" names | "source" String | "surface" word
               | "on" event ":" handler ["(" [value ("," value)*] ")"] | "on" "click" "->" Target ["in" "new" "window"]
 
 app           = "app" Name

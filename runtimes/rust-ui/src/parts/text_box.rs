@@ -186,7 +186,7 @@ impl TextBoxPart {
     pub fn value(&self) -> String {
         match self.base.bound() {
             Some(path) => value_text(self.base.host.read(path)),
-            None => self.base.state().and_then(|s| s.text).unwrap_or_else(|| self.own.clone()),
+            None => self.base.state().and_then(|s| s.text.clone()).unwrap_or_else(|| self.own.clone()),
         }
     }
 
@@ -217,7 +217,7 @@ impl TextBoxPart {
         let state = self.base.state();
         self.editor.enabled = self.base.enabled();
         self.editor.read_only = self.base.read_only();
-        self.editor.marked = state.and_then(|s| s.error).is_some_and(|e| !e.show().is_empty());
+        self.editor.marked = state.and_then(|s| s.error.clone()).is_some_and(|e| !e.show().is_empty());
     }
 
     /// A value set from elsewhere (code, the record read again) shows as it is.

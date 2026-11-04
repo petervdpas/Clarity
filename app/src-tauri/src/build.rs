@@ -90,6 +90,15 @@ impl Output {
         self.ended = Some((ok, message.to_string()));
     }
 
+    /// What a screen that reloaded picks up: its lines, and how it ended; none before a build.
+    pub fn snapshot(&self, busy: bool) -> Option<BuildSnapshot> {
+        self.started.then(|| BuildSnapshot {
+            busy,
+            lines: self.lines.iter().cloned().collect(),
+            ended: self.ended.clone().map(|(ok, message)| BuildEnded { ok, message }),
+        })
+    }
+
     /// The output as the agent reads it: how the build ended, then its lines.
     pub fn text(&self) -> String {
         if !self.started {
@@ -109,6 +118,29 @@ impl Output {
         let lines: Vec<&str> = self.lines.iter().map(String::as_str).collect();
         format!("{state} {which}:\n{}", lines.join("\n"))
     }
+}
+
+/// The last build as the Output panel shows it, for a screen that reloaded
+/// halfway (Vite while developing, or a crash of the page): whether it still
+/// runs, its lines and how it ended.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct BuildSnapshot {
+    pub busy: bool,
+    pub lines: Vec<String>,
+    pub ended: Option<BuildEnded>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct BuildEnded {
+    pub ok: bool,
+    pub message: String,
+}
+
+/// The last build, for a screen that reloaded; none before one.
+pub fn snapshot(app: &AppHandle) -> Option<BuildSnapshot> {
+    let state = app.state::<BuildState>();
+    let busy = state.busy.load(Ordering::SeqCst);
+    state.output.held().ok().and_then(|o| o.snapshot(busy))
 }
 
 /// A build starts: the Output panel's lines are kept from here.
@@ -774,6 +806,17 @@ mod tests {
         assert_eq!(can_serve_at(&address), Err(format!("another program listens on port {port}; stop it, or set another port on the Project tab")));
         drop(held);
         assert_eq!(can_serve_at(&address), Ok(()));
+    }
+
+    #[test]
+    fn a_screen_that_reloaded_halfway_picks_the_build_up_again() {
+        let mut output = Output::default();
+        assert_eq!(output.snapshot(false), None, "nothing to pick up before a build");
+        output.begin();
+        output.line("Compiling clarity-ui v0.5.0");
+        assert_eq!(output.snapshot(true), Some(BuildSnapshot { busy: true, lines: vec!["Compiling clarity-ui v0.5.0".into()], ended: None }));
+        output.finish(true, "built");
+        assert_eq!(output.snapshot(false).unwrap().ended, Some(BuildEnded { ok: true, message: "built".into() }));
     }
 
     #[test]

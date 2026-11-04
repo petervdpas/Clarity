@@ -150,7 +150,7 @@ impl FolderPart {
                 Some(Value::String(s)) => s,
                 Some(other) => other.to_string(),
             },
-            None => self.base.state().and_then(|s| s.text).unwrap_or_else(|| self.own.clone()),
+            None => self.base.state().and_then(|s| s.text.clone()).unwrap_or_else(|| self.own.clone()),
         }
     }
 
@@ -197,7 +197,7 @@ impl FolderPart {
         let state = self.base.state();
         self.editor.enabled = self.base.enabled();
         self.editor.read_only = self.base.read_only();
-        self.editor.marked = state.and_then(|s| s.error).is_some_and(|e| !e.show().is_empty());
+        self.editor.marked = state.and_then(|s| s.error.clone()).is_some_and(|e| !e.show().is_empty());
         let typed_only = !self.base.read_only() && !crate::files::system().picks_folders();
         self.editor.placeholder = self.placeholder.clone().or_else(|| typed_only.then(type_name));
         self.editor.mirror(&self.base.node);

@@ -220,6 +220,17 @@ void clarity_ui_set_connecting(ClarityUi* ui, const char* part, bool value) {
     p->connecting = value;
 }
 
+bool clarity_ui_resizable(const ClarityUi* ui, const char* part) {
+    const ClarityPart* p = found(ui, part);
+    return !p || !p->has_resizable || p->resizable;
+}
+
+void clarity_ui_set_resizable(ClarityUi* ui, const char* part, bool value) {
+    ClarityPart* p = part_of(ui, part);
+    p->has_resizable = true;
+    p->resizable = value;
+}
+
 const char* clarity_ui_background(const ClarityUi* ui, const char* part, const char* design) {
     const ClarityPart* p = found(ui, part);
     return p && p->background ? p->background : design;
@@ -511,6 +522,7 @@ static cJSON* part_json(const ClarityPart* p) {
     if (p->has_grid) cJSON_AddNumberToObject(out, "grid", (double)p->grid);
     if (p->has_snap) cJSON_AddBoolToObject(out, "snap", p->snap);
     if (p->has_connecting) cJSON_AddBoolToObject(out, "connecting", p->connecting);
+    if (p->has_resizable) cJSON_AddBoolToObject(out, "resizable", p->resizable);
     if (p->background) cJSON_AddStringToObject(out, "background", p->background);
     if (p->has_dot_size) cJSON_AddNumberToObject(out, "dotSize", (double)p->dot_size);
     if (p->dot_color) cJSON_AddStringToObject(out, "dotColor", p->dot_color);
@@ -540,6 +552,7 @@ static bool part_from_json(const cJSON* in, ClarityPart* p) {
     if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "grid"))) p->has_grid = true, p->grid = (int64_t)v->valuedouble;
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "snap"))) p->has_snap = true, p->snap = cJSON_IsTrue(v);
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "connecting"))) p->has_connecting = true, p->connecting = cJSON_IsTrue(v);
+    if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "resizable"))) p->has_resizable = true, p->resizable = cJSON_IsTrue(v);
     if (cJSON_IsString(v = cJSON_GetObjectItemCaseSensitive(in, "background"))) p->background = clarity_copy(v->valuestring);
     if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "dotSize"))) p->has_dot_size = true, p->dot_size = (int64_t)v->valuedouble;
     if (cJSON_IsString(v = cJSON_GetObjectItemCaseSensitive(in, "dotColor"))) p->dot_color = clarity_copy(v->valuestring);

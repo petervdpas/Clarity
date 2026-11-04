@@ -271,7 +271,7 @@ impl Element for DropdownPart {
         let radius = values.radius.map(|r| r as f64).unwrap_or_else(|| look.radius("input"));
         let enabled = self.base.enabled();
         let _dimmed = p.dimmed(enabled);
-        let error = self.base.state().and_then(|s| s.error).is_some_and(|e| !e.show().is_empty());
+        let error = self.base.state().and_then(|s| s.error.clone()).is_some_and(|e| !e.show().is_empty());
         let line = if error {
             look.color("error")
         } else if node.hovered && enabled {

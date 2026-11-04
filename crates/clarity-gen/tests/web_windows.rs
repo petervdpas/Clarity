@@ -553,3 +553,16 @@ fn a_part_stuck_to_the_bottom_says_so_in_the_markup() {
     assert!(markup.contains("<Button name=\"save\" at=\"1,11\" span=\"2\" caption=\"Save\" bottom=\"true\" />"), "{markup}");
     assert!(!markup.contains("<Label name=\"note\" at=\"3,11\" span=\"2\" caption=\"Note\" bottom"), "{markup}");
 }
+
+/// A striped table says so in the markup, which Clarity.UI draws its rows by;
+/// a table without it says nothing.
+#[test]
+fn a_striped_table_says_so_in_the_markup() {
+    let source = "module m\n\nentity Order\n    number: text(20)\n\npage Main: window\n    data orders: list<Order>\n    table name orders at 1,1 span 12 rows 8 bind orders columns number striped\n    table name plain at 1,9 span 12 rows 3 bind orders columns number\n";
+    let (file, diagnostics) = clarity_spec::parser::parse(source, "m.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    let markup = clarity_gen::web_windows::window_markup(&file.pages[0]);
+    let line = |name: &str| markup.lines().find(|l| l.contains(&format!("name=\"{name}\""))).unwrap_or_default().to_string();
+    assert!(line("orders").contains(" striped=\"true\""), "{markup}");
+    assert!(!line("plain").contains("striped"), "{markup}");
+}

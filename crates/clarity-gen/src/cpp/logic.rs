@@ -486,7 +486,7 @@ impl<'a> Emitter<'a> {
                 }
                 if let Some((part, property)) = self.part_property(target) {
                     let method = match property.as_str() {
-                        "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "tab" | "step" | "grid" | "snap" | "connecting" | "background" => format!("set_{property}"),
+                        "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "tab" | "step" | "grid" | "snap" | "connecting" | "resizable" | "background" => format!("set_{property}"),
                         "dotSize" => "set_dot_size".to_string(),
                         "dotColor" => "set_dot_color".to_string(),
                         "tool" | "brush" | "ink" => format!("set_{property}"),
@@ -1015,6 +1015,7 @@ impl<'a> Emitter<'a> {
             "grid" => format!("ui.grid({quoted}, {})", info.grid),
             "snap" => format!("ui.snap({quoted}, {})", info.snap),
             "connecting" => format!("ui.connecting({quoted})"),
+            "resizable" => format!("ui.resizable({quoted})"),
             "background" => format!("ui.background({quoted}, {})", string(&info.background)),
             "dotSize" => format!("ui.dot_size({quoted}, {})", info.dot_size),
             "dotColor" => format!("ui.dot_color({quoted}, {})", string(&info.dot_color)),

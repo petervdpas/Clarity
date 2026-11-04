@@ -213,6 +213,12 @@ public class CanvasEventTests
         Assert.False(sheet.Connecting);
         sheet.Connecting = true;
         Assert.True(sheet.Connecting);
+        // Boxes people resize: true until code sets canvas.resizable, and only false goes to the screen.
+        Assert.True(sheet.Resizable);
+        Assert.False(WireJson.Part(sheet, null).ContainsKey("resizable"));
+        sheet.Resizable = false;
+        Assert.False(sheet.Resizable);
+        Assert.Equal(false, (bool?)WireJson.Part(sheet, null)["resizable"]);
     }
 
     [Fact]

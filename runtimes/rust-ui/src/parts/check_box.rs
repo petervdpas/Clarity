@@ -182,7 +182,7 @@ impl Element for CheckPart {
             p.fill(knob, look.color("panel"), knob.height / 2.0);
         } else {
             let radius = look.radius("input").min(4.0);
-            let error = self.base.state().and_then(|s| s.error).is_some_and(|e| !e.show().is_empty());
+            let error = self.base.state().and_then(|s| s.error.clone()).is_some_and(|e| !e.show().is_empty());
             p.fill(mark, look.color(if on { "accent" } else { "input" }), radius);
             if !on || error {
                 let line = if error {

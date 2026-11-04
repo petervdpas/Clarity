@@ -3092,6 +3092,8 @@ impl<'a> BodyChecker<'_, 'a> {
             "snap" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas) => value(Ty::Bool),
             // Whether a press anywhere on a box draws a new line, as a line tool does: only on a canvas with `on connect`.
             "connecting" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && p.handlers.iter().any(|h| h.event == crate::widgets::Event::Connect)) => value(Ty::Bool),
+            // Whether people resize its boxes by their grip, true until code sets it: only on a canvas with `on resize`.
+            "resizable" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && p.handlers.iter().any(|h| h.event == crate::widgets::Event::Resize)) => value(Ty::Bool),
             // What its clear() fills it with; empty is the theme's panel.
             "background" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas) => value(Ty::Text),
             // Its grid's dots: how many pixels across, and their color (empty is the theme's border).

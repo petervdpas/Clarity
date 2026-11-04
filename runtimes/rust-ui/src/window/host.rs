@@ -681,7 +681,7 @@ impl PartHost for ProgramHost {
     }
 
     /// The canvas's handler of `event` runs with where the pointer was, kept
-    /// in the part's state; a drag, a drop, a bend or a new line is one edit
+    /// in the part's state; a drag, a drop, a bend, a new line or a resize is one edit
     /// of its undo scope, as a change is. None when the canvas has no handler for it.
     fn pointed(&self, part: &str, event: &str, at: &Map<String, Value>) -> Option<bool> {
         let call = self.specs.get(part)?.on(event).next()?.clone();
@@ -690,7 +690,7 @@ impl PartHost for ProgramHost {
         if self.calling() {
             return Some(false);
         }
-        if matches!(event, "drag" | "drop" | "bend" | "connect") {
+        if matches!(event, "drag" | "drop" | "bend" | "connect" | "resize") {
             if let Some(scope) = self.scope(part) {
                 let waiting = self.pending.borrow_mut().take();
                 if let Some(other) = waiting.filter(|w| w.part != part) {

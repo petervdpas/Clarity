@@ -162,9 +162,10 @@ fn decimals_and_dates_are_read_with_their_crates() {
     has(cargo, "chrono = \"0.4\"\n");
 }
 
-/// With custom parts, a debug build optimizes the dependencies (the parts'
-/// crates and what they use, such as a game engine), so a part runs at
-/// speed while the program's own code stays quick to build; the README says so.
+/// With custom parts, and on the desktop, a debug build optimizes the
+/// dependencies (Clarity.UI, the parts' crates and what they use, such as a
+/// game engine), so the windows run at speed while the program's own code
+/// stays quick to build; the README says so.
 #[test]
 fn a_debug_build_optimizes_the_dependencies_of_custom_parts() {
     let files = files();
@@ -172,9 +173,9 @@ fn a_debug_build_optimizes_the_dependencies_of_custom_parts() {
     has(cargo, "[profile.dev.package.\"*\"]\nopt-level = 3\n");
     has(file(&files, "README.md"), "[profile.dev.package.\"*\"]");
 
-    // Without custom parts the debug build stays as cargo makes it.
+    // Without custom parts a desktop program does too: Clarity.UI draws every frame.
     let plain = load_keyed([("game.clarity", "module game\n\npage Game: window\n    title \"Game\"\n")], &[], "en");
     let files = generate(&plain, &settings()).unwrap_or_else(|errors| panic!("{errors:#?}"));
-    assert!(!file(&files, "Cargo.toml").contains("[profile."), "{}", file(&files, "Cargo.toml"));
-    assert!(!file(&files, "README.md").contains("[profile."));
+    has(file(&files, "Cargo.toml"), "[profile.dev.package.\"*\"]\nopt-level = 3\n");
+    has(file(&files, "README.md"), "[profile.dev.package.\"*\"]");
 }

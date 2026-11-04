@@ -159,7 +159,7 @@ impl NumberPart {
     pub fn value(&self) -> Option<Value> {
         match self.base.bound() {
             Some(path) => self.base.host.read(path),
-            None => Some(Value::String(self.base.state().and_then(|s| s.text).unwrap_or_else(|| self.own.clone()))),
+            None => Some(Value::String(self.base.state().and_then(|s| s.text.clone()).unwrap_or_else(|| self.own.clone()))),
         }
     }
 
@@ -178,7 +178,7 @@ impl NumberPart {
         let state = self.base.state();
         self.editor.enabled = self.base.enabled();
         self.editor.read_only = self.base.read_only();
-        self.editor.marked = self.bad.is_some() || state.and_then(|s| s.error).is_some_and(|e| !e.show().is_empty());
+        self.editor.marked = self.bad.is_some() || state.and_then(|s| s.error.clone()).is_some_and(|e| !e.show().is_empty());
     }
 
     /// A value set from elsewhere (code, the record read again) shows as it is, and is no longer marked.

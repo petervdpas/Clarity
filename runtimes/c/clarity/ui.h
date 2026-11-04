@@ -27,6 +27,8 @@ typedef struct {
     bool has_grid, has_snap, snap;
     /// Whether a press anywhere on a box of a canvas with `on connect` draws a new line, as a handler set it.
     bool has_connecting, connecting;
+    /// Whether people resize the boxes of a canvas with `on resize` by their grip, as a handler set it; without `has_resizable` it is true.
+    bool has_resizable, resizable;
     int64_t grid;
     /// What a canvas's clear() fills it with, as a handler set it (empty is the theme's panel); NULL keeps the design.
     const char* background;
@@ -224,6 +226,9 @@ void clarity_ui_set_snap(ClarityUi* ui, const char* part, bool value);
 /// Whether a press anywhere on a box draws a new line (`canvas.connecting`), false until a handler sets it.
 bool clarity_ui_connecting(const ClarityUi* ui, const char* part);
 void clarity_ui_set_connecting(ClarityUi* ui, const char* part, bool value);
+/// Whether people resize a canvas's boxes by their grip (`canvas.resizable`), true until a handler sets it.
+bool clarity_ui_resizable(const ClarityUi* ui, const char* part);
+void clarity_ui_set_resizable(ClarityUi* ui, const char* part, bool value);
 /// What a canvas's clear() fills it with (`canvas.background`), as its line says until a handler sets it.
 const char* clarity_ui_background(const ClarityUi* ui, const char* part, const char* design);
 void clarity_ui_set_background(ClarityUi* ui, const char* part, const char* value);

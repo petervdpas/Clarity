@@ -315,7 +315,7 @@ impl ColorPart {
         let state = self.base.state();
         self.editor.enabled = self.base.enabled();
         self.editor.read_only = self.base.read_only();
-        self.editor.marked = self.bad || state.and_then(|s| s.error).is_some_and(|e| !e.show().is_empty());
+        self.editor.marked = self.bad || state.and_then(|s| s.error.clone()).is_some_and(|e| !e.show().is_empty());
         self.editor.mirror(&self.base.node);
     }
 }

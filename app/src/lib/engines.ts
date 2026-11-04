@@ -178,16 +178,17 @@ export function runEngine<P extends Running>(canvas: P, engine: EngineDecl | nul
   return {
     ...canvas,
     runs: engine.name.name,
-    handlers: canvas.handlers.filter((h) => h.event !== "draw" && h.event !== "connect"),
+    handlers: canvas.handlers.filter((h) => h.event !== "draw" && h.event !== "connect" && h.event !== "resize"),
     tells: canvas.tells.filter((t) => tells.has(t.tell)),
   };
 }
 
 /**
- * A canvas's events: none to draw it while an engine does; connect only on a
- * canvas its code draws (no engine, no mode), whose boxes a new line joins.
+ * A canvas's events: none to draw it while an engine does; connect and resize
+ * only on a canvas its code draws (no engine, no mode), whose boxes a new line
+ * joins and people resize.
  */
 export function canvasEvents(events: PartEvent[], runs: string | null, mode: string | null = null): PartEvent[] {
   const drawn = runs === null ? events : events.filter((e) => e !== "draw");
-  return runs === null && mode === null ? drawn : drawn.filter((e) => e !== "connect");
+  return runs === null && mode === null ? drawn : drawn.filter((e) => e !== "connect" && e !== "resize");
 }

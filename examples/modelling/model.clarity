@@ -26,6 +26,11 @@ enum Key
     Foreign label @keyForeign
     Unique label @keyUnique
 
+// How a diagram's boxes get their size: fitting their text, or as the person drags them.
+enum BoxSizing
+    Automatic label @boxSizingAutomatic
+    Manual label @boxSizingManual
+
 // How many records of one side the other side has, as an ERD draws it.
 enum Cardinality
     ExactlyOne label @cardinalityExactlyOne
@@ -67,6 +72,9 @@ entity ClassType
     // Where its box is on the class diagram, in the canvas's units; 0, 0 until it has a place.
     x: integer, label @classTypeXLabel
     y: integer, label @classTypeYLabel
+    // How big its box is when the diagrams size boxes by hand; 0 fits its text.
+    width: integer, label @classTypeWidthLabel
+    height: integer, label @classTypeHeightLabel
 
 // A parameter of a type's primary constructor: its type and name.
 entity Parameter
@@ -99,6 +107,9 @@ entity DataEntity
     // Where its box is on the entity relationship diagram.
     x: integer, label @dataEntityXLabel
     y: integer, label @dataEntityYLabel
+    // How big its box is when the diagrams size boxes by hand; 0 fits its text.
+    width: integer, label @dataEntityWidthLabel
+    height: integer, label @dataEntityHeightLabel
 
 // A column of an entity.
 entity Column

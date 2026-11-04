@@ -70,6 +70,11 @@ resizable: boolean,
  */
 sortable: boolean, 
 /**
+ * `striped`: a table, list, tree or tree table draws every other row
+ * with a faint stripe.
+ */
+striped: boolean, 
+/**
  * `order by field [desc]`: the order a table's rows show in first.
  */
 order: TableOrder | null, 

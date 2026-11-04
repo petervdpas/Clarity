@@ -117,8 +117,8 @@ pub fn readme(settings: &Settings, project: &clarity_spec::Project) -> String {
             out.push_str(&format!("which writes `{}`. ", toolchain.program.display()));
         }
         out.push_str(&format!("To try it while you work, build a debug program and start it with\n\n    {run}\n"));
-        if backend == Backend::Rust && !crate::rust::parts::crate_parts(project).is_empty() {
-            out.push_str("\nThe debug program builds its dependencies optimized, as the custom parts' crates and what they use (a game engine, say), so the parts run at speed while the program's own code stays quick to build: Cargo.toml says so under `[profile.dev.package.\"*\"]`.\n");
+        if backend == Backend::Rust && (settings.stack.has(clarity_project::Target::Desktop) || !crate::rust::parts::crate_parts(project).is_empty()) {
+            out.push_str("\nThe debug program builds its dependencies optimized, as Clarity.UI, which draws its windows, and the custom parts' crates and what they use (a game engine, say), so the windows run at speed while the program's own code stays quick to build: Cargo.toml says so under `[profile.dev.package.\"*\"]`.\n");
         }
     }
 

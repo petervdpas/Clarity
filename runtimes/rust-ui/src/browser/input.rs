@@ -159,6 +159,7 @@ pub fn cursor_css(cursor: Cursor) -> &'static str {
         Cursor::Text => "text",
         Cursor::ResizeLeftRight => "ew-resize",
         Cursor::ResizeUpDown => "ns-resize",
+        Cursor::ResizeCorner => "nwse-resize",
         Cursor::Move => "move",
         Cursor::Crosshair => "crosshair",
         Cursor::NotAllowed => "not-allowed",

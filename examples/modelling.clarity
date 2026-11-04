@@ -5,7 +5,7 @@
 // modelling folder next to this file.
 project Modelling
     title "Data Modelling"
-    stack csharp desktop
+    stack rust desktop
     output "out"
     language "en"
     datasource main sqlite "data/modelling.db"

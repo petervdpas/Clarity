@@ -147,6 +147,8 @@ pub enum Event {
     Bend,
     /// A person drew a new line from a box of a canvas, and let it go.
     Connect,
+    /// A person dragged the grip of a box of a canvas to a new size, and let it go.
+    Resize,
     /// Next is pressed in a wizard, before it moves on; a refusal keeps the step.
     Next,
     /// Finish is pressed on a wizard's last step.
@@ -162,7 +164,7 @@ pub enum Event {
 
 /// The events a window has, in the order the designer lists them.
 /// Every event, in the order the language lists them.
-pub const ALL_EVENTS: [Event; 22] = [
+pub const ALL_EVENTS: [Event; 23] = [
     Event::Click,
     Event::Change,
     Event::Enter,
@@ -180,6 +182,7 @@ pub const ALL_EVENTS: [Event; 22] = [
     Event::Drop,
     Event::Bend,
     Event::Connect,
+    Event::Resize,
     Event::Next,
     Event::Finish,
     Event::Reorder,
@@ -212,6 +215,7 @@ impl Event {
             Event::Drop => "drop",
             Event::Bend => "bend",
             Event::Connect => "connect",
+            Event::Resize => "resize",
             Event::Next => "next",
             Event::Finish => "finish",
             Event::Reorder => "reorder",
@@ -239,6 +243,7 @@ impl Event {
             "drop" => Some(Event::Drop),
             "bend" => Some(Event::Bend),
             "connect" => Some(Event::Connect),
+            "resize" => Some(Event::Resize),
             "next" => Some(Event::Next),
             "finish" => Some(Event::Finish),
             "reorder" => Some(Event::Reorder),
@@ -325,6 +330,8 @@ pub enum WidgetProperty {
     Resizable,
     /// `sortable`: a click on a table's header sorts by that column.
     Sortable,
+    /// `striped`: a part with rows draws every other row with a faint stripe.
+    Striped,
     /// `order by field [desc]`: the order a table's rows show in first.
     OrderBy,
     /// `reorder by position`: the person puts the rows in their own order (DESIGN 5.30).
@@ -794,7 +801,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Change, Event::Reorder],
-        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::NoUndo, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::OrderBy, WidgetProperty::Reorder, WidgetProperty::Page, WidgetProperty::Frame],
+        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::NoUndo, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::Striped, WidgetProperty::OrderBy, WidgetProperty::Reorder, WidgetProperty::Page, WidgetProperty::Frame],
     },
     // A list the window holds as a tree, arranged by `children` (U1c).
     Entry {
@@ -810,7 +817,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Reorder],
-        properties: &[WidgetProperty::Children, WidgetProperty::Show, WidgetProperty::Reorder, WidgetProperty::NoUndo, WidgetProperty::Frame],
+        properties: &[WidgetProperty::Children, WidgetProperty::Show, WidgetProperty::Striped, WidgetProperty::Reorder, WidgetProperty::NoUndo, WidgetProperty::Frame],
     },
     Entry {
         kind: WidgetKind::TreeTable,
@@ -825,7 +832,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Reorder],
-        properties: &[WidgetProperty::Children, WidgetProperty::Columns, WidgetProperty::Resizable, WidgetProperty::Reorder, WidgetProperty::NoUndo, WidgetProperty::Frame],
+        properties: &[WidgetProperty::Children, WidgetProperty::Columns, WidgetProperty::Resizable, WidgetProperty::Striped, WidgetProperty::Reorder, WidgetProperty::NoUndo, WidgetProperty::Frame],
     },
     // A list the window holds as a chart: `chart bar ... by status count` (U1c).
     Entry {
@@ -872,7 +879,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Reorder],
-        properties: &[WidgetProperty::Show, WidgetProperty::Cards, WidgetProperty::Reorder, WidgetProperty::NoUndo, WidgetProperty::Frame],
+        properties: &[WidgetProperty::Show, WidgetProperty::Cards, WidgetProperty::Striped, WidgetProperty::Reorder, WidgetProperty::NoUndo, WidgetProperty::Frame],
     },
     Entry {
         kind: WidgetKind::Progress,
@@ -957,7 +964,7 @@ const ENTRIES: &[Entry] = &[
         // a click runs a handler, which reads where as `canvas.x` and `canvas.y`;
         // a drag and a drop also read where it was pressed, `fromX` and `fromY`.
         // `on change`: an edit of a canvas with a mode ended (DESIGN 5.31).
-        events: &[Event::Draw, Event::Click, Event::Drag, Event::Drop, Event::Bend, Event::Connect, Event::Pointer, Event::Key, Event::Change],
+        events: &[Event::Draw, Event::Click, Event::Drag, Event::Drop, Event::Bend, Event::Connect, Event::Resize, Event::Pointer, Event::Key, Event::Change],
         properties: &[
             WidgetProperty::Units,
             WidgetProperty::NoUndo,
@@ -1256,6 +1263,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         widths: Default::default(),
         resizable: false,
         sortable: false,
+        striped: false,
         reorder: None,
         mode: None,
         objects: None,
@@ -1567,6 +1575,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if props.no_undo {
         parts.push("no undo".to_string());
     }
+    if props.striped {
+        parts.push("striped".to_string());
+    }
     if props.frame {
         parts.push("frame".to_string());
     }
@@ -1646,7 +1657,10 @@ pub fn pane_columns(widget: &crate::model::Widget) -> Vec<u32> {
 /// Why `on connect` is refused on a canvas with a mode or an engine: lines are drawn between the boxes its code draws.
 pub const CANVAS_CONNECT_PROBLEM: &str = "'on connect' draws lines between the boxes a canvas's code draws; a canvas with a mode or an engine has none";
 
-/// A canvas's grid is 1 to 10000 units, and it snaps only to a grid it has; it connects only the boxes its code draws.
+/// Why `on resize` is refused on a canvas with a mode or an engine: people size the boxes its code draws.
+pub const CANVAS_RESIZE_PROBLEM: &str = "'on resize' sizes the boxes a canvas's code draws; a canvas with a mode or an engine has none";
+
+/// A canvas's grid is 1 to 10000 units, and it snaps only to a grid it has; it connects and resizes only the boxes its code draws.
 pub fn canvas_options(props: &WidgetProps) -> Result<(), String> {
     if props.grid.is_some_and(|g| !(1..=10000).contains(&g)) {
         return Err(CANVAS_GRID_PROBLEM.to_string());
@@ -1659,6 +1673,9 @@ pub fn canvas_options(props: &WidgetProps) -> Result<(), String> {
     }
     if props.handlers.iter().any(|h| h.event == Event::Connect) && (props.mode.is_some() || props.runs.is_some()) {
         return Err(CANVAS_CONNECT_PROBLEM.to_string());
+    }
+    if props.handlers.iter().any(|h| h.event == Event::Resize) && (props.mode.is_some() || props.runs.is_some()) {
+        return Err(CANVAS_RESIZE_PROBLEM.to_string());
     }
     Ok(())
 }
@@ -1747,6 +1764,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Runs, props.runs.is_some(), "runs"),
         (WidgetProperty::Resizable, props.resizable, "resizable"),
         (WidgetProperty::Sortable, props.sortable, "sortable"),
+        (WidgetProperty::Striped, props.striped, "striped"),
         (WidgetProperty::OrderBy, props.order.is_some(), "order by"),
         (WidgetProperty::Reorder, props.reorder.is_some(), "reorder"),
         (WidgetProperty::Mode, props.mode.is_some(), "mode"),

@@ -378,6 +378,14 @@ func TestACanvasKeepsTheGridAndSnapCodeSets(t *testing.T) {
 	if !ui.Connecting("sheet") {
 		t.Fatal("connecting once code set it")
 	}
+	// Boxes people resize: true until code sets canvas.resizable.
+	if !ui.Resizable("sheet") {
+		t.Fatal("resizable before code sets it")
+	}
+	ui.SetResizable("sheet", false)
+	if ui.Resizable("sheet") {
+		t.Fatal("not resizable once code set it false")
+	}
 }
 
 // Copy hands the text to the screen for its clipboard; of several, the last.

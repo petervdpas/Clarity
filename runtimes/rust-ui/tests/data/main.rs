@@ -22,6 +22,7 @@ mod data_tree;
 mod data_trend;
 mod image_svg;
 mod looks_gallery;
+mod striped_rows;
 mod table_edge;
 mod table_key;
 mod table_row;

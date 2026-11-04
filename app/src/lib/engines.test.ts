@@ -145,4 +145,8 @@ test("a canvas runs an engine beside the screen, which draws it and tells throug
   assert.deepEqual(canvasEvents(["draw", "connect"], null), ["draw", "connect"]);
   assert.deepEqual(canvasEvents(["draw", "connect"], "Screen"), []);
   assert.deepEqual(canvasEvents(["draw", "connect", "change"], null, "paint"), ["draw", "change"]);
+  // So are the boxes people resize.
+  assert.deepEqual(canvasEvents(["draw", "resize"], null), ["draw", "resize"]);
+  assert.deepEqual(canvasEvents(["draw", "resize"], "Screen"), []);
+  assert.deepEqual(canvasEvents(["draw", "resize", "change"], null, "vector"), ["draw", "change"]);
 });

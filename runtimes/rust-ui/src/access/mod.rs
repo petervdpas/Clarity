@@ -791,7 +791,7 @@ impl Builder {
         if let Some(path) = base.bound() {
             node.states.required = host.field(path).is_some_and(|f| f.required);
         }
-        if let Some(error) = base.state().and_then(|s| s.error).map(|e| e.show()).filter(|e| !e.is_empty()) {
+        if let Some(error) = base.state().and_then(|s| s.error.clone()).map(|e| e.show()).filter(|e| !e.is_empty()) {
             node.states.invalid = Some(error);
         }
         Some((node, extra))

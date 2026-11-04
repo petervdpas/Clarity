@@ -107,11 +107,12 @@ impl<'a> Emitter<'a> {
         let action = decl.kind != FunctionKind::Function;
         let mut params = vec!["db: &Db".to_string()];
         let name = ident(&decl.name.name);
-        for param in &decl.params {
+        for (index, param) in decl.params.iter().enumerate() {
             let info = type_ref_info(self.project, &param.ty);
             let name = ident(&param.name.name);
             let ty = match &info {
-                TypeInfo::Record(e) if action => format!("&mut {e}"),
+                // An action takes its record to change only when it changes it, so a record held to read (a loop's) can be handed to it.
+                TypeInfo::Record(e) if action && changes_param(self.project, decl, index, &mut Vec::new()) => format!("&mut {e}"),
                 TypeInfo::Record(e) => format!("&{e}"),
                 TypeInfo::List(e) => format!("&[{e}]"),
                 other => value_type(other),
@@ -297,7 +298,17 @@ impl<'a> Emitter<'a> {
                 }
                 // A body that changes, saves or deletes its record works on the
                 // record in the list, as on the other stacks.
-                let each = if changes(body, &var.name) { "iter_mut" } else { "iter" };
+                let changed = changes_in(self.project, body, &var.name, &mut Vec::new());
+                let each = if changed { "iter_mut" } else { "iter" };
+                // A body that runs a handler of the window hands it the whole window, so a
+                // list of the window it only reads is gone through as it was when the loop began.
+                let mut runs_handler = false;
+                clarity_spec::code::each_expr_in(body, &mut |e| {
+                    if matches!(e.kind, ExprKind::Call { .. }) && self.types.name_of(e) == Some(&NameKind::Handler) {
+                        runs_handler = true;
+                    }
+                });
+                let source = if runs_handler && !changed && source.starts_with("w.") { format!("{source}.clone()") } else { source };
                 out.push_str(&format!("{pad}for {} in {source}.{each}() {{\n", ident(&var.name)));
                 self.refs.push(HashSet::from([var.name.clone()]));
                 self.block(body, depth + 1, out);
@@ -568,6 +579,7 @@ impl<'a> Emitter<'a> {
             "grid" => "grid",
             "snap" => "snap",
             "connecting" => "connecting",
+            "resizable" => "resizable",
             "bent" => "bent",
             "via" => "via",
             "background" => "background",
@@ -1334,11 +1346,13 @@ impl<'a> Emitter<'a> {
             return String::new();
         };
         let mut code = vec!["db".to_string()];
-        for (arg, param) in args.iter().zip(&callee.params) {
+        for (index, (arg, param)) in args.iter().zip(&callee.params).enumerate() {
             let expected = type_ref_info(self.project, &param.ty);
             let from = self.types.type_of(arg);
             let held = self.held(arg);
-            code.push(match (&expected, callee.kind, held) {
+            // An action that only reads its record takes it as a function does.
+            let kind = if callee.kind != FunctionKind::Function && !changes_param(self.project, callee, index, &mut Vec::new()) { FunctionKind::Function } else { callee.kind };
+            code.push(match (&expected, kind, held) {
                 (TypeInfo::Record(_) | TypeInfo::List(_), _, Some((place, true))) => place,
                 (TypeInfo::Record(_), FunctionKind::Action, Some((place, false))) => format!("&mut {place}"),
                 (TypeInfo::Record(_) | TypeInfo::List(_), _, Some((place, false))) => format!("&{place}"),
@@ -1775,6 +1789,47 @@ fn through(hops: &[crate::query::Hop], cond: String) -> String {
 }
 
 /// Whether `body` sets a field of `var`, or saves or deletes it.
+/// Whether an action changes the record it takes as its `index`th value:
+/// it sets its fields, saves or deletes it, or hands it to an action that
+/// changes it. `seen` holds the actions asked already, so actions that call
+/// each other end.
+fn changes_param(project: &Project, decl: &clarity_spec::code::FunctionDecl, index: usize, seen: &mut Vec<(String, usize)>) -> bool {
+    match decl.kind {
+        FunctionKind::Function => return false,
+        // A data event is called by the runtime, which hands it the record to change.
+        FunctionKind::Event => return true,
+        FunctionKind::Action => {}
+    }
+    let Some(param) = decl.params.get(index) else { return false };
+    let key = (decl.name.name.clone(), index);
+    if seen.contains(&key) {
+        return false;
+    }
+    seen.push(key);
+    changes_in(project, &decl.body, &param.name.name, seen)
+}
+
+/// Whether `body` changes the record `var` (`changes`), or hands it to an
+/// action of the project that changes it.
+fn changes_in(project: &Project, body: &[Stmt], var: &str, seen: &mut Vec<(String, usize)>) -> bool {
+    if changes(body, var) {
+        return true;
+    }
+    let mut handed = Vec::new();
+    clarity_spec::code::each_expr_in(body, &mut |expr| {
+        if let ExprKind::Call { function, args, .. } = &expr.kind {
+            for (i, arg) in args.iter().enumerate() {
+                if matches!(&arg.kind, ExprKind::Name { name } if name == var) {
+                    handed.push((function.name.clone(), i));
+                }
+            }
+        }
+    });
+    handed.into_iter().any(|(name, i)| {
+        project.files.iter().flat_map(|f| &f.functions).find(|f| f.name.name == name).is_some_and(|callee| changes_param(project, callee, i, seen))
+    })
+}
+
 fn changes(body: &[Stmt], var: &str) -> bool {
     fn root(expr: &Expr) -> Option<&str> {
         match &expr.kind {

@@ -61,7 +61,8 @@ pub fn ui_version() -> &'static str {
 
 /// The environment variable that, set while Clarity generates a project,
 /// names the Rust runtime's folder in Clarity's repository
-/// (`<Clarity>/runtimes/rust`), as it names the C# runtime's for C#.
+/// (`<Clarity>/runtimes/rust`), or the C# runtime's beside it as C# wants
+/// it, the runtimes folder or the repository.
 pub const RUNTIME_VARIABLE: &str = "CLARITY_RUNTIME";
 
 /// `.cargo/config.toml` of a project that builds on the crates in Clarity's
@@ -70,12 +71,12 @@ pub const RUNTIME_VARIABLE: &str = "CLARITY_RUNTIME";
 /// are patched: cargo warns of a patch it does not use. The paths are
 /// absolute, with `/` between folders (a backslash is an escape in TOML).
 /// Fails when `runtime` holds no clarity-runtime crate, saying what to name.
-pub fn local_patch(runtime: &std::path::Path, clarity_ui: bool) -> Result<String, String> {
-    let wrong = || format!("{RUNTIME_VARIABLE} names {}, which holds no clarity-runtime crate; name the Rust runtime's folder in Clarity's repository, <Clarity>/runtimes/rust", runtime.display());
-    let manifest = std::fs::read_to_string(runtime.join("Cargo.toml")).map_err(|_| wrong())?;
-    if !manifest.contains("\nname = \"clarity-runtime\"") {
-        return Err(wrong());
-    }
+pub fn local_patch(named: &std::path::Path, clarity_ui: bool) -> Result<String, String> {
+    let wrong = || format!("{RUNTIME_VARIABLE} names {}, which holds no clarity-runtime crate; name the Rust runtime's folder in Clarity's repository, <Clarity>/runtimes/rust", named.display());
+    // One variable serves every language: the Rust runtime itself, a runtime beside it (runtimes/csharp), the runtimes folder or the repository.
+    let holds = |folder: &std::path::Path| std::fs::read_to_string(folder.join("Cargo.toml")).is_ok_and(|m| m.contains("\nname = \"clarity-runtime\""));
+    let candidates = [named.to_path_buf(), named.join("../rust"), named.join("rust"), named.join("runtimes/rust")];
+    let runtime = candidates.iter().find(|c| holds(c)).ok_or_else(wrong)?;
     let runtime = runtime.canonicalize().map_err(|_| wrong())?;
     let path = |p: &std::path::Path| p.display().to_string().replace('\\', "/");
     let mut text = format!(
@@ -618,9 +619,10 @@ fn cargo_toml(name: &str, clarity: bool, features: &[&str], parts: &[(String, St
     // Clarity.UI, which draws the windows with Skia in the system's own window (DESIGN 7.9).
     let ui = if clarity { format!("clarity-ui = \"{}\"\n", ui_version()) } else { String::new() };
     let features = features.iter().map(|f| format!("{f:?}")).collect::<Vec<_>>().join(", ");
-    // With custom parts, every dependency (a part's game engine, say) builds optimized in a debug
-    // build too, so the part runs at speed, while the program's own code stays quick to build.
-    let profile = if parts.is_empty() { "" } else { "# Dependencies, such as those of the custom parts, build optimized in a debug build too;\n# the program's own code stays quick to build.\n[profile.dev.package.\"*\"]\nopt-level = 3\n\n" };
+    // On the desktop, and with custom parts, every dependency (Clarity.UI, which lays out and draws
+    // every frame; a part's game engine) builds optimized in a debug build too, so the windows run
+    // at speed, while the program's own code stays quick to build.
+    let profile = if !clarity && parts.is_empty() { "" } else { "# Dependencies, such as Clarity.UI and those of the custom parts, build optimized\n# in a debug build too; the program's own code stays quick to build.\n[profile.dev.package.\"*\"]\nopt-level = 3\n\n" };
     // Each custom part's crate, which draws on Clarity.UI's own surface.
     let parts: String = parts.iter().map(|(package, part)| format!("{package} = {{ path = \"parts/{part}\" }}\n")).collect();
     // Each library's crate (DESIGN 5.21).

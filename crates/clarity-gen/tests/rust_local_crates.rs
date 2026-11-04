@@ -1,7 +1,8 @@
 //! A Rust project builds on the crates in Clarity's repository, while working
 //! on them, through the environment variable CLARITY_RUNTIME (as a C# project
 //! does): set while Clarity generates the project, it names the Rust
-//! runtime's folder (`<Clarity>/runtimes/rust`), and the generator writes
+//! runtime's folder (`<Clarity>/runtimes/rust`), or any runtime folder of the
+//! repository, the runtimes folder or the repository, and the generator writes
 //! `.cargo/config.toml` patching the crates the project uses onto that folder
 //! and its neighbours. Unset, nothing is written and the project builds on
 //! crates.io.
@@ -41,13 +42,23 @@ fn a_webview_project_patches_only_the_runtime() {
     assert!(!text.contains("clarity-ui"), "{text}");
 }
 
+/// One CLARITY_RUNTIME serves every language: naming the C# runtime's
+/// folder (as the IDE is started for C#), the runtimes folder or the
+/// repository, a Rust project finds the Rust runtime beside it.
+#[test]
+fn the_rust_runtime_is_found_from_any_runtime_folder_of_the_repository() {
+    let runtimes = runtime().parent().unwrap().to_path_buf();
+    let want = rust_local_patch(&runtime(), true).unwrap();
+    for named in [runtimes.join("csharp"), runtimes.clone(), runtimes.parent().unwrap().to_path_buf()] {
+        assert_eq!(want, rust_local_patch(&named, true).unwrap(), "{}", named.display());
+    }
+}
+
 #[test]
 fn a_folder_without_the_runtime_says_what_to_name() {
-    let csharp = runtime().parent().unwrap().join("csharp");
-    let err = rust_local_patch(&csharp, true).unwrap_err();
+    let err = rust_local_patch(Path::new("/no/such/folder"), false).unwrap_err();
     assert!(err.contains("CLARITY_RUNTIME"), "{err}");
     assert!(err.contains("runtimes/rust"), "{err}");
-    let err = rust_local_patch(Path::new("/no/such/folder"), false).unwrap_err();
     assert!(err.contains("/no/such/folder"), "{err}");
 }
 

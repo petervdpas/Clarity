@@ -289,6 +289,10 @@ pub struct PartState {
     /// new line, as a line tool does, as a handler set it; none is false.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub connecting: Option<bool>,
+    /// Whether people resize the boxes of a canvas with `on resize` by their
+    /// grip, as a handler set it; none is true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resizable: Option<bool>,
     /// What a canvas's clear() fills it with, as a handler set it; empty is the theme's panel.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background: Option<String>,
@@ -670,6 +674,15 @@ impl Ui {
 
     pub fn set_connecting(&mut self, part: &str, value: bool) {
         self.parts.entry(part.to_string()).or_default().connecting = Some(value);
+    }
+
+    /// Whether people resize a canvas's boxes by their grip: `canvas.resizable`, true until a handler sets it.
+    pub fn resizable(&self, part: &str) -> bool {
+        self.parts.get(part).and_then(|p| p.resizable).unwrap_or(true)
+    }
+
+    pub fn set_resizable(&mut self, part: &str, value: bool) {
+        self.parts.entry(part.to_string()).or_default().resizable = Some(value);
     }
 
     /// What a canvas's clear() fills it with: `canvas.background`.

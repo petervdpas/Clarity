@@ -976,3 +976,79 @@ code Board
         assert!(board.contains(code), "{code} in\n{board}");
     }
 }
+
+/// An action takes a record to change only when it changes it (sets its
+/// fields, saves or deletes it, or hands it to an action that does), so code
+/// can hand it a record it only reads, as a loop's.
+#[test]
+fn an_action_takes_a_record_to_change_only_when_it_changes_it() {
+    let source = "module boxes
+
+entity Box
+    name: text(40)
+    x: integer
+    y: integer
+
+action width(b: Box) -> integer
+    effects db.read
+    return length(b.name) * 7
+
+action moved(b: Box)
+    effects db.write
+    b.x = b.x + 20
+    save b
+
+action moved_twice(b: Box)
+    effects db.write
+    moved(b)
+    moved(b)
+
+action widest(boxes: list<Box>) -> integer
+    effects db.read
+    let most = 0
+    for b in boxes
+        if width(b) > most
+            most = width(b)
+    return most
+";
+    // A window to start with: these come after the shop's own module.
+    let project = load_sources([("sales.clarity", SALES), ("boxes.clarity", source)]);
+    assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap();
+    let code: String = files.iter().filter(|f| f.path.ends_with(".rs")).map(|f| f.text.as_str()).collect();
+    assert!(code.contains("pub fn width(db: &Db, b: &Box) -> Result<i64>"), "{code}");
+    assert!(code.contains("pub fn moved(db: &Db, b: &mut Box) -> Result<()>"), "{code}");
+    assert!(code.contains("pub fn moved_twice(db: &Db, b: &mut Box) -> Result<()>"), "a record handed on to an action that changes it is changed: {code}");
+    assert!(code.contains("for b in boxes.iter() {"), "{code}");
+    assert!(code.contains("width(db, b)?"), "a record the loop only reads goes as it is: {code}");
+}
+
+/// A loop over a list of the window that runs a handler of the window goes
+/// through the list as it was when the loop began: the handler takes the
+/// whole window.
+#[test]
+fn a_loop_that_runs_a_handler_goes_through_a_copy_of_the_window_s_list() {
+    let source = "module tally
+
+entity Tile
+    x: integer
+
+page Tally: window
+    data tiles: list<Tile>
+    data total: integer
+    button \"Count\" name countButton at 1,1 span 2 on click: counted
+
+code Tally
+    handler counted
+        for t in tiles
+            add(t.x)
+
+    handler add(n: integer)
+        total = total + n
+";
+    let project = load_sources([("sales.clarity", SALES), ("tally.clarity", source)]);
+    assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap();
+    let code: String = files.iter().filter(|f| f.path.ends_with(".rs")).map(|f| f.text.as_str()).collect();
+    assert!(code.contains("for t in w.tiles.clone().iter() {"), "{code}");
+}

@@ -268,7 +268,7 @@ impl Element for RadioPart {
         let places = self.lay_out(p.fonts, look);
         let chosen = self.chosen();
         let focus_at = self.focus_at();
-        let error = self.base.state().and_then(|s| s.error).is_some_and(|e| !e.show().is_empty());
+        let error = self.base.state().and_then(|s| s.error.clone()).is_some_and(|e| !e.show().is_empty());
         let _clip = p.clip(self.base.node.bounds);
         for (i, (choice, place)) in choices.iter().zip(places).enumerate() {
             let circle = Rect::new(place.x + 1.0, place.y + (LINE - CIRCLE) / 2.0, CIRCLE, CIRCLE);

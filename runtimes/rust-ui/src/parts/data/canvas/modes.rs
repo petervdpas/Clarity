@@ -238,7 +238,7 @@ impl CanvasPart {
     /// The tool in hand: the one its state names, when the canvas has it, else its first.
     pub fn tool_in_hand(&self) -> &'static str {
         let tools = self.tools_shown();
-        let named = self.base.state().and_then(|s| s.tool).unwrap_or_default();
+        let named = self.base.state().and_then(|s| s.tool.clone()).unwrap_or_default();
         tools.iter().copied().find(|t| *t == named).or_else(|| tools.first().copied()).unwrap_or("")
     }
 
@@ -249,7 +249,7 @@ impl CanvasPart {
 
     /// The color it paints or draws with: the theme's by name, or written out.
     pub fn ink(&self) -> String {
-        self.base.state().and_then(|s| s.ink).filter(|i| !i.is_empty()).or_else(|| self.base.spec.text("ink").map(str::to_string)).unwrap_or_else(|| "text".to_string())
+        self.base.state().and_then(|s| s.ink.clone()).filter(|i| !i.is_empty()).or_else(|| self.base.spec.text("ink").map(str::to_string)).unwrap_or_else(|| "text".to_string())
     }
 
     /// The shape chosen, its place in the drawing from 0, as the window keeps it (`selected`, as a table's chosen row); none for none.

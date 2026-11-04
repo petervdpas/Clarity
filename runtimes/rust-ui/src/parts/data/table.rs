@@ -1134,6 +1134,7 @@ impl TablePart {
             _ => None,
         };
         let chosen = self.rows.chosen(&self.base);
+        let striped = rows::striped(&self.base);
         let (first, end) = self.rows.scroller.in_sight(height, shown.len());
         for (at, place) in shown.iter().enumerate().take(end).skip(first) {
             let row = self.rows.scroller.row_on_screen(at, height, height);
@@ -1144,7 +1145,7 @@ impl TablePart {
             } else {
                 None
             };
-            self.draw_row(p, *place, row, state);
+            self.draw_row(p, *place, row, state, striped && at % 2 == 1);
             if let Some((target, where_)) = self.rows.drop {
                 if target == *place {
                     rows::draw_drop(p, row, where_);
@@ -1153,9 +1154,9 @@ impl TablePart {
         }
     }
 
-    fn draw_row(&self, p: &Painter, place: usize, row: Rect, state: Option<&str>) {
+    fn draw_row(&self, p: &Painter, place: usize, row: Rect, state: Option<&str>, stripe: bool) {
         let look = p.look;
-        let text = rows::draw_row_back(p, row, state).text.unwrap_or_else(|| look.color("text"));
+        let text = rows::draw_row_back(p, row, state, stripe).text.unwrap_or_else(|| look.color("text"));
         let lefts = self.lefts(row.x);
         for (c, column) in self.columns.iter().enumerate() {
             let cell = Rect::new(lefts[c].0, row.y, lefts[c].1, row.height - look.border());

@@ -173,6 +173,14 @@
   let buildLog = $state<string[]>([]);
   let buildDone = $state<BuildDone | null>(null);
   let showOutput = $state(false);
+  /** Folded to its header line, to see more of the application; a failed build opens it again. */
+  let outputFolded = $state(false);
+  let generating = $state(false);
+  /** Generating, building or running a command line: the output pulses and cannot be closed halfway. */
+  let outputBusy = $derived(generating || building || commandRunning);
+  $effect(() => {
+    if (buildDone && !buildDone.ok) outputFolded = false;
+  });
   let outputPre: HTMLElement | undefined = $state();
 
   // The output follows the newest line.
@@ -248,6 +256,7 @@
     buildLog = [];
     buildDone = null;
     showOutput = true;
+    generating = true;
     try {
       const done = await invoke<{ out: string; written: string[]; removed: string[] }>("generate_app");
       // Each file it wrote and removed, by its path in the output folder.
@@ -256,6 +265,8 @@
       buildDone = { ok: true, message: `The source is generated in ${done.out}: ${counts}`, binary: null };
     } catch (err) {
       buildDone = { ok: false, message: String(err), binary: null };
+    } finally {
+      generating = false;
     }
   }
 
@@ -1187,6 +1198,14 @@
       running = state !== null;
       address = state?.address ?? null;
     });
+    // And a build may still run: its Output comes back with what it printed so far.
+    invoke<{ busy: boolean; lines: string[]; ended: { ok: boolean; message: string } | null } | null>("build_snapshot").then((last) => {
+      if (!last?.busy) return;
+      buildLog = last.lines.slice(-BUILD_LOG_LINES);
+      buildDone = null;
+      building = true;
+      showOutput = true;
+    });
     invoke<string | null>("initial_project").then((dir) => {
       const start = dir ?? readLastProject();
       if (start) openProject(start);
@@ -1660,11 +1679,16 @@
       </main>
       <PartGuard name="output">
         {#if showOutput}
-          <Splitter axis="y" label="Height of the output" onmove={(d) => layout.resize("output", -d)} />
-          <!-- The toolchain's output while the application is generated and built, at the height the person dragged it to. -->
-          <section class="output-panel" aria-label="Build output" style:height="{layout.sizes.output}px">
+          {#if !outputFolded}
+            <Splitter axis="y" label="Height of the output" onmove={(d) => layout.resize("output", -d)} />
+          {/if}
+          <!-- The toolchain's output while the application is generated and built, at the height the person dragged it to; folded, its header alone. -->
+          <section class="output-panel" class:busy={outputBusy} class:folded={outputFolded} aria-label="Build output" style:height={outputFolded ? "auto" : `${layout.sizes.output}px`}>
             <header>
               <strong>Output</strong>
+              {#if generating}
+                <span class="status">Generating...</span>
+              {/if}
               {#if commandRunning}
                 <span class="status">Building, then running the command line</span>
               {:else if building}
@@ -1675,12 +1699,14 @@
               {#if address}
                 <button class="link address" onclick={openInBrowser} title="Open it in your browser">{address}</button>
               {/if}
-              <button onclick={() => (showOutput = false)} title="Hide the output">&times;</button>
+              <button onclick={() => (outputFolded = !outputFolded)} title={outputFolded ? "Show the output" : "Fold the output to this line"} aria-expanded={!outputFolded}>{outputFolded ? "\u25B4" : "\u25BE"}</button>
+              <!-- Closed only when nothing runs: halfway a build it folds instead. -->
+              <button onclick={() => (showOutput = false)} disabled={outputBusy} title={outputBusy ? "It is still working; fold it instead" : "Close the output"}>&times;</button>
             </header>
-            {#if buildLog.length > 0}
+            {#if !outputFolded && buildLog.length > 0}
               <pre bind:this={outputPre}>{buildLog.join("\n")}</pre>
             {/if}
-            {#if commandRunning}
+            {#if commandRunning && !outputFolded}
               <!-- What the command-line program reads, as from a terminal: the answer to its questions. -->
               <form
                 class="typed"
@@ -1907,6 +1933,34 @@
     gap: 12px;
     padding: 6px 12px;
     border-bottom: 1px solid var(--border);
+  }
+
+  /* Generating or building: the header pulses, folded or not, so a build is not closed halfway. */
+  .output-panel.busy header {
+    animation: output-busy 1.6s ease-in-out infinite;
+  }
+
+  @keyframes output-busy {
+    0%,
+    100% {
+      box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--busy) 35%, transparent);
+      background: color-mix(in srgb, var(--busy) 8%, var(--panel));
+    }
+    50% {
+      box-shadow: inset 0 -3px 0 var(--busy);
+      background: color-mix(in srgb, var(--busy) 22%, var(--panel));
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .output-panel.busy header {
+      animation: none;
+      box-shadow: inset 0 -3px 0 var(--busy);
+    }
+  }
+
+  .output-panel.folded header {
+    border-bottom: none;
   }
 
   .output-panel .status {

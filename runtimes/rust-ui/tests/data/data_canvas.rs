@@ -625,6 +625,56 @@ fn a_canvas_without_on_connect_shows_no_handles_and_drags_as_before() {
     assert_eq!(vec!["drag", "drop"], host.events());
 }
 
+// -- Boxes people resize (`on resize`) ----------------------------------------------
+
+#[test]
+fn the_box_under_the_pointer_shows_a_grip_in_the_accent_at_its_corner() {
+    let (host, mut screen) = canvas_screen(&format!(r#"{UNITS} onresize="sized""#));
+    two_boxes(&host);
+    let accent = ThemeLook::clarity(false).color("accent");
+    // The first box's bottom-right corner: unit 30, 60 is pixel 320, 240.
+    assert_ne!(accent, pixel(&mut screen, 320, 240), "no grip before the pointer is over a box");
+    screen.pointer_moved(280.0, 200.0);
+    let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
+    shot.save(format!("{SHOTS}/data-canvas-resize-grip.png")).unwrap();
+    assert_eq!(accent, shot.pixel(320, 240));
+    assert_eq!(Some((30.0, 60.0)), the_canvas(&screen).resize_grip());
+    assert_eq!(3, the_canvas(&screen).drawing_sent().len(), "the grip is not in the drawing");
+    screen.pointer_left();
+    assert_eq!(None, the_canvas(&screen).resize_grip(), "the pointer left: no grip");
+}
+
+#[test]
+fn a_grip_dragged_outlines_the_new_box_dashed_and_resize_reads_its_corners() {
+    let (host, mut screen) = canvas_screen(&format!(r#"{UNITS} onresize="sized" ondrag="moved""#));
+    two_boxes(&host);
+    screen.pointer_moved(320.0, 240.0);
+    press(&mut screen, 320.0, 240.0);
+    screen.pointer_moved(360.0, 280.0);
+    screen.pointer_moved(400.0, 320.0);
+    let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
+    shot.save(format!("{SHOTS}/data-canvas-resize-outline.png")).unwrap();
+    let accent = ThemeLook::clarity(false).color("accent");
+    // The new right edge, unit 50, is pixel 400, from 160 down to 320.
+    let dashed: usize = (170..310).filter(|y| shot.pixel(400, *y) == accent).count();
+    assert!(dashed > 40 && dashed < 120, "a dashed outline, accent and gaps: {dashed}");
+    assert!(host.points.borrow().is_empty(), "no handler while resizing");
+    release(&mut screen, 400.0, 320.0);
+    let points = host.points.borrow();
+    assert_eq!(vec!["resize"], points.iter().map(|p| p.1.clone()).collect::<Vec<_>>(), "a resize, not a drag");
+    assert_eq!(json!({"x": 50, "y": 80, "fromX": 30, "fromY": 60}), Value::Object(points[0].2.clone()));
+}
+
+#[test]
+fn a_canvas_without_on_resize_draws_no_grip() {
+    let (host, mut screen) = canvas_screen(&format!(r#"{UNITS} ondrag="moved" ondrop="dropped""#));
+    two_boxes(&host);
+    let before = Shot::of(&mut screen, 800, 400, 1.0).pixel(320, 240);
+    screen.pointer_moved(280.0, 200.0);
+    assert_eq!(None, the_canvas(&screen).resize_grip());
+    assert_eq!(before, pixel(&mut screen, 320, 240), "nothing drawn at the corner");
+}
+
 #[test]
 fn a_paint_canvas_with_a_box_under_the_pointer_shows_no_handles() {
     let (host, mut screen) = canvas_screen(&format!(r#"{UNITS} mode="paint" bind="picture" onconnect="linked""#));
@@ -714,4 +764,55 @@ fn a_diagram_draws_boxes_with_columns_and_a_dashed_relationship_between_them() {
     shot.save(format!("{SHOTS}/data-canvas-diagram.png")).unwrap();
     assert_eq!(look.color("accent_soft"), shot.pixel(64, 64), "the header");
     assert_eq!(look.color("raised"), shot.pixel(560 + 80, 200), "the relationship ends at the box, not inside it");
+}
+
+/// How long panning a diagram as large as the modelling example's takes
+/// (2221 shapes): a measure, not a check, run by hand with
+/// `cargo test --release -p clarity-ui --test data timing_a_pan -- --ignored --nocapture`.
+/// It was 65 ms a frame unoptimized before the canvas kept its shapes and
+/// the parts their state; 7 ms optimized after.
+#[test]
+#[ignore]
+fn timing_a_pan_over_a_big_diagram() {
+    let host = Rc::new(CanvasHost::default());
+    let mut screen = alone(r#"<Canvas name="pad" zoom="true" units="{&quot;width&quot;:4000,&quot;height&quot;:3000}" />"#, host.clone(), 1600.0, 900.0);
+    let mut drawing = vec![clear()];
+    for i in 0..60 {
+        let (x, y) = (40 + (i % 10) * 380, 40 + (i / 10) * 480);
+        drawing.push(json!({"op": "link", "name": format!("l{i}"), "x1": x + 100, "y1": y + 100, "x2": 2000, "y2": 1500, "via": [], "color": "muted", "width": 2, "end": "many", "label": "x", "style": "dashed"}));
+    }
+    for i in 0..60 {
+        let (x, y) = (40 + (i % 10) * 380, 40 + (i / 10) * 480);
+        drawing.push(rect((x - 2) as f64, (y - 2) as f64, 304.0, 404.0, "accent"));
+        drawing.push(rect(x as f64, y as f64, 300.0, 400.0, "raised"));
+        drawing.push(rect(x as f64, y as f64, 300.0, 30.0, "accent_soft"));
+        drawing.push(json!({"op": "text", "x": x + 150, "y": y + 15, "text": "Title", "style": "bold mono"}));
+        for r in 0..16 {
+            drawing.push(json!({"op": "text", "x": x + 12, "y": y + 41 + r * 22, "text": "string?", "color": "accent", "size": 11, "align": "left", "style": "mono"}));
+            drawing.push(json!({"op": "text", "x": x + 100, "y": y + 41 + r * 22, "text": "someName", "size": 11, "align": "left", "style": "mono"}));
+        }
+    }
+    println!("{} shapes", drawing.len());
+    host.draw("pad", drawing);
+    Shot::of(&mut screen, 1600, 900, 1.0);
+    let t = std::time::Instant::now();
+    screen.pointer_pressed(800.0, 450.0, PointerButton::Left, 1);
+    for i in 0..10 {
+        screen.pointer_moved(800.0 + i as f64 * 10.0, 450.0);
+        Shot::of(&mut screen, 1600, 900, 1.0);
+    }
+    println!("10 pan frames: {:?}", t.elapsed());
+    let c = the_canvas(&screen);
+    let t = std::time::Instant::now();
+    for _ in 0..10 { let _ = c.shown(); }
+    println!("10 shown(): {:?}", t.elapsed());
+    let t = std::time::Instant::now();
+    for _ in 0..10 { let _ = c.drawing_sent(); }
+    println!("10 drawing_sent(): {:?}", t.elapsed());
+    let t = std::time::Instant::now();
+    for _ in 0..10 { let _ = c.drawing(); }
+    println!("10 drawing(): {:?}", t.elapsed());
+    let t = std::time::Instant::now();
+    for _ in 0..10 { let _ = c.box_at((10.0, 10.0)); }
+    println!("10 box_at(): {:?}", t.elapsed());
 }

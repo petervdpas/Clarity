@@ -39,6 +39,8 @@ struct PartState {
     std::optional<bool> snap;
     // Whether a press anywhere on a box of a canvas with `on connect` draws a new line, as a handler set it.
     std::optional<bool> connecting;
+    // Whether people resize the boxes of a canvas with `on resize` by their grip, as a handler set it; none is true.
+    std::optional<bool> resizable;
     // What a canvas's clear() fills it with, as a handler set it; empty is the theme's panel.
     std::optional<std::string> background;
     // A canvas's grid dots, as a handler set them: pixels across, and color (empty is the theme's border).
@@ -226,6 +228,9 @@ public:
     /// Whether a press anywhere on a box draws a new line (`canvas.connecting`), false until a handler sets it.
     bool connecting(const std::string& part) const;
     void set_connecting(const std::string& part, bool value) { parts_[part].connecting = value; }
+    /// Whether people resize a canvas's boxes by their grip (`canvas.resizable`), true until a handler sets it.
+    bool resizable(const std::string& part) const;
+    void set_resizable(const std::string& part, bool value) { parts_[part].resizable = value; }
     /// What a canvas's clear() fills it with (`canvas.background`), as its line says until a handler sets it.
     std::string background(const std::string& part, const std::string& design) const;
     void set_background(const std::string& part, const std::string& value) { parts_[part].background = value; }

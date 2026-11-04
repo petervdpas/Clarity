@@ -425,6 +425,12 @@ fn stop_app(app: AppHandle) {
     build::stop(&app);
 }
 
+/// The last build, for a screen that reloaded while it ran: its lines and how it ended.
+#[tauri::command]
+fn build_snapshot(app: AppHandle) -> Option<build::BuildSnapshot> {
+    build::snapshot(&app)
+}
+
 /// The application Run started, while it runs: where a browser opens it.
 #[tauri::command]
 fn app_state(app: AppHandle) -> Option<build::AppRunning> {
@@ -889,6 +895,7 @@ pub fn run() {
             type_line,
             stop_app,
             app_state,
+            build_snapshot,
             engines::engine_info,
             engines::engine_source_text,
             parts::part_files,

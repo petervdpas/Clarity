@@ -577,6 +577,10 @@ pub struct WidgetProps {
     /// `sortable`: a click on a table's header sorts its rows by that column.
     #[serde(default)]
     pub sortable: bool,
+    /// `striped`: a table, list, tree or tree table draws every other row
+    /// with a faint stripe.
+    #[serde(default)]
+    pub striped: bool,
     /// `order by field [desc]`: the order a table's rows show in first.
     #[serde(default)]
     pub order: Option<TableOrder>,

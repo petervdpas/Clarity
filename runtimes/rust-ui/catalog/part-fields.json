@@ -60,6 +60,7 @@
   "source": "text",
   "split": "bool",
   "step": "text",
+  "striped": "bool",
   "style": "text",
   "surface": "json",
   "switches": "texts",

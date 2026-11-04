@@ -132,7 +132,7 @@ impl TypeAheadPart {
     fn value(&self) -> Value {
         match self.base.bound() {
             Some(path) => self.base.host.read(path).unwrap_or(Value::Null),
-            None => match self.base.state().and_then(|s| s.text).filter(|t| !t.is_empty()) {
+            None => match self.base.state().and_then(|s| s.text.clone()).filter(|t| !t.is_empty()) {
                 Some(text) => Value::String(text),
                 None => Value::Null,
             },
@@ -212,7 +212,7 @@ impl TypeAheadPart {
         let state = self.base.state();
         self.editor.enabled = self.base.enabled();
         self.editor.read_only = self.base.read_only();
-        self.editor.marked = state.and_then(|s| s.error).is_some_and(|e| !e.show().is_empty());
+        self.editor.marked = state.and_then(|s| s.error.clone()).is_some_and(|e| !e.show().is_empty());
     }
 
     fn ready(&mut self) {

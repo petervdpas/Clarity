@@ -156,3 +156,43 @@ fn every_stack_runs_connect_and_keeps_connecting() {
     has(&csharp, "Sheet.Connecting = false");
     has(&csharp, "void ConnectAt_Sheet(Pointer at)");
 }
+
+const RESIZE: &str = "module diagram
+
+page Main: window
+    data width: integer
+    canvas name sheet at 1,1 span 12 rows 8 units 3000 x 2000 zoom on draw: drawSheet on resize: resized
+    button \"Manual\" name manualButton at 1,9 span 2 on click: manualClicked
+
+code Main
+    handler drawSheet
+        sheet.clear(\"panel\")
+        sheet.rect(20, 20, 200, 100, \"raised\")
+
+    handler resized
+        if sheet.fromX > 20
+            width = sheet.x - 20
+
+    handler manualClicked
+        sheet.resizable = not sheet.resizable
+";
+
+#[test]
+fn every_stack_runs_resize_and_keeps_resizable() {
+    let rust = generated_from(RESIZE, Backend::Rust, Ui::Clarity);
+    has(&rust, "ui.set_resizable(\"sheet\", ");
+    has(&rust, "ui.resizable(\"sheet\")");
+    has(&rust, "onresize=\"resized\"");
+    let go = generated_from(RESIZE, Backend::Go, Ui::Clarity);
+    has(&go, "ui.SetResizable(\"sheet\", ");
+    has(&go, "ui.Resizable(\"sheet\")");
+    let c = generated_from(RESIZE, Backend::C, Ui::Clarity);
+    has(&c, "clarity_ui_set_resizable(ui, \"sheet\", ");
+    has(&c, "clarity_ui_resizable(ui, \"sheet\")");
+    let cpp = generated_from(RESIZE, Backend::Cpp, Ui::Clarity);
+    has(&cpp, "ui.set_resizable(\"sheet\", ");
+    has(&cpp, "ui.resizable(\"sheet\")");
+    let csharp = generated_from(RESIZE, Backend::Csharp, Ui::Clarity);
+    has(&csharp, "Sheet.Resizable = !");
+    has(&csharp, "void ResizeAt_Sheet(Pointer at)");
+}

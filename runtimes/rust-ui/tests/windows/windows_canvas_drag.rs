@@ -6,7 +6,10 @@
 //! view, even when the snapped box stays where it was that time. On a
 //! canvas with `on connect` a press on a box's handle draws a new line to
 //! another box: the connect handler finds the two boxes, as the modelling
-//! example's does, and keeps a link between them.
+//! example's does, and keeps a link between them. On a canvas with `on
+//! resize` a press on the grip at a box's bottom-right corner sizes it: the
+//! resize handler finds the box by where that corner was and keeps its new
+//! size.
 
 use std::sync::{Arc, Mutex};
 
@@ -40,6 +43,12 @@ const CARRY_BOARD: &str = r#"<Window name="Main">
 </Window>
 "#;
 
+/// The carrying board with `on resize`: a box's grip sizes it.
+const SIZED_BOARD: &str = r#"<Window name="Main">
+  <Canvas name="board" at="1,1" span="12" undoScope="board" units="{&quot;width&quot;:4000,&quot;height&quot;:3000}" zoom="true" grid="20" snap="true" ondrop="carried" onbend="bent" onconnect="linked" onresize="sized" />
+</Window>
+"#;
+
 const MODEL: &str = r#"{"project": {"locale": {"language": "en"}, "files": [{"pages": [{"name": {"name": "Main"}, "kind": "window", "title": "Board"}]}]}, "keys": []}"#;
 
 const FILES: AppFiles = AppFiles { windows: &[("Main", BOARD)], apps: &[], themes: &[], model: MODEL, resources: &[], title: "Board", width: 800.0, height: 500.0 };
@@ -47,6 +56,8 @@ const FILES: AppFiles = AppFiles { windows: &[("Main", BOARD)], apps: &[], theme
 const LINKED_FILES: AppFiles = AppFiles { windows: &[("Main", LINKED_BOARD)], ..FILES };
 
 const CARRY_FILES: AppFiles = AppFiles { windows: &[("Main", CARRY_BOARD)], ..FILES };
+
+const SIZED_FILES: AppFiles = AppFiles { windows: &[("Main", SIZED_BOARD)], ..FILES };
 
 /// The box: where it is and how big.
 const BOX: (i64, i64, i64, i64) = (1000, 1000, 400, 200);
@@ -67,6 +78,8 @@ struct Board {
     line_tool: bool,
     /// Whether its canvas starts read-only.
     readonly: bool,
+    /// Whether its window starts with `canvas.resizable` set false.
+    fixed: bool,
 }
 
 fn reply(state: WindowState) -> Reply {
@@ -75,6 +88,11 @@ fn reply(state: WindowState) -> Reply {
 
 fn int(data: &Map<String, Value>, name: &str) -> i64 {
     data.get(name).and_then(Value::as_i64).unwrap_or(0)
+}
+
+/// The first box's width and height: as the resize handler kept them, else BOX's.
+fn size(data: &Map<String, Value>) -> (i64, i64) {
+    (data.get("w").and_then(Value::as_i64).unwrap_or(BOX.2), data.get("h").and_then(Value::as_i64).unwrap_or(BOX.3))
 }
 
 fn snapped(value: i64, step: i64) -> i64 {
@@ -87,9 +105,10 @@ fn draw(state: &mut WindowState) {
     let moving = int(d, "movingId") != 0;
     let (x, y) = if moving { (int(d, "movedX"), int(d, "movedY")) } else { (int(d, "x"), int(d, "y")) };
     let via = d.get("via").cloned().unwrap_or(json!([]));
+    let (w, h) = size(d);
     let mut drawing = vec![
-        json!({"op": "link", "name": "l1", "x1": x + BOX.2 / 2, "y1": y + BOX.3 / 2, "x2": 3000, "y2": 2500, "via": via, "color": "border", "width": 2}),
-        json!({"op": "rect", "x": x, "y": y, "width": BOX.2, "height": BOX.3, "color": "raised"}),
+        json!({"op": "link", "name": "l1", "x1": x + w / 2, "y1": y + h / 2, "x2": 3000, "y2": 2500, "via": via, "color": "border", "width": 2}),
+        json!({"op": "rect", "x": x, "y": y, "width": w, "height": h, "color": "raised"}),
     ];
     if d.contains_key("x2") {
         drawing.push(json!({"op": "rect", "x": int(d, "x2"), "y": int(d, "y2"), "width": BOX.2, "height": BOX.3, "color": "raised"}));
@@ -118,6 +137,9 @@ impl Program for Board {
         }
         if self.readonly {
             state.parts.entry("board".into()).or_default().readonly = Some(true);
+        }
+        if self.fixed {
+            state.parts.entry("board".into()).or_default().resizable = Some(false);
         }
         draw(&mut state);
         Ok(reply(state))
@@ -183,6 +205,17 @@ impl Program for Board {
                 };
                 let (from, to) = (which(int(&at, "fromX"), int(&at, "fromY")), which(int(&at, "x"), int(&at, "y")));
                 d.insert("linked".into(), json!([from, to]));
+            }
+            "sized" => {
+                // The box whose bottom-right corner was at fromX, fromY: found just inside it, as the modelling example finds it.
+                let (fx, fy) = (int(&at, "fromX") - 1, int(&at, "fromY") - 1);
+                let (w, h) = size(d);
+                if fx >= int(d, "x") && fx <= int(d, "x") + w && fy >= int(d, "y") && fy <= int(d, "y") + h {
+                    let (w, h) = (int(&at, "x") - int(d, "x"), int(&at, "y") - int(d, "y"));
+                    d.insert("w".into(), json!(w));
+                    d.insert("h".into(), json!(h));
+                    d.insert("sizedFrom".into(), json!([int(&at, "fromX"), int(&at, "fromY")]));
+                }
             }
             "bent" if at.get("bent") == Some(&json!("l1")) => {
                 d.insert("via".into(), at.get("via").cloned().unwrap_or(json!([])));
@@ -594,4 +627,155 @@ fn a_right_click_on_a_box_opens_the_canvas_menu_with_the_pointer_where_it_was() 
     screen.pointer_pressed(px, py, PointerButton::Right, 1);
     screen.pointer_released(px, py, PointerButton::Right);
     assert!(screen.context_menus().is_open());
+}
+
+#[test]
+fn a_right_click_on_a_line_takes_it_in_hand_and_the_menu_reads_which() {
+    let (mut screen, board) = carry_board();
+    let pointer = |screen: &Screen| screen.root().as_any().downcast_ref::<WindowStack>().unwrap().current().unwrap().state_now().parts["board"].pointer.clone().unwrap();
+    // Halfway along the link, beside the box, as the bend test presses it.
+    let (x, y) = on_screen(&screen, 2100.0, 1800.0);
+    screen.pointer_moved(x, y);
+    screen.pointer_pressed(x, y, PointerButton::Right, 1);
+    screen.pointer_released(x, y, PointerButton::Right);
+    assert!(screen.context_menus().is_open());
+    assert!(board.log.lock().unwrap().is_empty(), "{:?}", board.log.lock().unwrap());
+    assert_eq!(json!("l1"), pointer(&screen)["bent"], "the menu's handler reads which line");
+    // On a box, no line.
+    let (px, py) = on_screen(&screen, 200.0, 200.0);
+    screen.pointer_pressed(px, py, PointerButton::Left, 1);
+    screen.pointer_released(px, py, PointerButton::Left);
+    let (bx, by) = on_screen(&screen, (BOX.0 + 100) as f64, (BOX.1 + 50) as f64);
+    screen.pointer_pressed(bx, by, PointerButton::Right, 1);
+    screen.pointer_released(bx, by, PointerButton::Right);
+    assert_eq!(json!(""), pointer(&screen)["bent"]);
+}
+
+// -- Boxes people resize (`on resize`) ----------------------------------------------
+
+fn sized_board(board: Board) -> (Screen, Arc<Board>) {
+    started_with(Board { two: true, ..board }, SIZED_FILES)
+}
+
+/// Where on the screen the first box's bottom-right corner, its grip, is.
+fn grip(screen: &Screen) -> (f64, f64) {
+    on_screen(screen, (BOX.0 + BOX.2) as f64, (BOX.1 + BOX.3) as f64)
+}
+
+#[test]
+fn a_canvas_with_on_resize_shows_a_grip_on_the_box_under_the_pointer() {
+    let (mut screen, _) = sized_board(Board::default());
+    assert_eq!(None, canvas(&screen).resize_grip(), "no grip before the pointer is over a box");
+    let (x, y) = on_screen(&screen, (BOX.0 + BOX.2 / 2) as f64, (BOX.1 + BOX.3 / 2) as f64);
+    screen.pointer_moved(x, y);
+    assert_eq!(Some(((BOX.0 + BOX.2) as f64, (BOX.1 + BOX.3) as f64)), canvas(&screen).resize_grip());
+    // Just outside the corner the grip still shows, with the resize cursor over it.
+    let (gx, gy) = grip(&screen);
+    screen.pointer_moved(gx + 3.0, gy + 3.0);
+    assert!(canvas(&screen).resize_grip().is_some());
+    assert_eq!(clarity_ui::input::Cursor::ResizeCorner, screen.cursor());
+    let (ex, ey) = on_screen(&screen, (BOX.0 - 200) as f64, (BOX.1 - 200) as f64);
+    screen.pointer_moved(ex, ey);
+    assert_eq!(None, canvas(&screen).resize_grip());
+}
+
+#[test]
+fn a_drag_on_the_grip_shows_the_new_box_and_runs_resize_once_on_the_grid() {
+    let (mut screen, board) = sized_board(Board::default());
+    let scale = view(&screen).scale;
+    let before = view(&screen);
+    let (gx, gy) = grip(&screen);
+    screen.pointer_moved(gx, gy);
+    screen.pointer_pressed(gx, gy, PointerButton::Left, 1);
+    screen.pointer_moved(gx + 10.0, gy);
+    // 205 by 98 units: the new corner snaps to the grid of 20, at 1605 -> 1600 and 1298 -> 1300.
+    screen.pointer_moved(gx + 205.0 * scale, gy + 98.0 * scale);
+    let outline = canvas(&screen).resize_outline().expect("the new box is outlined");
+    assert_eq!((BOX.0 as f64, BOX.1 as f64, 600.0, 300.0), (outline.x, outline.y, outline.width, outline.height));
+    assert!(board.log.lock().unwrap().is_empty(), "no handler while resizing: {:?}", board.log.lock().unwrap());
+    assert_eq!(None, canvas(&screen).resize_grip(), "no grip while resizing");
+    screen.pointer_released(gx + 205.0 * scale, gy + 98.0 * scale, PointerButton::Left);
+    assert_eq!(vec!["board sized"], *board.log.lock().unwrap(), "one edit");
+    let kept = data(&screen);
+    assert_eq!((600, 300), size(&kept));
+    assert_eq!(json!([BOX.0 + BOX.2, BOX.1 + BOX.3]), kept["sizedFrom"], "fromX, fromY: where the corner was");
+    assert_eq!((BOX.0 as f64, BOX.1 as f64), drawn_box(&screen), "the box's top-left stays");
+    assert_eq!(None, canvas(&screen).resize_outline());
+    assert_eq!(before, view(&screen), "the view did not pan");
+}
+
+#[test]
+fn a_box_is_never_resized_smaller_than_the_least_size() {
+    let (mut screen, board) = sized_board(Board::default());
+    let scale = view(&screen).scale;
+    let (gx, gy) = grip(&screen);
+    screen.pointer_moved(gx, gy);
+    screen.pointer_pressed(gx, gy, PointerButton::Left, 1);
+    screen.pointer_moved(gx - 10.0, gy);
+    screen.pointer_moved(gx - 1000.0 * scale, gy - 1000.0 * scale);
+    screen.pointer_released(gx - 1000.0 * scale, gy - 1000.0 * scale, PointerButton::Left);
+    assert_eq!(vec!["board sized"], *board.log.lock().unwrap());
+    // 40 by 30 at least; on the grid of 20 the bottom edge goes to the next step, 40.
+    assert_eq!((40, 40), size(&data(&screen)));
+}
+
+#[test]
+fn a_grip_let_go_where_it_was_runs_nothing_and_a_press_inside_still_carries() {
+    let (mut screen, board) = sized_board(Board::default());
+    let (gx, gy) = grip(&screen);
+    screen.pointer_moved(gx, gy);
+    screen.pointer_pressed(gx, gy, PointerButton::Left, 1);
+    screen.pointer_moved(gx + 1.0, gy);
+    screen.pointer_released(gx + 1.0, gy, PointerButton::Left);
+    assert!(board.log.lock().unwrap().is_empty(), "{:?}", board.log.lock().unwrap());
+    let scale = view(&screen).scale;
+    let (x, y) = on_screen(&screen, (BOX.0 + 100) as f64, (BOX.1 + 50) as f64);
+    screen.pointer_moved(x, y);
+    screen.pointer_pressed(x, y, PointerButton::Left, 1);
+    screen.pointer_moved(x + 10.0, y);
+    screen.pointer_moved(x + 200.0 * scale, y);
+    screen.pointer_released(x + 200.0 * scale, y, PointerButton::Left);
+    assert_eq!(vec!["board carried"], *board.log.lock().unwrap());
+    assert_eq!((BOX.2, BOX.3), size(&data(&screen)), "carried, not resized");
+}
+
+#[test]
+fn a_cancelled_resize_runs_nothing() {
+    let (mut screen, board) = sized_board(Board::default());
+    let scale = view(&screen).scale;
+    let (gx, gy) = grip(&screen);
+    screen.pointer_moved(gx, gy);
+    screen.pointer_pressed(gx, gy, PointerButton::Left, 1);
+    screen.pointer_moved(gx + 100.0 * scale, gy + 100.0 * scale);
+    screen.pointer_cancelled();
+    assert_eq!(None, canvas(&screen).resize_outline());
+    assert!(board.log.lock().unwrap().is_empty(), "{:?}", board.log.lock().unwrap());
+}
+
+#[test]
+fn a_canvas_whose_code_set_resizable_false_shows_no_grip_and_resizes_nothing() {
+    let (mut screen, board) = sized_board(Board { fixed: true, ..Board::default() });
+    let scale = view(&screen).scale;
+    let (gx, gy) = grip(&screen);
+    screen.pointer_moved(gx - 3.0, gy - 3.0);
+    assert_eq!(None, canvas(&screen).resize_grip());
+    assert_ne!(clarity_ui::input::Cursor::ResizeCorner, screen.cursor());
+    screen.pointer_pressed(gx - 3.0, gy - 3.0, PointerButton::Left, 1);
+    screen.pointer_moved(gx + 10.0, gy);
+    screen.pointer_moved(gx + 200.0 * scale, gy + 100.0 * scale);
+    screen.pointer_released(gx + 200.0 * scale, gy + 100.0 * scale, PointerButton::Left);
+    assert!(!board.log.lock().unwrap().contains(&"board sized".to_string()), "{:?}", board.log.lock().unwrap());
+    assert_eq!((BOX.2, BOX.3), size(&data(&screen)));
+}
+
+#[test]
+fn a_canvas_without_on_resize_shows_no_grip() {
+    let (mut screen, board) = carry_board();
+    let (x, y) = on_screen(&screen, (BOX.0 + BOX.2 / 2) as f64, (BOX.1 + BOX.3 / 2) as f64);
+    screen.pointer_moved(x, y);
+    assert_eq!(None, canvas(&screen).resize_grip());
+    let (gx, gy) = grip(&screen);
+    screen.pointer_moved(gx - 2.0, gy - 2.0);
+    assert_ne!(clarity_ui::input::Cursor::ResizeCorner, screen.cursor());
+    assert!(board.log.lock().unwrap().is_empty());
 }

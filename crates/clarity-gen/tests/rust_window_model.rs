@@ -159,3 +159,18 @@ code Card
     let wasm = files.iter().find(|f| f.path.ends_with("counter.wasm")).and_then(|f| f.bytes.as_deref()).expect("counter.wasm");
     assert_eq!(&wasm[..4], b"\0asm");
 }
+
+/// Clarity.UI lays out, shapes text and draws every frame, so a desktop
+/// program's dependencies build optimized in a debug build too (a large
+/// diagram pans and zooms at speed); the program's own code stays quick to build.
+#[test]
+fn a_desktop_program_builds_its_dependencies_optimized_in_a_debug_build() {
+    let files = files(
+        "module pad
+
+page Pad: window
+    button \"Go\" name goButton at 1,1 span 2
+",
+    );
+    has(file(&files, "Cargo.toml"), "[profile.dev.package.\"*\"]\nopt-level = 3\n");
+}

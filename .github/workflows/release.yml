@@ -88,7 +88,10 @@ jobs:
         run: npm run build
 
       - name: Test the workspace
-        run: cargo test --workspace
+        run: |
+          # The C header's test links the library itself, which cargo test does not build.
+          cargo build -p clarity-ui-ffi
+          cargo test --workspace
 
   # ───────────────────────────────────────────────────────────────
   # Clarity.UI's browser files (DESIGN 7.9, round B), built once with the

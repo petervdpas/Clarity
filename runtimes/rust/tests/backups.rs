@@ -56,7 +56,7 @@ fn a_database_with_a_schema_is_backed_up_before_new_steps_and_a_new_one_is_not()
     let name = backups[0].file_name().unwrap().to_string_lossy().to_string();
     assert!(name.starts_with("shop-") && name.ends_with("-before-migration-0002.db"), "{name}");
     // The backup holds the data and the schema as they were before step 2.
-    let mut copy = Db::open(&backups[0]).unwrap();
+    let copy = Db::open(&backups[0]).unwrap();
     assert_eq!(1, copy.schema_version().unwrap());
     assert!(copy.batch("", "SELECT price FROM item").is_err(), "step 2 is not in the backup");
     // Nothing to apply: no backup.

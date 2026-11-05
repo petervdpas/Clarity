@@ -86,6 +86,11 @@ bool clarity_ui_visible(const ClarityUi* ui, const char* part) {
     return p && p->has_visible ? p->visible : true;
 }
 
+bool clarity_ui_visible_or(const ClarityUi* ui, const char* part, bool design) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->has_visible ? p->visible : design;
+}
+
 void clarity_ui_set_visible(ClarityUi* ui, const char* part, bool value) {
     ClarityPart* p = part_of(ui, part);
     p->has_visible = true;
@@ -292,6 +297,17 @@ void clarity_ui_set_maximized(ClarityUi* ui, const char* part, bool value) {
     p->maximized = value;
 }
 
+bool clarity_ui_pinned(const ClarityUi* ui, const char* part) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->has_pinned && p->pinned;
+}
+
+void clarity_ui_set_pinned(ClarityUi* ui, const char* part, bool value) {
+    ClarityPart* p = part_of(ui, part);
+    p->has_pinned = true;
+    p->pinned = value;
+}
+
 int64_t clarity_ui_tab(const ClarityUi* ui, const char* part) {
     const ClarityPart* p = found(ui, part);
     return p && p->has_tab ? p->tab : 1;
@@ -398,6 +414,16 @@ void clarity_ui_deselect(ClarityUi* ui, const char* part) {
         if (strcmp(ui->state.selected[i].name, part) != 0) ui->state.selected[kept++] = ui->state.selected[i];
     }
     ui->state.selected_count = kept;
+}
+
+void clarity_ui_select(ClarityUi* ui, const char* part, int64_t place) {
+    clarity_ui_deselect(ui, part);
+    if (place < 0) return;
+    ClaritySelected* selected = CLARITY_NEW(ClaritySelected, ui->state.selected_count + 1);
+    if (ui->state.selected_count) memcpy(selected, ui->state.selected, ui->state.selected_count * sizeof *selected);
+    selected[ui->state.selected_count] = (ClaritySelected){clarity_copy(part), (int)place};
+    ui->state.selected = selected;
+    ui->state.selected_count++;
 }
 
 void clarity_ui_message(ClarityUi* ui, ClarityLevel level, const ClarityText* text) {
@@ -530,6 +556,7 @@ static cJSON* part_json(const ClarityPart* p) {
     if (p->has_brush) cJSON_AddNumberToObject(out, "brush", (double)p->brush);
     if (p->ink) cJSON_AddStringToObject(out, "ink", p->ink);
     if (p->has_maximized) cJSON_AddBoolToObject(out, "maximized", p->maximized);
+    if (p->has_pinned) cJSON_AddBoolToObject(out, "pinned", p->pinned);
     if (p->has_tab) cJSON_AddNumberToObject(out, "tab", (double)p->tab);
     if (p->has_step) cJSON_AddNumberToObject(out, "step", (double)p->step);
     if (p->has_open) cJSON_AddNumberToObject(out, "open", (double)p->open);
@@ -560,6 +587,7 @@ static bool part_from_json(const cJSON* in, ClarityPart* p) {
     if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "brush"))) p->has_brush = true, p->brush = (int64_t)v->valuedouble;
     if (cJSON_IsString(v = cJSON_GetObjectItemCaseSensitive(in, "ink"))) p->ink = clarity_copy(v->valuestring);
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "maximized"))) p->has_maximized = true, p->maximized = cJSON_IsTrue(v);
+    if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "pinned"))) p->has_pinned = true, p->pinned = cJSON_IsTrue(v);
     if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "tab"))) p->has_tab = true, p->tab = (int64_t)v->valuedouble;
     if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "step"))) p->has_step = true, p->step = (int64_t)v->valuedouble;
     if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "open"))) p->has_open = true, p->open = (int64_t)v->valuedouble;

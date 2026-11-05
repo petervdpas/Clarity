@@ -23,7 +23,48 @@ pub fn emit(project: &Project, file: &SpecFile, namespace: &str, program: &str, 
             out.push_str(&record(project, entity));
         }
     }
+    for decl in &file.records {
+        out.push_str(&plain_record(project, decl));
+    }
     out
+}
+
+/// A record (DESIGN 5.12): a class of its fields with their defaults; never
+/// stored, so it has no id and is no `IRecord`.
+fn plain_record(project: &Project, record: &Entity) -> String {
+    let name = &record.name.name;
+    let properties: String = record
+        .fields
+        .iter()
+        .map(|f| {
+            let ty = field_type(&f.ty);
+            let prop = property(name, &f.name.name);
+            let field = backing(&f.name.name);
+            let init = initial(f).map(|v| format!(" = {v}")).unwrap_or_default();
+            format!("    public {ty} {prop} {{ get => {field}; set => SetProperty(ref {field}, value); }}\n    {ty} {field}{init};\n")
+        })
+        .collect();
+    // A record is a value: its copy has copies of its lists and of the records it holds.
+    let plain = |entity: &str| project.entity(entity).is_some_and(|e| e.record);
+    let copied: String = record
+        .fields
+        .iter()
+        .map(|f| {
+            let prop = property(name, &f.name.name);
+            let value = match &f.ty {
+                FieldType::Values { .. } => format!("[.. {prop}]"),
+                FieldType::Record { entity } if plain(&entity.name) => format!("{prop}.Copy()"),
+                FieldType::List { item } if plain(&item.name) => format!("[.. {prop}.Select(r => r.Copy())]"),
+                FieldType::List { .. } => format!("[.. {prop}]"),
+                _ => prop.clone(),
+            };
+            format!("        {prop} = {value},\n")
+        })
+        .collect();
+    let copy = format!(
+        "\n    /// <summary>A copy of its values: a record is a value, so what keeps or gets one has its own (DESIGN 5.12).</summary>\n    public {name} Copy() => new()\n    {{\n{copied}    }};\n"
+    );
+    format!("/// <summary>A record of values, made in code and never stored.</summary>\npublic sealed partial class {name} : ObservableObject\n{{\n{properties}{copy}}}\n\n")
 }
 
 /// An enum, and its labels for text: `Labels.Of(status)`, in the language

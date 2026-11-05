@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
-use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
+use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, SLIDEOUT_KEYS, TABLE_ROW_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -108,6 +108,8 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
         // A field line with `required` (an option of a command is no field).
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("    ") && !l.trim_start().starts_with("option ") && l.contains(':') && l.split([',', ' ']).any(|w| w == "required"))) { REQUIRED_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("sidebar ") && l.split_whitespace().any(|w| w == "collapsible" || w == "maximizable"))) { SIDEBAR_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("slideout "))) { SLIDEOUT_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("table ") && l.split_whitespace().any(|w| w == "add" || w == "remove"))) { TABLE_ROW_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("page "))) { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("engine "))) { ENGINE_ERROR_KEYS.as_slice() } else { &[] });
     for (key, value) in own {

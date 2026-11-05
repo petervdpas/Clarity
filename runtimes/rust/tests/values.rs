@@ -117,6 +117,33 @@ fn a_sidebar_is_collapsed_and_maximized_as_every_runtime_says() {
     }
 }
 
+const SLIDEOUTS: &str = include_str!("../../../conformance/slideouts.json");
+
+#[test]
+fn a_slideout_is_open_and_pinned_as_every_runtime_says() {
+    use clarity_runtime::ui::{PartState, Ui, WindowState};
+    let file: serde_json::Value = serde_json::from_str(SLIDEOUTS).unwrap();
+    for case in file["slideout"].as_array().unwrap() {
+        let mut state = WindowState::default();
+        state.parts.insert("details".into(), serde_json::from_value::<PartState>(case["part"].clone()).unwrap());
+        let ui = Ui::from_state(&state);
+        // Closed until it is opened.
+        assert_eq!(ui.visible_or("details", false), case["visible"].as_bool().unwrap(), "{case}");
+        assert_eq!(ui.pinned("details"), case["pinned"].as_bool().unwrap(), "{case}");
+    }
+    for case in file["set"].as_array().unwrap() {
+        let mut ui = Ui::from_state(&WindowState::default());
+        if let Some(visible) = case["visible"].as_bool() {
+            ui.set_visible("details", visible);
+        }
+        if let Some(pinned) = case["pinned"].as_bool() {
+            ui.set_pinned("details", pinned);
+        }
+        let reply = ui.reply("Main", serde_json::Map::new());
+        assert_eq!(serde_json::to_value(&reply.state.parts["details"]).unwrap(), case["part"], "{case}");
+    }
+}
+
 const STEPS: &str = include_str!("../../../conformance/steps.json");
 
 #[test]

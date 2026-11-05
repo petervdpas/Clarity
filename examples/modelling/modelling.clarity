@@ -2,1161 +2,336 @@ module modelling
 
 use model
 
-// What each person sets for themselves: the language, where exports go, and how the diagrams help.
-settings
-    language
-    exportsFolder: folder, default "exports", label @settingsExportsFolderLabel
-    codeFolder: folder, default "code", label @settingsCodeFolderLabel
-    // The web API types are imported from: where it is, the path that gives them, and a key when it needs one.
-    apiAddress: url, default "http://localhost:8383", label @settingsApiAddressLabel
-    apiPath: text, default "/api/collections/fcdm-entities/export.ndjson", label @settingsApiPathLabel
-    apiKey: secret, label @settingsApiKeyLabel
-    openProject: ref Project, label @settingsOpenProjectLabel
-    showGrid: bool, default true, label @settingsShowGridLabel
-    snapToGrid: bool, default true, label @settingsSnapToGridLabel
-    // The diagrams' background; none keeps the theme's.
-    diagramColor: color, label @settingsDiagramColorLabel
-    // The grid's dots: how many pixels across, and their color; none keeps the theme's.
-    gridDotSize: integer, min 1, max 20, default 2, label @settingsGridDotSizeLabel
-    gridDotColor: color, label @settingsGridDotColorLabel
-    // Every other line of a diagram's box a shade darker, as a table's rows.
-    stripedRows: bool, default true, label @settingsStripedRowsLabel
-    // Automatic: a diagram's boxes fit their text. Manual: each box keeps the size it is dragged to.
-    boxSizing: BoxSizing, default Automatic, label @settingsBoxSizingLabel
-
 app Modelling
     title @modellingTitle
-    main Projects
-    menu name mainMenu
-        item @fileItem name fileItem
-            item @projectsItem name projectsItem key "Ctrl+0" on click -> Projects
-            separator
-            item @domainsItem name domainsItem key "Ctrl+1" on click -> Domains
-            item @typesItem name typesItem key "Ctrl+2" on click -> Types
-            item @entitiesItem name entitiesItem key "Ctrl+3" on click -> Entities
-            item @relationsItem name relationsItem key "Ctrl+4" on click -> Relations
-            separator
-            item @settingsItem name settingsItem on click -> Preferences
-            item @languageItem name languageItem on click -> language
-            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
-        item @editItem name editItem
-            // Ctrl+Z takes back the last edit of the part with the focus: a box moved or a line bent, a field.
-            item @undoItem name undoItem key "Ctrl+Z" on click -> undo
-            item @redoItem name redoItem key "Ctrl+Y" on click -> redo
-        item @modelItem name modelItem
-            item @diagramsItem name diagramsItem key "Ctrl+5" on click -> Diagrams
-            item @outputItem name outputItem key "Ctrl+6" on click -> Output
-            item @versionsItem name versionsItem key "Ctrl+7" on click -> Versions
-    toolbar name mainToolbar
-        button @projectsButtonCaption name projectsButton icon "folder-open" on click -> Projects
-        separator
-        button @domainsButtonCaption name domainsButton icon "palette" on click -> Domains
-        button @typesButtonCaption name typesButton icon "box" on click -> Types
-        button @entitiesButtonCaption name entitiesButton icon "database" on click -> Entities
-        button @relationsButtonCaption name relationsButton icon "git-merge" on click -> Relations
-        separator
-        button @diagramsButtonCaption name diagramsButton icon "network" on click -> Diagrams
-        button @outputButtonCaption name outputButton icon "file-code" on click -> Output
-        button @versionsButtonCaption name versionsButton icon "clock" on click -> Versions
+    main Workspace
 
-// The modelling projects: open one to work on its types and entities.
-page Projects: window
-    title @projectsTitle
-    size 928 x 586
-    data projects: list<Project>
-    data current: Project
-    on open: projectsOpened
-    on return: projectsOpened
+// A row of the tree at the left: a domain, or a class under its domain.
+record Node
+    key: text
+    parent: text
+    label: text
+    kind: text
+    domain: ref Domain
+    model: ref ModelClass
 
-    splitter name projectsSplitter at 1,1 span 12 rows 11
-        pane span 4
-            textbox name projectSearch at 1,1 span 4 placeholder @projectSearchPlaceholder on change: showProjects
-            list name projectList at 1,2 span 4 rows 9 bind projects show name, summary cards on select: projectSelected on open: openClicked
-        pane
-            form name projectForm at 1,1 span 8 rows 3 bind current labels 2
-                textbox name projectName at 3,1 span 6 bind current.name
-                memo name projectSummary at 3,2 span 6 rows 2 bind current.summary
-            label name openNow at 1,5 span 8
-            button @newProjectCaption name newProject at 1,11 span 2 bottom on click: newProjectClicked
-            button @saveProjectCaption name saveProject at 3,11 span 2 bottom key "Ctrl+S" default on click: saveProjectClicked
-            button @deleteProjectCaption name deleteProject at 5,11 span 2 bottom on click: deleteProjectClicked
-            button @openProjectButtonCaption name openProjectButton at 7,11 span 2 bottom on click: openClicked
+// What the diagram view draws of the domain.
+enum DiagramKind
+    ClassDiagram label @diagramKindClass
+    Erd label @diagramKindErd
 
-// The domains of the open project, each with the color its types and entities are drawn in.
-page Domains: window
-    title @domainsTitle
-    size 900 x 560
-    data project: Project
-    data domains: list<Domain>
-    data current: Domain
-    on open: domainsOpened
-    on return: domainsOpened
+// The workspace: the domains and their classes in the tree at the left, the
+// domain picked in the middle. A class picked opens the class editor, which
+// slides out from the right; the domain's diagrams slide up from the footer.
+page Workspace: window
+    title @workspaceTitle
+    size 1280 x 800
+    data nodes: list<Node>
+    data domain: Domain
+    on open: workspaceOpened
 
-    splitter name domainsSplitter at 1,1 span 12 rows 11
-        pane span 4
-            text name domainsProject at 1,1 span 4 bind project.name
-            textbox name domainSearch at 1,2 span 4 placeholder @domainSearchPlaceholder on change: showDomains
-            list name domainList at 1,3 span 4 rows 8 bind domains show name, summary cards on select: domainSelected
-        pane
-            form name domainForm at 1,1 span 8 rows 4 bind current labels 2
-                textbox name domainName at 3,1 span 6 bind current.name
-                color name domainColor at 3,2 span 3 bind current.color
-                memo name domainSummary at 3,3 span 6 rows 2 bind current.summary
-            button @newDomainCaption name newDomain at 1,11 span 2 bottom on click: newDomainClicked
-            button @saveDomainCaption name saveDomain at 3,11 span 2 bottom key "Ctrl+S" default on click: saveDomainClicked
-            button @deleteDomainCaption name deleteDomain at 5,11 span 2 bottom on click: deleteDomainClicked
+    heading @domainHeading name domainHeading at 1,1 span 8
+    label @pickADomain name pickADomain at 1,2 span 8
+    label @domainNameCaption name domainNameLabel at 1,3 span 2 for domainNameBox
+    textbox name domainNameBox at 3,3 span 5 bind domain.name
+    label @domainSummaryCaption name domainSummaryLabel at 1,4 span 2 for domainSummaryBox
+    memo name domainSummaryBox at 3,4 span 5 rows 3 bind domain.summary
+    button @saveDomainCaption name saveDomainButton at 6,7 span 2 on click: saveDomainClicked
 
-// The types of the domain: the list on the left, the type on the right.
-page Types: window
-    title @typesTitle
-    size 1100 x 680
-    data project: Project
-    data types: list<ClassType>
-    data current: ClassType
-    data parameters: list<Parameter>
-    on open: typesOpened
-    on return: typesOpened
+    slideout @classSlideout name classPanel view ClassEditor width 560 resizable min 420 max 1000 pinnable span 6 rows 13 on close: classPanelClosed
+    slideout @diagramSlideout name diagramPanel side bottom view DiagramCanvas height 400 resizable min 220 max 900 pinnable span 12 rows 9
 
-    splitter name typesSplitter at 1,1 span 12 rows 13
-        pane span 4
-            text name typesProject at 1,1 span 4 bind project.name
-            textbox name typeSearch at 1,2 span 4 placeholder @typeSearchPlaceholder on change: showTypes
-            list name typeList at 1,3 span 4 rows 10 bind types show name, namespace cards on select: typeSelected
-        pane
-            form name typeForm at 1,1 span 8 rows 8 bind current labels 2
-                textbox name typeName at 3,1 span 6 bind current.name
-                textbox name typeNamespace at 3,2 span 6 bind current.namespace
-                dropdown name typeDomain at 3,3 span 6 bind current.domain
-                dropdown name typeKind at 3,4 span 3 bind current.kind
-                radio name typeOntology at 3,5 span 4 bind current.ontology horizontal
-                dropdown name typeBase at 3,6 span 6 bind current.base
-                tags name typeInterfaces at 3,7 span 6 bind current.interfaces
-                textbox name typeSummary at 3,8 span 6 bind current.summary
-            table name parameterGrid at 1,9 span 8 rows 3 bind parameters columns position 60, type, name edit type, name reorder by position on change: parameterChanged on reorder: parametersMoved
-            button @addParameterCaption name addParameter at 1,12 span 2 on click: addParameterClicked
-            button @removeParameterCaption name removeParameter at 3,12 span 2 on click: removeParameterClicked
-            text name typeUpdated at 5,12 span 4 bind current.updated
-            button @newTypeCaption name newType at 1,13 span 2 on click: newTypeClicked
-            button @saveTypeCaption name saveType at 3,13 span 2 key "Ctrl+S" default on click: saveTypeClicked
-            button @deleteTypeCaption name deleteType at 5,13 span 2 on click: deleteTypeClicked
-            button @importApiCaption name importApi at 7,13 span 2 on click: importApiClicked
+    sidebar left name explorer width 300 grid 6 columns
+        button @newDomainCaption name newDomainButton at 1,1 span 3 icon "plus" on click: newDomainClicked
+        button @newClassCaption name newClassButton at 4,1 span 3 icon "plus" on click: newClassClicked
+        tree name modelTree at 1,2 span 6 rows 15 bind nodes key key parent parent show label on select: nodePicked
+        button @deleteCaption name deleteButton at 4,17 span 3 icon "trash" on click: deleteClicked
+    footer
+        status @workspaceStatus
 
-// The entities of the ERD, with their columns.
-page Entities: window
-    title @entitiesTitle
-    size 1100 x 680
-    data project: Project
-    data entities: list<DataEntity>
-    data current: DataEntity
-    data columns: list<Column>
-    on open: entitiesOpened
-    on return: entitiesOpened
+// A class: its name, what it is, and its properties in order.
+page ClassEditor: view
+    data editedClass: ModelClass
+    data properties: list<Property>
 
-    splitter name entitiesSplitter at 1,1 span 12 rows 13
-        pane span 4
-            text name entitiesProject at 1,1 span 4 bind project.name
-            textbox name entitySearch at 1,2 span 4 placeholder @entitySearchPlaceholder on change: showEntities
-            list name entityList at 1,3 span 4 rows 10 bind entities show name, summary cards on select: entitySelected
-        pane
-            form name entityForm at 1,1 span 8 rows 4 bind current labels 2
-                textbox name entityName at 3,1 span 6 bind current.name
-                dropdown name entityType at 3,2 span 6 bind current.type
-                dropdown name entityDomain at 3,3 span 6 bind current.domain
-                textbox name entitySummary at 3,4 span 6 bind current.summary
-            table name columnGrid at 1,5 span 8 rows 6 bind columns columns position 60, name, type, key, mandatory 80 edit name, type, key, mandatory reorder by position on change: columnChanged on reorder: columnsMoved
-            button @addColumnCaption name addColumn at 1,12 span 2 on click: addColumnClicked
-            button @removeColumnCaption name removeColumn at 3,12 span 2 on click: removeColumnClicked
-            text name entityUpdated at 5,12 span 4 bind current.updated
-            button @newEntityCaption name newEntity at 1,13 span 2 on click: newEntityClicked
-            button @saveEntityCaption name saveEntity at 3,13 span 2 key "Ctrl+S" default on click: saveEntityClicked
-            button @deleteEntityCaption name deleteEntity at 5,13 span 2 on click: deleteEntityClicked
+    label @classNameCaption name classNameLabel at 1,1 span 2 for classNameBox
+    textbox name classNameBox at 3,1 span 4 bind editedClass.name
+    label @classSummaryCaption name classSummaryLabel at 1,2 span 2 for classSummaryBox
+    memo name classSummaryBox at 3,2 span 4 rows 2 bind editedClass.summary
+    heading @propertiesHeading name propertiesHeading at 1,4 span 6
+    table name propertyTable at 1,5 span 6 rows 7 bind properties columns name 180, type 160, optional edit name, type, optional reorder by position add remove confirm on add: addPropertyClicked on remove: removePropertyClicked on change: propertyChanged on reorder: propertiesMoved
+    button @saveClassCaption name saveClassButton at 5,13 span 2 default on click: saveClassClicked
 
-// The lines of both diagrams, edited in their tables.
-page Relations: window
-    title @relationsTitle
-    size 1100 x 600
-    data project: Project
-    data associations: list<Association>
-    data relationships: list<Relationship>
-    on open: relationsOpened
+// The diagrams of a domain: its classes with their properties and lines, or
+// the tables the adapter keeps them in, with their keys.
+page DiagramCanvas: view
+    data kind: DiagramKind
+    data classes: list<ModelClass>
+    data members: list<Property>
 
-    tabs name relationTabs at 1,1 span 12 rows 11
-        tab @relationsBetweenTypesTab
-            table name associationGrid at 1,1 span 12 rows 9 bind associations columns source, link, target, multiplicity 100, label edit source, link, target, multiplicity, label on change: associationChanged
-            button @addAssociationCaption name addAssociation at 1,10 span 2 on click: addAssociationClicked
-            button @removeAssociationCaption name removeAssociation at 3,10 span 2 on click: removeAssociationClicked
-        tab @relationsBetweenEntitiesTab
-            table name relationshipGrid at 1,1 span 12 rows 9 bind relationships columns source, source_side, target_side, target, label edit source, source_side, target_side, target, label on change: relationshipChanged
-            button @addRelationshipCaption name addRelationship at 1,10 span 2 on click: addRelationshipClicked
-            button @removeRelationshipCaption name removeRelationship at 3,10 span 2 on click: removeRelationshipClicked
+    radio name diagramKindRadio at 1,1 span 6 bind kind horizontal
+    canvas name diagramCanvas at 1,2 span 12 rows 8 units 1600 x 600 zoom grid 20 snap background panel mode objects classes at x, y on draw: drawDiagram on change: classMoved
 
-// Both diagrams, drawn over all their records.
-page Diagrams: window
-    title @diagramsTitle
-    size 1200 x 820
-    data project: Project
-    data types: list<ClassType>
-    data entities: list<DataEntity>
-    on open: diagramsOpened
-    on return: gridFromSettings
+code Workspace
+    handler workspaceOpened
+        refreshTree()
+        showDomain()
 
-    tabs name diagramTabs at 1,1 span 12 rows 11
-        tab @diagramsClassDiagramTab
-            canvas name classCanvas at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawClasses on drop: classDropped on bend: classBent on connect: classConnected on resize: classResized
-                menu name classMenu
-                    item @diagramEditItem name classEditItem on click: classEditClicked
-                    item @diagramRemoveLineItem name classRemoveLineItem on click: classLineRemoved
-                    separator
-                    item @arrangeCaption name classArrangeItem on click: arrangeClicked
-        tab @diagramsEntityRelationshipDiagramTab
-            canvas name erdCanvas at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawEntities on drop: entityDropped on bend: entityBent on connect: entityConnected on resize: entityResized
-                menu name erdMenu
-                    item @diagramEditItem name entityEditItem on click: entityEditClicked
-                    item @diagramRemoveLineItem name entityRemoveLineItem on click: entityLineRemoved
-                    separator
-                    item @arrangeCaption name entityArrangeItem on click: arrangeClicked
-    button @arrangeCaption name arrange at 11,12 span 2 tooltip @arrangeTooltip on click: arrangeClicked
+    handler refreshTree
+        let domains = find d in Domain order by d.name
+        let allClasses = find c in ModelClass order by c.name
+        nodes = outline(domains, allClasses)
 
-// The model as Mermaid and as an OpenAPI description, as they are now.
-page Output: window
-    title @outputTitle
-    size 1100 x 720
-    data project: Project
-    data classText: text
-    data erdText: text
-    data apiText: text
-    on open: showOutput
+    // Picks the row of that key in the tree, which opens the rows above it.
+    handler pickNode(key: text)
+        for n in nodes
+            if n.key == key
+                modelTree.selected = n
 
-    // The buttons stand at the top: a small window cuts off the end of the text, which scrolls, never a button.
-    button @refreshOutputCaption name refreshOutput at 1,1 span 2 on click: showOutput
-    button @exportOutputCaption name exportOutput at 3,1 span 2 on click: exportClicked
-    button @writeCsharpCaption name writeCsharp at 5,1 span 2 on click: writeCsharpClicked
-    button @saveVersionButtonCaption name saveVersionButton at 11,1 span 2 on click: saveVersionClicked
-    tabs name outputTabs at 1,2 span 12 rows 11
-        tab @outputClassDiagramMermaidTab
-            button @copyOutputCaption name copyClassButton at 11,1 span 2 on click: copyOutput(1)
-            memo name classMemo at 1,2 span 12 rows 9 bind classText readonly
-        tab @outputERDMermaidTab
-            button @copyOutputCaption name copyErdButton at 11,1 span 2 on click: copyOutput(2)
-            memo name erdMemo at 1,2 span 12 rows 9 bind erdText readonly
-        tab @outputOpenAPITab
-            button @copyOutputCaption name copyApiButton at 11,1 span 2 on click: copyOutput(3)
-            memo name apiMemo at 1,2 span 12 rows 9 bind apiText readonly
+    // The middle shows the domain picked, or says to pick one.
+    handler showDomain
+        let picked = domain.id != 0
+        pickADomain.visible = not picked
+        domainNameBox.enabled = picked
+        domainSummaryBox.enabled = picked
+        saveDomainButton.enabled = picked
+        newClassButton.enabled = picked
 
-// The versions kept, and what the model was in each.
-page Versions: window
-    title @versionsTitle
-    size 1100 x 720
-    data project: Project
-    data versions: list<Version>
-    data current: Version
-    on open: versionsOpened
-
-    table name versionGrid at 1,1 span 12 rows 4 bind versions columns number 80, saved 170, note, types 70, entities 70 order by number desc on select: versionSelected
-    tabs name versionTabs at 1,5 span 12 rows 8
-        tab @versionsClassDiagramTab
-            memo name versionClassMemo at 1,1 span 12 rows 7 bind current.class_diagram readonly
-        tab @versionsERDTab
-            memo name versionErdMemo at 1,1 span 12 rows 7 bind current.erd readonly
-        tab @versionsOpenAPITab
-            memo name versionApiMemo at 1,1 span 12 rows 7 bind current.openapi readonly
-
-page Preferences: dialog
-    title @preferencesTitle
-
-    form name settingsForm at 1,1 span 12 rows 13 bind settings labels 3
-        dropdown name languageBox at 4,1 span 6 bind settings.language
-        folder name exportsFolderBox at 4,2 span 9 bind settings.exportsFolder
-        folder name codeFolderBox at 4,3 span 9 bind settings.codeFolder
-        checkbox name showGridBox at 4,4 span 6 bind settings.showGrid
-        checkbox name snapToGridBox at 4,5 span 6 bind settings.snapToGrid
-        color name diagramColorBox at 4,6 span 4 bind settings.diagramColor
-        spinbox name gridDotSizeBox at 4,7 span 2 bind settings.gridDotSize min 1 max 20
-        color name gridDotColorBox at 4,8 span 4 bind settings.gridDotColor
-        textbox name apiAddressBox at 4,9 span 6 bind settings.apiAddress
-        textbox name apiPathBox at 4,10 span 9 bind settings.apiPath
-        password name apiKeyBox at 4,11 span 6 bind settings.apiKey
-        checkbox name stripedRowsBox at 4,12 span 6 bind settings.stripedRows
-        dropdown name boxSizingBox at 4,13 span 4 bind settings.boxSizing
-    button @closePreferencesCaption name closePreferences at 11,14 span 2 cancel on click -> close
-
-code Projects
-    handler projectsOpened
-        showProjects()
-        showOpen()
-
-    handler showProjects
-        projects = find p in Project where p matches projectSearch.text order by p.name
-
-    handler showOpen
-        if settings.openProject == none
-            openNow.caption = @noProjectIsOpenYet
-        else
-            let open = settings.openProject
-            openNow.caption = @openOpenProject(openProject = open.name)
-
-    handler projectSelected
-        current = projectList.selected
-
-    handler newProjectClicked
-        current = new Project
-
-    handler saveProjectClicked
-        projectName.error = ""
-        if current.name == ""
-            projectName.error = @aProjectNeedsAName
+    handler nodePicked
+        let node = modelTree.selected
+        if node.key == ""
             return
-        save current
-        showProjects()
-        message @savedName(name = current.name)
+        let chosen = node.domain
+        domain = chosen
+        loadDiagram()
+        showDomain()
+        if node.kind == "class"
+            let found = node.model
+            editedClass = found
+            properties = find p in Property where p.owner == editedClass order by p.position
+            classPanel.visible = true
 
-    // Opening a project makes it the one every other window works on.
-    handler openClicked
-        if current.id == 0
-            message warning @chooseAProjectToOpen
-            return
-        settings.openProject = current
-        showOpen()
-        open Types
-
-    handler deleteProjectClicked
-        if current.id == 0
-            return
-        ask @deleteNameWithEverythingIn(name = current.name) yes @delete no @keep then deleteConfirmed
-
-    handler deleteConfirmed
-        // Its types, entities and versions go with it (cascade).
-        if settings.openProject != none
-            let open = settings.openProject
-            if open.id == current.id
-                settings.openProject = none
-        delete current
-        current = new Project
-        showProjects()
-        showOpen()
-
-code Domains
-    handler domainsOpened
-        if settings.openProject == none
-            message warning @openAProjectFirst
-            return
-        project = settings.openProject
-        showDomains()
-
-    handler showDomains
-        domains = find d in Domain where d.project == project and d matches domainSearch.text order by d.name
-
-    handler domainSelected
-        current = domainList.selected
+    // The diagram view shows the classes of the domain picked; it draws the properties of those.
+    handler loadDiagram
+        classes = find c in ModelClass where c.domain == domain order by c.name
+        members = find p in Property order by p.position
 
     handler newDomainClicked
-        current = new Domain
+        let d = new Domain
+        d.name = new_name("Domain", find x in Domain order by x.name)
+        save d
+        domain = d
+        refreshTree()
+        pickNode("d{d.id}")
+        loadDiagram()
+        showDomain()
+
+    handler newClassClicked
+        if domain.id == 0
+            return
+        let existing = find c in ModelClass where c.domain == domain order by c.name
+        let c = new ModelClass
+        let next = count(existing) + 1
+        c.domain = domain
+        c.name = "Class{next}"
+        c.x = 40 + 320 * column_of(count(existing))
+        c.y = 40 + 300 * row_of(count(existing))
+        save c
+        editedClass = c
+        properties = find p in Property where p.owner == c order by p.position
+        refreshTree()
+        pickNode("c{c.id}")
+        loadDiagram()
+        classPanel.visible = true
 
     handler saveDomainClicked
-        domainName.error = ""
-        if project.id == 0
-            message warning @openAProjectFirst
+        save domain
+        refreshTree()
+
+    // Deletes the domain or class picked in the tree, after asking.
+    handler deleteClicked
+        let node = modelTree.selected
+        if node.key == ""
             return
-        if current.name == ""
-            domainName.error = @aDomainNeedsAName
-            return
-        current.project = project
-        save current
-        showDomains()
-        message @savedName(name = current.name)
-
-    handler deleteDomainClicked
-        if current.id == 0
-            return
-        ask @deleteDomainName(name = current.name) yes @delete no @keep then deleteConfirmed
-
-    // Its types and entities stay, without a domain.
-    handler deleteConfirmed
-        for t in find t in ClassType where t.domain == current
-            t.domain = none
-            save t
-        for e in find e in DataEntity where e.domain == current
-            e.domain = none
-            save e
-        delete current
-        current = new Domain
-        showDomains()
-
-code Types
-    handler typesOpened
-        if settings.openProject == none
-            message warning @openAProjectFirst
-            return
-        project = settings.openProject
-        showTypes()
-        // Only the parameters of the type on the right; none before one is chosen.
-        parameters = find p in Parameter where p.owner == current order by p.position
-
-    handler showTypes
-        types = find t in ClassType where t.project == project and t matches typeSearch.text order by t.name
-
-    handler importApiClicked
-        if project.id == 0
-            return
-        let read = import_types(project, settings.apiAddress + settings.apiPath, settings.apiKey)
-        showTypes()
-        message @importedCountTypes(count = read)
-
-    handler typeSelected
-        current = typeList.selected
-        parameters = find p in Parameter where p.owner == current order by p.position
-
-    handler newTypeClicked
-        current = new ClassType
-        parameters = find p in Parameter where p.owner == current
-
-    handler saveTypeClicked
-        typeName.error = ""
-        if project.id == 0
-            message warning @openAProjectFirst
-            return
-        if current.name == ""
-            typeName.error = @aTypeNeedsAName
-            return
-        current.project = project
-        save current
-        showTypes()
-        message @savedName(name = current.name)
-
-    handler deleteTypeClicked
-        if current.id == 0
-            return
-        ask @deleteNameAndItsParameters(name = current.name) yes @delete no @keep then deleteConfirmed
+        ask @deleteNode(name = node.label) yes @delete no @keep then deleteConfirmed
 
     handler deleteConfirmed
-        // The entities that keep its records stay, without a type.
-        for e in find e in DataEntity where e.type == current
-            e.type = none
-            save e
-        delete current
-        current = new ClassType
-        parameters = find p in Parameter where p.owner == current
-        showTypes()
+        let node = modelTree.selected
+        if node.kind == "class"
+            let gone = node.model
+            delete gone
+            classPanel.visible = false
+        else
+            let gone = node.domain
+            delete gone
+            domain = new Domain
+            classPanel.visible = false
+        refreshTree()
+        loadDiagram()
+        showDomain()
 
-    handler addParameterClicked
-        if current.id == 0
-            message warning @saveTheTypeBeforeAdding
-            return
-        let parameter = new Parameter
-        parameter.owner = current
-        parameter.position = count(parameters) + 1
-        parameter.type = "string"
-        parameter.name = "value{parameter.position}"
-        save parameter
-        parameters = find p in Parameter where p.owner == current order by p.position
+    // What the class editor saved shows in the tree and on the diagram once it slides away.
+    handler classPanelClosed
+        refreshTree()
+        loadDiagram()
 
-    handler removeParameterClicked
-        if parameterGrid.selected.id != 0
-            delete parameterGrid.selected
-        parameters = find p in Parameter where p.owner == current order by p.position
+code ClassEditor
+    handler addPropertyClicked
+        if editedClass.id == 0
+            save editedClass
+        let p = new Property
+        p.owner = editedClass
+        let next = count(properties) + 1
+        p.position = next
+        p.name = "property{next}"
+        p.type = "string"
+        save p
+        properties = find x in Property where x.owner == editedClass order by x.position
 
-    handler parameterChanged
-        save parameterGrid.selected
+    handler removePropertyClicked
+        delete propertyTable.selected
+        properties = find x in Property where x.owner == editedClass order by x.position
 
-    // Dragged, or moved with Alt and the arrows: every parameter keeps its new position.
-    handler parametersMoved
-        for p in parameters
+    handler propertyChanged
+        save propertyTable.selected
+
+    handler propertiesMoved
+        for p in properties
             save p
 
-code Entities
-    handler entitiesOpened
-        if settings.openProject == none
-            message warning @openAProjectFirst
-            return
-        project = settings.openProject
-        showEntities()
-        columns = find c in Column where c.owner == current order by c.position
+    handler saveClassClicked
+        save editedClass
 
-    handler showEntities
-        entities = find e in DataEntity where e.project == project and e matches entitySearch.text order by e.name
-
-    handler entitySelected
-        current = entityList.selected
-        columns = find c in Column where c.owner == current order by c.position
-
-    handler newEntityClicked
-        current = new DataEntity
-        columns = find c in Column where c.owner == current
-
-    handler saveEntityClicked
-        entityName.error = ""
-        if project.id == 0
-            message warning @openAProjectFirst
-            return
-        if current.name == ""
-            entityName.error = @anEntityNeedsAName
-            return
-        current.project = project
-        save current
-        showEntities()
-        message @savedName(name = current.name)
-
-    handler deleteEntityClicked
-        if current.id == 0
-            return
-        ask @deleteNameAndItsColumns(name = current.name) yes @delete no @keep then deleteConfirmed
-
-    handler deleteConfirmed
-        delete current
-        current = new DataEntity
-        columns = find c in Column where c.owner == current
-        showEntities()
-
-    handler addColumnClicked
-        if current.id == 0
-            message warning @saveTheEntityBeforeAdding
-            return
-        let column = new Column
-        column.owner = current
-        column.position = count(columns) + 1
-        column.name = "column{column.position}"
-        column.type = "string"
-        save column
-        columns = find c in Column where c.owner == current order by c.position
-
-    handler removeColumnClicked
-        if columnGrid.selected.id != 0
-            delete columnGrid.selected
-        columns = find c in Column where c.owner == current order by c.position
-
-    handler columnChanged
-        save columnGrid.selected
-
-    // Dragged, or moved with Alt and the arrows: every column keeps its new position.
-    handler columnsMoved
-        for c in columns
-            save c
-
-code Relations
-    handler relationsOpened
-        if settings.openProject == none
-            message warning @openAProjectFirst
-            return
-        project = settings.openProject
-        showRelations()
-
-    handler showRelations
-        associations = find a in Association where a.project == project
-        relationships = find r in Relationship where r.project == project
-
-    handler addAssociationClicked
-        let types = find t in ClassType where t.project == project order by t.name
-        if count(types) == 0
-            message warning @addTypesFirst
-            return
-        let association = new Association
-        association.project = project
-        association.source = types[1]
-        association.target = types[1]
-        save association
-        showRelations()
-
-    handler removeAssociationClicked
-        if associationGrid.selected.id != 0
-            delete associationGrid.selected
-        showRelations()
-
-    handler associationChanged
-        save associationGrid.selected
-
-    handler addRelationshipClicked
-        let entities = find e in DataEntity where e.project == project order by e.name
-        if count(entities) == 0
-            message warning @addEntitiesFirst
-            return
-        let relationship = new Relationship
-        relationship.project = project
-        relationship.source = entities[1]
-        relationship.target = entities[1]
-        save relationship
-        showRelations()
-
-    handler removeRelationshipClicked
-        if relationshipGrid.selected.id != 0
-            delete relationshipGrid.selected
-        showRelations()
-
-    handler relationshipChanged
-        save relationshipGrid.selected
-
-code Diagrams
-    handler diagramsOpened
-        if settings.openProject == none
-            message warning @openAProjectFirst
-            return
-        project = settings.openProject
-        types = find t in ClassType where t.project == project order by t.name
-        entities = find e in DataEntity where e.project == project order by e.name
-        gridFromSettings()
-        placeTypes()
-        placeEntities()
-
-    // Types without a place get one below the rest, in rows as wide as the canvas, on the grid; dragging a box moves it by whole steps of it.
-    // Arrange lays every box out again, in rows by name, each as wide as its text.
-    handler arrangeClicked
-        for t in types
-            t.x = 0
-            t.y = 0
-            save t
-        for e in entities
-            e.x = 0
-            e.y = 0
-            save e
-        placeTypes()
-        placeEntities()
-
-    handler placeTypes
-        let top = 20
-        for t in types
-            if t.x != 0 or t.y != 0
-                let bottom = grid_up(t.y + class_box_height(t, settings.boxSizing == Manual) + 40)
-                if bottom > top
-                    top = bottom
-        let left = 20
-        let tallest = 0
-        let placed = false
-        for t in types
-            if t.x == 0 and t.y == 0
-                let height = class_box_height(t, settings.boxSizing == Manual)
-                let width = class_box_width(t, settings.boxSizing == Manual)
-                // A row is as wide as its boxes with 40 between them, until the canvas's 4000 units.
-                if left + width > 3980
-                    left = 20
-                    top = grid_up(top + tallest + 40)
-                    tallest = 0
-                t.x = left
-                t.y = top
-                left = left + width + 40
-                save t
-                placed = true
-                if height > tallest
-                    tallest = height
-        if placed
-            types = find t in ClassType where t.project == project order by t.name
-
-    handler placeEntities
-        let top = 20
-        for e in entities
-            if e.x != 0 or e.y != 0
-                let bottom = grid_up(e.y + entity_box_height(e, settings.boxSizing == Manual) + 40)
-                if bottom > top
-                    top = bottom
-        let left = 20
-        let tallest = 0
-        let placed = false
-        for e in entities
-            if e.x == 0 and e.y == 0
-                let height = entity_box_height(e, settings.boxSizing == Manual)
-                let width = entity_box_width(e, settings.boxSizing == Manual)
-                // A row is as wide as its boxes with 40 between them, until the canvas's 4000 units.
-                if left + width > 3980
-                    left = 20
-                    top = grid_up(top + tallest + 40)
-                    tallest = 0
-                e.x = left
-                e.y = top
-                left = left + width + 40
-                save e
-                placed = true
-                if height > tallest
-                    tallest = height
-        if placed
-            entities = find e in DataEntity where e.project == project order by e.name
-
-    // Show grid, Snap to grid, the background and the grid's dots, from the person's settings, for both diagrams; without a grid there is nothing to snap to.
-    handler gridFromSettings
-        if settings.showGrid
-            classCanvas.grid = 20
-            erdCanvas.grid = 20
+code DiagramCanvas
+    handler drawDiagram
+        diagramCanvas.clear()
+        if kind == DiagramKind.Erd
+            drawErd()
         else
-            classCanvas.grid = 0
-            erdCanvas.grid = 0
-        classCanvas.snap = settings.snapToGrid
-        erdCanvas.snap = settings.snapToGrid
-        // An empty color is the theme's panel.
-        classCanvas.background = settings.diagramColor
-        erdCanvas.background = settings.diagramColor
-        classCanvas.dotSize = settings.gridDotSize
-        erdCanvas.dotSize = settings.gridDotSize
-        classCanvas.dotColor = settings.gridDotColor
-        erdCanvas.dotColor = settings.gridDotColor
-        // A box's corner grip sizes it only while boxes have a size of their own.
-        classCanvas.resizable = settings.boxSizing == Manual
-        erdCanvas.resizable = settings.boxSizing == Manual
+            drawClasses()
 
-    // Every type as a box with its parameters, where it was put, and the lines between them, as Clarity's diagram designer draws them.
+    // The class diagram: a box per class with its properties, and a line to
+    // each class a property's type names.
     handler drawClasses
-        classCanvas.clear()
-        let names: list<text> = []
-        let xs: list<integer> = []
-        let ys: list<integer> = []
-        let heights: list<integer> = []
-        let widths: list<integer> = []
-        for t in types
-            names = names + [t.name]
-            xs = xs + [t.x]
-            ys = ys + [t.y]
-            heights = heights + [class_box_height(t, settings.boxSizing == Manual)]
-            widths = widths + [class_box_width(t, settings.boxSizing == Manual)]
-        // The lines first; each ends at the edge of its boxes, with what its ends are.
-        for t in types
-            let from = place_of(names, t.name)
-            if t.base != none
-                let base = t.base
-                let to = place_of(names, base.name)
-                // The line to its base bends too, named after the type: its own points keep where. Its triangle points at the base.
-                classCanvas.link("b{t.id}", xs[from] + widths[from] / 2, ys[from] + heights[from] / 2, xs[to] + widths[to] / 2, ys[to] + heights[to] / 2, t.base_via, "muted", 2, "", "triangle")
-        let associations = find a in Association where a.project == project
-        for a in associations
-            let source = a.source
-            let target = a.target
-            let from = place_of(names, source.name)
-            let to = place_of(names, target.name)
-            // A line people bend, named after its association, so a bend says which.
-            classCanvas.link("a{a.id}", xs[from] + widths[from] / 2, ys[from] + heights[from] / 2, xs[to] + widths[to] / 2, ys[to] + heights[to] / 2, a.via, "muted", 2, link_start(a.link), link_end(a.link), a.label, link_style(a.link))
-        let i = 1
-        for t in types
-            // A type of a domain has its domain's color.
-            let color = ""
-            if t.domain != none
-                let domain = t.domain
-                color = domain.color
-            drawClassBox(t.name, color, xs[i], ys[i], widths[i], heights[i], class_types(t), class_names(t))
-            i = i + 1
+        for c in classes
+            for p in members
+                if p.owner.id == c.id
+                    for target in classes
+                        if refers_to(p.type, target.name)
+                            diagramCanvas.line(c.x + 130, c.y + 20, target.x + 130, target.y + 20, "muted", 2)
+        for c in classes
+            let lines: list<text> = []
+            for p in members
+                if p.owner.id == c.id
+                    lines = lines + [property_line(p.name, p.type, p.optional)]
+            drawBox(c, c.name, lines, "accent")
 
-    // A box as the designer draws it: its edge in its domain's color (the
-    // accent without one), a header with its name in bold, its types and
-    // names in columns of the code font.
-    handler drawClassBox(title: text, color: text, x: integer, y: integer, w: integer, h: integer, types: list<text>, names: list<text>)
-        let edge = "accent"
-        let head = "accent_soft"
-        let ink = "text"
-        if color != ""
-            edge = color
-            head = color
-            ink = "#ffffff"
-        classCanvas.rect(x - 2, y - 2, w + 4, h + 4, edge)
-        classCanvas.rect(x, y, w, h, "raised")
-        classCanvas.rect(x, y, w, 30, head)
-        classCanvas.text(x + w / 2, y + 15, title, ink, 13, "center", "bold mono")
-        let left = x + 28 + widest(types) * 7
-        let line = 1
-        let shaded = false
-        for type in types
-            let row = y + 41 + (line - 1) * 22
-            // A box sized by hand shows the lines that fit in it.
-            if row + 11 > y + h
-                return
-            // Every other line shaded, a see-through grey on light and dark alike.
-            if shaded and settings.stripedRows
-                classCanvas.rect(x, row - 11, w, 22, "#8080801f")
-            shaded = not shaded
-            classCanvas.text(x + 12, row, type, "accent", 11, "left", "mono")
-            classCanvas.text(left, row, names[line], "text", 11, "left", "mono")
-            line = line + 1
+    // The ERD: a table per class as the adapter keeps it, its business key
+    // first, a foreign key for each class a property names, and its two
+    // moments; a line to each table a foreign key points at.
+    handler drawErd
+        for c in classes
+            for p in members
+                if p.owner.id == c.id
+                    for target in classes
+                        if refers_to(p.type, target.name)
+                            diagramCanvas.line(c.x + 130, c.y + 20, target.x + 130, target.y + 20, "muted", 2)
+        for c in classes
+            let lines: list<text> = ["PK  Bk"]
+            for p in members
+                if p.owner.id == c.id
+                    lines = lines + [column_line(p.name, p.type, class_names(classes))]
+            lines = lines + ["    LastModified", "    LastProcessed"]
+            drawBox(c, c.name, lines, "success")
 
-    // The canvas carries a box while it is dragged; letting go moves the type it was pressed on by as much.
-    handler classDropped
-        let id = class_at(types, classCanvas.fromX, classCanvas.fromY, settings.boxSizing == Manual)
-        for t in types
-            if t.id == id
-                t.x = at_least_zero(t.x + classCanvas.x - classCanvas.fromX)
-                t.y = at_least_zero(t.y + classCanvas.y - classCanvas.fromY)
-                save t
-        types = find t in ClassType where t.project == project order by t.name
+    handler drawBox(c: ModelClass, title: text, lines: list<text>, edge: text)
+        let h = 40 + 22 * count(lines)
+        diagramCanvas.object(c, c.x, c.y, 260, h)
+        diagramCanvas.rect(c.x - 2, c.y - 2, 264, h + 4, edge)
+        diagramCanvas.rect(c.x, c.y, 260, h, "raised")
+        diagramCanvas.rect(c.x, c.y, 260, 32, "accent_soft")
+        diagramCanvas.text(c.x + 130, c.y + 16, title, "text", 13, "center", "bold")
+        let row = c.y + 50
+        for line in lines
+            diagramCanvas.text(c.x + 12, row, line, "text", 11, "left", "mono")
+            row = row + 22
 
-    // A type's box resized by its corner grip: it keeps the new size, the
-    // box found just inside where its bottom-right corner was.
-    handler classResized
-        let id = class_at(types, classCanvas.fromX - 1, classCanvas.fromY - 1, settings.boxSizing == Manual)
-        for t in types
-            if t.id == id
-                t.width = classCanvas.x - t.x
-                t.height = classCanvas.y - t.y
-                if t.width < 40
-                    t.width = 40
-                if t.height < 40
-                    t.height = 40
-                save t
-        types = find t in ClassType where t.project == project order by t.name
+    handler classMoved
+        save diagramCanvas.selected
 
-    // The menu's Remove line takes away the line it was opened on: an
-    // association, or the line to a base type, which the type then has no more.
-    handler classLineRemoved
-        for a in find a in Association where a.project == project
-            if "a{a.id}" == classCanvas.bent
-                delete a
-        for t in types
-            if "b{t.id}" == classCanvas.bent
-                t.base = none
-                t.base_via = []
-                save t
-        types = find t in ClassType where t.project == project order by t.name
+// The tree's rows: each domain, and its classes under it.
+function outline(domains: list<Domain>, classes: list<ModelClass>) -> list<Node>
+    let all: list<Node> = []
+    for d in domains
+        let n = new Node
+        n.key = "d{d.id}"
+        n.label = d.name
+        n.kind = "domain"
+        n.domain = d
+        all = all + [n]
+        for c in classes
+            if c.domain.id == d.id
+                let m = new Node
+                m.key = "c{c.id}"
+                m.parent = "d{d.id}"
+                m.label = c.name
+                m.kind = "class"
+                m.domain = d
+                m.model = c
+                all = all + [m]
+    return all
 
-    // The menu's Edit opens the type it was opened on.
-    handler classEditClicked
-        let id = class_at(types, classCanvas.x, classCanvas.y, settings.boxSizing == Manual)
-        for t in types
-            if t.id == id
-                open Types with current = t
+// A name not taken yet: the word, or the word with the first number free.
+function new_name(word: text, domains: list<Domain>) -> text
+    let name = word
+    let n = 1
+    for step in 1 to 1000
+        let taken = false
+        for d in domains
+            if d.name == name
+                taken = true
+        if not taken
+            return name
+        n = n + 1
+        name = "{word}{n}"
+    return name
 
-    // A line drawn from one type's box to another's: an association between them.
-    handler classConnected
-        let sourceId = class_at(types, classCanvas.fromX, classCanvas.fromY, settings.boxSizing == Manual)
-        let targetId = class_at(types, classCanvas.x, classCanvas.y, settings.boxSizing == Manual)
-        if sourceId == 0 or targetId == 0 or sourceId == targetId
-            return
-        let association = new Association
-        association.project = project
-        for t in types
-            if t.id == sourceId
-                association.source = t
-            if t.id == targetId
-                association.target = t
-        save association
-        types = find t in ClassType where t.project == project order by t.name
+// Whether a property's type names the class: the class itself or a list of it.
+function refers_to(type: text, name: text) -> bool
+    return type == name or type == "list<{name}>"
 
-    // Every entity as a box with its columns and keys, where it was put, and the relationships between them, as Clarity's diagram designer draws them.
-    handler drawEntities
-        erdCanvas.clear()
-        let names: list<text> = []
-        let xs: list<integer> = []
-        let ys: list<integer> = []
-        let heights: list<integer> = []
-        let widths: list<integer> = []
-        for e in entities
-            names = names + [e.name]
-            xs = xs + [e.x]
-            ys = ys + [e.y]
-            heights = heights + [entity_box_height(e, settings.boxSizing == Manual)]
-            widths = widths + [entity_box_width(e, settings.boxSizing == Manual)]
-        // Dashed, each end showing how many there are on that side, the label halfway.
-        let relationships = find r in Relationship where r.project == project
-        for r in relationships
-            let source = r.source
-            let target = r.target
-            let from = place_of(names, source.name)
-            let to = place_of(names, target.name)
-            erdCanvas.link("r{r.id}", xs[from] + widths[from] / 2, ys[from] + heights[from] / 2, xs[to] + widths[to] / 2, ys[to] + heights[to] / 2, r.via, "muted", 2, side_end(r.source_side), side_end(r.target_side), r.label, "dashed")
-        let i = 1
-        for e in entities
-            // An entity has its domain's color, or else the domain of the type it keeps.
-            let color = ""
-            if e.domain != none
-                let domain = e.domain
-                color = domain.color
-            else if e.type != none
-                let type = e.type
-                if type.domain != none
-                    let domain = type.domain
-                    color = domain.color
-            drawEntityBox(e.name, color, xs[i], ys[i], widths[i], heights[i], entity_types(e), entity_names(e), entity_keys(e))
-            i = i + 1
-
-    // An entity's box as the designer draws it, its keys at the right.
-    handler drawEntityBox(title: text, color: text, x: integer, y: integer, w: integer, h: integer, types: list<text>, names: list<text>, keys: list<text>)
-        let edge = "accent"
-        let head = "accent_soft"
-        let ink = "text"
-        if color != ""
-            edge = color
-            head = color
-            ink = "#ffffff"
-        erdCanvas.rect(x - 2, y - 2, w + 4, h + 4, edge)
-        erdCanvas.rect(x, y, w, h, "raised")
-        erdCanvas.rect(x, y, w, 30, head)
-        erdCanvas.text(x + w / 2, y + 15, title, ink, 13, "center", "bold mono")
-        let left = x + 28 + widest(types) * 7
-        let line = 1
-        let shaded = false
-        for type in types
-            let row = y + 41 + (line - 1) * 22
-            // A box sized by hand shows the lines that fit in it.
-            if row + 11 > y + h
-                return
-            if shaded and settings.stripedRows
-                erdCanvas.rect(x, row - 11, w, 22, "#8080801f")
-            shaded = not shaded
-            erdCanvas.text(x + 12, row, type, "accent", 11, "left", "mono")
-            erdCanvas.text(left, row, names[line], "text", 11, "left", "mono")
-            erdCanvas.text(x + w - 12, row, keys[line], "muted", 11, "right", "mono")
-            line = line + 1
-
-    // A bent line keeps its points: the association it stands for saves them.
-    handler classBent
-        for a in find a in Association where a.project == project
-            if "a{a.id}" == classCanvas.bent
-                a.via = classCanvas.via
-                save a
-        for t in types
-            if "b{t.id}" == classCanvas.bent
-                t.base_via = classCanvas.via
-                save t
-        types = find t in ClassType where t.project == project order by t.name
-
-    handler entityBent
-        for r in find r in Relationship where r.project == project
-            if "r{r.id}" == erdCanvas.bent
-                r.via = erdCanvas.via
-                save r
-
-    handler entityDropped
-        let id = entity_at(entities, erdCanvas.fromX, erdCanvas.fromY, settings.boxSizing == Manual)
-        for e in entities
-            if e.id == id
-                e.x = at_least_zero(e.x + erdCanvas.x - erdCanvas.fromX)
-                e.y = at_least_zero(e.y + erdCanvas.y - erdCanvas.fromY)
-                save e
-        entities = find e in DataEntity where e.project == project order by e.name
-
-    // An entity's box resized by its corner grip: it keeps the new size, the
-    // box found just inside where its bottom-right corner was.
-    handler entityResized
-        let id = entity_at(entities, erdCanvas.fromX - 1, erdCanvas.fromY - 1, settings.boxSizing == Manual)
-        for e in entities
-            if e.id == id
-                e.width = erdCanvas.x - e.x
-                e.height = erdCanvas.y - e.y
-                if e.width < 40
-                    e.width = 40
-                if e.height < 40
-                    e.height = 40
-                save e
-        entities = find e in DataEntity where e.project == project order by e.name
-
-    handler entityLineRemoved
-        for r in find r in Relationship where r.project == project
-            if "r{r.id}" == erdCanvas.bent
-                delete r
-        entities = find e in DataEntity where e.project == project order by e.name
-
-    handler entityEditClicked
-        let id = entity_at(entities, erdCanvas.x, erdCanvas.y, settings.boxSizing == Manual)
-        for e in entities
-            if e.id == id
-                open Entities with current = e
-
-    // A line drawn from one entity's box to another's: a relationship between them.
-    handler entityConnected
-        let sourceId = entity_at(entities, erdCanvas.fromX, erdCanvas.fromY, settings.boxSizing == Manual)
-        let targetId = entity_at(entities, erdCanvas.x, erdCanvas.y, settings.boxSizing == Manual)
-        if sourceId == 0 or targetId == 0 or sourceId == targetId
-            return
-        let relationship = new Relationship
-        relationship.project = project
-        for e in entities
-            if e.id == sourceId
-                relationship.source = e
-            if e.id == targetId
-                relationship.target = e
-        save relationship
-        entities = find e in DataEntity where e.project == project order by e.name
-
-code Output
-    // Copy puts the tab's text on the clipboard, to paste where Mermaid or OpenAPI is read.
-    handler copyOutput(which: integer)
-        if which == 1
-            copy classText
-        else if which == 2
-            copy erdText
-        else
-            copy apiText
-        message @copiedToTheClipboard
-
-    handler showOutput
-        if settings.openProject == none
-            message warning @openAProjectFirst
-            return
-        project = settings.openProject
-        classText = class_diagram(project)
-        erdText = erd_diagram(project)
-        apiText = openapi(project, latest_version(project))
-
-    handler exportClicked
-        if project.id == 0
-            return
-        export_model(project, latest_version(project))
-        message @wroteModelMdAndOpenapi(name = project.name)
-
-    handler writeCsharpClicked
-        if project.id == 0
-            return
-        let written = write_csharp(project)
-        message @wroteCountCsharpFiles(count = written, name = project.name)
-
-    handler saveVersionClicked
-        if project.id == 0
-            return
-        ask @aNoteForThisVersion for text then saveVersion
-
-    handler saveVersion(note: text)
-        let number = save_version(project, note)
-        message @savedVersionNumber(number = number)
-        showOutput()
-
-code Versions
-    handler versionsOpened
-        if settings.openProject == none
-            message warning @openAProjectFirst
-            return
-        project = settings.openProject
-        versions = find v in Version where v.project == project order by v.number desc
-
-    handler versionSelected
-        current = versionGrid.selected
-
-// The type whose box is at a point of the class diagram, its id; 0 on empty paper. Its outline lies 2 outside it.
-action class_at(types: list<ClassType>, x: integer, y: integer, manual: bool) -> integer
-    effects db.read
-    let found = 0
-    for t in types
-        if x >= t.x - 2 and x <= t.x + class_box_width(t, manual) + 2 and y >= t.y - 2 and y <= t.y + class_box_height(t, manual) + 2
-            found = t.id
-    return found
-
-// The entity whose box is at a point of the ERD, its id; 0 on empty paper.
-action entity_at(entities: list<DataEntity>, x: integer, y: integer, manual: bool) -> integer
-    effects db.read
-    let found = 0
-    for e in entities
-        if x >= e.x - 2 and x <= e.x + entity_box_width(e, manual) + 2 and y >= e.y - 2 and y <= e.y + entity_box_height(e, manual) + 2
-            found = e.id
-    return found
-
-// How tall a box is on a diagram, for its lines (parameters or columns): a
-// header of 30, a line of 22 each and 6 under the last.
-function box_height(lines: integer) -> integer
-    return 36 + 22 * lines
-
-// The longest of some texts, in characters.
-function widest(texts: list<text>) -> integer
-    let most = 0
-    for t in texts
-        if length(t) > most
-            most = length(t)
-    return most
-
-// How wide a box is on a diagram: a margin, its types in one column, its
-// names in the next, room for its keys (`keys` characters) and a margin (a
-// character of the code font takes about 7 units); at least as wide as its
-// bold title (8 a character), on the grid of 20, never narrower than 200.
-function box_width(title: text, types: list<text>, names: list<text>, keys: integer) -> integer
-    let width = grid_up(12 + widest(types) * 7 + 16 + widest(names) * 7 + keys * 7 + 12)
-    let titled = grid_up(length(title) * 8 + 28)
-    if titled > width
-        width = titled
-    if width < 200
-        width = 200
-    return width
-
-// The types of a class's constructor's parameters, in order, and their names.
-action class_types(t: ClassType) -> list<text>
-    effects db.read
-    let types: list<text> = []
-    for p in find p in Parameter where p.owner == t order by p.position
-        types = types + [p.type]
-    return types
-
-action class_names(t: ClassType) -> list<text>
-    effects db.read
+function class_names(classes: list<ModelClass>) -> list<text>
     let names: list<text> = []
-    for p in find p in Parameter where p.owner == t order by p.position
-        names = names + [p.name]
-    return names
-
-// A box's size on a diagram: the size it was given when boxes are sized by
-// hand (`manual`) and it has one, else as its text needs.
-action class_box_width(t: ClassType, manual: bool) -> integer
-    effects db.read
-    if manual and t.width > 0
-        return t.width
-    return class_width(t)
-
-action class_box_height(t: ClassType, manual: bool) -> integer
-    effects db.read
-    if manual and t.height > 0
-        return t.height
-    return box_height(count(class_names(t)))
-
-action entity_box_width(e: DataEntity, manual: bool) -> integer
-    effects db.read
-    if manual and e.width > 0
-        return e.width
-    return entity_width(e)
-
-action entity_box_height(e: DataEntity, manual: bool) -> integer
-    effects db.read
-    if manual and e.height > 0
-        return e.height
-    return box_height(count(entity_names(e)))
-
-action class_width(t: ClassType) -> integer
-    effects db.read
-    return box_width(t.name, class_types(t), class_names(t), 0)
-
-// The types of an entity's columns, in order, their names, and their keys
-// with a star for a column that is required.
-action entity_types(e: DataEntity) -> list<text>
-    effects db.read
-    let types: list<text> = []
-    for c in find c in Column where c.owner == e order by c.position
-        types = types + [c.type]
-    return types
-
-action entity_names(e: DataEntity) -> list<text>
-    effects db.read
-    let names: list<text> = []
-    for c in find c in Column where c.owner == e order by c.position
+    for c in classes
         names = names + [c.name]
     return names
 
-action entity_keys(e: DataEntity) -> list<text>
-    effects db.read
-    let keys: list<text> = []
-    for c in find c in Column where c.owner == e order by c.position
-        let mark = key_mark(c.key)
-        if c.mandatory
-            mark = mark + " *"
-        keys = keys + [mark]
-    return keys
+// A line of a class box: its name and type, a question mark when it may be empty.
+function property_line(name: text, type: text, optional: bool) -> text
+    if optional
+        return "{name}: {type}?"
+    return "{name}: {type}"
 
-action entity_width(e: DataEntity) -> integer
-    effects db.read
-    return box_width(e.name, entity_types(e), entity_names(e), 6)
+// A column of a table: a foreign key for a class, the property itself otherwise.
+function column_line(name: text, type: text, classes: list<text>) -> text
+    for c in classes
+        if type == c
+            return "FK  {name}Bk"
+    return "    {name}"
 
-// A place on a diagram rounded up to its grid of 20.
-function grid_up(n: integer) -> integer
-    let up = 0
+// Where the n-th box of a domain goes, from 0: five to a row.
+function column_of(n: integer) -> integer
+    let left = n
     for step in 1 to 1000
-        if up < n
-            up = up + 20
-    return up
+        if left >= 5
+            left = left - 5
+    return left
 
-// A place on a diagram, never left of or above it.
-function at_least_zero(n: integer) -> integer
-    if n < 0
-        return 0
-    return n
-
-// Where a name is in a list of names, counted from 1; 1 when it is not there.
-function place_of(names: list<text>, name: text) -> integer
-    let i = 1
-    for n in names
-        if n == name
-            return i
-        i = i + 1
-    return 1
-
-// The number of a project's latest version as text, or "draft" before the first.
-action latest_version(project: Project) -> text
-    effects db.read
-    let versions = find v in Version where v.project == project order by v.number desc
-    if count(versions) == 0
-        return "draft"
-    let latest = versions[1]
-    return "{latest.number}"
+function row_of(n: integer) -> integer
+    let left = n
+    let row = 0
+    for step in 1 to 1000
+        if left >= 5
+            left = left - 5
+            row = row + 1
+    return row

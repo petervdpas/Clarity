@@ -319,7 +319,10 @@ impl<'a> Window<'a> {
             let prop = member(data);
             let field = backing(data);
             if *list {
-                let _ = writeln!(constructor, "        {field} = Db.All<{entity}>();");
+                // A list of records starts empty: code builds it (DESIGN 5.12).
+                if !self.project.entity(entity).is_some_and(|e| e.record) {
+                    let _ = writeln!(constructor, "        {field} = Db.All<{entity}>();");
+                }
                 let _ = write!(
                     properties,
                     "    public List<{entity}> {prop} {{ get => {field}; set => SetProperty(ref {field}, value); }}\n    List<{entity}> {field} = [];\n\n"
@@ -474,8 +477,8 @@ impl<'a> Window<'a> {
             if !help.is_empty() {
                 args.push(format!("help: {}", Texts::kept(&help)));
             }
-            // A foldable part starts as designed; a popover starts closed.
-            let starts = if widget.props.kind == WidgetKind::Popover {
+            // A foldable part starts as designed; a popover and a slide-out start closed.
+            let starts = if matches!(widget.props.kind, WidgetKind::Popover | WidgetKind::Slideout) {
                 " { IsVisible = false }"
             } else if widget.props.foldable && widget.props.folded {
                 " { IsFolded = true }"
@@ -749,8 +752,8 @@ impl<'a> Window<'a> {
         if close {
             clicks.push_str("    [RelayCommand]\n    void CloseWindow_() => Handle(Close);\n\n");
         }
-        // The popovers a click opens.
-        for popover in self.page.widgets.iter().filter(|w| w.props.kind == WidgetKind::Popover) {
+        // The popovers and slide-outs a click opens.
+        for popover in self.page.widgets.iter().filter(|w| matches!(w.props.kind, WidgetKind::Popover | WidgetKind::Slideout)) {
             let Some(n) = &popover.props.name else { continue };
             let _ = write!(clicks, "    [RelayCommand]\n    void Show_{n}() => {}.IsVisible = true;\n\n", member(n));
         }

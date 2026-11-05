@@ -259,6 +259,15 @@ impl TablePart {
         self.toggle_box(place).filter(|t| t.contains(x, y)).map(|_| place)
     }
 
+    /// Its own button at a point: the Add button (false) or a row's trash button (true).
+    fn own_button_at(&self, x: f64, y: f64) -> Option<bool> {
+        if self.add_button().is_some_and(|b| b.contains(x, y)) {
+            return Some(false);
+        }
+        let (place, _) = self.row_at(y).filter(|_| self.rows.scroller.bounds.contains(x, y))?;
+        self.remove_box(place).filter(|b| b.contains(x, y)).map(|_| true)
+    }
+
     /// The pointer's shape at a point: a header edge resizes; a page button that works and a toggle are pressed.
     pub fn pointer_shape(&self, x: f64, y: f64) -> Option<Cursor> {
         if matches!(self.press, Some(super::Press::Edge(..))) {
@@ -270,6 +279,9 @@ impl TablePart {
         if let Some(button) = self.pager_button_at(x, y) {
             return self.page_button_works(button).then_some(Cursor::Hand);
         }
+        if self.own_button_at(x, y).is_some() {
+            return (!self.locked()).then_some(Cursor::Hand);
+        }
         if self.edge_column_at(x, y).is_some() {
             return Some(Cursor::ResizeLeftRight);
         }
@@ -280,6 +292,9 @@ impl TablePart {
     pub fn tip_at(&self, x: f64, y: f64) -> Option<String> {
         if let Some(button) = self.pager_button_at(x, y) {
             return Some(Self::page_word(button));
+        }
+        if let Some(remove) = self.own_button_at(x, y) {
+            return Some(if remove { super::remove_word() } else { super::add_word() });
         }
         self.toggle_at(x, y).map(|place| self.toggle_word(place))
     }

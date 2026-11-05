@@ -188,6 +188,15 @@ pub const SIDEBAR_KEYS: [(&str, &str); 4] = [
     ("sidebarGiveBack", "Give the window back"),
 ];
 
+/// Clarity's words of a slide-out's buttons (tooltips): close it, pin it
+/// open beside the window's parts and let it go again. A window with a slide-out has them.
+pub const SLIDEOUT_KEYS: [(&str, &str); 3] = [("slideoutClose", "Close"), ("slideoutPin", "Pin it open"), ("slideoutUnpin", "Let it slide away")];
+
+/// Clarity's words of a table's own buttons (`add`, `remove`): the Add
+/// button above it, the tooltip of each row's trash button, and what
+/// `remove confirm` asks, with its buttons.
+pub const TABLE_ROW_KEYS: [(&str, &str); 4] = [("addRow", "Add"), ("removeRow", "Remove"), ("removeRowAsk", "Remove {row}?"), ("keepRow", "Keep")];
+
 /// What a window says when code fails at a value or a record: an item
 /// outside its list, a record that is not there or still used. The
 /// runtimes fill the slots; every application with windows has them.
@@ -231,6 +240,8 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&UNDO_KEYS)
         .chain(&REQUIRED_KEYS)
         .chain(&SIDEBAR_KEYS)
+        .chain(&SLIDEOUT_KEYS)
+        .chain(&TABLE_ROW_KEYS)
         .chain(&RUNTIME_ERROR_KEYS)
         .chain(&ENGINE_ERROR_KEYS)
         .chain(&DESKTOP_KEYS)
@@ -623,6 +634,8 @@ fn shown(project: &Project) -> Shown {
     let windows = project.files.iter().any(|f| !f.pages.is_empty());
     let required = project.entities().any(|e| !e.settings && e.fields.iter().any(|f| f.modifiers.required));
     let sidebars = project.files.iter().flat_map(|f| f.pages.iter().map(|p| &p.frame).chain(f.apps.iter().map(|a| &a.frame))).any(|frame| frame.sidebars.iter().any(|s| s.props.collapsible || s.props.maximizable));
+    let slideouts = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Slideout));
+    let table_rows = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.add || w.props.remove));
     let engines = project.files.iter().any(|f| !f.engines.is_empty());
     // A date input, or a table cell of a date field, opens the calendar.
     let dates = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Date))
@@ -651,6 +664,8 @@ fn shown(project: &Project) -> Shown {
         .chain(if screen_engines { SCREEN_ENGINE_KEYS.as_slice() } else { &[] })
         .chain(if required { REQUIRED_KEYS.as_slice() } else { &[] })
         .chain(if sidebars { SIDEBAR_KEYS.as_slice() } else { &[] })
+        .chain(if slideouts { SLIDEOUT_KEYS.as_slice() } else { &[] })
+        .chain(if table_rows { TABLE_ROW_KEYS.as_slice() } else { &[] })
         .chain(if windows { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
         .chain(if engines { ENGINE_ERROR_KEYS.as_slice() } else { &[] });
     // The runtimes fill the slots of Clarity's own words, the ones its English has.

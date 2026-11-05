@@ -64,6 +64,21 @@ void rows_read_again_have_no_selected_row(void) {
     CHECK_TEXT(state.selected[0].name, "grid");
 }
 
+void code_selects_a_row_and_none(void) {
+    ClarityWindowState state;
+    REQUIRE_OK(clarity_window_state_from_json(cJSON_Parse("{\"window\":\"Outline\",\"data\":{},\"parts\":{},\"selected\":{\"nav\":0,\"names\":1}}"), &state));
+    ClarityUi* ui = clarity_ui(&state);
+    clarity_ui_select(ui, "nav", 2);
+    clarity_ui_select(ui, "grid", 1);
+    clarity_ui_select(ui, "names", -1);
+    size_t row;
+    CHECK_OK(clarity_ui_selected(ui, "nav", 3, &row));
+    CHECK_INT(row, 2);
+    CHECK_FAILS(CLARITY_INVALID, clarity_ui_selected(ui, "names", 3, &row));
+    CHECK_JSON(clarity_window_state_json(&clarity_ui_reply(ui, "Outline", cJSON_CreateObject())->state),
+               "{\"window\":\"Outline\",\"instance\":0,\"data\":{},\"parts\":{},\"selected\":{\"nav\":2,\"grid\":1}}");
+}
+
 void a_window_opens_with_its_data_and_with(void) {
     ClarityWindowState* state =
         clarity_opened("Card", cJSON_Parse("{\"order\":{\"id\":0,\"number\":\"new\"},\"note\":\"\"}"), cJSON_Parse("{\"order\":{\"id\":7,\"number\":\"ORD-7\"}}"));

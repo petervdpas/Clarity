@@ -19,7 +19,7 @@ use crate::widgets::{self, BindTarget, ContainerKind, WidgetKind};
 /// The entity is `None` when it did not resolve; that error is reported once.
 struct PageContext<'a> {
     data: HashMap<&'a str, Held<'a>>,
-    /// The popovers of the window, by name: a click opens them as it opens a window.
+    /// The popovers and slide-outs of the window, by name: a click opens them as it opens a window.
     popovers: HashSet<&'a str>,
 }
 
@@ -101,6 +101,8 @@ struct Checker<'a> {
     /// Declaration name -> all declarations with that name.
     decls: HashMap<&'a str, Vec<Decl<'a>>>,
     diagnostics: Vec<Diagnostic>,
+    /// The popovers and slide-outs of the window being checked: a menu item's click opens them too.
+    overlays: HashSet<&'a str>,
 }
 
 pub fn check(files: &[SpecFile]) -> Vec<Diagnostic> {
@@ -109,6 +111,7 @@ pub fn check(files: &[SpecFile]) -> Vec<Diagnostic> {
         modules: HashMap::new(),
         decls: HashMap::new(),
         diagnostics: Vec::new(),
+        overlays: HashSet::new(),
     };
     checker.collect();
     checker.check_single_app();
@@ -348,8 +351,15 @@ impl<'a> Checker<'a> {
                 if !seen.insert(field.name.name.as_str()) {
                     self.error(file_index, format!("duplicate field '{}'", field.name.name), field.name.span);
                 }
-                if matches!(field.ty, FieldType::Ref { .. } | FieldType::Image | FieldType::File) {
-                    self.error(file_index, format!("record {} has field {}: a record's fields are values, not references, pictures or files", record.name.name, field.name.name), field.name.span);
+                if matches!(field.ty, FieldType::Image | FieldType::File) {
+                    self.error(file_index, format!("record {} has field {}: a record's fields are values or references to stored records, not pictures or files", record.name.name, field.name.name), field.name.span);
+                    continue;
+                }
+                // A record refers to a stored record by its id, never to another record.
+                if let FieldType::Ref { entity } = &field.ty
+                    && self.decls.get(entity.name.as_str()).is_some_and(|ds| ds.iter().any(|d| d.kind == DeclKind::Record))
+                {
+                    self.error(file_index, format!("record {} has field {}: a reference names a stored entity; {} is a record, which is never stored", record.name.name, field.name.name, entity.name), field.name.span);
                     continue;
                 }
                 self.check_field(file_index, field);
@@ -361,6 +371,7 @@ impl<'a> Checker<'a> {
 
         for page in &file.pages {
             self.check_page(file_index, page);
+            self.overlays.clear();
         }
 
         for app in &file.apps {
@@ -386,7 +397,8 @@ impl<'a> Checker<'a> {
         }
 
         let mut context = self.data_context(file, &page.data);
-        context.popovers = page.widgets.iter().filter(|w| w.props.kind == WidgetKind::Popover).filter_map(|w| w.props.name.as_deref()).collect();
+        context.popovers = page.widgets.iter().filter(|w| matches!(w.props.kind, WidgetKind::Popover | WidgetKind::Slideout)).filter_map(|w| w.props.name.as_deref()).collect();
+        self.overlays = context.popovers.clone();
         self.check_widgets(file, &context, &page.widgets, page.columns);
         if page.kind != PageKind::Window && !page.frame.is_empty() {
             let kind = if page.kind == PageKind::Dialog {
@@ -407,6 +419,7 @@ impl<'a> Checker<'a> {
         }
         self.check_frame(file, &context, &page.frame);
         self.check_names(file, &page.widgets, &page.frame);
+        self.check_views(file, page);
         self.check_page_keys(file, page);
         self.check_commands_and_data(file, page);
         self.check_forms(file, &page.widgets, None);
@@ -433,7 +446,11 @@ impl<'a> Checker<'a> {
                     continue;
                 }
                 DataKind::Record { entity } | DataKind::List { entity } => {
-                    let found = if self.decls.contains_key(entity.name.as_str()) {
+                    let record = self.decls.get(entity.name.as_str()).is_some_and(|ds| ds.iter().any(|d| d.kind == DeclKind::Record));
+                    let found = if record {
+                        // A record (DESIGN 5.12) is window data too, made in code and never stored.
+                        self.resolve(file, entity, DeclKind::Record).map(|(f, i)| &self.files[f].records[i])
+                    } else if self.decls.contains_key(entity.name.as_str()) {
                         self.resolve(file, entity, DeclKind::Entity).map(|(f, i)| &self.files[f].entities[i])
                     } else {
                         self.error(file, format!("unknown entity or enum '{}'", entity.name), entity.span);
@@ -738,6 +755,56 @@ impl<'a> Checker<'a> {
                     format!("item or button '{name}' has the name of data of {}; give one of them another name", page.name.name),
                     span,
                 );
+            }
+        }
+    }
+
+    /// The views a window's slide-outs show (`view ClassEditor`, DESIGN 5.33):
+    /// each a view of the project, shown once, in a window, its parts and data
+    /// named apart from the window's, and the slide-out holding none of its own.
+    fn check_views(&mut self, file: usize, page: &'a Page) {
+        fn names<'w>(widgets: &'w [Widget], out: &mut Vec<&'w str>) {
+            for w in widgets {
+                out.extend(w.props.name.as_deref());
+                names(&w.children, out);
+                for inner in &w.pages {
+                    names(&inner.children, out);
+                }
+            }
+        }
+        let mut own = Vec::new();
+        names(&page.widgets, &mut own);
+        own.extend(page.data.iter().map(|d| d.name.name.as_str()));
+        let mut shown: Vec<&str> = Vec::new();
+        for (widget, name) in crate::views::showing(&page.widgets) {
+            if !widget.children.is_empty() {
+                self.error(file, format!("a slide-out that shows a view holds no parts of its own; they are {name}'s"), widget.span);
+            }
+            if page.kind == PageKind::View {
+                self.error(file, "a view shows in a window, not in another view", widget.span);
+                continue;
+            }
+            let Some(found) = self.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == name) else {
+                self.error(file, format!("there is no view '{name}'"), widget.span);
+                continue;
+            };
+            if found.kind != PageKind::View {
+                self.error(file, format!("{name} is a {}; a slide-out shows a view: write page {name}: view", page_kind_word(found.kind)), widget.span);
+                continue;
+            }
+            if shown.contains(&name) {
+                self.error(file, format!("{name} shows once in a window"), widget.span);
+                continue;
+            }
+            shown.push(name);
+            if found.widgets.iter().any(|w| w.props.kind == WidgetKind::Slideout) {
+                self.error(file, format!("{name} has a slide-out of its own, so it cannot show in one"), widget.span);
+            }
+            let mut theirs = Vec::new();
+            names(&found.widgets, &mut theirs);
+            theirs.extend(found.data.iter().map(|d| d.name.name.as_str()));
+            for clash in theirs.iter().filter(|n| own.contains(n)) {
+                self.error(file, format!("{name} has '{clash}', as {} has; name one of them apart", page.name.name), widget.span);
             }
         }
     }
@@ -1088,6 +1155,13 @@ impl<'a> Checker<'a> {
             }
             self.check_small_part(file, widget);
             // A popover is outside the grid: only its own parts are placed, on its own grid.
+            // A table's Add button and trash buttons run their handlers, which add and delete the row.
+            if p.add && !p.handlers.iter().any(|h| h.event == crate::widgets::Event::Add) {
+                self.error(file, "'add' shows an Add button above the table: write 'on add: handler' that adds the row", widget.span);
+            }
+            if p.remove && !p.handlers.iter().any(|h| h.event == crate::widgets::Event::Remove) {
+                self.error(file, "'remove' shows a trash button on every row: write 'on remove: handler' that deletes the row", widget.span);
+            }
             let popover = p.kind == WidgetKind::Popover;
             if popover && p.for_part.is_none() {
                 self.error(file, "a popover opens next to a part: write 'for' and the part's name", widget.span);
@@ -1096,13 +1170,14 @@ impl<'a> Checker<'a> {
             for nested in inside {
                 match nested.props.kind {
                     WidgetKind::Popover => self.error(file, "a popover stands on the window, not in another part", nested.span),
+                    WidgetKind::Slideout => self.error(file, "a slide-out stands on the window, not in another part", nested.span),
                     WidgetKind::Sound => self.error(file, "a sound stands on the window, not in another part", nested.span),
                     WidgetKind::Timer => self.error(file, "a timer stands on the window, not in another part", nested.span),
                     _ => {}
                 }
             }
             // A sound and a timer have no place at all (DESIGN 5.22, 5.26).
-            let popover = popover || matches!(p.kind, WidgetKind::Sound | WidgetKind::Timer);
+            let popover = popover || widgets::off_grid(p.kind);
             self.check_time(file, widget);
             if let Some(menu) = &widget.menu {
                 // A context menu is named only when code hides or disables it as a whole.
@@ -1133,7 +1208,7 @@ impl<'a> Checker<'a> {
                     widget.span,
                 );
             }
-            for other in widgets[..index].iter().filter(|o| !popover && !matches!(o.props.kind, WidgetKind::Popover | WidgetKind::Sound | WidgetKind::Timer)) {
+            for other in widgets[..index].iter().filter(|o| !popover && !widgets::off_grid(o.props.kind)) {
                 if overlaps(&other.props, p) {
                     self.error(
                         file,
@@ -1170,7 +1245,7 @@ impl<'a> Checker<'a> {
                 } else if frame::BUILT_IN_COMMANDS.contains(&target.as_str()) {
                     self.error(file, format!("'{target}' picks in a menu or a toolbar; a button can close its window or quit"), widget.span);
                 } else if page.popovers.contains(target.as_str()) {
-                    // A click opens a popover of its window next to its part.
+                    // A click opens a popover of its window next to its part, or a slide-out at its side.
                 } else {
                     self.check_click_target(file, target, widget.span);
                 }
@@ -1577,8 +1652,16 @@ impl<'a> Checker<'a> {
     /// kind, through the one reference to their own kind (their parent).
     fn check_tree(&mut self, file: usize, at: &str, entity: &Entity, widget: &Widget) {
         let name = &entity.name.name;
-        let Some(children) = widget.props.children.as_deref() else {
-            return self.error(file, format!("{at}: a tree names the list of its own kind its rows have, as in 'children children'"), widget.span);
+        let p = &widget.props;
+        if p.row_key.is_some() || p.parent_key.is_some() {
+            return self.check_tree_by_key(file, at, entity, widget);
+        }
+        let Some(children) = p.children.as_deref() else {
+            return self.error(
+                file,
+                format!("{at}: a tree names the list of its own kind its rows have, as in 'children children', or the key and parent fields of its rows, as in 'key id parent parentId'"),
+                widget.span,
+            );
         };
         match entity.field(children).map(|f| &f.ty) {
             None => return self.error(file, format!("{at}: {name} has no field '{children}'"), widget.span),
@@ -1588,6 +1671,38 @@ impl<'a> Checker<'a> {
         let parents = entity.fields.iter().filter(|f| matches!(&f.ty, FieldType::Ref { entity: e } if e.name == *name)).count();
         if parents != 1 {
             self.error(file, format!("{at}: a tree of {name} needs one field 'ref {name}' to know a row's parent"), widget.span);
+        }
+    }
+
+    /// A tree by key: each row is named by its `key` field and shows under
+    /// the row whose key its `parent` field holds, text or whole numbers.
+    fn check_tree_by_key(&mut self, file: usize, at: &str, entity: &Entity, widget: &Widget) {
+        let p = &widget.props;
+        let name = &entity.name.name;
+        if p.children.is_some() {
+            return self.error(file, format!("{at}: a tree is arranged by 'children' or by 'key' and 'parent', not both"), widget.span);
+        }
+        let (Some(key), Some(parent)) = (p.row_key.as_deref(), p.parent_key.as_deref()) else {
+            return self.error(file, format!("{at}: a tree by key names both fields, as in 'key id parent parentId'"), widget.span);
+        };
+        let mut kinds = Vec::new();
+        for field in [key, parent] {
+            // A stored record's own id names it too.
+            if field == crate::code::check::RECORD_ID && !entity.record && entity.field(field).is_none() {
+                kinds.push("integer");
+                continue;
+            }
+            match entity.field(field).map(|f| &f.ty) {
+                None => self.error(file, format!("{at}: {name} has no field '{field}'"), widget.span),
+                Some(FieldType::Text { .. }) => kinds.push("text"),
+                Some(FieldType::Integer) => kinds.push("integer"),
+                Some(other) => self.error(file, format!("{at}: '{field}' is {}; a tree's key and parent are text or integer", widgets::field_type_tag(other)), widget.span),
+            }
+        }
+        if let [k, q] = kinds[..]
+            && k != q
+        {
+            self.error(file, format!("{at}: '{key}' is {k} and '{parent}' is {q}; a row's parent holds a key of the same type"), widget.span);
         }
     }
 
@@ -1666,6 +1781,9 @@ impl<'a> Checker<'a> {
     fn check_reorder(&mut self, file: usize, at: &str, entity: &Entity, widget: &Widget) {
         let p = &widget.props;
         let Some(field) = p.reorder.as_deref() else { return };
+        if entity.record {
+            return self.error(file, format!("{at}: {} is a record, which is never stored, so the person cannot put its rows in their own order; build the list in code", entity.name.name), widget.span);
+        }
         match entity.field(field) {
             None => self.error(file, format!("{at}: {} has no field '{field}' to keep the order in", entity.name.name), widget.span),
             Some(f) if f.ty != FieldType::Integer => self.error(
@@ -1692,6 +1810,9 @@ impl<'a> Checker<'a> {
         let p = &widget.props;
         if p.edit.is_empty() {
             return;
+        }
+        if entity.record {
+            return self.error(file, format!("{at}: {} is a record, which is never stored, so its rows are not edited in a table; edit them in parts bound to a record", entity.name.name), widget.span);
         }
         for field in &p.edit {
             if !p.columns.contains(field) {
@@ -1725,6 +1846,10 @@ impl<'a> Checker<'a> {
     /// A click opens a window. Unknown names are warnings: they become
     /// event handlers once code behind is part of the language.
     fn check_click_target(&mut self, file: usize, target: &str, span: Span) {
+        // A popover or slide-out of the window opens as a window does.
+        if self.overlays.contains(target) {
+            return;
+        }
         let visible = self.visible_modules(file);
         let kinds: Vec<DeclKind> = self
             .decls

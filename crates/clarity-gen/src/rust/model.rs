@@ -14,6 +14,26 @@ pub fn emit(project: &Project, file: &SpecFile) -> String {
     for entity in &file.entities {
         out.push_str(&record(project, entity));
     }
+    for decl in &file.records {
+        out.push_str(&plain_record(project, decl));
+    }
+    out
+}
+
+/// A record (DESIGN 5.12): its fields and their defaults, never stored, so
+/// it has no id and no table.
+fn plain_record(project: &Project, record: &Entity) -> String {
+    let name = &record.name.name;
+    let mut out = format!("#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]\npub struct {name} {{\n");
+    for field in &record.fields {
+        out.push_str(&super::names::struct_field(&field.name.name, &field_type(&field.ty)));
+    }
+    out.push_str("}\n\n");
+    out.push_str(&format!("impl Default for {name} {{\n    fn default() -> Self {{\n        {name} {{\n"));
+    for field in &record.fields {
+        out.push_str(&format!("            {}: {},\n", ident(&field.name.name), default_value(project, field)));
+    }
+    out.push_str("        }\n    }\n}\n\n");
     out
 }
 

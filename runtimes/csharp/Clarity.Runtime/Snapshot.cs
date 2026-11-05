@@ -101,6 +101,7 @@ public static class Snapshot
         ["folded"] = part.IsFolded,
         ["collapsed"] = part.IsCollapsed,
         ["maximized"] = part.IsMaximized,
+        ["pinned"] = part.IsPinned,
         ["tab"] = part.Tab,
         ["step"] = part.Step,
         ["open_section"] = part.OpenSection,
@@ -122,6 +123,7 @@ public static class Snapshot
         part.IsFolded = Get("folded", part.IsFolded);
         part.IsCollapsed = Get("collapsed", part.IsCollapsed);
         part.IsMaximized = Get("maximized", part.IsMaximized);
+        part.IsPinned = Get("pinned", part.IsPinned);
         part.Tab = Get("tab", part.Tab);
         part.Step = Get("step", part.Step);
         part.OpenSection = Get("open_section", part.OpenSection);

@@ -18,6 +18,8 @@ use crate::widgets::{self, Event, WidgetKind, new_props, widget_line};
 pub enum PageTemplate {
     /// An empty window.
     Blank,
+    /// An empty view, which a window's slide-out shows (DESIGN 5.33).
+    View,
     /// A label and an input for every field of the entity, and Save and
     /// Close buttons.
     Form { entity: String },
@@ -43,6 +45,7 @@ pub fn page_from_template(
     let title = default_label(name);
     match template {
         PageTemplate::Blank => Ok(format!("page {name}: window\n    title {}", quote(&title))),
+        PageTemplate::View => Ok(format!("page {name}: view")),
         PageTemplate::Form { entity } => {
             let entity = find_entity(project, entity)?;
             Ok(form_page(name, &title, entity))

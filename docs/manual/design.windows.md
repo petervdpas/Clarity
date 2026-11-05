@@ -23,6 +23,8 @@ page CustomerForm: window
 
 The kind after the colon is `window` (a window of its own, which can have a menu, toolbar and other frame regions), `dialog` (a modal window) or `view`. Only a `window` has frame regions; see [The app and its frame](design.frame.md).
 
+A **view** is a piece of a window, designed on its own as a window is: its parts, its data and its code. A window composes views: a slide-out with **Shows view** set (`view ClassEditor`) shows that view, and the view's parts, data and handlers join the window's, so the window's code sets what it shows. Views have their own section in the project tree; **+ New view** there starts a blank one.
+
 To add one, click **New window** on the Project or Design tab. Give it a name and choose what it starts from: a blank window, Form for an entity (a label and an input per field, with Save and Close buttons) or Browse for an entity (a filter, a table, and New and Open buttons, with the code that filters and refreshes). The result is an ordinary window. New window always makes a `window`; to make a dialog, change `: window` to `: dialog` in the text (see [Design as text](design.text.md)). A dialog that answers a question says what it gives, `: dialog gives Friend`, and its handler closes it with one: `close with grid.selected`; `ask PickFriend then lend(album)` opens it from another window, and the answer runs `lend` there (see [Code behind](code.handlers.md)).
 
 ## Data and events

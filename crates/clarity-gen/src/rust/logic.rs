@@ -189,6 +189,12 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{pad}ui.set_part_value({part:?}, {property:?}, to_value(&{value})?);\n"));
                     return;
                 }
+                // Code selects a row: the first that is the record given, or none.
+                if let Some((part, "selected")) = self.part_property(target) {
+                    let select = self.select_row(&part, value);
+                    out.push_str(&format!("{pad}{select}\n"));
+                    return;
+                }
                 if let Some((part, property)) = self.part_property(target) {
                     let value = if matches!(property, "caption" | "error") { self.shown(value) } else { coerce(self.value(value), &from, &to) };
                     out.push_str(&format!("{pad}ui.set_{property}({part:?}, {value});\n"));
@@ -567,6 +573,7 @@ impl<'a> Emitter<'a> {
             "folded" => "folded",
             "collapsed" => "collapsed",
             "maximized" => "maximized",
+            "pinned" => "pinned",
             "tab" => "tab",
             "step" => "step",
             // An accordion's open section: `ui.open_section`, as `ui.open` opens a window.
@@ -624,6 +631,7 @@ impl<'a> Emitter<'a> {
             ("readonly", Some(info)) => format!("ui.readonly({part:?}, {})", info.readonly),
             ("folded", Some(info)) => format!("ui.folded({part:?}, {})", info.folded),
             ("collapsed", Some(info)) => format!("ui.collapsed({part:?}, {})", info.collapsed),
+            ("visible", Some(info)) if info.closed => format!("ui.visible_or({part:?}, false)"),
             ("grid", Some(info)) => format!("ui.grid({part:?}, {})", info.grid),
             ("snap", Some(info)) => format!("ui.snap({part:?}, {})", info.snap),
             ("background", Some(info)) => format!("ui.background({part:?}, {:?})", info.background),
@@ -646,6 +654,22 @@ impl<'a> Emitter<'a> {
             }
             (property, _) => format!("ui.{property}({part:?})"),
         }
+    }
+
+    /// `grid.selected = value`: the row of the part's list that is the
+    /// record given (a stored one by its id, a record by its fields), or none.
+    fn select_row(&mut self, part: &str, value: &Expr) -> String {
+        let Some(bind) = self.window.as_ref().and_then(|w| w.parts.get(part)).and_then(|p| p.bind.clone()) else {
+            self.errors.push(format!("'{part}' is not bound to a list"));
+            return String::new();
+        };
+        if matches!(value.kind, ExprKind::Empty) {
+            return format!("ui.select({part:?}, None);");
+        }
+        let stored = matches!(self.types.type_of(value), TypeInfo::Record(e) if self.project.entity(&e).is_some_and(|d| !d.record));
+        let same = if stored { "r.id == wanted.id" } else { "*r == wanted" };
+        let wanted = self.value(value);
+        format!("{{ let wanted = {wanted}; let place = w.{}.iter().position(|r| {same}); ui.select({part:?}, place); }}", ident(&bind))
     }
 
     /// The record `save` or `delete` works on: a name holding it, or the
@@ -794,8 +818,8 @@ impl<'a> Emitter<'a> {
             }
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", self.value(operand)),
-            // A list of values grows by a list of its items (DESIGN 5.26).
-            ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_)) => {
+            // A list of values, or of records, grows by a list of its items (DESIGN 5.26, 5.12).
+            ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_) | TypeInfo::List(_)) => {
                 format!("{{ let mut joined = {}; joined.extend({}); joined }}", self.value(left), self.value(right))
             }
             ExprKind::Binary { op, left, right } => self.binary(*op, left, right, &ty),
@@ -1083,8 +1107,8 @@ impl<'a> Emitter<'a> {
                 self.errors.push(format!("{entity} cannot be ordered by '{}'", key.field.name));
                 continue;
             };
-            let numeric = self.field_type(&path.entity, &path.field).is_some_and(|t| is_stored_number(&t));
-            let column = self.column(&path.entity, &path.field);
+            let numeric = crate::query_field_type(self.project, &path.entity, &path.field).is_some_and(|t| is_stored_number(&t));
+            let column = crate::query_column(self.project, &path.entity, &path.field);
             if path.hops.is_empty() {
                 let method = if numeric { "order_number" } else { "order" };
                 query.push_str(&format!(".{method}({column:?}, {})", key.descending));
@@ -1094,12 +1118,6 @@ impl<'a> Emitter<'a> {
             }
         }
         format!("db.find::<{entity}>(&{query})?")
-    }
-
-    /// The column a field is stored in: its own name, or the existing
-    /// column it is mapped to.
-    fn column(&self, entity: &str, field: &str) -> String {
-        self.project.entity(entity).map_or_else(|| field.to_string(), |e| e.column_of(field).to_string())
     }
 
     fn field_type(&self, entity: &str, field: &str) -> Option<FieldType> {
@@ -1137,11 +1155,11 @@ impl<'a> Emitter<'a> {
                         return String::new();
                     }
                 };
-                let Some(ty) = self.field_type(&path.entity, &path.field) else {
+                let Some(ty) = crate::query_field_type(self.project, &path.entity, &path.field) else {
                     self.errors.push(format!("{} has no field '{}'", path.entity, path.field));
                     return String::new();
                 };
-                let column = self.column(&path.entity, &path.field);
+                let column = crate::query_column(self.project, &path.entity, &path.field);
                 let own = if matches!(value.kind, ExprKind::Empty) {
                     let test = format!("Cond::is_none({column:?})");
                     if op == BinaryOp::Eq { test } else { format!("{test}.negated()") }
@@ -1162,17 +1180,17 @@ impl<'a> Emitter<'a> {
                     self.errors.push(format!("'{}' compares no field of {var}", print::expr(expr)));
                     return String::new();
                 };
-                let Some(ty) = self.field_type(&path.entity, &path.field) else {
+                let Some(ty) = crate::query_field_type(self.project, &path.entity, &path.field) else {
                     self.errors.push(format!("{} has no field '{}'", path.entity, path.field));
                     return String::new();
                 };
                 let constructor = if is_stored_number(&ty) { "one_of_numbers" } else { "one_of" };
                 let values: Vec<String> = options.iter().map(|o| self.sql_value(&ty, o)).collect();
-                let own = format!("Cond::{constructor}({:?}, vec![{}])", self.column(&path.entity, &path.field), values.join(", "));
+                let own = format!("Cond::{constructor}({:?}, vec![{}])", crate::query_column(self.project, &path.entity, &path.field), values.join(", "));
                 through(&path.hops, own)
             }
             _ => match path_of(expr) {
-                Some(path) => through(&path.hops, format!("Cond::is_true({:?})", self.column(&path.entity, &path.field))),
+                Some(path) => through(&path.hops, format!("Cond::is_true({:?})", crate::query_column(self.project, &path.entity, &path.field))),
                 None => {
                     self.errors.push(format!("'{}' is not a condition on {var}", print::expr(expr)));
                     String::new()
@@ -1376,6 +1394,8 @@ pub struct PartInfo {
     pub folded: bool,
     /// Whether the design starts a collapsible sidebar folded to its button.
     pub collapsed: bool,
+    /// A popover or slide-out: closed until code or a click opens it, so `visible` reads false until then.
+    pub closed: bool,
     /// A canvas's grid as its line says (0 for none), and whether code snaps to it.
     pub grid: u32,
     pub snap: bool,
@@ -1422,6 +1442,7 @@ impl WindowCtx {
                         readonly: widget.props.readonly,
                         folded: widget.props.folded,
                         collapsed: false,
+                        closed: matches!(widget.props.kind, clarity_spec::widgets::WidgetKind::Popover | clarity_spec::widgets::WidgetKind::Slideout),
                         grid: widget.props.grid.unwrap_or(0),
                         snap: widget.props.snap,
                         background: widget.props.background.clone().unwrap_or_default(),
@@ -1454,6 +1475,7 @@ impl WindowCtx {
                         readonly: false,
                         folded: false,
                         collapsed: false,
+                        closed: false,
                         grid: 0,
                         snap: false,
                         background: String::new(),
@@ -1594,6 +1616,8 @@ pub fn emit_windows(
                     // The settings are what the person kept, each value that still fits.
                     DataKind::Record { entity } if project.entity(&entity.name).is_some_and(|e| e.settings) => "crate::kept_settings()".to_string(),
                     DataKind::Record { entity } => format!("{}::default()", entity.name),
+                    // A list of records starts empty: code builds it (DESIGN 5.12).
+                    DataKind::List { entity } if project.entity(&entity.name).is_some_and(|e| e.record) => "Vec::new()".to_string(),
                     DataKind::List { entity } => format!("db.all::<{}>()?", entity.name),
                     DataKind::Value { ty, default: Some(value) } => literal(project, ty, value),
                     DataKind::Value { default: None, .. } => "Default::default()".into(),

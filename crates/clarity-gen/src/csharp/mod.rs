@@ -618,7 +618,7 @@ fn fields_cs(project: &Project, name: &str) -> String {
         None => "null".to_string(),
     };
     let mut lines = String::new();
-    for entity in project.entities() {
+    for entity in project.entities().chain(project.records()) {
         let parent = tree_parent(entity).map_or("null".to_string(), |p| string(p));
         for field in &entity.fields {
             let refers = match &field.ty {
@@ -687,7 +687,7 @@ pub(super) fn field_format(field: &clarity_spec::model::Field) -> Option<String>
     let format = field.modifiers.format.as_deref().map(string);
     let (kind, scale) = match &field.ty {
         FieldType::Integer => ("Integer", None),
-        FieldType::Decimal { scale, .. } => ("Decimal", Some(*scale)),
+        FieldType::Decimal { .. } => ("Decimal", field.ty.shown_scale()),
         FieldType::Money => ("Money", None),
         FieldType::Date => ("Date", None),
         FieldType::DateTime => ("DateTime", None),

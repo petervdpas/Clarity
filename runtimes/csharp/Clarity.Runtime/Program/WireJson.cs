@@ -169,6 +169,7 @@ internal static class WireJson
             ["folded"] = part.IsFolded,
             ["collapsed"] = part.IsCollapsed,
             ["maximized"] = part.IsMaximized,
+            ["pinned"] = part.IsPinned,
             ["text"] = part.Text,
             ["checked"] = part.IsChecked,
         };
@@ -259,12 +260,15 @@ internal static class WireJson
 
     /// <summary>
     /// What the screen changed of a part's state (an unbound input's text,
-    /// a tick, a fold, a tab, a step, a section, a canvas's tool) given back
-    /// to the view model's state; what code alone sets (caption, error,
-    /// shown, enabled) stays the view model's.
+    /// a tick, a fold, a tab, a step, a section, a canvas's tool, a popover
+    /// or slide-out the person closed or pinned) given back to the view
+    /// model's state; what code alone sets (caption, error, enabled) stays
+    /// the view model's.
     /// </summary>
     public static void ApplyPart(PartState part, JsonObject sent)
     {
+        if (sent["visible"] is JsonValue shown && shown.TryGetValue<bool>(out var v) && v != part.IsVisible)
+            part.IsVisible = v;
         if (sent["text"] is JsonValue text && text.TryGetValue<string>(out var t) && t != part.Text)
             part.Text = t;
         if (sent["checked"] is JsonValue ticked && ticked.TryGetValue<bool>(out var c) && c != part.IsChecked)
@@ -275,6 +279,8 @@ internal static class WireJson
             part.IsCollapsed = k;
         if (sent["maximized"] is JsonValue maximized && maximized.TryGetValue<bool>(out var m) && m != part.IsMaximized)
             part.IsMaximized = m;
+        if (sent["pinned"] is JsonValue pinned && pinned.TryGetValue<bool>(out var p) && p != part.IsPinned)
+            part.IsPinned = p;
         if (Whole(sent["tab"]) is { } tab && tab != part.Tab)
             part.Tab = tab;
         if (Whole(sent["step"]) is { } step && step != part.Step)

@@ -58,8 +58,24 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
         Shown::Window(name) => crate::window_size(project, name),
         Shown::App(_) => (clarity_spec::layout::WINDOW_WIDTH, clarity_spec::layout::WINDOW_HEIGHT),
     };
-    let write = || crate::web_browser::files_json_as(project, title, size);
+    // The preview shows each view in its window's part; the designer shows the part as written, empty.
+    let placed = if design { project.clone() } else { clarity_spec::views::placed(project) };
+    let write = || crate::web_browser::files_json_as(&placed, title, size);
     let text = if design { crate::web_windows::designed_showing(showing, write) } else { write() };
+    // A view is no window of a program, but the designer and preview draw it on its own as one.
+    let view = match shown {
+        Shown::Window(name) => project.pages().find(|p| p.name.name == *name && p.kind == clarity_spec::model::PageKind::View),
+        Shown::App(_) => None,
+    };
+    if let Some(view) = view {
+        let Ok(mut files) = serde_json::from_str::<Value>(&text) else { return text };
+        let write = || crate::web_windows::window_markup_rows(view, project.row_height);
+        let markup = if design { crate::web_windows::designed_showing(showing, write) } else { write() };
+        if let Some(windows) = files.get_mut("windows").and_then(Value::as_object_mut) {
+            windows.insert(view.name.name.clone(), Value::String(markup));
+        }
+        return files.to_string() + "\n";
+    }
     let Shown::App(name) = shown else { return text };
     let Ok(mut files) = serde_json::from_str::<Value>(&text) else { return text };
     let item = project.apps().find(|a| a.name.name == *name).filter(|_| design).map(|a| format!(" designItem=\"{}\"", a.span.start)).unwrap_or_default();
@@ -95,6 +111,7 @@ pub struct PreviewProgram {
 impl PreviewProgram {
     /// The program of `project`, starting with the window `main`.
     pub fn new(project: Project, main: &str) -> PreviewProgram {
+        let project = clarity_spec::views::placed(&project);
         let samples = clarity_spec::sample::sample_data(&project);
         let displays = clarity_spec::sample::display_values(&project);
         PreviewProgram { project, samples, displays, main: main.to_string(), open: Vec::new() }

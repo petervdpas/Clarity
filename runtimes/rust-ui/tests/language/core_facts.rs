@@ -18,7 +18,9 @@ const MODEL: &str = r##"{
       "pages": [
         { "name": { "name": "Main" }, "kind": "window", "title": "@mainTitle", "size": null, "columns": 12,
           "data": [ { "name": { "name": "tasks" }, "of": { "kind": "list", "entity": { "name": "Task" } } },
-                    { "name": { "name": "settings" }, "of": { "kind": "record", "entity": { "name": "Settings" } } } ] },
+                    { "name": { "name": "settings" }, "of": { "kind": "record", "entity": { "name": "Settings" } } },
+                    { "name": { "name": "mood" }, "of": { "kind": "value", "ty": { "kind": { "kind": "named", "name": "Tone" } }, "default": null } },
+                    { "name": { "name": "note" }, "of": { "kind": "value", "ty": { "kind": { "kind": "text" } }, "default": null } } ] },
         { "name": { "name": "Pick" }, "kind": "dialog", "title": "Pick", "size": { "width": 320, "height": 200 }, "columns": 6, "data": [] }
       ],
       "apps": [],
@@ -86,6 +88,10 @@ fn a_values_type_is_its_enum_its_entity_or_its_kind() {
     assert_eq!(Some("Task".to_string()), facts.type_of("Main", "tasks"));
     assert_eq!(Some("decimal".to_string()), facts.type_of("Main", "tasks.cost"));
     assert_eq!(Some("language".to_string()), facts.type_of("Main", "settings.language"));
+    // A window's own value of an enum is that enum, so a radio or dropdown bound to it offers its values.
+    assert_eq!(Some("Tone".to_string()), facts.type_of("Main", "mood"));
+    assert_eq!(Some("Tone"), facts.value_enum("Main", "mood"));
+    assert_eq!(None, facts.value_enum("Main", "note"));
     let tones = facts.enum_choices("Tone");
     assert_eq!(vec!["red", "blue"], tones.iter().map(|c| c.value.as_str().unwrap()).collect::<Vec<_>>());
     assert_eq!("Blue", tones[1].label);

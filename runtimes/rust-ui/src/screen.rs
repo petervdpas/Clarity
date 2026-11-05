@@ -811,7 +811,8 @@ impl Screen {
         self.hide_tip();
         // A press outside the overlays closes them, top first, and goes no
         // further, unless the one closed lets it through (a dropdown's list).
-        if let Some(top) = self.overlays.last() {
+        // One that stays (a pinned slide-out) is left open, and the press goes on.
+        if let Some(top) = self.overlays.iter().rev().find(|o| !(o.staying() && !o.content.node().bounds.contains(x, y))) {
             let anchored = top.anchor.and_then(|a| self.element(a)).is_some_and(|a| a.node().bounds.contains(x, y));
             if !top.modal && !top.content.node().bounds.contains(x, y) && !top.place.contains(x, y) && !anchored {
                 let (id, through) = (top.id(), top.through);
@@ -990,11 +991,16 @@ impl Screen {
 
     // -- Keys --------------------------------------------------------------------
 
-    /// The elements Tab reaches, in Tab order: in the dialog on top, else in the window.
+    /// The elements Tab reaches, in Tab order: in the dialog on top, else in
+    /// what lies over the window that has the focus (a slide-out), else in the window.
     pub fn tab_order(&self) -> Vec<ElementId> {
         match self.overlays.last() {
             Some(top) if top.modal => element::focus_takers(top.content.as_ref()),
-            _ => element::focus_takers(self.root.as_ref()),
+            _ => {
+                let holding = self.focused.and_then(|f| self.overlays.iter().rev().find(|o| element::find(o.content.as_ref(), f).is_some()));
+                let inside = holding.map(|o| element::focus_takers(o.content.as_ref())).filter(|t| !t.is_empty());
+                inside.unwrap_or_else(|| element::focus_takers(self.root.as_ref()))
+            }
         }
     }
 
@@ -1063,10 +1069,13 @@ impl Screen {
             None => false,
         };
         // Escape closes the overlay on top, unless the part with the focus takes it (a list that closes itself).
-        if key.key == Key::Escape && !self.overlays.is_empty() && !top_modal {
+        // One that stays (a pinned slide-out) closes only while the focus is in it.
+        let focus_in = |o: &Overlay| focused.is_some_and(|f| element::find(o.content.as_ref(), f).is_some());
+        let closing = self.overlays.iter().rev().find(|o| !o.staying() || focus_in(o)).map(Overlay::id);
+        if key.key == Key::Escape && closing.is_some() && !top_modal {
             if !focused_key(self, &mut cx) {
-                if let Some(top) = self.overlays.last() {
-                    cx.close(top.id());
+                if let Some(top) = closing {
+                    cx.close(top);
                 }
             }
             self.settle(cx);

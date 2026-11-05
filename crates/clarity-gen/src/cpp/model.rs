@@ -22,7 +22,7 @@ pub fn emit(project: &Project) -> (String, String) {
         source.push_str(&s);
     }
     // Every record named first, for the lists of records some hold.
-    for entity in project.entities() {
+    for entity in project.entities().chain(project.records()) {
         let _ = writeln!(header, "struct {};", entity.name.name);
     }
     header.push('\n');
@@ -32,6 +32,42 @@ pub fn emit(project: &Project) -> (String, String) {
         header.push_str(&h);
         source.push_str(&s);
     }
+    for decl in project.records() {
+        let (h, s) = plain_record(project, decl);
+        header.push_str(&h);
+        source.push_str(&s);
+    }
+    (header, source)
+}
+
+/// A record (DESIGN 5.12): a struct of its fields with their defaults and
+/// its JSON; never stored, so it has no id, no table and no columns.
+fn plain_record(project: &Project, record: &Entity) -> (String, String) {
+    let name = &record.name.name;
+    let mut fields = String::new();
+    for f in &record.fields {
+        let init = initial(project, f).map(|v| format!(" = {v}")).unwrap_or_default();
+        let _ = writeln!(fields, "    {} {}{init};", field_type(&f.ty), ident(&f.name.name));
+    }
+    let header = format!("struct {name} {{\n{fields}}};\nvoid to_json(nlohmann::json& out, const {name}& r);\nvoid from_json(const nlohmann::json& in, {name}& r);\n\n");
+    let mut to = String::new();
+    let mut from = String::new();
+    for f in &record.fields {
+        let key = string(&f.name.name);
+        let _ = writeln!(to, "    out[{key}] = {};", json_of(f));
+        let _ = match &f.ty {
+            FieldType::Date | FieldType::DateTime => {
+                let inner = if f.ty == FieldType::Date { "clarity::Date" } else { "clarity::DateTime" };
+                writeln!(from, "    if (in.contains({key})) r.{} = in[{key}].is_null() ? std::nullopt : std::optional<{inner}>({});", ident(&f.name.name), json_read(f))
+            }
+            _ => writeln!(from, "    if (in.contains({key}) && !in[{key}].is_null()) r.{} = {};", ident(&f.name.name), json_read(f)),
+        };
+    }
+    let unused = if record.fields.is_empty() { "    (void)r;\n" } else { "" };
+    let unused_in = if record.fields.is_empty() { "    (void)in;\n" } else { "" };
+    let source = format!(
+        "void to_json(nlohmann::json& out, const {name}& r) {{\n{unused}    out = nlohmann::json::object();\n{to}}}\n\nvoid from_json(const nlohmann::json& in, {name}& r) {{\n{unused_in}    r = {name}{{}};\n{from}}}\n\n"
+    );
     (header, source)
 }
 

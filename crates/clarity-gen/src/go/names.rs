@@ -47,8 +47,8 @@ const PROGRAM_NAMES: [&str; 3] = ["Clarity", "Sources", "SourceSteps"];
 /// trailing `_`: `size` beside `enum Size` is `Size_`.
 pub fn function(project: &Project, name: &str) -> String {
     let go = pascal(name);
-    let types = project.entities().map(|e| e.name.name.clone()).chain(project.enums().map(|e| e.name.name.clone()));
-    let constructors = project.entities().map(|e| format!("New{}", e.name.name));
+    let types = project.entities().chain(project.records()).map(|e| e.name.name.clone()).chain(project.enums().map(|e| e.name.name.clone()));
+    let constructors = project.entities().chain(project.records()).map(|e| format!("New{}", e.name.name));
     let constants = project.enums().flat_map(|e| e.variants.iter().map(|v| super::model::constant(&e.name.name, &v.name.name)));
     let windows = project.pages().map(|p| format!("{}Window", p.name.name)).chain(project.apps().map(|a| format!("{}App", a.name.name)));
     let taken = PROGRAM_NAMES.iter().map(|n| n.to_string()).chain(types).chain(constructors).chain(constants).chain(windows).any(|n| n == go);

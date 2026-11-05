@@ -47,7 +47,8 @@ type Databases = (Vec<(String, Sql, String)>, Vec<(String, Sql)>);
 /// where it is, and the ones Clarity owns (and so migrates); external ones
 /// are opened as they are. `backend` names the backend in messages.
 fn databases(project: &Project, settings: &Settings) -> Result<Databases, Vec<String>> {
-    if settings.datasources.is_empty() {
+    // A project with no entities stores nothing, so it needs no data source.
+    if settings.datasources.is_empty() && project.entities().next().is_some() {
         return Err(vec!["the project needs a data source to store its records".to_string()]);
     }
     let mut databases: Vec<(String, Sql, String)> = Vec::new();
@@ -378,6 +379,26 @@ pub(crate) fn canvas_tool(props: &clarity_spec::model::WidgetProps) -> String {
     first.unwrap_or_default().to_string()
 }
 
+/// The type of a field a query compares: the entity's field, or its key
+/// for `id`, which every record has (`where p.id != current.id`).
+pub(crate) fn query_field_type(project: &clarity_spec::Project, entity: &str, field: &str) -> Option<clarity_spec::model::FieldType> {
+    let entity = project.entity(entity)?;
+    match entity.field(field) {
+        Some(found) => Some(found.ty.clone()),
+        None if field == clarity_spec::code::check::RECORD_ID => Some(clarity_spec::model::FieldType::Integer),
+        None => None,
+    }
+}
+
+/// The column a query compares: the field's, or the key column for `id`.
+pub(crate) fn query_column(project: &clarity_spec::Project, entity: &str, field: &str) -> String {
+    match project.entity(entity) {
+        Some(e) if e.field(field).is_none() && field == clarity_spec::code::check::RECORD_ID => e.key_column().to_string(),
+        Some(e) => e.column_of(field).to_string(),
+        None => field.to_string(),
+    }
+}
+
 pub(crate) fn shape_values<'a>(
     shape: &str,
     args: &'a [clarity_spec::code::Expr],
@@ -685,7 +706,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !misfits.is_empty() {
         return Err(misfits);
     }
-    let mut project = compile_engines(with_resource_texts(&consts::inlined(&calls::filled(project))), settings)?;
+    // Each view shows as parts of the window that shows it (clarity_spec::views).
+    let mut project = compile_engines(with_resource_texts(&consts::inlined(&calls::filled(&clarity_spec::views::placed(project)))), settings)?;
     // The keys window and the person's keys, where the project file allows them (DESIGN 5.28).
     project.keys_editable = settings.keys_editable;
     // How high the windows' rows are, which their markup carries.

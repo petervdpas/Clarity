@@ -967,6 +967,14 @@ fn frame_node(builder: &mut Builder, e: &dyn Element, id: ElementId, b: Rect, an
         AccessNode::new(id, Role::Dialog, ask.ask.question.show(), ask.panel())
     } else if let Some(dialog) = any.downcast_ref::<DialogOverlay>() {
         AccessNode::new(id, Role::Dialog, dialog.title.clone(), dialog.panel())
+    } else if let Some(slideout) = any.downcast_ref::<crate::parts::containers::slideout::SlideoutFrame>() {
+        // A slide-out is a region like a dialog, named by its caption; it holds the focus while it is open.
+        AccessNode::new(id, Role::Dialog, slideout.caption(), b)
+    } else if let Some(handle) = any.downcast_ref::<crate::parts::containers::slideout::SlideoutHandle>() {
+        // Its handle on the window's edge: a button named by its caption that says whether it is out.
+        let mut n = AccessNode::new(id, Role::Button, handle.slide().caption(), b).with_actions(&[AccessAction::Click, AccessAction::Focus, AccessAction::ScrollIntoView]);
+        n.states.expanded = Some(handle.slide().is_open());
+        n
     } else if any.is::<KeysWindow>() {
         AccessNode::new(id, Role::Dialog, crate::dialogs::keys::title(), b)
     } else if let Some(bar) = any.downcast_ref::<LongCallBar>() {

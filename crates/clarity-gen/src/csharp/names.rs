@@ -33,7 +33,7 @@ const TYPE_NAMES: [&str; 37] = [
 /// trailing `_`: `size` beside `enum Size` is `Size_`.
 pub fn function(project: &Project, name: &str) -> String {
     let cs = pascal(name);
-    let types = project.entities().map(|e| e.name.name.clone()).chain(project.enums().map(|e| e.name.name.clone()));
+    let types = project.entities().chain(project.records()).map(|e| e.name.name.clone()).chain(project.enums().map(|e| e.name.name.clone()));
     let windows = project.pages().flat_map(|p| [format!("{}View", p.name.name), format!("{}ViewModel", p.name.name)]);
     let apps = project.apps().map(|a| a.name.name.clone());
     let taken = TYPE_NAMES.contains(&cs.as_str()) || types.chain(windows).chain(apps).any(|n| n == cs);
@@ -114,11 +114,11 @@ pub fn property(entity: &str, field: &str) -> String {
 /// protected ones, ObservableObject's and object's), which data, a part or a
 /// handler's command cannot be called. Clarity.Runtime.Tests checks that the
 /// list holds every member WindowViewModel has.
-pub const VIEW_MODEL_MEMBERS: [&str; 55] = [
+pub const VIEW_MODEL_MEMBERS: [&str; 56] = [
     "Answer", "AppSettings", "Ask", "AskRequested", "CanvasEvent", "Changed", "Close", "CloseRequested", "CloseWith", "Closing", "Copy",
     "CopyRequested", "Db", "DrawAnew", "Edited", "EditOf", "Edits", "Fetched", "FocusedScope", "Handle", "Instance", "IsDialog",
     "LongCall", "Messages", "OnClose", "OnOpen", "OnReturn", "Open", "Opened", "OpenRequested", "QuitApplication", "Redraw",
-    "Reshow", "Returned", "RunUnconnected", "Say", "Selected", "ShowKeys", "ShowText", "Title", "UndoEdit", "UndoFocused",
+    "Reshow", "Returned", "RunUnconnected", "SameRow", "Say", "Selected", "ShowKeys", "ShowText", "Title", "UndoEdit", "UndoFocused",
     "WindowSize", "PropertyChanged", "PropertyChanging", "OnPropertyChanged", "OnPropertyChanging", "SetProperty",
     "SetPropertyAndNotifyOnCompletion", "Equals", "GetHashCode", "ToString", "GetType", "MemberwiseClone", "Finalize",
 ];

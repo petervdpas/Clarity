@@ -68,6 +68,7 @@ A name that is both data and a part in the same window is an error.
 | `folded` | foldable panels and forms | yes |
 | `collapsed` | collapsible sidebars and ribbons | yes |
 | `maximized` | maximizable sidebars | yes |
+| `pinned` | pinnable slide-outs: pinned open beside the window's parts | yes |
 | `tab` | the ribbon: its open tab, from 1 | yes |
 | `x`, `y` | canvases: where it was clicked last | no |
 

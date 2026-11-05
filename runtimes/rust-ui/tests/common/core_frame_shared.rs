@@ -24,6 +24,8 @@ pub struct FrameHost {
     pub base: TestHost,
     pub keys: RefCell<BTreeMap<String, Vec<String>>>,
     pub icons: RefCell<BTreeMap<String, String>>,
+    /// The window's name as the host gives it; none, as a test host has no window.
+    pub window: RefCell<Option<String>>,
 }
 
 impl FrameHost {
@@ -80,6 +82,9 @@ impl PartHost for FrameHost {
     }
     fn icon_path(&self, name: &str) -> Option<String> {
         self.icons.borrow().get(name).cloned()
+    }
+    fn window_name(&self) -> Option<String> {
+        self.window.borrow().clone()
     }
 }
 

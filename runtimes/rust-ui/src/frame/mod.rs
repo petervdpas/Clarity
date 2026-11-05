@@ -127,6 +127,11 @@ impl WindowFrame {
         self.body.get()
     }
 
+    /// The window's own parts go here: inside the regions, beside a pinned slide-out.
+    pub fn set_body(&self, body: Rect) {
+        self.body.set(body);
+    }
+
     /// What the `language` target picks from; a test gives its own.
     pub fn set_language(&self, picker: FramePicker) {
         *self.language.borrow_mut() = picker;

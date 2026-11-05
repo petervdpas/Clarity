@@ -677,6 +677,19 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     protected static R Selected<R>(PartState part) where R : class =>
         part.SelectedItem as R ?? throw new InvalidValueException($"no row of {part.Name} is selected");
 
+    /// <summary>The row of <paramref name="rows"/> that code selects with a record
+    /// (DESIGN 5.12): the same one, else the first holding the same values; null for none.</summary>
+    protected static R? SameRow<R>(IEnumerable<R> rows, R? wanted) where R : class
+    {
+        if (wanted is null)
+            return null;
+        var list = rows.ToList();
+        if (list.FirstOrDefault(r => ReferenceEquals(r, wanted)) is { } same)
+            return same;
+        var values = JsonSerializer.SerializeToNode(wanted, JsonValues.Options);
+        return list.FirstOrDefault(r => JsonNode.DeepEquals(JsonSerializer.SerializeToNode(r, JsonValues.Options), values));
+    }
+
     /// <summary>
     /// Opens a window: in place, on top of this one, or in a desktop window of
     /// its own when the design marks it (`in new window`).

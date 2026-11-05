@@ -17,6 +17,7 @@
     X(a_handler_copies_the_last_text_it_copies)                   \
     X(a_foldable_part_is_folded_as_every_runtime_says)           \
     X(a_sidebar_is_collapsed_and_maximized_as_every_runtime_says) \
+    X(a_slideout_is_open_and_pinned_as_every_runtime_says)        \
     X(a_ribbons_open_tab_is_as_every_runtime_says)               \
     X(a_wizards_step_is_as_every_runtime_says)                   \
     X(an_accordions_open_section_is_as_every_runtime_says)       \
@@ -66,6 +67,7 @@
     X(the_server_scenario_on_sqlite)                              \
     X(a_handler_replies_as_the_other_runtimes_do)                 \
     X(rows_read_again_have_no_selected_row)                       \
+    X(code_selects_a_row_and_none)                                \
     X(a_reply_carries_the_texts_shown_in_text_values)             \
     X(code_texts_are_translated_as_every_runtime_does)            \
     X(a_window_opens_with_its_data_and_with)                      \

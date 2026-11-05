@@ -450,8 +450,8 @@ impl PartHost for ProgramHost {
                 return true;
             }
         }
-        // A click that names a popover of this window opens it (C#'s `Show_<popover>`).
-        if call.args.is_empty() && self.specs.get(&call.handler).is_some_and(|spec| spec.kind == "popover") {
+        // A click that names a popover or slide-out of this window opens it (C#'s `Show_<popover>`).
+        if call.args.is_empty() && self.specs.get(&call.handler).is_some_and(|spec| spec.kind == "popover" || spec.kind == "slideout") {
             crate::parts::change_state(self, &call.handler, |s| s.visible = Some(true));
             return true;
         }
@@ -564,6 +564,11 @@ impl PartHost for ProgramHost {
     /// that pick them, or the records a reference points at.
     fn choices(&self, path: &str) -> Vec<Choice> {
         let window = self.window();
+        // A value of the window's own of an enum offers the enum's values, as an enum field does.
+        if let Some(name) = self.facts.value_enum(&window, path) {
+            let labelled = self.facts.enum_choices(name);
+            return if labelled.is_empty() { self.program_facts().enum_values(name).iter().map(|v| Choice { value: Value::from(v.as_str()), label: v.clone(), cells: None }).collect() } else { labelled };
+        }
         let Some((_, field)) = self.facts.field_at(&window, path) else { return Vec::new() };
         let offers = |offers: Vec<crate::choices::Offer>| offers.into_iter().map(|o| Choice { value: Value::from(o.name), label: o.label, cells: None }).collect();
         // A field of an enum, or a list of an enum's values, offers the enum's values.

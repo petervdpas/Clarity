@@ -156,11 +156,12 @@
         ? NO_FRAME
         : shownFrame(projectApp, page.kind === "window" ? page.frame : null),
   );
-  const entities = $derived(preview.project.files.flatMap((f) => f.entities));
+  /** What has fields: the entities, and the records (DESIGN 5.12) code builds and nothing stores. */
+  const entities = $derived(preview.project.files.flatMap((f) => [...f.entities, ...f.records]));
   // Where Clarity.UI drew the window's parts and grids, for the design layer over it.
   let laid = $state<Layout | null>(null);
-  // A popover shows while it or a part in it is picked, as it opens when the program runs.
-  const popovers = $derived(allParts(page).filter((w) => w.props.kind === "popover"));
+  // A popover or slide-out shows while it or a part in it is picked, as it opens when the program runs.
+  const popovers = $derived(allParts(page).filter((w) => w.props.kind === "popover" || w.props.kind === "slideout"));
   const openPopovers = $derived(
     popovers.filter((w) => pageDesigner.selected !== null && pageDesigner.selected >= w.span.start && pageDesigner.selected < w.span.end && w.props.name).map((w) => w.props.name as string),
   );
@@ -499,16 +500,16 @@
     </ShownWindow>
     {#if !app}
       <!-- Parts not seen (sounds, timers) have no place in the window: they wait here, as on C++ Builder's forms (DESIGN 5.22, 5.26).
-           A popover is hidden until opened: it waits here too, marked so, and shows on the window while it is picked. -->
+           A popover or slide-out is hidden until opened: it waits here too, marked so, and shows on the window while it is picked. -->
       {@const unplaced = [...page.widgets.filter((w) => w.props.kind === "sound" || w.props.kind === "timer"), ...popovers]}
       {#if unplaced.length > 0}
         <div class="tray" role="listbox" aria-label="Parts without a place in the window">
           {#each unplaced as w (w.span.start)}
-            <span role="option" aria-selected={pageDesigner.selected === w.span.start} class:selected={pageDesigner.selected === w.span.start} class:hidden-part={w.props.kind === "popover"} data-hidden-part={w.props.kind === "popover" ? w.props.name : undefined}>
+            <span role="option" aria-selected={pageDesigner.selected === w.span.start} class:selected={pageDesigner.selected === w.span.start} class:hidden-part={w.props.kind === "popover" || w.props.kind === "slideout"} data-hidden-part={w.props.kind === "popover" || w.props.kind === "slideout" ? w.props.name : undefined}>
               <PartTile
                 kind={w.props.kind}
                 name={w.props.name ?? w.props.kind}
-                title="{w.props.kind}{w.props.source ? ', plays ' + w.props.source : ''}{w.props.every ? ', every ' + w.props.every + ' s' : ''}{w.props.kind === 'popover' ? ', hidden until opened: picked, it shows on the window' : ''}. Pick it to set it in the inspector."
+                title="{w.props.kind}{w.props.source ? ', plays ' + w.props.source : ''}{w.props.every ? ', every ' + w.props.every + ' s' : ''}{w.props.kind === 'popover' || w.props.kind === 'slideout' ? ', hidden until opened: picked, it shows on the window' : ''}. Pick it to set it in the inspector."
                 onpointerdown={(e) => {
                   e.stopPropagation();
                   pageDesigner.selected = w.span.start;

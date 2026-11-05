@@ -183,7 +183,7 @@ impl ListPart {
     }
 
     fn apply(&mut self, mv: clarity_runtime::reorder::Move, cx: &mut Cx) {
-        if let Some(now) = self.rows.apply(&self.base, mv, None) {
+        if let Some(now) = self.rows.apply(&self.base, mv, "id", None) {
             self.show_row(now);
         }
         cx.invalidate();

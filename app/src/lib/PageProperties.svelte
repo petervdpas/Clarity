@@ -51,7 +51,8 @@
   const frameElement = $derived(selected === null || location || inner ? null : findFrameElement(page.frame, selected, page.widgets));
   const info = $derived(p ? widgetInfo(preview, p.kind) : null);
 
-  const entities = $derived(preview.project.files.flatMap((f) => f.entities));
+  /** What has fields: the entities, and the records (DESIGN 5.12) code builds and nothing stores. */
+  const entities = $derived(preview.project.files.flatMap((f) => [...f.entities, ...f.records]));
   const targets = $derived([
     ...allPages(preview).map((x) => x.name.name).filter((n) => n !== page.name.name),
   ]);
@@ -87,7 +88,7 @@
   /** Named parts of the window a popover can open next to. */
   const partNames = $derived(
     allParts(page)
-      .filter((w) => w.props.name !== null && w.props.kind !== "popover")
+      .filter((w) => w.props.name !== null && w.props.kind !== "popover" && w.props.kind !== "slideout")
       .map((w) => w.props.name as string),
   );
 
@@ -139,7 +140,14 @@
   }
 
   /** Parts with no place in the window's grid, so no `bottom`. */
-  const UNPLACED: string[] = ["popover", "sound", "timer"];
+  const UNPLACED: string[] = ["popover", "slideout", "sound", "timer"];
+  // A slide-out at the top or bottom has a height; at the left or right a width. A new side drops the other one.
+  const slidesAcross = $derived(p?.side === "top" || p?.side === "bottom");
+  function sideEdit(value: string): Partial<WidgetProps> {
+    const side = value === "left" || value === "top" || value === "bottom" ? value : null;
+    const across = side === "top" || side === "bottom";
+    return across ? { side, slideWidth: null } : { side, slideHeight: null };
+  }
 
   function update(changes: Partial<WidgetProps>) {
     if (!location || !p) return;
@@ -252,6 +260,8 @@
   let dataOf = $state("");
   let dataList = $state(false);
   const enums = $derived(preview.project.files.flatMap((f) => f.enums).map((e) => e.name.name));
+  /** The project's views, which a slide-out can show. */
+  const views = $derived(preview.project.files.flatMap((f) => f.pages).filter((page) => page.kind === "view").map((page) => page.name.name));
   /** Only records come as a list. */
   const listable = $derived(entities.some((e) => e.name.name === dataOf));
 
@@ -396,15 +406,42 @@
         const decl = page.data.find((d) => d.name.name === p.bind);
         return entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null));
       })()}
-      <label class="prop" title="The list field of the rows' own kind: a row shows under the row its reference to its own kind names">
-        <span>Children</span>
-        <select value={p.children ?? ""} onchange={(e) => update({ children: e.currentTarget.value || null })}>
-          <option value="">(none)</option>
-          {#each (own?.fields ?? []).filter((f) => f.type.kind === "list" && f.type.item.name === own?.name.name) as field (field.name.name)}
-            <option value={field.name.name}>{field.name.name}</option>
-          {/each}
-        </select>
-      </label>
+      {@const keys = [
+        ...(own && !own.record ? ["id"] : []),
+        ...(own?.fields ?? []).filter((f) => f.type.kind === "text" || f.type.kind === "integer").map((f) => f.name.name),
+      ]}
+      {#if !p.rowKey && !p.parentKey}
+        <label class="prop" title="The list field of the rows' own kind: a row shows under the row its reference to its own kind names">
+          <span>Children</span>
+          <select value={p.children ?? ""} onchange={(e) => update({ children: e.currentTarget.value || null })}>
+            <option value="">(none)</option>
+            {#each (own?.fields ?? []).filter((f) => f.type.kind === "list" && f.type.item.name === own?.name.name) as field (field.name.name)}
+              <option value={field.name.name}>{field.name.name}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
+      {#if !p.children}
+        <!-- A tree by key: rows of any kind, records built in code among them, under the row their parent key names. -->
+        <label class="prop" title="The field that names a row, text or integer: the rows whose parent field holds it show under it">
+          <span>Key</span>
+          <select value={p.rowKey ?? ""} onchange={(e) => update({ rowKey: e.currentTarget.value || null })}>
+            <option value="">(none)</option>
+            {#each keys as key (key)}
+              <option value={key}>{key}</option>
+            {/each}
+          </select>
+        </label>
+        <label class="prop" title="The field that holds the key of the row a row shows under; a row whose parent key names no row shows at the top">
+          <span>Parent</span>
+          <select value={p.parentKey ?? ""} onchange={(e) => update({ parentKey: e.currentTarget.value || null })}>
+            <option value="">(none)</option>
+            {#each keys as key (key)}
+              <option value={key}>{key}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
     {/if}
     {#if info.properties.includes("cards")}
       <label class="prop" title="Each row a small card: the first field shown is its title, the others lines below it">
@@ -557,6 +594,15 @@
         <label title="A click on a header sorts by that column; another click the other way">
           <input type="checkbox" checked={p.sortable} onchange={(e) => update(e.currentTarget.checked ? { sortable: true, reorder: null } : { sortable: false })} /> Sortable by a header click
         </label>
+        <label title="An Add button above the table, at the right: it runs the table's add event (Insert does too)">
+          <input type="checkbox" checked={p.add} onchange={(e) => update({ add: e.currentTarget.checked })} /> Add button above it
+        </label>
+        <label title="A trash button on every row, in a last column: it picks the row and runs the table's remove event (Delete does too)">
+          <input type="checkbox" checked={p.remove} onchange={(e) => update(e.currentTarget.checked ? { remove: true } : { remove: false, confirm: false })} /> Trash button on every row
+        </label>
+        <label title="The trash button asks first, in Clarity's dialog, and removes the row on yes">
+          <input type="checkbox" checked={p.confirm} disabled={!p.remove} onchange={(e) => update({ confirm: e.currentTarget.checked })} /> Ask first
+        </label>
         <label class="order">
           <span>First order</span>
           <select value={p.order?.field ?? ""} onchange={(e) => update(e.currentTarget.value ? { order: { field: e.currentTarget.value, desc: p.order?.desc ?? false }, reorder: null } : { order: null })}>
@@ -653,13 +699,61 @@
         />
       </label>
     {/if}
-    {#if info.properties.includes("min")}
+    {#if info.properties.includes("side")}
+      <label class="prop" title="The edge of the window it slides in from">
+        <span>Side</span>
+        <select value={p.side ?? "right"} onchange={(e) => update(sideEdit(e.currentTarget.value))}>
+          <option value="right">Right</option>
+          <option value="left">Left</option>
+          <option value="top">Top</option>
+          <option value="bottom">Bottom</option>
+        </select>
+      </label>
+    {/if}
+    {#if info.properties.includes("slideWidth") && !slidesAcross}
+      <label class="prop" title="How wide it is, in pixels: 100 to 1600">
+        <span>Width (px)</span>
+        <input type="number" min="100" max="1600" value={p.slideWidth ?? ""} placeholder="420" onchange={(e) => update({ slideWidth: textOf(e) === null ? null : numberOf(e) })} />
+      </label>
+    {/if}
+    {#if info.properties.includes("slideHeight") && slidesAcross}
+      <label class="prop" title="How high it is, in pixels: 100 to 1600">
+        <span>Height (px)</span>
+        <input type="number" min="100" max="1600" value={p.slideHeight ?? ""} placeholder="300" onchange={(e) => update({ slideHeight: textOf(e) === null ? null : numberOf(e) })} />
+      </label>
+    {/if}
+    {#if p.kind === "slideout"}
+      <fieldset class="checks">
+        <legend>Slide-out</legend>
+        <label><input type="checkbox" checked={p.resizable} onchange={(e) => update({ resizable: e.currentTarget.checked })} /> The person can resize it</label>
+        <label class="prop">
+          <span>{slidesAcross ? "Lowest" : "Narrowest"}</span>
+          <input value={p.min ?? ""} placeholder="100" inputmode="numeric" disabled={!p.resizable} onchange={(e) => update({ min: textOf(e) })} />
+        </label>
+        <label class="prop">
+          <span>{slidesAcross ? "Highest" : "Widest"}</span>
+          <input value={p.max ?? ""} placeholder="1600" inputmode="numeric" disabled={!p.resizable} onchange={(e) => update({ max: textOf(e) })} />
+        </label>
+        <label><input type="checkbox" checked={p.pinnable} onchange={(e) => update({ pinnable: e.currentTarget.checked })} /> The person can pin it open</label>
+        <label class="prop" title="A view it shows: its parts, data and handlers join this window's, so this window's code sets what it shows">
+          <span>Shows view</span>
+          <select value={p.view ?? ""} onchange={(e) => update({ view: e.currentTarget.value || null })}>
+            <option value="">its own parts</option>
+            {#each views as view (view)}
+              <option value={view}>{view}</option>
+            {/each}
+          </select>
+        </label>
+        <p class="hint">A button opens it with <code>on click -&gt; {partName}</code>; code with <code>{partName}.visible</code>{#if p.pinnable} and pins it with <code>{partName}.pinned</code>{/if}.</p>
+      </fieldset>
+    {/if}
+    {#if info.properties.includes("min") && p.kind !== "slideout"}
       <label class="prop">
         <span>Lowest</span>
         <input value={p.min ?? ""} placeholder={shownRange.min ?? "none"} inputmode="decimal" onchange={(e) => update({ min: textOf(e) })} />
       </label>
     {/if}
-    {#if info.properties.includes("max")}
+    {#if info.properties.includes("max") && p.kind !== "slideout"}
       <label class="prop">
         <span>{p.kind === "progress" ? "Full at" : p.kind === "trend" || p.kind === "chart" ? "Top" : "Highest"}</span>
         <input value={p.max ?? ""} placeholder={p.kind === "progress" ? "100" : p.kind === "trend" || p.kind === "chart" ? "follows" : (shownRange.max ?? "none")} inputmode="decimal" onchange={(e) => update({ max: textOf(e) })} />

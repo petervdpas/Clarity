@@ -1,0 +1,21 @@
+{
+  "about": "A slide-out (`slideout \"Order\" name details side right width 420 min 300 max 900 resizable pinnable`): parts on a grid of their own that slide in over the window from its right or left edge, as high as the window's content, or from its top or bottom edge (`side top`, `side bottom`, `height 300`), as wide as it. It is closed until it is opened, by a click with `on click -> details` or by code with `details.visible = true`; Escape, a click beside it or its close button closes it, and the renderer sends that as `visible: false`. A pinnable one is pinned with the pin in its header or by code with `details.pinned = true`: it stays open beside the window's parts, which make room for it, and a click beside it leaves it open. The renderer sends it as `pinned`. `slideout` gives the part's state and what `details.visible` and `details.pinned` read; `set` what setting them sends back. `widths` give the width the person drags its inner edge to, the limits, and the width it gets: a sidebar's.",
+  "slideout": [
+    { "part": {}, "visible": false, "pinned": false },
+    { "part": { "visible": true }, "visible": true, "pinned": false },
+    { "part": { "visible": true, "pinned": true }, "visible": true, "pinned": true },
+    { "part": { "visible": false, "pinned": true }, "visible": false, "pinned": true }
+  ],
+  "set": [
+    { "visible": true, "part": { "visible": true } },
+    { "pinned": true, "part": { "pinned": true } },
+    { "visible": false, "pinned": false, "part": { "visible": false, "pinned": false } }
+  ],
+  "widths": [
+    { "dragged": 500, "min": 300, "max": 900, "width": 500 },
+    { "dragged": 120, "min": 300, "max": 900, "width": 300 },
+    { "dragged": 1200, "min": 300, "max": 900, "width": 900 },
+    { "dragged": 50, "min": null, "max": null, "width": 100 },
+    { "dragged": 2000, "min": null, "max": null, "width": 1600 }
+  ]
+}

@@ -10,10 +10,17 @@ using Xunit;
 
 namespace Clarity.Runtime.Tests;
 
+sealed class Node
+{
+    public string Key { get; set; } = "";
+    public List<string> Tags { get; set; } = [];
+}
+
 sealed class PickingViewModel(Db? db) : WindowViewModel(db)
 {
     public PartState Grid { get; } = new("grid");
     public string Picked() => Selected<string>(Grid);
+    public Node? Same(List<Node> rows, Node? wanted) => SameRow(rows, wanted);
     public void Quit() => Handle(QuitApplication);
     public void Keys() => Handle(ShowKeys);
 }
@@ -28,6 +35,17 @@ public class WindowRowsTests
         Assert.Equal("no row of grid is selected", Assert.Throws<InvalidValueException>(window.Picked).Message.Replace("invalid value: ", ""));
         window.Grid.SelectedItem = "b";
         Assert.Equal("b", window.Picked());
+    }
+
+    [Fact]
+    public void Code_selects_the_same_record_else_the_first_with_its_values()
+    {
+        var window = new PickingViewModel(null);
+        var rows = new List<Node> { new() { Key = "a", Tags = ["x"] }, new() { Key = "b", Tags = ["y"] }, new() { Key = "b", Tags = ["y"] } };
+        Assert.Same(rows[2], window.Same(rows, rows[2]));
+        Assert.Same(rows[1], window.Same(rows, new Node { Key = "b", Tags = ["y"] }));
+        Assert.Null(window.Same(rows, new Node { Key = "c" }));
+        Assert.Null(window.Same(rows, null));
     }
 
     sealed class Recorded : IDesktop

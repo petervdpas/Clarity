@@ -208,6 +208,56 @@ func TestASidebarIsCollapsedAndMaximizedAsEveryRuntimeSays(t *testing.T) {
 	}
 }
 
+func TestASlideoutIsOpenAndPinnedAsEveryRuntimeSays(t *testing.T) {
+	text, err := os.ReadFile("../../../conformance/slideouts.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Slideout []struct {
+			Part    json.RawMessage `json:"part"`
+			Visible bool            `json:"visible"`
+			Pinned  bool            `json:"pinned"`
+		} `json:"slideout"`
+		Set []struct {
+			Visible *bool           `json:"visible"`
+			Pinned  *bool           `json:"pinned"`
+			Part    json.RawMessage `json:"part"`
+		} `json:"set"`
+	}
+	if err := json.Unmarshal(text, &file); err != nil || len(file.Slideout) == 0 {
+		t.Fatalf("no cases: %v", err)
+	}
+	for _, c := range file.Slideout {
+		var part PartState
+		if err := json.Unmarshal(c.Part, &part); err != nil {
+			t.Fatal(err)
+		}
+		ui := NewUi(WindowState{Window: "Main", Parts: map[string]PartState{"details": part}})
+		// Closed until it is opened.
+		if got := ui.VisibleOr("details", false); got != c.Visible {
+			t.Errorf("%s: visible %v, want %v", c.Part, got, c.Visible)
+		}
+		if got := ui.Pinned("details"); got != c.Pinned {
+			t.Errorf("%s: pinned %v, want %v", c.Part, got, c.Pinned)
+		}
+	}
+	for _, c := range file.Set {
+		ui := NewUi(WindowState{Window: "Main"})
+		if c.Visible != nil {
+			ui.SetVisible("details", *c.Visible)
+		}
+		if c.Pinned != nil {
+			ui.SetPinned("details", *c.Pinned)
+		}
+		reply, _ := ui.Reply("Main", map[string]any{})
+		got, _ := json.Marshal(reply.State.Parts["details"])
+		if normal(got) != normal(c.Part) {
+			t.Errorf("sends %s, want %s", got, c.Part)
+		}
+	}
+}
+
 func TestAWizardsStepIsAsEveryRuntimeSays(t *testing.T) {
 	text, err := os.ReadFile("../../../conformance/steps.json")
 	if err != nil {

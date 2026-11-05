@@ -144,6 +144,20 @@ impl<'a> Painter<'a> {
         self.fonts.draw(self.canvas, text, x, baseline, role, size, bold, &paint);
     }
 
+    /// A line of text turned a quarter clockwise, read from top to bottom, in the middle of `area` (a tall, narrow one), as a side tab's caption.
+    pub fn turned_text(&self, text: &str, area: Rect, color: Color, size: f64) {
+        if text.is_empty() {
+            return;
+        }
+        let _clip = self.clip(area);
+        self.canvas.save();
+        self.canvas.translate((area.right() as f32, area.y as f32));
+        self.canvas.rotate(90.0, None);
+        // Turned, the area's height is the line's width and its width the line's height.
+        self.text(text, Rect::new(0.0, 0.0, area.height, area.width), color, size, "text", false, TextAlign::Center);
+        self.canvas.restore();
+    }
+
     /// A line of text in the theme's text font, left, not bold: the plain case of `text`.
     pub fn plain_text(&self, text: &str, area: Rect, color: Color, size: f64) {
         self.text(text, area, color, size, "text", false, TextAlign::Left);

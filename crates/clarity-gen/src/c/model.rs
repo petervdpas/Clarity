@@ -22,11 +22,11 @@ pub fn emit(project: &Project) -> (String, String) {
         source.push_str(&s);
     }
     // Every record named first, with its list, for the lists of records some hold.
-    for entity in project.entities() {
+    for entity in project.entities().chain(project.records()) {
         let name = &entity.name.name;
         let _ = writeln!(header, "typedef struct {name} {name};");
     }
-    for entity in project.entities() {
+    for entity in project.entities().chain(project.records()) {
         let name = &entity.name.name;
         let _ = writeln!(header, "/// Records of {name}, in the scratch arena.\ntypedef struct {{\n    {name}* items;\n    size_t count;\n}} {};", list_type(name));
     }
@@ -37,6 +37,45 @@ pub fn emit(project: &Project) -> (String, String) {
         header.push_str(&h);
         source.push_str(&s);
     }
+    for decl in project.records() {
+        let (h, s) = plain_record(project, decl);
+        header.push_str(&h);
+        source.push_str(&s);
+    }
+    (header, source)
+}
+
+/// A record (DESIGN 5.12): a struct of its fields, a new one with their
+/// defaults, its JSON and lists of it; never stored, so it has no id, no
+/// description for the database and no calls that store it.
+fn plain_record(project: &Project, record: &Entity) -> (String, String) {
+    let name = &record.name.name;
+    let p = prefix(name);
+    let list = list_type(name);
+    let mut fields = String::new();
+    for f in &record.fields {
+        let _ = writeln!(fields, "    {} {};", field_type(&f.ty), ident(&f.name.name));
+    }
+    if fields.is_empty() {
+        // C has no struct without members.
+        fields.push_str("    char nothing;\n");
+    }
+    let header = format!(
+        "struct {name} {{\n{fields}}};\n\n/// A new record, with the defaults of its fields.\n{name} {p}_new(void);\n/// Whether two records hold the same values (their JSON, in the scratch arena).\nbool {p}_same(const {name}* a, const {name}* b);\n/// A list of `count` records, copied into the scratch arena.\n{list} {p}_list_of(size_t count, const {name}* items);\n/// `xs + ys` in code: a new list of the records of both.\n{list} {p}_list_join({list} a, {list} b);\ncJSON* {p}_json(const {name}* record);\nbool {p}_from_json(const cJSON* in, {name}* out);\ncJSON* {p}_list_json(const {list}* list);\nbool {p}_list_from_json(const cJSON* in, {list}* out);\n\n"
+    );
+    let defaults: Vec<String> = record.fields.iter().filter_map(|f| initial(project, f).map(|v| format!("        .{} = {v},", ident(&f.name.name)))).collect();
+    let new = if defaults.is_empty() { format!("    return ({name}){{0}};\n") } else { format!("    return ({name}){{\n{}\n    }};\n", defaults.join("\n")) };
+    let mut to = String::new();
+    let mut from = String::new();
+    for f in &record.fields {
+        let _ = writeln!(to, "    cJSON_AddItemToObject(out, {}, {});", string(&f.name.name), json_of(f));
+        from.push_str(&json_read(f));
+    }
+    let unused = if record.fields.is_empty() { "    (void)in;\n" } else { "" };
+    let source = format!(
+        "{name} {p}_new(void) {{\n{new}}}\n\nbool {p}_same(const {name}* a, const {name}* b) {{\n    cJSON* x = {p}_json(a);\n    cJSON* y = {p}_json(b);\n    return cJSON_Compare(x, y, true);\n}}\n\n{list} {p}_list_of(size_t count, const {name}* items) {{\n    {list} list = {{CLARITY_NEW({name}, count ? count : 1), count}};\n    if (count) memcpy(list.items, items, sizeof({name}) * count);\n    return list;\n}}\n\n{list} {p}_list_join({list} a, {list} b) {{\n    {list} list = {{CLARITY_NEW({name}, a.count + b.count ? a.count + b.count : 1), a.count + b.count}};\n    if (a.count) memcpy(list.items, a.items, sizeof({name}) * a.count);\n    if (b.count) memcpy(list.items + a.count, b.items, sizeof({name}) * b.count);\n    return list;\n}}\n\ncJSON* {p}_json(const {name}* r) {{\n    cJSON* out = cJSON_CreateObject();\n{unused_to}{to}    return out;\n}}\n\nbool {p}_from_json(const cJSON* in, {name}* r) {{\n    *r = {p}_new();\n{unused}{from}    return true;\n}}\n\ncJSON* {p}_list_json(const {list}* list) {{\n    cJSON* out = cJSON_CreateArray();\n    for (size_t i = 0; i < list->count; i++) cJSON_AddItemToArray(out, {p}_json(&list->items[i]));\n    return out;\n}}\n\nbool {p}_list_from_json(const cJSON* in, {list}* out) {{\n    size_t count = (size_t)cJSON_GetArraySize(in);\n    {name}* items = CLARITY_NEW({name}, count ? count : 1);\n    size_t i = 0;\n    const cJSON* item;\n    cJSON_ArrayForEach(item, in) {{\n        if (!{p}_from_json(item, &items[i++])) return false;\n    }}\n    *out = ({list}){{items, count}};\n    return true;\n}}\n\n",
+        unused_to = if record.fields.is_empty() { "    (void)r;\n" } else { "" },
+    );
     (header, source)
 }
 

@@ -1,0 +1,22 @@
+module shop
+
+page Orders: window
+    on open: started
+    data note: text
+    button "Details" name detailsButton at 1,1 span 2 on click -> details
+    slideout "Order" name details side left width 480 min 300 max 900 resizable pinnable span 6 rows 8 on open: loadDetails on close: dropDetails
+        textbox name noteBox at 1,1 span 6 bind note
+    slideout "Diagram" name diagram side bottom height 320 span 12 rows 6
+        label "Nothing yet" name diagramNote at 1,1 span 6
+
+code Orders
+    handler started
+        details.visible = not details.visible
+
+    handler loadDetails
+        if details.pinned
+            note = "pinned"
+
+    handler dropDetails
+        details.pinned = false
+        details.visible = false

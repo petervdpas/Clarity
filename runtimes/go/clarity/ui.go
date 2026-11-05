@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"sync"
 	"sync/atomic"
 )
@@ -52,6 +53,9 @@ type PartState struct {
 	Ink   *string `json:"ink,omitempty"`
 	// Maximized is whether a maximizable sidebar fills the window; nil is not.
 	Maximized *bool `json:"maximized,omitempty"`
+	// Pinned is whether a pinnable slide-out is pinned open beside the
+	// window's parts; nil is not (conformance/slideouts.json).
+	Pinned *bool `json:"pinned,omitempty"`
 	// Tab is the open tab of a ribbon, counted from 1; nil is the first
 	// (conformance/ribbons.json).
 	Tab *int64 `json:"tab,omitempty"`
@@ -249,6 +253,15 @@ func (u *Ui) Visible(part string) bool {
 		return *v
 	}
 	return true
+}
+
+// VisibleOr is whether a part shows, design while no handler or person
+// changed it: a popover or slide-out is closed until it is opened.
+func (u *Ui) VisibleOr(part string, design bool) bool {
+	if v := u.parts[part].Visible; v != nil {
+		return *v
+	}
+	return design
 }
 
 func (u *Ui) SetVisible(part string, value bool) {
@@ -482,6 +495,18 @@ func (u *Ui) SetMaximized(part string, value bool) {
 	u.part(part, func(p *PartState) { p.Maximized = &value })
 }
 
+// Pinned is whether a pinnable slide-out is pinned open beside the window's parts.
+func (u *Ui) Pinned(part string) bool {
+	if p := u.parts[part].Pinned; p != nil {
+		return *p
+	}
+	return false
+}
+
+func (u *Ui) SetPinned(part string, value bool) {
+	u.part(part, func(p *PartState) { p.Pinned = &value })
+}
+
 // Tab is the open tab of a ribbon, counted from 1.
 func (u *Ui) Tab(part string) int64 {
 	if t := u.parts[part].Tab; t != nil {
@@ -585,6 +610,68 @@ func Selected[T any](u *Ui, part string, rows []T) (*T, error) {
 	}
 	row := rows[i]
 	return &row, nil
+}
+
+// Select selects the row at place of a table, list or tree, or none at -1:
+// what code does with grid.selected = record.
+func (u *Ui) Select(part string, place int) {
+	if place < 0 {
+		delete(u.selected, part)
+		return
+	}
+	if u.selected == nil {
+		u.selected = map[string]int{}
+	}
+	u.selected[part] = place
+}
+
+// SelectRecord selects the first row of rows that is wanted field by field
+// (a record, DESIGN 5.12), or none.
+func SelectRecord[T any](u *Ui, part string, rows []T, wanted any) {
+	var want *T
+	switch v := wanted.(type) {
+	case *T:
+		want = v
+	case T:
+		want = &v
+	}
+	for i := range rows {
+		if want != nil && reflect.DeepEqual(rows[i], *want) {
+			u.Select(part, i)
+			return
+		}
+	}
+	u.Select(part, -1)
+}
+
+// SelectStored selects the first row of rows with the id of wanted, a
+// stored record, or none.
+func SelectStored[T any](u *Ui, part string, rows []T, wanted any) {
+	var want *T
+	switch v := wanted.(type) {
+	case *T:
+		want = v
+	case T:
+		want = &v
+	}
+	id := func(r *T) (int64, bool) {
+		keyed, ok := any(r).(interface{ GetID() int64 })
+		if !ok {
+			return 0, false
+		}
+		return keyed.GetID(), true
+	}
+	if want != nil {
+		if wantedID, ok := id(want); ok {
+			for i := range rows {
+				if rowID, _ := id(&rows[i]); rowID == wantedID {
+					u.Select(part, i)
+					return
+				}
+			}
+		}
+	}
+	u.Select(part, -1)
 }
 
 // Deselect forgets the selected row of a table or list, whose rows were

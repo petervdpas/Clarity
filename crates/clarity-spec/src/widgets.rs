@@ -67,6 +67,9 @@ pub enum WidgetKind {
     Steps,
     /// Parts on their own grid, outside the window's, opened next to the part in `for` (DESIGN 5.16).
     Popover,
+    /// Parts on their own grid, outside the window's, sliding in over the
+    /// window from its right or left edge; pinned, beside the window's parts.
+    Slideout,
     Splitter,
     Table,
     List,
@@ -155,6 +158,10 @@ pub enum Event {
     Finish,
     /// The person moved a row of a part that reorders (DESIGN 5.30).
     Reorder,
+    /// The person pressed the Add button above a table (`add`).
+    Add,
+    /// The person pressed the trash button of a table's row (`remove`), which picked the row.
+    Remove,
     /// A timer's time has come round again (DESIGN 5.26).
     Tick,
     /// The app's databases did not open, as when a connection kept as a
@@ -164,7 +171,7 @@ pub enum Event {
 
 /// The events a window has, in the order the designer lists them.
 /// Every event, in the order the language lists them.
-pub const ALL_EVENTS: [Event; 23] = [
+pub const ALL_EVENTS: [Event; 25] = [
     Event::Click,
     Event::Change,
     Event::Enter,
@@ -186,6 +193,8 @@ pub const ALL_EVENTS: [Event; 23] = [
     Event::Next,
     Event::Finish,
     Event::Reorder,
+    Event::Add,
+    Event::Remove,
     Event::Tick,
     Event::Unconnected,
 ];
@@ -219,6 +228,8 @@ impl Event {
             Event::Next => "next",
             Event::Finish => "finish",
             Event::Reorder => "reorder",
+            Event::Add => "add",
+            Event::Remove => "remove",
             Event::Tick => "tick",
             Event::Unconnected => "unconnected",
         }
@@ -247,6 +258,8 @@ impl Event {
             "next" => Some(Event::Next),
             "finish" => Some(Event::Finish),
             "reorder" => Some(Event::Reorder),
+            "add" => Some(Event::Add),
+            "remove" => Some(Event::Remove),
             "tick" => Some(Event::Tick),
             "unconnected" => Some(Event::Unconnected),
             _ => None,
@@ -330,6 +343,10 @@ pub enum WidgetProperty {
     Resizable,
     /// `sortable`: a click on a table's header sorts by that column.
     Sortable,
+    /// `add`: an Add button above a table's header, at the right, runs `on add`.
+    Add,
+    /// `remove`: a trash button in a last column of every row runs `on remove`.
+    Remove,
     /// `striped`: a part with rows draws every other row with a faint stripe.
     Striped,
     /// `order by field [desc]`: the order a table's rows show in first.
@@ -378,6 +395,16 @@ pub enum WidgetProperty {
     Points,
     /// `every 1`: how many seconds between a timer's ticks, or a trend's values.
     Every,
+    /// `side left`, `side top`, `side bottom`: the edge a slide-out comes in from.
+    Side,
+    /// `width 420`: how wide a slide-out at the left or right is, in pixels.
+    SlideWidth,
+    /// `height 300`: how high a slide-out at the top or bottom is, in pixels.
+    SlideHeight,
+    /// `pinnable`: a slide-out the person pins open beside the window's parts.
+    Pinnable,
+    /// `view ClassEditor`: the view a slide-out shows.
+    View,
 }
 
 /// The fewest and most rows a table's page holds.
@@ -774,6 +801,21 @@ const ENTRIES: &[Entry] = &[
         properties: &[WidgetProperty::For],
     },
     Entry {
+        kind: WidgetKind::Slideout,
+        keyword: "slideout",
+        name: "Slide-out",
+        category: Category::Containers,
+        size: (6, 12),
+        caption: Some("Details"),
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: Some(ContainerKind::Plain),
+        clickable: false,
+        events: &[Event::Open, Event::Close],
+        properties: &[WidgetProperty::Side, WidgetProperty::SlideWidth, WidgetProperty::SlideHeight, WidgetProperty::Resizable, WidgetProperty::Min, WidgetProperty::Max, WidgetProperty::Pinnable, WidgetProperty::View],
+    },
+    Entry {
         kind: WidgetKind::Splitter,
         keyword: "splitter",
         name: "Splitter",
@@ -800,8 +842,8 @@ const ENTRIES: &[Entry] = &[
         input: false,
         container: None,
         clickable: false,
-        events: &[Event::Select, Event::Open, Event::Change, Event::Reorder],
-        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::NoUndo, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::Striped, WidgetProperty::OrderBy, WidgetProperty::Reorder, WidgetProperty::Page, WidgetProperty::Frame],
+        events: &[Event::Select, Event::Open, Event::Change, Event::Reorder, Event::Add, Event::Remove],
+        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::NoUndo, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::Add, WidgetProperty::Remove, WidgetProperty::Striped, WidgetProperty::OrderBy, WidgetProperty::Reorder, WidgetProperty::Page, WidgetProperty::Frame],
     },
     // A list the window holds as a tree, arranged by `children` (U1c).
     Entry {
@@ -1107,6 +1149,50 @@ pub fn container(kind: WidgetKind) -> Option<ContainerKind> {
     entry(kind).container
 }
 
+/// Whether a part stands outside the window's grid: a popover and a
+/// slide-out on a grid of their own, a sound and a timer with no place.
+pub fn off_grid(kind: WidgetKind) -> bool {
+    matches!(kind, WidgetKind::Popover | WidgetKind::Slideout | WidgetKind::Sound | WidgetKind::Timer)
+}
+
+/// Whether a slide-out lies across the window, at the top or the bottom: its size is a height.
+pub fn slides_across(props: &WidgetProps) -> bool {
+    props.side.is_some_and(crate::model::SlideSide::across)
+}
+
+/// A slide-out's size and its limits as written, in pixels: its own width
+/// (`SLIDEOUT_WIDTH` without one), or its height at the top or the bottom
+/// (`SLIDEOUT_HEIGHT` without one), and `min` and `max` where it has them.
+pub fn slide_widths(props: &WidgetProps) -> (u32, Option<u32>, Option<u32>) {
+    let number = |v: &Option<String>| v.as_deref().and_then(|v| v.parse::<f64>().ok()).map(|v| v.max(0.0) as u32);
+    let size = if slides_across(props) { props.slide_height.unwrap_or(crate::model::SLIDEOUT_HEIGHT) } else { props.slide_width.unwrap_or(crate::model::SLIDEOUT_WIDTH) };
+    (size, number(&props.min), number(&props.max))
+}
+
+/// Whether a slide-out's size and limits fit: a width at the left or right
+/// and a height at the top or bottom, each one of the sizes a sidebar takes,
+/// and the size between the limits.
+pub fn slide_widths_fit(props: &WidgetProps) -> Result<(), String> {
+    let across = slides_across(props);
+    if across && props.slide_width.is_some() {
+        return Err("a slide-out at the top or bottom has a height, not a width: write height 300".to_string());
+    }
+    if !across && props.slide_height.is_some() {
+        return Err("a slide-out at the left or right has a width, not a height: write width 420, or side top or side bottom".to_string());
+    }
+    let (least, most) = crate::model::SIDEBAR_WIDTHS;
+    let (size, min, max) = slide_widths(props);
+    let what = if across { "high" } else { "wide" };
+    if [Some(size), min, max].into_iter().flatten().any(|w| !(least..=most).contains(&w)) {
+        return Err(format!("a slide-out is {least} to {most} pixels {what}"));
+    }
+    if min.is_some_and(|m| m > size) || max.is_some_and(|m| m < size) {
+        let size = if across { "height" } else { "width" };
+        return Err(format!("a slide-out's {size} lies between its min and max"));
+    }
+    Ok(())
+}
+
 pub fn has_event(kind: WidgetKind, event: Event) -> bool {
     entry(kind).events.contains(&event)
 }
@@ -1262,7 +1348,15 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         switches: Vec::new(),
         widths: Default::default(),
         resizable: false,
+        side: None,
+        slide_width: None,
+        slide_height: None,
+        pinnable: false,
+        view: None,
         sortable: false,
+        add: false,
+        remove: false,
+        confirm: false,
         striped: false,
         reorder: None,
         mode: None,
@@ -1300,6 +1394,8 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         typed: false,
         page: None,
         children: None,
+        row_key: None,
+        parent_key: None,
         chart: (kind == WidgetKind::Chart).then_some(crate::model::ChartKind::Bar),
         by: None,
         measure: (kind == WidgetKind::Chart).then_some(crate::model::ChartMeasure::Count),
@@ -1411,6 +1507,23 @@ pub fn widget_line(props: &WidgetProps) -> String {
         if let Some(target) = &props.for_part {
             parts.push(format!("for {target}"));
         }
+    } else if props.kind == WidgetKind::Slideout {
+        // A slide-out has none either: it comes in from its side, this wide (or high).
+        if let Some(side) = props.side.filter(|s| *s != crate::model::SlideSide::Right) {
+            parts.push(format!("side {}", side.keyword()));
+        }
+        if let Some(width) = props.slide_width {
+            parts.push(format!("width {width}"));
+        }
+        if let Some(height) = props.slide_height {
+            parts.push(format!("height {height}"));
+        }
+        if props.pinnable {
+            parts.push("pinnable".to_string());
+        }
+        if let Some(view) = &props.view {
+            parts.push(format!("view {view}"));
+        }
     } else {
         parts.push(format!("at {},{}", props.col, props.row));
     }
@@ -1437,6 +1550,12 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(children) = &props.children {
         parts.push(format!("children {children}"));
+    }
+    if let Some(key) = &props.row_key {
+        parts.push(format!("key {key}"));
+    }
+    if let Some(parent) = &props.parent_key {
+        parts.push(format!("parent {parent}"));
     }
     if let Some(by) = &props.by {
         parts.push(format!("by {by}"));
@@ -1515,6 +1634,12 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if props.sortable {
         parts.push("sortable".to_string());
+    }
+    if props.add {
+        parts.push("add".to_string());
+    }
+    if props.remove {
+        parts.push(if props.confirm { "remove confirm" } else { "remove" }.to_string());
     }
     if let Some(order) = &props.order {
         parts.push(if order.desc { format!("order by {} desc", order.field) } else { format!("order by {}", order.field) });
@@ -1709,7 +1834,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         }
         identifier("click target", target)?;
     }
-    if props.bottom && matches!(props.kind, WidgetKind::Sound | WidgetKind::Timer | WidgetKind::Popover) {
+    if props.bottom && off_grid(props.kind) {
         return Err(format!("a {name} has no place in the window's grid, so no 'bottom'"));
     }
     if let Some(part) = &props.name {
@@ -1764,6 +1889,8 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Runs, props.runs.is_some(), "runs"),
         (WidgetProperty::Resizable, props.resizable, "resizable"),
         (WidgetProperty::Sortable, props.sortable, "sortable"),
+        (WidgetProperty::Add, props.add, "add"),
+        (WidgetProperty::Remove, props.remove, "remove"),
         (WidgetProperty::Striped, props.striped, "striped"),
         (WidgetProperty::OrderBy, props.order.is_some(), "order by"),
         (WidgetProperty::Reorder, props.reorder.is_some(), "reorder"),
@@ -1786,8 +1913,15 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Search, props.search, "search"),
         (WidgetProperty::Page, props.page.is_some(), "page"),
         (WidgetProperty::Children, props.children.is_some(), "children"),
+        (WidgetProperty::Children, props.row_key.is_some(), "key"),
+        (WidgetProperty::Children, props.parent_key.is_some(), "parent"),
         (WidgetProperty::By, props.by.is_some(), "by"),
         (WidgetProperty::Measure, props.measure.is_some(), "count"),
+        (WidgetProperty::Side, props.side.is_some(), "side"),
+        (WidgetProperty::SlideWidth, props.slide_width.is_some(), "width"),
+        (WidgetProperty::SlideHeight, props.slide_height.is_some(), "height"),
+        (WidgetProperty::Pinnable, props.pinnable, "pinnable"),
+        (WidgetProperty::View, props.view.is_some(), "view"),
     ];
     for (property, present, what) in checks {
         if present && !has_property(props.kind, property) {
@@ -1800,6 +1934,9 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
     }
     if props.folded && !props.foldable {
         return Err("'folded' needs 'foldable': write 'foldable folded'".to_string());
+    }
+    if props.kind == WidgetKind::Slideout {
+        slide_widths_fit(props)?;
     }
     if props.cards && props.show.is_empty() {
         return Err("'cards' shows the fields of 'show': write 'show title, kind cards'".to_string());
@@ -1814,7 +1951,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
     if let Some(field) = props.switches.iter().find(|f| !props.edit.contains(f)) {
         return Err(format!("'{field}' is a switch but is not edited"));
     }
-    for field in props.columns.iter().chain(&props.edit).chain(&props.show) {
+    for field in props.columns.iter().chain(&props.edit).chain(&props.show).chain(&props.row_key).chain(&props.parent_key) {
         identifier("field name", field)?;
     }
     if props.widths.values().any(|w| !(MIN_COLUMN_WIDTH..=MAX_COLUMN_WIDTH).contains(w)) {

@@ -324,6 +324,26 @@ fn questions_and_their_answers_build_in_cpp() {
     remove(&out);
 }
 
+/// Records in app code and a tree by key (DESIGN 5.12) build without a
+/// warning in their own code.
+#[test]
+#[ignore]
+fn an_outline_of_records_builds_in_cpp() {
+    let project = clarity_spec::keyed::load_keyed([("outline.clarity", include_str!("fixtures/outline.clarity"))], &[], "en");
+    let mut settings = clarity_project::starter("Outline", "outline");
+    settings.stack.backend = Backend::Cpp;
+    settings.stack.ui = Ui::Clarity;
+    let out = scratch().join(format!("clarity-gen-cpp-outline-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    clarity_gen::write_out(&out, &files, &["build", "data"]).unwrap();
+    let said = run(&out, "cmake", &["--workflow", "--preset", "debug"]);
+    let own: Vec<&str> = said.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();
+    assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
+    remove(&out);
+}
+
 /// The web target (DESIGN 7.3, round B): a project whose only target is the
 /// web builds into a web server that serves Clarity.UI's page and browser
 /// files, the program's files.json, and answers the library's commands.

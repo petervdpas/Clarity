@@ -122,6 +122,34 @@ func TestRowsReadAgainHaveNoSelectedRow(t *testing.T) {
 	equal(t, reply.State.Selected["other"], 0)
 }
 
+type keyedRecord struct {
+	ID   int64
+	Name string
+	Tags []string
+}
+
+func (r *keyedRecord) GetID() int64 { return r.ID }
+
+// Code selects a row: a record by its fields, a stored one by its id, or none.
+func TestCodeSelectsARow(t *testing.T) {
+	ui := NewUi(WindowState{Window: "Outline"})
+	rows := []keyedRecord{{ID: 1, Name: "a", Tags: []string{"x"}}, {ID: 2, Name: "b", Tags: []string{"y"}}}
+	SelectRecord(ui, "nav", rows, keyedRecord{ID: 2, Name: "b", Tags: []string{"y"}})
+	SelectStored(ui, "grid", rows, &keyedRecord{ID: 1, Name: "changed"})
+	SelectRecord(ui, "flat", rows, &keyedRecord{Name: "none"})
+	ui.Select("names", 0)
+	ui.Select("names", -1)
+	reply, err := ui.Reply("Outline", map[string]any{})
+	must(t, err)
+	equal(t, reply.State.Selected["nav"], 1)
+	equal(t, reply.State.Selected["grid"], 0)
+	for _, part := range []string{"flat", "names"} {
+		if _, ok := reply.State.Selected[part]; ok {
+			t.Fatalf("%s has a selected row", part)
+		}
+	}
+}
+
 // Every window that opens has a number of its own, which its handlers'
 // replies keep, so what belongs to one open window (an engine's state) is
 // found again and dropped when it closes.

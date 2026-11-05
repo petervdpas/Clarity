@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Asks for the name of a new window, where it goes and what it starts from.
+  // Asks for the name of a new window (or view), where it goes and what it starts from.
 
   import Modal from "./Modal.svelte";
   import type { PageTemplate } from "@clarity/ui/generated/PageTemplate.ts";
@@ -9,6 +9,7 @@
   let {
     preview,
     file,
+    view = false,
     error,
     onsubmit,
     oncancel,
@@ -16,6 +17,8 @@
     preview: Preview;
     /** The file the window goes into, unless the user picks another. */
     file: SpecFile;
+    /** A view is asked for: it starts blank as a view. */
+    view?: boolean;
     error: string | null;
     onsubmit: (file: SpecFile, name: string, template: PageTemplate) => void;
     oncancel: () => void;
@@ -24,6 +27,9 @@
   let name = $state("");
   /** `blank`, or a template and an entity: `form:Customer`, `browse:Customer`. */
   let start = $state("blank");
+  $effect.pre(() => {
+    start = view ? "view" : "blank";
+  });
   let path = $state("");
   $effect.pre(() => {
     path = file.path;
@@ -45,7 +51,9 @@
           ? { kind: "browse", entity }
           : kind === "settings"
             ? { kind: "settings" }
-            : { kind: "blank" };
+            : kind === "view"
+              ? { kind: "view" }
+              : { kind: "blank" };
     onsubmit(target, name.trim(), template);
   }
 
@@ -54,7 +62,7 @@
   }
 </script>
 
-<Modal title={"New window"} width={420} onclose={oncancel}>
+<Modal title={view ? "New view" : "New window"} width={420} onclose={oncancel}>
   <form class="dialog" onsubmit={submit}>
     <label>
       <span>Name</span>
@@ -65,6 +73,7 @@
       <span>Start from</span>
       <select bind:value={start}>
         <option value="blank">Blank window</option>
+        <option value="view">Blank view (shown in a slide-out)</option>
         {#if hasSettings}<option value="settings">Settings window</option>{/if}
         {#each entities as entity (entity)}
           <option value="form:{entity}">Form for {entity}</option>

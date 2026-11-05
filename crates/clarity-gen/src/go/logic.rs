@@ -136,6 +136,47 @@ fn bare(code: String) -> String {
     code[1..code.len() - 1].to_string()
 }
 
+/// One of several values of a call, as gofmt writes it there: a sum of
+/// two plain operands without spaces (`p.Name+"/c"`); a longer one keeps
+/// its parentheses, inside which gofmt keeps the spaces; anything else bare.
+fn call_arg(code: String) -> String {
+    let inner = bare(code.clone());
+    if inner.len() == code.len() {
+        return code;
+    }
+    // The operators at the top level, outside brackets and literals.
+    let bytes = inner.as_bytes();
+    let (mut depth, mut quote, mut operators, mut spaces) = (0i32, None::<u8>, Vec::new(), 0usize);
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        match quote {
+            Some(q) if c == b'\\' && q != b'`' => i += 1,
+            Some(q) if c == q => quote = None,
+            Some(_) => {}
+            None => match c {
+                b'"' | b'`' | b'\'' => quote = Some(c),
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' => depth -= 1,
+                b' ' if depth == 0 => {
+                    spaces += 1;
+                    if bytes.get(i + 2) == Some(&b' ') && matches!(bytes.get(i + 1), Some(b'+' | b'-' | b'*' | b'/' | b'%')) {
+                        operators.push(i);
+                    }
+                }
+                _ => {}
+            },
+        }
+        i += 1;
+    }
+    match operators.as_slice() {
+        // Only the operator's own two spaces, and no sign on the right that gofmt keeps apart.
+        [at] if spaces == 2 && !matches!(bytes.get(at + 3), Some(b'-' | b'+' | b'*' | b'&')) => format!("{}{}{}", &inner[..*at], &inner[at + 1..at + 2], &inner[at + 3..]),
+        [] => inner,
+        _ => code,
+    }
+}
+
 /// `lines` indented by `depth` tabs.
 fn indent(lines: &str, depth: usize) -> String {
     let pad = "\t".repeat(depth);
@@ -154,6 +195,8 @@ pub struct PartInfo {
     pub folded: bool,
     /// Whether the design starts a collapsible sidebar folded to its button.
     pub collapsed: bool,
+    /// A popover or slide-out: closed until code or a click opens it, so `visible` reads false until then.
+    pub closed: bool,
     /// A canvas's grid as its line says (0 for none), and whether code snaps to it.
     pub grid: u32,
     pub snap: bool,
@@ -189,7 +232,7 @@ impl WindowCtx {
         for widget in widgets {
             if let Some(name) = &widget.props.name {
                 let custom = widget.props.part.clone().map(|kind| (kind, widget.props.values.clone()));
-                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
+                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, closed: matches!(widget.props.kind, clarity_spec::widgets::WidgetKind::Popover | clarity_spec::widgets::WidgetKind::Slideout), grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
                 self.parts.insert(name.clone(), info);
             }
             self.widgets(&widget.children);
@@ -340,6 +383,10 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
         for d in data {
             let (local_name, field_name) = (local(&d.name.name), pascal(&d.name.name));
             match &d.of {
+                // A list of records starts empty: code builds it (DESIGN 5.12).
+                DataKind::List { entity } if project.entity(&entity.name).is_some_and(|e| e.record) => {
+                    let _ = writeln!(load, "\tw.{field_name} = []{}{{}}", entity.name);
+                }
                 DataKind::List { entity } => {
                     let entity = &entity.name;
                     let _ = write!(load, "\t{local_name}, err := clarity.All[{entity}](db)\n\tif err != nil {{\n\t\treturn nil, err\n\t}}\n\tw.{field_name} = {local_name}\n");
@@ -623,6 +670,26 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("ui.SetPartValue({}, {}, {code})\n", string(&part), string(&property)));
                     return;
                 }
+                // Code selects a row: the first that is the record given (a
+                // stored one by its id, a record by its fields), or none.
+                if let Some((part, property)) = self.part_property(target)
+                    && property == "selected"
+                {
+                    let Some(bind) = self.window.and_then(|w| w.parts.get(&part)).and_then(|i| i.bind.clone()) else {
+                        self.errors.push(format!("'{part}' is not bound to a list"));
+                        return;
+                    };
+                    if matches!(value.kind, ExprKind::Empty) {
+                        out.push_str(&format!("ui.Select({}, -1)\n", string(&part)));
+                        return;
+                    }
+                    let stored = matches!(self.types.type_of(value), TypeInfo::Record(e) if self.project.entity(&e).is_some_and(|d| !d.record));
+                    let helper = if stored { "SelectStored" } else { "SelectRecord" };
+                    let code = bare(self.value(value, &mut pre));
+                    out.push_str(&pre);
+                    out.push_str(&format!("clarity.{helper}(ui, {}, w.{}, {code})\n", string(&part), pascal(&bind)));
+                    return;
+                }
                 if let Some((part, property)) = self.part_property(target) {
                     let method = match property.as_str() {
                         "caption" => "SetCaption",
@@ -643,6 +710,7 @@ impl<'a> Emitter<'a> {
                         "brush" => "SetBrush",
                         "ink" => "SetInk",
                         "maximized" => "SetMaximized",
+                        "pinned" => "SetPinned",
                         "tab" => "SetTab",
                         "step" => "SetStep",
                         "open" => "SetOpenSection",
@@ -1185,11 +1253,6 @@ impl<'a> Emitter<'a> {
         self.project.entity(entity).and_then(|e| e.field(field_name)).map(|f| f.ty.clone())
     }
 
-    /// The column a field is stored in.
-    fn column(&self, entity: &str, field_name: &str) -> String {
-        self.project.entity(entity).map_or_else(|| field_name.to_string(), |e| e.column_of(field_name).to_string())
-    }
-
     /// After a handler replaced the rows of `data` (`reload`, or a new
     /// list): the tables and lists showing them lose their selected row.
     fn deselect(&self, data: &str) -> String {
@@ -1290,6 +1353,7 @@ impl<'a> Emitter<'a> {
             return self.lift(format!("clarity.PartValueAs[{ty}](ui, {quoted}, {}, {})", string(&property), string(&fallback)), pre);
         }
         match property.as_str() {
+            "visible" if info.closed => format!("ui.VisibleOr({quoted}, false)"),
             "visible" => format!("ui.Visible({quoted})"),
             "enabled" => format!("ui.Enabled({quoted})"),
             "caption" => format!("ui.Caption({quoted}, {})", string(info.caption.as_deref().unwrap_or_default())),
@@ -1314,6 +1378,7 @@ impl<'a> Emitter<'a> {
                 self.lift(format!("clarity.Selected(ui, {quoted}, w.{})", pascal(&list)), pre)
             }
             "maximized" => format!("ui.Maximized({quoted})"),
+            "pinned" => format!("ui.Pinned({quoted})"),
             "tab" => format!("ui.Tab({quoted})"),
             "step" => format!("ui.Step({quoted})"),
             "open" => format!("ui.OpenSection({quoted})"),
@@ -1353,6 +1418,20 @@ impl<'a> Emitter<'a> {
     fn value(&mut self, expr: &Expr, pre: &mut String) -> String {
         let ty = self.types.type_of(expr);
         match &expr.kind {
+            // A list of records (DESIGN 5.12): a copy of each, as code holds records by pointer.
+            ExprKind::ListOf { items } if matches!(ty, TypeInfo::List(_)) => {
+                let items: Vec<String> = items
+                    .iter()
+                    .map(|i| {
+                        let record = bare(self.value(i, pre));
+                        match record.strip_prefix('&') {
+                            Some(place) => place.to_string(),
+                            None => format!("*{record}"),
+                        }
+                    })
+                    .collect();
+                format!("{}{{{}}}", value_type(&ty), items.join(", "))
+            }
             ExprKind::ListOf { items } => {
                 let decimals = matches!(&ty, TypeInfo::Values(item) if is_decimal(&item.info()));
                 let items: Vec<String> = items.iter().map(|i| bare(if decimals { self.decimal(i, pre) } else { self.value(i, pre) })).collect();
@@ -1390,8 +1469,8 @@ impl<'a> Emitter<'a> {
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand, pre)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } if is_decimal(&ty) => format!("{}.Neg()", self.value(operand, pre)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", self.value(operand, pre)),
-            // A list of values grows by a list of its items (DESIGN 5.26).
-            ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_)) => {
+            // A list of values, or of records, grows by a list of its items (DESIGN 5.26, 5.12).
+            ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_) | TypeInfo::List(_)) => {
                 let (left, right) = (bare(self.value(left, pre)), bare(self.value(right, pre)));
                 // A copy first, so the list it grows from stays as it was.
                 let copy = if left.starts_with("slices.Clone(") { left } else { format!("slices.Clone({left})") };
@@ -1546,12 +1625,12 @@ impl<'a> Emitter<'a> {
             // Whether a list holds an item.
             BinaryOp::Contains if let TypeInfo::Values(item) = &lt => {
                 let l = self.list_ref(left, pre);
-                let r = bare(if is_decimal(&item.info()) { self.decimal(right, pre) } else { self.value(right, pre) });
+                let r = call_arg(if is_decimal(&item.info()) { self.decimal(right, pre) } else { self.value(right, pre) });
                 format!("clarity.ListHolds({l}, {r})")
             }
             BinaryOp::Contains => {
-                let l = bare(self.value(left, pre));
-                let r = bare(self.value(right, pre));
+                let l = call_arg(self.value(left, pre));
+                let r = call_arg(self.value(right, pre));
                 format!("clarity.TextContains({l}, {r})")
             }
             BinaryOp::Add if *result == TypeInfo::Text => {
@@ -1578,8 +1657,8 @@ impl<'a> Emitter<'a> {
             }
             _ if matches!(lt, TypeInfo::Date | TypeInfo::DateTime) => {
                 let compare = if lt == TypeInfo::Date { "CompareDates" } else { "CompareDateTimes" };
-                let l = bare(self.value(left, pre));
-                let r = bare(self.value(right, pre));
+                let l = call_arg(self.value(left, pre));
+                let r = call_arg(self.value(right, pre));
                 format!("(clarity.{compare}({l}, {r}) {} 0)", op.symbol())
             }
             _ if matches!(lt, TypeInfo::Record(_)) => {
@@ -1632,7 +1711,7 @@ impl<'a> Emitter<'a> {
         for (arg, param) in args.iter().zip(&callee.params) {
             let ty = type_ref_info(self.project, &param.ty);
             let value = if is_decimal(&ty) { self.decimal(arg, pre) } else { self.value(arg, pre) };
-            code.push(bare(value));
+            code.push(call_arg(value));
         }
         format!("{}({})", function_name(self.project, name), code.join(", "))
     }
@@ -1648,7 +1727,7 @@ impl<'a> Emitter<'a> {
         // round(value, places), as every runtime rounds (conformance/rounding.json).
         // sin(degrees), cos(degrees), as every runtime gives them (conformance/drawing.json).
         if name == clarity_spec::code::check::SNAPPED && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
-            let values: Vec<String> = args.iter().map(|a| bare(self.value(a, pre))).collect();
+            let values: Vec<String> = args.iter().map(|a| call_arg(self.value(a, pre))).collect();
             return format!("clarity.Snapped({})", values.join(", "));
         }
         if name == clarity_spec::code::check::SIN || name == clarity_spec::code::check::COS {
@@ -1662,7 +1741,7 @@ impl<'a> Emitter<'a> {
             return format!("clarity.{function}({value})");
         }
         if name == clarity_spec::code::check::ROUND {
-            let values: Vec<String> = args.iter().map(|a| bare(self.value(a, pre))).collect();
+            let values: Vec<String> = args.iter().map(|a| call_arg(self.value(a, pre))).collect();
             return format!("clarity.Round({})", values.join(", "));
         }
         if name == clarity_spec::code::check::LENGTH && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
@@ -1670,8 +1749,8 @@ impl<'a> Emitter<'a> {
             return format!("int64(len([]rune({text})))");
         }
         if name == clarity_spec::code::check::JOIN && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
-            let list = args.first().map(|a| bare(self.value(a, pre))).unwrap_or_default();
-            let separator = args.get(1).map(|a| bare(self.value(a, pre))).unwrap_or_default();
+            let list = args.first().map(|a| call_arg(self.value(a, pre))).unwrap_or_default();
+            let separator = args.get(1).map(|a| call_arg(self.value(a, pre))).unwrap_or_default();
             return format!("clarity.Join({list}, {separator})");
         }
         if name == "count" {
@@ -1694,8 +1773,8 @@ impl<'a> Emitter<'a> {
                 self.errors.push(format!("{entity} cannot be ordered by '{}'", key.field.name));
                 continue;
             };
-            let numeric = self.field_type(&path.entity, &path.field).is_some_and(|t| is_stored_number(&t));
-            let column = string(&self.column(&path.entity, &path.field));
+            let numeric = crate::query_field_type(self.project, &path.entity, &path.field).is_some_and(|t| is_stored_number(&t));
+            let column = string(&crate::query_column(self.project, &path.entity, &path.field));
             if path.hops.is_empty() {
                 let method = if numeric { "OrderNumber" } else { "Order" };
                 query.push_str(&format!(".{method}({column}, {})", key.descending));
@@ -1748,11 +1827,11 @@ impl<'a> Emitter<'a> {
                         return String::new();
                     }
                 };
-                let Some(ty) = self.field_type(&path.entity, &path.field) else {
+                let Some(ty) = crate::query_field_type(self.project, &path.entity, &path.field) else {
                     self.errors.push(format!("{} has no field '{}'", path.entity, path.field));
                     return String::new();
                 };
-                let name = string(&self.column(&path.entity, &path.field));
+                let name = string(&crate::query_column(self.project, &path.entity, &path.field));
                 let own = if matches!(value.kind, ExprKind::Empty) {
                     let test = format!("clarity.IsNone({name})");
                     if op == BinaryOp::Eq { test } else { format!("clarity.Not({test})") }
@@ -1773,18 +1852,18 @@ impl<'a> Emitter<'a> {
                     self.errors.push(format!("'{}' compares no field of {var}", print::expr(expr)));
                     return String::new();
                 };
-                let Some(ty) = self.field_type(&path.entity, &path.field) else {
+                let Some(ty) = crate::query_field_type(self.project, &path.entity, &path.field) else {
                     self.errors.push(format!("{} has no field '{}'", path.entity, path.field));
                     return String::new();
                 };
                 let constructor = if is_stored_number(&ty) { "OneOfNumbers" } else { "OneOf" };
                 let values: Vec<String> = options.iter().map(|o| self.sql_value(&ty, o, pre)).collect();
                 let own =
-                    format!("clarity.{constructor}({}, []any{{{}}})", string(&self.column(&path.entity, &path.field)), values.join(", "));
+                    format!("clarity.{constructor}({}, []any{{{}}})", string(&crate::query_column(self.project, &path.entity, &path.field)), values.join(", "));
                 through(&path.hops, own)
             }
             _ => match path_of(expr) {
-                Some(path) => through(&path.hops, format!("clarity.IsTrue({})", string(&self.column(&path.entity, &path.field)))),
+                Some(path) => through(&path.hops, format!("clarity.IsTrue({})", string(&crate::query_column(self.project, &path.entity, &path.field)))),
                 None => {
                     self.errors.push(format!("'{}' is not a condition on {var}", print::expr(expr)));
                     String::new()

@@ -1,0 +1,84 @@
+module outline
+
+enum Kind
+    Landscape
+    Domain
+    Class
+
+entity Project
+    name: text(80), required
+
+record Node
+    key: text
+    parent: text
+    label: text
+    kind: Kind
+    depth: integer
+    weight: decimal
+    open: bool
+    seen: date
+    tags: list<text>
+    project: ref Project
+
+function node(key: text, parent: text, label: text, kind: Kind) -> Node
+    let n = new Node
+    n.key = key
+    n.parent = parent
+    n.label = label
+    n.kind = kind
+    return n
+
+function outline(projects: list<Project>) -> list<Node>
+    let all: list<Node> = []
+    all = all + [node("land", "", "Landscape", Landscape)]
+    for p in projects
+        let n = node(p.name, "land", p.name, Domain)
+        n.depth = 1
+        n.weight = 1.5
+        n.tags = ["domain"]
+        n.project = p
+        all = all + [n, node(p.name + "/c", p.name, "Classes", Class)]
+    return all
+
+function deepest(nodes: list<Node>) -> integer
+    let most = 0
+    for n in nodes
+        if n.depth > most
+            most = n.depth
+    return most
+
+page Outline: window
+    on open: loadNodes
+    data projects: list<Project>
+    data nodes: list<Node>
+    data picked: Node
+    tree name nav at 1,1 span 4 rows 10 bind nodes key key parent parent show label on select: chosen
+    treetable name grid at 5,1 span 8 rows 5 bind nodes key key parent parent columns label 200, depth, kind on open: opened
+    table name flat at 5,6 span 8 rows 4 bind nodes columns label, weight, open
+    list name names at 1,11 span 4 rows 2 bind nodes show label
+    textbox name labelBox at 5,10 span 4 bind picked.label
+    button "Next" name nextButton at 9,10 span 2 on click: nextClicked
+
+code Outline
+    handler loadNodes
+        projects = find p in Project order by p.name
+        nodes = outline(projects)
+        if count(nodes) > 1
+            nav.selected = nodes[2]
+
+    handler chosen
+        picked = nav.selected
+        picked.depth = picked.depth + deepest(nodes)
+
+    handler opened
+        let n = grid.selected
+        if n.project != none
+            message n.project.name
+
+    handler nextClicked
+        let fresh = new Node
+        fresh.key = "k" + count(nodes)
+        fresh.label = picked.label
+        nodes = nodes + [fresh]
+        flat.selected = fresh
+        names.selected = none

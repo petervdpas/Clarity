@@ -56,6 +56,44 @@
       "shows": []
     }
   ],
+  "byKey": {
+    "about": "A tree by key (`key key parent up`): each row is named by its `key` field, text or a whole number, and shows under the first row whose key its `up` field holds; any other row shows at the top. Empty text names no row, so a row whose `up` is empty shows at the top. Rows have no id; `open` names the keys of the rows shown open. Otherwise as the cases above: the order of the list, a loop broken at its first row.",
+    "cases": [
+      {
+        "name": "rows arranged by text keys",
+        "rows": [{ "key": "land", "up": "" }, { "key": "sales", "up": "land" }, { "key": "v1", "up": "api" }, { "key": "api", "up": "" }, { "key": "order", "up": "sales" }],
+        "open": ["land", "sales", "api"],
+        "shows": [[0, 0, true], [1, 1, true], [4, 2, false], [3, 0, true], [2, 1, false]]
+      },
+      {
+        "name": "whole numbers name rows too",
+        "rows": [{ "key": 10, "up": 0 }, { "key": 20, "up": 10 }, { "key": 30, "up": 10 }],
+        "open": [10],
+        "shows": [[0, 0, true], [1, 1, false], [2, 1, false]]
+      },
+      {
+        "name": "an empty key names no row, and a key no row has puts its row at the top",
+        "rows": [{ "key": "a", "up": "gone" }, { "key": "", "up": "" }, { "key": "b", "up": "" }],
+        "open": [],
+        "shows": [[0, 0, false], [1, 0, false], [2, 0, false]]
+      },
+      {
+        "name": "a row shows under the first row of its parent's key",
+        "rows": [{ "key": "a", "up": "" }, { "key": "a", "up": "" }, { "key": "b", "up": "a" }],
+        "open": ["a"],
+        "shows": [[0, 0, true], [2, 1, false], [1, 0, false]]
+      },
+      {
+        "name": "a loop of keys is broken at its first row",
+        "rows": [{ "key": "a", "up": "c" }, { "key": "b", "up": "a" }, { "key": "c", "up": "b" }],
+        "open": ["a", "b"],
+        "shows": [[0, 0, true], [1, 1, true], [2, 2, false]]
+      }
+    ],
+    "reveal": [
+      { "rows": [{ "key": "land", "up": "" }, { "key": "sales", "up": "land" }, { "key": "order", "up": "sales" }], "at": 2, "opens": ["land", "sales"] }
+    ]
+  },
   "reveal": [
     { "rows": [{ "id": 1, "parent": null }, { "id": 2, "parent": 1 }, { "id": 3, "parent": 2 }, { "id": 4, "parent": null }], "at": 2, "opens": [1, 2] },
     { "rows": [{ "id": 1, "parent": null }, { "id": 2, "parent": 1 }], "at": 0, "opens": [] }

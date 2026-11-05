@@ -258,9 +258,13 @@ code CustomerForm
 code Orders
     handler gridOpened
         grid.selected = grid.selected
+        grid.selected = none
+        grid.selected = 3
         let n = count(orders) + grid.selected.lines
 ";
-    assert_eq!(errors(orders), ["'selected' of table 'grid' can only be read"]);
+    // Code selects a row with a record of the list, or none.
+    assert_eq!(errors(orders).len(), 1, "{:#?}", errors(orders));
+    assert!(errors(orders)[0].contains("integer"), "{:#?}", errors(orders));
 }
 
 #[test]

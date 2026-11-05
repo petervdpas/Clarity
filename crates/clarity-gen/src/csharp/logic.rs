@@ -176,6 +176,7 @@ fn part_property(property: &str) -> Option<&'static str> {
         "folded" => "IsFolded",
         "collapsed" => "IsCollapsed",
         "maximized" => "IsMaximized",
+        "pinned" => "IsPinned",
         "tab" => "Tab",
         "step" => "Step",
         "open" => "OpenSection",
@@ -298,6 +299,27 @@ impl<'a> Emitter<'a> {
                 if let Some((part, property, _, _)) = self.custom_property(target) {
                     let value = self.value(value);
                     out.push_str(&format!("{pad}{part}.SetValue({}, {value});\n", string(&property)));
+                    return;
+                }
+                // Code selects a row: the record given when the list holds it, else the
+                // first with its id (a stored one) or its values (a record), or none.
+                if let Some((part, "SelectedItem")) = self.part_property(target)
+                    && let ExprKind::Member { object, .. } = &target.kind
+                    && let ExprKind::Name { name } = &object.kind
+                    && self.window.and_then(|w| w.parts.get(name)).is_some_and(|p| p.mode.is_none())
+                {
+                    let Some(bind) = self.window.and_then(|w| w.parts.get(name)).and_then(|p| p.bind.clone()) else {
+                        self.errors.push(format!("'{name}' is not bound to a list"));
+                        return;
+                    };
+                    let row = if matches!(value.kind, ExprKind::Empty) {
+                        "null".to_string()
+                    } else {
+                        let stored = matches!(self.types.type_of(value), TypeInfo::Record(e) if self.project.entity(&e).is_some_and(|d| !d.record));
+                        let wanted = self.value(value);
+                        if stored { format!("{}.FirstOrDefault(r => r.Id == {wanted}.Id)", member(&bind)) } else { format!("SameRow({}, {wanted})", member(&bind)) }
+                    };
+                    out.push_str(&format!("{pad}{part}.SelectedItem = {row};\n"));
                     return;
                 }
                 if let Some((part, property)) = self.part_property(target) {
@@ -756,12 +778,6 @@ impl<'a> Emitter<'a> {
         self.project.entity(entity).and_then(|e| e.field(field)).map(|f| f.ty.clone())
     }
 
-    /// The column a field is stored in: its own name, or the existing
-    /// column it is mapped to.
-    fn column(&self, entity: &str, field: &str) -> String {
-        self.project.entity(entity).map_or_else(|| field.to_string(), |e| e.column_of(field).to_string())
-    }
-
     /// A part property such as `grid.selected` or `name_input.error`: the
     /// part's `PartState` and its property, when `expr` is one.
     fn part_property(&self, expr: &Expr) -> Option<(String, &'static str)> {
@@ -905,6 +921,17 @@ impl<'a> Emitter<'a> {
     }
 
     fn value(&mut self, expr: &Expr) -> String {
+        let code = self.shared_value(expr);
+        // A record is a value (DESIGN 5.12): what keeps or gets one read from
+        // a name, a field, a list or a part takes a copy of its own, as a
+        // struct is copied on the other stacks.
+        let place = matches!(expr.kind, ExprKind::Name { .. } | ExprKind::Member { .. } | ExprKind::Index { .. });
+        let record = matches!(self.types.type_of(expr), TypeInfo::Record(e) if self.project.entity(&e).is_some_and(|d| d.record));
+        if place && record && !code.is_empty() { format!("{code}.Copy()") } else { code }
+    }
+
+    /// An expression as a value, a record as the one it is.
+    fn shared_value(&mut self, expr: &Expr) -> String {
         let ty = self.types.type_of(expr);
         match &expr.kind {
             ExprKind::ListOf { items } => {
@@ -934,8 +961,8 @@ impl<'a> Emitter<'a> {
             ExprKind::Name { .. } | ExprKind::Member { .. } => self.place(expr),
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", self.value(operand)),
-            // A list of values grows by a list of its items (DESIGN 5.26).
-            ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_)) => {
+            // A list of values, or of records, grows by a list of its items (DESIGN 5.26, 5.12).
+            ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_) | TypeInfo::List(_)) => {
                 format!("System.Linq.Enumerable.ToList(System.Linq.Enumerable.Concat({}, {}))", self.value(left), self.value(right))
             }
             ExprKind::Binary { op, left, right } => self.binary(*op, left, right, &ty),
@@ -1158,8 +1185,8 @@ impl<'a> Emitter<'a> {
                 self.errors.push(format!("{entity} cannot be ordered by '{}'", key.field.name));
                 continue;
             };
-            let numeric = self.field_type(&path.entity, &path.field).is_some_and(|t| is_stored_number(&t));
-            let column = string(&self.column(&path.entity, &path.field));
+            let numeric = crate::query_field_type(self.project, &path.entity, &path.field).is_some_and(|t| is_stored_number(&t));
+            let column = string(&crate::query_column(self.project, &path.entity, &path.field));
             if path.hops.is_empty() {
                 let method = if numeric { "OrderNumber" } else { "Order" };
                 query.push_str(&format!(".{method}({column}, {})", key.descending));
@@ -1227,11 +1254,11 @@ impl<'a> Emitter<'a> {
                         return String::new();
                     }
                 };
-                let Some(ty) = self.field_type(&path.entity, &path.field) else {
+                let Some(ty) = crate::query_field_type(self.project, &path.entity, &path.field) else {
                     self.errors.push(format!("{} has no field '{}'", path.entity, path.field));
                     return String::new();
                 };
-                let name = string(&self.column(&path.entity, &path.field));
+                let name = string(&crate::query_column(self.project, &path.entity, &path.field));
                 let own = if matches!(value.kind, ExprKind::Empty) {
                     let test = format!("Cond.IsNone({name})");
                     if op == BinaryOp::Eq { test } else { format!("{test}.Negated()") }
@@ -1252,17 +1279,17 @@ impl<'a> Emitter<'a> {
                     self.errors.push(format!("'{}' compares no field of {var}", print::expr(expr)));
                     return String::new();
                 };
-                let Some(ty) = self.field_type(&path.entity, &path.field) else {
+                let Some(ty) = crate::query_field_type(self.project, &path.entity, &path.field) else {
                     self.errors.push(format!("{} has no field '{}'", path.entity, path.field));
                     return String::new();
                 };
                 let constructor = if is_stored_number(&ty) { "OneOfNumbers" } else { "OneOf" };
                 let values: Vec<String> = options.iter().map(|o| self.sql_value(&ty, o)).collect();
-                let own = format!("Cond.{constructor}({}, [{}])", string(&self.column(&path.entity, &path.field)), values.join(", "));
+                let own = format!("Cond.{constructor}({}, [{}])", string(&crate::query_column(self.project, &path.entity, &path.field)), values.join(", "));
                 through(&path.hops, own)
             }
             _ => match path_of(expr) {
-                Some(path) => through(&path.hops, format!("Cond.IsTrue({})", string(&self.column(&path.entity, &path.field)))),
+                Some(path) => through(&path.hops, format!("Cond.IsTrue({})", string(&crate::query_column(self.project, &path.entity, &path.field)))),
                 None => {
                     self.errors.push(format!("'{}' is not a condition on {var}", print::expr(expr)));
                     String::new()

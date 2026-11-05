@@ -572,6 +572,37 @@ page CustomerForm: window
 
 Only a `window` has frame regions of its own.
 
+### Views
+
+A window can be a composition of views. A `view` is designed as a window is (its parts on its grid, its data, its code), without a frame of its own, and shows where a window's part names it. Today that part is a slide-out: `view ClassEditor` on its line, and it holds no parts of its own.
+
+```clarity
+page Workspace: window
+    data picked: text
+    tree name classTree at 1,1 span 3 rows 20 bind nodes key key parent parent show label on select: classPicked
+    slideout @classCaption name classPanel view ClassEditor width 520 pinnable span 6 rows 12
+
+page ClassEditor: view
+    data className: text
+    label @nameLabel name nameLabel at 1,1 span 2 for nameBox
+    textbox name nameBox at 3,1 span 4 bind className
+    button @saveCaption name saveButton at 5,2 span 2 on click: saveClicked
+
+code Workspace
+    handler classPicked
+        className = classTree.selected.label
+        classPanel.visible = true
+
+code ClassEditor
+    handler saveClicked
+        // works on its own parts and data
+```
+
+- Where it shows, the view's parts, data and handlers join the window's: the window's code reaches them by name, so the window sets what the view shows (`className = ...`). The view's own code reaches only its own parts and data, so one view can show in several windows.
+- A window shows a view once; the view's part and data names differ from the window's; a view shows in a window, not in another view, and has no slide-out of its own.
+- In the IDE views have their own section in the project tree, with **New view**, and are designed on their own as windows are. The designer shows the slide-out as written; the Preview shows it with the view in it.
+
+
 An application has one desktop window, on every stack. `open` shows a window in place, on top of the one that opened it, and `close` goes back to the one below. A desktop window of its own opens only where the design says so: a target marked `in new window` starts one, and a `dialog` may get one too (the web stacks show it on top of the window that opened it; on C# dialogs come with Clarity.UI).
 
 ### Settings
@@ -582,6 +613,7 @@ An application has one desktop window, on every stack. `open` shows a window in 
 | `size W x H` | The size its desktop window opens at, in pixels, like `size 320 x 460`: 200 to 3840 wide and 150 to 2160 high. Without it a window opens at 1100 x 760. A desktop window takes the size of the window it shows first; a window opened in place keeps the desktop window's size. The designer shows a window at its size. |
 | `data name: Entity` | One record the window works on. |
 | `data name: list<Entity>` | A list of records the window works on. |
+| `data name: Record`, `data name: list<Record>` | A [record](#records) the window holds, new when it opens, or a list of them, empty when it opens; code fills them, nothing stores them. |
 | `data name: type` | A plain value the window holds: `data shown: decimal`, `data pending: Operation`, `data readings: list<decimal>`. The type is `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`, an enum, or a list of text, integers, decimals or dates, which starts empty. It is no record and is never stored; it lives as long as the window. |
 | `data name: type, default value` | A plain value that starts at `value`: `data fresh: bool, default true`. Without a default it starts empty: 0, empty text, false, no date, or the enum's first value. |
 | `grid N columns` | The number of grid columns, 1 to 24. The default is 12. |
@@ -683,9 +715,10 @@ A color input shows a swatch and the color as `#rrggbb`. The swatch opens a pale
 |---|---|---|---|
 | `form` | parts, on its own grid; binds to one record: `bind customer` | `foldable`, `foldable folded`, `labels 3` | `submit` |
 | `panel` | parts, on its own grid, in a frame with the caption | `foldable`, `foldable folded` | none |
-| `tabs` | `tab @key` blocks, each with parts | none | `change` |
+| `tabs` | `tab @key` blocks, each with parts; code reads and sets the open tab as `part.tab`, counted from 1 | none | `change` |
 | `steps` | `step @key` blocks, each with parts: a wizard | none | `next`, `finish` |
 | `popover` | parts on its own grid, opened next to the part in `for` | none | none |
+| `slideout` | parts on its own grid, sliding in over the window from its right, left, top or bottom edge | `side left` (`top`, `bottom`), `width 420` (`height 300` at the top or bottom), `resizable`, `min 300`, `max 900`, `pinnable` | `open`, `close` |
 | `buttons` | buttons and toggles joined in one row, on its own grid | none | none |
 | `accordion` | `section @key` blocks, each with parts; one open at a time | none | `change` |
 | `scroll` | parts, on its own grid; parts below its rows scroll into view | none | none |
@@ -697,10 +730,10 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
-| `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `order by field [desc]`; `reorder by field`; `page 50`; `striped`; `frame` | `select`, `open`, `change`, `reorder` |
+| `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `add`; `remove` [`confirm`]; `order by field [desc]`; `reorder by field`; `page 50`; `striped`; `frame` | `select`, `open`, `change`, `reorder`, `add`, `remove` |
 | `list` | a list: `bind orders` | `show field, field, ...`; `cards`: each row a small card, the first field of `show` its title and the others lines below it, in the theme's `part card` and `part card_line` looks; `reorder by field`; `striped`; `frame` | `select`, `open`, `reorder` |
-| `tree` | a list: `bind folders children children` | `children field`; `show field, ...`; `reorder by field`; `striped`; `frame` | `select`, `open`, `reorder` |
-| `treetable` | a list: `bind folders children children` | `children field`; `columns field [width], ...`; `resizable`; `reorder by field`; `striped` | `select`, `open`, `reorder` |
+| `tree` | a list: `bind folders children children` | `children field`, or `key field parent field`; `show field, ...`; `reorder by field`; `striped`; `frame` | `select`, `open`, `reorder` |
+| `treetable` | a list: `bind folders children children` | `children field`, or `key field parent field`; `columns field [width], ...`; `resizable`; `reorder by field`; `striped` | `select`, `open`, `reorder` |
 | `chart` | a list: `chart bar ... bind orders by status count`; or a list of numbers, drawn as they are: `chart line ... bind readings` | `bar`, `line` or `pie` first; `by field`; `count`, `sum field` or `average field`; for a list of numbers `points n` (its last n) and `max n` (the top of the axis) | |
 | `trend` | an integer, decimal, money or duration: `bind cpu` | `points n`, the values it keeps, 60 without it; `max n`, the top of the axis; `every n`, seconds between values, 1 without it; see [Live graphs](#live-graphs) | none |
 
@@ -823,8 +856,44 @@ code Files
 - A row whose parent is in the list shows under it; any other row shows at the top. Each level keeps the order of the list. A loop of parents is broken at its row that comes first in the list.
 - A row with rows under it has a toggle that shows or hides them; all start closed. Its words are Clarity's `expandRow` and `collapseRow`.
 - A tree shows each row's text, or the fields of `show`. A tree table shows `columns` under their headers, the first one indented.
-- `folderTree.selected` is the record picked, as for a table, and selecting a row in code opens the rows above it. Every renderer arranges the rows alike (`conformance/trees.json`).
+- `folderTree.selected` is the record picked, as for a table, and selecting a row in code (`folderTree.selected = folder`) opens the rows above it. Every renderer arranges the rows alike (`conformance/trees.json`).
+
+A tree can also be arranged **by key**: `key` names the field that names a row and `parent` the field that holds the key of the row it shows under, text or whole numbers of the same type. The rows need no reference to their own kind, so code builds one tree of different things as a list of records (see [Records](#records)); a stored record's `id` names it too.
+
+```clarity
+tree name nav at 1,1 span 4 rows 20 bind nodes key key parent parent show label
+treetable name grid at 5,1 span 8 rows 20 bind nodes key key parent parent columns label 200, kind
+```
+
+- A row shows under the first row whose key its parent field holds; any other row shows at the top. Empty text names no row, so a row whose parent is empty is at the top. Rows keep the order of the list, and a loop of parents is broken as above.
+- A tree has `children` or `key` and `parent`, not both. In the designer they are **Key** and **Parent**, offered when the list's rows have text or integer fields.
 - Sorting changes only how the rows show. A row keeps its place in the data, so `grid.selected` and every event name the record the person sees, and `save grid.selected` saves it.
+
+### Adding and removing rows
+
+A table adds and removes its own rows when its line says `add` and `remove`: an Add button stands above its header at the right, and every row has a trash button in a last column of its own. The Add button runs `on add`; a trash button picks its row and runs `on remove`, which reads the row as `table.selected`. Insert and Delete do the same from the keys, and a read-only or disabled table runs neither. The handlers do the adding and deleting, so each needs its handler.
+
+```clarity
+page ClassEditor: view
+    data editedClass: ModelClass
+    data properties: list<Property>
+    table name propertyTable at 1,1 span 6 rows 6 bind properties columns name, type edit name, type add remove on add: propertyAdded on remove: propertyRemoved on change: propertyChanged
+
+code ClassEditor
+    handler propertyAdded
+        let p = new Property
+        p.owner = editedClass
+        save p
+        properties = find x in Property where x.owner == editedClass
+
+    handler propertyRemoved
+        delete propertyTable.selected
+        properties = find x in Property where x.owner == editedClass
+```
+
+With `remove confirm` the trash button (and Delete) asks first, in Clarity's dialog: "Remove {row}?" with the row's first column, and Remove and Keep; `on remove` runs on Remove only. For a question of its own (a dialog page with more in it, say) the `on remove` handler asks in code instead, with `ask` or `open`.
+
+The button says Clarity's word `addRow` ("Add") with the plus icon, and the trash button's tooltip is `removeRow` ("Remove"); the question is `removeRowAsk` and its other button `keepRow`. Each language file gives them its own words, as `addRow "Toevoegen"` and `removeRow "Verwijderen"`.
 
 ### Reordering
 
@@ -957,6 +1026,14 @@ A popover is a container outside the window's grid: it has no `at`, only a size,
 button @filterButton name filterButton at 1,7 span 2 on click -> filters
 popover name filters for filterButton span 4 rows 2
     checkbox @onlyVinylCaption name vinylBox at 1,1 span 4 bind onlyVinyl on change: refilter
+```
+
+A slide-out is a container outside the window's grid too, as an IDE's side panels are: it has no `at` and no `for`. It slides in over the window from its right edge (`side left`: its left), as high as the window's content (below the menu bar, toolbar and ribbon, above the footer), with a shadow, and what is under it stays where it is. With `side top` or `side bottom` it slides down from the top of the content or up from its bottom, as wide as the content, as an IDE's bottom panel does. Its width is in pixels (420 without `width`, 100 to 1600); at the top or bottom it has a `height` instead (300 without it, 100 to 1600), and `min` and `max` limit that. `span` and `rows` give its own grid. Its caption shows in its header and on its handle: a tab on its edge of the window with the caption written along it (across at the top and bottom), always there, which slides it out with a click (or Enter) and back with another; the handles of one side stand one after the other in a strip the window's parts make room for; at the bottom that strip lies on top of the footer. A slide-out whose caption is written empty (`slideout ""`) has no handle. A click on another part can open it too (`on click -> details`, from a button or a menu item), and so can code (`details.visible = true`); Escape, a click beside it, the close button in its header or `details.visible = false` closes it. With `resizable` the person drags its inner edge between `min` and `max`, as a sidebar's (up and down at the top or bottom). With `pinnable` its header has a pin: pinned, it stays open beside the window's parts, which make room for it as for a sidebar, and a click beside it leaves it open (Escape closes it while the focus is in it). Code reads and sets `details.pinned`. The size the person dragged it to and whether it is pinned are kept per window for the next start. `on open` and `on close` run when it opens and closes, so a handler can load what it shows. The focus moves into it when it opens and back when it closes; a screen reader finds it as a dialog named by its caption. It stands on the window, not inside another part.
+
+```clarity
+button @detailsButton name detailsButton at 1,1 span 2 on click -> details
+slideout @orderDetails name details width 480 resizable min 300 max 900 pinnable span 6 rows 10 on open: loadDetails
+    textbox @noteCaption name noteBox at 1,1 span 6 bind order.note
 ```
 
 An accordion shows its sections' titles one under the other, with the open section's parts under its title; the first is open to start. A press on a title opens that section, or folds it when it was the open one, and runs `on change`; code reads and sets the open section as `faq.open` (0 folds them all). A scroll box holds parts on its own grid like a panel, and parts placed below its rows scroll into view.
@@ -1301,7 +1378,7 @@ A name that is both data and a part in the same window is an error.
 | `readonly` | inputs | bool | yes |
 | `text` | text boxes, memos and password inputs that are not bound | text: what the user typed | yes |
 | `checked` | checkboxes and switches that are not bound | bool: whether it is on | yes |
-| `selected` | tables, lists | the record of the selected row | no |
+| `selected` | tables, lists, trees | the record of the selected row | yes: the first row that is that record (a stored record by its id, a record by its values), or `none` for no row |
 | `folded` | foldable panels and forms | bool: whether it is folded, by the person or by code | yes |
 | `collapsed` | collapsible sidebars | bool: whether it is folded to its button | yes |
 | `maximized` | maximizable sidebars | bool: whether it fills the window | yes |
@@ -1758,9 +1835,52 @@ record Dot
 
 - **`new Dot`** has every field at its default: the one written with `default`, or 0, empty text, no, an empty list. A record's decimal needs no precision and scale, since it has no column.
 - **`d.x`** reads a field and **`d.x = 3`** sets it. A record is a value: setting a field changes that record only, as an item of a list does.
-- **Lists of records** (`list<Dot>`, `[a, b]`) are read by item and by `for`.
-- **Fields** are values: text, numbers, yes or no, enums and lists of them; not references, pictures or files.
-- **For now** records are for engines written in Clarity, which give and take them as JSON objects of their fields. Code outside an engine does not have them yet.
+- **Copied, never shared.** Putting a record into a list, giving it to a variable, a window's data or a function, or reading it from a list or from `grid.selected` makes a copy. After `let d = new Dot`, `dots = dots + [d]` and `d.x = 3`, the dot in the list still has its own `x`. Every stack behaves alike: Rust, Go, C and C++ copy the struct, C# copies the object (`d.Copy()`).
+- **Lists of records** (`list<Dot>`, `[a, b]`) are read by item and by `for`, and grow by a list of the same records: `dots + [d]`. An empty one names its type: `let dots: list<Dot> = []`.
+- **Fields** are values: text, numbers, yes or no, dates, enums and lists of them, or a reference to a stored record (`project: ref Project`), kept as its id; not pictures or files, and no reference to another record. An engine uses records of values only.
+- **A record is never none.** It always has its fields; compare a field instead. Only a part's selected row is set to `none`.
+- **Never stored.** `save`, `delete` and `find` on a record are errors.
+- **Engines** written in Clarity give and take records as JSON objects of their fields.
+- **App code** uses them too: functions and actions take and give them, a window holds one (`data picked: Node`, new when the window opens) or a list of them (`data nodes: list<Node>`, empty when it opens), and a `list`, `table`, `tree` or `treetable` shows such a list as it shows records of an entity: `columns` and `show` name its fields, `grid.selected` is the record of the chosen row, and `on select` and `on open` run. A record has no id, so a row is its place in the list. Giving the window a new list (`nodes = outline()`) selects no row; code selects one again with `nav.selected = ...`. A table of records is not edited by the person (`edit`) and its rows are not moved by hand (`reorder`): build the list in code.
+
+```clarity
+record Node
+    key: text
+    parent: text
+    label: text
+    project: ref Project
+
+function outline(projects: list<Project>) -> list<Node>
+    let all: list<Node> = []
+    let top = new Node
+    top.key = "land"
+    top.label = "Landscape"
+    all = all + [top]
+    for p in projects
+        let n = new Node
+        n.key = p.name
+        n.parent = "land"
+        n.label = p.name
+        n.project = p
+        all = all + [n]
+    return all
+
+page Workspace: window
+    on open: loadNodes
+    data projects: list<Project>
+    data nodes: list<Node>
+    tree name nav at 1,1 span 4 rows 20 bind nodes key key parent parent show label on select: chosen
+
+code Workspace
+    handler loadNodes
+        projects = find p in Project order by p.name
+        nodes = outline(projects)
+        nav.selected = nodes[1]
+
+    handler chosen
+        if nav.selected.project != none
+            message nav.selected.project.name
+```
 
 How to build an engine in another language, and what it exports, is in the manual: [Engines](manual/code.engines.md).
 

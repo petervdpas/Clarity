@@ -18,6 +18,7 @@ use crate::input::{Key, KeyInput, Modifiers, PointerInput};
 use crate::markup::{CommandSpec, WindowSpec};
 use crate::painter::{Painter, TextAlign};
 use crate::parts::containers::container::ContainerButton;
+use crate::parts::containers::slideout::{Side, SlideoutHandle, SlideoutPart, HANDLE_WIDTH};
 use crate::parts::containers::steps::StepsPart;
 use crate::parts::{self, PartHost};
 use crate::shortcuts;
@@ -41,6 +42,8 @@ pub struct WindowView {
     /// Where the pointer took the bar's thumb, and how far the window was scrolled then.
     drag_from: Option<(f64, f64)>,
     hover_x: f64,
+    /// The strips of slide-out handles at its edges, as last placed, with the side each is on.
+    strips: Vec<(Rect, Side)>,
 }
 
 /// A part that may answer a key: where it is, its name and what its markup says of keys.
@@ -73,7 +76,7 @@ impl WindowView {
         let body = Showing::new(Box::new(grid), move || filling.filling().is_none());
         let mut node = Node::new();
         node.add(Box::new(body));
-        let mut view = WindowView { node, host, own_frame: spec.frame.clone(), frame, name: spec.name.clone(), problem: None, scroll_y: 0.0, max_scroll_y: 0.0, drag_from: None, hover_x: 0.0 };
+        let mut view = WindowView { node, host, own_frame: spec.frame.clone(), frame, name: spec.name.clone(), problem: None, scroll_y: 0.0, max_scroll_y: 0.0, drag_from: None, hover_x: 0.0, strips: Vec::new() };
         view.add_regions();
         view
     }
@@ -117,10 +120,19 @@ impl WindowView {
         self.add_regions();
     }
 
-    /// The frame's regions go before the body: they come first in Tab order, as they are docked around the grid.
+    /// The frame's regions go before the body: they come first in Tab order,
+    /// as they are docked around the grid; then the handles of the slide-outs,
+    /// which the frame leaves alone and the window places at its edges.
     fn add_regions(&mut self) {
-        for (at, region) in frame::regions(&self.frame).into_iter().enumerate() {
+        let mut at = 0;
+        for region in frame::regions(&self.frame) {
             self.node.children_mut().insert(at, region);
+            at += 1;
+        }
+        let slides: Vec<_> = self.grid().node().children().iter().filter_map(|c| c.as_any().downcast_ref::<SlideoutPart>()).map(|s| s.slide().clone()).filter(|s| s.has_handle()).collect();
+        for slide in slides {
+            self.node.children_mut().insert(at, Box::new(SlideoutHandle::new(slide)));
+            at += 1;
         }
     }
 
@@ -478,6 +490,72 @@ impl WindowView {
 }
 
 impl WindowView {
+    /// Gives each slide-out of the window its band at its side of `body`, the
+    /// window's content inside the frame; a pinned open one lies beside the
+    /// window's parts, which make room for it. Where the parts go now.
+    fn place_slideouts(&mut self, body: Rect, cx: &mut Cx) -> Rect {
+        let mut room = body;
+        let size = cx.look().size("small");
+        self.strips.clear();
+        // The handles of each side stand in a strip at its edge, one after the other: those of the bottom on top of the footer.
+        for side in [Side::Left, Side::Right, Side::Top, Side::Bottom] {
+            let lengths: Vec<f64> = self.node.children().iter().filter_map(|c| c.as_any().downcast_ref::<SlideoutHandle>()).filter(|h| h.slide().side() == side).map(|h| h.length(cx.fonts(), size)).collect();
+            if lengths.is_empty() {
+                continue;
+            }
+            let strip = match side {
+                Side::Left => Rect::new(room.x, room.y, HANDLE_WIDTH.min(room.width), room.height),
+                Side::Right => Rect::new(room.right() - HANDLE_WIDTH.min(room.width), room.y, HANDLE_WIDTH.min(room.width), room.height),
+                Side::Top => Rect::new(room.x, room.y, room.width, HANDLE_WIDTH.min(room.height)),
+                Side::Bottom => Rect::new(room.x, room.bottom() - HANDLE_WIDTH.min(room.height), room.width, HANDLE_WIDTH.min(room.height)),
+            };
+            let mut at = 0.0;
+            let mut lengths = lengths.into_iter();
+            for child in self.node.children_mut() {
+                let Some(handle) = child.as_any().downcast_ref::<SlideoutHandle>() else { continue };
+                if handle.slide().side() != side {
+                    continue;
+                }
+                let along = if side.across() { strip.width } else { strip.height };
+                let length = lengths.next().unwrap_or(0.0).min((along - at).max(0.0));
+                let place = if side.across() { Rect::new(strip.x + at, strip.y, length, strip.height) } else { Rect::new(strip.x, strip.y + at, strip.width, length) };
+                child.arrange(place, cx);
+                at += length;
+            }
+            self.strips.push((strip, side));
+            room = match side {
+                Side::Left => Rect::new(room.x + strip.width, room.y, room.width - strip.width, room.height),
+                Side::Right => Rect::new(room.x, room.y, room.width - strip.width, room.height),
+                Side::Top => Rect::new(room.x, room.y + strip.height, room.width, room.height - strip.height),
+                Side::Bottom => Rect::new(room.x, room.y, room.width, room.height - strip.height),
+            };
+        }
+        let grid = self.body_mut().child_mut();
+        for child in grid.node_mut().children_mut() {
+            let Some(slideout) = child.as_any().downcast_ref::<SlideoutPart>() else { continue };
+            let slide = slideout.slide();
+            let side = slide.side();
+            let deep = slide.size().min(if side.across() { room.height } else { room.width }).max(0.0);
+            // Docked ones line up from the edge in; one that floats lies at the edge of what is left.
+            let band = match side {
+                Side::Left => Rect::new(room.x, room.y, deep, room.height),
+                Side::Right => Rect::new(room.right() - deep, room.y, deep, room.height),
+                Side::Top => Rect::new(room.x, room.y, room.width, deep),
+                Side::Bottom => Rect::new(room.x, room.bottom() - deep, room.width, deep),
+            };
+            slideout.set_band(band);
+            if slideout.docked() {
+                room = match side {
+                    Side::Left => Rect::new(room.x + deep, room.y, (room.width - deep).max(0.0), room.height),
+                    Side::Right => Rect::new(room.x, room.y, (room.width - deep).max(0.0), room.height),
+                    Side::Top => Rect::new(room.x, room.y + deep, room.width, (room.height - deep).max(0.0)),
+                    Side::Bottom => Rect::new(room.x, room.y, room.width, (room.height - deep).max(0.0)),
+                };
+            }
+        }
+        room
+    }
+
     /// The button Enter presses in the wizard of that id: its Next, or on its last step its Finish; none when neither shows or can be pressed.
     fn default_of(&self, wizard: ElementId) -> Option<ElementId> {
         let steps = element::find(self, wizard)?.as_any().downcast_ref::<StepsPart>()?;
@@ -502,7 +580,8 @@ impl Element for WindowView {
         self.node.bounds = area;
         let frame = self.frame.clone();
         let regions = self.node.children().len() - 1;
-        frame.arrange(&mut self.node.children_mut()[..regions], area, cx);
+        let body = frame.arrange(&mut self.node.children_mut()[..regions], area, cx);
+        frame.set_body(self.place_slideouts(body, cx));
         let inside = self.inside();
         let content = self.grid().content_for(inside.width, inside.height);
         self.max_scroll_y = (content - inside.height).max(0.0);
@@ -530,6 +609,11 @@ impl Element for WindowView {
         }
         if let Some(problem) = &self.problem {
             p.text(problem, Rect::new(inside.x, inside.y, inside.width, row_height()), p.look.color("error"), p.look.size("text"), "text", false, TextAlign::Left);
+        }
+        // A strip of handles has the panel's color and a line toward the window's parts.
+        for (strip, side) in &self.strips {
+            p.fill(*strip, p.look.color("panel"), 0.0);
+            p.fill(side.inner_edge(*strip, p.look.border()), p.look.color("border"), 0.0);
         }
         for region in self.regions() {
             if region.is_shown() {

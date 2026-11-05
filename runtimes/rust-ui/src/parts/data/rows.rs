@@ -580,14 +580,15 @@ impl Rows {
     /// A move of a row: each record gets its number (and in a tree its
     /// parent in `parent`), the list its new order, written as one edit; the
     /// moved row is chosen and `reorder` runs. A move that changes nothing
-    /// does nothing. The moved row's place after, when it moved.
-    pub fn apply(&mut self, base: &PartBase, mv: Move, parent: Option<&str>) -> Option<usize> {
+    /// does nothing. The moved row's place after, when it moved. A row is
+    /// named by its `key` field (`id`, or a tree's key), which a parent holds.
+    pub fn apply(&mut self, base: &PartBase, mv: Move, key: &str, parent: Option<&str>) -> Option<usize> {
         let by = Self::reorder_by(base)?;
         let bound = base.bound()?.to_string();
         let given: Vec<Row> = self
             .records
             .iter()
-            .map(|r| Row { id: value_of(r, "id"), parent: parent.map(|p| value_of(r, p)).unwrap_or(Value::Null) })
+            .map(|r| Row { id: clarity_runtime::trees::key_of(value_of(r, key)), parent: parent.map(|p| clarity_runtime::trees::key_of(value_of(r, p))).unwrap_or(Value::Null) })
             .collect();
         let moved = reorder::reorder(&given, &mv, parent.is_some())?;
         let mut order = Vec::with_capacity(moved.order.len());

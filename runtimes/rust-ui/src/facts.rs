@@ -33,12 +33,13 @@ pub struct FieldOf {
     pub item: Option<String>,
 }
 
-/// What a window's data holds by its name: a list of records, one record, or a plain value.
+/// What a window's data holds by its name: a list of records, one record, or
+/// a plain value, with the name of its type when it is a named one (an enum).
 #[derive(Debug, Clone, PartialEq)]
 enum Data {
     List(String),
     Record(String),
-    Value,
+    Value(Option<String>),
 }
 
 /// The facts of a program's model, read once.
@@ -72,7 +73,7 @@ fn data_of(decls: &Value) -> BTreeMap<String, Data> {
         let data = match decl["of"]["kind"].as_str() {
             Some("list") => Data::List(entity),
             Some("record") => Data::Record(entity),
-            _ => Data::Value,
+            _ => Data::Value(decl["of"]["ty"]["kind"]["name"].as_str().map(str::to_string)),
         };
         out.insert(name.to_string(), data);
     }
@@ -129,7 +130,8 @@ impl ModelFacts {
             let modifiers = &field["modifiers"];
             let facts = FieldFacts {
                 label: field["label"].as_str().or_else(|| modifiers["label"].as_str()).unwrap_or(name).to_string(),
-                format: format_written(&kind, ty["scale"].as_u64(), modifiers["format"].as_str()),
+                // A record's decimal without precision and scale (28, 0) shows the places it has.
+                format: format_written(&kind, ty["scale"].as_u64().filter(|s| *s != 0 || ty["precision"].as_u64() != Some(28)), modifiers["format"].as_str()),
                 required: modifiers["required"].as_bool().unwrap_or(false),
                 min: literal(&modifiers["min"]),
                 max: literal(&modifiers["max"]),
@@ -207,7 +209,7 @@ impl ModelFacts {
         let data = self.data.get(window).and_then(|d| d.get(first)).or_else(|| self.app_data.get(first))?;
         let mut entity = match data {
             Data::List(e) | Data::Record(e) => e.clone(),
-            Data::Value => return None,
+            Data::Value(_) => return None,
         };
         for step in steps {
             let field = self.entities.get(&entity)?.get(step)?;
@@ -252,6 +254,9 @@ impl ModelFacts {
                 kind => kind.to_string(),
             });
         }
+        if let Some(name) = self.value_enum(window, path) {
+            return Some(name.to_string());
+        }
         self.entity_at(window, path)
     }
 
@@ -266,6 +271,14 @@ impl ModelFacts {
     /// The file store `field` of `entity` keeps its files in; none for one kept in the database.
     pub fn store_of(&self, entity: &str, field: &str) -> Option<String> {
         self.field_of(entity, field).and_then(|f| f.store.clone())
+    }
+
+    /// The enum a window's own value `path` holds (`data kind: DiagramKind`); none for any other.
+    pub fn value_enum(&self, window: &str, path: &str) -> Option<&str> {
+        match self.data.get(window).and_then(|d| d.get(without_places(path).as_str())).or_else(|| self.app_data.get(path))? {
+            Data::Value(Some(name)) if self.is_enum(name) => Some(name),
+            _ => None,
+        }
     }
 
     /// Whether `name` is an enum of the model.

@@ -236,6 +236,30 @@ void a_sidebar_is_collapsed_and_maximized_as_every_runtime_says(void) {
     cJSON_Delete(file);
 }
 
+void a_slideout_is_open_and_pinned_as_every_runtime_says(void) {
+    cJSON* file = conformance("slideouts.json");
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "slideout")) {
+        ClarityUi* ui = sidebar_ui(cJSON_GetObjectItemCaseSensitive(c, "part"));
+        REQUIRE(ui);
+        /* Closed until it is opened. */
+        CHECK(clarity_ui_visible_or(ui, "nav", false) == cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(c, "visible")));
+        CHECK(clarity_ui_pinned(ui, "nav") == cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(c, "pinned")));
+    }
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "set")) {
+        ClarityUi* ui = sidebar_ui(cJSON_CreateObject());
+        REQUIRE(ui);
+        const cJSON* visible = cJSON_GetObjectItemCaseSensitive(c, "visible");
+        const cJSON* pinned = cJSON_GetObjectItemCaseSensitive(c, "pinned");
+        if (cJSON_IsBool(visible)) clarity_ui_set_visible(ui, "nav", cJSON_IsTrue(visible));
+        if (cJSON_IsBool(pinned)) clarity_ui_set_pinned(ui, "nav", cJSON_IsTrue(pinned));
+        cJSON* back = clarity_window_state_json(&clarity_ui_reply(ui, "Main", cJSON_CreateObject())->state);
+        CHECK_JSON(cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(back, "parts"), "nav"),
+                   cJSON_PrintUnformatted(cJSON_GetObjectItemCaseSensitive(c, "part")));
+    }
+    cJSON_Delete(file);
+}
+
 void a_wizards_step_is_as_every_runtime_says(void) {
     cJSON* file = conformance("steps.json");
     const cJSON* c;

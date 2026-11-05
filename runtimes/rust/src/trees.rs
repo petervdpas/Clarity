@@ -7,6 +7,15 @@ use crate::reorder::{Row, parents, same_id};
 use serde::Serialize;
 use serde_json::Value;
 
+/// A row's key as a tree compares it: empty text names no row, so a row
+/// whose parent key is empty shows at the top (a tree by key).
+pub fn key_of(value: Value) -> Value {
+    match value {
+        Value::String(s) if s.is_empty() => Value::Null,
+        other => other,
+    }
+}
+
 /// A row a tree shows: its place in the list, its depth, and whether rows
 /// are under it; JSON writes it as `[place, depth, children]`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

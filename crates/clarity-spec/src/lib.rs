@@ -31,6 +31,7 @@ pub mod shortcuts;
 pub mod source;
 pub mod span;
 pub mod templates;
+pub mod views;
 pub mod widgets;
 
 use std::collections::BTreeMap;

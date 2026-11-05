@@ -80,6 +80,13 @@ pub fn used(project: &Project) -> BTreeMap<String, String> {
             if let Some(icon) = &w.props.icon {
                 add(icon);
             }
+            // A table's own Add and trash buttons show theirs.
+            if w.props.add {
+                add("plus");
+            }
+            if w.props.remove {
+                add("trash");
+            }
             if let Some(menu) = &w.menu {
                 commands(&menu.items, add);
             }

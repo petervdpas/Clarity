@@ -42,6 +42,8 @@ typedef struct {
     int64_t brush;
     const char* ink;
     bool has_maximized, maximized;
+    /// Whether a pinnable slide-out is pinned open (conformance/slideouts.json).
+    bool has_pinned, pinned;
     /// The open tab of a ribbon, counted from 1 (conformance/ribbons.json).
     bool has_tab;
     int64_t tab;
@@ -188,6 +190,8 @@ void clarity_off_window_closed(void (*listen)(uint64_t instance, void* context),
 void clarity_window_closed(uint64_t instance);
 
 bool clarity_ui_visible(const ClarityUi* ui, const char* part);
+/// Whether a part shows, `design` while no handler or person changed it: a popover or slide-out is closed until it is opened.
+bool clarity_ui_visible_or(const ClarityUi* ui, const char* part, bool design);
 void clarity_ui_set_visible(ClarityUi* ui, const char* part, bool value);
 bool clarity_ui_enabled(const ClarityUi* ui, const char* part);
 void clarity_ui_set_enabled(ClarityUi* ui, const char* part, bool value);
@@ -250,6 +254,9 @@ int64_t clarity_ui_selected_shape(const ClarityUi* ui, const char* part);
 /// Whether a maximizable sidebar fills the window.
 bool clarity_ui_maximized(const ClarityUi* ui, const char* part);
 void clarity_ui_set_maximized(ClarityUi* ui, const char* part, bool value);
+/// Whether a pinnable slide-out is pinned open beside the window's parts.
+bool clarity_ui_pinned(const ClarityUi* ui, const char* part);
+void clarity_ui_set_pinned(ClarityUi* ui, const char* part, bool value);
 /// A property of a custom part as code set it, or NULL when it was not set.
 const cJSON* clarity_ui_part_value(const ClarityUi* ui, const char* part, const char* name);
 /// Sets a property of a custom part; it takes `value`.
@@ -279,6 +286,10 @@ bool clarity_ui_selected(const ClarityUi* ui, const char* part, size_t count, si
 /// Forgets the selected row of a table or list, whose rows were read again
 /// or replaced: they are other records.
 void clarity_ui_deselect(ClarityUi* ui, const char* part);
+
+/// Selects the row at `place` (from 0) of a table, list or tree, or none
+/// when it is below 0: what code does with `grid.selected = record`.
+void clarity_ui_select(ClarityUi* ui, const char* part, int64_t place);
 
 void clarity_ui_message(ClarityUi* ui, ClarityLevel level, const ClarityText* text);
 /// `copy text`: the screen puts it, as it shows, on the clipboard when the handler is done; the last copy counts.

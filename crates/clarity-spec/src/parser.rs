@@ -1549,11 +1549,11 @@ fn parse_widget_page(
 }
 
 /// The words of a part's line, which every editor colors as Clarity's own (the VS Code grammar too).
-pub const LINE_WORDS: [&str; 69] = [
+pub const LINE_WORDS: [&str; 78] = [
     "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "striped", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
     "children", "page", "typed", "cards", "frame", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
-    "foldable", "folded", "taborder", "key", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window",
+    "foldable", "folded", "taborder", "key", "parent", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window", "side", "width", "top", "pinnable", "view", "add", "remove", "confirm",
 ];
 
 fn parse_widget_props(
@@ -1580,7 +1580,15 @@ fn parse_widget_props(
         switches: Vec::new(),
         widths: Default::default(),
         resizable: false,
+        side: None,
+        slide_width: None,
+        slide_height: None,
+        pinnable: false,
+        view: None,
         sortable: false,
+        add: false,
+        remove: false,
+        confirm: false,
         striped: false,
         reorder: None,
         mode: None,
@@ -1616,6 +1624,8 @@ fn parse_widget_props(
         typed: false,
         page: None,
         children: None,
+        row_key: None,
+        parent_key: None,
         chart: None,
         by: None,
         measure: None,
@@ -1721,6 +1731,39 @@ fn parse_widget_props(
             "at" if kind == WidgetKind::Popover => {
                 return Err(Diagnostic::error("a popover has no 'at': it opens next to the part named in 'for'", clause.span));
             }
+            "at" if kind == WidgetKind::Slideout => {
+                return Err(Diagnostic::error("a slide-out has no 'at': it comes in from the side of the window named in 'side'", clause.span));
+            }
+            "for" if kind == WidgetKind::Slideout => {
+                return Err(Diagnostic::error("a slide-out has no 'for': it comes in from the side of the window; a part that opens next to another is a popover", clause.span));
+            }
+            "side" => {
+                applies(WidgetProperty::Side)?;
+                let word = cursor.expect_ident("left, right, top or bottom, as in side left")?;
+                props.side = Some(match word.name.as_str() {
+                    "left" => crate::model::SlideSide::Left,
+                    "right" => crate::model::SlideSide::Right,
+                    "top" => crate::model::SlideSide::Top,
+                    "bottom" => crate::model::SlideSide::Bottom,
+                    other => return Err(Diagnostic::error(format!("a slide-out comes in from the left, the right, the top or the bottom, not '{other}': write side left, side right, side top or side bottom"), word.span)),
+                });
+            }
+            "width" => {
+                applies(WidgetProperty::SlideWidth)?;
+                props.slide_width = Some(cursor.expect_number("a width in pixels, as in width 420")?);
+            }
+            "height" if kind == WidgetKind::Slideout => {
+                applies(WidgetProperty::SlideHeight)?;
+                props.slide_height = Some(cursor.expect_number("a height in pixels, as in height 300")?);
+            }
+            "pinnable" => {
+                applies(WidgetProperty::Pinnable)?;
+                props.pinnable = true;
+            }
+            "view" => {
+                applies(WidgetProperty::View)?;
+                props.view = Some(cursor.expect_ident("the view it shows, as in view ClassEditor")?.name);
+            }
             "at" => {
                 props.col = cursor.expect_number("a column")?;
                 cursor.expect(TokenKind::Comma, "',' and a row, as in 'at 1,2'")?;
@@ -1729,7 +1772,7 @@ fn parse_widget_props(
             }
             "span" => props.width = cursor.expect_number("a number of columns")?,
             "rows" => props.height = cursor.expect_number("a number of rows")?,
-            "bottom" if matches!(kind, WidgetKind::Sound | WidgetKind::Timer | WidgetKind::Popover) => {
+            "bottom" if widgets::off_grid(kind) => {
                 return Err(Diagnostic::error(format!("a {name} has no place in the window's grid, so no 'bottom'"), clause.span));
             }
             "bottom" => props.bottom = true,
@@ -1827,6 +1870,19 @@ fn parse_widget_props(
             "sortable" => {
                 applies(WidgetProperty::Sortable)?;
                 props.sortable = true;
+            }
+            "add" => {
+                applies(WidgetProperty::Add)?;
+                props.add = true;
+            }
+            "remove" => {
+                applies(WidgetProperty::Remove)?;
+                props.remove = true;
+                // `remove confirm`: it asks first.
+                if cursor.peek().is_some_and(|t| t.text == "confirm") {
+                    cursor.next();
+                    props.confirm = true;
+                }
             }
             "striped" => {
                 applies(WidgetProperty::Striped)?;
@@ -2102,12 +2158,17 @@ fn parse_widget_props(
             }
             "max" => {
                 applies(WidgetProperty::Max)?;
-                let what = if kind == WidgetKind::Progress { "the number it is full at, as in max 250" } else { "the highest value, as in max 100" };
+                let what = match kind {
+                    WidgetKind::Progress => "the number it is full at, as in max 250",
+                    WidgetKind::Slideout => "the widest it is dragged, in pixels, as in max 900",
+                    _ => "the highest value, as in max 100",
+                };
                 props.max = Some(cursor.expect(TokenKind::Number, what)?.text.clone());
             }
             "min" => {
                 applies(WidgetProperty::Min)?;
-                props.min = Some(cursor.expect(TokenKind::Number, "the lowest value, as in min 0")?.text.clone());
+                let what = if kind == WidgetKind::Slideout { "the narrowest it is dragged, in pixels, as in min 300" } else { "the lowest value, as in min 0" };
+                props.min = Some(cursor.expect(TokenKind::Number, what)?.text.clone());
             }
             "step" => {
                 applies(WidgetProperty::Step)?;
@@ -2149,6 +2210,14 @@ fn parse_widget_props(
                 }
                 props.tab_order = Some(order);
             }
+            // A tree's key field (`key id`), beside a shortcut (`key "Ctrl+S"`).
+            "key" if widgets::has_property(kind, WidgetProperty::Children) && cursor.peek().is_some_and(|t| t.kind == TokenKind::Ident) => {
+                props.row_key = Some(cursor.expect_ident("the field that names a row, as in key id")?.name);
+            }
+            "parent" => {
+                applies(WidgetProperty::Children)?;
+                props.parent_key = Some(cursor.expect_ident("the field that holds the key of a row's parent, as in parent parentId")?.name);
+            }
             "key" => {
                 applies(WidgetProperty::Shortcut)?;
                 let text = cursor.peek().map(|t| t.span).unwrap_or(clause.span);
@@ -2175,7 +2244,7 @@ fn parse_widget_props(
 
     // A popover stands outside the window's grid, on a grid of its own; a
     // sound has no place at all.
-    if matches!(kind, WidgetKind::Popover | WidgetKind::Sound | WidgetKind::Timer) {
+    if widgets::off_grid(kind) {
         props.col = 1;
         props.row = 1;
         placed = true;
@@ -2185,6 +2254,9 @@ fn parse_widget_props(
             format!("a {name} needs a position, as in 'at 1,1'"),
             line,
         ));
+    }
+    if kind == WidgetKind::Slideout {
+        widgets::slide_widths_fit(&props).map_err(|m| Diagnostic::error(m, line))?;
     }
     Ok(props)
 }

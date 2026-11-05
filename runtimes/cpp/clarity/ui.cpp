@@ -27,6 +27,7 @@ std::string level_name(Level level) {
 }  // namespace
 
 bool Ui::visible(const std::string& part) const { return part_or(parts_, part, &PartState::visible, true); }
+bool Ui::visible_or(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::visible, design); }
 bool Ui::enabled(const std::string& part) const { return part_or(parts_, part, &PartState::enabled, true); }
 bool Ui::readonly(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::readonly, design); }
 bool Ui::folded(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::folded, design); }
@@ -42,6 +43,7 @@ std::string Ui::tool(const std::string& part, const std::string& design) const {
 int64_t Ui::brush(const std::string& part, int64_t design) const { return part_or(parts_, part, &PartState::brush, design); }
 std::string Ui::ink(const std::string& part, const std::string& design) const { return part_or(parts_, part, &PartState::ink, design); }
 bool Ui::maximized(const std::string& part) const { return part_or(parts_, part, &PartState::maximized, false); }
+bool Ui::pinned(const std::string& part) const { return part_or(parts_, part, &PartState::pinned, false); }
 int64_t Ui::tab(const std::string& part) const { return part_or(parts_, part, &PartState::tab, int64_t(1)); }
 int64_t Ui::step(const std::string& part) const { return part_or(parts_, part, &PartState::step, int64_t(1)); }
 int64_t Ui::open_section(const std::string& part) const { return part_or(parts_, part, &PartState::open, int64_t(1)); }
@@ -153,6 +155,7 @@ void to_json(nlohmann::json& out, const PartState& p) {
     if (p.brush) out["brush"] = *p.brush;
     if (p.ink) out["ink"] = *p.ink;
     if (p.maximized) out["maximized"] = *p.maximized;
+    if (p.pinned) out["pinned"] = *p.pinned;
     if (p.tab) out["tab"] = *p.tab;
     if (p.step) out["step"] = *p.step;
     if (p.open) out["open"] = *p.open;
@@ -185,6 +188,7 @@ void from_json(const nlohmann::json& in, PartState& p) {
     take("brush", p.brush);
     take("ink", p.ink);
     take("maximized", p.maximized);
+    take("pinned", p.pinned);
     take("tab", p.tab);
     take("step", p.step);
     take("open", p.open);

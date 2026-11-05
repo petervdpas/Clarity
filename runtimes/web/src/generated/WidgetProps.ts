@@ -7,6 +7,7 @@ import type { ChartMeasure } from "./ChartMeasure";
 import type { Handler } from "./Handler";
 import type { Literal } from "./Literal";
 import type { Orientation } from "./Orientation";
+import type { SlideSide } from "./SlideSide";
 import type { Surface } from "./Surface";
 import type { TableOrder } from "./TableOrder";
 import type { TellHandler } from "./TellHandler";
@@ -62,13 +63,50 @@ switches: Array<string>,
  */
 widths: { [key in string]: number }, 
 /**
- * `resizable`: the person drags a table's header edges, and the widths are remembered.
+ * `resizable`: the person drags a table's header edges, and the widths
+ * are remembered; or a slide-out's inner edge, between `min` and `max`.
  */
 resizable: boolean, 
+/**
+ * `side left`, `side top`, `side bottom`: the edge a slide-out comes in from; the right without it.
+ */
+side: SlideSide | null, 
+/**
+ * `width 420`: how wide a slide-out at the left or right is, in pixels; `SLIDEOUT_WIDTH` without it.
+ */
+slideWidth: number | null, 
+/**
+ * `height 300`: how high a slide-out at the top or bottom is, in pixels; `SLIDEOUT_HEIGHT` without it.
+ */
+slideHeight: number | null, 
+/**
+ * `pinnable`: a slide-out has a pin in its header; pinned, it stays
+ * open beside the window's parts, which make room for it.
+ */
+pinnable: boolean, 
+/**
+ * `view ClassEditor`: a slide-out shows that view, its parts, data and
+ * handlers joining the window's (`crate::views`); it holds none of its own.
+ */
+view: string | null, 
 /**
  * `sortable`: a click on a table's header sorts its rows by that column.
  */
 sortable: boolean, 
+/**
+ * `add`: a table has an Add button above its header, at the right,
+ * which runs `on add`.
+ */
+add: boolean, 
+/**
+ * `remove`: every row of a table has a trash button in a last column,
+ * which picks the row and runs `on remove`.
+ */
+remove: boolean, 
+/**
+ * `remove confirm`: the trash button asks first, in Clarity's dialog, and runs `on remove` on yes.
+ */
+confirm: boolean, 
 /**
  * `striped`: a table, list, tree or tree table draws every other row
  * with a faint stripe.
@@ -125,7 +163,17 @@ measure: ChartMeasure | null,
  * `children children`: the list field of a tree's rows that lists
  * records of their own kind, arranged by its reference (U1c).
  */
-children: string | null, show: Array<string>, 
+children: string | null, 
+/**
+ * `key id`: the field that names a tree's row, which the parent key
+ * of the rows under it holds; with `parent`, instead of `children`.
+ */
+rowKey: string | null, 
+/**
+ * `parent parentId`: the field of a tree's row that holds the key of
+ * the row it shows under.
+ */
+parentKey: string | null, show: Array<string>, 
 /**
  * `cards`: a list's rows as small cards, the first field of `show` the
  * card's title and the others lines below it.

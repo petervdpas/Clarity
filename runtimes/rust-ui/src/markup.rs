@@ -32,8 +32,8 @@ const PAGE_KINDS: [(&str, &str); 4] = [("Tab", "tab"), ("Step", "step"), ("Secti
 const REGIONS: [&str; 5] = ["Menu", "Toolbar", "Ribbon", "Sidebar", "Footer"];
 
 /// The events a part's `on...` attribute may name.
-const EVENTS: [&str; 23] = [
-    "click", "change", "enter", "leave", "select", "open", "pointer", "key", "close", "return", "start", "submit", "draw", "drag", "drop", "bend", "connect", "resize", "next", "finish", "reorder", "tick", "unconnected",
+const EVENTS: [&str; 25] = [
+    "click", "change", "enter", "leave", "select", "open", "pointer", "key", "close", "return", "start", "submit", "draw", "drag", "drop", "bend", "connect", "resize", "next", "finish", "reorder", "add", "remove", "tick", "unconnected",
 ];
 
 fn catalog(cell: &'static OnceLock<Map<String, Value>>, text: &str) -> &'static Map<String, Value> {

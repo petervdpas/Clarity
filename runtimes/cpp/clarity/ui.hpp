@@ -51,6 +51,8 @@ struct PartState {
     std::optional<int64_t> brush;
     std::optional<std::string> ink;
     std::optional<bool> maximized;
+    /// Whether a pinnable slide-out is pinned open (conformance/slideouts.json).
+    std::optional<bool> pinned;
     /// The open tab of a ribbon, counted from 1 (conformance/ribbons.json).
     std::optional<int64_t> tab;
     /// The step a wizard (a steps part) is on, counted from 1 (conformance/steps.json).
@@ -185,6 +187,8 @@ public:
     uint64_t instance() const { return instance_; }
 
     bool visible(const std::string& part) const;
+    /// Whether a part shows, `design` while no handler or person changed it: a popover or slide-out is closed until it is opened.
+    bool visible_or(const std::string& part, bool design) const;
     void set_visible(const std::string& part, bool value) { parts_[part].visible = value; }
     bool enabled(const std::string& part) const;
     void set_enabled(const std::string& part, bool value) { parts_[part].enabled = value; }
@@ -253,6 +257,9 @@ public:
     /// Whether a maximizable sidebar fills the window.
     bool maximized(const std::string& part) const;
     void set_maximized(const std::string& part, bool value) { parts_[part].maximized = value; }
+    /// Whether a pinnable slide-out is pinned open beside the window's parts.
+    bool pinned(const std::string& part) const;
+    void set_pinned(const std::string& part, bool value) { parts_[part].pinned = value; }
     /// The open tab of a ribbon, counted from 1.
     int64_t tab(const std::string& part) const;
     void set_tab(const std::string& part, int64_t value) { parts_[part].tab = value; }
@@ -272,6 +279,16 @@ public:
     /// Forgets the selected row of a table or list, whose rows were read
     /// again or replaced: they are other records.
     void deselect(const std::string& part) { selected_.erase(part); }
+
+    /// Selects the row at `place` (from 0) of a table, list or tree, or none
+    /// when it is below 0: what code does with `grid.selected = record`.
+    void select(const std::string& part, int place) {
+        if (place < 0) {
+            selected_.erase(part);
+        } else {
+            selected_[part] = place;
+        }
+    }
 
     /// The selected record of a table or list showing `rows`, as a copy to work on.
     template <typename R>

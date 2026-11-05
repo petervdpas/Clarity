@@ -536,6 +536,23 @@ fn questions_and_their_answers_build_in_go() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
+/// Records in app code and a tree by key (DESIGN 5.12) build, and gofmt and
+/// go vet are content with them.
+#[test]
+#[ignore = "builds Go"]
+fn an_outline_of_records_builds_in_go() {
+    let project = clarity_spec::keyed::load_keyed([("outline.clarity", include_str!("fixtures/outline.clarity"))], &[], "en");
+    let mut settings = clarity_project::starter("Outline", "outline");
+    settings.stack.backend = Backend::Go;
+    settings.stack.ui = Ui::Clarity;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = scratch().join(format!("clarity-gen-go-outline-{}", std::process::id()));
+    write(&out, &files, Runtime::Local);
+    checks(&out, Runtime::Local);
+    run(&out, "go", &["build", "-o", "outline", "."]);
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
 /// An engine beside the screen (DESIGN 5.12, conformance/engines/play.clarity):
 /// the backend loads no engine, the model carries it for the renderer. With
 /// CLARITY_KEEP set the built application stays, to run it.

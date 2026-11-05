@@ -316,6 +316,10 @@ pub struct PartState {
     /// Whether a maximizable sidebar fills the window; none is not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub maximized: Option<bool>,
+    /// Whether a pinnable slide-out is pinned open beside the window's parts;
+    /// none is not (conformance/slideouts.json).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned: Option<bool>,
     /// The open tab of a ribbon, counted from 1; none is the first
     /// (conformance/ribbons.json).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -551,6 +555,12 @@ impl Ui {
         self.parts.get(part).and_then(|p| p.visible).unwrap_or(true)
     }
 
+    /// Whether a part shows, `design` while no handler or person changed it:
+    /// a popover or slide-out is closed until it is opened.
+    pub fn visible_or(&self, part: &str, design: bool) -> bool {
+        self.parts.get(part).and_then(|p| p.visible).unwrap_or(design)
+    }
+
     pub fn set_visible(&mut self, part: &str, value: bool) {
         self.parts.entry(part.to_string()).or_default().visible = Some(value);
     }
@@ -756,6 +766,15 @@ impl Ui {
         self.parts.entry(part.to_string()).or_default().maximized = Some(value);
     }
 
+    /// Whether a pinnable slide-out is pinned open beside the window's parts.
+    pub fn pinned(&self, part: &str) -> bool {
+        self.parts.get(part).and_then(|p| p.pinned).unwrap_or(false)
+    }
+
+    pub fn set_pinned(&mut self, part: &str, value: bool) {
+        self.parts.entry(part.to_string()).or_default().pinned = Some(value);
+    }
+
     /// The open tab of a ribbon, counted from 1.
     pub fn tab(&self, part: &str) -> i64 {
         self.parts.get(part).and_then(|p| p.tab).unwrap_or(1)
@@ -805,6 +824,19 @@ impl Ui {
     /// again or replaced: they are other records.
     pub fn deselect(&mut self, part: &str) {
         self.selected.remove(part);
+    }
+
+    /// Selects the row at `place` of a table, list or tree, or none: what
+    /// code does with `grid.selected = record`.
+    pub fn select(&mut self, part: &str, place: Option<usize>) {
+        match place {
+            Some(at) => {
+                self.selected.insert(part.to_string(), at);
+            }
+            None => {
+                self.selected.remove(part);
+            }
+        }
     }
 
     /// The selected record of a table or list showing `rows`.
@@ -1136,6 +1168,18 @@ mod tests {
         let reply = ui.reply("Orders", Map::new());
         assert!(!reply.state.selected.contains_key("grid"));
         assert_eq!(reply.state.selected.get("other"), Some(&0));
+    }
+
+    #[test]
+    fn code_selects_a_row_and_none() {
+        let mut ui = Ui::from_state(&WindowState::new("Orders", Map::new()));
+        ui.select("grid", Some(1));
+        assert_eq!(ui.selected("grid", &["a", "b"]).unwrap(), "b");
+        ui.select("other", Some(0));
+        ui.select("other", None);
+        let reply = ui.reply("Orders", Map::new());
+        assert_eq!(reply.state.selected.get("grid"), Some(&1));
+        assert!(!reply.state.selected.contains_key("other"));
     }
 }
 

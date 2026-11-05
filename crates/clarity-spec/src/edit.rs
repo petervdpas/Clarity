@@ -1072,13 +1072,17 @@ impl Doc {
                 let child_kind = child_kind(kind, child);
                 let named = child.tokens.windows(2).any(|w| w[0].kind == TokenKind::Ident && w[0].text == "name" && w[1].kind == TokenKind::Ident);
                 if matches!(child_kind, Kind::Widget(_)) && !named {
-                    // Before `at`; a popover, which has none, after its keyword.
+                    // Before `at`; a popover or slide-out, which has none, after its keyword and caption.
+                    let off_grid = child.tokens.first().filter(|t| t.text == "popover" || t.text == "slideout").map(|first| {
+                        let caption = child.tokens.get(1).filter(|t| matches!(t.kind, TokenKind::Str | TokenKind::Key));
+                        caption.unwrap_or(first).span.end as usize + 1
+                    });
                     let at = child
                         .tokens
                         .windows(2)
                         .find(|w| w[0].kind == TokenKind::Ident && w[0].text == "at" && w[1].kind == TokenKind::Number)
                         .map(|w| w[0].span.start as usize)
-                        .or_else(|| child.tokens.first().filter(|t| t.text == "popover").map(|t| t.span.end as usize + 1).filter(|end| *end <= child.text.len()));
+                        .or_else(|| off_grid.filter(|end| *end <= child.text.len()));
                     if let (Some(at), Some(keyword)) = (at, child.tokens.first().map(|t| t.text.clone())) {
                         // After its purpose when the line says it, else numbered.
                         let name = match props_of_line(&child.tokens).as_ref().and_then(crate::names::suggested_name) {
@@ -1472,6 +1476,9 @@ impl Doc {
     ) -> EditResult<Option<u32>> {
         if *template == PageTemplate::Blank {
             return self.add_page(name, PageKind::Window);
+        }
+        if *template == PageTemplate::View {
+            return self.add_page(name, PageKind::View);
         }
         self.check_new_name(name)?;
         let text = templates::page_from_template(project, name, template).map_err(EditError)?;

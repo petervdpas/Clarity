@@ -376,7 +376,7 @@ fn facts_rs(project: &Project) -> String {
             let _ = writeln!(records, "        ({:?}, {}),", entity.name.name, typed(types));
         }
     }
-    for entity in project.entities() {
+    for entity in project.entities().chain(project.records()) {
         let parent = crate::csharp::tree_parent(entity);
         for field in &entity.fields {
             let refers = match &field.ty {
@@ -443,7 +443,7 @@ pub(crate) fn facts_json(project: &Project) -> String {
         }
     }
     let mut fields = Map::new();
-    for entity in project.entities() {
+    for entity in project.entities().chain(project.records()) {
         let parent = crate::csharp::tree_parent(entity);
         for field in &entity.fields {
             let refers = match &field.ty {
@@ -474,7 +474,7 @@ pub(crate) fn facts_json(project: &Project) -> String {
 fn fact_format_parts(field: &clarity_spec::model::Field) -> Option<(&'static str, Option<u32>)> {
     match &field.ty {
         FieldType::Integer => Some(("integer", None)),
-        FieldType::Decimal { scale, .. } => Some(("decimal", Some(*scale))),
+        FieldType::Decimal { .. } => Some(("decimal", field.ty.shown_scale())),
         FieldType::Money => Some(("money", None)),
         FieldType::Date => Some(("date", None)),
         FieldType::DateTime => Some(("dateTime", None)),
@@ -488,7 +488,7 @@ fn fact_format_parts(field: &clarity_spec::model::Field) -> Option<(&'static str
 fn fact_format(field: &clarity_spec::model::Field) -> Option<String> {
     let (kind, scale) = match &field.ty {
         FieldType::Integer => ("Integer", None),
-        FieldType::Decimal { scale, .. } => ("Decimal", Some(*scale)),
+        FieldType::Decimal { .. } => ("Decimal", field.ty.shown_scale()),
         FieldType::Money => ("Money", None),
         FieldType::Date => ("Date", None),
         FieldType::DateTime => ("DateTime", None),

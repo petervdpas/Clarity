@@ -211,6 +211,8 @@ pub struct PartInfo {
     pub folded: bool,
     /// Whether the design starts a collapsible sidebar folded to its button.
     pub collapsed: bool,
+    /// A popover or slide-out: closed until code or a click opens it, so `visible` reads false until then.
+    pub closed: bool,
     /// A canvas's grid as its line says (0 for none), and whether code snaps to it.
     pub grid: u32,
     pub snap: bool,
@@ -248,7 +250,7 @@ impl WindowCtx {
         for widget in widgets {
             if let Some(name) = &widget.props.name {
                 let custom = widget.props.part.clone().map(|kind| (kind, widget.props.values.clone()));
-                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
+                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, closed: matches!(widget.props.kind, clarity_spec::widgets::WidgetKind::Popover | clarity_spec::widgets::WidgetKind::Slideout), grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
                 self.parts.insert(name.clone(), info);
             }
             self.widgets(&widget.children);
@@ -420,7 +422,12 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             let e = prefix(entity);
             if d.is_list() {
                 let _ = writeln!(fields, "    {} {member};", list_type(entity));
-                let _ = writeln!(load, "    if (!{e}_all(db, &w->{member})) return false;");
+                if project.entity(entity).is_some_and(|r| r.record) {
+                    // A list of records starts empty: code builds it (DESIGN 5.12).
+                    let _ = writeln!(load, "    w->{member} = {e}_list_of(0, NULL);");
+                } else {
+                    let _ = writeln!(load, "    if (!{e}_all(db, &w->{member})) return false;");
+                }
                 let _ = writeln!(to, "    cJSON_AddItemToObject(out, {key}, {e}_list_json(&w->{member}));");
                 let _ = writeln!(from, "    if ((value = clarity_json_given(in, {key})) && !{e}_list_from_json(value, &w->{member})) return false;");
             } else {
@@ -719,9 +726,19 @@ impl<'a> Emitter<'a> {
                     let _ = writeln!(out, "clarity_ui_set_part_value(ui, {}, {}, {json});", string(&part), string(&property));
                     return;
                 }
+                // Code selects a row: the first that is the record given (a
+                // stored one by its id, a record by its fields), or none.
+                if let Some((part, property)) = self.part_property(target)
+                    && property == "selected"
+                {
+                    let select = self.select_row(&part, value, &mut pre);
+                    out.push_str(&pre);
+                    out.push_str(&select);
+                    return;
+                }
                 if let Some((part, property)) = self.part_property(target) {
                     let function = match property.as_str() {
-                        "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "tab" | "step" | "grid" | "snap" | "connecting" | "resizable" | "background" => format!("clarity_ui_set_{property}"),
+                        "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "pinned" | "tab" | "step" | "grid" | "snap" | "connecting" | "resizable" | "background" => format!("clarity_ui_set_{property}"),
                         "dotSize" => "clarity_ui_set_dot_size".to_string(),
                         "dotColor" => "clarity_ui_set_dot_color".to_string(),
                         "tool" | "brush" | "ink" => format!("clarity_ui_set_{property}"),
@@ -1392,16 +1409,33 @@ impl<'a> Emitter<'a> {
         self.project.entity(entity).and_then(|e| e.field(field_name)).map(|f| f.ty.clone())
     }
 
-    /// The column a field is stored in.
-    fn column(&self, entity: &str, field_name: &str) -> String {
-        self.project.entity(entity).map_or_else(|| field_name.to_string(), |e| e.column_of(field_name).to_string())
-    }
-
     /// After a handler replaced the rows of `data` (`reload`, or a new
     /// list): the tables and lists showing them lose their selected row.
     fn deselect(&self, data: &str) -> String {
         let parts = self.window.and_then(|w| w.showing.get(data)).into_iter().flatten();
         parts.map(|part| format!("clarity_ui_deselect(ui, {});\n", string(part))).collect()
+    }
+
+    /// `grid.selected = value`: the place of the record given in the part's
+    /// list (a stored one by its id, a record by its fields), or none.
+    fn select_row(&mut self, part: &str, value: &Expr, pre: &mut String) -> String {
+        let bind = self.window.and_then(|w| w.parts.get(part)).and_then(|i| i.bind.clone());
+        let Some((bind, entity)) = bind.and_then(|b| self.window.and_then(|w| w.data.iter().find(|(n, _, list)| *n == b && *list)).map(|(n, e, _)| (n.clone(), e.clone()))) else {
+            self.errors.push(format!("'{part}' is not bound to a list"));
+            return String::new();
+        };
+        if matches!(value.kind, ExprKind::Empty) {
+            return format!("clarity_ui_select(ui, {}, -1);\n", string(part));
+        }
+        let record = self.project.entity(&entity).is_some_and(|e| e.record);
+        let wanted = bare(self.value(value, pre));
+        let (held, place, index) = (self.temp(), self.temp(), self.temp());
+        let rows = format!("w->{}", ident(&bind));
+        let same = if record { format!("{}_same(&{rows}.items[{index}], {held})", prefix(&entity)) } else { format!("{rows}.items[{index}].id == {held}->id") };
+        format!(
+            "const {entity}* {held} = {wanted};\nint64_t {place} = -1;\nfor (size_t {index} = 0; {index} < {rows}.count; {index}++) {{\n    if ({same}) {{\n        {place} = (int64_t){index};\n        break;\n    }}\n}}\nclarity_ui_select(ui, {}, {place});\n",
+            string(part)
+        )
     }
 
     /// An expression as a place: what can be assigned or read in place. A
@@ -1532,6 +1566,7 @@ impl<'a> Emitter<'a> {
             return v;
         }
         match property.as_str() {
+            "visible" if info.closed => format!("clarity_ui_visible_or(ui, {quoted}, false)"),
             "visible" | "enabled" | "error" | "text" | "checked" | "x" | "y" => format!("clarity_ui_{property}(ui, {quoted})"),
             "fromX" => format!("clarity_ui_from_x(ui, {quoted})"),
             "bent" => format!("clarity_ui_bent(ui, {quoted})"),
@@ -1554,6 +1589,7 @@ impl<'a> Emitter<'a> {
             // A vector canvas's chosen shape, from 1 (0 for none).
             "selected" if info.mode == Some(clarity_spec::model::CanvasMode::Vector) => format!("clarity_ui_selected_shape(ui, {quoted})"),
             "maximized" => format!("clarity_ui_maximized(ui, {quoted})"),
+            "pinned" => format!("clarity_ui_pinned(ui, {quoted})"),
             "tab" => format!("clarity_ui_tab(ui, {quoted})"),
             "step" => format!("clarity_ui_step(ui, {quoted})"),
             "open" => format!("clarity_ui_open_section(ui, {quoted})"),
@@ -1598,6 +1634,16 @@ impl<'a> Emitter<'a> {
     fn value(&mut self, expr: &Expr, pre: &mut String) -> String {
         let ty = self.types.type_of(expr);
         match &expr.kind {
+            // A list of records (DESIGN 5.12): a copy of each, in the scratch arena.
+            ExprKind::ListOf { items } if matches!(ty, TypeInfo::List(_)) => {
+                let TypeInfo::List(entity) = &ty else { unreachable!() };
+                let records: Vec<String> = items.iter().map(|i| format!("*{}", self.value(i, pre))).collect();
+                if records.is_empty() {
+                    format!("{}_list_of(0, NULL)", prefix(entity))
+                } else {
+                    format!("{}_list_of({}, ({entity}[]){{{}}})", prefix(entity), records.len(), records.join(", "))
+                }
+            }
             ExprKind::ListOf { items } => {
                 let TypeInfo::Values(item) = ty else {
                     self.errors.push("only a list of plain values is written out in C yet".into());
@@ -1656,6 +1702,12 @@ impl<'a> Emitter<'a> {
                 let TypeInfo::Values(item) = &ty else { unreachable!() };
                 let (left, right) = (bare(self.value(left, pre)), bare(self.value(right, pre)));
                 format!("{}_join({left}, {right})", values_prefix(item))
+            }
+            // A list of records grows by a list of the same records: `nodes + [node]`.
+            ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::List(_)) => {
+                let TypeInfo::List(entity) = &ty else { unreachable!() };
+                let (left, right) = (bare(self.value(left, pre)), bare(self.value(right, pre)));
+                format!("{}_list_join({left}, {right})", prefix(entity))
             }
             ExprKind::Binary { op, left, right } => self.binary(*op, left, right, &ty, pre),
             // `1 to n`: the whole numbers from one to the other.
@@ -2041,8 +2093,8 @@ impl<'a> Emitter<'a> {
                 self.errors.push(format!("{entity} cannot be ordered by '{}'", key.field.name));
                 continue;
             };
-            let numeric = self.field_type(&path.entity, &path.field).is_some_and(|t| is_stored_number(&t));
-            let column = string(&self.column(&path.entity, &path.field));
+            let numeric = crate::query_field_type(self.project, &path.entity, &path.field).is_some_and(|t| is_stored_number(&t));
+            let column = string(&crate::query_column(self.project, &path.entity, &path.field));
             if path.hops.is_empty() {
                 let function = if numeric { "clarity_order_by_number" } else { "clarity_order_by" };
                 query = format!("{function}({query}, {column}, {})", key.descending);
@@ -2098,11 +2150,11 @@ impl<'a> Emitter<'a> {
                         return String::new();
                     }
                 };
-                let Some(ty) = self.field_type(&path.entity, &path.field) else {
+                let Some(ty) = crate::query_field_type(self.project, &path.entity, &path.field) else {
                     self.errors.push(format!("{} has no field '{}'", path.entity, path.field));
                     return String::new();
                 };
-                let name = string(&self.column(&path.entity, &path.field));
+                let name = string(&crate::query_column(self.project, &path.entity, &path.field));
                 let own = if matches!(value.kind, ExprKind::Empty) {
                     let test = format!("clarity_is_none({name})");
                     if op == BinaryOp::Eq { test } else { format!("clarity_not({test})") }
@@ -2123,7 +2175,7 @@ impl<'a> Emitter<'a> {
                     self.errors.push(format!("'{}' compares no field of {var}", print::expr(expr)));
                     return String::new();
                 };
-                let Some(ty) = self.field_type(&path.entity, &path.field) else {
+                let Some(ty) = crate::query_field_type(self.project, &path.entity, &path.field) else {
                     self.errors.push(format!("{} has no field '{}'", path.entity, path.field));
                     return String::new();
                 };
@@ -2131,14 +2183,14 @@ impl<'a> Emitter<'a> {
                 let values: Vec<String> = options.iter().map(|o| self.sql_value(&ty, o, pre)).collect();
                 let own = format!(
                     "{function}({}, {}, (ClarityValue[]){{{}}})",
-                    string(&self.column(&path.entity, &path.field)),
+                    string(&crate::query_column(self.project, &path.entity, &path.field)),
                     values.len(),
                     values.join(", ")
                 );
                 through(&path.hops, own)
             }
             _ => match path_of(expr) {
-                Some(path) => through(&path.hops, format!("clarity_is_true({})", string(&self.column(&path.entity, &path.field)))),
+                Some(path) => through(&path.hops, format!("clarity_is_true({})", string(&crate::query_column(self.project, &path.entity, &path.field)))),
                 None => {
                     self.errors.push(format!("'{}' is not a condition on {var}", print::expr(expr)));
                     String::new()

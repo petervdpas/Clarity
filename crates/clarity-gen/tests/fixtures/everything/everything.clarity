@@ -181,6 +181,9 @@ page Folders: window
     chart pie name lentChart at 9,9 span 4 rows 6 bind albums by lentTo average copies
     // Sorted by a header click and shown a page at a time, by the runtime (DESIGN 1.7).
     table name albumGrid at 1,15 span 12 rows 4 bind albums columns title, copies sortable order by title page 2
+    button @folders name detailsButton at 1,19 span 2 on click -> folderDetails
+    slideout @folders name folderDetails width 360 min 300 max 700 resizable pinnable span 6 rows 4 on open: folderPicked
+        label @folders name folderLabel at 1,1 span 6
 
 page PickFriend: dialog gives Friend
     on open: loadFriends

@@ -911,6 +911,8 @@ struct Owner<'a> {
     /// Whether it is the app, whose code runs in no window of its own.
     is_app: bool,
     data: &'a [DataDecl],
+    /// The data of the views it shows, which its code reaches by name (crate::views).
+    shown: Vec<&'a DataDecl>,
     parts: HashMap<&'a str, Part<'a>>,
     /// Handlers wired to events, with the span of the part that wires them.
     wired: Vec<Wired<'a>>,
@@ -1017,19 +1019,27 @@ fn collect_frame<'a>(frame: &'a Frame, owner: &mut Owner<'a>) {
     }
 }
 
-fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
+fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
     let mut owners = Vec::new();
     for page in &file.pages {
         let mut owner = Owner {
             name: &page.name.name,
             is_app: false,
             data: &page.data,
+            shown: Vec::new(),
             parts: HashMap::new(),
             wired: Vec::new(),
         };
         owner.wired.extend(page.handlers.iter().map(|h| Wired { handler: &h.handler, args: &h.args, event: h.event.keyword(), own_event: true, tell_of: None, span: page.span }));
         collect_widgets(&page.widgets, &mut owner);
         collect_frame(&page.frame, &mut owner);
+        // The parts and data of the views it shows are the window's too; their handlers are the view's own.
+        for view in crate::views::showing(&page.widgets).filter_map(|(_, name)| crate::views::find(visible.iter().copied(), name)) {
+            let mut theirs = Owner { name: &view.name.name, is_app: false, data: &view.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new() };
+            collect_widgets(&view.widgets, &mut theirs);
+            owner.parts.extend(theirs.parts);
+            owner.shown.extend(view.data.iter());
+        }
         owners.push(owner);
     }
     for app in &file.apps {
@@ -1037,6 +1047,7 @@ fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
             name: &app.name.name,
             is_app: true,
             data: &app.data,
+            shown: Vec::new(),
             parts: HashMap::new(),
             wired: Vec::new(),
         };
@@ -1057,7 +1068,7 @@ fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
     check_parts(env, file, out);
     check_libraries(env, file, out);
     check_placed_parts(env, file, out);
-    let owners = owners(file);
+    let owners = owners(file, &env.visible);
     for owner in &owners {
         check_defaults(env, owner, out);
     }
@@ -1568,9 +1579,14 @@ fn check_engine_body(env: &Env, engine: &EngineDecl, body: &EngineBody, out: &mu
     }
 }
 
-/// Why a record cannot be used outside an engine yet.
-fn record_for_engines(record: &Entity) -> String {
-    format!("record {} is for engines for now: code outside an engine does not have records yet", record.name.name)
+/// Why an engine cannot use a record that refers to stored records.
+fn record_refers(record: &Entity) -> String {
+    format!("record {} refers to stored records, which an engine has no way to; an engine uses records of values only", record.name.name)
+}
+
+/// Whether a record has a field that refers to a stored record.
+fn refers_to_stored(record: &Entity) -> bool {
+    record.record && record.fields.iter().any(|f| matches!(f.ty, crate::model::FieldType::Ref { .. }))
 }
 
 /// Checks the parameters, conditions and statements of a function, action
@@ -1584,13 +1600,13 @@ fn check_body<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent>, 
 fn check_body_in<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent>, engine: Option<&EngineDecl>, kept: HashMap<String, Ty<'a>>, out: &mut Output) {
     let name = decl.name.name.as_str();
     let mut scope = HashMap::new();
-    // A record is for engines for now (DESIGN 5.12).
-    let outside_engine = |ty: &Ty, span: Span, out: &mut Output| {
-        if engine.is_none()
+    // An engine uses records of values only (DESIGN 5.12).
+    let in_engine = |ty: &Ty, span: Span, out: &mut Output| {
+        if engine.is_some()
             && let Ty::Record(record) | Ty::List(record) = ty
-            && record.record
+            && refers_to_stored(record)
         {
-            out.push(Diagnostic::error(record_for_engines(record), span));
+            out.push(Diagnostic::error(record_refers(record), span));
         }
     };
     for param in &decl.params {
@@ -1598,7 +1614,7 @@ fn check_body_in<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent
             out.push(Diagnostic::error(message, param.ty.span));
             Ty::Unknown
         });
-        outside_engine(&ty, param.ty.span, out);
+        in_engine(&ty, param.ty.span, out);
         scope.insert(param.name.name.clone(), ty);
     }
     let returns = decl.returns.as_ref().map(|r| {
@@ -1606,7 +1622,7 @@ fn check_body_in<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent
             out.push(Diagnostic::error(message, r.span));
             Ty::Unknown
         });
-        outside_engine(&ty, r.span, out);
+        in_engine(&ty, r.span, out);
         ty
     });
     let mut checker = BodyChecker {
@@ -1933,7 +1949,7 @@ impl<'a> BodyChecker<'_, 'a> {
     }
 
     fn data(&self, name: &str) -> Option<&'a DataDecl> {
-        self.owner.and_then(|o| o.data.iter().find(|d| d.name.name == name))
+        self.owner.and_then(|o| o.data.iter().find(|d| d.name.name == name).or_else(|| o.shown.iter().copied().find(|d| d.name.name == name)))
     }
 
     /// Whether `handler` draws for the draw handler `draws`: it is that
@@ -2788,10 +2804,10 @@ impl<'a> BodyChecker<'_, 'a> {
 
     /// `save` and `delete`: not in functions; in actions only with
     /// `effects db.write`.
-    /// A record outside an engine: the generators do not write records yet.
+    /// A record made in an engine holds values only.
     fn record_in_engine(&mut self, decl: &Entity, span: Span) {
-        if decl.record && self.engine.is_none() {
-            self.error(record_for_engines(decl), span);
+        if self.engine.is_some() && refers_to_stored(decl) {
+            self.error(record_refers(decl), span);
         }
     }
 
@@ -2911,6 +2927,14 @@ impl<'a> BodyChecker<'_, 'a> {
         };
         if let Err(message) = writable {
             self.error(message, target.span);
+        }
+        // `grid.selected = none` selects no row, a list of records' too.
+        if matches!(value.kind, ExprKind::Empty)
+            && let ExprKind::Member { object, member } = &target.kind
+            && member.name == "selected"
+            && matches!(self.place(object), Some(Place::Part(..)))
+        {
+            return;
         }
         // A file of a store, or another record's file, becomes a record's file.
         if matches!(ty, Ty::RecordFile) && !matches!(value.kind, ExprKind::Empty) {
@@ -3087,6 +3111,8 @@ impl<'a> BodyChecker<'_, 'a> {
             // A sidebar folded to its button, or filling the window.
             "collapsed" if matches!(part, Part::Sidebar(p) if p.collapsible) => value(Ty::Bool),
             "maximized" if matches!(part, Part::Sidebar(p) if p.maximizable) => value(Ty::Bool),
+            // A pinnable slide-out pinned open beside the window's parts.
+            "pinned" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Slideout && p.pinnable) => value(Ty::Bool),
             // A canvas's grid, in its units (0 for none), and whether code snaps to it: as its line says, until code sets them.
             "grid" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas) => value(Ty::Integer),
             "snap" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas) => value(Ty::Bool),
@@ -3102,6 +3128,8 @@ impl<'a> BodyChecker<'_, 'a> {
             // A ribbon folded to its tabs, and its open tab, counted from 1.
             "collapsed" if matches!(part, Part::Ribbon(r) if r.collapsible) => value(Ty::Bool),
             "tab" if matches!(part, Part::Ribbon(_)) => value(Ty::Integer),
+            // The open tab of tabs, counted from 1, as a ribbon's.
+            "tab" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Tabs) => value(Ty::Integer),
             // The step a wizard is on, counted from 1.
             "step" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Steps) => value(Ty::Integer),
             // The open section of an accordion, from 1; 0 when none is open.
@@ -3150,10 +3178,9 @@ impl<'a> BodyChecker<'_, 'a> {
                     Some(Ty::List(entity)) => Ty::Record(entity),
                     _ => Ty::Unknown,
                 };
-                Some(Place::Value {
-                    ty,
-                    writable: Err(format!("'selected' of {} '{name}' can only be read", part.keyword())),
-                })
+                // Code selects a row too: the first that is the record given
+                // (a stored one by its id, a record by its fields), or none.
+                Some(Place::Value { ty, writable: Ok(()) })
             }
             _ => None,
         }
@@ -4024,6 +4051,11 @@ impl<'a> BodyChecker<'_, 'a> {
     /// a date and time or a reference, and of nothing else.
     fn empty(&mut self, expected: Option<Ty<'a>>, span: Span) -> Ty<'a> {
         match expected {
+            // A record (DESIGN 5.12) is a value with fields, never stored, so never none.
+            Some(Ty::Record(record)) if record.record => {
+                self.error(format!("{} is a record, which is never none; compare one of its fields", record.name.name), span);
+                Ty::Unknown
+            }
             Some(ty @ (Ty::Date | Ty::DateTime | Ty::Record(_) | Ty::Image | Ty::RecordFile | Ty::Unknown)) => ty,
             Some(Ty::Text) => {
                 self.error("text is never none; empty text is \"\"", span);

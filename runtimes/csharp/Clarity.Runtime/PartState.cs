@@ -201,6 +201,11 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     public bool IsMaximized { get => maximized; set => SetProperty(ref maximized, value); }
     bool maximized;
 
+    /// <summary>Whether a pinnable slide-out is pinned open beside the window's parts, as the
+    /// person or a handler left it (conformance/slideouts.json).</summary>
+    public bool IsPinned { get => pinned; set => SetProperty(ref pinned, value); }
+    bool pinned;
+
     /// <summary>The open tab of a ribbon, counted from 1 (conformance/ribbons.json).</summary>
     public long Tab { get => tab; set => SetProperty(ref tab, value); }
     long tab = 1;

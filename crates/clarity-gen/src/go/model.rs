@@ -21,7 +21,24 @@ pub fn emit(project: &Project, file: &SpecFile) -> String {
     for entity in &file.entities {
         out.push_str(&record(project, entity));
     }
+    for decl in &file.records {
+        out.push_str(&plain_record(project, decl));
+    }
     out
+}
+
+/// A record (DESIGN 5.12): its fields with their JSON names and `NewX` with
+/// their defaults; never stored, so it has no id and no table.
+fn plain_record(project: &Project, record: &Entity) -> String {
+    let name = &record.name.name;
+    let rows: Vec<Vec<String>> = record.fields.iter().map(|f| vec![field(&f.name.name), field_type(&f.ty), format!("`json:\"{}\"`", f.name.name)]).collect();
+    let defaults: Vec<String> = record.fields.iter().filter_map(|f| initial(project, f).map(|v| format!("{}: {v}", field(&f.name.name)))).collect();
+    let body = if rows.is_empty() { String::new() } else { aligned(&rows, "\t") };
+    format!(
+        "type {name} struct {{\n{body}}}\n\n// New{name} is a new {} with its defaults.\nfunc New{name}() {name} {{\n\treturn {name}{{{}}}\n}}\n\n",
+        record_name(name).replace('_', " "),
+        defaults.join(", ")
+    )
 }
 
 /// Lines of `columns` with each column padded to the widest, as gofmt

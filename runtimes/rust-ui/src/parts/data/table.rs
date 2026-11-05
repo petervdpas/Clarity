@@ -95,7 +95,14 @@ enum Press {
     Pager(PageButton),
     Bar,
     Editor,
+    /// Its Add button (`add`), and a row's trash button (`remove`).
+    Add,
+    Remove(usize),
 }
+
+/// How wide the column of the rows' trash buttons is, and how big the icons of its own buttons.
+const REMOVE_WIDTH: f64 = 36.0;
+const OWN_ICON: f64 = 16.0;
 
 /// A cell being typed into: its row's place, its field, and the text editor over it.
 struct Editing {
@@ -154,6 +161,10 @@ pub struct TablePart {
     /// How wide each header's label is, and the page bar's text, as last measured.
     widths: HashMap<String, f64>,
     pager_text: f64,
+    /// How wide its Add button's caption is, as last measured.
+    add_text: f64,
+    /// Set when the person said yes to removing the chosen row (`remove confirm`): its `on remove` runs on the next wake.
+    remove_said: Rc<Cell<bool>>,
     formats: Formats,
 }
 
@@ -179,6 +190,8 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         look: Measures::default(),
         widths: HashMap::new(),
         pager_text: 60.0,
+        add_text: 32.0,
+        remove_said: Rc::new(Cell::new(false)),
         formats: Formats::default(),
     };
     part.sync();
@@ -471,16 +484,34 @@ impl TablePart {
     // -- What shows ---------------------------------------------------------------
 
     fn tree_rows(&self) -> Vec<clarity_runtime::reorder::Row> {
+        let key = self.key_field();
         let parent = self.parent_field();
         self.rows
             .records
             .iter()
-            .map(|r| clarity_runtime::reorder::Row { id: rows::value_of(r, "id"), parent: if self.is_tree() { rows::value_of(r, &parent) } else { Value::Null } })
+            .map(|r| clarity_runtime::reorder::Row {
+                id: trees::key_of(rows::value_of(r, &key)),
+                parent: if self.is_tree() { trees::key_of(rows::value_of(r, &parent)) } else { Value::Null },
+            })
             .collect()
     }
 
-    /// The field of a record that holds its parent's id, in a tree: as the application's facts say, else `parent`.
+    /// The field that names a row of a tree: its `key` (a tree by key), else the record's id.
+    pub fn key_field(&self) -> String {
+        self.base.spec.text("rowKey").filter(|k| !k.is_empty()).unwrap_or("id").to_string()
+    }
+
+    /// The key that names the row at `place`, as the tree's rows have it.
+    fn key_at(&self, place: usize) -> Option<Value> {
+        self.rows.records.get(place).map(|r| trees::key_of(rows::value_of(r, &self.key_field())))
+    }
+
+    /// The field of a record that holds its parent's key, in a tree: its
+    /// `parent` (a tree by key), else as the application's facts say, else `parent`.
     pub fn parent_field(&self) -> String {
+        if let Some(parent) = self.base.spec.text("parentKey").filter(|p| !p.is_empty()) {
+            return parent.to_string();
+        }
         let facts = |f: &str| self.base.bound().and_then(|b| self.base.host.field(&rows::column_path(b, f))).and_then(|f| f.parent);
         facts("id").or_else(|| facts("parent")).unwrap_or_else(|| "parent".to_string())
     }
@@ -538,16 +569,12 @@ impl TablePart {
 
     /// Whether a row of a tree shows the rows under it.
     pub fn is_open(&self, place: usize) -> bool {
-        self.rows.records.get(place).is_some_and(|r| {
-            let id = rows::value_of(r, "id");
-            self.opened.iter().any(|o| rows::same(o, &id))
-        })
+        self.key_at(place).is_some_and(|id| !id.is_null() && self.opened.iter().any(|o| rows::same(o, &id)))
     }
 
     /// Shows or hides the rows under a row of a tree.
     pub fn toggle(&mut self, place: usize) {
-        let Some(record) = self.rows.records.get(place) else { return };
-        let id = rows::value_of(record, "id");
+        let Some(id) = self.key_at(place).filter(|id| !id.is_null()) else { return };
         match self.opened.iter().position(|o| rows::same(o, &id)) {
             Some(at) => {
                 self.opened.remove(at);
@@ -637,8 +664,79 @@ impl TablePart {
     }
 
     fn inner(&self) -> Rect {
-        let b = self.base.node.bounds;
+        let b = self.framed_box();
         if self.framed() { b.inset(self.look.border) } else { b }
+    }
+
+    /// Whether it has an Add button above its header (`add`) and a trash button on every row (`remove`).
+    pub fn adds(&self) -> bool {
+        self.base.spec.flag("add")
+    }
+
+    pub fn removes(&self) -> bool {
+        self.base.spec.flag("remove")
+    }
+
+    /// Whether removing a row asks first (`remove confirm`).
+    pub fn confirms(&self) -> bool {
+        self.base.spec.flag("confirm")
+    }
+
+    /// The chosen row is removed: its `on remove` runs, after the person said yes where the table asks first.
+    fn remove_chosen(&mut self, cx: &mut Cx) {
+        let Some(place) = self.rows.chosen(&self.base) else { return };
+        if !self.confirms() {
+            self.base.fire("remove");
+            return;
+        }
+        use clarity_runtime::ui::{Ask, AskForm, Slot, Text};
+        let row = self.columns.first().map(|c| self.shown(place, &c.field)).unwrap_or_default();
+        let word = |key: &str, english: &str| Text { text: english.to_string(), values: Default::default(), key: Some(key.to_string()) };
+        let mut question = word("removeRowAsk", "Remove {row}?");
+        question.values.insert("row".to_string(), Slot::text(row));
+        let ask = Ask { question, form: AskForm::Confirm { yes: Some(word("removeRow", "Remove")), no: Some(word("keepRow", "Keep")) }, handler: String::new(), values: Vec::new() };
+        let dialog = crate::dialogs::ask::AskDialog::new(ask, None);
+        let first = dialog.first();
+        let answered = dialog.answered();
+        let (said, me) = (self.remove_said.clone(), self.base.node.id());
+        let mut overlay = Overlay { opener: Some(me), ..Overlay::dialog(Box::new(dialog)) };
+        overlay.closed = Some(Box::new(move || said.set(answered.borrow().is_some())));
+        cx.open(overlay);
+        cx.focus(Some(first));
+    }
+
+    /// The strip above it where its Add button stands; none high without one.
+    fn add_strip(&self) -> Rect {
+        let b = self.base.node.bounds;
+        let height = if self.adds() { (crate::grid::row_height() + 4.0).min(b.height) } else { 0.0 };
+        Rect::new(b.x, b.y, b.width, height)
+    }
+
+    /// What its frame, header and rows fill: all of it below the Add strip.
+    fn framed_box(&self) -> Rect {
+        let b = self.base.node.bounds;
+        let strip = self.add_strip().height;
+        Rect::new(b.x, b.y + strip, b.width, (b.height - strip).max(0.0))
+    }
+
+    /// Its Add button, at the right above its header; none without `add`.
+    pub fn add_button(&self) -> Option<Rect> {
+        if !self.adds() {
+            return None;
+        }
+        let strip = self.add_strip();
+        let width = (self.add_text.ceil() + OWN_ICON + 4.0 * self.look.padding + 6.0).min(strip.width);
+        Some(Rect::new(strip.right() - width, strip.y, width, (strip.height - 4.0).max(0.0)))
+    }
+
+    /// The trash button of the row of the record at `place`, in the last column, while the row is in sight; none without `remove`.
+    pub fn remove_box(&self, place: usize) -> Option<Rect> {
+        if !self.removes() {
+            return None;
+        }
+        let row = self.row_box(place)?;
+        let end = self.lefts(row.x).last().map(|(x, w)| x + w).unwrap_or(row.x);
+        Some(Rect::new(end, row.y, REMOVE_WIDTH, row.height))
     }
 
     fn header(&self) -> Rect {
@@ -667,7 +765,7 @@ impl TablePart {
     fn place_rows(&mut self) {
         let content = self.shown_places().len() as f64 * self.row_height();
         let body = self.body();
-        let total: f64 = self.lefts(0.0).iter().map(|l| l.1).sum();
+        let total: f64 = self.lefts(0.0).iter().map(|l| l.1).sum::<f64>() + if self.removes() { REMOVE_WIDTH } else { 0.0 };
         let width = if total > body.width + 0.5 { total } else { body.width };
         self.rows.scroller.place_wide(body, content, width);
     }
@@ -687,7 +785,8 @@ impl TablePart {
     /// rows show in (at least a little each, so together they may be wider
     /// and scroll sideways).
     fn lefts(&self, left: f64) -> Vec<(f64, f64)> {
-        let room = self.body().width;
+        // The trash buttons' column keeps its own width at the end.
+        let room = self.body().width - if self.removes() { REMOVE_WIDTH } else { 0.0 };
         const LEAST: f64 = 48.0;
         let fixed: f64 = self
             .columns
@@ -1092,7 +1191,8 @@ impl TablePart {
 
     fn apply(&mut self, mv: Move, cx: &mut Cx) {
         let parent = self.is_tree().then(|| self.parent_field());
-        if let Some(now) = self.rows.apply(&self.base, mv, parent.as_deref()) {
+        let key = self.key_field();
+        if let Some(now) = self.rows.apply(&self.base, mv, &key, parent.as_deref()) {
             self.sync();
             self.show_place(now);
         }
@@ -1154,9 +1254,33 @@ impl TablePart {
         }
     }
 
+    /// Its Add button: a button's look, the plus and Clarity's word.
+    fn draw_add(&self, p: &Painter, button: Rect) {
+        let look = p.look;
+        let hover = self.base.node.hovered && self.rows.pointer.is_some_and(|(x, y)| button.contains(x, y)) && !self.locked();
+        let values = look.part("button", if hover { Some("hover") } else { None });
+        let radius = values.radius.map(|r| r as f64).unwrap_or_else(|| look.radius("button"));
+        let _dim = p.dimmed(!self.locked());
+        p.fill(button, values.background.unwrap_or_else(|| look.color("raised")), radius);
+        p.stroke(button, values.border.unwrap_or_else(|| look.color("strong_border")), look.border(), radius);
+        let ink = values.text.unwrap_or_else(|| look.color("text"));
+        let pad = 2.0 * look.padding();
+        let icon = Rect::new(button.x + pad, button.y + (button.height - OWN_ICON) / 2.0, OWN_ICON, OWN_ICON);
+        crate::parts::containers::icon::draw_icon(p, self.base.host.icon_path("plus").as_deref(), icon, ink);
+        let words = Rect::new(icon.right() + 6.0, button.y, (button.right() - icon.right() - 6.0 - pad).max(0.0), button.height);
+        p.text(&add_word(), words, ink, look.size("text"), "text", false, TextAlign::Left);
+    }
+
     fn draw_row(&self, p: &Painter, place: usize, row: Rect, state: Option<&str>, stripe: bool) {
         let look = p.look;
         let text = rows::draw_row_back(p, row, state, stripe).text.unwrap_or_else(|| look.color("text"));
+        // The row's trash button, red under the pointer.
+        if let Some(trash) = self.remove_box(place).map(|b| Rect { height: b.height - look.border(), ..b }) {
+            let over = self.base.node.hovered && self.rows.pointer.is_some_and(|(x, y)| trash.contains(x, y)) && !self.locked();
+            let icon = Rect::new(trash.x + (trash.width - OWN_ICON) / 2.0, trash.y + (trash.height - OWN_ICON) / 2.0, OWN_ICON, OWN_ICON);
+            let _dim = p.dimmed(!self.locked());
+            crate::parts::containers::icon::draw_icon(p, self.base.host.icon_path("trash").as_deref(), icon, look.color(if over { "error" } else { "muted" }));
+        }
         let lefts = self.lefts(row.x);
         for (c, column) in self.columns.iter().enumerate() {
             let cell = Rect::new(lefts[c].0, row.y, lefts[c].1, row.height - look.border());
@@ -1394,6 +1518,12 @@ fn draw_switch(p: &Painter, cell: Rect, on: bool, inert: bool) {
 impl Element for TablePart {
     part_element!();
 
+    fn on_wake(&mut self, _cx: &mut Cx) {
+        if self.remove_said.replace(false) {
+            self.base.fire("remove");
+        }
+    }
+
     fn focusable(&self) -> bool {
         self.base.enabled()
     }
@@ -1426,6 +1556,10 @@ impl Element for TablePart {
     }
 
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
+        // A yes to removing a row runs `on remove` once the screen is laid out, as an event.
+        if self.remove_said.get() {
+            cx.wake(self.base.node.id(), cx.now());
+        }
         self.look = Measures::of(cx.look());
         self.base.node.bounds = area;
         self.sync();
@@ -1437,13 +1571,19 @@ impl Element for TablePart {
         if let Some(paged) = self.paged() {
             self.pager_text = cx.fonts().measure(&paged.text(), "text", cx.look().size("text"), false);
         }
+        if self.adds() {
+            self.add_text = cx.fonts().measure(&add_word(), "text", cx.look().size("text"), false);
+        }
         self.place_rows();
         self.place_editor(cx);
     }
 
     fn draw(&self, p: &Painter) {
         let look = p.look;
-        let b = self.base.node.bounds;
+        if let Some(button) = self.add_button() {
+            self.draw_add(p, button);
+        }
+        let b = self.framed_box();
         let radius = look.radius("panel");
         let plain = look.part("list", None);
         let framed = self.framed();
@@ -1478,6 +1618,22 @@ impl Element for TablePart {
             return;
         }
         let (x, y) = (at.screen_x, at.screen_y);
+        if self.add_button().is_some_and(|b| b.contains(x, y)) {
+            self.take(cx);
+            if !self.locked() {
+                self.press = Some(Press::Add);
+            }
+            return;
+        }
+        if let Some((place, _)) = self.row_at(y).filter(|_| self.rows.scroller.bounds.contains(x, y)) {
+            if self.remove_box(place).is_some_and(|b| b.contains(x, y)) {
+                self.take(cx);
+                if !self.locked() {
+                    self.press = Some(Press::Remove(place));
+                }
+                return;
+            }
+        }
         if self.pager().contains(x, y) {
             self.press = PageButton::ALL.into_iter().find(|b| self.pager_box(*b).is_some_and(|r| r.contains(x, y))).map(Press::Pager);
             return;
@@ -1650,6 +1806,18 @@ impl Element for TablePart {
             Some(Press::Bar) => {
                 self.rows.scroller.release();
             }
+            // Its Add button runs `on add`; a row's trash button picks the row and runs `on remove`.
+            Some(Press::Add) => {
+                if self.add_button().is_some_and(|b| b.contains(at.screen_x, at.screen_y)) {
+                    self.base.fire("add");
+                }
+            }
+            Some(Press::Remove(place)) => {
+                if self.remove_box(place).is_some_and(|b| b.contains(at.screen_x, at.screen_y)) {
+                    self.choose(place, cx);
+                    self.remove_chosen(cx);
+                }
+            }
             Some(Press::Editor) => {
                 if let Some(e) = self.editing.as_mut() {
                     e.editor.released();
@@ -1756,6 +1924,15 @@ impl Element for TablePart {
         }
         if key.key == Key::Enter && at.is_some() {
             self.base.fire("open");
+            return true;
+        }
+        // Delete runs the chosen row's trash button; Insert the Add button.
+        if key.key == Key::Delete && at.is_some() && self.removes() && !self.locked() {
+            self.remove_chosen(cx);
+            return true;
+        }
+        if key.key == Key::Insert && self.adds() && !self.locked() {
+            self.base.fire("add");
             return true;
         }
         let Some(to) = rows::moved_to(key.key, at, shown.len(), page) else { return false };
@@ -2043,4 +2220,13 @@ impl Element for CellChoices {
         }
         moved
     }
+}
+
+/// What a table's Add button says, and what its rows' trash buttons say where the pointer rests, in the person's language.
+pub fn add_word() -> String {
+    locale::translate("addRow", "Add")
+}
+
+pub fn remove_word() -> String {
+    locale::translate("removeRow", "Remove")
 }

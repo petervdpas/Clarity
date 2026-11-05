@@ -1,6 +1,6 @@
 //! Containers and small displays. The containers hold grids of parts: a
 //! panel and a form, a button group, a scroll box, tabs, steps, an
-//! accordion, a splitter and a popover; a separator lines them up. The small
+//! accordion, a splitter, a popover and a slide-out; a separator lines them up. The small
 //! displays show something and take no input: help, badge, progress, busy,
 //! display, icon, image, markdown and text. Each kind is a module in the folder of
 //! this group; KINDS lists the kinds the group draws with the function that
@@ -16,6 +16,7 @@ pub mod markdown;
 pub mod panel;
 pub mod popover;
 pub mod scroll;
+pub mod slideout;
 pub mod scroll_view;
 pub mod separator;
 pub mod small;
@@ -38,6 +39,7 @@ pub const KINDS: &[(&str, MakePart)] = &[
     ("accordion", accordion::make),
     ("splitter", splitter::make),
     ("popover", popover::make),
+    ("slideout", slideout::make),
     ("help", small::make),
     ("badge", small::make),
     ("progress", small::make),

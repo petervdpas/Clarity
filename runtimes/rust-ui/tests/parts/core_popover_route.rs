@@ -1,4 +1,4 @@
-//! A click whose target names a popover of the window (`opens filters`)
+//! A click whose target names a popover or slide-out of the window (`opens filters`)
 //! opens it, as C#'s generated `Show_filters` does; no handler runs.
 
 use super::core_windows_fake;
@@ -27,5 +27,21 @@ fn a_click_that_names_a_popover_opens_it() {
     fake.calls();
     assert!(host.run(Some("filterButton"), &HandlerCall::new("click", "filters", Vec::new())));
     assert_eq!(host.state(Some("filters")).and_then(|s| s.visible), Some(true));
+    assert!(fake.calls().is_empty());
+}
+
+#[test]
+fn a_click_that_names_a_slideout_opens_it() {
+    let fake = Arc::new(Fake::default());
+    let program: Arc<dyn Program> = fake.clone();
+    let markup = r#"<Window name="Main">
+  <Button name="detailsButton" at="1,1" span="3" caption="Details" opens="details" />
+  <Slideout name="details" span="6" rows="4" />
+</Window>"#;
+    let parts = markup::read(markup).unwrap().parts;
+    let host = ProgramHost::new(program, FILES, WindowState::new("Main", Map::new()), &parts);
+    fake.calls();
+    assert!(host.run(Some("detailsButton"), &HandlerCall::new("click", "details", Vec::new())));
+    assert_eq!(host.state(Some("details")).and_then(|s| s.visible), Some(true));
     assert!(fake.calls().is_empty());
 }

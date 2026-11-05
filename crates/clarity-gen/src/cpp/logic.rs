@@ -160,6 +160,8 @@ pub struct PartInfo {
     pub folded: bool,
     /// Whether the design starts a collapsible sidebar folded to its button.
     pub collapsed: bool,
+    /// A popover or slide-out: closed until code or a click opens it, so `visible` reads false until then.
+    pub closed: bool,
     /// A canvas's grid as its line says (0 for none), and whether code snaps to it.
     pub grid: u32,
     pub snap: bool,
@@ -195,7 +197,7 @@ impl WindowCtx {
         for widget in widgets {
             if let Some(name) = &widget.props.name {
                 let custom = widget.props.part.clone().map(|kind| (kind, widget.props.values.clone()));
-                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
+                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, closed: matches!(widget.props.kind, clarity_spec::widgets::WidgetKind::Popover | clarity_spec::widgets::WidgetKind::Slideout), grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
                 self.parts.insert(name.clone(), info);
             }
             self.widgets(&widget.children);
@@ -333,7 +335,10 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
                     let _ = writeln!(fields, "    {ty} {member};");
                 }
             }
-            if let DataKind::List { entity } = &d.of {
+            // A list of records starts empty: code builds it (DESIGN 5.12).
+            if let DataKind::List { entity } = &d.of
+                && !project.entity(&entity.name).is_some_and(|e| e.record)
+            {
                 let _ = writeln!(load, "    w.{member} = db.all<{}>();", entity.name);
             }
             let _ = writeln!(to, "    out[{key}] = w.{member};");
@@ -484,9 +489,33 @@ impl<'a> Emitter<'a> {
                     let _ = writeln!(out, "ui.set_part_value({}, {}, nlohmann::json({code}));", string(&part), string(&property));
                     return;
                 }
+                // Code selects a row: the first that is the record given (a
+                // stored one by its id, a record by its fields), or none.
+                if let Some((part, property)) = self.part_property(target)
+                    && property == "selected"
+                {
+                    let Some(bind) = self.window.and_then(|w| w.parts.get(&part)).and_then(|i| i.bind.clone()) else {
+                        self.errors.push(format!("'{part}' is not bound to a list"));
+                        return;
+                    };
+                    if matches!(value.kind, ExprKind::Empty) {
+                        let _ = writeln!(out, "ui.select({}, -1);", string(&part));
+                        return;
+                    }
+                    let stored = matches!(self.types.type_of(value), TypeInfo::Record(e) if self.project.entity(&e).is_some_and(|d| !d.record));
+                    let rows = ident(&bind);
+                    let same = if stored { format!("{rows}[i].id == wanted.id") } else { format!("nlohmann::json({rows}[i]) == nlohmann::json(wanted)") };
+                    let code = self.value(value);
+                    let _ = writeln!(
+                        out,
+                        "{{\n    const auto wanted = {code};\n    int place = -1;\n    for (size_t i = 0; i < {rows}.size(); ++i) {{\n        if ({same}) {{\n            place = int(i);\n            break;\n        }}\n    }}\n    ui.select({}, place);\n}}",
+                        string(&part)
+                    );
+                    return;
+                }
                 if let Some((part, property)) = self.part_property(target) {
                     let method = match property.as_str() {
-                        "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "tab" | "step" | "grid" | "snap" | "connecting" | "resizable" | "background" => format!("set_{property}"),
+                        "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "pinned" | "tab" | "step" | "grid" | "snap" | "connecting" | "resizable" | "background" => format!("set_{property}"),
                         "dotSize" => "set_dot_size".to_string(),
                         "dotColor" => "set_dot_color".to_string(),
                         "tool" | "brush" | "ink" => format!("set_{property}"),
@@ -905,11 +934,6 @@ impl<'a> Emitter<'a> {
         self.project.entity(entity).and_then(|e| e.field(field_name)).map(|f| f.ty.clone())
     }
 
-    /// The column a field is stored in.
-    fn column(&self, entity: &str, field_name: &str) -> String {
-        self.project.entity(entity).map_or_else(|| field_name.to_string(), |e| e.column_of(field_name).to_string())
-    }
-
     /// After a handler replaced the rows of `data` (`reload`, or a new
     /// list): the tables and lists showing them lose their selected row.
     fn deselect(&self, data: &str) -> String {
@@ -1003,6 +1027,7 @@ impl<'a> Emitter<'a> {
             return format!("ui.part_value({quoted}, {}).value_or(nlohmann::json::parse({})).get<{ty}>()", string(&property), string(&fallback));
         }
         match property.as_str() {
+            "visible" if info.closed => format!("ui.visible_or({quoted}, false)"),
             "visible" | "enabled" | "error" | "text" | "checked" | "x" | "y" => format!("ui.{property}({quoted})"),
             "fromX" => format!("ui.from_x({quoted})"),
             "bent" => format!("ui.bent({quoted})"),
@@ -1026,6 +1051,7 @@ impl<'a> Emitter<'a> {
             "selected" if info.mode == Some(clarity_spec::model::CanvasMode::Vector) => format!("ui.shape_chosen({quoted})"),
             "selected" if info.objects.is_some() => format!("ui.selected({quoted}, {})", ident(info.objects.as_deref().unwrap_or_default())),
             "maximized" => format!("ui.maximized({quoted})"),
+            "pinned" => format!("ui.pinned({quoted})"),
             "tab" => format!("ui.tab({quoted})"),
             "step" => format!("ui.step({quoted})"),
             "open" => format!("ui.open_section({quoted})"),
@@ -1082,8 +1108,8 @@ impl<'a> Emitter<'a> {
             ExprKind::Name { .. } | ExprKind::Member { .. } => self.place(expr),
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", self.value(operand)),
-            // A list of values grows by a list of its items (DESIGN 5.26).
-            ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_)) => format!(
+            // A list of values, or of records, grows by a list of its items (DESIGN 5.26, 5.12).
+            ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_) | TypeInfo::List(_)) => format!(
                 "[&] {{ auto joined = {}; auto&& more = {}; joined.insert(joined.end(), more.begin(), more.end()); return joined; }}()",
                 self.value(left),
                 self.value(right)
@@ -1356,8 +1382,8 @@ impl<'a> Emitter<'a> {
                 self.errors.push(format!("{entity} cannot be ordered by '{}'", key.field.name));
                 continue;
             };
-            let numeric = self.field_type(&path.entity, &path.field).is_some_and(|t| is_stored_number(&t));
-            let column = string(&self.column(&path.entity, &path.field));
+            let numeric = crate::query_field_type(self.project, &path.entity, &path.field).is_some_and(|t| is_stored_number(&t));
+            let column = string(&crate::query_column(self.project, &path.entity, &path.field));
             if path.hops.is_empty() {
                 let method = if numeric { "order_number" } else { "order" };
                 let _ = write!(query, ".{method}({column}, {})", key.descending);
@@ -1421,11 +1447,11 @@ impl<'a> Emitter<'a> {
                         return String::new();
                     }
                 };
-                let Some(ty) = self.field_type(&path.entity, &path.field) else {
+                let Some(ty) = crate::query_field_type(self.project, &path.entity, &path.field) else {
                     self.errors.push(format!("{} has no field '{}'", path.entity, path.field));
                     return String::new();
                 };
-                let name = string(&self.column(&path.entity, &path.field));
+                let name = string(&crate::query_column(self.project, &path.entity, &path.field));
                 let own = if matches!(value.kind, ExprKind::Empty) {
                     let test = format!("clarity::Cond::is_none({name})");
                     if op == BinaryOp::Eq { test } else { format!("!{test}") }
@@ -1446,17 +1472,17 @@ impl<'a> Emitter<'a> {
                     self.errors.push(format!("'{}' compares no field of {var}", print::expr(expr)));
                     return String::new();
                 };
-                let Some(ty) = self.field_type(&path.entity, &path.field) else {
+                let Some(ty) = crate::query_field_type(self.project, &path.entity, &path.field) else {
                     self.errors.push(format!("{} has no field '{}'", path.entity, path.field));
                     return String::new();
                 };
                 let constructor = if is_stored_number(&ty) { "one_of_numbers" } else { "one_of" };
                 let values: Vec<String> = options.iter().map(|o| self.sql_value(&ty, o)).collect();
-                let own = format!("clarity::Cond::{constructor}({}, {{{}}})", string(&self.column(&path.entity, &path.field)), values.join(", "));
+                let own = format!("clarity::Cond::{constructor}({}, {{{}}})", string(&crate::query_column(self.project, &path.entity, &path.field)), values.join(", "));
                 through(&path.hops, own)
             }
             _ => match path_of(expr) {
-                Some(path) => through(&path.hops, format!("clarity::Cond::is_true({})", string(&self.column(&path.entity, &path.field)))),
+                Some(path) => through(&path.hops, format!("clarity::Cond::is_true({})", string(&crate::query_column(self.project, &path.entity, &path.field)))),
                 None => {
                     self.errors.push(format!("'{}' is not a condition on {var}", print::expr(expr)));
                     String::new()

@@ -145,6 +145,8 @@
   });
   /** The file a new window goes into, while the New window dialog is open. */
   let newWindowIn = $state<SpecFile | null>(null);
+  /** Whether the new page asked for is a view (from the tree's Views), else a window. */
+  let newIsView = $state(false);
   let newWindowError = $state<string | null>(null);
   /** The project file, which the Project tab shows and edits. */
   let projectFile = $state<ProjectFile | null>(null);
@@ -985,10 +987,11 @@
     }
   }
 
-  function startNewWindow() {
+  function startNewWindow(view = false) {
     const target = file ?? preview?.project.files[0];
     if (target) {
       newWindowError = null;
+      newIsView = view === true;
       newWindowIn = target;
     }
   }
@@ -1269,7 +1272,8 @@
         onnewlanguage={full ? startNewLanguage : null}
         onnewresource={full ? startNewResource : null}
         onnewdiagram={full ? startNewDiagram : null}
-        onnewwindow={full ? startNewWindow : null}
+        onnewwindow={full ? () => startNewWindow() : null}
+        onnewview={full ? () => startNewWindow(true) : null}
         onnewapp={full && preview.project.files[0] ? () => preview && addApp(preview.project.files[0]) : null}
         apis={projectFile?.settings?.datasources.filter((s) => s.kind === "rest") ?? []}
         onnewapi={full && projectFile?.settings ? startNewApi : null}
@@ -1883,6 +1887,7 @@
     <NewWindowDialog
       {preview}
       file={newWindowIn}
+      view={newIsView}
       error={newWindowError}
       onsubmit={addWindow}
       oncancel={() => (newWindowIn = null)}

@@ -250,6 +250,17 @@ impl FieldType {
     pub fn is_held(&self) -> bool {
         matches!(self, FieldType::List { .. } | FieldType::Record { .. })
     }
+
+    /// The places a decimal shows: its scale, or none for a record's decimal
+    /// written without precision and scale (`decimal(28, 0)` as the parser
+    /// reads it), which shows the places it has.
+    pub fn shown_scale(&self) -> Option<u32> {
+        match self {
+            FieldType::Decimal { precision: 28, scale: 0 } => None,
+            FieldType::Decimal { scale, .. } => Some(*scale),
+            _ => None,
+        }
+    }
 }
 
 /// What a list field of plain values holds.
@@ -571,12 +582,41 @@ pub struct WidgetProps {
     /// `columns title 240, artist`. A column without one shares what is left.
     #[serde(default)]
     pub widths: std::collections::BTreeMap<String, u32>,
-    /// `resizable`: the person drags a table's header edges, and the widths are remembered.
+    /// `resizable`: the person drags a table's header edges, and the widths
+    /// are remembered; or a slide-out's inner edge, between `min` and `max`.
     #[serde(default)]
     pub resizable: bool,
+    /// `side left`, `side top`, `side bottom`: the edge a slide-out comes in from; the right without it.
+    #[serde(default)]
+    pub side: Option<SlideSide>,
+    /// `width 420`: how wide a slide-out at the left or right is, in pixels; `SLIDEOUT_WIDTH` without it.
+    #[serde(default)]
+    pub slide_width: Option<u32>,
+    /// `height 300`: how high a slide-out at the top or bottom is, in pixels; `SLIDEOUT_HEIGHT` without it.
+    #[serde(default)]
+    pub slide_height: Option<u32>,
+    /// `pinnable`: a slide-out has a pin in its header; pinned, it stays
+    /// open beside the window's parts, which make room for it.
+    #[serde(default)]
+    pub pinnable: bool,
+    /// `view ClassEditor`: a slide-out shows that view, its parts, data and
+    /// handlers joining the window's (`crate::views`); it holds none of its own.
+    #[serde(default)]
+    pub view: Option<String>,
     /// `sortable`: a click on a table's header sorts its rows by that column.
     #[serde(default)]
     pub sortable: bool,
+    /// `add`: a table has an Add button above its header, at the right,
+    /// which runs `on add`.
+    #[serde(default)]
+    pub add: bool,
+    /// `remove`: every row of a table has a trash button in a last column,
+    /// which picks the row and runs `on remove`.
+    #[serde(default)]
+    pub remove: bool,
+    /// `remove confirm`: the trash button asks first, in Clarity's dialog, and runs `on remove` on yes.
+    #[serde(default)]
+    pub confirm: bool,
     /// `striped`: a table, list, tree or tree table draws every other row
     /// with a faint stripe.
     #[serde(default)]
@@ -621,6 +661,14 @@ pub struct WidgetProps {
     /// records of their own kind, arranged by its reference (U1c).
     #[serde(default)]
     pub children: Option<String>,
+    /// `key id`: the field that names a tree's row, which the parent key
+    /// of the rows under it holds; with `parent`, instead of `children`.
+    #[serde(default)]
+    pub row_key: Option<String>,
+    /// `parent parentId`: the field of a tree's row that holds the key of
+    /// the row it shows under.
+    #[serde(default)]
+    pub parent_key: Option<String>,
     pub show: Vec<String>,
     /// `cards`: a list's rows as small cards, the first field of `show` the
     /// card's title and the others lines below it.
@@ -899,6 +947,34 @@ pub enum Side {
     Right,
 }
 
+/// The edge of the window's content a slide-out comes in from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum SlideSide {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+impl SlideSide {
+    /// The word its line says: `side top`.
+    pub fn keyword(self) -> &'static str {
+        match self {
+            SlideSide::Left => "left",
+            SlideSide::Right => "right",
+            SlideSide::Top => "top",
+            SlideSide::Bottom => "bottom",
+        }
+    }
+
+    /// Whether it lies across the window, at the top or the bottom: it has a height, not a width.
+    pub fn across(self) -> bool {
+        matches!(self, SlideSide::Top | SlideSide::Bottom)
+    }
+}
+
 /// A sidebar docked to the left or right edge of a window, with its own
 /// grid of parts: `sidebar left name nav width 280 min 200 max 480
 /// resizable collapsible collapsed maximizable grid 4 columns`.
@@ -934,6 +1010,12 @@ pub struct SidebarProps {
     /// Columns of its own grid.
     pub columns: u32,
 }
+
+/// A slide-out's width when its line says none, in pixels; it takes the widths a sidebar takes.
+pub const SLIDEOUT_WIDTH: u32 = 420;
+
+/// A slide-out's height at the top or bottom when its line says none, in pixels; it takes the same sizes.
+pub const SLIDEOUT_HEIGHT: u32 = 300;
 
 /// A sidebar's width and grid when its line says none.
 pub const DEFAULT_SIDEBAR_WIDTH: u32 = 240;
@@ -1182,8 +1264,14 @@ impl Project {
         self.files.iter().flat_map(|f| f.apps.iter())
     }
 
+    /// An entity or a record (DESIGN 5.12) by its name: what has fields.
     pub fn entity(&self, name: &str) -> Option<&Entity> {
-        self.entities().find(|e| e.name.name == name)
+        self.entities().find(|e| e.name.name == name).or_else(|| self.records().find(|r| r.name.name == name))
+    }
+
+    /// The records of every module (DESIGN 5.12): values with fields, never stored.
+    pub fn records(&self) -> impl Iterator<Item = &Entity> {
+        self.files.iter().flat_map(|f| f.records.iter())
     }
 
     pub fn enum_decl(&self, name: &str) -> Option<&EnumDecl> {

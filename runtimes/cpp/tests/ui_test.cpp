@@ -95,6 +95,17 @@ TEST(rows_read_again_have_no_selected_row) {
     CHECK_EQ(json(ui.reply("Orders", json::object()).state.selected), json::parse(R"({"other":0})"));
 }
 
+TEST(code_selects_a_row_and_none) {
+    WindowState state = json::parse(R"({"window":"Outline","data":{},"parts":{},"selected":{"names":1}})").get<WindowState>();
+    Ui ui(state);
+    std::vector<Order> orders{{1, "A"}, {2, "B"}};
+    ui.select("nav", 1);
+    ui.select("names", -1);
+    CHECK_EQ(ui.selected("nav", orders).number, "B");
+    CHECK_THROWS(InvalidError, ui.selected("names", orders));
+    CHECK_EQ(json(ui.reply("Outline", json::object()).state.selected), json::parse(R"({"nav":1})"));
+}
+
 TEST(a_window_opens_with_its_data_and_with) {
     WindowState state = opened("Card", {{"order", Order{0, "new"}}}, {{"order", {{"id", 7}, {"number", "ORD-7"}}}});
     CHECK_EQ(state.data["order"].get<Order>().number, "ORD-7");
@@ -158,6 +169,22 @@ TEST(a_sidebar_is_collapsed_and_maximized_as_every_runtime_says) {
         if (c.contains("collapsed")) ui.set_collapsed("nav", c["collapsed"].get<bool>());
         if (c.contains("maximized")) ui.set_maximized("nav", c["maximized"].get<bool>());
         CHECK_EQ(json(ui.reply("Main", json::object()).state)["parts"]["nav"], c["part"]);
+    }
+}
+
+TEST(a_slideout_is_open_and_pinned_as_every_runtime_says) {
+    auto file = conformance("slideouts.json");
+    auto with = [](const json& part) { return Ui(json{{"window", "Main"}, {"data", json::object()}, {"parts", {{"details", part}}}}.get<WindowState>()); };
+    for (const auto& c : file["slideout"]) {
+        // Closed until it is opened.
+        CHECK_EQ(with(c["part"]).visible_or("details", false), c["visible"].get<bool>());
+        CHECK_EQ(with(c["part"]).pinned("details"), c["pinned"].get<bool>());
+    }
+    for (const auto& c : file["set"]) {
+        Ui ui(WindowState{"Main", json::object(), {}, {}});
+        if (c.contains("visible")) ui.set_visible("details", c["visible"].get<bool>());
+        if (c.contains("pinned")) ui.set_pinned("details", c["pinned"].get<bool>());
+        CHECK_EQ(json(ui.reply("Main", json::object()).state)["parts"]["details"], c["part"]);
     }
 }
 

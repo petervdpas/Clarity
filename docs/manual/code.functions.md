@@ -26,7 +26,7 @@ Use a function when you compute something from what you get, such as a total or 
 
 ## Parameters and results
 
-The signature is `name(param: type, ...)`, optionally followed by `-> type` for the result. Parameter and result types are `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, an entity (one record), an enum and `list<Entity>`.
+The signature is `name(param: type, ...)`, optionally followed by `-> type` for the result. Parameter and result types are `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, an entity (one record), a record (`record Node`, a value with fields that is never stored), an enum, `list<Entity>` and `list<Node>`.
 
 A parameter with a default is optional: `limit: integer = 0`. The default is a value written out, such as `0`, `""`, `true` or an enum's value, and the parameters with one come last. A call leaves them out, or names the ones it gives after the values in order:
 

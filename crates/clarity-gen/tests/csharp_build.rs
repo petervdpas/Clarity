@@ -391,6 +391,25 @@ fn questions_and_their_answers_build_in_csharp() {
     remove(&out);
 }
 
+/// Records in app code and a tree by key (DESIGN 5.12) build without a
+/// warning, every binding checked.
+#[test]
+#[ignore]
+fn an_outline_of_records_builds_in_csharp() {
+    let project = clarity_spec::keyed::load_keyed([("outline.clarity", include_str!("fixtures/outline.clarity"))], &[], "en");
+    let mut settings = clarity_project::starter("Outline", "outline");
+    settings.stack.backend = Backend::Csharp;
+    settings.stack.ui = Ui::Clarity;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = scratch().join(format!("clarity-gen-csharp-outline-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
+    let built = dotnet(&out, &["build", "--nologo", "-v", "quiet", "-warnaserror"], Runtime::Local).output().unwrap();
+    assert!(built.status.success(), "the generated project does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
+    remove(&out);
+}
+
 /// Pictures of the resources folder, SVG among them (conformance/drawing.json):
 /// an image by name, and a canvas drawing one, build without a warning.
 #[test]

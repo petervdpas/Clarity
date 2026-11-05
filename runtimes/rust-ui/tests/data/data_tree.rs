@@ -75,6 +75,37 @@ fn a_tree_shows_its_rows_as_every_stack_does() {
     }
 }
 
+/// A tree by key: rows without ids, named by `key` and arranged under the
+/// row whose key their `up` holds (conformance/trees.json `byKey`).
+#[test]
+fn a_tree_by_key_shows_its_rows_as_every_stack_does() {
+    let by_key = &case_file("trees.json")["byKey"];
+    let keyed = |rows: &Value| Value::Array(rows.as_array().unwrap().iter().map(|r| json!({ "key": r["key"], "up": r["up"], "name": format!("Node {}", r["key"]) })).collect());
+    for c in by_key["cases"].as_array().unwrap() {
+        let rows = keyed(&c["rows"]);
+        let (mut screen, _) = made(rows.clone(), "Tree", r#"show="name" rowKey="key" parentKey="up""#);
+        for key in c["open"].as_array().unwrap() {
+            let place = rows.as_array().unwrap().iter().position(|r| r["key"] == *key).unwrap();
+            if !tree(&screen).is_open(place) {
+                act(&mut screen, |t| t.toggle(place));
+            }
+        }
+        let t = tree(&screen);
+        let shown: Vec<String> = t.shown_places().iter().map(|p| t.tree_place(*p).unwrap()).map(|s| format!("{},{},{}", s.0, s.1, s.2)).collect();
+        let expect: Vec<String> = c["shows"].as_array().unwrap().iter().map(|s| format!("{},{},{}", s[0], s[1], s[2])).collect();
+        assert_eq!(expect, shown, "{}", c["name"]);
+    }
+    for c in by_key["reveal"].as_array().unwrap() {
+        let rows = keyed(&c["rows"]);
+        let (mut screen, host) = made(rows.clone(), "TreeTable", r#"columns="name" rowKey="key" parentKey="up""#);
+        host.choose("folders", Some(c["at"].as_u64().unwrap() as usize));
+        laid(&mut screen, 800, 400);
+        let t = tree(&screen);
+        let opens: Vec<Value> = rows.as_array().unwrap().iter().enumerate().filter(|(i, _)| t.is_open(*i)).map(|(_, r)| r["key"].clone()).collect();
+        assert_eq!(c["opens"].as_array().unwrap(), &opens);
+    }
+}
+
 fn documents() -> Value {
     json!([
         { "id": 1, "name": "Documents", "parent": null },

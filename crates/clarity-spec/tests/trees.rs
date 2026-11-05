@@ -80,3 +80,61 @@ fn sample_records_of_a_tree_form_one_for_the_designer() {
     assert_eq!(rows[4]["parent"], name(1));
     assert_eq!(rows[6]["parent"], name(2), "a third level");
 }
+
+/// A tree by key: rows of any kind, records among them, arranged by a key
+/// field and the field that holds the key of their parent.
+const NODES: &str = "module files
+
+record Node
+    key: text
+    parent: text
+    label: text
+    rank: integer
+    up: integer
+
+page Files: window
+    data nodes: list<Node>
+    tree name nav at 1,1 span 4 rows 10 bind nodes key key parent parent show label on select: picked
+    treetable name grid at 5,1 span 8 rows 10 bind nodes key key parent parent columns label 200, rank
+
+code Files
+    handler picked
+        grid.selected = nav.selected
+";
+
+fn node_errors(page: &str) -> Vec<String> {
+    load_sources([("files.clarity", page)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+}
+
+#[test]
+fn a_tree_by_key_reads_and_writes_back() {
+    let (file, diagnostics) = parse(NODES, "files.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let tree = &file.pages[0].widgets[0].props;
+    assert_eq!((tree.row_key.as_deref(), tree.parent_key.as_deref()), (Some("key"), Some("parent")));
+    assert_eq!(widgets::widget_line(tree), "tree name nav at 1,1 span 4 rows 10 bind nodes key key parent parent show label on select: picked");
+    assert_eq!(widgets::widget_line(&file.pages[0].widgets[1].props), "treetable name grid at 5,1 span 8 rows 10 bind nodes key key parent parent columns label 200, rank");
+    let found = node_errors(NODES);
+    assert!(found.is_empty(), "{found:#?}");
+    // Whole numbers name rows too, and a stored record by its id.
+    let numbers = NODES.replace("key key parent parent show", "key rank parent up show");
+    assert!(node_errors(&numbers).is_empty(), "{:#?}", node_errors(&numbers));
+    let ids = format!("{FILES}").replace("bind folders children children on select", "bind folders key id parent size on select");
+    assert!(errors(&ids).is_empty(), "{:#?}", errors(&ids));
+}
+
+#[test]
+fn the_rules_of_a_tree_by_key() {
+    let says = |page: String, wanted: &str| {
+        let found = node_errors(&page);
+        assert!(found.iter().any(|m| m.contains(wanted)), "{wanted}: {found:#?}");
+    };
+    says(NODES.replace("key key parent parent show", "key key show"), "a tree by key names both fields, as in 'key id parent parentId'");
+    says(NODES.replace("key key parent parent show", "parent parent show"), "a tree by key names both fields");
+    says(NODES.replace("key key parent parent show", "key name parent parent show"), "Node has no field 'name'");
+    says(NODES.replace("key key parent parent show", "key key parent parent children kids show"), "a tree is arranged by 'children' or by 'key' and 'parent', not both");
+    says(NODES.replace("    rank: integer\n", "    rank: decimal\n").replace("key key parent parent show", "key rank parent up show"), "'rank' is decimal; a tree's key and parent are text or integer");
+    says(NODES.replace("key key parent parent show", "key key parent up show"), "'key' is text and 'up' is integer");
+    says(NODES.replace("key key parent parent show", "key id parent parent show"), "Node has no field 'id'");
+    says(NODES.replace("tree name nav at 1,1 span 4 rows 10 bind nodes key key parent parent", "table name nav at 1,1 span 4 rows 10 bind nodes parent parent columns label"), "'parent' does not apply to a table");
+}

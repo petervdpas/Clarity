@@ -600,7 +600,30 @@ code ClassEditor
 
 - Where it shows, the view's parts, data and handlers join the window's: the window's code reaches them by name, so the window sets what the view shows (`className = ...`). The view's own code reaches only its own parts and data, so one view can show in several windows.
 - A window shows a view once; the view's part and data names differ from the window's; a view shows in a window, not in another view, and has no slide-out of its own.
+- Only a view tells; the place that shows it hears only what the view's page says it tells, and the handler takes the tell's values.
 - In the IDE views have their own section in the project tree, with **New view**, and are designed on their own as windows are. The inspector of a slide-out, tab, step or section has **Shows view**. The designer shows the place as written; the Preview shows it with the view in it.
+
+A view tells its window what happened, as an engine beside the screen does: its page says `tells saved` (with values, `tells saved(name: text)`), its code says `tell saved()`, and the window hears it on the slide-out, tab, step or section that shows the view, `on saved: recipeSaved`, with a handler that takes those values. A tell the window does not hear does nothing.
+
+```clarity
+page Cookbook: window
+    data recipes: list<Recipe>
+    slideout @recipeCaption name recipePanel view RecipeEditor on saved: recipeSaved
+
+page RecipeEditor: view
+    tells saved
+    data dish: Recipe
+    button @saveCaption name saveButton at 5,8 span 2 on click: saveClicked
+
+code Cookbook
+    handler recipeSaved
+        recipes = find r in Recipe order by r.name
+
+code RecipeEditor
+    handler saveClicked
+        save dish
+        tell saved()
+```
 
 An accordion, tabs or a wizard can be a composition of views too, each section, tab or step one view:
 
@@ -693,19 +716,19 @@ Properties may be written in any order. The designer writes them in a fixed orde
 
 | Part | Binds to fields of type | Own properties | Events |
 |---|---|---|---|
-| `textbox` | text, email, url | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
-| `memo` | text (several lines) | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
+| `textbox` | text, email, url | `placeholder`, `copy`, `readonly`, `taborder` | `change`, `enter`, `leave` |
+| `memo` | text (several lines) | `placeholder`, `code csharp`, `copy`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `password` | text (hidden while typed; an eye beside it shows it or hides it again, and a button copies it) | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `number` | integer, decimal, money, id | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `checkbox` | bool | `readonly`, `taborder` | `change` |
 | `switch` | bool | `readonly`, `taborder` | `change` |
-| `dropdown` | an enum, `ref Entity`; text with `typed` | `typed`, `search`, `show name, city`, `readonly`, `taborder` | `change` |
+| `dropdown` | an enum, `ref Entity`; text with `typed` | `typed`, `search`, `show name, city`, `placeholder`, `readonly`, `taborder` | `change` |
 | `radio` | an enum, as one button per value | `horizontal` or `vertical`, `readonly`, `taborder` | `change` |
-| `date` | date, datetime | `readonly`, `taborder` | `change` |
-| `color` | color | `readonly`, `taborder` | `change` |
+| `date` | date, datetime | `placeholder`, `readonly`, `taborder` | `change` |
+| `color` | color | `placeholder`, `readonly`, `taborder` | `change` |
 | `file` | file | `readonly`, `taborder` | `change` |
-| `folder` | a folder setting (a path typed, or chosen with the system's folder picker) | `readonly`, `taborder` | `change`, `enter`, `leave` |
-| `tags` | a list of values (`list<text>`, `list<Genre>`) | `readonly`, `taborder` | `change` |
+| `folder` | a folder setting (a path typed, or chosen with the system's folder picker) | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
+| `tags` | a list of values (`list<text>`, `list<Genre>`) | `placeholder`, `readonly`, `taborder` | `change` |
 | `slider` | integer, decimal, money | `min`, `max`, `step`, `readonly`, `taborder` | `change` |
 | `spinbox` | integer, decimal, money (a number with up and down arrows) | `min`, `max`, `step`, `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `button` | nothing | `taborder`, `key`, `default`, `cancel`, `icon "save"`, `split` | `click` |
@@ -968,7 +991,9 @@ form name details at 1,1 span 12 rows 3 bind customer
 
 | Property | On | Meaning |
 |---|---|---|
-| `placeholder @key` | textbox, memo, password, number | Shown while the input is empty. |
+| `code csharp` | memo | Code: the text in the mono font, its comments, texts, numbers, keywords and type names in the theme's colors (`code_keyword`, `code_type`, `code_text`, `code_number`, `code_comment`); read only, it takes the theme's `code` part look, its own background (`code_background`) and a quieter border. The languages: clarity, csharp, rust, go, c, cpp, java, javascript, typescript, python, sql, json, xml, html, css, yaml, markdown, shell. |
+| `copy` | textbox, memo | A button in its corner (a memo's top right) puts its text on the clipboard, read only too; Clarity's word `copyText` names it. |
+| `placeholder @key` | textbox, memo, password, number, spinbox, folder, date, color, tags, dropdown | Shown in a muted color while the input is empty: nothing typed, no day, no color, no tag, nothing chosen. Tags without one say Clarity's word `addTag`. |
 | `readonly` | inputs | Shows the value, which cannot be changed. Handlers can change this. |
 | `no undo` | the parts the person edits: inputs, images, canvases, tables with `edit`, and lists, tables and trees that reorder | Ctrl+Z takes back nothing on this part, not even typing in a text input. Every other one has undo; see [Undo](#undo). |
 | `taborder n` | inputs, buttons | Position in the keyboard order, from 1. Parts without one follow in reading order. |
@@ -1295,13 +1320,13 @@ theme Shop
 |---|---|
 | `title @nightOwlTheme` | The name people see when they choose the theme, by its key. A theme the application offers needs one. |
 | `mode light`, `mode dark`, `mode system` | The theme is always light, always dark, or follows the system. |
-| `color name "#rrggbb"` | A color, written `#rrggbb` or `#rgb`; `dark "#rrggbb"` after it gives its value in dark mode. |
+| `color name "#rrggbb"` | A color, written `#rrggbb` or `#rgb`; `dark "#rrggbb"` after it gives its value in dark mode. Code in a memo takes `code_background` (read only) and the colors of its words, `code_keyword`, `code_type`, `code_text`, `code_number` and `code_comment`. |
 | `font "Families"`, `font heading ...`, `font mono ...` | The fonts of text, headings and code, as a list of families: `"Inter, sans-serif"`. |
 | `size n`, `size small n`, `size heading n` | Text sizes in pixels: the text, small text (help, captions) and headings. |
 | `radius n`, `radius input n`, `radius button n`, `radius panel n` | Corner radii in pixels: of everything, or of one kind. |
 | `padding n`, `border n` | The space inside inputs and buttons, and the width of borders, in pixels. |
 | `shadow none`, `shadow flat`, `shadow raised` | The shadow under menus, popups and messages. |
-| `part kind [state] look` | How a kind of part looks: `button`, `input`, `header` (of a table), `tab`, `menu`, `list` (its frame and rows), `card` (a row of a list with `cards`) or `card_line` (the lines under a card's title); with `hover`, `pressed` or `focus`, in that state, and a list, card or card line with `selected`, as the row chosen, a tab with `selected` as the one open. A card's padding and the gap between cards follow the theme's `padding`. |
+| `part kind [state] look` | How a kind of part looks: `button`, `input`, `header` (of a table), `tab`, `menu`, `list` (its frame and rows), `card` (a row of a list with `cards`), `card_line` (the lines under a card's title) or `code` (a read-only memo of code, so people see it is code to read, not a box to type in); with `hover`, `pressed` or `focus`, in that state, and a list, card or card line with `selected`, as the row chosen, a tab with `selected` as the one open. A card's padding and the gap between cards follow the theme's `padding`. |
 | `style name look` | A named style that parts pick with `style name`. |
 
 A look (of a part or a style) sets `background`, `text` and `border` to a color of the theme by name or written out (a background or border can be `none`), `radius n`, `weight bold` or `weight normal`, and `size n`, the text size in pixels (6 to 200), separated by commas. A style also sets how its text shows: `font` with a font of the theme (`text`, `heading` or `mono`), and `align left`, `align center` or `align right`; aligned text keeps an input's padding from the edge. A calculator's display:
@@ -1466,7 +1491,7 @@ code Main
 | `canvas.circle(x, y, r, color)` | | A filled circle around x, y. |
 | `canvas.ring(x, y, r, color, width)` | width 1 when left out | A circle's outline. |
 | `canvas.text(x, y, text, color, size, align, style)` | color `"text"`, size 10, align `"center"` and no style when left out | Text centered on x, y, or with `"left"` starting at x and with `"right"` ending there; slots are filled in the person's format, like a message. `style` is any of `"bold"`, `"italic"` and `"mono"` (the theme's code font), together as `"bold mono"`. |
-| `canvas.link(name, x1, y1, x2, y2, via, color, width, start, end, label, style)` | width 1, plain ends, no label and solid when left out | A line people bend, from x1, y1 through its bend points to x2, y2. `via` is a `list<integer>` of the points, x, y, x, y, ... (`[]` for straight); `name` is plain text the code knows it by, as `"a{association.id}"`. See `on bend` below. An end that lies in a box (as `on connect` finds boxes) is drawn at the edge of that box, so a line from the middle of one box to the middle of another runs between their edges. `start` and `end` say what its ends show: `"arrow"`, `"triangle"` (hollow, a base type), `"diamond"` and `"filledDiamond"` (a whole), or a data model's `"one"`, `"many"` (a crow's foot), `"zeroOrOne"`, `"zeroOrMany"` and `"oneOrMany"`. `label` is a text halfway along it, in quiet italics, which moves with it. `style` is `"dashed"` or `"dotted"`. The checker knows the words. |
+| `canvas.link(name, x1, y1, x2, y2, via, color, width, start, end, label, style)` | width 1, plain ends, no label and solid when left out | A line people bend, from x1, y1 through its bend points to x2, y2. `via` is a `list<integer>` of the points, x, y, x, y, ... (`[]` for straight); `name` is plain text the code knows it by, as `"a{association.id}"`. See `on bend` below. An end that lies in a box (as `on connect` finds boxes) is drawn at the edge of that box, so a line from the middle of one box to the middle of another runs between their edges; while an object is dragged (`mode objects`), an end that lies in its box moves with it, and its bend points stay. `start` and `end` say what its ends show: `"arrow"`, `"triangle"` (hollow, a base type), `"diamond"` and `"filledDiamond"` (a whole), or a data model's `"one"`, `"many"` (a crow's foot), `"zeroOrOne"`, `"zeroOrMany"` and `"oneOrMany"`. `label` is a text halfway along it, in quiet italics, which moves with it. `style` is `"dashed"` or `"dotted"`. The checker knows the words. |
 | `canvas.image(x, y, width, height, picture)` | | A picture of the resources folder by its name (`"pill.svg"`, or a picture constant), stretched to fill the box whose top left corner is x, y. |
 | `canvas.ellipse(x, y, rx, ry, color)` | | A filled ellipse around x, y, rx across and ry high from its center. |
 | `canvas.path(points, color, width)` | width 1 when left out | An open line through its points, a `list<integer>` x, y, x, y, .... |

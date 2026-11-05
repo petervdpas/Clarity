@@ -30,7 +30,7 @@ use crate::parser::{Cursor, Node, ParseResult, first_word, no_children};
 /// The colors every theme has, which the renderer itself uses. Clarity's
 /// own theme sets them all; another sets those it changes, and can name
 /// colors of its own for its styles and parts.
-pub const ROLES: [&str; 21] = [
+pub const ROLES: [&str; 27] = [
     "background",
     "panel",
     "raised",
@@ -52,6 +52,13 @@ pub const ROLES: [&str; 21] = [
     "warning_soft",
     "success",
     "success_soft",
+    // Code in a memo (`code csharp`): its read-only background, and the colors of its words.
+    "code_background",
+    "code_keyword",
+    "code_type",
+    "code_text",
+    "code_number",
+    "code_comment",
 ];
 
 /// The fonts, text sizes and radii a theme sets, by role.
@@ -62,7 +69,7 @@ pub const RADII: [&str; 3] = ["input", "button", "panel"];
 /// The kinds of part a theme gives a look, and the states they can be in.
 /// A list is its frame and plain rows; a card is a row of a list of cards,
 /// `card_line` the lines under a card's title.
-pub const PART_KINDS: [&str; 8] = ["button", "input", "header", "tab", "menu", "list", "card", "card_line"];
+pub const PART_KINDS: [&str; 9] = ["button", "input", "header", "tab", "menu", "list", "card", "card_line", "code"];
 pub const STATES: [&str; 4] = ["hover", "pressed", "focus", "selected"];
 /// The parts with a `selected` look: the rows to choose, and the tab open.
 pub const SELECTABLE: [&str; 4] = ["list", "card", "card_line", "tab"];
@@ -615,6 +622,12 @@ const CREAM_GREEN: &[(&str, &str)] = &[
     ("warning_soft", "#f8ecd2"),
     ("success", "#3d7a2a"),
     ("success_soft", "#e2ecd9"),
+    ("code_background", "#f4efdd"),
+    ("code_keyword", "#2e6b3a"),
+    ("code_type", "#6b4f1d"),
+    ("code_text", "#a0522d"),
+    ("code_number", "#b45309"),
+    ("code_comment", "#8a8572"),
 ];
 
 /// The text of a new theme called `name`, starting from `start`: every

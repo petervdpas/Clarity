@@ -107,6 +107,12 @@ pub struct TextEditor {
     pub max_length: Option<usize>,
     /// Whether Ctrl+Z takes back its typing: not in a part with `no undo`, whose holder sets it false.
     pub undoes: bool,
+    /// The theme's font it writes in: `text`, or `mono` for code.
+    pub font_role: &'static str,
+    /// The language whose words it colors (`code csharp`); none for plain text.
+    pub language: Option<&'static crate::parts::code_colors::Language>,
+    /// The colored stretches of the text, for the version they were found in.
+    inked: RefCell<Option<(u64, Vec<(usize, usize, crate::parts::code_colors::Ink)>)>>,
     undo: Vec<Typed>,
     redo: Vec<Typed>,
     /// Whether the last step was typing characters, which the next typed character joins.
@@ -160,6 +166,9 @@ impl TextEditor {
             key_first: None,
             max_length: None,
             undoes: true,
+            font_role: "text",
+            language: None,
+            inked: RefCell::new(None),
             undo: Vec::new(),
             redo: Vec::new(),
             typing: false,
@@ -689,7 +698,7 @@ impl TextEditor {
             return false;
         }
         let laid = self.layout(cx.fonts(), cx.look());
-        let most = (laid.lines.len() as f64 * laid.height - self.inner(cx.look()).height).max(0.0);
+        let most = crate::geometry::scroll_room(laid.lines.len() as f64 * laid.height, self.inner(cx.look()).height);
         if most <= 0.0 {
             return false;
         }
@@ -747,17 +756,17 @@ impl TextEditor {
     fn layout(&self, fonts: &Fonts, look: &ThemeLook) -> Laid {
         let width = self.inner(look).width;
         let size = look.size("text");
-        let font_name = look.font("text");
+        let font_name = look.font(self.font_role);
         if let Some(laid) = self.laid.borrow().as_ref() {
             if (laid.width - width).abs() < 0.5 && laid.size == size && laid.font == font_name && laid.version == self.version {
                 return laid.clone();
             }
         }
-        let font = fonts.font("text", size, false);
+        let font = fonts.font(self.font_role, size, false);
         let shown = self.shown_chars();
         let text: String = shown.iter().collect();
         // The text shaped as drawn (Arabic joined, Hebrew right to left): each character's width, in the text's order.
-        let whole = fonts.shape(&text, "text", size, false);
+        let whole = fonts.shape(&text, self.font_role, size, false);
         let mut from = vec![0.0; shown.len() + 1];
         for (i, c) in shown.iter().enumerate() {
             let w = if *c == '\n' || i >= whole.len() { 0.0 } else { whole.right_of(i) - whole.left_of(i) };
@@ -771,7 +780,7 @@ impl TextEditor {
                 if l.start == 0 && l.end == shown.len() {
                     whole.clone()
                 } else {
-                    fonts.shape(&shown[l.start..l.end].iter().collect::<String>(), "text", size, false)
+                    fonts.shape(&shown[l.start..l.end].iter().collect::<String>(), self.font_role, size, false)
                 }
             })
             .collect();
@@ -848,7 +857,7 @@ impl TextEditor {
         let laid = self.layout(fonts, look);
         let inner = self.inner(look);
         if self.multiline {
-            let most = (laid.lines.len() as f64 * laid.height - inner.height).max(0.0);
+            let most = crate::geometry::scroll_room(laid.lines.len() as f64 * laid.height, inner.height);
             if self.follow {
                 let top = line_of(&laid, self.caret) as f64 * laid.height;
                 if top < self.scroll_y {
@@ -878,6 +887,16 @@ impl TextEditor {
 
     // -- Drawing ----------------------------------------------------------------
 
+    /// The colored stretches of its code, found once per version of the text; none for plain text or a password.
+    fn inks(&self) -> Option<std::cell::Ref<'_, Vec<(usize, usize, crate::parts::code_colors::Ink)>>> {
+        let language = self.language.filter(|_| !self.password)?;
+        let fresh = self.inked.borrow().as_ref().is_some_and(|(v, _)| *v == self.version);
+        if !fresh {
+            *self.inked.borrow_mut() = Some((self.version, crate::parts::code_colors::spans(language, &self.chars)));
+        }
+        Some(std::cell::Ref::map(self.inked.borrow(), |i| &i.as_ref().expect("found above").1))
+    }
+
     /// Draws the frame, the text, the selection and the caret.
     pub fn paint(&self, p: &Painter) {
         let look = p.look;
@@ -891,7 +910,9 @@ impl TextEditor {
         } else {
             None
         };
-        let input = look.part("input", state);
+        // Code to read, not to type in, looks as the theme's code part, beside its input look.
+        let reading = self.read_only && self.language.is_some();
+        let input = if reading { look.part("code", state).over(&look.part("input", state)) } else { look.part("input", state) };
         let radius = input.radius.map(|r| r as f64).unwrap_or_else(|| look.radius("input"));
         let background = input.background.unwrap_or_else(|| look.color("input"));
         let border = if self.marked { look.color("error") } else { input.border.unwrap_or_else(|| look.color("strong_border")) };
@@ -909,7 +930,7 @@ impl TextEditor {
         let inner = self.inner(look);
         let size = look.size("text");
         let text_color = fade(if self.framed { input.text.unwrap_or_else(|| look.color("text")) } else { look.color("text") }, faded);
-        let font = p.fonts.font("text", size, false);
+        let font = p.fonts.font(self.font_role, size, false);
         let mut paint = Paint::default();
         paint.set_color(text_color);
         paint.set_anti_alias(true);
@@ -926,7 +947,7 @@ impl TextEditor {
                 let mut muted = Paint::default();
                 muted.set_color(fade(look.color("muted"), faded));
                 muted.set_anti_alias(true);
-                let width = p.fonts.measure(placeholder, "text", size, false);
+                let width = p.fonts.measure(placeholder, self.font_role, size, false);
                 let x = if self.align == TextAlign::Left || self.multiline {
                     inner.x
                 } else if self.align == TextAlign::Right {
@@ -934,7 +955,7 @@ impl TextEditor {
                 } else {
                     inner.x + (inner.width - width) / 2.0
                 };
-                p.fonts.draw(p.canvas, placeholder, x, baseline(0), "text", size, false, &muted);
+                p.fonts.draw(p.canvas, placeholder, x, baseline(0), self.font_role, size, false, &muted);
             }
         }
 
@@ -967,7 +988,35 @@ impl TextEditor {
                 }
             }
             if line.end > line.start {
-                shape.draw(p.canvas, left, baseline(i), &paint, 0.0);
+                match self.inks() {
+                    // Code: each stretch in its color, where the shaped line puts it.
+                    Some(inks) => {
+                        let mut at = line.start;
+                        let draw = |from: usize, to: usize, ink: Option<crate::parts::code_colors::Ink>| {
+                            let piece: String = self.chars[from..to].iter().filter(|c| **c != '\n').collect();
+                            if piece.is_empty() {
+                                return;
+                            }
+                            let mut colored = paint.clone();
+                            if let Some(ink) = ink {
+                                colored.set_color(fade(look.try_color(ink.role()).unwrap_or_else(|| look.color(ink.fallback())), faded));
+                            }
+                            p.fonts.draw(p.canvas, &piece, left + shape.caret_x(from - line.start), baseline(i), self.font_role, size, false, &colored);
+                        };
+                        for &(from, to, ink) in inks.iter().filter(|(f, t, _)| *t > line.start && *f < line.end) {
+                            let (from, to) = (from.max(line.start), to.min(line.end));
+                            if from > at {
+                                draw(at, from, None);
+                            }
+                            draw(from, to, Some(ink));
+                            at = to;
+                        }
+                        if at < line.end {
+                            draw(at, line.end, None);
+                        }
+                    }
+                    None => shape.draw(p.canvas, left, baseline(i), &paint, 0.0),
+                }
             }
         }
 

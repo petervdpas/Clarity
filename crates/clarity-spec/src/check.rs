@@ -773,6 +773,25 @@ impl<'a> Checker<'a> {
                 }
             }
         }
+        if page.kind != PageKind::View
+            && let Some(first) = page.tells.first()
+        {
+            self.error(file, format!("a {} tells nothing; a view tells the window it shows in", page_kind_word(page.kind)), first.span);
+        }
+        // A slide-out hears what its view tells; one without a view has nothing to hear.
+        fn deaf<'w>(widgets: &'w [Widget], out: &mut Vec<&'w Widget>) {
+            for w in widgets {
+                if w.props.kind == WidgetKind::Slideout && w.props.view.is_none() && !w.props.tells.is_empty() {
+                    out.push(w);
+                }
+                deaf(&w.children, out);
+            }
+        }
+        let mut unheard = Vec::new();
+        deaf(&page.widgets, &mut unheard);
+        for w in unheard {
+            self.error(file, format!("a slide-out hears what the view it shows tells; it shows no view, so 'on {}' has nothing to hear", w.props.tells[0].tell), w.span);
+        }
         let mut own = Vec::new();
         names(&page.widgets, &mut own);
         own.extend(page.data.iter().map(|d| d.name.name.as_str()));
@@ -799,6 +818,11 @@ impl<'a> Checker<'a> {
                 continue;
             }
             shown.push(name);
+            for heard in place.tells {
+                if !found.tells.iter().any(|t| t.name.name == heard.tell) {
+                    self.error(file, format!("{name} tells no '{}'; its page says what it tells", heard.tell), span);
+                }
+            }
             // A slide-out stands on the window, so a view that has one shows nowhere.
             if found.widgets.iter().any(|w| w.props.kind == WidgetKind::Slideout) {
                 self.error(file, format!("{name} has a slide-out of its own, so it cannot show in a {what}"), span);

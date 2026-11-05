@@ -4,6 +4,7 @@ import type { Frame } from "./Frame";
 import type { Handler } from "./Handler";
 import type { Ident } from "./Ident";
 import type { PageKind } from "./PageKind";
+import type { PartMessage } from "./PartMessage";
 import type { Span } from "./Span";
 import type { TypeRef } from "./TypeRef";
 import type { Widget } from "./Widget";
@@ -35,4 +36,10 @@ handlers: Array<Handler>,
  * What a dialog gives when it closes with a value (`page X: dialog
  * gives Friend`), for the handler that asked for it (DESIGN 5.14).
  */
-gives: TypeRef | null, span: Span, };
+gives: TypeRef | null, 
+/**
+ * What a view tells the window it shows in (`tells saved(name: text)`,
+ * DESIGN 5.33): its code says `tell saved(name)`, and the window hears
+ * it on the slide-out or section that shows it (`on saved: handler`).
+ */
+tells: Array<PartMessage>, span: Span, };

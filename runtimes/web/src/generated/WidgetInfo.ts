@@ -35,4 +35,8 @@ grows: boolean,
 /**
  * Events a handler in the code behind can be wired to.
  */
-events: Array<Event>, properties: Array<WidgetProperty>, };
+events: Array<Event>, properties: Array<WidgetProperty>, 
+/**
+ * The languages it colors as code (`code csharp`): a memo's; none for other parts.
+ */
+codeLanguages: Array<string>, };

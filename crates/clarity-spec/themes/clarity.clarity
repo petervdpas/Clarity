@@ -36,6 +36,14 @@ theme Clarity
     color success "#1a7f37" dark "#3fb950"
     color success_soft "#e6f4ea" dark "#1f3326"
 
+    // Code in a memo: the background of code to read, and its words.
+    color code_background "#f4f6f9" dark "#171b22"
+    color code_keyword "#1f5fbf" dark "#6fa3f2"
+    color code_type "#1a7f37" dark "#3fb950"
+    color code_text "#9a6700" dark "#e3b341"
+    color code_number "#9a6700" dark "#e3b341"
+    color code_comment "#5d6677" dark "#9aa3b5"
+
     font "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
     font heading "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
     font mono "ui-monospace, JetBrains Mono, Cascadia Code, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, monospace"
@@ -72,3 +80,5 @@ theme Clarity
     part card selected background accent, text on_accent, border accent
     part card_line text accent, weight bold
     part card_line selected text on_accent
+    // A memo of code to read, not to type in: its own background, a quiet border.
+    part code background code_background, text text, border border

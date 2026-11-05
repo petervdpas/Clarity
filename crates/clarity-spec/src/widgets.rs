@@ -403,6 +403,10 @@ pub enum WidgetProperty {
     SlideHeight,
     /// `pinnable`: a slide-out the person pins open beside the window's parts.
     Pinnable,
+    /// `code csharp`: a memo colors its text as code of that language.
+    Code,
+    /// `copy`: a button that puts the text on the clipboard.
+    Copy,
     /// `view ClassEditor`: the view a slide-out shows.
     View,
 }
@@ -444,6 +448,10 @@ pub struct WidgetInfo {
     /// Events a handler in the code behind can be wired to.
     pub events: Vec<Event>,
     pub properties: Vec<WidgetProperty>,
+    /// The languages it colors as code (`code csharp`): a memo's; none for other parts.
+    #[serde(rename = "codeLanguages")]
+    #[ts(rename = "codeLanguages")]
+    pub code_languages: Vec<String>,
 }
 
 struct Entry {
@@ -463,11 +471,22 @@ struct Entry {
 }
 
 const INPUT_EVENTS: &[Event] = &[Event::Change, Event::Enter, Event::Leave];
+/// An input that shows a placeholder while it is empty: typed in, or a day, a color or tags.
 const TYPED: &[WidgetProperty] = &[
     WidgetProperty::Placeholder,
     WidgetProperty::Readonly, WidgetProperty::NoUndo,
     WidgetProperty::TabOrder,
 ];
+/// A text box: typed in, and with `copy` a button that copies its text.
+const TEXT_BOX: &[WidgetProperty] = &[WidgetProperty::Placeholder, WidgetProperty::Copy, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];
+/// A memo: a text box of lines, which can color its text as code.
+const MEMO: &[WidgetProperty] = &[WidgetProperty::Placeholder, WidgetProperty::Code, WidgetProperty::Copy, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];
+
+/// The languages a memo colors as code (`code csharp`), as conformance/code-languages.json lists them for every renderer.
+pub const CODE_LANGUAGES: [&str; 18] = [
+    "clarity", "csharp", "rust", "go", "c", "cpp", "java", "javascript", "typescript", "python", "sql", "json", "xml", "html", "css", "yaml", "markdown", "shell",
+];
+
 const PICKED: &[WidgetProperty] = &[WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];
 
 /// A part that shows text and takes no input.
@@ -569,8 +588,8 @@ const ENTRIES: &[Entry] = &[
         field_types: &["text"],
         ..text_part(WidgetKind::Markdown, "markdown", "Markdown", (6, 4), None, BindTarget::Field, &[WidgetProperty::Source])
     },
-    input(WidgetKind::Textbox, "textbox", "Text box", (4, 1), &["text", "email", "url"], INPUT_EVENTS, TYPED),
-    input(WidgetKind::Memo, "memo", "Memo", (6, 3), &["text"], INPUT_EVENTS, TYPED),
+    input(WidgetKind::Textbox, "textbox", "Text box", (4, 1), &["text", "email", "url"], INPUT_EVENTS, TEXT_BOX),
+    input(WidgetKind::Memo, "memo", "Memo", (6, 3), &["text"], INPUT_EVENTS, MEMO),
     input(WidgetKind::Password, "password", "Password", (4, 1), &["text", "secret"], INPUT_EVENTS, TYPED),
     input(WidgetKind::Number, "number", "Number", (3, 1), &["integer", "decimal", "money", "id", "duration"], INPUT_EVENTS, TYPED),
     Entry {
@@ -594,7 +613,7 @@ const ENTRIES: &[Entry] = &[
         (4, 1),
         &["enum", "ref", "language", "theme", "text"],
         &[Event::Change],
-        &[WidgetProperty::Typed, WidgetProperty::Search, WidgetProperty::Show, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder],
+        &[WidgetProperty::Typed, WidgetProperty::Search, WidgetProperty::Show, WidgetProperty::Placeholder, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder],
     ),
     input(
         WidgetKind::Radio,
@@ -605,14 +624,14 @@ const ENTRIES: &[Entry] = &[
         &[Event::Change],
         &[WidgetProperty::Orientation, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder],
     ),
-    input(WidgetKind::Date, "date", "Date", (3, 1), &["date", "dateTime"], &[Event::Change], PICKED),
+    input(WidgetKind::Date, "date", "Date", (3, 1), &["date", "dateTime"], &[Event::Change], TYPED),
     // A file of a record (U1c): its name, with buttons to choose, open, save a copy of and remove it.
     input(WidgetKind::File, "file", "File", (6, 1), &["file"], &[Event::Change], PICKED),
     input(WidgetKind::Folder, "folder", "Folder", (6, 1), &["folder"], INPUT_EVENTS, TYPED),
     // A list field of values (U1c): its items as chips, a typed item or an enum's value added, one removed.
-    input(WidgetKind::Tags, "tags", "Tags", (6, 1), &["values"], &[Event::Change], PICKED),
+    input(WidgetKind::Tags, "tags", "Tags", (6, 1), &["values"], &[Event::Change], TYPED),
     // A color (U1c): typed as #rrggbb, or picked from the palette every renderer shares.
-    input(WidgetKind::Color, "color", "Color", (3, 1), &["color"], &[Event::Change], PICKED),
+    input(WidgetKind::Color, "color", "Color", (3, 1), &["color"], &[Event::Change], TYPED),
     // A number between its lowest and highest value (U1c): the range is written, or the field's own.
     input(
         WidgetKind::Slider,
@@ -1109,6 +1128,7 @@ pub fn info(kind: WidgetKind) -> WidgetInfo {
         grows: grows(e.kind),
         events: e.events.to_vec(),
         properties: e.properties.to_vec(),
+        code_languages: if e.properties.contains(&WidgetProperty::Code) { CODE_LANGUAGES.iter().map(|l| l.to_string()).collect() } else { Vec::new() },
     }
 }
 
@@ -1352,6 +1372,8 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         slide_width: None,
         slide_height: None,
         pinnable: false,
+        code: None,
+        copy: false,
         view: None,
         sortable: false,
         add: false,
@@ -1697,6 +1719,12 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if props.readonly {
         parts.push("readonly".to_string());
     }
+    if let Some(language) = &props.code {
+        parts.push(format!("code {language}"));
+    }
+    if props.copy {
+        parts.push("copy".to_string());
+    }
     if props.no_undo {
         parts.push("no undo".to_string());
     }
@@ -1921,6 +1949,8 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::SlideWidth, props.slide_width.is_some(), "width"),
         (WidgetProperty::SlideHeight, props.slide_height.is_some(), "height"),
         (WidgetProperty::Pinnable, props.pinnable, "pinnable"),
+        (WidgetProperty::Code, props.code.is_some(), "code"),
+        (WidgetProperty::Copy, props.copy, "copy"),
         (WidgetProperty::View, props.view.is_some(), "view"),
     ];
     for (property, present, what) in checks {

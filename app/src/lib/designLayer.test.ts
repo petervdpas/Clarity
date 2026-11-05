@@ -14,7 +14,7 @@ function widget(start: number, kind: string, children: Widget[] = [], pages: { s
   return {
     props: { kind, name: `${kind}${start}`, col: 1, row: 1, width: 4, height: 1, handlers: [] },
     children,
-    pages: pages.map((p) => ({ title: null, columns: null, children: p.children, span: span(p.start) })),
+    pages: pages.map((p) => ({ title: null, columns: null, view: null, tells: [], children: p.children, span: span(p.start) })),
     menu: null,
     span: span(start),
   } as unknown as Widget;

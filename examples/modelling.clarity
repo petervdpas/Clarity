@@ -8,4 +8,5 @@ project Modelling
     stack rust desktop
     output "out"
     language "en"
+    theme Studio Midnight
     datasource main sqlite "data/modelling.db"

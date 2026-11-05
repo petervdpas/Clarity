@@ -365,3 +365,18 @@ fn every_form_case_that_picks_behaves_as_on_every_renderer() {
     }
     assert!(run >= 7, "only {run} cases ran");
 }
+
+#[test]
+fn empty_it_shows_its_placeholder_until_a_choice_is_picked() {
+    let host = owners();
+    host.values.borrow_mut().insert("task.owner".into(), Value::Null);
+    let markup = r#"<Dropdown at="1,1" span="4" name="owner" bind="task.owner" placeholder="Who does it?" />"#;
+    let mut screen = window(markup, host.clone());
+    assert_eq!("", dropdown(&screen, "owner").shown());
+    assert_eq!(Some("Who does it?".to_string()), dropdown(&screen, "owner").placeholder_shown());
+    let mut shot = Shot::of(&mut screen, 400, 80, 1.0);
+    keep(&mut shot, "inputs-dropdown-placeholder.png");
+    host.set("task.owner", json!(2));
+    screen.resize(800.0, 400.0, 1.0);
+    assert_eq!(None, dropdown(&screen, "owner").placeholder_shown());
+}

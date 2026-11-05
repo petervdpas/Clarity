@@ -410,7 +410,7 @@ impl Element for MarkdownPart {
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
         self.base.node.bounds = area;
         self.lay_out((area.width - BAR_ROOM).max(0.0), cx);
-        self.max_scroll_y = (self.laid.height - area.height).max(0.0);
+        self.max_scroll_y = crate::geometry::scroll_room(self.laid.height, area.height);
         self.scroll_y = self.scroll_y.clamp(0.0, self.max_scroll_y);
     }
 

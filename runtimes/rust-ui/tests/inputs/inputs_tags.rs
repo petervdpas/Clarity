@@ -209,3 +209,12 @@ fn the_place_to_add_is_as_high_as_an_input_box_and_the_chips_sit_in_its_middle()
     let screen = make(host_of("enum", json!(["Jazz"])), MARKUP);
     assert_eq!(ROW_HEIGHT, tags(&screen).adder().unwrap().height);
 }
+
+#[test]
+fn its_box_shows_its_own_placeholder_else_clarity_s_word_for_adding() {
+    let screen = make(host_of("text", json!([])), MARKUP);
+    assert_eq!(Some("Add".to_string()), tags(&screen).editor().and_then(|e| e.placeholder.clone()));
+    let own = r#"<Tags at="1,1" span="8" name="genres" bind="album.genres" placeholder="A genre, then Enter" />"#;
+    let screen = make(host_of("text", json!([])), own);
+    assert_eq!(Some("A genre, then Enter".to_string()), tags(&screen).editor().and_then(|e| e.placeholder.clone()));
+}

@@ -27,10 +27,11 @@ page CustomerBrowse: window
     label @searchLabel name searchLabel at 1,1 span 2 for searchBox
     textbox name searchBox at 3,1 span 10 placeholder @searchPlaceholder on change: filterChanged
     table name grid at 1,2 span 12 rows 9 bind customers columns name, email, kind, credit_limit, active, tags sortable page 20 add remove confirm on add: newClicked on remove: removeClicked on open: openClicked
-    slideout @customerSlideout name customerPanel view CustomerEditor width 760 resizable min 520 max 1200 pinnable span 12 rows 9 on close: filterChanged
+    slideout @customerSlideout name customerPanel view CustomerEditor width 760 resizable min 520 max 1200 pinnable span 12 rows 9 on saved: filterChanged
 
 // A customer: who they are, their money, and notes.
 page CustomerEditor: view
+    tells saved
     data customer: Customer
 
     form name customerForm at 1,1 span 12 rows 8 bind customer
@@ -102,6 +103,7 @@ code CustomerEditor
             message warning @aBusinessCustomerNeedsA
             return
         save customer
+        tell saved()
         message @savedName(name = customer.name)
 
 // Data events run whenever a customer is saved or deleted, from any window

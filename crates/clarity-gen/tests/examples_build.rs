@@ -21,7 +21,7 @@ fn every_example_is_here() {
     assert_eq!(found, EXAMPLES, "an example without a build test here, or a test without its example");
 }
 
-const EXAMPLES: [&str; 15] = ["calculator", "dial", "dice", "invaders", "ledger", "modelling", "noughts", "orbs", "pills", "records", "shop", "stock", "todo", "walker", "waves"];
+const EXAMPLES: [&str; 16] = ["calculator", "dial", "dice", "invaders", "kitchen", "ledger", "modelling", "noughts", "orbs", "pills", "records", "shop", "stock", "todo", "walker", "waves"];
 
 #[test]
 #[ignore = "builds the calculator example (go desktop); run with --ignored, one at a time"]
@@ -48,13 +48,19 @@ fn the_invaders_example_builds_without_warnings() {
 }
 
 #[test]
+#[ignore = "builds the kitchen example (c desktop); run with --ignored, one at a time"]
+fn the_kitchen_example_builds_without_warnings() {
+    builds_without_warnings("kitchen");
+}
+
+#[test]
 #[ignore = "builds the ledger example (csharp cli); run with --ignored, one at a time"]
 fn the_ledger_example_builds_without_warnings() {
     builds_without_warnings("ledger");
 }
 
 #[test]
-#[ignore = "builds the modelling example (csharp desktop); run with --ignored, one at a time"]
+#[ignore = "builds the modelling example (rust desktop); run with --ignored, one at a time"]
 fn the_modelling_example_builds_without_warnings() {
     builds_without_warnings("modelling");
 }

@@ -584,7 +584,7 @@ impl Element for WindowView {
         frame.set_body(self.place_slideouts(body, cx));
         let inside = self.inside();
         let content = self.grid().content_for(inside.width, inside.height);
-        self.max_scroll_y = (content - inside.height).max(0.0);
+        self.max_scroll_y = crate::geometry::scroll_room(content, inside.height);
         self.scroll_y = self.scroll_y.clamp(0.0, self.max_scroll_y);
         let place = if self.max_scroll_y > 0.0 { Rect::new(inside.x, inside.y - self.scroll_y, inside.width, content) } else { inside };
         let body = self.body_mut();

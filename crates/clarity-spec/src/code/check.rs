@@ -916,6 +916,8 @@ struct Owner<'a> {
     parts: HashMap<&'a str, Part<'a>>,
     /// Handlers wired to events, with the span of the part that wires them.
     wired: Vec<Wired<'a>>,
+    /// What a view tells the window it shows in; none for a window, a dialog or the app.
+    tells: Option<&'a [crate::code::PartMessage]>,
 }
 
 /// A handler wired to an event: `on click: digit(7)`.
@@ -936,6 +938,8 @@ struct Wired<'a> {
 enum TellOf<'a> {
     Part(&'a str),
     Engine(&'a str),
+    /// The view a slide-out, tab, step or section shows (DESIGN 5.33).
+    View(&'a str),
 }
 
 fn collect_widgets<'a>(widgets: &'a [Widget], owner: &mut Owner<'a>) {
@@ -950,8 +954,14 @@ fn collect_widgets<'a>(widgets: &'a [Widget], owner: &mut Owner<'a>) {
             owner.wired.push(Wired { handler: &tell.handler, args: &[], event: &tell.tell, own_event: false, tell_of: match (&widget.props.runs, &widget.props.part) {
                 (Some(engine), _) => Some(TellOf::Engine(engine)),
                 (None, Some(part)) => Some(TellOf::Part(part)),
-                (None, None) => None,
+                (None, None) => widget.props.view.as_deref().map(TellOf::View),
             }, span: widget.span });
+        }
+        // A tab, step or section that shows a view hears what the view tells.
+        for page in &widget.pages {
+            for tell in &page.tells {
+                owner.wired.push(Wired { handler: &tell.handler, args: &[], event: &tell.tell, own_event: false, tell_of: page.view.as_deref().map(TellOf::View), span: page.span });
+            }
         }
         // Its context menu: the menu and its items are parts, their clicks run handlers.
         if let Some(menu) = &widget.menu {
@@ -1029,13 +1039,14 @@ fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
             shown: Vec::new(),
             parts: HashMap::new(),
             wired: Vec::new(),
+            tells: (page.kind == crate::model::PageKind::View).then_some(page.tells.as_slice()),
         };
         owner.wired.extend(page.handlers.iter().map(|h| Wired { handler: &h.handler, args: &h.args, event: h.event.keyword(), own_event: true, tell_of: None, span: page.span }));
         collect_widgets(&page.widgets, &mut owner);
         collect_frame(&page.frame, &mut owner);
         // The parts and data of the views it shows are the window's too; their handlers are the view's own.
         for view in crate::views::places(&page.widgets).into_iter().filter_map(|place| crate::views::find(visible.iter().copied(), place.view)) {
-            let mut theirs = Owner { name: &view.name.name, is_app: false, data: &view.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new() };
+            let mut theirs = Owner { name: &view.name.name, is_app: false, data: &view.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new(), tells: None };
             collect_widgets(&view.widgets, &mut theirs);
             owner.parts.extend(theirs.parts);
             owner.shown.extend(view.data.iter());
@@ -1050,6 +1061,7 @@ fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
             shown: Vec::new(),
             parts: HashMap::new(),
             wired: Vec::new(),
+            tells: None,
         };
         owner.wired.extend(app.handlers.iter().map(|h| Wired { handler: &h.handler, args: &h.args, event: h.event.keyword(), own_event: true, tell_of: None, span: app.span }));
         collect_frame(&app.frame, &mut owner);
@@ -1142,6 +1154,7 @@ fn check_values(env: &Env, wired: &Wired, decl: &HandlerDecl, out: &mut Output) 
         let (message, part) = match teller {
             TellOf::Part(part) => (env.part_decl(part).and_then(|p| p.tells.iter().find(|t| t.name.name == wired.event)), format!("part {part}")),
             TellOf::Engine(engine) => (env.engine(engine).and_then(|e| e.tells.iter().find(|t| t.name.name == wired.event)), format!("engine {engine}")),
+            TellOf::View(view) => (crate::views::find(env.visible.iter().copied(), view).and_then(|v| v.tells.iter().find(|t| t.name.name == wired.event)), format!("view {view}")),
         };
         let Some(message) = message else { return };
         let fits = message.params.len() == decl.params.len()
@@ -2020,8 +2033,17 @@ impl<'a> BodyChecker<'_, 'a> {
                 }
                 found
             }
+            // A view tells the window it shows in (DESIGN 5.33).
+            _ if self.owner.and_then(|o| o.tells).is_some() => {
+                let owner = self.owner.expect("a view's code");
+                let found = owner.tells.unwrap_or_default().iter().find(|t| t.name.name == tell.name);
+                if found.is_none() {
+                    self.error(format!("view {} tells no '{}'; say it on the view's page: tells {}", owner.name, tell.name, tell.name), tell.span);
+                }
+                found
+            }
             _ => {
-                self.error("'tell' is for an engine beside the screen, which tells the window it shows in", tell.span);
+                self.error("'tell' is for an engine beside the screen or a view, which tell the window they show in", tell.span);
                 None
             }
         };

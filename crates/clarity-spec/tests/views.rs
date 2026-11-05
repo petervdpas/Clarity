@@ -77,8 +77,9 @@ fn placed_the_views_parts_data_and_handlers_are_the_windows() {
     assert!(window.data.iter().any(|d| d.name.name == "className"));
     let code = file.code.iter().find(|c| c.name.name == "Workspace").unwrap();
     assert!(code.handlers.iter().any(|h| h.name.name == "saveClicked"));
-    // The view stays as it is, so the designer still shows it on its own.
-    assert_eq!(file.pages[1].widgets.len(), 3);
+    // The view is the window's now, its page and its code: no program has it on its own.
+    assert_eq!(file.pages.len(), 1);
+    assert!(!file.code.iter().any(|c| c.name.name == "ClassEditor"));
 }
 
 const SECTIONS: &str = "module model
@@ -162,4 +163,83 @@ fn a_section_line_writes_its_view_back() {
     assert!(edited.contains("        section \"Notes\" view Diagram\n"), "{edited}");
     let cleared = apply(text, &Edit::SetPageView { target: class, view: None }).unwrap().text;
     assert!(cleared.contains("        section \"Class\"\n"), "{cleared}");
+}
+
+const TELLING: &str = "module model
+
+page Workspace: window
+    data count: integer
+    slideout \"Class\" name classPanel view ClassEditor span 6 rows 6 on saved: classSaved
+    accordion name parts at 1,1 span 12 rows 8
+        section \"Notes\" view Notes on noted: notesNoted
+        section \"Other\"
+
+page ClassEditor: view
+    tells saved(name: text)
+    data className: text
+    button \"Save\" name saveButton at 1,1 span 2 on click: saveClicked
+
+page Notes: view
+    tells noted
+    button \"Note\" name noteButton at 1,1 span 2 on click: noteClicked
+
+code Workspace
+    handler classSaved(name: text)
+        count = count + 1
+
+    handler notesNoted
+        count = 0
+
+code ClassEditor
+    handler saveClicked
+        tell saved(className)
+
+code Notes
+    handler noteClicked
+        tell noted()
+";
+
+#[test]
+fn a_view_tells_its_window_which_hears_it_on_the_place_that_shows_it() {
+    assert!(errors(TELLING).is_empty(), "{:#?}", errors(TELLING));
+    let file = &project(TELLING).files[0];
+    assert_eq!(file.pages[1].tells[0].name.name, "saved");
+    let panel = &file.pages[0].widgets[0];
+    assert!(clarity_spec::widgets::widget_line(&panel.props).contains(" on saved: classSaved"), "{}", clarity_spec::widgets::widget_line(&panel.props));
+    assert_eq!(file.pages[0].widgets[1].pages[0].tells[0].handler, "notesNoted");
+}
+
+#[test]
+fn the_rules_of_telling() {
+    has(&TELLING.replace("tell saved(className)", "tell gone(className)"), "view ClassEditor tells no 'gone'");
+    has(&TELLING.replace("on saved: classSaved", "on lost: classSaved"), "ClassEditor tells no 'lost'");
+    has(&TELLING.replace("on noted: notesNoted", "on lost: notesNoted"), "Notes tells no 'lost'");
+    has(&TELLING.replace("handler classSaved(name: text)", "handler classSaved"), "tell saved of view ClassEditor gives (name: text); handler classSaved takes ()");
+    has(&TELLING.replace("    data count: integer\n", "    data count: integer\n    tells changed\n"), "a window tells nothing; a view tells the window it shows in");
+}
+
+#[test]
+fn placed_a_tell_runs_the_windows_handler_and_an_unheard_one_does_nothing() {
+    use clarity_spec::code::{ExprKind, StmtKind};
+    let calls = |text: &str, handler: &str| -> Vec<String> {
+        let placed = clarity_spec::views::placed(&project(text));
+        let code = placed.files[0].code.iter().find(|c| c.name.name == "Workspace").unwrap().clone();
+        let h = code.handlers.iter().find(|h| h.name.name == handler).unwrap();
+        h.body
+            .iter()
+            .map(|s| match &s.kind {
+                StmtKind::Call { call } => match &call.kind {
+                    ExprKind::Call { function, .. } => format!("call {}", function.name),
+                    _ => "call".into(),
+                },
+                StmtKind::Tell { tell, .. } => format!("tell {}", tell.name),
+                _ => "other".into(),
+            })
+            .collect()
+    };
+    assert_eq!(calls(TELLING, "saveClicked"), ["call classSaved"]);
+    assert_eq!(calls(TELLING, "noteClicked"), ["call notesNoted"]);
+    let unheard = TELLING.replace(" on saved: classSaved", "");
+    assert!(errors(&unheard).is_empty(), "{:#?}", errors(&unheard));
+    assert!(calls(&unheard, "saveClicked").is_empty());
 }

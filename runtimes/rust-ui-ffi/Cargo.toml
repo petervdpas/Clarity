@@ -1,7 +1,7 @@
 [package]
 name = "clarity-ui-ffi"
 description = "The C interface of Clarity.UI: the one library C#, Go, C and C++ draw their windows with"
-version = "0.7.2"
+version = "0.7.3"
 edition.workspace = true
 license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"

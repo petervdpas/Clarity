@@ -7,6 +7,7 @@
 mod core_windows_fake;
 
 mod check_box;
+mod code_colors;
 mod core_custom_line;
 mod core_help;
 mod core_parts;

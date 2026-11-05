@@ -38,10 +38,12 @@ page OrderBrowse: window
     label @numberFilterLabel name numberFilterLabel at 1,1 span 2 for numberFilter
     textbox name numberFilter at 3,1 span 4 placeholder @numberFilterPlaceholder on change: filterChanged
     table name ordersTable at 1,2 span 12 rows 9 bind orders columns number, customer, ordered_on, status, total sortable order by ordered_on desc page 20 add remove confirm on add: newOrderClicked on remove: removeOrderClicked on open: openOrderClicked
-    slideout @orderSlideout name orderSlide view OrderEditor width 820 resizable min 600 max 1200 pinnable span 12 rows 11 on close: filterChanged
+    slideout @orderSlideout name orderSlide view OrderEditor width 820 resizable min 600 max 1200 pinnable span 12 rows 11 on saved: filterChanged
 
 // An order: its customer and state, its lines, and its total.
+// It tells the window when the order changed, so its list shows it at once.
 page OrderEditor: view
+    tells saved
     data order: Order
     data lines: list<OrderLine>
 
@@ -127,18 +129,22 @@ code OrderEditor
         line.product = "New product"
         save line
         lines = find l in OrderLine where l.order == order
+        tell saved()
 
     handler removeLineClicked
         delete linesGrid.selected
         lines = find l in OrderLine where l.order == order
         order.total = Pricing.total(lines)
+        tell saved()
 
     handler lineChanged
         save linesGrid.selected
         order.total = Pricing.total(lines)
+        tell saved()
 
     handler saveOrderClicked
         save order
+        tell saved()
         message @savedName(name = order.number)
 
     handler approveClicked
@@ -146,6 +152,7 @@ code OrderEditor
             message warning credit_note(order)
             return
         approve(order)
+        tell saved()
         message @orderNumberIsApproved(number = order.number)
 
 code Order

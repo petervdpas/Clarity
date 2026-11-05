@@ -1,0 +1,39 @@
+module themes
+
+// The two looks the modelling app offers; the toolbar's Theme button
+// switches them. Each colors code its own way, as the class editor's C#
+// tab shows.
+theme Studio
+    title @studioTheme
+    mode light
+    color accent "#0f766e"
+    color accent_soft "#ccfbf1"
+    color focus "#0f766e"
+    color selection "#c7f0e8"
+    color code_background "#faf7f0"
+    color code_keyword "#7c3aed"
+    color code_type "#0f766e"
+    color code_text "#b45309"
+    color code_number "#c2410c"
+    color code_comment "#8b8478"
+    part code background code_background, text "#2b2a26", border "#e4dccb"
+
+theme Midnight
+    title @midnightTheme
+    mode dark
+    color background "#0f1424"
+    color panel "#151b2e"
+    color raised "#1b2238"
+    color input "#151b2e"
+    color frame "#151b2e"
+    color accent "#82aaff"
+    color accent_soft "#1f2b4d"
+    color focus "#82aaff"
+    color selection "#2a3a66"
+    color code_background "#0b1020"
+    color code_keyword "#c792ea"
+    color code_type "#ffcb6b"
+    color code_text "#c3e88d"
+    color code_number "#f78c6c"
+    color code_comment "#697098"
+    part code background code_background, text "#d6deeb", border "#232b45"

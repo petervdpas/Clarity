@@ -111,7 +111,15 @@ pub struct PreviewProgram {
 impl PreviewProgram {
     /// The program of `project`, starting with the window `main`.
     pub fn new(project: Project, main: &str) -> PreviewProgram {
-        let project = clarity_spec::views::placed(&project);
+        let mut placed = clarity_spec::views::placed(&project);
+        // A view the designer shows on its own is its window here, with its own code.
+        for (file, own) in project.files.iter().zip(placed.files.iter_mut()) {
+            if let Some(view) = file.pages.iter().find(|p| p.name.name == main && p.kind == clarity_spec::model::PageKind::View) {
+                own.pages.push(view.clone());
+                own.code.extend(file.code.iter().find(|c| c.name.name == main).cloned());
+            }
+        }
+        let project = placed;
         let samples = clarity_spec::sample::sample_data(&project);
         let displays = clarity_spec::sample::display_values(&project);
         PreviewProgram { project, samples, displays, main: main.to_string(), open: Vec::new() }

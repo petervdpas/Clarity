@@ -297,3 +297,29 @@ fn escape_drops_the_text_being_typed() {
     assert_eq!(None, the_canvas(&screen).typing());
     assert!(host.actions.borrow().is_empty());
 }
+
+/// While a box is dragged, a link that ends in it follows it there: the
+/// end in the box moves with it, its bend points and its other end stay,
+/// and a link drawn after the box is not carried whole.
+#[test]
+fn a_link_that_ends_in_a_dragged_box_follows_it_while_it_moves() {
+    use clarity_ui::parts::data::canvas::with_object_moved;
+    let link = |x1: f64, y1: f64, x2: f64, y2: f64| Shape::Link { name: "a".into(), x1, y1, x2, y2, via: vec![300.0, 50.0], color: "muted".into(), width: 2.0, start: String::new(), end: String::new(), label: String::new(), style: String::new() };
+    let shapes = vec![
+        link(50.0, 50.0, 500.0, 50.0),
+        Shape::Object { record: serde_json::json!({"id": 1}), x: 0.0, y: 0.0, width: 100.0, height: 100.0 },
+        Shape::Rect { x: 0.0, y: 0.0, width: 100.0, height: 100.0, color: "raised".into() },
+        link(500.0, 500.0, 60.0, 60.0),
+        Shape::Object { record: serde_json::json!({"id": 2}), x: 450.0, y: 0.0, width: 100.0, height: 100.0 },
+    ];
+    let moved = with_object_moved(shapes, 1, 20.0, 30.0);
+    match &moved[0] {
+        Shape::Link { x1, y1, x2, y2, via, .. } => assert_eq!((*x1, *y1, *x2, *y2, via.clone()), (70.0, 80.0, 500.0, 50.0, vec![300.0, 50.0])),
+        other => panic!("{other:?}"),
+    }
+    match &moved[3] {
+        Shape::Link { x1, y1, x2, y2, .. } => assert_eq!((*x1, *y1, *x2, *y2), (500.0, 500.0, 80.0, 90.0)),
+        other => panic!("{other:?}"),
+    }
+    assert!(matches!(&moved[2], Shape::Rect { x, y, .. } if (*x, *y) == (20.0, 30.0)));
+}

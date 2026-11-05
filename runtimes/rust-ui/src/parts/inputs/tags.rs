@@ -188,7 +188,9 @@ impl Core {
             self.bad = false;
         } else if self.editor.is_none() {
             let mut editor = TextEditor::new(false);
-            editor.placeholder = Some(locale::translate("addTag", "Add"));
+            // Its own placeholder, else Clarity's word for adding one.
+            let own = self.spec.text("placeholder").map(|p| self.host.text(Some(p))).filter(|p| !p.is_empty());
+            editor.placeholder = Some(own.unwrap_or_else(|| locale::translate("addTag", "Add")));
             self.editor = Some(editor);
         }
         let days = self.editor.is_some() && kind == ItemKind::Date;

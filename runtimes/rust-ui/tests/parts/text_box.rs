@@ -407,3 +407,51 @@ fn a_text_box_in_a_disabled_panel_draws_disabled() {
     Shot::of(&mut screen, 800, 400, 1.0);
     assert!(!text_box(&screen, "note").editor().enabled);
 }
+
+#[test]
+fn a_memo_or_text_box_with_copy_has_a_copy_button_in_its_corner_that_copies_it_read_only_too() {
+    let host = TestHost::new();
+    host.set("code", json!("public class Recipe { }\nline two"));
+    let mut screen = window(r#"<Memo at="1,1" span="6" rows="4" name="code" bind="code" readonly="true" copy="true" />"#, host.clone());
+    let memo = text_box(&screen, "code");
+    assert!(memo.eye().is_none());
+    assert_eq!(locale::translate("copyText", "Copy"), memo.copy().unwrap().name);
+    let (copy, whole) = (memo.copy().unwrap().bounds, memo.node().bounds);
+    // In the top right corner, one line high, the text kept clear of it.
+    assert!((copy.right() - whole.right()).abs() < 4.0 && (copy.y - whole.y).abs() < 4.0, "{copy:?} in {whole:?}");
+    assert!(copy.height < whole.height / 2.0);
+    assert!(memo.editor().right_inset >= copy.width);
+    click(&mut screen, copy.x + 5.0, copy.y + 5.0);
+    assert_eq!(Some("public class Recipe { }\nline two".to_string()), screen.clipboard_text());
+    let screen = window(r#"<Textbox at="1,1" span="4" name="code" bind="code" copy="true" />"#, host);
+    assert!(text_box(&screen, "code").copy().is_some());
+}
+
+#[test]
+fn a_memo_of_code_writes_in_the_mono_font_and_colors_its_words_by_the_language() {
+    let host = TestHost::new();
+    host.set("code", json!("// A recipe\npublic class Recipe { int Serves = 4; string Name = \"Soup\"; }"));
+    let mut screen = window(r#"<Memo at="1,1" span="8" rows="4" name="code" bind="code" code="csharp" />"#, host);
+    let memo = text_box(&screen, "code");
+    assert_eq!("mono", memo.editor().font_role);
+    assert_eq!(Some("csharp"), memo.editor().language.map(|l| l.name));
+    let mut shot = Shot::of(&mut screen, 800, 200, 1.0);
+    keep(&mut shot, "parts-memo-code.png");
+}
+
+#[test]
+fn a_read_only_memo_of_code_looks_as_the_theme_s_code_part_not_as_an_input() {
+    let host = TestHost::new();
+    host.set("code", json!("public class Recipe { }"));
+    let look = ThemeLook::clarity(false);
+    let code = look.part("code", None).background.expect("Clarity's own theme gives code a background");
+    assert_ne!(code, look.color("input"));
+    let mut screen = window(r#"<Memo at="1,1" span="6" rows="4" name="code" bind="code" readonly="true" code="csharp" />"#, host.clone());
+    let b = text_box(&screen, "code").node().bounds;
+    let mut shot = Shot::of(&mut screen, 800, 300, 1.0);
+    assert_eq!(code, shot.pixel((b.x + b.width - 20.0) as i32, (b.y + b.height - 10.0) as i32));
+    // One that can be typed in looks as an input.
+    let mut screen = window(r#"<Memo at="1,1" span="6" rows="4" name="code" bind="code" code="csharp" />"#, host);
+    let mut shot = Shot::of(&mut screen, 800, 300, 1.0);
+    assert_eq!(look.color("input"), shot.pixel((b.x + b.width - 20.0) as i32, (b.y + b.height - 10.0) as i32));
+}

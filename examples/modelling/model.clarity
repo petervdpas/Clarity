@@ -24,3 +24,5 @@ entity Property
     name: text(60), required, label @propertyNameLabel
     type: text(60), required, default "string", label @propertyTypeLabel
     optional: bool, default false, label @propertyOptionalLabel
+    // The bend points of its line on the diagrams, when it names a class: x, y, x, y, ...
+    via: list<integer>, label @propertyViaLabel

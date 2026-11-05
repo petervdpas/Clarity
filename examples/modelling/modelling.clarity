@@ -2,9 +2,17 @@ module modelling
 
 use model
 
+// What each person sets for themselves, kept on their machine.
+settings
+    language
+    theme
+
 app Modelling
     title @modellingTitle
     main Workspace
+    toolbar name mainToolbar
+        button @languageCaption name languageButton icon "languages" on click -> language
+        button @themeCaption name themeButton icon "palette" on click -> theme
 
 // A row of the tree at the left: a domain, or a class under its domain.
 record Node
@@ -38,29 +46,38 @@ page Workspace: window
     memo name domainSummaryBox at 3,4 span 5 rows 3 bind domain.summary
     button @saveDomainCaption name saveDomainButton at 6,7 span 2 on click: saveDomainClicked
 
-    slideout @classSlideout name classPanel view ClassEditor width 560 resizable min 420 max 1000 pinnable span 6 rows 13 on close: classPanelClosed
+    slideout @classSlideout name classPanel view ClassEditor width 620 resizable min 420 max 1000 pinnable span 6 rows 13 on close: classPanelClosed on saved: classSaved
     slideout @diagramSlideout name diagramPanel side bottom view DiagramCanvas height 400 resizable min 220 max 900 pinnable span 12 rows 9
 
     sidebar left name explorer width 300 grid 6 columns
         button @newDomainCaption name newDomainButton at 1,1 span 3 icon "plus" on click: newDomainClicked
         button @newClassCaption name newClassButton at 4,1 span 3 icon "plus" on click: newClassClicked
-        tree name modelTree at 1,2 span 6 rows 15 bind nodes key key parent parent show label on select: nodePicked
-        button @deleteCaption name deleteButton at 4,17 span 3 icon "trash" on click: deleteClicked
+        tree name modelTree at 1,2 span 6 rows 14 bind nodes key key parent parent show label on select: nodePicked
+        button @deleteCaption name deleteButton at 4,16 span 3 icon "trash" on click: deleteClicked
     footer
         status @workspaceStatus
 
-// A class: its name, what it is, and its properties in order.
+// A class: its name, what it is and its properties in order, and the C#
+// class the adapter's code has for it, to read and copy. It tells the
+// window when it saved.
 page ClassEditor: view
+    tells saved
     data editedClass: ModelClass
     data properties: list<Property>
+    data classNames: list<text>
+    data csharpText: text
 
-    label @classNameCaption name classNameLabel at 1,1 span 2 for classNameBox
-    textbox name classNameBox at 3,1 span 4 bind editedClass.name
-    label @classSummaryCaption name classSummaryLabel at 1,2 span 2 for classSummaryBox
-    memo name classSummaryBox at 3,2 span 4 rows 2 bind editedClass.summary
-    heading @propertiesHeading name propertiesHeading at 1,4 span 6
-    table name propertyTable at 1,5 span 6 rows 7 bind properties columns name 180, type 160, optional edit name, type, optional reorder by position add remove confirm on add: addPropertyClicked on remove: removePropertyClicked on change: propertyChanged on reorder: propertiesMoved
-    button @saveClassCaption name saveClassButton at 5,13 span 2 default on click: saveClassClicked
+    tabs name classTabs at 1,1 span 6 rows 13
+        tab @classTab
+            label @classNameCaption name classNameLabel at 1,1 span 2 for classNameBox
+            textbox name classNameBox at 3,1 span 4 bind editedClass.name
+            label @classSummaryCaption name classSummaryLabel at 1,2 span 2 for classSummaryBox
+            memo name classSummaryBox at 3,2 span 4 rows 2 bind editedClass.summary
+            heading @propertiesHeading name propertiesHeading at 1,4 span 6
+            table name propertyTable at 1,5 span 6 rows 6 bind properties columns name 180, type 160, optional edit name, type, optional reorder by position add remove confirm on add: addPropertyClicked on remove: removePropertyClicked on change: propertyChanged on reorder: propertiesMoved
+            button @saveClassCaption name saveClassButton at 5,12 span 2 default on click: saveClassClicked
+        tab @csharpTab
+            memo name csharpBox at 1,1 span 6 rows 12 bind csharpText readonly code csharp copy
 
 // The diagrams of a domain: its classes with their properties and lines, or
 // the tables the adapter keeps them in, with their keys.
@@ -70,7 +87,7 @@ page DiagramCanvas: view
     data members: list<Property>
 
     radio name diagramKindRadio at 1,1 span 6 bind kind horizontal
-    canvas name diagramCanvas at 1,2 span 12 rows 8 units 1600 x 600 zoom grid 20 snap background panel mode objects classes at x, y on draw: drawDiagram on change: classMoved
+    canvas name diagramCanvas at 1,2 span 12 rows 8 units 1600 x 600 zoom grid 20 snap background panel mode objects classes at x, y on draw: drawDiagram on change: classMoved on bend: lineBent
 
 code Workspace
     handler workspaceOpened
@@ -109,12 +126,14 @@ code Workspace
             let found = node.model
             editedClass = found
             properties = find p in Property where p.owner == editedClass order by p.position
+            csharpText = csharp_class(editedClass, properties, classNames)
             classPanel.visible = true
 
     // The diagram view shows the classes of the domain picked; it draws the properties of those.
     handler loadDiagram
         classes = find c in ModelClass where c.domain == domain order by c.name
         members = find p in Property order by p.position
+        classNames = class_names(classes)
 
     handler newDomainClicked
         let d = new Domain
@@ -142,6 +161,7 @@ code Workspace
         refreshTree()
         pickNode("c{c.id}")
         loadDiagram()
+        csharpText = csharp_class(editedClass, properties, classNames)
         classPanel.visible = true
 
     handler saveDomainClicked
@@ -170,12 +190,20 @@ code Workspace
         loadDiagram()
         showDomain()
 
-    // What the class editor saved shows in the tree and on the diagram once it slides away.
+    // What the class editor saved shows in the tree and on the diagram at once.
+    handler classSaved
+        refreshTree()
+        loadDiagram()
+
+    // Its properties, changed without Save, show once it slides away.
     handler classPanelClosed
         refreshTree()
         loadDiagram()
 
 code ClassEditor
+    handler showCsharp
+        csharpText = csharp_class(editedClass, properties, classNames)
+
     handler addPropertyClicked
         if editedClass.id == 0
             save editedClass
@@ -187,20 +215,26 @@ code ClassEditor
         p.type = "string"
         save p
         properties = find x in Property where x.owner == editedClass order by x.position
+        showCsharp()
 
     handler removePropertyClicked
         delete propertyTable.selected
         properties = find x in Property where x.owner == editedClass order by x.position
+        showCsharp()
 
     handler propertyChanged
         save propertyTable.selected
+        showCsharp()
 
     handler propertiesMoved
         for p in properties
             save p
+        showCsharp()
 
     handler saveClassClicked
         save editedClass
+        showCsharp()
+        tell saved()
 
 code DiagramCanvas
     handler drawDiagram
@@ -218,7 +252,7 @@ code DiagramCanvas
                 if p.owner.id == c.id
                     for target in classes
                         if refers_to(p.type, target.name)
-                            diagramCanvas.line(c.x + 130, c.y + 20, target.x + 130, target.y + 20, "muted", 2)
+                            diagramCanvas.link("p{p.id}", c.x + 130, c.y + 20, target.x + 130, target.y + 20, p.via, "muted", 2, "", "arrow")
         for c in classes
             let lines: list<text> = []
             for p in members
@@ -235,7 +269,7 @@ code DiagramCanvas
                 if p.owner.id == c.id
                     for target in classes
                         if refers_to(p.type, target.name)
-                            diagramCanvas.line(c.x + 130, c.y + 20, target.x + 130, target.y + 20, "muted", 2)
+                            diagramCanvas.link("p{p.id}", c.x + 130, c.y + 20, target.x + 130, target.y + 20, p.via, "muted", 2, "many", "one")
         for c in classes
             let lines: list<text> = ["PK  Bk"]
             for p in members
@@ -251,13 +285,26 @@ code DiagramCanvas
         diagramCanvas.rect(c.x, c.y, 260, h, "raised")
         diagramCanvas.rect(c.x, c.y, 260, 32, "accent_soft")
         diagramCanvas.text(c.x + 130, c.y + 16, title, "text", 13, "center", "bold")
+        // Its rows, every other one on a stripe so the eye keeps the line.
         let row = c.y + 50
+        let striped = false
         for line in lines
+            if striped
+                diagramCanvas.rect(c.x + 1, row - 11, 258, 22, "accent_soft")
             diagramCanvas.text(c.x + 12, row, line, "text", 11, "left", "mono")
             row = row + 22
+            striped = not striped
 
     handler classMoved
         save diagramCanvas.selected
+
+    // A line bent: its property keeps the points.
+    handler lineBent
+        for p in members
+            if "p{p.id}" == diagramCanvas.bent
+                p.via = diagramCanvas.via
+                save p
+        members = find p in Property order by p.position
 
 // The tree's rows: each domain, and its classes under it.
 function outline(domains: list<Domain>, classes: list<ModelClass>) -> list<Node>
@@ -295,6 +342,37 @@ function new_name(word: text, domains: list<Domain>) -> text
         n = n + 1
         name = "{word}{n}"
     return name
+
+// The C# class the adapter's code has for a class: its summary as a doc
+// comment, and a property for each of its properties, in order.
+function csharp_class(c: ModelClass, props: list<Property>, classes: list<text>) -> text
+    let lines: list<text> = []
+    if c.summary != ""
+        lines = lines + ["/// <summary>", "/// {c.summary}", "/// </summary>"]
+    lines = lines + ["public class {c.name}", "{{"]
+    for p in props
+        let type = csharp_type(p.type, p.optional, classes)
+        let start = csharp_start(p.type, classes)
+        lines = lines + ["    public {type} {p.name} {{ get; set; }}{start}"]
+    lines = lines + ["}}"]
+    return join(lines, "\n")
+
+// A property's type in C#: a list of a class or value type is a List, and
+// an optional value may be null.
+function csharp_type(type: text, optional: bool, classes: list<text>) -> text
+    for name in classes + ["string", "int", "decimal", "bool", "DateTime"]
+        if type == "list<{name}>"
+            return "List<{name}>"
+    if optional
+        return "{type}?"
+    return type
+
+// What a property starts as: a list starts empty.
+function csharp_start(type: text, classes: list<text>) -> text
+    for name in classes + ["string", "int", "decimal", "bool", "DateTime"]
+        if type == "list<{name}>"
+            return " = new();"
+    return ""
 
 // Whether a property's type names the class: the class itself or a list of it.
 function refers_to(type: text, name: text) -> bool

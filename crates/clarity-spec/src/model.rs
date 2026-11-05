@@ -396,6 +396,11 @@ pub struct Page {
     /// What a dialog gives when it closes with a value (`page X: dialog
     /// gives Friend`), for the handler that asked for it (DESIGN 5.14).
     pub gives: Option<crate::code::TypeRef>,
+    /// What a view tells the window it shows in (`tells saved(name: text)`,
+    /// DESIGN 5.33): its code says `tell saved(name)`, and the window hears
+    /// it on the slide-out or section that shows it (`on saved: handler`).
+    #[serde(default)]
+    pub tells: Vec<crate::code::PartMessage>,
     pub span: Span,
 }
 
@@ -493,6 +498,9 @@ pub struct WidgetPage {
     /// `section "Class" view ClassEditor`: a tab, step or section showing a
     /// view (DESIGN 5.33), whose parts are then its own.
     pub view: Option<String>,
+    /// The tells of the view it shows wired to the window's handlers: `on saved: recipeSaved`.
+    #[serde(default)]
+    pub tells: Vec<TellHandler>,
     pub children: Vec<Widget>,
     pub span: Span,
 }
@@ -602,6 +610,14 @@ pub struct WidgetProps {
     /// open beside the window's parts, which make room for it.
     #[serde(default)]
     pub pinnable: bool,
+    /// `code csharp`: a memo of code, in the mono font, its words colored
+    /// by the language (one of `widgets::CODE_LANGUAGES`).
+    #[serde(default)]
+    pub code: Option<String>,
+    /// `copy`: a memo or text box has a button in its corner that puts its
+    /// text on the clipboard, read only too.
+    #[serde(default)]
+    pub copy: bool,
     /// `view ClassEditor`: a slide-out shows that view, its parts, data and
     /// handlers joining the window's (`crate::views`); it holds none of its own.
     #[serde(default)]

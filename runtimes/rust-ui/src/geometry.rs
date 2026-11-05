@@ -55,3 +55,11 @@ impl fmt::Display for Rect {
         write!(f, "[{}, {}, {}, {}]", n(self.x), n(self.y), n(self.width), n(self.height))
     }
 }
+
+/// How far `content` goes beyond `room`, the room a scroll area scrolls:
+/// none when it fits, and none for less than half a pixel, which is what
+/// sums of row heights leave over in their last digits, not content.
+pub fn scroll_room(content: f64, room: f64) -> f64 {
+    let over = content - room;
+    if over < 0.5 { 0.0 } else { over }
+}

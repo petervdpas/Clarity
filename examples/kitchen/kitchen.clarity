@@ -12,6 +12,7 @@ entity Recipe
     serves: integer, default 4, min 1, max 40, label @recipeServesLabel
     minutes: integer, default 30, min 0, max 1440, label @recipeMinutesLabel
     notes: text(2000), label @recipeNotesLabel
+    photo: image, label @recipePhotoLabel
 
 // What goes into a recipe, in the order it is listed.
 entity Ingredient
@@ -31,7 +32,8 @@ app Kitchen
     main Cookbook
 
 // The recipes at the left; the one picked opens at the right in an
-// accordion of views, its headers side by side.
+// accordion of views, its headers side by side. Add opens an empty recipe,
+// which its overview saves.
 page Cookbook: window
     title @kitchenTitle
     size 1200 x 720
@@ -42,8 +44,8 @@ page Cookbook: window
     on open: kitchenOpened
 
     table name recipeTable at 1,1 span 4 rows 14 bind recipes columns name, course, minutes sortable add remove confirm on add: addRecipe on remove: removeRecipe on select: recipePicked
-    accordion name recipeParts at 5,1 span 8 rows 14 horizontal on change: partOpened
-        section @overviewSection view RecipeOverview
+    accordion name recipeParts at 5,1 span 8 rows 14 horizontal
+        section @overviewSection view RecipeOverview on saved: recipeSaved
         section @ingredientsSection view IngredientList
         section @methodSection view MethodSteps
         section @timerSection
@@ -54,24 +56,29 @@ page Cookbook: window
             label @secondsLeftLabel name secondsLeftLabel at 1,3 span 6
             display name timerShown at 1,4 span 6 rows 2 bind secondsLeft digits 5
     timer name clock every 1 on tick: ticked
+    sound name alarm volume 80
     footer
         status @kitchenStatus
 
-// A recipe's name, course, how many it serves, how long it takes, and notes.
+// A recipe's name, course, how many it serves, how long it takes, notes
+// and a photo of the dish. Save stores it and tells the window, which shows it in its list.
 page RecipeOverview: view
+    tells saved
     data dish: Recipe
 
     label @recipeNameLabel name dishNameLabel at 1,1 span 2 for dishNameBox
-    textbox name dishNameBox at 3,1 span 6 bind dish.name
+    textbox name dishNameBox at 3,1 span 6 bind dish.name placeholder @dishNamePlaceholder
     label @recipeCourseLabel name dishCourseLabel at 1,2 span 2 for dishCourseBox
-    dropdown name dishCourseBox at 3,2 span 3 bind dish.course
+    dropdown name dishCourseBox at 3,2 span 3 bind dish.course placeholder @dishCoursePlaceholder
     label @recipeServesLabel name dishServesLabel at 1,3 span 2 for dishServesBox
     spinbox name dishServesBox at 3,3 span 2 bind dish.serves min 1 max 40
     label @recipeMinutesLabel name dishMinutesLabel at 1,4 span 2 for dishMinutesBox
     spinbox name dishMinutesBox at 3,4 span 2 bind dish.minutes min 0 max 1440
     label @recipeNotesLabel name dishNotesLabel at 1,5 span 2 for dishNotesBox
-    memo name dishNotesBox at 3,5 span 6 rows 6 bind dish.notes
-    button @saveRecipeCaption name saveRecipeButton at 7,12 span 2 default on click: saveDish
+    memo name dishNotesBox at 3,5 span 6 rows 4 bind dish.notes placeholder @dishNotesPlaceholder
+    label @recipePhotoLabel name dishPhotoLabel at 1,9 span 2 for dishPhoto
+    image name dishPhoto at 3,9 span 4 rows 5 bind dish.photo
+    button @saveRecipeCaption name saveRecipeButton at 7,14 span 2 default on click: saveDish
 
 // What goes into the recipe, in order; Add and the trash edit the list.
 page IngredientList: view
@@ -80,12 +87,17 @@ page IngredientList: view
 
     table name ingredientTable at 1,1 span 8 rows 13 bind ingredients columns name 300, amount 200 edit name, amount reorder by position add remove confirm on add: addIngredient on remove: removeIngredient on change: ingredientChanged on reorder: ingredientsMoved
 
-// The method, step by step; drag a step to move it.
+// The method: the steps in order (drag one to move it), and below them the
+// whole text of the step picked.
 page MethodSteps: view
     data stepsOf: Recipe
     data steps: list<Step>
+    data step: Step
 
-    table name stepTable at 1,1 span 8 rows 13 bind steps columns position 60, instruction 560 edit instruction reorder by position add remove confirm on add: addStep on remove: removeStep on change: stepChanged on reorder: stepsMoved
+    table name stepTable at 1,1 span 8 rows 7 bind steps columns position 60, instruction 500 reorder by position add remove confirm on add: addStep on remove: removeStep on select: stepPicked on reorder: stepsMoved
+    label @stepTextLabel name stepTextLabel at 1,9 span 8 for stepTextBox
+    memo name stepTextBox at 1,10 span 8 rows 4 bind step.instruction placeholder @stepTextPlaceholder
+    button @saveStepCaption name saveStepButton at 7,14 span 2 on click: saveStep
 
 code Cookbook
     handler kitchenOpened
@@ -97,17 +109,19 @@ code Cookbook
     handler refreshRecipes
         recipes = find r in Recipe order by r.name
 
-    // The views show the recipe picked; without one there is nothing to edit.
+    // The views show the recipe picked: a new one has no ingredients or method until it is saved.
     handler showRecipe
-        let picked = recipe.id != 0
+        let saved = recipe.id != 0
         dish = recipe
         ingredientsOf = recipe
         stepsOf = recipe
+        step = new Step
         ingredients = find i in Ingredient where i.recipe == recipe order by i.position
         steps = find s in Step where s.recipe == recipe order by s.position
-        saveRecipeButton.enabled = picked
-        ingredientTable.enabled = picked
-        stepTable.enabled = picked
+        ingredientTable.enabled = saved
+        stepTable.enabled = saved
+        stepTextBox.enabled = false
+        saveStepButton.enabled = false
 
     handler recipePicked
         let picked = recipeTable.selected
@@ -115,14 +129,16 @@ code Cookbook
         timerMinutes = recipe.minutes
         showRecipe()
 
+    // An empty recipe in the overview, its boxes saying what goes in them; Save stores it.
     handler addRecipe
-        let r = new Recipe
-        r.name = free_name(@newRecipeName, find x in Recipe order by x.name)
-        save r
-        recipe = r
-        refreshRecipes()
-        recipeTable.selected = r
+        recipe = new Recipe
         recipeParts.open = 1
+        showRecipe()
+
+    // What the overview saved shows in the list, and its ingredients and method can be written.
+    handler recipeSaved
+        recipe = dish
+        refreshRecipes()
         showRecipe()
 
     // A recipe goes with its ingredients and its method.
@@ -136,10 +152,6 @@ code Cookbook
         recipe = new Recipe
         refreshRecipes()
         showRecipe()
-
-    // What the overview saved shows in the list once another section opens.
-    handler partOpened
-        refreshRecipes()
 
     handler startTimer
         secondsLeft = timerMinutes * 60
@@ -157,11 +169,14 @@ code Cookbook
         if secondsLeft <= 0
             secondsLeft = 0
             stopTimer()
+            // Twenty beeps, two by two, while the message says the time is up.
+            alarm.melody("A6/4 -/4 A6/4 - A6/4 -/4 A6/4 - A6/4 -/4 A6/4 - A6/4 -/4 A6/4 - A6/4 -/4 A6/4 - A6/4 -/4 A6/4 - A6/4 -/4 A6/4 - A6/4 -/4 A6/4 - A6/4 -/4 A6/4 - A6/4 -/4 A6/4 -", 240)
             message @timerDone
 
 code RecipeOverview
     handler saveDish
         save dish
+        tell saved()
 
 code IngredientList
     handler addIngredient
@@ -186,6 +201,10 @@ code IngredientList
             save i
 
 code MethodSteps
+    handler loadSteps
+        steps = find x in Step where x.recipe == stepsOf order by x.position
+
+    // A new step at the end, empty, its text box ready below.
     handler addStep
         if stepsOf.id == 0
             return
@@ -193,30 +212,31 @@ code MethodSteps
         s.recipe = stepsOf
         s.position = count(steps) + 1
         save s
-        steps = find x in Step where x.recipe == stepsOf order by x.position
+        loadSteps()
+        step = s
+        stepTextBox.enabled = true
+        saveStepButton.enabled = true
 
     handler removeStep
         delete stepTable.selected
-        steps = find x in Step where x.recipe == stepsOf order by x.position
+        loadSteps()
+        step = new Step
+        stepTextBox.enabled = false
+        saveStepButton.enabled = false
 
-    handler stepChanged
-        save stepTable.selected
+    handler stepPicked
+        let picked = stepTable.selected
+        step = picked
+        stepTextBox.enabled = true
+        saveStepButton.enabled = true
+
+    // Save stores the step's text, which then shows in the list.
+    handler saveStep
+        if step.id == 0
+            return
+        save step
+        loadSteps()
 
     handler stepsMoved
         for s in steps
             save s
-
-// The word, or the word with the first number no recipe has.
-function free_name(word: text, all: list<Recipe>) -> text
-    let name = word
-    let n = 1
-    for step in 1 to 1000
-        let taken = false
-        for r in all
-            if r.name == name
-                taken = true
-        if not taken
-            return name
-        n = n + 1
-        name = "{word} {n}"
-    return name

@@ -396,7 +396,7 @@ pub(crate) fn parse_type_ref(cursor: &mut Cursor) -> ParseResult<TypeRef> {
 }
 
 /// The parameters after `(`, to and with `)`: `a: T, b: T)`.
-fn parse_params(cursor: &mut Cursor) -> ParseResult<Vec<Param>> {
+pub(crate) fn parse_params(cursor: &mut Cursor) -> ParseResult<Vec<Param>> {
     let mut params = Vec::new();
     if cursor.eat(TokenKind::RParen) {
         return Ok(params);

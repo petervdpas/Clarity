@@ -85,6 +85,16 @@ slideHeight: number | null,
  */
 pinnable: boolean, 
 /**
+ * `code csharp`: a memo of code, in the mono font, its words colored
+ * by the language (one of `widgets::CODE_LANGUAGES`).
+ */
+code: string | null, 
+/**
+ * `copy`: a memo or text box has a button in its corner that puts its
+ * text on the clipboard, read only too.
+ */
+copy: boolean, 
+/**
  * `view ClassEditor`: a slide-out shows that view, its parts, data and
  * handlers joining the window's (`crate::views`); it holds none of its own.
  */

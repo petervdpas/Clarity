@@ -33,11 +33,11 @@ struct Scrolled {
 
 impl Scrolled {
     fn max_x(&self) -> f64 {
-        (self.content_width.get() - self.place.get().width).max(0.0)
+        crate::geometry::scroll_room(self.content_width.get(), self.place.get().width)
     }
 
     fn max_y(&self) -> f64 {
-        (self.content_height.get() - self.place.get().height).max(0.0)
+        crate::geometry::scroll_room(self.content_height.get(), self.place.get().height)
     }
 
     /// Scrolls to `x`, `y` within the ends: true when it moved.

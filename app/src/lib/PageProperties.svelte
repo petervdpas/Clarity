@@ -685,6 +685,20 @@
         <TextField {preview} {onapplied} text={p.placeholder} placeholder="shown while the input is empty" onwrite={(text) => update({ placeholder: text })} />
       </label>
     {/if}
+    {#if info.properties.includes("code")}
+      <label class="prop" title="Writes in the mono font and colors the words of the language's code">
+        <span>Code</span>
+        <select value={p.code ?? ""} onchange={(e) => update({ code: e.currentTarget.value || null })}>
+          <option value="">plain text</option>
+          {#each info.codeLanguages as language (language)}
+            <option value={language}>{language}</option>
+          {/each}
+        </select>
+      </label>
+    {/if}
+    {#if info.properties.includes("copy")}
+      <label title="A button in its corner puts its text on the clipboard, read only too"><input type="checkbox" checked={p.copy} onchange={(e) => update({ copy: e.currentTarget.checked })} /> Copy button</label>
+    {/if}
     {#if info.properties.includes("to")}
       <label class="prop">
         <span>Opens</span>

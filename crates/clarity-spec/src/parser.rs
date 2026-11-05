@@ -799,6 +799,7 @@ pub(crate) fn is_page_setting(tokens: &[Token]) -> bool {
         || starts_with_keyword(tokens, "data", Some(TokenKind::Ident))
         || starts_with_keyword(tokens, "grid", Some(TokenKind::Number))
         || starts_with_keyword(tokens, "on", Some(TokenKind::Ident))
+        || starts_with_keyword(tokens, "tells", Some(TokenKind::Ident))
 }
 
 fn parse_page(
@@ -838,6 +839,7 @@ fn parse_page(
         frame: Frame::default(),
         handlers: Vec::new(),
         gives,
+        tells: Vec::new(),
         span: node.span(),
     };
     let mut grid_seen = false;
@@ -909,6 +911,12 @@ fn parse_page_setting(node: &Node, page: &mut Page, grid_seen: &mut bool) -> Par
         }
         "data" => {
             page.data.push(parse_data(&mut cursor, node.line.span)?);
+        }
+        // What a view tells its window: `tells saved(name: text)`.
+        "tells" => {
+            let name = cursor.expect_ident("a tell's name, as in tells saved(name: text)")?;
+            let params = if cursor.eat(TokenKind::LParen) { crate::code::parse::parse_params(&mut cursor)? } else { Vec::new() };
+            page.tells.push(crate::code::PartMessage { name, params, span: node.span() });
         }
         "on" => {
             let owner = page.name.name.clone();
@@ -1533,8 +1541,16 @@ fn parse_widget_page(
     } else {
         None
     };
-    // `section "Class" view ClassEditor`: what it holds is the view's.
+    // `section "Class" view ClassEditor`: what it holds is the view's, and
+    // `on saved: recipeSaved` hears what the view tells.
     let view = if keyword != "pane" && cursor.eat_keyword("view") { Some(cursor.expect_ident("the name of the view it shows")?.name) } else { None };
+    let mut tells = Vec::new();
+    while keyword != "pane" && cursor.eat_keyword("on") {
+        let tell = cursor.expect_ident("a tell of the view it shows")?.name;
+        cursor.expect(TokenKind::Colon, "':' and a handler, as in 'on saved: recipeSaved'")?;
+        let handler = cursor.expect_ident("a handler name")?.name;
+        tells.push(crate::model::TellHandler { tell, handler });
+    }
     let columns = if keyword == "pane" && cursor.eat_keyword("span") {
         let token = cursor.expect(TokenKind::Number, "the columns the pane starts with")?;
         Some(token.text.parse().map_err(|_| Diagnostic::error("a pane's span is a whole number", token.span))?)
@@ -1546,17 +1562,18 @@ fn parse_widget_page(
         title,
         columns,
         view,
+        tells,
         children: parse_widgets(&node.children, diagnostics),
         span: node.span(),
     })
 }
 
 /// The words of a part's line, which every editor colors as Clarity's own (the VS Code grammar too).
-pub const LINE_WORDS: [&str; 78] = [
+pub const LINE_WORDS: [&str; 80] = [
     "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "striped", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
     "children", "page", "typed", "cards", "frame", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
-    "foldable", "folded", "taborder", "key", "parent", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window", "side", "width", "top", "pinnable", "view", "add", "remove", "confirm",
+    "foldable", "folded", "taborder", "key", "parent", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window", "side", "width", "top", "pinnable", "view", "add", "remove", "confirm", "code", "copy",
 ];
 
 fn parse_widget_props(
@@ -1587,6 +1604,8 @@ fn parse_widget_props(
         slide_width: None,
         slide_height: None,
         pinnable: false,
+        code: None,
+        copy: false,
         view: None,
         sortable: false,
         add: false,
@@ -1715,6 +1734,14 @@ fn parse_widget_props(
             props.tells.push(crate::model::TellHandler { tell, handler });
             continue;
         }
+        // A tell of the view a slide-out shows (DESIGN 5.33): the view's `tells` say which there are.
+        if kind == WidgetKind::Slideout && word == "on" && Event::by_keyword(event_word).is_none() {
+            let tell = cursor.expect_ident("a tell of the view the slide-out shows")?.name;
+            cursor.expect(TokenKind::Colon, "':' and a handler, as in 'on saved: recipeSaved'")?;
+            let handler = cursor.expect_ident("a handler name")?.name;
+            props.tells.push(crate::model::TellHandler { tell, handler });
+            continue;
+        }
         // A tell of the engine beside the screen a canvas runs (DESIGN 5.12):
         // the engine's declaration says which there are.
         if kind == WidgetKind::Canvas && word == "on" && Event::by_keyword(event_word).is_none() {
@@ -1762,6 +1789,19 @@ fn parse_widget_props(
             "pinnable" => {
                 applies(WidgetProperty::Pinnable)?;
                 props.pinnable = true;
+            }
+            // `code csharp`: a memo colors its text as code of the language.
+            "code" => {
+                applies(WidgetProperty::Code)?;
+                let language = cursor.expect_ident("a language, as in code csharp")?;
+                if !widgets::CODE_LANGUAGES.contains(&language.name.as_str()) {
+                    return Err(Diagnostic::error(format!("a memo colors code of {}, not '{}'", widgets::CODE_LANGUAGES.join(", "), language.name), language.span));
+                }
+                props.code = Some(language.name);
+            }
+            "copy" => {
+                applies(WidgetProperty::Copy)?;
+                props.copy = true;
             }
             "view" => {
                 applies(WidgetProperty::View)?;

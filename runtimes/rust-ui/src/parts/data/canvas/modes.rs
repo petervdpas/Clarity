@@ -169,8 +169,15 @@ pub fn first_place(shape: &Map<String, Value>) -> (f64, f64) {
     }
 }
 
-/// The drawing with the object at `place` and what is drawn after it, until the next object, moved.
+/// The drawing with the object at `place` and what is drawn after it, until
+/// the next object, moved; a link that ends in the object's box follows it
+/// there, its end in the box moving and its bend points staying.
 pub fn with_object_moved(shapes: Vec<Shape>, place: usize, dx: f64, dy: f64) -> Vec<Shape> {
+    let held = match shapes.get(place) {
+        Some(Shape::Object { x, y, width, height, .. }) => Some((*x, *y, *width, *height)),
+        _ => None,
+    };
+    let inside = |px: f64, py: f64| held.is_some_and(|(x, y, w, h)| px >= x && px <= x + w && py >= y && py <= y + h);
     let mut moving = false;
     shapes
         .into_iter()
@@ -179,10 +186,14 @@ pub fn with_object_moved(shapes: Vec<Shape>, place: usize, dx: f64, dy: f64) -> 
             if matches!(shape, Shape::Object { .. }) {
                 moving = i == place;
             }
-            if moving {
-                shape.translated(dx, dy)
-            } else {
-                shape
+            match shape {
+                Shape::Link { name, x1, y1, x2, y2, via, color, width, start, end, label, style } => {
+                    let (x1, y1) = if inside(x1, y1) { (x1 + dx, y1 + dy) } else { (x1, y1) };
+                    let (x2, y2) = if inside(x2, y2) { (x2 + dx, y2 + dy) } else { (x2, y2) };
+                    Shape::Link { name, x1, y1, x2, y2, via, color, width, start, end, label, style }
+                }
+                shape if moving => shape.translated(dx, dy),
+                shape => shape,
             }
         })
         .collect()

@@ -148,11 +148,22 @@ impl TextBoxPart {
         editor.undoes = !base.spec.flag("noUndo");
         let password = base.spec.kind == "password";
         editor.set_password(password);
+        // A memo of code writes in the mono font, its words colored by the language.
+        if let Some(language) = base.spec.text("code").and_then(crate::parts::code_colors::language) {
+            editor.language = Some(language);
+            editor.font_role = "mono";
+        }
         let (eye, copy) = if password {
             editor.right_inset = 2.0 * BUTTON_WIDTH + 2.0;
             let mut copy = InputSideButton::new(InputIcon::Copy);
             copy.name = locale::translate("copySecret", "Copy");
             (Some(InputSideButton::new(InputIcon::Eye)), Some(copy))
+        } else if base.spec.flag("copy") {
+            // `copy`: a button in its corner puts its text on the clipboard, read only too.
+            editor.right_inset = BUTTON_WIDTH + 2.0;
+            let mut copy = InputSideButton::new(InputIcon::Copy);
+            copy.name = locale::translate("copyText", "Copy");
+            (None, Some(copy))
         } else {
             (None, None)
         };
@@ -297,8 +308,11 @@ impl Element for TextBoxPart {
         if let Some(eye) = self.eye.as_mut() {
             eye.bounds = Rect::new(area.right() - 2.0 - 2.0 * BUTTON_WIDTH, area.y + 2.0, BUTTON_WIDTH, height);
         }
+        // A memo's stands in its top right corner, one line high.
+        let multiline = self.editor.is_multiline();
         if let Some(copy) = self.copy.as_mut() {
-            copy.bounds = Rect::new(area.right() - 2.0 - BUTTON_WIDTH, area.y + 2.0, BUTTON_WIDTH, height);
+            let high = if multiline { height.min(crate::grid::ROW_HEIGHT - 4.0) } else { height };
+            copy.bounds = Rect::new(area.right() - 2.0 - BUTTON_WIDTH, area.y + 2.0, BUTTON_WIDTH, high);
         }
     }
 

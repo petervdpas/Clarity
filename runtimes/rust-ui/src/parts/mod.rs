@@ -9,6 +9,7 @@ pub mod containers;
 pub mod data;
 pub mod inputs;
 pub mod check_box;
+pub mod code_colors;
 pub mod heading;
 pub mod label;
 pub mod sound;

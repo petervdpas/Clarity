@@ -187,3 +187,12 @@ fn a_sidebar_that_fills_the_window_and_gives_it_back_takes_the_same_room() {
     assert_eq!(view(&screen).body_place(), body);
     assert_eq!(body, Rect::new(320.0, 0.0, 377.0, 510.0));
 }
+
+/// Rows that fill the window exactly give it no scroll bar: what a sum of
+/// row heights leaves over in the last digits is no room to scroll.
+#[test]
+fn rows_that_fill_the_window_exactly_leave_nothing_to_scroll() {
+    let markup = r#"<Window name="Kitchen"><Footer status="Ready" columns="12" /><Table name="recipes" at="1,1" span="4" rows="14" columns="name" add="true" remove="true" /><Label name="side" at="5,1" span="8" rows="14" /></Window>"#;
+    let (screen, _) = shown(markup, 1200.0, 720.0);
+    assert_eq!(0.0, view(&screen).max_scroll_y);
+}

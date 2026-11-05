@@ -467,7 +467,7 @@ impl KeysWindow {
     }
 
     fn max_scroll(&self) -> f64 {
-        (self.content_height() - self.view().height).max(0.0)
+        crate::geometry::scroll_room(self.content_height(), self.view().height)
     }
 
     /// A key for the window, as `KeysState::key_pressed`.

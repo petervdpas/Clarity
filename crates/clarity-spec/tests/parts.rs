@@ -310,3 +310,36 @@ fn a_placed_part_sticks_to_the_bottom() {
     let (_, diagnostics) = parse("module shop\npage P: window\n    sound name ding source \"ding.ogg\" bottom\n", "p.clarity");
     assert!(diagnostics.iter().any(|d| d.message.contains("bottom")), "{diagnostics:#?}");
 }
+
+/// Every input that can be empty shows a placeholder while it is: the boxes
+/// typed in, a day, a color, a list of tags and every dropdown.
+#[test]
+fn every_input_that_can_be_empty_takes_a_placeholder() {
+    for kind in [WidgetKind::Textbox, WidgetKind::Memo, WidgetKind::Password, WidgetKind::Number, WidgetKind::Spinbox, WidgetKind::Folder, WidgetKind::Date, WidgetKind::Color, WidgetKind::Tags, WidgetKind::Dropdown] {
+        assert!(widgets::has_property(kind, widgets::WidgetProperty::Placeholder), "{kind:?}");
+    }
+    for kind in [WidgetKind::Checkbox, WidgetKind::Switch, WidgetKind::Radio, WidgetKind::Slider, WidgetKind::File] {
+        assert!(!widgets::has_property(kind, widgets::WidgetProperty::Placeholder), "{kind:?}");
+    }
+    let dropdown = with("radio name kind at 4,2 span 6 vertical bind customer.kind", "dropdown name kind at 4,2 span 6 bind customer.kind placeholder \"Choose a kind\"");
+    assert!(errors(&dropdown).is_empty(), "{:#?}", errors(&dropdown));
+}
+
+/// A memo of code (`code csharp`) and a copy button (`copy`) on a memo or text box.
+#[test]
+fn a_memo_colors_code_and_a_memo_or_text_box_copies() {
+    let source = with("memo name notes at 4,5 span 6 rows 2 bind customer.notes", "memo name notes at 4,5 span 6 rows 2 bind customer.notes readonly code csharp copy");
+    assert!(errors(&source).is_empty(), "{:#?}", errors(&source));
+    let file = parse(&source, "shop.clarity").0;
+    let notes = file.pages[0].widgets[1].children.iter().find(|w| w.props.name.as_deref() == Some("notes")).unwrap();
+    assert_eq!(notes.props.code.as_deref(), Some("csharp"));
+    assert!(notes.props.copy);
+    assert!(widget_line(&notes.props).contains(" code csharp copy"), "{}", widget_line(&notes.props));
+    assert_has(&errors(&with("bind customer.notes", "bind customer.notes code klingon")), "a memo colors code of clarity, csharp");
+    assert_has(&errors(&with("bind customer.name placeholder", "bind customer.name code csharp placeholder")), "'code' does not apply to a textbox");
+    assert!(errors(&with("bind customer.name placeholder", "bind customer.name copy placeholder")).is_empty());
+    // The languages are the ones every renderer colors.
+    let file: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../conformance/code-languages.json")).unwrap()).unwrap();
+    let listed: Vec<&str> = file["languages"].as_array().unwrap().iter().map(|l| l.as_str().unwrap()).collect();
+    assert_eq!(listed, widgets::CODE_LANGUAGES);
+}

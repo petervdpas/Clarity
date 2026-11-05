@@ -841,10 +841,15 @@ impl Doc {
                 // Its keyword and title stay as written (a key or a text).
                 let head: Vec<&str> = node.tokens.iter().take(2).map(|t| &node.text[t.span.start as usize..t.span.end as usize]).collect();
                 let head = head.join(" ");
-                let line = match view.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+                // What it hears of the view (`on saved: recipeSaved`) stays.
+                let heard = node.tokens.iter().position(|t| t.text == "on").map(|at| node.text[node.tokens[at].span.start as usize..node.tokens.last().map_or(0, |t| t.span.end as usize)].to_string());
+                let mut line = match view.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
                     Some(view) => format!("{head} view {view}"),
                     None => head,
                 };
+                if let Some(heard) = heard {
+                    line = format!("{line} {heard}");
+                }
                 set_line_keeping_comment(self.node_mut(&path), line);
                 Ok(Some(*target))
             }

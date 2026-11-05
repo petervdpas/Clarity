@@ -61,7 +61,7 @@ fn colors_and_styles_are_checked() {
     assert_eq!(errors(&project(&bad, &["Shop"])), [
         "a style sets background, text, border, radius, weight, size, font and align, not 'shadow'",
         "'yellow' is not a color; write it as \"#rrggbb\" or \"#rgb\"",
-        "style 'loud' uses color 'nothing', which theme Shop does not have; its colors are background, panel, raised, text, muted, border, strong_border, accent, accent_soft, on_accent, selection, focus, input, frame, frame_text, error, error_soft, warning, warning_soft, success, success_soft and brand",
+        "style 'loud' uses color 'nothing', which theme Shop does not have; its colors are background, panel, raised, text, muted, border, strong_border, accent, accent_soft, on_accent, selection, focus, input, frame, frame_text, error, error_soft, warning, warning_soft, success, success_soft, code_background, code_keyword, code_type, code_text, code_number, code_comment and brand",
     ]);
     let twice = THEME.replace("    color brand", "    color accent \"#000000\"\n    color brand");
     assert_eq!(errors(&project(&twice, &["Shop"])), ["theme Shop has color 'accent' twice"]);
@@ -206,7 +206,7 @@ fn deeper_theme_lines_are_checked() {
         "unknown radius 'knob'; a theme sets the radius of input, button and panel, or of all with 'radius n'",
         "unknown shadow 'deep'; a shadow is none, flat or raised",
         "unknown state 'wobble'; a part looks different on hover, pressed, focus or selected",
-        "a theme sets the look of the parts button, input, header, tab, menu, list, card and card_line, not 'slider'",
+        "a theme sets the look of the parts button, input, header, tab, menu, list, card, card_line and code, not 'slider'",
     ]);
 }
 

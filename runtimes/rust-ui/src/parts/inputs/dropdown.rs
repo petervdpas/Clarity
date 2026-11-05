@@ -85,6 +85,14 @@ impl DropdownPart {
         self.chosen().and_then(|at| choices.get(at)).map(|c| c.label.clone()).unwrap_or_default()
     }
 
+    /// The placeholder it shows, in the muted color, while nothing is chosen.
+    pub fn placeholder_shown(&self) -> Option<String> {
+        if !self.shown().is_empty() {
+            return None;
+        }
+        self.base.spec.text("placeholder").map(|p| self.base.host.text(Some(p))).filter(|p| !p.is_empty())
+    }
+
     /// Its list's overlay id, while it is open.
     pub fn list(&self) -> Option<ElementId> {
         self.list.as_ref().map(|(id, _)| *id)
@@ -289,8 +297,16 @@ impl Element for DropdownPart {
         let color = values.text.unwrap_or_else(|| look.color("text"));
         let size = values.size.map(|s| s as f64).unwrap_or_else(|| look.size("text"));
         let font = values.font.clone().unwrap_or_else(|| "text".to_string());
-        let shown = p.fit(&self.shown(), text.width, size, &font, values.bold());
-        p.text(&shown, text, color, size, &font, values.bold(), TextAlign::Left);
+        match self.placeholder_shown() {
+            Some(placeholder) => {
+                let shown = p.fit(&placeholder, text.width, size, &font, false);
+                p.text(&shown, text, look.color("muted"), size, &font, false, TextAlign::Left);
+            }
+            None => {
+                let shown = p.fit(&self.shown(), text.width, size, &font, values.bold());
+                p.text(&shown, text, color, size, &font, values.bold(), TextAlign::Left);
+            }
+        }
         p.down_arrow(Rect::new(b.right() - pad - 18.0, b.y, 18.0, b.height), color);
     }
 }

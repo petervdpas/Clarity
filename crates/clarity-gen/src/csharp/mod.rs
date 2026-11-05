@@ -579,6 +579,7 @@ fn unconnected_host(project: &Project) -> clarity_spec::model::Page {
         frame: Frame::default(),
         handlers: Vec::new(),
         gives: None,
+        tells: Vec::new(),
         span: Default::default(),
     }
 }

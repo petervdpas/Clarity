@@ -1,0 +1,10 @@
+// The kitchen example: a recipe book in C. A recipe picked at the left
+// opens in a horizontal accordion whose sections are views: its overview,
+// its ingredients and its method; the last section, a kitchen timer, holds
+// parts of its own. The modules are in the kitchen folder next to this file.
+project Kitchen
+    title "Kitchen"
+    stack c desktop
+    output "out"
+    language "en"
+    datasource main sqlite "data/kitchen.db"

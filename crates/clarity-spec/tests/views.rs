@@ -80,3 +80,86 @@ fn placed_the_views_parts_data_and_handlers_are_the_windows() {
     // The view stays as it is, so the designer still shows it on its own.
     assert_eq!(file.pages[1].widgets.len(), 3);
 }
+
+const SECTIONS: &str = "module model
+
+page Workspace: window
+    data picked: text
+    button \"Edit\" name editButton at 1,1 span 2 on click: editClicked
+    accordion name parts at 1,2 span 12 rows 8 horizontal
+        section \"Class\" view ClassEditor
+        section \"Notes\"
+            label \"Notes\" name notesLabel at 1,1 span 4
+    tabs name pages at 1,10 span 12 rows 6
+        tab \"Diagram\" view Diagram
+
+page ClassEditor: view
+    data className: text
+    textbox name nameBox at 1,1 span 4 bind className
+    button \"Save\" name saveButton at 5,1 span 2 on click: saveClicked
+
+page Diagram: view
+    data zoom: integer
+    label \"Zoom\" name zoomLabel at 1,1 span 2
+
+code Workspace
+    handler editClicked
+        className = picked
+        zoom = 2
+        nameBox.enabled = true
+
+code ClassEditor
+    handler saveClicked
+        className = \"\"
+";
+
+#[test]
+fn a_section_tab_or_step_shows_a_view_as_a_slideout_does() {
+    assert!(errors(SECTIONS).is_empty(), "{:#?}", errors(SECTIONS));
+    let file = &project(SECTIONS).files[0];
+    let accordion = &file.pages[0].widgets[1];
+    assert_eq!(accordion.props.orientation, Some(clarity_spec::model::Orientation::Horizontal));
+    assert_eq!(accordion.pages[0].view.as_deref(), Some("ClassEditor"));
+    assert_eq!(accordion.pages[1].view, None);
+    let steps = SECTIONS.replace("tabs name pages", "steps name pages").replace("        tab \"Diagram\" view Diagram\n", "        step \"Diagram\" view Diagram\n        step \"Done\"\n");
+    assert!(errors(&steps).is_empty(), "{:#?}", errors(&steps));
+}
+
+#[test]
+fn the_rules_of_views_hold_in_sections_tabs_and_steps() {
+    has(&SECTIONS.replace("view ClassEditor", "view Nothing"), "there is no view 'Nothing'");
+    has(&SECTIONS.replace("page Diagram: view", "page Diagram: window"), "Diagram is a window; a tab shows a view");
+    has(&SECTIONS.replace("section \"Class\" view ClassEditor\n", "section \"Class\" view ClassEditor\n            label \"x\" name own at 1,1 span 2\n"), "a section that shows a view holds no parts of its own");
+    has(&SECTIONS.replace("tab \"Diagram\" view Diagram", "tab \"Diagram\" view ClassEditor"), "ClassEditor shows once in a window");
+    has(&SECTIONS.replace("name notesLabel", "name nameBox"), "ClassEditor has 'nameBox', as Workspace has");
+    has(&SECTIONS.replace("    label \"Zoom\" name zoomLabel at 1,1 span 2\n", "    label \"Zoom\" name zoomLabel at 1,1 span 2\n    slideout \"More\" name morePanel span 4 rows 4\n"), "Diagram has a slide-out of its own");
+    // A view's sections show no views of their own.
+    has(&SECTIONS.replace("    label \"Zoom\" name zoomLabel at 1,1 span 2\n", "    label \"Zoom\" name zoomLabel at 1,1 span 2\n    tabs name inner at 1,2 span 4 rows 4\n        tab \"In\" view ClassEditor\n"), "a view shows in a window, not in another view");
+}
+
+#[test]
+fn placed_a_sections_view_is_its_parts_and_the_windows_data_and_code() {
+    let placed = clarity_spec::views::placed(&project(SECTIONS));
+    let file = &placed.files[0];
+    let window = &file.pages[0];
+    let names = |w: &clarity_spec::model::Widget, i: usize| w.pages[i].children.iter().filter_map(|c| c.props.name.clone()).collect::<Vec<_>>();
+    assert_eq!(names(&window.widgets[1], 0), ["nameBox", "saveButton"]);
+    assert_eq!(names(&window.widgets[1], 1), ["notesLabel"]);
+    assert_eq!(names(&window.widgets[2], 0), ["zoomLabel"]);
+    assert!(window.data.iter().any(|d| d.name.name == "className") && window.data.iter().any(|d| d.name.name == "zoom"));
+    let code = file.code.iter().find(|c| c.name.name == "Workspace").unwrap();
+    assert!(code.handlers.iter().any(|h| h.name.name == "saveClicked"));
+}
+
+#[test]
+fn a_section_line_writes_its_view_back() {
+    use clarity_spec::edit::{apply, Edit};
+    let text = SECTIONS;
+    let file = &clarity_spec::parser::parse(text, "model.clarity").0;
+    let notes = file.pages[0].widgets[1].pages[1].span.start;
+    let class = file.pages[0].widgets[1].pages[0].span.start;
+    let edited = apply(text, &Edit::SetPageView { target: notes, view: Some("Diagram".into()) }).unwrap().text;
+    assert!(edited.contains("        section \"Notes\" view Diagram\n"), "{edited}");
+    let cleared = apply(text, &Edit::SetPageView { target: class, view: None }).unwrap().text;
+    assert!(cleared.contains("        section \"Class\"\n"), "{cleared}");
+}

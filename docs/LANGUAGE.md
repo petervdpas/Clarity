@@ -574,7 +574,7 @@ Only a `window` has frame regions of its own.
 
 ### Views
 
-A window can be a composition of views. A `view` is designed as a window is (its parts on its grid, its data, its code), without a frame of its own, and shows where a window's part names it. Today that part is a slide-out: `view ClassEditor` on its line, and it holds no parts of its own.
+A window can be a composition of views. A `view` is designed as a window is (its parts on its grid, its data, its code), without a frame of its own, and shows where a window's part names it: a slide-out with `view ClassEditor` on its line, or a tab, step or section with it on its own (`section @classCaption view ClassEditor`). A place that shows a view holds no parts of its own.
 
 ```clarity
 page Workspace: window
@@ -600,7 +600,18 @@ code ClassEditor
 
 - Where it shows, the view's parts, data and handlers join the window's: the window's code reaches them by name, so the window sets what the view shows (`className = ...`). The view's own code reaches only its own parts and data, so one view can show in several windows.
 - A window shows a view once; the view's part and data names differ from the window's; a view shows in a window, not in another view, and has no slide-out of its own.
-- In the IDE views have their own section in the project tree, with **New view**, and are designed on their own as windows are. The designer shows the slide-out as written; the Preview shows it with the view in it.
+- In the IDE views have their own section in the project tree, with **New view**, and are designed on their own as windows are. The inspector of a slide-out, tab, step or section has **Shows view**. The designer shows the place as written; the Preview shows it with the view in it.
+
+An accordion, tabs or a wizard can be a composition of views too, each section, tab or step one view:
+
+```clarity
+page Workspace: window
+    accordion name panels at 1,1 span 12 rows 12 horizontal
+        section @classesCaption view ClassList
+        section @diagramCaption view Diagram
+        section @notesCaption
+            memo name notesBox at 1,1 span 6 rows 6
+```
 
 
 An application has one desktop window, on every stack. `open` shows a window in place, on top of the one that opened it, and `close` goes back to the one below. A desktop window of its own opens only where the design says so: a target marked `in new window` starts one, and a `dialog` may get one too (the web stacks show it on top of the window that opened it; on C# dialogs come with Clarity.UI).
@@ -715,12 +726,12 @@ A color input shows a swatch and the color as `#rrggbb`. The swatch opens a pale
 |---|---|---|---|
 | `form` | parts, on its own grid; binds to one record: `bind customer` | `foldable`, `foldable folded`, `labels 3` | `submit` |
 | `panel` | parts, on its own grid, in a frame with the caption | `foldable`, `foldable folded` | none |
-| `tabs` | `tab @key` blocks, each with parts; code reads and sets the open tab as `part.tab`, counted from 1 | none | `change` |
-| `steps` | `step @key` blocks, each with parts: a wizard | none | `next`, `finish` |
+| `tabs` | `tab @key` blocks, each with parts or `view X`; code reads and sets the open tab as `part.tab`, counted from 1 | none | `change` |
+| `steps` | `step @key` blocks, each with parts or `view X`: a wizard | none | `next`, `finish` |
 | `popover` | parts on its own grid, opened next to the part in `for` | none | none |
 | `slideout` | parts on its own grid, sliding in over the window from its right, left, top or bottom edge | `side left` (`top`, `bottom`), `width 420` (`height 300` at the top or bottom), `resizable`, `min 300`, `max 900`, `pinnable` | `open`, `close` |
 | `buttons` | buttons and toggles joined in one row, on its own grid | none | none |
-| `accordion` | `section @key` blocks, each with parts; one open at a time | none | `change` |
+| `accordion` | `section @key` blocks, each with parts or `view X`; one open at a time | `horizontal` | `change` |
 | `scroll` | parts, on its own grid; parts below its rows scroll into view | none | none |
 | `splitter` | exactly two `pane` blocks, each with parts; `pane span n` starts the first at n columns | `horizontal` or `vertical` | none |
 
@@ -1036,7 +1047,7 @@ slideout @orderDetails name details width 480 resizable min 300 max 900 pinnable
     textbox @noteCaption name noteBox at 1,1 span 6 bind order.note
 ```
 
-An accordion shows its sections' titles one under the other, with the open section's parts under its title; the first is open to start. A press on a title opens that section, or folds it when it was the open one, and runs `on change`; code reads and sets the open section as `faq.open` (0 folds them all). A scroll box holds parts on its own grid like a panel, and parts placed below its rows scroll into view.
+An accordion shows its sections' titles one under the other, with the open section's parts under its title; the first is open to start. A `horizontal` one stands its titles side by side as tall strips, read downwards, with the open section's parts beside its title, as a side panel of folding sections does. A press on a title opens that section, or folds it when it was the open one, and runs `on change`; code reads and sets the open section as `faq.open` (0 folds them all). A scroll box holds parts on its own grid like a panel, and parts placed below its rows scroll into view.
 
 A button with `split` has an arrow beside it that opens its `menu` block, written as a context menu is; the button itself runs its `on click`. A toggle is a button that stays pressed: bound to a bool as a checkbox is, or holding its own, which code reads and sets as `part.checked`; its `on change` runs when the person presses it.
 

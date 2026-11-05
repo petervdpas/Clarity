@@ -1,0 +1,18 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Recipes"
+    add entity Recipe
+        name: text(80), unique
+        course: Course, default Main
+        serves: integer, default 4
+        minutes: integer, default 30
+        notes: text(2000)
+    add entity Ingredient
+        recipe: ref Recipe
+        position: integer
+        name: text(80)
+        amount: text(40)
+    add entity Step
+        recipe: ref Recipe
+        position: integer
+        instruction: text(400)

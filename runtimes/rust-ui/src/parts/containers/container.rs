@@ -226,13 +226,15 @@ pub struct ContainerButton {
     pub accent: bool,
     /// Its text on the left with a chevron before it, open or not, as a section's header.
     pub chevron: Option<bool>,
+    /// Standing up, as a horizontal accordion's header: the chevron at its top and its text turned, read downwards.
+    pub turned: bool,
     shows: Option<Box<dyn Fn() -> bool>>,
     usable: Option<Box<dyn Fn() -> bool>>,
 }
 
 impl ContainerButton {
     pub fn new(text: impl Fn() -> String + 'static, pressed: impl Fn(&mut Cx) + 'static) -> ContainerButton {
-        ContainerButton { node: Node::new(), text: Box::new(text), pressed: Box::new(pressed), accent: false, chevron: None, shows: None, usable: None }
+        ContainerButton { node: Node::new(), text: Box::new(text), pressed: Box::new(pressed), accent: false, chevron: None, turned: false, shows: None, usable: None }
     }
 
     /// Shown only while `shows` says so: a wizard shows only the buttons its step has.
@@ -321,6 +323,13 @@ impl Element for ContainerButton {
         let size = values.size.map(|s| s as f64).unwrap_or_else(|| look.size("text"));
         let font = values.font.clone().unwrap_or_else(|| "text".to_string());
         match self.chevron {
+            Some(open) if self.turned => {
+                let pad = 2.0 * look.padding();
+                // Open, it points right, at the parts beside it; folded, down.
+                chevron(p, Rect::new(bounds.x, bounds.y + pad, bounds.width, 10.0), color, !open);
+                let text = Rect::new(bounds.x, bounds.y + pad + 18.0, bounds.width, (bounds.height - pad * 2.0 - 18.0).max(0.0));
+                p.turned_line(&self.text(), text, color, size, &font, values.bold() || open, TextAlign::Left);
+            }
             Some(open) => {
                 let pad = 2.0 * look.padding();
                 chevron(p, Rect::new(bounds.x + pad, bounds.y, 10.0, bounds.height), color, open);

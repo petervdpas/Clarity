@@ -260,7 +260,7 @@
   let dataOf = $state("");
   let dataList = $state(false);
   const enums = $derived(preview.project.files.flatMap((f) => f.enums).map((e) => e.name.name));
-  /** The project's views, which a slide-out can show. */
+  /** The project's views, which a slide-out, tab, step or section can show. */
   const views = $derived(preview.project.files.flatMap((f) => f.pages).filter((page) => page.kind === "view").map((page) => page.name.name));
   /** Only records come as a list. */
   const listable = $derived(entities.some((e) => e.name.name === dataOf));
@@ -939,7 +939,14 @@
     {#if info.properties.includes("orientation")}
       <label class="prop">
         <span>Orientation</span>
-        <select value={p.orientation ?? "horizontal"} onchange={(e) => update({ orientation: e.currentTarget.value as Orientation })}>
+        <!-- An accordion stacks its sections unless written horizontal, so stacked writes nothing. -->
+        <select
+          value={p.orientation ?? (p.kind === "accordion" ? "vertical" : "horizontal")}
+          onchange={(e) => {
+            const chosen = e.currentTarget.value as Orientation;
+            update({ orientation: p.kind === "accordion" && chosen === "vertical" ? null : chosen });
+          }}
+        >
           <option value="horizontal">Side by side</option>
           <option value="vertical">Stacked</option>
         </select>
@@ -1045,6 +1052,22 @@
         <span>Title</span>
         <TextField {preview} {onapplied} text={tab.title} onwrite={(text) => onedit({ op: "setTitle", target: tab.span.start, title: text ?? "" })} />
       </label>
+      <label class="prop" title="A view it shows: its parts, data and handlers join this window's, so this window's code sets what it shows">
+        <span>Shows view</span>
+        <select
+          value={tab.view ?? ""}
+          disabled={tab.view === null && tab.children.length > 0}
+          onchange={(e) => onedit({ op: "setPageView", target: tab.span.start, view: e.currentTarget.value || null })}
+        >
+          <option value="">its own parts</option>
+          {#each views as view (view)}
+            <option value={view}>{view}</option>
+          {/each}
+        </select>
+      </label>
+      {#if tab.view === null && tab.children.length > 0}
+        <p class="hint">It holds parts of its own; remove them to show a view here.</p>
+      {/if}
       <div class="actions">
         <button class="danger" onclick={() => onedit({ op: "remove", item: tab.span.start })}>{step ? "Remove step" : section ? "Remove section" : "Remove tab"}</button>
       </div>

@@ -1533,6 +1533,8 @@ fn parse_widget_page(
     } else {
         None
     };
+    // `section "Class" view ClassEditor`: what it holds is the view's.
+    let view = if keyword != "pane" && cursor.eat_keyword("view") { Some(cursor.expect_ident("the name of the view it shows")?.name) } else { None };
     let columns = if keyword == "pane" && cursor.eat_keyword("span") {
         let token = cursor.expect(TokenKind::Number, "the columns the pane starts with")?;
         Some(token.text.parse().map_err(|_| Diagnostic::error("a pane's span is a whole number", token.span))?)
@@ -1543,6 +1545,7 @@ fn parse_widget_page(
     Ok(WidgetPage {
         title,
         columns,
+        view,
         children: parse_widgets(&node.children, diagnostics),
         span: node.span(),
     })

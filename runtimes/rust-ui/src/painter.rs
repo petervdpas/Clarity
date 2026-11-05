@@ -146,6 +146,13 @@ impl<'a> Painter<'a> {
 
     /// A line of text turned a quarter clockwise, read from top to bottom, in the middle of `area` (a tall, narrow one), as a side tab's caption.
     pub fn turned_text(&self, text: &str, area: Rect, color: Color, size: f64) {
+        self.turned_line(text, area, color, size, "text", false, TextAlign::Center);
+    }
+
+    /// A line of text turned a quarter clockwise in `area`, read from its top
+    /// down, in the font and weight given; `align` places it along the area's height.
+    #[allow(clippy::too_many_arguments)]
+    pub fn turned_line(&self, text: &str, area: Rect, color: Color, size: f64, font: &str, bold: bool, align: TextAlign) {
         if text.is_empty() {
             return;
         }
@@ -154,7 +161,7 @@ impl<'a> Painter<'a> {
         self.canvas.translate((area.right() as f32, area.y as f32));
         self.canvas.rotate(90.0, None);
         // Turned, the area's height is the line's width and its width the line's height.
-        self.text(text, Rect::new(0.0, 0.0, area.height, area.width), color, size, "text", false, TextAlign::Center);
+        self.text(text, Rect::new(0.0, 0.0, area.height, area.width), color, size, font, bold, align);
         self.canvas.restore();
     }
 

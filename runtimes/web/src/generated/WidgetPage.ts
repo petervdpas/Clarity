@@ -11,4 +11,9 @@ export type WidgetPage = { title: string | null,
  * its grid has them; the second pane has the rest. Without it each pane
  * has the splitter's columns and they start alike.
  */
-columns: number | null, children: Array<Widget>, span: Span, };
+columns: number | null, 
+/**
+ * `section "Class" view ClassEditor`: a tab, step or section showing a
+ * view (DESIGN 5.33), whose parts are then its own.
+ */
+view: string | null, children: Array<Widget>, span: Span, };

@@ -105,3 +105,33 @@ fn the_open_sections_parts_fill_the_room_under_its_header_and_the_rest_follow() 
     let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
     keep(&mut shot, "containers-accordion.png");
 }
+
+#[test]
+fn a_horizontal_accordion_stands_its_headers_side_by_side_with_the_open_section_beside_its_own() {
+    let host = TestHost::new();
+    host.set_state("faq", |s| s.open = Some(2));
+    let inside: String = (1..=3).map(|i| format!(r#"<Section title="Section {i}"><Label at="1,1" span="3" caption="Inside {i}" /></Section>"#)).collect();
+    let mut screen = window(&format!(r#"<Accordion name="faq" at="1,1" span="12" rows="8" orientation="horizontal" onchange="opened">{inside}</Accordion>"#), host.clone(), 800.0);
+    let part = first::<AccordionPart>(&screen);
+    let whole = part.node().bounds;
+    let headers: Vec<Rect> = part.headers().iter().map(|h| h.node().bounds).collect();
+    let page = part.pages()[1].node().bounds;
+    // Each header is a strip as high as the accordion, narrower than it is high.
+    for h in &headers {
+        assert!((h.y - whole.y).abs() < 0.001 && (h.height - whole.height).abs() < 0.001, "{h:?} in {whole:?}");
+        assert!(h.width < h.height);
+    }
+    assert!(headers[1].x > headers[0].right());
+    assert!(page.x >= headers[1].right());
+    assert!(headers[2].x >= page.right());
+    assert!(headers[2].right() <= whole.right() + 0.001);
+    assert!(page.width > whole.width / 2.0, "the open section has most of the room: {page:?}");
+    // Its sections have its whole height, so it asks no room beyond its rows.
+    assert!((page.height - whole.height).abs() < 0.001);
+    assert_eq!(0.0, part.around());
+    // A press on a header opens it, as a vertical one does.
+    click(&mut screen, headers[2].x + 10.0, headers[2].y + 40.0);
+    assert_eq!(Some(3), host.state(Some("faq")).unwrap().open);
+    let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
+    keep(&mut shot, "containers-accordion-horizontal.png");
+}

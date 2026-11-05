@@ -3,7 +3,9 @@
 //! parts fill the room under it. The open section, counted from 1 and 0 for
 //! none, is its part's state's `open`, so code reads and sets it. A press on
 //! a header opens that section, or folds it when it was the open one, and
-//! runs the part's handler of `on change`.
+//! runs the part's handler of `on change`. A horizontal one (`horizontal`)
+//! stands its headers side by side, as high as the accordion, their titles
+//! turned, with the open section's parts beside its header.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -18,7 +20,7 @@ use crate::parts::{Part, PartBase, PartHost};
 
 use super::container::{self, ContainerButton, LookNow, Page};
 
-/// How high a section's header is.
+/// How high a section's header is; how wide it is in a horizontal accordion.
 pub const SECTION_HEIGHT: f64 = 32.0;
 
 /// The room between headers.
@@ -63,12 +65,14 @@ impl Shared {
 pub struct AccordionPart {
     base: PartBase,
     shared: Rc<Shared>,
+    horizontal: bool,
     look: Cell<LookNow>,
 }
 
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
     let columns = container::columns_of(&spec);
     let count = spec.pages.len();
+    let horizontal = spec.text("orientation") == Some("horizontal");
     let shared = Rc::new(Shared { part: PartBase::new(spec.clone(), host.clone()), here: Cell::new(crate::markup::design_shown(&spec)), count });
     let mut base = PartBase::new(spec.clone(), host.clone());
     for (i, page) in spec.pages.iter().enumerate() {
@@ -81,12 +85,13 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         )
         .usable(move || usable_of.part.enabled());
         header.chevron = Some(false);
+        header.turned = horizontal;
         base.node.add(Box::new(header));
     }
     for page in &spec.pages {
         base.node.add(Box::new(Page::new(Box::new(container::grid_of(&page.children, columns, GAP, &host).owned(page.item.as_deref())))));
     }
-    Box::new(AccordionPart { base, shared, look: Cell::new(LookNow::default()) })
+    Box::new(AccordionPart { base, shared, horizontal, look: Cell::new(LookNow::default()) })
 }
 
 impl AccordionPart {
@@ -109,6 +114,17 @@ impl AccordionPart {
         self.pages().into_iter().map(Page::grid).collect()
     }
 
+    /// How much of its length its headers take, with the room between them.
+    fn headers_length(&self) -> f64 {
+        let count = self.shared.count;
+        count as f64 * SECTION_HEIGHT + count.saturating_sub(1) as f64 * BETWEEN
+    }
+
+    /// Whether it stands its headers side by side (`horizontal`).
+    pub fn horizontal(&self) -> bool {
+        self.horizontal
+    }
+
     /// A press on the header of section `press`, from 1.
     pub fn press(&mut self, press: i64, cx: &mut Cx) {
         self.shared.press(press);
@@ -119,12 +135,12 @@ impl AccordionPart {
 impl Element for AccordionPart {
     part_element!();
 
-    /// The room it needs beyond its rows: its headers and the open section's padding over its highest section.
+    /// The room it needs beyond its rows: its headers and the open section's padding over its highest section (none in a horizontal one).
     fn around(&self) -> f64 {
-        let count = self.shared.count;
-        let headers = count as f64 * SECTION_HEIGHT + count.saturating_sub(1) as f64 * BETWEEN;
         let highest = self.grids().into_iter().map(container::least_of).fold(0.0, f64::max);
-        container::around_for(&self.base.spec, headers + 4.0 * self.look.get().padding, highest)
+        // A horizontal one gives its open section its whole height; the headers and padding lie beside it.
+        let frame = if self.horizontal { 0.0 } else { self.headers_length() + 4.0 * self.look.get().padding };
+        container::around_for(&self.base.spec, frame, highest)
     }
 
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
@@ -134,23 +150,26 @@ impl Element for AccordionPart {
         let pad = look.padding;
         let count = self.shared.count;
         let open = shown(self.shared.open(), count) as usize;
-        let headers = count as f64 * SECTION_HEIGHT + count.saturating_sub(1) as f64 * BETWEEN;
-        let room = (area.height - headers - 4.0 * pad).max(0.0);
-        let mut y = area.y;
+        let horizontal = self.horizontal;
+        // Along the accordion: down a vertical one, across a horizontal one.
+        let (start, length) = if horizontal { (area.x, area.width) } else { (area.y, area.height) };
+        let room = (length - self.headers_length() - 4.0 * pad).max(0.0);
+        let along = |at: f64, size: f64| if horizontal { Rect::new(at, area.y, size, area.height) } else { Rect::new(area.x, at, area.width, size) };
+        let mut at = start;
         for i in 0..count {
             let on = i + 1 == open;
             let children = self.base.node.children_mut();
             if let Some(header) = children[i].as_any_mut().downcast_mut::<ContainerButton>() {
                 header.chevron = Some(on);
             }
-            element::arrange_safely(children[i].as_mut(), Rect::new(area.x, y, area.width, SECTION_HEIGHT), cx);
-            y += SECTION_HEIGHT + BETWEEN;
+            element::arrange_safely(children[i].as_mut(), along(at, SECTION_HEIGHT), cx);
+            at += SECTION_HEIGHT + BETWEEN;
             if let Some(page) = children[count + i].as_any_mut().downcast_mut::<Page>() {
                 page.shown = on;
             }
             if on {
-                element::arrange_safely(children[count + i].as_mut(), Rect::new(area.x, y + 2.0 * pad - BETWEEN, area.width, room), cx);
-                y += room + 4.0 * pad;
+                element::arrange_safely(children[count + i].as_mut(), along(at + 2.0 * pad - BETWEEN, room), cx);
+                at += room + 4.0 * pad;
             }
         }
     }

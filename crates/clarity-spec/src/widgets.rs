@@ -720,7 +720,7 @@ const ENTRIES: &[Entry] = &[
         container: Some(ContainerKind::Accordion),
         clickable: false,
         events: &[Event::Change],
-        properties: &[],
+        properties: &[WidgetProperty::Orientation],
     },
     // Parts that scroll into view below its rows.
     Entry {
@@ -1366,8 +1366,8 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         ink: None,
         order: None,
         show: Vec::new(),
-        // A splitter is written with its direction; a separator is level unless written vertical.
-        orientation: (has_property(kind, WidgetProperty::Orientation) && kind != WidgetKind::Separator)
+        // A splitter is written with its direction; a separator is level and an accordion stands its sections one under the other unless written otherwise.
+        orientation: (has_property(kind, WidgetProperty::Orientation) && !matches!(kind, WidgetKind::Separator | WidgetKind::Accordion))
             .then_some(Orientation::Horizontal),
         surface: has_property(kind, WidgetProperty::Surface).then_some(Surface::Svg),
         source: None,

@@ -46,6 +46,9 @@ pub enum Edit {
     /// Set the columns a splitter's first pane starts with (`pane span 4`),
     /// or none, so the panes start alike.
     SetPaneSpan { target: u32, columns: Option<u32> },
+    /// Set the view a tab, step or section shows (`section "Class" view
+    /// ClassEditor`), or none, so it holds parts of its own.
+    SetPageView { target: u32, view: Option<String> },
     /// Place a new widget on a page, panel, tab or pane.
     PlaceWidget { container: u32, props: WidgetProps },
     /// Place a new widget with the catalog defaults for its kind, optionally
@@ -829,6 +832,19 @@ impl Doc {
             Edit::SetPaneSpan { target, columns } => {
                 let (path, _) = self.find(*target, "a pane", |k| k == Kind::Pane)?;
                 let line = columns.map_or_else(|| "pane".to_string(), |n| format!("pane span {n}"));
+                set_line_keeping_comment(self.node_mut(&path), line);
+                Ok(Some(*target))
+            }
+            Edit::SetPageView { target, view } => {
+                let (path, _) = self.find(*target, "a tab, step or section", |k| k == Kind::WidgetTab)?;
+                let node = self.node(&path);
+                // Its keyword and title stay as written (a key or a text).
+                let head: Vec<&str> = node.tokens.iter().take(2).map(|t| &node.text[t.span.start as usize..t.span.end as usize]).collect();
+                let head = head.join(" ");
+                let line = match view.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+                    Some(view) => format!("{head} view {view}"),
+                    None => head,
+                };
                 set_line_keeping_comment(self.node_mut(&path), line);
                 Ok(Some(*target))
             }

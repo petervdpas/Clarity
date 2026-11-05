@@ -490,6 +490,9 @@ pub struct WidgetPage {
     /// its grid has them; the second pane has the rest. Without it each pane
     /// has the splitter's columns and they start alike.
     pub columns: Option<u32>,
+    /// `section "Class" view ClassEditor`: a tab, step or section showing a
+    /// view (DESIGN 5.33), whose parts are then its own.
+    pub view: Option<String>,
     pub children: Vec<Widget>,
     pub span: Span,
 }

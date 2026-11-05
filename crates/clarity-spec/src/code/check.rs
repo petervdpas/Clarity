@@ -1034,7 +1034,7 @@ fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
         collect_widgets(&page.widgets, &mut owner);
         collect_frame(&page.frame, &mut owner);
         // The parts and data of the views it shows are the window's too; their handlers are the view's own.
-        for view in crate::views::showing(&page.widgets).filter_map(|(_, name)| crate::views::find(visible.iter().copied(), name)) {
+        for view in crate::views::places(&page.widgets).into_iter().filter_map(|place| crate::views::find(visible.iter().copied(), place.view)) {
             let mut theirs = Owner { name: &view.name.name, is_app: false, data: &view.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new() };
             collect_widgets(&view.widgets, &mut theirs);
             owner.parts.extend(theirs.parts);

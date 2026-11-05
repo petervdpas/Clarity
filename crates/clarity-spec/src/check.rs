@@ -759,9 +759,10 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// The views a window's slide-outs show (`view ClassEditor`, DESIGN 5.33):
-    /// each a view of the project, shown once, in a window, its parts and data
-    /// named apart from the window's, and the slide-out holding none of its own.
+    /// The views a window's slide-outs, tabs, steps and sections show (`view
+    /// ClassEditor`, DESIGN 5.33): each a view of the project, shown once, in
+    /// a window, its parts and data named apart from the window's, and the
+    /// place holding none of its own.
     fn check_views(&mut self, file: usize, page: &'a Page) {
         fn names<'w>(widgets: &'w [Widget], out: &mut Vec<&'w str>) {
             for w in widgets {
@@ -776,36 +777,38 @@ impl<'a> Checker<'a> {
         names(&page.widgets, &mut own);
         own.extend(page.data.iter().map(|d| d.name.name.as_str()));
         let mut shown: Vec<&str> = Vec::new();
-        for (widget, name) in crate::views::showing(&page.widgets) {
-            if !widget.children.is_empty() {
-                self.error(file, format!("a slide-out that shows a view holds no parts of its own; they are {name}'s"), widget.span);
+        for place in crate::views::places(&page.widgets) {
+            let (name, what, span) = (place.view, place.what, place.span);
+            if place.holds_parts {
+                self.error(file, format!("a {what} that shows a view holds no parts of its own; they are {name}'s"), span);
             }
             if page.kind == PageKind::View {
-                self.error(file, "a view shows in a window, not in another view", widget.span);
+                self.error(file, "a view shows in a window, not in another view", span);
                 continue;
             }
             let Some(found) = self.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == name) else {
-                self.error(file, format!("there is no view '{name}'"), widget.span);
+                self.error(file, format!("there is no view '{name}'"), span);
                 continue;
             };
             if found.kind != PageKind::View {
-                self.error(file, format!("{name} is a {}; a slide-out shows a view: write page {name}: view", page_kind_word(found.kind)), widget.span);
+                self.error(file, format!("{name} is a {}; a {what} shows a view: write page {name}: view", page_kind_word(found.kind)), span);
                 continue;
             }
             if shown.contains(&name) {
-                self.error(file, format!("{name} shows once in a window"), widget.span);
+                self.error(file, format!("{name} shows once in a window"), span);
                 continue;
             }
             shown.push(name);
+            // A slide-out stands on the window, so a view that has one shows nowhere.
             if found.widgets.iter().any(|w| w.props.kind == WidgetKind::Slideout) {
-                self.error(file, format!("{name} has a slide-out of its own, so it cannot show in one"), widget.span);
+                self.error(file, format!("{name} has a slide-out of its own, so it cannot show in a {what}"), span);
             }
             let mut theirs = Vec::new();
             names(&found.widgets, &mut theirs);
             theirs.extend(found.data.iter().map(|d| d.name.name.as_str()));
             // The project's settings are every page's: the same data, no clash.
             for clash in theirs.iter().filter(|n| own.contains(n) && **n != crate::parser::SETTINGS_DATA) {
-                self.error(file, format!("{name} has '{clash}', as {} has; name one of them apart", page.name.name), widget.span);
+                self.error(file, format!("{name} has '{clash}', as {} has; name one of them apart", page.name.name), span);
             }
         }
     }

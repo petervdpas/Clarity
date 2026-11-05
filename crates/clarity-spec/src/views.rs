@@ -48,7 +48,9 @@ pub fn placed(project: &Project) -> Project {
                 let Some(name) = widget.props.view.clone() else { continue };
                 let Some((view, code)) = views.iter().find(|(v, _)| v.name.name == name) else { continue };
                 widget.children = view.widgets.clone();
-                page.data.extend(view.data.iter().cloned());
+                // Data the window has already (the project's settings, which every page has) stays the window's.
+                let fresh: Vec<_> = view.data.iter().filter(|d| !page.data.iter().any(|w| w.name.name == d.name.name)).cloned().collect();
+                page.data.extend(fresh);
                 if let Some(code) = code {
                     added.push((page.name.name.clone(), code.clone()));
                 }

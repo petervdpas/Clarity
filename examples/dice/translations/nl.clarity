@@ -33,3 +33,8 @@ translation nl
     engineTooLong "{engine} liep langer dan {seconds} seconden en is gestopt"
     engineStopped "{engine} is gestopt"
     engineBroke "{engine} werkt niet meer in {function}"
+    historySlideout "Worpen"
+    oddsSlideout "Kansen"
+    slideoutClose "Sluiten"
+    slideoutPin "Vastzetten"
+    slideoutUnpin "Laten wegschuiven"

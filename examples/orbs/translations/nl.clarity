@@ -31,3 +31,7 @@ translation nl
     itemOutsideList "Er is geen item {position} in een lijst van {count}"
     recordNotThere "Er is geen {table} met id {id}"
     recordStillUsed "Deze {table} wordt nog door andere records gebruikt"
+    bestSlideout "Beste rondes"
+    slideoutClose "Sluiten"
+    slideoutPin "Vastzetten"
+    slideoutUnpin "Laten wegschuiven"

@@ -89,26 +89,26 @@ action export_collection()
         lines = lines + album.title + "\n"
     write lines to exports "collection.txt"
 
+// The collection, with the album opened (a double click or Enter) in the
+// editor that slides out from the right; the table adds and removes albums.
 page AlbumBrowse: window
     title @albumBrowseTitle
     data albums: list<Album>
+    on open: filterChanged
     on return: windowReturned
 
     heading @collectionHeadingCaption name collectionHeading at 1,1 span 6
     image name collectionLogo at 12,1 span 1 rows 1 source "logo.png" tooltip @collectionLogoTooltip
     label @searchLabel name searchLabel at 1,2 span 2 for searchBox
     textbox name searchBox at 3,2 span 10 placeholder @searchPlaceholder on change: filterChanged
-    table name grid at 1,3 span 12 rows 8 bind albums columns title, artist, year, format, rating, price, tags resizable sortable page 25 on open: openClicked
+    table name grid at 1,3 span 12 rows 8 bind albums columns title, artist, year, format, rating, price, tags resizable sortable page 25 add remove confirm on add: newClicked on remove: removeClicked on open: openClicked
     button @exportListCaption name exportList at 1,11 span 2 on click: exportClicked
-    button @newAlbumCaption name newAlbum at 9,11 span 2 on click -> AlbumForm
-    button @openCaption name openAlbum at 11,11 span 2 on click: openClicked
+    slideout @albumSlideout name albumSlide view AlbumEditor width 980 resizable min 700 max 1400 pinnable span 12 rows 11 on close: filterChanged
 
-page AlbumForm: window
-    title @albumFormTitle
+// An album: what it is, its tracks, what it cost, its cover and notes.
+page AlbumEditor: view
     data album: Album
     data tracks: list<Track>
-    on open: albumOpened
-    on return: albumOpened
 
     splitter name albumSplitter at 1,1 span 12 rows 10 horizontal
         pane
@@ -130,9 +130,8 @@ page AlbumForm: window
         pane
             tabs name albumTabs at 1,1 span 12 rows 9
                 tab @albumFormTracksTab
-                    table name trackGrid at 1,1 span 12 rows 6 bind tracks columns number, title, length on open: trackOpened
+                    table name trackGrid at 1,1 span 12 rows 6 bind tracks columns number, title, length add remove confirm on add: addTrackClicked on remove: removeTrackClicked on open: trackOpened
                     label name length at 1,7 span 9
-                    button @addTrackCaption name addTrack at 10,7 span 3 on click: addTrackClicked
                 tab @albumFormPurchaseTab
                     label @boughtOnLabel name boughtOnLabel at 1,1 span 3 for boughtOn
                     date name boughtOn at 4,1 span 4 bind album.bought_on
@@ -149,8 +148,7 @@ page AlbumForm: window
                     button @useAsArtistPhotoCaption name useAsArtistPhoto at 9,8 span 4 on click: useAsArtistPhotoClicked
                 tab @albumFormNotesTab
                     memo name albumNotes at 1,1 span 12 rows 7 bind album.notes
-    button @saveCaption name save at 9,11 span 2 style primary key "Ctrl+S" default on click: saveClicked
-    button @closeCaption name closeAlbum at 11,11 span 2 cancel on click -> close
+    button @saveCaption name save at 11,11 span 2 style primary key "Ctrl+S" default on click: saveClicked
 
 // One track, in a dialog over the album.
 page TrackDialog: dialog
@@ -164,25 +162,26 @@ page TrackDialog: dialog
     textbox name title at 4,2 span 9 bind track.title
     label @lengthLabel name lengthLabel at 1,3 span 3 for length
     number name length at 4,3 span 3 bind track.length placeholder "3:45"
-    button @deleteButtonCaption name deleteButton at 1,5 span 2 on click: deleteClicked
     button @saveCaption name saveTrack at 9,5 span 2 style primary default on click: saveClicked
     button @cancelCaption name cancelTrack at 11,5 span 2 cancel on click -> close
 
+// The artists as cards, with the one opened in the editor that slides out from the right.
 page ArtistBrowse: window
     title @artistBrowseTitle
     data artists: list<Artist>
-    on return: windowReturned
+    on open: filterChanged
+    on return: filterChanged
 
     label @artistSearchLabel name artistSearchLabel at 1,1 span 2 for artistSearch
     textbox name artistSearch at 3,1 span 10 placeholder @artistSearchPlaceholder on change: filterChanged
     list name artistList at 1,2 span 12 rows 8 bind artists show name, country, formed cards on open: openClicked
     button @findPhotosCaption name findPhotos at 1,10 span 2 on click: photosClicked
     button @backUpPhotosCaption name backUpPhotos at 3,10 span 2 on click: backupClicked
-    button @newArtistCaption name newArtist at 9,10 span 2 on click -> ArtistForm
-    button @openCaption name openArtist at 11,10 span 2 on click: openClicked
+    button @newArtistCaption name newArtist at 11,10 span 2 icon "plus" on click: newClicked
+    slideout @artistSlideout name artistSlide view ArtistEditor width 760 resizable min 520 max 1100 pinnable span 12 rows 6 on close: filterChanged
 
-page ArtistForm: window
-    title @artistFormTitle
+// An artist: name, country, since when, website and photo.
+page ArtistEditor: view
     data artist: Artist
 
     image name photo at 10,1 span 3 rows 4 bind artist.photo
@@ -195,17 +194,14 @@ page ArtistForm: window
         number name formed at 4,3 span 2 bind artist.formed
         label @websiteLabel name websiteLabel at 1,4 span 3 for website
         textbox name website at 4,4 span 6 bind artist.website placeholder @websitePlaceholder
-    button @saveCaption name saveArtist at 9,6 span 2 style primary default on click: saveClicked
-    button @closeCaption name closeArtist at 11,6 span 2 cancel on click -> close
+    button @saveCaption name saveArtist at 11,6 span 2 style primary default on click: saveClicked
 
 page GenreBrowse: window
     title @genreBrowseTitle
     data genres: list<Genre>
     on return: windowReturned
 
-    treetable name genreTree at 1,1 span 10 rows 8 bind genres children children columns name on open: openClicked
-    button @newGenreCaption name newGenre at 11,1 span 2 on click -> GenreDialog
-    button @openCaption name openGenre at 11,2 span 2 on click: openClicked
+    treetable name genreTree at 1,1 span 12 rows 9 bind genres children children columns name add remove confirm on add: newClicked on remove: removeClicked on open: openClicked
 
 // The collection at a glance: what it is on, when it is from, where the money went.
 page CollectionOverview: window
@@ -234,27 +230,45 @@ page GenreDialog: dialog
     button @cancelCaption name cancelGenre at 11,5 span 2 cancel on click -> close
 
 code AlbumBrowse
+    // Back from a track's dialog: the album's tracks again too.
     handler windowReturned
         filterChanged()
+        showTracks()
 
     handler filterChanged
         // Words of the title, label, notes or tags, or part of the artist's name.
         albums = find a in Album where a matches searchBox.text or a.artist.name contains searchBox.text order by a.artist.name, a.title
 
     handler openClicked
-        open AlbumForm with album = grid.selected
+        album = grid.selected
+        showTracks()
+        albumSlide.visible = true
 
-    handler exportClicked
-        export_collection()
-        message @savedTheListInCollection
+    handler newClicked
+        album = new Album
+        showTracks()
+        albumSlide.visible = true
 
-code AlbumForm
-    handler albumOpened
+    // Its tracks go with it; an album lent out stays, and says so.
+    handler removeClicked
+        let gone = grid.selected
+        for t in find x in Track where x.album == gone
+            delete t
+        delete gone
+        albumSlide.visible = false
+        filterChanged()
+
+    handler showTracks
         tracks = find t in Track where t.album == album order by t.number
         let total = total_length(tracks)
         let count = count(tracks)
         length.caption = @countTracksTotal(count = count, total = total)
 
+    handler exportClicked
+        export_collection()
+        message @savedTheListInCollection
+
+code AlbumEditor
     handler trackOpened
         open TrackDialog with album = album, track = trackGrid.selected
 
@@ -275,6 +289,10 @@ code AlbumForm
         save album
         open TrackDialog with album = album
 
+    handler removeTrackClicked
+        delete trackGrid.selected
+        tracks = find t in Track where t.album == album order by t.number
+
     handler saveClicked
         title.error = ""
         if album.title == ""
@@ -282,7 +300,6 @@ code AlbumForm
             return
         save album
         message @savedTitle(title = album.title)
-        close
 
 code TrackDialog
     handler saveClicked
@@ -294,19 +311,17 @@ code TrackDialog
         save track
         close
 
-    handler deleteClicked
-        delete track
-        close
-
 code ArtistBrowse
-    handler windowReturned
-        filterChanged()
-
     handler filterChanged
         artists = find a in Artist where a matches artistSearch.text order by a.name
 
     handler openClicked
-        open ArtistForm with artist = artistList.selected
+        artist = artistList.selected
+        artistSlide.visible = true
+
+    handler newClicked
+        artist = new Artist
+        artistSlide.visible = true
 
     handler photosClicked
         find_artist_photos()
@@ -316,7 +331,7 @@ code ArtistBrowse
         back_up_photos()
         message @copiedThePhotosToThe
 
-code ArtistForm
+code ArtistEditor
     handler saveClicked
         name.error = ""
         if artist.name == ""
@@ -324,7 +339,6 @@ code ArtistForm
             return
         save artist
         message @savedName(name = artist.name)
-        close
 
 code GenreBrowse
     handler windowReturned
@@ -332,6 +346,14 @@ code GenreBrowse
 
     handler openClicked
         open GenreDialog with genre = genreTree.selected
+
+    handler newClicked
+        open GenreDialog
+
+    // A genre with genres below it stays, and says so.
+    handler removeClicked
+        delete genreTree.selected
+        reload genres
 
 code CollectionOverview
     handler overviewOpened

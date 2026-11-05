@@ -733,7 +733,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 | `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `add`; `remove` [`confirm`]; `order by field [desc]`; `reorder by field`; `page 50`; `striped`; `frame` | `select`, `open`, `change`, `reorder`, `add`, `remove` |
 | `list` | a list: `bind orders` | `show field, field, ...`; `cards`: each row a small card, the first field of `show` its title and the others lines below it, in the theme's `part card` and `part card_line` looks; `reorder by field`; `striped`; `frame` | `select`, `open`, `reorder` |
 | `tree` | a list: `bind folders children children` | `children field`, or `key field parent field`; `show field, ...`; `reorder by field`; `striped`; `frame` | `select`, `open`, `reorder` |
-| `treetable` | a list: `bind folders children children` | `children field`, or `key field parent field`; `columns field [width], ...`; `resizable`; `reorder by field`; `striped` | `select`, `open`, `reorder` |
+| `treetable` | a list: `bind folders children children` | `children field`, or `key field parent field`; `columns field [width], ...`; `resizable`; `add`; `remove` [`confirm`]; `reorder by field`; `striped` | `select`, `open`, `reorder`, `add`, `remove` |
 | `chart` | a list: `chart bar ... bind orders by status count`; or a list of numbers, drawn as they are: `chart line ... bind readings` | `bar`, `line` or `pie` first; `by field`; `count`, `sum field` or `average field`; for a list of numbers `points n` (its last n) and `max n` (the top of the axis) | |
 | `trend` | an integer, decimal, money or duration: `bind cpu` | `points n`, the values it keeps, 60 without it; `max n`, the top of the axis; `every n`, seconds between values, 1 without it; see [Live graphs](#live-graphs) | none |
 
@@ -871,7 +871,7 @@ treetable name grid at 5,1 span 8 rows 20 bind nodes key key parent parent colum
 
 ### Adding and removing rows
 
-A table adds and removes its own rows when its line says `add` and `remove`: an Add button stands above its header at the right, and every row has a trash button in a last column of its own. The Add button runs `on add`; a trash button picks its row and runs `on remove`, which reads the row as `table.selected`. Insert and Delete do the same from the keys, and a read-only or disabled table runs neither. The handlers do the adding and deleting, so each needs its handler.
+A table (and a tree table) adds and removes its own rows when its line says `add` and `remove`: an Add button stands above its header at the right, and every row has a trash button in a last column of its own. The Add button runs `on add`; a trash button picks its row and runs `on remove`, which reads the row as `table.selected`. Insert and Delete do the same from the keys, and a read-only or disabled table runs neither. The handlers do the adding and deleting, so each needs its handler.
 
 ```clarity
 page ClassEditor: view

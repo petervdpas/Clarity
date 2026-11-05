@@ -16,19 +16,21 @@ entity Customer
     tags: list<text>, search, label @customerTagsLabel
     contract: file, label @customerContractLabel
 
+// The customers, with the one opened (a double click or Enter) in the
+// editor that slides out from the right; the table adds and removes them.
 page CustomerBrowse: window
     title @customerBrowseTitle
     data customers: list<Customer>
-    on return: windowReturned
+    on open: filterChanged
+    on return: filterChanged
 
     label @searchLabel name searchLabel at 1,1 span 2 for searchBox
     textbox name searchBox at 3,1 span 10 placeholder @searchPlaceholder on change: filterChanged
-    table name grid at 1,2 span 12 rows 8 bind customers columns name, email, kind, credit_limit, active, tags sortable page 20 on open: openClicked
-    button @newCaption name newCustomer at 9,10 span 2 on click -> CustomerForm
-    button @openButtonCaption name openButton at 11,10 span 2 on click: openClicked
+    table name grid at 1,2 span 12 rows 9 bind customers columns name, email, kind, credit_limit, active, tags sortable page 20 add remove confirm on add: newClicked on remove: removeClicked on open: openClicked
+    slideout @customerSlideout name customerPanel view CustomerEditor width 760 resizable min 520 max 1200 pinnable span 12 rows 9 on close: filterChanged
 
-page CustomerForm: window
-    title @customerFormTitle
+// A customer: who they are, their money, and notes.
+page CustomerEditor: view
     data customer: Customer
 
     form name customerForm at 1,1 span 12 rows 8 bind customer
@@ -61,22 +63,29 @@ page CustomerForm: window
                 label @notesLabel name notesLabel at 1,1 span 3 for notes
                 memo name notes at 4,1 span 9 rows 4 bind customer.notes
                 help name notesHelp at 4,5 span 9 for notes
-    button @saveCaption name save at 9,10 span 2 tooltip @saveTooltip style primary key "Ctrl+S" default on click: saveClicked
-    button @closeFormCaption name closeForm at 11,10 span 2 cancel on click: closeClicked
+    button @saveCaption name save at 11,9 span 2 tooltip @saveTooltip style primary key "Ctrl+S" default on click: saveClicked
 
 code CustomerBrowse
-    handler windowReturned
-        // A form opened from here may have saved a customer.
-        filterChanged()
-
     handler filterChanged
         // Every word typed, at the start of a word of the name, e-mail, notes or tags.
         customers = find c in Customer where c matches searchBox.text order by c.name
 
     handler openClicked
-        open CustomerForm with customer = grid.selected
+        customer = grid.selected
+        vatNumber.enabled = customer.kind == Business
+        customerPanel.visible = true
 
-code CustomerForm
+    handler newClicked
+        customer = new Customer
+        vatNumber.enabled = false
+        customerPanel.visible = true
+
+    handler removeClicked
+        delete grid.selected
+        customerPanel.visible = false
+        filterChanged()
+
+code CustomerEditor
     handler kindChanged
         // Only business customers have a VAT number.
         vatNumber.enabled = customer.kind == Business
@@ -94,10 +103,6 @@ code CustomerForm
             return
         save customer
         message @savedName(name = customer.name)
-        close
-
-    handler closeClicked
-        close
 
 // Data events run whenever a customer is saved or deleted, from any window
 // or action.

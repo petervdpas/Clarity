@@ -2,7 +2,7 @@
 name = "clarity-ui"
 description = "Clarity.UI: Clarity's own UI framework, drawn with Skia, the one library behind the programs Clarity generates in every language"
 # Released on its own (tag runtimes/rust-ui/vX.Y.Z), after the clarity-runtime it names.
-version = "0.7.0"
+version = "0.7.1"
 edition.workspace = true
 license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"

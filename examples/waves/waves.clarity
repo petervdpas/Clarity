@@ -19,7 +19,6 @@ part WaveField
 page Water: window
     title @waterTitle
     size 980 x 640
-    data swells: list<Swell>
     data speed: integer, default 4
     data sources: integer, default 3
     data highest: integer
@@ -31,7 +30,14 @@ page Water: window
     label @highestLabel name highestLabel at 9,5 span 4
     display name highestShown at 9,6 span 4 rows 2 bind highest digits 3
     button @calmCaption name calm at 9,8 span 4 on click: calmClicked
-    table name kept at 9,9 span 4 rows 4 bind swells columns height, seen order by height desc
+
+    slideout @keptSlideout name keptPanel view KeptSwells width 360 resizable min 260 max 700 pinnable span 6 rows 12
+
+// The swells seen, the highest first.
+page KeptSwells: view
+    data swells: list<Swell>
+
+    table name kept at 1,1 span 6 rows 12 bind swells columns height, seen order by height desc
 
 code Water
     handler waterSwelled(height: integer)

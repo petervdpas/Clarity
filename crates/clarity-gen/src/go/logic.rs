@@ -831,7 +831,10 @@ impl<'a> Emitter<'a> {
                     out.push_str(&pre);
                     let mut inner = String::new();
                     self.block(body, &mut inner);
-                    out.push_str(&format!("for _, {} := range {list} {{\n{}}}\n", local(&var.name), indent(&unused_locals(&inner), 1)));
+                    // A loop that never reads its value takes none: Go refuses a variable it never reads.
+                    let name = local(&var.name);
+                    let head = if inner.lines().any(|l| mentions(l, &name)) { format!("for _, {name} := range") } else { "for range".to_string() };
+                    out.push_str(&format!("{head} {list} {{\n{}}}\n", indent(&unused_locals(&inner), 1)));
                     return;
                 }
                 out.push_str(&pre);

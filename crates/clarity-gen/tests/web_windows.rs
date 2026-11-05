@@ -256,8 +256,9 @@ fn the_designer_draws_markup_that_says_where_each_part_is_written() {
     let designed = files(&preview::files_json(&project, "Todo", &Shown::Window("Main".into()), true, &Default::default()));
     let markup = designed["windows"]["Main"].as_str().unwrap();
     assert!(markup.contains(&format!("<Window name=\"Main\" designItem=\"{}\">", main.span.start)), "{markup}");
-    let add = main.widgets.iter().find(|w| w.props.name.as_deref() == Some("addButton")).unwrap();
-    assert!(markup.contains(&format!("onclick=\"addClicked\" designItem=\"{}\"", add.span.start)), "{markup}");
+    let grid = main.widgets.iter().find(|w| w.props.name.as_deref() == Some("grid")).unwrap();
+    let line = markup.lines().find(|l| l.contains("<Table name=\"grid\"")).expect("the task table");
+    assert!(line.contains("onadd=\"addClicked\"") && line.contains(&format!("designItem=\"{}\"", grid.span.start)), "{line}");
     // The app's menu items too.
     assert!(designed["apps"]["Todo"].as_str().unwrap().contains("designItem="));
     // The preview's markup is the program's own: no design items.

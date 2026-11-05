@@ -1905,6 +1905,11 @@ impl Element for TablePart {
         if !self.base.enabled() || !rows::plain(key) {
             return false;
         }
+        // Insert runs the Add button, an empty table's too.
+        if key.key == Key::Insert && self.adds() && !self.locked() {
+            self.base.fire("add");
+            return true;
+        }
         let shown = self.shown_places();
         if shown.is_empty() {
             return false;
@@ -1929,10 +1934,6 @@ impl Element for TablePart {
         // Delete runs the chosen row's trash button; Insert the Add button.
         if key.key == Key::Delete && at.is_some() && self.removes() && !self.locked() {
             self.remove_chosen(cx);
-            return true;
-        }
-        if key.key == Key::Insert && self.adds() && !self.locked() {
-            self.base.fire("add");
             return true;
         }
         let Some(to) = rows::moved_to(key.key, at, shown.len(), page) else { return false };

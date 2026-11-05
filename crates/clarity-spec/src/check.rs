@@ -803,7 +803,8 @@ impl<'a> Checker<'a> {
             let mut theirs = Vec::new();
             names(&found.widgets, &mut theirs);
             theirs.extend(found.data.iter().map(|d| d.name.name.as_str()));
-            for clash in theirs.iter().filter(|n| own.contains(n)) {
+            // The project's settings are every page's: the same data, no clash.
+            for clash in theirs.iter().filter(|n| own.contains(n) && **n != crate::parser::SETTINGS_DATA) {
                 self.error(file, format!("{name} has '{clash}', as {} has; name one of them apart", page.name.name), widget.span);
             }
         }

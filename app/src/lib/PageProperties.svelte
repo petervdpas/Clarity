@@ -585,15 +585,9 @@
       </fieldset>
     {/if}
 
-    {#if info.properties.includes("sortable") && p.columns.length > 0}
+    {#if info.properties.includes("add")}
       <fieldset class="checks">
-        <legend>Table</legend>
-        <label title="The person drags the header edges; the widths are remembered for them">
-          <input type="checkbox" checked={p.resizable} onchange={(e) => update({ resizable: e.currentTarget.checked })} /> Resizable columns
-        </label>
-        <label title="A click on a header sorts by that column; another click the other way">
-          <input type="checkbox" checked={p.sortable} onchange={(e) => update(e.currentTarget.checked ? { sortable: true, reorder: null } : { sortable: false })} /> Sortable by a header click
-        </label>
+        <legend>Rows</legend>
         <label title="An Add button above the table, at the right: it runs the table's add event (Insert does too)">
           <input type="checkbox" checked={p.add} onchange={(e) => update({ add: e.currentTarget.checked })} /> Add button above it
         </label>
@@ -603,6 +597,19 @@
         <label title="The trash button asks first, in Clarity's dialog, and removes the row on yes">
           <input type="checkbox" checked={p.confirm} disabled={!p.remove} onchange={(e) => update({ confirm: e.currentTarget.checked })} /> Ask first
         </label>
+      </fieldset>
+    {/if}
+
+    {#if info.properties.includes("sortable") && p.columns.length > 0}
+      <fieldset class="checks">
+        <legend>Table</legend>
+        <label title="The person drags the header edges; the widths are remembered for them">
+          <input type="checkbox" checked={p.resizable} onchange={(e) => update({ resizable: e.currentTarget.checked })} /> Resizable columns
+        </label>
+        <label title="A click on a header sorts by that column; another click the other way">
+          <input type="checkbox" checked={p.sortable} onchange={(e) => update(e.currentTarget.checked ? { sortable: true, reorder: null } : { sortable: false })} /> Sortable by a header click
+        </label>
+
         <label class="order">
           <span>First order</span>
           <select value={p.order?.field ?? ""} onchange={(e) => update(e.currentTarget.value ? { order: { field: e.currentTarget.value, desc: p.order?.desc ?? false }, reorder: null } : { order: null })}>

@@ -10,7 +10,6 @@ app Records
     menu name mainMenu
         item @fileItem name fileItem
             item @albumsItem name albumsItem key "Ctrl+1" on click -> AlbumBrowse
-            item @newAlbumItem name newAlbumItem key "Ctrl+N" on click -> AlbumForm
             separator
             item @settingsItem name settingsItem on click -> Preferences
             item @languageItem name languageItem on click -> language

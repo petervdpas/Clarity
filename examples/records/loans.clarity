@@ -36,11 +36,10 @@ page LoanBrowse: window
 
     heading @loansHeadingCaption name loansHeading at 1,1 span 6
     checkbox @showReturnedCaption name showReturned at 9,1 span 4 on change: windowReturned
-    table name loanGrid at 1,2 span 12 rows 8 bind loans columns album, friend, lent_on, returned_on sortable on open: openClicked
+    // Add lends an album in the dialog; the trash takes a loan away for good.
+    table name loanGrid at 1,2 span 12 rows 8 bind loans columns album, friend, lent_on, returned_on sortable add remove confirm on add: lendClicked on remove: removeClicked on open: openClicked
     button @friendsCaption name friends at 1,10 span 2 on click -> FriendBrowse
-    button @lendCaption name lend at 7,10 span 2 on click -> LoanDialog
-    button @backButtonCaption name backButton at 9,10 span 2 on click: backClicked
-    button @openCaption name openLoan at 11,10 span 2 on click: openClicked
+    button @backButtonCaption name backButton at 11,10 span 2 on click: backClicked
 
 page LoanDialog: dialog
     title @loanDialogTitle
@@ -64,9 +63,7 @@ page FriendBrowse: window
     data friends: list<Friend>
     on return: windowReturned
 
-    table name friendGrid at 1,1 span 12 rows 8 bind friends columns name, phone, email on open: openClicked
-    button @newFriendCaption name newFriend at 9,9 span 2 on click -> FriendDialog
-    button @openCaption name openFriend at 11,9 span 2 on click: openClicked
+    table name friendGrid at 1,1 span 12 rows 9 bind friends columns name, phone, email add remove confirm on add: newClicked on remove: removeClicked on open: openClicked
 
 page FriendDialog: dialog
     title @friendDialogTitle
@@ -90,6 +87,13 @@ code LoanBrowse
 
     handler openClicked
         open LoanDialog with loan = loanGrid.selected
+
+    handler lendClicked
+        open LoanDialog
+
+    handler removeClicked
+        delete loanGrid.selected
+        windowReturned()
 
     handler backClicked
         bring_back(loanGrid.selected)
@@ -121,6 +125,14 @@ code FriendBrowse
 
     handler openClicked
         open FriendDialog with friend = friendGrid.selected
+
+    handler newClicked
+        open FriendDialog
+
+    // A friend who borrowed albums stays, and says so.
+    handler removeClicked
+        delete friendGrid.selected
+        reload friends
 
 code FriendDialog
     handler saveClicked

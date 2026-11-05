@@ -19,7 +19,6 @@ part OrbField
 page Play: window
     title @playTitle
     size 980 x 640
-    data scores: list<Score>
     data player: text, default @defaultPlayer
     data caught: integer
     data speed: integer, default 3
@@ -31,7 +30,14 @@ page Play: window
     label @caughtLabel name caughtLabel at 9,5 span 4
     display name caughtShown at 9,6 span 4 rows 2 bind caught digits 4
     button @againCaption name again at 9,8 span 4 on click: againClicked
-    table name best at 9,9 span 4 rows 4 bind scores columns player, points order by points desc
+
+    slideout @bestSlideout name bestPanel view BestScores width 360 resizable min 260 max 700 pinnable span 6 rows 12
+
+// The rounds played, the most orbs first.
+page BestScores: view
+    data scores: list<Score>
+
+    table name best at 1,1 span 6 rows 12 bind scores columns player, points, played order by points desc
 
 code Play
     handler orbCaught(points: integer)

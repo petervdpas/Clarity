@@ -42,19 +42,15 @@ page Main: window
     on open: windowOpened
     on return: windowReturned
 
-    label @newTitleLabel name newTitleLabel at 1,1 span 2 for newTitle
-    textbox name newTitle at 3,1 span 8 placeholder @newTitlePlaceholder
-    button @addButtonCaption name addButton at 11,1 span 2 default on click: addClicked
-    label @searchLabel name searchLabel at 1,2 span 2 for searchBox
-    textbox name searchBox at 3,2 span 10 placeholder @searchPlaceholder on change: showTasks
-    table name grid at 1,3 span 12 rows 8 bind tasks columns title, done, finished_by resizable edit title, done as switch, finished_by on select: rowSelected on change: taskChanged
-    button @usersButtonCaption name usersButton at 1,11 span 2 on click -> Users
-    button @deleteButtonCaption name deleteButton at 11,11 span 2 on click: deleteClicked
+    label @searchLabel name searchLabel at 1,1 span 2 for searchBox
+    textbox name searchBox at 3,1 span 10 placeholder @searchPlaceholder on change: showTasks
+    // The table adds and removes its tasks itself: Add above it, the trash on each row.
+    table name grid at 1,2 span 12 rows 9 bind tasks columns title, done, finished_by resizable edit title, done as switch, finished_by add remove confirm on add: addClicked on remove: deleteClicked on change: taskChanged
+    button @usersButtonCaption name usersButton at 1,12 span 2 on click -> Users
 
 page Users: window
     title @usersTitle
     data people: list<Person>
-    data person: Person
     on open: usersOpened
     // This window has its own menu and ribbon: they lead back to Main, not to Users.
     menu name usersMenu
@@ -73,17 +69,22 @@ page Users: window
                 button @languageButtonCaption name usersLanguageButton icon "languages" large on click -> language
                 button @themeButtonCaption name usersThemeButton large on click -> theme
 
-    table name peopleGrid at 1,1 span 12 rows 6 bind people columns name, color resizable sortable on select: personSelected
-    form name personForm at 1,7 span 12 rows 2 bind person
+    // A person picked opens in the editor that slides out from the right.
+    table name peopleGrid at 1,1 span 12 rows 9 bind people columns name, color resizable sortable add remove on add: newClicked on remove: deletePersonClicked on select: personSelected
+    slideout @personSlideout name personPanel view PersonEditor width 460 pinnable span 6 rows 4 on close: personPanelClosed
+    button @closeButtonCaption name closeButton at 11,11 span 2 cancel on click: closeClicked
+
+// A person: their name and the color their tasks show in.
+page PersonEditor: view
+    data person: Person
+
+    form name personForm at 1,1 span 6 rows 2 bind person
         label @nameLabel name nameLabel at 1,1 span 2 for name
-        textbox name name at 3,1 span 8 bind person.name placeholder @namePlaceholder
-        help name nameHelp at 11,1 span 2 for name
+        textbox name name at 3,1 span 4 bind person.name placeholder @namePlaceholder
         label @colorLabel name colorLabel at 1,2 span 2 for colorBox
         color name colorBox at 3,2 span 3 bind person.color
-    button @newButtonCaption name newButton at 5,10 span 2 on click: newClicked
-    button @saveButtonCaption name saveButton at 7,10 span 2 key "Ctrl+S" default on click: saveClicked
-    button @deletePersonButtonCaption name deletePersonButton at 9,10 span 2 on click: deletePersonClicked
-    button @closeButtonCaption name closeButton at 11,10 span 2 cancel on click: closeClicked
+    help name nameHelp at 3,3 span 4 for name
+    button @saveButtonCaption name saveButton at 5,4 span 2 key "Ctrl+S" default on click: saveClicked
 
 page Preferences: dialog
     title @preferencesTitle
@@ -97,12 +98,10 @@ page Preferences: dialog
 code Main
     handler windowOpened
         showTasks()
-        deleteButton.enabled = false
 
     handler windowReturned
         // Users may have been added, changed or removed, and the settings changed.
         showTasks()
-        deleteButton.enabled = false
 
     handler showTasks
         // Done tasks show while the person's settings say so; the search
@@ -112,17 +111,11 @@ code Main
         else
             tasks = find t in Task where t.done == false and t matches searchBox.text
 
-    handler rowSelected
-        deleteButton.enabled = true
-
+    // A new task gets a title the person types over in its row.
     handler addClicked
-        if newTitle.text == ""
-            message warning @pleaseTypeATaskFirst
-            return
         let task = new Task
-        task.title = newTitle.text
+        task.title = @newTaskTitle
         save task
-        newTitle.text = ""
         showTasks()
 
     handler taskChanged
@@ -132,40 +125,48 @@ code Main
         let task = grid.selected
         delete task
         showTasks()
-        deleteButton.enabled = false
 
 code Users
     handler usersOpened
-        deletePersonButton.enabled = false
+        reload people
 
     handler personSelected
         person = peopleGrid.selected
         name.error = ""
-        deletePersonButton.enabled = true
+        personPanel.visible = true
 
     handler newClicked
         person = new Person
         name.error = ""
-        deletePersonButton.enabled = false
+        personPanel.visible = true
 
+    // A person who finished tasks stays; any other is removed after the question, asked here in code.
+    handler deletePersonClicked
+        let gone = peopleGrid.selected
+        let tasks = find t in Task where t.finished_by == gone
+        if count(tasks) > 0
+            message error @nameHasFinishedTasksAnd(name = gone.name)
+            return
+        ask @deletePerson(name = gone.name) yes @deletePersonYes no @keepPerson then deleteConfirmed
+
+    handler deleteConfirmed
+        delete peopleGrid.selected
+        reload people
+        person = new Person
+        personPanel.visible = false
+
+    // What the editor saved shows in the table once it slides away.
+    handler personPanelClosed
+        reload people
+
+    handler closeClicked
+        close
+
+code PersonEditor
     handler saveClicked
         name.error = ""
         if person.name == ""
             name.error = @nameIsRequired
             return
         save person
-        reload people
         message @savedName(name = person.name)
-
-    handler deletePersonClicked
-        let tasks = find t in Task where t.finished_by == person
-        if count(tasks) > 0
-            message error @nameHasFinishedTasksAnd(name = person.name)
-            return
-        delete person
-        reload people
-        person = new Person
-        deletePersonButton.enabled = false
-
-    handler closeClicked
-        close

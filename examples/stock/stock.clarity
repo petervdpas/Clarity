@@ -14,46 +14,47 @@ app Stock
     title @stockTitle
     main Items
 
-// The window and the command line work on the same items.
+// The window and the command line work on the same items. The table adds,
+// edits and removes them itself: Add above it, the trash on each row.
 page Items: window
     title @itemsTitle
     data items: list<Item>
     on open: itemsOpened
 
-    label @newNameLabel name newNameLabel at 1,1 span 2 for newName
-    textbox name newName at 3,1 span 8 placeholder @newNamePlaceholder
-    button @addButtonCaption name addButton at 11,1 span 2 default on click: addClicked
-    table name grid at 1,2 span 12 rows 8 bind items columns name, count, low resizable sortable edit count, low on select: rowSelected on change: itemChanged
-    button @deleteButtonCaption name deleteButton at 11,10 span 2 on click: deleteClicked
+    table name grid at 1,1 span 12 rows 10 bind items columns name, count, low resizable sortable edit name, count, low add remove confirm on add: addClicked on remove: deleteClicked on change: itemChanged
 
 code Items
     handler itemsOpened
         items = find i in Item order by i.name
-        deleteButton.enabled = false
 
-    handler rowSelected
-        deleteButton.enabled = true
-
+    // A new item gets a name no other item has; the person types its own over it.
     handler addClicked
-        if newName.text == ""
-            message warning @typeANameFirst
-            return
         let item = new Item
-        item.name = newName.text
+        item.name = free_name(@newItemName, find i in Item order by i.name)
         save item
-        newName.text = ""
         items = find i in Item order by i.name
 
     handler itemChanged
         save grid.selected
 
     handler deleteClicked
-        ask @deleteItem(name = grid.selected.name) yes @delete no @keep then deleteConfirmed
-
-    handler deleteConfirmed
         delete grid.selected
         items = find i in Item order by i.name
-        deleteButton.enabled = false
+
+// The word, or the word with the first number no item has.
+function free_name(word: text, all: list<Item>) -> text
+    let name = word
+    let n = 1
+    for step in 1 to 1000
+        let taken = false
+        for i in all
+            if i.name == name
+                taken = true
+        if not taken
+            return name
+        n = n + 1
+        name = "{word} {n}"
+    return name
 
 cli Stock
     help @stockHelp

@@ -33,3 +33,8 @@ translation en
     engineTooLong "{engine} ran longer than {seconds} seconds and was stopped"
     engineStopped "{engine} was stopped"
     engineBroke "{engine} stopped working in {function}"
+    historySlideout "Rolls"
+    oddsSlideout "Odds"
+    slideoutClose "Close"
+    slideoutPin "Pin it open"
+    slideoutUnpin "Let it slide away"

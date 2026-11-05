@@ -749,3 +749,16 @@ fn the_web_target_serves_the_browser_files_and_the_wire() {
     has(both, "//go:embed browser\nvar site embed.FS");
     assert!(files.iter().any(|f| f.path == "ui/windows/OrderForm.cxaml") && files.iter().any(|f| f.path == "browser/index.html"));
 }
+
+/// A loop that never reads its value takes none, as Go refuses a variable
+/// it never reads: `for step in 1 to 3` counting alone still builds.
+#[test]
+fn a_loop_that_never_reads_its_value_takes_none() {
+    let text = "module m\n\nfunction thrice() -> integer\n    let n = 0\n    for step in 1 to 3\n        n = n + 1\n    return n\n\nfunction total() -> integer\n    let n = 0\n    for step in 1 to 3\n        n = n + step\n    return n\n\npage Main: window\n    label \"x\" name xLabel at 1,1 span 2\n";
+    let project = load_sources([("m.clarity", text)]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code: String = files.iter().filter(|f| f.path.ends_with(".go")).map(|f| f.text.as_str()).collect();
+    has(&code, "for range clarity.Range(1, 3) {");
+    has(&code, "for _, step := range clarity.Range(1, 3) {");
+}

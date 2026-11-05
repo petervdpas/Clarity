@@ -523,8 +523,12 @@ fn no_op_edit_round_trips_exactly() {
         for target in pages {
             // Setting a page's title to what it already is changes nothing.
             // A title is a key, or a text without letters in quotes.
+            // Only the page's own lines: a view has no title, and must not take the next page's.
             let title = source[target as usize..]
                 .lines()
+                .enumerate()
+                .take_while(|(i, l)| *i == 0 || l.starts_with(char::is_whitespace) || l.is_empty())
+                .map(|(_, l)| l)
                 .find_map(|l| {
                     let rest = l.trim().strip_prefix("title ")?;
                     Some(rest.strip_prefix('"').map_or(rest.to_string(), |t| t.trim_end_matches('"').to_string()))

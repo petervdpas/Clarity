@@ -109,7 +109,7 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("    ") && !l.trim_start().starts_with("option ") && l.contains(':') && l.split([',', ' ']).any(|w| w == "required"))) { REQUIRED_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("sidebar ") && l.split_whitespace().any(|w| w == "collapsible" || w == "maximizable"))) { SIDEBAR_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("slideout "))) { SLIDEOUT_KEYS.as_slice() } else { &[] })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("table ") && l.split_whitespace().any(|w| w == "add" || w == "remove"))) { TABLE_ROW_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| (l.trim_start().starts_with("table ") || l.trim_start().starts_with("treetable ")) && l.split_whitespace().any(|w| w == "add" || w == "remove"))) { TABLE_ROW_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("page "))) { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("engine "))) { ENGINE_ERROR_KEYS.as_slice() } else { &[] });
     for (key, value) in own {

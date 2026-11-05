@@ -27,22 +27,23 @@ entity OrderLine
 engine Pricing from "pricing.wasm"
     function total(lines: list<OrderLine>) -> money
 
+// The orders, with the one opened (a double click or Enter) in the editor
+// that slides out from the right; the table adds and removes them.
 page OrderBrowse: window
     title @orderBrowseTitle
     data orders: list<Order>
-    on return: windowReturned
+    on open: filterChanged
+    on return: filterChanged
 
     label @numberFilterLabel name numberFilterLabel at 1,1 span 2 for numberFilter
     textbox name numberFilter at 3,1 span 4 placeholder @numberFilterPlaceholder on change: filterChanged
-    table name ordersTable at 1,2 span 12 rows 8 bind orders columns number, customer, ordered_on, status, total sortable order by ordered_on desc page 20
-    button @newCaption name newOrder at 9,10 span 2 on click -> OrderForm
-    button @openCaption name openOrder at 11,10 span 2 on click -> OrderForm
+    table name ordersTable at 1,2 span 12 rows 9 bind orders columns number, customer, ordered_on, status, total sortable order by ordered_on desc page 20 add remove confirm on add: newOrderClicked on remove: removeOrderClicked on open: openOrderClicked
+    slideout @orderSlideout name orderSlide view OrderEditor width 820 resizable min 600 max 1200 pinnable span 12 rows 11 on close: filterChanged
 
-page OrderForm: window
-    title @orderFormTitle
+// An order: its customer and state, its lines, and its total.
+page OrderEditor: view
     data order: Order
     data lines: list<OrderLine>
-    on open: orderOpened
 
     panel @orderPanelCaption name orderPanel at 1,1 span 12 rows 4
         label @orderNumberLabel name numberLabel at 1,1 span 2
@@ -53,15 +54,13 @@ page OrderForm: window
         dropdown name orderCustomer at 4,2 span 8 bind order.customer search show name, email
         label @orderStatusLabel name statusLabel at 1,3 span 3
         dropdown name orderStatus at 4,3 span 4 bind order.status
-    table name linesGrid at 1,5 span 12 rows 4 bind lines columns product, quantity, price edit product, quantity, price on change: lineChanged
-    button @addLineCaption name addLine at 1,9 span 2 on click: addLineClicked
+    table name linesGrid at 1,5 span 12 rows 4 bind lines columns product, quantity, price edit product, quantity, price add remove confirm on add: addLineClicked on remove: removeLineClicked on change: lineChanged
     label @orderTotalLabel name totalLabel at 7,9 span 2
     number name orderTotal at 9,9 span 3 bind order.total readonly
     label @orderRemarksLabel name remarksLabel at 1,10 span 3
     textbox name orderRemarks at 4,10 span 6 bind order.remarks
-    button @approveButtonCaption name approveButton at 7,11 span 2 on click: approveClicked
-    button @saveCaption name saveOrder at 9,11 span 2
-    button @closeCaption name closeOrder at 11,11 span 2
+    button @approveButtonCaption name approveButton at 9,11 span 2 on click: approveClicked
+    button @saveCaption name saveOrder at 11,11 span 2 default on click: saveOrderClicked
 
 // How sales go: orders by status, money per day, and who spends it.
 page SalesDashboard: window
@@ -95,20 +94,31 @@ action approve(order: Order)
     save order
 
 code OrderBrowse
-    handler windowReturned
-        filterChanged()
-
     handler filterChanged
         orders = find o in Order where o.number contains numberFilter.text order by o.number
+
+    handler openOrderClicked
+        order = ordersTable.selected
+        lines = find l in OrderLine where l.order == order
+        orderSlide.visible = true
+
+    // A new order is stored once it has a number and a customer: Save, or its first line.
+    handler newOrderClicked
+        order = new Order
+        order.ordered_on = today()
+        lines = find l in OrderLine where l.order == order
+        orderSlide.visible = true
+
+    handler removeOrderClicked
+        delete ordersTable.selected
+        orderSlide.visible = false
+        filterChanged()
 
 code SalesDashboard
     handler dashboardOpened
         orders = find o in Order where o.status != Cancelled
 
-code OrderForm
-    handler orderOpened
-        lines = find l in OrderLine where l.order == order
-
+code OrderEditor
     // A line belongs to a stored order, so the order is saved first.
     handler addLineClicked
         save order
@@ -118,9 +128,18 @@ code OrderForm
         save line
         lines = find l in OrderLine where l.order == order
 
+    handler removeLineClicked
+        delete linesGrid.selected
+        lines = find l in OrderLine where l.order == order
+        order.total = Pricing.total(lines)
+
     handler lineChanged
         save linesGrid.selected
         order.total = Pricing.total(lines)
+
+    handler saveOrderClicked
+        save order
+        message @savedName(name = order.number)
 
     handler approveClicked
         if not within_credit(order)

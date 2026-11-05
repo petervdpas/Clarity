@@ -873,8 +873,8 @@ const ENTRIES: &[Entry] = &[
         input: false,
         container: None,
         clickable: false,
-        events: &[Event::Select, Event::Open, Event::Reorder],
-        properties: &[WidgetProperty::Children, WidgetProperty::Columns, WidgetProperty::Resizable, WidgetProperty::Striped, WidgetProperty::Reorder, WidgetProperty::NoUndo, WidgetProperty::Frame],
+        events: &[Event::Select, Event::Open, Event::Reorder, Event::Add, Event::Remove],
+        properties: &[WidgetProperty::Children, WidgetProperty::Columns, WidgetProperty::Resizable, WidgetProperty::Striped, WidgetProperty::Reorder, WidgetProperty::Add, WidgetProperty::Remove, WidgetProperty::NoUndo, WidgetProperty::Frame],
     },
     // A list the window holds as a chart: `chart bar ... by status count` (U1c).
     Entry {

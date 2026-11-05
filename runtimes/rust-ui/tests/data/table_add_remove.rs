@@ -97,3 +97,15 @@ fn with_confirm_it_asks_first_and_removes_on_yes_only() {
     laid(&mut screen, 800, 400);
     assert_eq!(vec!["select", "remove"], host.events());
 }
+
+#[test]
+fn insert_adds_to_an_empty_table_too() {
+    let host = DataHost::new();
+    host.set("folders", json!([]));
+    let mut screen = window_of(TABLE, host.clone());
+    laid(&mut screen, 800, 400);
+    let id = table(&screen).node().id();
+    screen.focus(Some(id));
+    screen.key_pressed(KeyInput::new(Key::Insert, Modifiers::NONE));
+    assert_eq!(vec!["add"], host.events());
+}

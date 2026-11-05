@@ -10,6 +10,7 @@
   import ImportPanel from "./ImportPanel.svelte";
   import ApiPanel from "./ApiPanel.svelte";
   import MigrationPanel from "./MigrationPanel.svelte";
+  import BackupPanel from "./BackupPanel.svelte";
   import { themeChoice } from "@clarity/ui/screen/scheme.svelte.ts";
   import StackFields from "./StackFields.svelte";
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
@@ -511,6 +512,7 @@
 
       {#each databases as db (db.name)}
         <MigrationPanel source={db.name} named={databases.length > 1} {preview} {onapplied} />
+        <BackupPanel source={db.name} named={databases.length > 1} {preview} />
       {/each}
 
     {/key}

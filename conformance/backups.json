@@ -1,0 +1,49 @@
+{
+  "about": "Backups of an SQLite database (docs/BACKUP-PLAN.md), alike in Clarity (crates/clarity-db) and every runtime that migrates (Rust, Go, C#, C, C++): a copy beside the database in backups/, made with VACUUM INTO, named <database>-<when>-<why>.db with the time in UTC; a second one of the same second gets _2, _3 before .db. A runtime takes one, for before-migration-NNNN (the first step it applies, four digits), before applying steps to a database that already has a schema, and refuses to migrate when it cannot. Each database keeps its newest `kept` automatic backups (any reason but manual): a prune removes the older ones and leaves manual backups, other databases' and every other file alone.",
+  "stamps": [
+    { "seconds": 0, "stamp": "19700101T000000Z" },
+    { "seconds": 951782400, "stamp": "20000229T000000Z" },
+    { "seconds": 1793912345, "stamp": "20261105T205905Z" },
+    { "seconds": 4107542399, "stamp": "21000228T235959Z" }
+  ],
+  "names": [
+    { "database": "shop", "seconds": 1793912345, "step": 6, "file": "shop-20261105T205905Z-before-migration-0006.db" },
+    { "database": "modelling", "seconds": 951782400, "step": 12, "file": "modelling-20000229T000000Z-before-migration-0012.db" }
+  ],
+  "kept": 10,
+  "prune": {
+    "database": "shop",
+    "files": [
+      "shop-20261101T000000Z-manual.db",
+      "shop-20261102T000000Z-before-migration-0001.db",
+      "shop-20261103T000000Z-before-migration-0002.db",
+      "shop-20261104T000000Z-before-restore.db",
+      "shop-20261105T000000Z-before-migration-0003.db",
+      "shop-20261106T000000Z-before-migration-0004.db",
+      "shop-20261107T000000Z-before-migration-0005.db",
+      "shop-20261108T000000Z-before-migration-0006.db",
+      "shop-20261109T000000Z-before-migration-0007.db",
+      "shop-20261110T000000Z-before-migration-0008.db",
+      "shop-20261111T000000Z-before-migration-0009.db",
+      "shop-20261112T000000Z-before-migration-0010.db",
+      "shop-20261112T000000Z-before-migration-0010_2.db",
+      "shopkeeper-20261101T000000Z-before-migration-0001.db",
+      "notes.txt"
+    ],
+    "left": [
+      "notes.txt",
+      "shop-20261101T000000Z-manual.db",
+      "shop-20261104T000000Z-before-restore.db",
+      "shop-20261105T000000Z-before-migration-0003.db",
+      "shop-20261106T000000Z-before-migration-0004.db",
+      "shop-20261107T000000Z-before-migration-0005.db",
+      "shop-20261108T000000Z-before-migration-0006.db",
+      "shop-20261109T000000Z-before-migration-0007.db",
+      "shop-20261110T000000Z-before-migration-0008.db",
+      "shop-20261111T000000Z-before-migration-0009.db",
+      "shop-20261112T000000Z-before-migration-0010.db",
+      "shop-20261112T000000Z-before-migration-0010_2.db",
+      "shopkeeper-20261101T000000Z-before-migration-0001.db"
+    ]
+  }
+}

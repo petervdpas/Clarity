@@ -1,5 +1,7 @@
 #include "clarity/db.hpp"
 
+#include "clarity/backup.hpp"
+
 #include <algorithm>
 #include <fstream>
 #include <set>
@@ -41,6 +43,8 @@ int Db::schema_version() { return version_of(*at("").driver); }
 int Db::migrate_source(const std::string& source, const std::vector<Step>& steps) {
     Driver& d = *at(source).driver;
     int done = version_of(d);
+    // A database that already has a schema is backed up before it changes (docs/BACKUP-PLAN.md).
+    if (done > 0 && done < int(steps.size())) backup::before_migration(d, done + 1);
     for (int i = done; i < int(steps.size()); ++i) d.apply(i + 1, steps[size_t(i)]);
     return std::max(0, int(steps.size()) - done);
 }

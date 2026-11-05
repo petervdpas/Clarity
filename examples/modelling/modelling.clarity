@@ -27,6 +27,7 @@ engine Fcdm from "fcdm.wasm"
     function read_files(files: list<SourceFile>) -> list<ReadRow>
     function diff_text(path: text, on_disk: text, written: text) -> text
     function file_bytes(text: text) -> bytes
+    function event_code(spec: EventSpec, fields: list<EventFieldSpec>) -> text
 
 // A file the app writes, compared with the one on disk: the same, differs, or new.
 record CompareRow
@@ -35,6 +36,7 @@ record CompareRow
     kind: text
     version: ref ObjectVersion
     enum_type: ref EnumType
+    event_type: ref EventType
 
 // A file of the fcdm repository, as the engine reads it.
 record SourceFile
@@ -65,6 +67,40 @@ record ReadRow
     number: integer
     note: text
     renames: bool
+    namespace: text
+    event_kind: text
+    base: bool
+    list: text
+    access: text
+    review: text
+
+// A data object and the number of one of its versions, as an editor picks them.
+record VersionPick
+    object: ref DataObject
+    number: integer
+
+// An event, as the engine writes it.
+record EventSpec
+    domain: text
+    name: text
+    version: integer
+    namespace: text
+    kind: text
+    base: bool
+    type_name: text
+    type_version: integer
+    obsolete: text
+
+// A field of an event, as the engine writes it.
+record EventFieldSpec
+    name: text
+    kind: PropertyKind
+    nullable: bool
+    type_name: text
+    type_version: integer
+    list: text
+    access: text
+    obsolete: text
 
 // A version of a data object, as the engine writes it.
 record ObjectSpec
@@ -110,6 +146,7 @@ record Node
     data_object: ref DataObject
     version: ref ObjectVersion
     enum_type: ref EnumType
+    event_type: ref EventType
     level: integer
 
 // What the diagram view draws of the domain.
@@ -146,14 +183,16 @@ page Workspace: window
 
     slideout @objectSlideout name objectPanel view ObjectEditor width 720 resizable min 480 max 1200 pinnable span 8 rows 14 on saved: objectSaved
     slideout @enumSlideout name enumPanel view EnumEditor width 520 resizable min 380 max 900 pinnable span 6 rows 12 on saved: enumSaved
+    slideout @eventSlideout name eventPanel view EventEditor width 720 resizable min 480 max 1200 pinnable span 8 rows 14 on saved: eventSaved
     slideout @diagramSlideout name diagramPanel side bottom view DiagramCanvas height 400 resizable min 220 max 900 pinnable span 12 rows 9
 
     sidebar left name explorer width 320 grid 6 columns
         button @newDomainCaption name newDomainButton at 1,1 span 3 icon "plus" on click: newDomainClicked
         button @newObjectCaption name newObjectButton at 4,1 span 3 icon "plus" on click: newObjectClicked
-        tree name modelTree at 1,2 span 6 rows 13 bind nodes key key parent parent show label on select: nodePicked
-        button @newEnumCaption name newEnumButton at 1,15 span 3 icon "plus" on click: newEnumClicked
-        button @deleteCaption name deleteButton at 4,15 span 3 icon "trash" on click: deleteClicked
+        tree name modelTree at 1,2 span 6 rows 12 bind nodes key key parent parent show label on select: nodePicked
+        button @newEnumCaption name newEnumButton at 1,14 span 3 icon "plus" on click: newEnumClicked
+        button @newEventCaption name newEventButton at 4,14 span 3 icon "plus" on click: newEventClicked
+        button @deleteCaption name deleteButton at 1,15 span 3 icon "trash" on click: deleteClicked
         button @importCaption name importButton at 1,16 span 3 icon "download" on click -> ImportDialog
         button @compareCaption name compareButton at 4,16 span 3 icon "git-compare" on click -> CompareDialog
     footer
@@ -251,6 +290,49 @@ page EnumEditor: view
         tab @enumCodeTab
             memo name enumCodeBox at 1,1 span 6 rows 11 bind enumText readonly code csharp copy
 
+// An event of a domain's messages project: what it is, the data object it
+// carries (a base event) or its fields, why it needs a review, and the C#
+// the engine writes for it. It tells the window when it saved.
+page EventEditor: view
+    tells saved
+    data editedEvent: EventType
+    data fields: list<EventField>
+    data pickedField: EventField
+    data carriedPick: VersionPick
+    data heldPick: VersionPick
+    data eventText: text
+
+    tabs name eventTabs at 1,1 span 8 rows 14
+        tab @eventTab
+            label @eventNameCaption name eventNameLabel at 1,1 span 2 for eventNameBox
+            textbox name eventNameBox at 3,1 span 4 bind editedEvent.name placeholder @eventNamePlaceholder
+            spinbox name eventNumberBox at 7,1 span 2 bind editedEvent.number min 1 max 99
+            label @eventNamespaceCaption name eventNamespaceLabel at 1,2 span 2 for eventNamespaceBox
+            textbox name eventNamespaceBox at 3,2 span 6 bind editedEvent.namespace placeholder @eventNamespacePlaceholder
+            label @eventKindCaption name eventKindLabel at 1,3 span 2 for eventKindBox
+            dropdown name eventKindBox at 3,3 span 3 bind editedEvent.kind on change: eventShapeChanged
+            checkbox @eventBaseLabel name eventBaseBox at 6,3 span 3 bind editedEvent.base on change: eventShapeChanged
+            panel name carriesPanel at 1,4 span 8 rows 1
+                label @eventCarriesCaption name eventCarriesLabel at 1,1 span 2 for carriedObjectBox
+                dropdown name carriedObjectBox at 3,1 span 4 bind carriedPick.object placeholder @carriedPlaceholder on change: carriedChanged
+                spinbox name carriedNumberBox at 7,1 span 2 bind carriedPick.number min 1 max 99 on change: carriedChanged
+            label @eventObsoleteCaption name eventObsoleteLabel at 1,5 span 2 for eventObsoleteBox
+            textbox name eventObsoleteBox at 3,5 span 6 bind editedEvent.obsolete placeholder @obsoletePlaceholder
+            label @reviewLabel name eventReviewLabel at 1,6 span 2 for eventReviewBox
+            textbox name eventReviewBox at 3,6 span 4 bind editedEvent.review readonly placeholder @reviewPlaceholder
+            button @reviewedCaption name eventReviewedButton at 7,6 span 2 icon "check" on click: eventReviewedClicked
+            panel name fieldsPanel at 1,7 span 8 rows 6
+                table name fieldTable at 1,1 span 8 rows 4 bind fields columns name 180, kind 150, nullable, list 110, access 110 edit name, kind, nullable, list, access reorder by position add remove confirm on add: addFieldClicked on remove: removeFieldClicked on change: fieldChanged on reorder: fieldsMoved on select: fieldPicked
+                label @eventFieldHoldsLabel name heldLabel at 1,5 span 2 for heldObjectBox
+                dropdown name heldObjectBox at 3,5 span 4 bind heldPick.object placeholder @heldPlaceholder on change: heldChanged
+                spinbox name heldNumberBox at 7,5 span 2 bind heldPick.number min 1 max 99 on change: heldChanged
+                label @eventFieldKeyOfLabel name keyOfLabel at 1,6 span 2 for keyOfBox
+                dropdown name keyOfBox at 3,6 span 3 bind pickedField.key_of placeholder @keyOfPlaceholder on change: pickedFieldChanged
+                textbox name fieldObsoleteBox at 6,6 span 3 bind pickedField.obsolete placeholder @obsoletePlaceholder on leave: pickedFieldChanged
+            button @saveEventCaption name saveEventButton at 7,13 span 2 default on click: saveEventClicked
+        tab @eventCodeTab
+            memo name eventCodeBox at 1,1 span 8 rows 13 bind eventText readonly code csharp copy
+
 // The diagrams of a domain at one of its versions: its data objects as they
 // are in that version, with their properties and lines, or the tables the
 // adapter keeps them in, with their keys.
@@ -278,7 +360,8 @@ code Workspace
         let versions = find v in ObjectVersion order by v.number
         let held = find p in Property where p.kind == HeldObjects or p.kind == HeldObject order by p.position
         let enums = find e in EnumType order by e.name
-        nodes = outline(domains, objects, versions, held, enums)
+        let events = find e in EventType order by e.name
+        nodes = outline(domains, objects, versions, held, enums, events)
 
     // Picks the row of that key in the tree, which opens the rows above it.
     handler pickNode(key: text)
@@ -299,6 +382,7 @@ code Workspace
         saveDomainButton.enabled = chosen
         newObjectButton.enabled = chosen
         newEnumButton.enabled = chosen
+        newEventButton.enabled = chosen
 
     handler nodePicked
         let node = modelTree.selected
@@ -317,6 +401,9 @@ code Workspace
         if node.kind == "enum"
             let found = node.enum_type
             openEnum(found)
+        if node.kind == "event"
+            let found = node.event_type
+            openEvent(found)
         if node.kind == "level"
             level = node.level
         loadDiagram()
@@ -337,6 +424,25 @@ code Workspace
         values = find x in EnumValue where x.owner == e order by x.position
         enumText = enum_text(e, values)
         enumPanel.visible = true
+
+    // The event editor shows an event: what it carries or its fields, and its C#.
+    handler openEvent(e: EventType)
+        editedEvent = e
+        fields = find f in EventField where f.owner == e order by f.position
+        pickedField = new EventField
+        heldPick = new VersionPick
+        heldPick.number = 1
+        carriedPick = new VersionPick
+        carriedPick.number = 1
+        if e.carries != none
+            let v = e.carries
+            carriedPick.object = v.owner
+            carriedPick.number = v.number
+        eventText = event_text(e, fields)
+        // A base event carries a data object; any other has fields.
+        carriesPanel.visible = e.base
+        fieldsPanel.visible = not e.base
+        eventPanel.visible = true
 
     // The diagram view shows the domain's data objects as they are in the version chosen.
     handler loadDiagram
@@ -388,6 +494,26 @@ code Workspace
         pickNode("e{e.id}")
         openEnum(e)
 
+    // A new event starts as a base Changed event in the domain's newest event version.
+    handler newEventClicked
+        if domain.id == 0
+            return
+        let highest = 1
+        for x in find x in EventType where x.domain == domain
+            if x.number > highest
+                highest = x.number
+        let e = new EventType
+        e.domain = domain
+        e.name = @newEventName
+        e.number = highest
+        e.namespace = folder_namespace(domain.name, highest)
+        e.kind = EventKind.Changed
+        e.base = true
+        save e
+        refreshTree()
+        pickNode("ev{e.id}")
+        openEvent(e)
+
     handler saveDomainClicked
         save domain
         refreshTree()
@@ -395,7 +521,7 @@ code Workspace
     // Deletes the domain, data object, version or enum picked in the tree, after asking.
     handler deleteClicked
         let node = modelTree.selected
-        if node.key == "" or node.kind == "objects" or node.kind == "enums" or node.kind == "levels" or node.kind == "level" or node.kind == "resolved"
+        if node.key == "" or node.kind == "objects" or node.kind == "enums" or node.kind == "levels" or node.kind == "level" or node.kind == "resolved" or node.kind == "model" or node.kind == "messages" or node.kind == "events" or node.kind == "eventlevel"
             return
         ask @deleteNode(name = node.label) yes @delete no @keep then deleteConfirmed
 
@@ -411,6 +537,10 @@ code Workspace
             let gone = node.enum_type
             delete gone
             enumPanel.visible = false
+        else if node.kind == "event"
+            let gone = node.event_type
+            delete gone
+            eventPanel.visible = false
         else
             let gone = node.domain
             delete gone
@@ -431,6 +561,9 @@ code Workspace
         loadDiagram()
 
     handler enumSaved
+        refreshTree()
+
+    handler eventSaved
         refreshTree()
 
 code ObjectEditor
@@ -545,6 +678,92 @@ code EnumEditor
         reloadValues()
         tell saved()
 
+code EventEditor
+    handler showEventCode
+        eventText = event_text(editedEvent, fields)
+
+    // A base event carries a data object; any other has fields.
+    handler eventShapeChanged
+        carriesPanel.visible = editedEvent.base
+        fieldsPanel.visible = not editedEvent.base
+        showEventCode()
+
+    // The data object and its version picked: the version it carries, when there is one.
+    handler carriedChanged
+        let v = version_of(carriedPick.object, carriedPick.number)
+        carriedNumberBox.error = ""
+        if v.id != 0
+            editedEvent.carries = v
+        else
+            editedEvent.carries = none
+            if carriedPick.object != none
+                carriedNumberBox.error = @noSuchVersion(number = carriedPick.number)
+        showEventCode()
+
+    handler reloadFields
+        fields = find f in EventField where f.owner == editedEvent order by f.position
+        showEventCode()
+
+    handler addFieldClicked
+        let f = new EventField
+        f.owner = editedEvent
+        f.position = count(fields) + 1
+        f.name = @newFieldName
+        f.kind = TextValue
+        save f
+        reloadFields()
+
+    handler removeFieldClicked
+        delete fieldTable.selected
+        reloadFields()
+
+    handler fieldChanged
+        save fieldTable.selected
+        reloadFields()
+
+    handler fieldsMoved
+        for f in fields
+            save f
+        reloadFields()
+
+    handler fieldPicked
+        pickedField = fieldTable.selected
+        heldPick = new VersionPick
+        heldPick.number = 1
+        if pickedField.holds != none
+            let v = pickedField.holds
+            heldPick.object = v.owner
+            heldPick.number = v.number
+
+    handler heldChanged
+        if pickedField.id == 0
+            return
+        let v = version_of(heldPick.object, heldPick.number)
+        heldNumberBox.error = ""
+        if v.id != 0
+            pickedField.holds = v
+            save pickedField
+            reloadFields()
+        else if heldPick.object != none
+            heldNumberBox.error = @noSuchVersion(number = heldPick.number)
+
+    handler pickedFieldChanged
+        if pickedField.id == 0
+            return
+        save pickedField
+        reloadFields()
+
+    // Looked at: the event no longer asks for a review.
+    handler eventReviewedClicked
+        editedEvent.review = ""
+        save editedEvent
+        tell saved()
+
+    handler saveEventClicked
+        save editedEvent
+        showEventCode()
+        tell saved()
+
 code DiagramCanvas
     handler drawDiagram
         diagramCanvas.clear()
@@ -650,6 +869,12 @@ code CompareDialog
                 r.kind = "enum"
                 r.enum_type = e
                 found = found + [r]
+            for e in find x in EventType where x.domain == d order by x.number, x.name
+                let r = new CompareRow
+                r.path = event_path(d.name, e.name, e.number)
+                r.kind = "event"
+                r.event_type = e
+                found = found + [r]
         for r in found
             let onDisk = disk_text(disk, r.path)
             if onDisk == ""
@@ -742,6 +967,9 @@ action written_for(r: CompareRow) -> text
     if r.kind == "enum"
         let e = r.enum_type
         return enum_text(e, find x in EnumValue where x.owner == e order by x.position)
+    if r.kind == "event"
+        let e = r.event_type
+        return event_text(e, find x in EventField where x.owner == e order by x.position)
     let v = r.version
     let o = v.owner
     let properties = find x in Property where x.owner == v order by x.position
@@ -754,7 +982,7 @@ action written_for(r: CompareRow) -> text
 // properties, whose enums and data objects are found by name. Gives the
 // report.
 action import_rows(rows: list<ReadRow>) -> text
-    effects db.write
+    effects db.read, db.write
     let lines: list<text> = []
     // The domains read, emptied: each read again replaces the one there was.
     let names: list<text> = []
@@ -762,7 +990,11 @@ action import_rows(rows: list<ReadRow>) -> text
         if r.kind == "object" or r.kind == "enum" or r.kind == "domain"
             if not (names contains r.domain)
                 names = names + [r.domain]
-    // Their properties go first: they point at data objects across domains, which go with their domains.
+    // Their events and properties go first: they point at data objects across domains, which go with their domains.
+    for name in names
+        for old in find d in Domain where d.name == name
+            for e in find x in EventType where x.domain == old
+                delete e
     for name in names
         for old in find d in Domain where d.name == name
             for o in find x in DataObject where x.domain == old
@@ -832,6 +1064,7 @@ action import_rows(rows: list<ReadRow>) -> text
             v.owner = o
             v.number = r.version
             v.obsolete = r.obsolete
+            v.review = r.review
             save v
             versions = versions + 1
     // The properties, each of the version read before it.
@@ -867,8 +1100,59 @@ action import_rows(rows: list<ReadRow>) -> text
                     lines = lines + ["{r.note}.{r.name}: no data object is called {r.type_name}; the key names none"]
             save p
             properties = properties + 1
+    // The events, each with its fields after it; the data objects they carry are found by name and version.
+    let currentEvent = new EventType
+    let events = 0
+    let reviews = 0
+    for r in rows
+        if r.kind == "event"
+            let found = find d in Domain where d.name == r.domain
+            if count(found) > 0
+                let e = new EventType
+                e.domain = found[1]
+                e.name = r.name
+                e.number = r.version
+                e.namespace = r.namespace
+                e.kind = event_kind_named(r.event_kind)
+                e.base = r.base
+                e.obsolete = r.obsolete
+                e.review = r.review
+                if r.base
+                    let v = found_version(r.domain, r.type_name, r.type_version)
+                    if v.id != 0
+                        e.carries = v
+                save e
+                currentEvent = e
+                position = 0
+                events = events + 1
+                if r.review != ""
+                    reviews = reviews + 1
+        if r.kind == "event_field" and currentEvent.id != 0
+            position = position + 1
+            let f = new EventField
+            f.owner = currentEvent
+            f.position = position
+            f.name = r.name
+            f.kind = kind_named(r.property_kind)
+            f.nullable = r.nullable
+            f.list = list_named(r.list)
+            f.access = access_named(r.access)
+            f.obsolete = r.obsolete
+            if f.kind == HeldObject or f.kind == HeldObjects
+                let at = r.domain
+                if at == ""
+                    let owner = currentEvent.domain
+                    at = owner.name
+                let v = found_version(at, r.type_name, r.type_version)
+                if v.id != 0
+                    f.holds = v
+            if f.kind == BusinessKey
+                let t = find x in DataObject where x.name == r.type_name
+                if count(t) > 0
+                    f.key_of = t[1]
+            save f
     let domains = count(names)
-    let summary = "Read {domains} domains, {objects} data objects with {versions} versions, {properties} properties and {enums} enums."
+    let summary = "Read {domains} domains, {objects} data objects with {versions} versions, {properties} properties, {enums} enums and {events} events ({reviews} to review)."
     let report: list<text> = [summary, ""]
     for r in rows
         if r.kind == "note"
@@ -902,21 +1186,162 @@ function kind_named(word: text) -> PropertyKind
         return BusinessKey
     return TextValue
 
-// The tree's rows: each domain with its data objects (their versions, and
-// the child objects a version holds under it), its enums, and its versions,
-// each listing the data objects as they are in it.
-function outline(domains: list<Domain>, objects: list<DataObject>, versions: list<ObjectVersion>, held: list<Property>, enums: list<EnumType>) -> list<Node>
+// The version `number` of the data object `name` of a domain; none when there is no such version.
+action found_version(domain: text, name: text, number: integer) -> ObjectVersion
+    effects db.read
+    let d = find x in Domain where x.name == domain
+    if count(d) == 0
+        return new ObjectVersion
+    let o = find x in DataObject where x.domain == d[1] and x.name == name
+    if count(o) == 0
+        return new ObjectVersion
+    let v = find x in ObjectVersion where x.owner == o[1] and x.number == number
+    if count(v) == 0
+        return new ObjectVersion
+    return v[1]
+
+// The version `number` of a data object; an empty one (id 0) when it has no such version.
+action version_of(o: DataObject, number: integer) -> ObjectVersion
+    effects db.read
+    if o.id == 0
+        return new ObjectVersion
+    let v = find x in ObjectVersion where x.owner == o and x.number == number
+    if count(v) == 0
+        return new ObjectVersion
+    return v[1]
+
+function event_kind_named(word: text) -> EventKind
+    if word == "Deleted"
+        return EventKind.Deleted
+    if word == "Created"
+        return EventKind.Created
+    if word == "Updated"
+        return EventKind.Updated
+    if word == "Other"
+        return EventKind.Other
+    return EventKind.Changed
+
+function event_kind_word(kind: EventKind) -> text
+    if kind == EventKind.Deleted
+        return "Deleted"
+    if kind == EventKind.Created
+        return "Created"
+    if kind == EventKind.Updated
+        return "Updated"
+    if kind == EventKind.Other
+        return "Other"
+    return "Changed"
+
+function list_named(word: text) -> ListStyle
+    if word == "IEnumerable"
+        return Sequence
+    if word == "Array"
+        return ArrayOf
+    if word == "List"
+        return ListOf
+    return Single
+
+function list_word(style: ListStyle) -> text
+    if style == Sequence
+        return "IEnumerable"
+    if style == ArrayOf
+        return "Array"
+    if style == ListOf
+        return "List"
+    return ""
+
+function access_named(word: text) -> Access
+    if word == "get"
+        return GetOnly
+    if word == "set"
+        return GetSet
+    return InitOnly
+
+function access_word(access: Access) -> text
+    if access == GetOnly
+        return "get"
+    if access == GetSet
+        return "set"
+    return "init"
+
+// Where an event stands in the domain's messages project: Events/, or Events/vN from version 2.
+function event_path(domain: text, name: text, number: integer) -> text
+    if number > 1
+        return "Fontys.Messages.{domain}/Events/v{number}/{name}.cs"
+    return "Fontys.Messages.{domain}/Events/{name}.cs"
+
+// The namespace an event's folder gives, which a new event starts with.
+function folder_namespace(domain: text, number: integer) -> text
+    if number > 1
+        return "Fontys.Messages.{domain}.Events.v{number}"
+    return "Fontys.Messages.{domain}.Events"
+
+// The C# of an event, as the engine writes it.
+function event_text(e: EventType, fields: list<EventField>) -> text
+    let spec = new EventSpec
+    let d = e.domain
+    spec.domain = d.name
+    spec.name = e.name
+    spec.version = e.number
+    spec.namespace = e.namespace
+    spec.kind = event_kind_word(e.kind)
+    spec.base = e.base
+    spec.obsolete = e.obsolete
+    if e.carries != none
+        let v = e.carries
+        let o = v.owner
+        spec.type_name = o.name
+        spec.type_version = v.number
+    let specs: list<EventFieldSpec> = []
+    for f in fields
+        let fs = new EventFieldSpec
+        fs.name = f.name
+        fs.kind = f.kind
+        fs.nullable = f.nullable
+        fs.list = list_word(f.list)
+        fs.access = access_word(f.access)
+        fs.obsolete = f.obsolete
+        if f.holds != none
+            let v = f.holds
+            let o = v.owner
+            fs.type_name = o.name
+            fs.type_version = v.number
+        if f.key_of != none
+            let k = f.key_of
+            fs.type_name = k.name
+        specs = specs + [fs]
+    return Fcdm.event_code(spec, specs)
+
+// A row of the tree for something that asks for a review: its label, marked.
+function review_label(label: text, review: text) -> text
+    if review == ""
+        return label
+    return @reviewMark(label = label)
+
+// The tree's rows: each domain with its two projects as the repository has
+// them. The model project holds its data objects (their versions, and the
+// child objects a version holds under it), its enums, and its versions,
+// each listing the data objects as they are in it; the messages project
+// holds its events, by event version.
+function outline(domains: list<Domain>, objects: list<DataObject>, versions: list<ObjectVersion>, held: list<Property>, enums: list<EnumType>, events: list<EventType>) -> list<Node>
     let all: list<Node> = []
     for d in domains
         let n = new Node
         n.key = "d{d.id}"
-        n.label = domain_label(d.name, d.model_version)
+        n.label = d.name
         n.kind = "domain"
         n.domain = d
         all = all + [n]
+        let model = new Node
+        model.key = "pm{d.id}"
+        model.parent = "d{d.id}"
+        model.label = domain_label(project_name(d.model_package, "Fontys.Fcdm.{d.name}"), d.model_version)
+        model.kind = "model"
+        model.domain = d
+        all = all + [model]
         let objectsNode = new Node
         objectsNode.key = "os{d.id}"
-        objectsNode.parent = "d{d.id}"
+        objectsNode.parent = "pm{d.id}"
         objectsNode.label = @dataObjectsNode
         objectsNode.kind = "objects"
         objectsNode.domain = d
@@ -927,7 +1352,12 @@ function outline(domains: list<Domain>, objects: list<DataObject>, versions: lis
                 for v in versions
                     if v.owner.id == o.id and v.number > highest
                         highest = v.number
-            if o.domain.id == d.id and o.kind == Root
+            // A root stands under Data objects, and so does a child no version holds.
+            let heldBySome = false
+            for p in held
+                if p.target != none and p.target.id == o.id
+                    heldBySome = true
+            if o.domain.id == d.id and (o.kind == Root or not heldBySome)
                 let on = new Node
                 on.key = "o{o.id}"
                 on.parent = "os{d.id}"
@@ -941,7 +1371,7 @@ function outline(domains: list<Domain>, objects: list<DataObject>, versions: lis
                         let vn = new Node
                         vn.key = "v{v.id}"
                         vn.parent = "o{o.id}"
-                        vn.label = version_label(v.number, v.obsolete)
+                        vn.label = review_label(version_label(v.number, v.obsolete), v.review)
                         vn.kind = "version"
                         vn.domain = d
                         vn.data_object = o
@@ -949,7 +1379,7 @@ function outline(domains: list<Domain>, objects: list<DataObject>, versions: lis
                         all = all + [vn]
                         // The child objects this version holds, as they are in it.
                         for p in held
-                            if p.owner.id == v.id and p.target.kind == Child
+                            if p.owner.id == v.id and p.target != none and p.target.kind == Child
                                 let at = newest_number(versions, p.target.id, v.number)
                                 for cv in versions
                                     if cv.owner.id == p.target.id and cv.number == at
@@ -957,7 +1387,7 @@ function outline(domains: list<Domain>, objects: list<DataObject>, versions: lis
                                         let cn = new Node
                                         cn.key = "c{cv.id}in{v.id}"
                                         cn.parent = "v{v.id}"
-                                        cn.label = version_title(child.name, cv.number)
+                                        cn.label = review_label(version_title(child.name, cv.number), cv.review)
                                         cn.kind = "version"
                                         cn.domain = d
                                         cn.data_object = child
@@ -965,7 +1395,7 @@ function outline(domains: list<Domain>, objects: list<DataObject>, versions: lis
                                         all = all + [cn]
         let enumsNode = new Node
         enumsNode.key = "es{d.id}"
-        enumsNode.parent = "d{d.id}"
+        enumsNode.parent = "pm{d.id}"
         enumsNode.label = @enumsNode
         enumsNode.kind = "enums"
         enumsNode.domain = d
@@ -983,7 +1413,7 @@ function outline(domains: list<Domain>, objects: list<DataObject>, versions: lis
         // The domain's versions: each holds every root object at its newest version up to it.
         let levelsNode = new Node
         levelsNode.key = "ls{d.id}"
-        levelsNode.parent = "d{d.id}"
+        levelsNode.parent = "pm{d.id}"
         levelsNode.label = @versionsNode
         levelsNode.kind = "levels"
         levelsNode.domain = d
@@ -1012,7 +1442,55 @@ function outline(domains: list<Domain>, objects: list<DataObject>, versions: lis
                             rn.version = v
                             rn.level = level
                             all = all + [rn]
+        // The messages project: its events, by event version.
+        let messages = new Node
+        messages.key = "pe{d.id}"
+        messages.parent = "d{d.id}"
+        messages.label = domain_label(project_name(d.messages_package, "Fontys.Messages.{d.name}"), d.messages_version)
+        messages.kind = "messages"
+        messages.domain = d
+        all = all + [messages]
+        let eventsNode = new Node
+        eventsNode.key = "evs{d.id}"
+        eventsNode.parent = "pe{d.id}"
+        eventsNode.label = @eventsNode
+        eventsNode.kind = "events"
+        eventsNode.domain = d
+        all = all + [eventsNode]
+        let newestEvent = 0
+        for e in events
+            if e.domain.id == d.id and e.number > newestEvent
+                newestEvent = e.number
+        for number in 1 to newestEvent
+            let mine: list<EventType> = []
+            for e in events
+                if e.domain.id == d.id and e.number == number
+                    mine = mine + [e]
+            if count(mine) > 0
+                let vn = new Node
+                vn.key = "evl{d.id}at{number}"
+                vn.parent = "evs{d.id}"
+                vn.label = "v{number}"
+                vn.kind = "eventlevel"
+                vn.domain = d
+                vn.level = number
+                all = all + [vn]
+                for e in mine
+                    let en = new Node
+                    en.key = "ev{e.id}"
+                    en.parent = "evl{d.id}at{number}"
+                    en.label = review_label(e.name, e.review)
+                    en.kind = "event"
+                    en.domain = d
+                    en.event_type = e
+                    all = all + [en]
     return all
+
+// A project's name: its package, or the name the repository gives it when none is set.
+function project_name(package: text, fallback: text) -> text
+    if package == ""
+        return fallback
+    return package
 
 // The number of the newest version of a data object up to `level`; 0 when it has none yet.
 function newest_number(versions: list<ObjectVersion>, owner: integer, level: integer) -> integer
@@ -1098,7 +1576,7 @@ function domain_label(name: text, version: text) -> text
 
 function version_label(number: integer, obsolete: text) -> text
     if obsolete != ""
-        return "v{number} (obsolete)"
+        return @obsoleteVersionMark(number = number)
     return "v{number}"
 
 function version_title(name: text, number: integer) -> text

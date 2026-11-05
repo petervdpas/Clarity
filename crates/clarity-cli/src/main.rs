@@ -75,8 +75,43 @@ enum Command {
         #[arg(long)]
         list: bool,
     },
+    /// Back up the project's SQLite databases, list the backups, and restore one (docs/BACKUP-PLAN.md).
+    Data {
+        #[command(subcommand)]
+        command: DataCommand,
+    },
     /// Look for the build tools of every stack, and say what to install.
     Tools,
+}
+
+#[derive(Subcommand)]
+enum DataCommand {
+    /// Take a backup of a data source's database, beside it in backups/.
+    Backup {
+        /// The project file, like shop.clarity.
+        project: PathBuf,
+        /// The data source; the first SQLite one the project owns by default.
+        #[arg(long)]
+        source: Option<String>,
+    },
+    /// List the backups of a data source's database, the newest first.
+    Backups {
+        /// The project file, like shop.clarity.
+        project: PathBuf,
+        /// The data source; the first SQLite one the project owns by default.
+        #[arg(long)]
+        source: Option<String>,
+    },
+    /// Put a backup in place of the database, after backing up what is there now.
+    Restore {
+        /// The project file, like shop.clarity.
+        project: PathBuf,
+        /// The backup's file, as `clarity data backups` lists it.
+        backup: PathBuf,
+        /// The data source; the first SQLite one the project owns by default.
+        #[arg(long)]
+        source: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -153,6 +188,7 @@ fn main() -> ExitCode {
             list,
         } => import(&project, &source, module, tables, list),
         Command::Own { project, source } => own(&project, &source),
+        Command::Data { command } => data(command),
         Command::Tools => {
             print!("{}", clarity_gen::tools::report(&clarity_gen::tools::check_all(&clarity_gen::tools::System)));
             ExitCode::SUCCESS
@@ -555,5 +591,55 @@ fn own(project_file: &std::path::Path, source: &str) -> ExitCode {
             eprintln!("clarity: {err}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// Backups of a project's databases: take one, list them, restore one.
+fn data(command: DataCommand) -> ExitCode {
+    let (project, source) = match &command {
+        DataCommand::Backup { project, source } | DataCommand::Backups { project, source } | DataCommand::Restore { project, source, .. } => (project, source.as_deref()),
+    };
+    let dir = clarity_project::module_dir(project);
+    let (name, database) = match clarity_project::database_to_back_up(&dir, source) {
+        Ok(found) => found,
+        Err(err) => {
+            eprintln!("clarity: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let done = match command {
+        DataCommand::Backup { .. } => clarity_db::backup::take(&database, clarity_db::backup::MANUAL).map(|b| eprintln!("Backed up {name} to {}", b.path.display())),
+        DataCommand::Backups { .. } => {
+            let all = clarity_db::backup::list(&database);
+            if all.is_empty() {
+                eprintln!("{name} has no backups yet; clarity data backup takes one.");
+            }
+            for b in all {
+                println!("{}  {:<24} {:>10}  {}", b.when, b.why, size(b.bytes), b.path.display());
+            }
+            Ok(())
+        }
+        DataCommand::Restore { backup, .. } => clarity_db::backup::restore(&database, &backup).map(|before| {
+            eprintln!("Restored {name} from {}.", backup.display());
+            if before.path != backup {
+                eprintln!("What it replaced is kept in {}.", before.path.display());
+            }
+        }),
+    };
+    match done {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("clarity: {err}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// A file's size as people read it: `840 B`, `12.3 kB`, `4.1 MB`.
+fn size(bytes: u64) -> String {
+    match bytes {
+        b if b < 1000 => format!("{b} B"),
+        b if b < 1_000_000 => format!("{:.1} kB", b as f64 / 1000.0),
+        b => format!("{:.1} MB", b as f64 / 1_000_000.0),
     }
 }

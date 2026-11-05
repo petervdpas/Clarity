@@ -4,6 +4,7 @@
 //! enums it has, written again and compared with its files.
 
 use super::*;
+use crate::events;
 
 fn object(domain: &str, name: &str, root: bool, version: i64) -> ObjectSpec {
     ObjectSpec { domain: domain.into(), name: name.into(), root, keyed: root, newtonsoft: true, version, summary: String::new(), obsolete: String::new() }
@@ -239,4 +240,58 @@ fn the_repository_s_classes_round_trip() {
 fn a_file_is_written_with_its_byte_order_mark_and_lf() {
     assert_eq!(with_mark("a\r\nb\n"), b"\xEF\xBB\xBFa\nb\n".to_vec());
     assert_eq!(with_mark("\u{feff}a\n"), b"\xEF\xBB\xBFa\n".to_vec(), "one mark, not two");
+}
+
+/// Every event read from the repository, written again: each comes out as its file is, or as its notes say.
+#[test]
+fn the_repository_s_events_round_trip() {
+    let Some(repo) = repository() else {
+        eprintln!("the fcdm repository is not on this machine: skipped");
+        return;
+    };
+    let mut files = Vec::new();
+    fn walk(dir: &std::path::Path, root: &std::path::Path, out: &mut Vec<read::SourceFile>) {
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') || name == "bin" || name == "obj" {
+                continue;
+            }
+            if path.is_dir() {
+                walk(&path, root, out);
+            } else if name.ends_with(".cs") || name.ends_with(".csproj") {
+                let relative = path.strip_prefix(root).unwrap().to_string_lossy().to_string();
+                out.push(read::SourceFile { path: relative, text: std::fs::read_to_string(&path).unwrap_or_default() });
+            }
+        }
+    }
+    walk(&repo, &repo, &mut files);
+    let rows = read::read_files(&files);
+    let (mut same, mut differ, mut count, mut review) = (0, Vec::new(), 0, 0);
+    for (i, e) in rows.iter().enumerate().filter(|(_, r)| r.kind == "event") {
+        count += 1;
+        if !e.review.is_empty() {
+            review += 1;
+        }
+        let fields: Vec<events::EventFieldSpec> = rows[i + 1..].iter().take_while(|r| r.kind == "event_field").map(events::field_spec_of).collect();
+        let spec = events::spec_of(e);
+        assert_eq!(e.path, events::event_path(&spec), "an event is written where it was read");
+        let written = events::write_event(&spec, &fields);
+        let on_disk = file(&repo, &e.path).unwrap_or_default();
+        if written == on_disk {
+            same += 1;
+        } else {
+            let first = written.lines().zip(on_disk.lines()).position(|(a, b)| a != b).unwrap_or_else(|| written.lines().count().min(on_disk.lines().count()));
+            differ.push(format!("{}: line {}: wrote {:?}, file has {:?}", e.path, first + 1, written.lines().nth(first).unwrap_or(""), on_disk.lines().nth(first).unwrap_or("")));
+        }
+    }
+    eprintln!("{count} events, {same} as their file, {} differ, {review} flagged for review", differ.len());
+    for n in rows.iter().filter(|r| r.kind == "note" && r.note.contains("left out")) { eprintln!("  {}", n.note); }
+    assert!(count > 140, "events read: {count}");
+    let noted: Vec<&str> = rows.iter().filter(|r| r.kind == "note").map(|r| r.path.as_str()).collect();
+    let unexplained: Vec<&String> = differ.iter().filter(|d| !noted.iter().any(|p| d.starts_with(&format!("{p}:")))).collect();
+    assert!(unexplained.is_empty(), "differences no note explains: {unexplained:#?}");
+    // A held object of an event is a data object the import read.
+    let unknown: Vec<String> = rows.iter().filter(|r| r.kind == "event_field" && r.property_kind.starts_with("Held") && !rows.iter().any(|o| o.kind == "object" && o.name == r.type_name && o.version == r.type_version)).map(|r| format!("{} v{}", r.type_name, r.type_version)).collect();
+    assert!(unknown.is_empty(), "event fields holding no data object read: {unknown:?}");
 }

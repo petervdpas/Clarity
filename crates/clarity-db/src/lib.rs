@@ -3,6 +3,8 @@
 //! that the dictionary still fits the tables it maps onto. SQLite for now;
 //! the other SQL databases follow with their dialects (D1d).
 
+pub mod backup;
+
 use std::path::Path;
 
 use clarity_spec::dictionary::{FieldSpec, field_line};

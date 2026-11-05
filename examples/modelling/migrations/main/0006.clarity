@@ -1,0 +1,26 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Events and reviews"
+    add field ObjectVersion.review: text(400)
+    add entity EventType
+        domain: ref Domain
+        name: text(120)
+        number: integer, default 1
+        namespace: text(200)
+        kind: EventKind, default Changed
+        base: bool, default true
+        carries: ref ObjectVersion
+        obsolete: text(400)
+        review: text(400)
+        summary: text
+    add entity EventField
+        owner: ref EventType
+        position: integer, default 1
+        name: text(80)
+        kind: PropertyKind, default TextValue
+        nullable: bool, default false
+        holds: ref ObjectVersion
+        key_of: ref DataObject
+        list: ListStyle, default Single
+        access: Access, default InitOnly
+        obsolete: text(400)

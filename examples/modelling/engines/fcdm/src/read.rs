@@ -42,6 +42,15 @@ pub struct ReadRow {
     /// For a note: what was found and what was done; `renames` when it changes a public name.
     pub note: String,
     pub renames: bool,
+    /// For an event: its namespace as published, its kind (Changed, Deleted, ...), and whether it is a base event.
+    pub namespace: String,
+    pub event_kind: String,
+    pub base: bool,
+    /// For an event field: how a list is typed (IEnumerable, Array, List) and its accessors (init, get, set).
+    pub list: String,
+    pub access: String,
+    /// For an event or a data object's version: why someone should look at it; empty when nothing asks for it.
+    pub review: String,
 }
 
 /// Whether a path is one the import reads: a domain's model project, not its tests, interfaces or build output.
@@ -63,13 +72,18 @@ fn interface_file(path: &str) -> bool {
 }
 
 /// The domain a project or namespace names: `Fontys.Fcdm.Hr.v2` gives Hr.
-fn domain_of(namespace: &str) -> String {
+pub(crate) fn domain_of(namespace: &str) -> String {
     namespace.split('.').nth(2).unwrap_or("").to_string()
 }
 
 /// The version a namespace names: `.v3` gives 3, none gives 1.
-fn version_of(namespace: &str) -> i64 {
+pub(crate) fn version_of(namespace: &str) -> i64 {
     namespace.rsplit('.').next().and_then(|last| last.strip_prefix('v').or_else(|| last.strip_prefix('V'))).and_then(|n| n.parse().ok()).unwrap_or(1)
+}
+
+/// The text between the first quotes of an attribute, for the events' reader.
+pub(crate) fn quoted_text(line: &str) -> String {
+    quoted(line)
 }
 
 /// The text between the first quotes of an attribute: `[Obsolete("Use v2.")]` gives `Use v2.`.
@@ -117,6 +131,17 @@ pub fn read_files(files: &[SourceFile]) -> Vec<ReadRow> {
     for f in files.iter().filter(|f| interface_file(&f.path)) {
         let notes = read_interface(f, &clean(&f.text), &rows, &newtonsoft);
         rows.extend(notes);
+    }
+    // The events, which carry the data objects read.
+    let objects: Vec<(String, String, i64)> = rows.iter().filter(|r| r.kind == "object").map(|r| (r.domain.clone(), r.name.clone(), r.version)).collect();
+    rows.extend(crate::events::read_events(files, &objects));
+    // A data object's version whose public names the import changed asks for a review.
+    let renamed: Vec<(String, String)> = rows.iter().filter(|r| r.kind == "note" && r.renames).map(|r| (r.path.clone(), r.note.clone())).collect();
+    for o in rows.iter_mut().filter(|r| r.kind == "object") {
+        let mine: Vec<&str> = renamed.iter().filter(|(p, _)| *p == o.path).map(|(_, n)| n.as_str()).collect();
+        if !mine.is_empty() {
+            o.review = format!("The import changed a public name: {}", mine.join("; "));
+        }
     }
     // A package is a domain's only when the domain has data objects or enums: not a dispatcher's or a test's.
     let has: Vec<String> = rows.iter().filter(|r| r.kind == "object" || r.kind == "enum").map(|r| r.domain.clone()).collect();
@@ -207,10 +232,9 @@ fn read_class(f: &SourceFile, text: &str, enums: &[String], newtonsoft: &[String
     let name: String = after.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
     let implements = after.split(':').nth(1).map(|s| s.trim().to_string()).unwrap_or_default();
     let obsolete = lines[..at].iter().rev().take_while(|l| l.trim().starts_with('[')).find(|l| l.contains("Obsolete")).map(|l| quoted(l)).unwrap_or_default();
-    // An event (`IEvent`) that stands in a model project waits for the events stage.
+    // Data declared as an NServiceBus event (`IEvent`) in a model project: read as the data object it is, which drops the IEvent, a public change.
     if implements.split(',').any(|i| i.trim() == "IEvent") {
-        rows.push(note(&f.path, format!("{name}: an event in the model project, left for the events stage"), false));
-        return rows;
+        rows.push(note(&f.path, format!("{name} v{version}: is data (events carry it) but declared an NServiceBus IEvent; written as a data object without IEvent"), true));
     }
     let has_bk = lines.iter().any(|l| l.trim().starts_with("public string Bk "));
     let root = has_bk || implements.split(',').any(|i| i.trim() == format!("I{name}"));

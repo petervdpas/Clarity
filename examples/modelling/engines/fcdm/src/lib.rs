@@ -11,6 +11,7 @@
 use serde::Deserialize;
 
 pub mod diff;
+pub mod events;
 pub mod read;
 
 clarity_engine::interface!();
@@ -84,9 +85,10 @@ clarity_engine::function!(interface_code, |(object, properties): (ObjectSpec, Ve
 clarity_engine::function!(read_files, |(files,): (Vec<read::SourceFile>,)| Ok(read::read_files(&files)));
 clarity_engine::function!(diff_text, |(path, on_disk, written): (String, String, String)| Ok(diff::unified(&path, &on_disk, &written)));
 clarity_engine::function!(file_bytes, |(text,): (String,)| Ok(clarity_engine::Bytes(with_mark(&text))));
+clarity_engine::function!(event_code, |(spec, fields): (events::EventSpec, Vec<events::EventFieldSpec>)| Ok(events::write_event(&spec, &fields)));
 clarity_engine::function!(enum_code, |(spec, values): (EnumSpec, Vec<EnumValueSpec>)| Ok(write_enum(&spec, &values)));
 
-const INDENT: &str = "    ";
+pub(crate) const INDENT: &str = "    ";
 /// The longest constructor line that stays on one line.
 pub(crate) const ONE_LINE: usize = 120;
 /// The most parameters a constructor on one line takes.
@@ -142,7 +144,7 @@ const KEYWORDS: [&str; 92] = [
 ];
 
 /// The parameter a constructor names a property by: its name with a small first letter, with `@` before a word C# keeps.
-fn parameter(name: &str) -> String {
+pub(crate) fn parameter(name: &str) -> String {
     let mut chars = name.chars();
     let word: String = match chars.next() {
         Some(first) => first.to_lowercase().chain(chars).collect(),
@@ -159,7 +161,7 @@ fn uses_lists(properties: &[PropertySpec]) -> bool {
     properties.iter().any(|p| p.kind == "HeldObjects")
 }
 
-fn quoted(text: &str) -> String {
+pub(crate) fn quoted(text: &str) -> String {
     text.replace('\\', "\\\\").replace('"', "\\\"")
 }
 

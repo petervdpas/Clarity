@@ -137,7 +137,9 @@
     X(a_database_opens_in_the_folder_clarity_data_names) \
     X(a_reply_says_quit_and_keys_only_when_code_asks) \
     X(an_open_says_new_window_only_when_asked) \
-    X(code_quits_and_opens_the_keys_window_through_the_layer)
+    X(code_quits_and_opens_the_keys_window_through_the_layer) \
+    X(backups_are_named_and_pruned_as_every_stack_does) \
+    X(a_database_with_a_schema_is_backed_up_before_new_steps)
 
 #define CLARITY_DECLARED(name) void name(void);
 CLARITY_TESTS(CLARITY_DECLARED)

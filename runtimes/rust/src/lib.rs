@@ -4,6 +4,7 @@
 //! contracts. It is published as the crate clarity-runtime, which every
 //! generated project depends on.
 
+pub mod backup;
 pub mod canvas;
 pub mod charts;
 pub mod data_folder;
@@ -658,6 +659,10 @@ impl Db {
     pub fn migrate_source(&mut self, source: &str, steps: &[Step]) -> Result<usize> {
         let mut conn = self.conn(source)?;
         let done = schema_version(&mut **conn)?;
+        // A database that already has a schema is backed up before it changes (docs/BACKUP-PLAN.md).
+        if done > 0 && done < steps.len() {
+            backup::before_migration(&mut **conn, done + 1)?;
+        }
         for (i, step) in steps.iter().enumerate().skip(done) {
             conn.apply(i + 1, step)?;
         }

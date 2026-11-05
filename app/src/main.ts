@@ -1,4 +1,5 @@
 import { mount } from "svelte";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./app.css";
 import "@clarity/ui/screen/render.css";
@@ -24,6 +25,8 @@ const shown = (manual ? import("./Manual.svelte") : import("./App.svelte")).then
   requestAnimationFrame(() =>
     requestAnimationFrame(() => {
       getCurrentWindow().show().catch(() => {});
+      // Clarity's window shows: its splash screen goes (src-tauri/src/splash.rs).
+      if (!manual) invoke("splash_done").catch(() => {});
     }),
   );
   return mounted;

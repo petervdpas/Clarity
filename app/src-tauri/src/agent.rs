@@ -132,6 +132,8 @@ design.sound) plays sound files of the resources, tones and melodies; it has no 
 cannot write; use those the overview lists.
 - Lay windows out to use the full width of their grid: inputs and tables reach the last column, labels sit left of \
 their inputs, buttons sit together at the bottom right.
+- Before you change data in bulk, or when the person asks, take a backup with backup_data; list_backups shows what there is and \
+restore_backup puts one back. Both changing tools ask the person first.
 - Data is designed in a diagram first. When asked for new or changed data (\"an order system with customers and \
 invoices\"), read the Data model with diagram_view, then sketch the change as a Mermaid ERD (or a class diagram for \
 enums) with write_diagram, open it with show_diagram, say in a few lines what it proposes, and stop: the person \
@@ -200,6 +202,8 @@ pub trait Execute {
     /// Builds the custom part or library `name` of the project in `dir` on
     /// its own, in its folder, and waits for the end; gives the output.
     fn build_part(&mut self, dir: &Path, name: &str) -> Result<String, String>;
+    /// Ends the application Run started, which has the database open, before a restore.
+    fn stop_app(&mut self) {}
 }
 
 /// The tools, on one project: the project file and its folder of modules.
@@ -612,6 +616,47 @@ impl ProjectTools {
         Ok(output)
     }
 
+    /// The data source a backup tool names, or the first SQLite one the project owns.
+    fn backup_source(&self, input: &Value) -> Result<(PathBuf, String), String> {
+        let (_, dir) = self.open()?.clone();
+        let named = input["source"].as_str().map(str::trim).filter(|s| !s.is_empty());
+        let (source, _) = clarity_project::database_to_back_up(&dir, named)?;
+        Ok((dir, source))
+    }
+
+    fn list_backups(&self, input: &Value) -> Result<String, String> {
+        let (dir, source) = self.backup_source(input)?;
+        let list = super::backups::list(&dir, &source);
+        if let Some(why) = list.unavailable {
+            return Err(why);
+        }
+        if list.backups.is_empty() {
+            return Ok(format!("{source} has no backups yet."));
+        }
+        Ok(list.backups.iter().map(|b| format!("{}  {}  {} ({} bytes)", b.file, b.when, b.why, b.bytes)).collect::<Vec<_>>().join("\n"))
+    }
+
+    fn backup_data(&mut self, input: &Value) -> Result<String, String> {
+        let (dir, source) = self.backup_source(input)?;
+        let execute = self.execute.as_mut().ok_or("backing up is not available here")?;
+        if !execute.ask(&format!("Back up the database of {source}")) {
+            return Ok("The person denied this, so nothing was backed up. Do not ask again in this turn.".into());
+        }
+        Ok(super::backups::take(&dir, &source)?.done.unwrap_or_default())
+    }
+
+    fn restore_backup(&mut self, input: &Value) -> Result<String, String> {
+        let (dir, source) = self.backup_source(input)?;
+        let file = input["file"].as_str().map(str::trim).filter(|f| !f.is_empty()).ok_or("name the backup by its file, as list_backups gives it")?.to_string();
+        let execute = self.execute.as_mut().ok_or("restoring is not available here")?;
+        let what = format!("Restore the database of {source} from {file} (what it holds now is backed up first; a running application is stopped)");
+        if !execute.ask(&what) {
+            return Ok("The person denied this, so nothing was restored. Do not ask again in this turn.".into());
+        }
+        execute.stop_app();
+        Ok(super::backups::restore(&dir, &source, &file)?.done.unwrap_or_default())
+    }
+
     fn new_project(&mut self, input: &Value) -> Result<String, String> {
         let name = input["name"].as_str().unwrap_or_default().trim();
         if name.is_empty() {
@@ -716,6 +761,21 @@ impl Tools for ProjectTools {
                 "Writes the changes of the data dictionary since the last migration step as the next step, so the database follows. Use it after adding or changing entities, when check warns that they are not in a migration yet.",
                 schema(json!({ "title": { "type": "string", "description": "What the step does, like \"Tasks\"." }, "source": { "type": "string", "description": "The data source; the first one by default." } }), &[]),
             ),
+            tool(
+                "list_backups",
+                "Lists the backups of a data source's database, the newest first, with when (UTC) and why each was taken; or says why Clarity does not back that source up.",
+                schema(json!({ "source": { "type": "string", "description": "The data source; the first one by default." } }), &[]),
+            ),
+            tool(
+                "backup_data",
+                "Takes a backup of a data source's database, beside it in backups/. It asks the person first. Take one before you change data in bulk or restore.",
+                schema(json!({ "source": { "type": "string", "description": "The data source; the first one by default." } }), &[]),
+            ),
+            tool(
+                "restore_backup",
+                "Puts a backup in place of a data source's database, after backing up what is there now; a running application is stopped first. It asks the person first. Name the backup by its file, as list_backups gives it.",
+                schema(json!({ "file": { "type": "string", "description": "The backup's file name, like shop-20261105T213012Z-manual.db." }, "source": { "type": "string", "description": "The data source; the first one by default." } }), &["file"]),
+            ),
             tool("parts", "The parts a window can hold, with their properties, sizes and events, as JSON.", schema(json!({}), &[])),
             tool(
                 "manual",
@@ -818,6 +878,9 @@ impl Tools for ProjectTools {
             "reference" => section(LANGUAGE, "language reference", &text("section")),
             "new_project" => self.new_project(input),
             "migrate" => self.migrate(input),
+            "list_backups" => self.list_backups(input),
+            "backup_data" => self.backup_data(input),
+            "restore_backup" => self.restore_backup(input),
             "build_output" => Ok(self.output.clone()),
             "read_generated" => self.generated(&text("path")),
             "build" => self.build(input),
@@ -925,6 +988,10 @@ impl Execute for AppExecute {
     fn build_part(&mut self, dir: &Path, name: &str) -> Result<String, String> {
         crate::parts::start_part_build(self.app.clone(), dir, name)?;
         Ok(self.finished())
+    }
+
+    fn stop_app(&mut self) {
+        crate::build::stop(&self.app);
     }
 }
 
@@ -1269,6 +1336,10 @@ mod tests {
             "apply_diagram", "migrate", "new_project", "pick_api", "write_diagram", "write_file",
             // Showing a window in Preview or a diagram, which draw without running anything.
             "show_diagram", "show_window",
+            // Reading the database's backups.
+            "list_backups",
+            // Backing up and restoring the database, only after the person allows it.
+            "backup_data", "restore_backup",
             // Running or building, only after the person allows it.
             "build",
         ];
@@ -1380,6 +1451,36 @@ mod tests {
         assert!(!built.is_error && built.text.ends_with("dotnet build"), "{}", built.text);
         assert_eq!(person.borrow().asked[1], "Build the application: generate it and build it");
         assert_eq!(person.borrow().built, [false]);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// Backing up and restoring a database always ask the person first, whatever the settings say of building.
+    #[test]
+    fn backing_up_and_restoring_ask_the_person_first() {
+        let (root, file, dir) = project("backups");
+        let (_, path) = clarity_project::database_to_back_up(&dir, None).unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let db = rusqlite::Connection::open(&path).unwrap();
+        db.execute_batch("CREATE TABLE IF NOT EXISTS item (id INTEGER PRIMARY KEY);").unwrap();
+        drop(db);
+        let person = std::rc::Rc::new(std::cell::RefCell::new(Asked { allow: false, asked: vec![], built: vec![] }));
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        tools.runs = Runs::Allow;
+        assert!(tools.call("backup_data", &json!({})).is_error, "without a way to ask, nothing is backed up");
+        tools.execute = Some(Box::new(person.clone()));
+        let denied = tools.call("backup_data", &json!({}));
+        assert!(denied.text.contains("denied"), "{}", denied.text);
+        assert!(tools.call("list_backups", &json!({})).text.contains("no backups"));
+        person.borrow_mut().allow = true;
+        let taken = tools.call("backup_data", &json!({}));
+        assert!(!taken.is_error && taken.text.starts_with("Backed up"), "{}", taken.text);
+        let listed = tools.call("list_backups", &json!({})).text;
+        let backup = listed.split_whitespace().next().unwrap().to_string();
+        let restored = tools.call("restore_backup", &json!({"file": backup}));
+        assert!(!restored.is_error && restored.text.starts_with("Restored"), "{}", restored.text);
+        let asked = person.borrow().asked.clone();
+        assert_eq!(asked.len(), 3, "{asked:?}");
+        assert!(asked[2].starts_with("Restore the database of main from "), "{asked:?}");
         std::fs::remove_dir_all(&root).unwrap();
     }
 

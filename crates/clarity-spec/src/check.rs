@@ -795,6 +795,13 @@ impl<'a> Checker<'a> {
         let mut own = Vec::new();
         names(&page.widgets, &mut own);
         own.extend(page.data.iter().map(|d| d.name.name.as_str()));
+        // Each name the window holds, and whose it is: its own, then each view's it places, whose handlers join its code.
+        let window = page.name.name.as_str();
+        let handlers_of = |page_name: &str| -> Vec<String> {
+            self.files.iter().flat_map(|f| &f.code).filter(|c| c.name.name == page_name).flat_map(|c| c.handlers.iter().map(|h| h.name.name.clone())).collect()
+        };
+        let mut taken: Vec<(String, String)> = own.iter().map(|n| (n.to_string(), window.to_string())).collect();
+        let mut handlers_taken: Vec<(String, String)> = handlers_of(window).into_iter().map(|h| (h, window.to_string())).collect();
         let mut shown: Vec<&str> = Vec::new();
         for place in crate::views::places(&page.widgets) {
             let (name, what, span) = (place.view, place.what, place.span);
@@ -831,8 +838,23 @@ impl<'a> Checker<'a> {
             names(&found.widgets, &mut theirs);
             theirs.extend(found.data.iter().map(|d| d.name.name.as_str()));
             // The project's settings are every page's: the same data, no clash.
-            for clash in theirs.iter().filter(|n| own.contains(n) && **n != crate::parser::SETTINGS_DATA) {
-                self.error(file, format!("{name} has '{clash}', as {} has; name one of them apart", page.name.name), span);
+            let mut clashes: Vec<(String, String)> = Vec::new();
+            for n in theirs.iter().filter(|n| **n != crate::parser::SETTINGS_DATA) {
+                match taken.iter().find(|(t, _)| t == n) {
+                    Some((_, whose)) => clashes.push((n.to_string(), whose.clone())),
+                    None => taken.push((n.to_string(), name.to_string())),
+                }
+            }
+            // Its handlers join the window's code, beside the window's own and those of the other views it places.
+            for h in handlers_of(name) {
+                match handlers_taken.iter().find(|(t, _)| *t == h) {
+                    Some((_, whose)) => clashes.push((format!("handler {h}"), whose.clone())),
+                    None => handlers_taken.push((h, name.to_string())),
+                }
+            }
+            for (clash, whose) in clashes {
+                let clash = clash.strip_prefix("handler ").map(|h| format!("handler '{h}'")).unwrap_or(format!("'{clash}'"));
+                self.error(file, format!("{name} has {clash}, as {whose} has; name one of them apart"), span);
             }
         }
     }

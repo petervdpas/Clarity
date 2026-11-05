@@ -20,6 +20,8 @@ mod vault;
 mod agent;
 mod manual;
 mod migrations;
+mod splash;
+mod backups;
 mod resource_urls;
 
 use crate::fail_safe::Held;
@@ -820,6 +822,13 @@ fn window_title(name: &str, version: &str, dev_release: Option<&str>) -> String 
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            // The splash screen first, so something shows while the rest starts.
+            let info = app.package_info();
+            let dev_release = cfg!(debug_assertions).then_some(env!("CLARITY_DEV_RELEASE"));
+            let title = window_title(&info.name, &info.version.to_string(), dev_release);
+            // The version alone, as the title says it after the name (which may be more than one word).
+            let version = title.strip_prefix(info.name.as_str()).unwrap_or(&title).trim().to_string();
+            splash::open(app.handle(), &title, &version);
             // Fail safe: a panic in a command shows in the IDE.
             fail_safe::report_panics(app.handle().clone());
             // The status bar's meters, and the System page while it is open.
@@ -839,15 +848,20 @@ pub fn run() {
                 clarity_gen::clarity_ui::set_bundled_browser(folder);
             }
             // The preview and the design canvas draw with the same browser files (DESIGN 8.1).
+            splash::status(app.handle(), "Starting the preview");
             app.manage(preview_server(app.handle().clone()));
-            let info = app.package_info();
+            splash::status(app.handle(), "Loading the designer");
             if let Some(window) = app.get_webview_window("main") {
                 // F5, Ctrl+R, Ctrl+P and Ctrl+F are Clarity's, not the webview's.
                 browser_keys::turn_off(&window);
-                // Hidden until its page has drawn itself (main.ts); see show_later.
+                // Hidden until its page has drawn itself (main.ts); see show_later. The splash goes when it shows, or with it then.
                 manual::show_later(window.clone());
-                let dev_release = cfg!(debug_assertions).then_some(env!("CLARITY_DEV_RELEASE"));
-                window.set_title(&window_title(&info.name, &info.version.to_string(), dev_release))?;
+                let later = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(4));
+                    splash::done(&later);
+                });
+                window.set_title(&title)?;
                 // The manual's window closes with Clarity's; its own close only hides it.
                 let app = app.handle().clone();
                 window.on_window_event(move |event| {
@@ -861,6 +875,7 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
+        .manage(splash::SplashState::default())
         .manage(WatchState::default())
         .manage(HistoryState::default())
         .manage(build::BuildState::default())
@@ -868,6 +883,8 @@ pub fn run() {
         .manage(agent::AgentState::default())
         .invoke_handler(tauri::generate_handler![
             preview_server_address,
+            splash::splash_done,
+            splash::splash_status,
             manual::manual_topics,
             manual::manual_page,
             manual::open_manual,
@@ -921,6 +938,10 @@ pub fn run() {
             rename,
             migrations::pending_migration,
             migrations::create_migration,
+            backups::list_backups,
+            backups::take_backup,
+            backups::restore_backup,
+            backups::delete_backup,
             external::source_tables,
             apis::api_listing,
             apis::add_api_file,

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "clarity/backup.h"
 #include "clarity/db_internal.h"
 #include "clarity/disk.h"
 #include "clarity/record_file.h"
@@ -101,6 +102,8 @@ bool clarity_migrate(ClarityDb* db, const char* source, const ClarityStep* steps
     ClaritySourceDb* s = NULL;
     int done;
     if (!clarity_source(db, source, &s) || !version_of(s->driver, &done)) return false;
+    // A database that already has a schema is backed up before it changes (docs/BACKUP-PLAN.md).
+    if (done > 0 && done < (int)count && !clarity_backup_before_migration(s->driver, done + 1)) return false;
     for (int i = done; i < (int)count; ++i)
         if (!s->driver->apply(s->driver, i + 1, &steps[i])) return false;
     if (applied) *applied = (int)count > done ? (int)count - done : 0;

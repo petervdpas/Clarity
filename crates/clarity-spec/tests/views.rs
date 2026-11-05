@@ -62,6 +62,12 @@ fn the_rules_of_views() {
         &MODEL.replace("    slideout \"Class\" name classPanel view ClassEditor pinnable span 6 rows 6\n", "    slideout \"Class\" name classPanel view ClassEditor pinnable span 6 rows 6\n    slideout \"Again\" name againPanel view ClassEditor span 6 rows 6\n"),
         "ClassEditor shows once in a window",
     );
+    // Its handlers join the window's code: a name the window's code or another view placed there has is a clash.
+    has(&MODEL.replace("    handler saveClicked\n        className = \"\"\n", "    handler editClicked\n        className = \"\"\n").replace("on click: saveClicked", "on click: editClicked"), "ClassEditor has handler 'editClicked', as Workspace has");
+    let two = MODEL.replace("    slideout \"Class\" name classPanel view ClassEditor pinnable span 6 rows 6\n", "    slideout \"Class\" name classPanel view ClassEditor pinnable span 6 rows 6\n    slideout \"Other\" name otherPanel view OtherEditor span 6 rows 6\n")
+        + "\npage OtherEditor: view\n    button \"Go\" name goButton at 1,1 span 2 on click: saveClicked\n\ncode OtherEditor\n    handler saveClicked\n        goButton.enabled = false\n";
+    has(&two, "OtherEditor has handler 'saveClicked', as ClassEditor has");
+    has(&two.replace("name goButton", "name saveButton").replace("goButton.enabled", "saveButton.enabled").replace("handler saveClicked\n        saveButton", "handler goClicked\n        saveButton").replace("on click: saveClicked\n\ncode OtherEditor", "on click: goClicked\n\ncode OtherEditor"), "OtherEditor has 'saveButton', as ClassEditor has");
     // The view's own code reaches only its own parts.
     has(&MODEL.replace("        className = \"\"\n", "        classPanel.visible = false\n"), "classPanel");
 }

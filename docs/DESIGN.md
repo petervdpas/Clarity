@@ -154,6 +154,7 @@ Clarity has migrations built in, for every source it owns. Its advantage over th
   - Removing a field or an entity is marked destructive and needs confirmation.
 - **Data migrations.** A step can carry Clarity code that transforms rows, for example splitting `name` into `first_name` and `last_name`.
 - **Down steps.** A step gets a down step when it can be reversed, and is marked one-way when it cannot (a removed field).
+- **Backups.** Before it applies steps to an SQLite database that has a schema, every runtime backs it up beside it with `VACUUM INTO`, named and pruned alike (conformance/backups.json); the IDE, the command line (`clarity data`) and the agent (asking first) take and restore backups (docs/BACKUP-PLAN.md, built 2026-11-05; server databases follow).
 - **Applying.** Run on the Preview tab applies pending steps to the dev database first. The generated application checks its schema version at startup and applies what is missing; a command-line switch applies them separately, for server deployments where an administrator does it. Every step runs in a transaction where the database allows it.
 
 **Moving data between databases.** When a project switches a source from one database to another (SQLite to PostgreSQL, say), the dictionary describes both sides, so Clarity can generate a copy tool that moves the data. It comes after the rest.

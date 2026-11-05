@@ -39,6 +39,8 @@ entity ObjectVersion
     number: integer, min 1, default 1, label @versionNumberLabel
     // Why it is no longer to be used; empty while it is.
     obsolete: text(400), label @versionObsoleteLabel
+    // Why someone should look at it (the import changed a public name); empty when nothing asks for it.
+    review: text(400), label @reviewLabel
 
 // What a property holds: a value, one of the domain's enums, a data object
 // held inside, a list of those, or the business key of another data object.
@@ -86,3 +88,58 @@ entity EnumValue
     position: integer, min 1, default 1, label @enumValuePositionLabel
     name: text(80), required, label @enumValueNameLabel
     number: integer, label @enumValueNumberLabel
+
+// What an event tells: that a data object changed, was deleted, made or
+// updated, or something of its own.
+enum EventKind
+    Changed label @eventKindChanged
+    Deleted label @eventKindDeleted
+    Created label @eventKindCreated
+    Updated label @eventKindUpdated
+    Other label @eventKindOther
+
+// An event a domain's messages project publishes, under Events/ (version 1)
+// or Events/vN. A base event is one line on fcdm's base classes and carries
+// one version of a data object; any other has fields of its own. Its
+// namespace is kept as published: NServiceBus routes a message by it.
+entity EventType
+    domain: ref Domain, required, cascade, label @eventDomainLabel
+    name: text(120), required, label @eventNameLabel
+    number: integer, min 1, default 1, label @eventNumberLabel
+    namespace: text(200), label @eventNamespaceLabel
+    kind: EventKind, default Changed, label @eventKindLabel
+    base: bool, default true, label @eventBaseLabel
+    // For a base event: the version of the data object it carries.
+    carries: ref ObjectVersion, label @eventCarriesLabel
+    obsolete: text(400), label @eventObsoleteLabel
+    // Why someone should look at it; empty when nothing asks for it.
+    review: text(400), label @reviewLabel
+    summary: text, label @eventSummaryLabel
+
+// How a field that holds several is typed.
+enum ListStyle
+    Single label @listSingle
+    Sequence label @listSequence
+    ArrayOf label @listArray
+    ListOf label @listList
+
+// Which accessors a field has.
+enum Access
+    InitOnly label @accessInit
+    GetOnly label @accessGet
+    GetSet label @accessSet
+
+// A field of an event that is no base event, in its constructor's order.
+entity EventField
+    owner: ref EventType, required, cascade, label @eventFieldOwnerLabel
+    position: integer, min 1, default 1, label @eventFieldPositionLabel
+    name: text(80), required, label @eventFieldNameLabel
+    kind: PropertyKind, default TextValue, label @eventFieldKindLabel
+    nullable: bool, default false, label @eventFieldNullableLabel
+    // The version of the data object it holds.
+    holds: ref ObjectVersion, label @eventFieldHoldsLabel
+    // The data object whose business key it is.
+    key_of: ref DataObject, label @eventFieldKeyOfLabel
+    list: ListStyle, default Single, label @eventFieldListLabel
+    access: Access, default InitOnly, label @eventFieldAccessLabel
+    obsolete: text(400), label @eventFieldObsoleteLabel

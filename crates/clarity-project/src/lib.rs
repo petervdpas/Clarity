@@ -795,6 +795,31 @@ pub fn sqlite_path(dir: &Path, source: &DataSource) -> PathBuf {
     std::path::absolute(&joined).unwrap_or(joined)
 }
 
+/// The SQLite database Clarity backs up for data source `source` of the
+/// project in folder `dir` (the first one it owns when none is named), with
+/// the source's name (docs/BACKUP-PLAN.md). An external source is someone
+/// else's, and a server database its administrator's for now: each says so.
+pub fn database_to_back_up(dir: &Path, source: Option<&str>) -> Result<(String, PathBuf), String> {
+    let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
+    let settings = load(&file).settings.ok_or_else(|| format!("{} cannot be read", file.display()))?;
+    let found = match source {
+        Some(name) => settings.datasources.iter().find(|s| s.name == name).ok_or_else(|| format!("the project has no data source {name}"))?,
+        None => settings
+            .datasources
+            .iter()
+            .find(|s| s.kind == SourceKind::Sqlite && !s.external)
+            .ok_or_else(|| "the project owns no SQLite database to back up".to_string())?,
+    };
+    if found.external {
+        return Err(format!("data source {} is external: its database is someone else's, and Clarity neither backs it up nor restores it", found.name));
+    }
+    match found.kind {
+        SourceKind::Sqlite => Ok((found.name.clone(), sqlite_path(dir, found))),
+        SourceKind::Rest => Err(format!("data source {} is a web API; its data is kept by the service behind it", found.name)),
+        other => Err(format!("data source {} is {}; its administrator backs it up until Clarity backs up server databases itself", found.name, source_word(other))),
+    }
+}
+
 /// Hands the project file's language, currency and theme to the project,
 /// for showing values and for its look; a part's `style` is checked
 /// against that theme.

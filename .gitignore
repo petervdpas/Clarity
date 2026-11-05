@@ -10,6 +10,8 @@ obj/
 
 # What Clarity generates and builds for the examples.
 /examples/*/out/
+# The backups Clarity takes of the examples' databases (docs/BACKUP-PLAN.md).
+/examples/*/data/backups/
 # The agents' test examples: local only, removed when the C# round is done.
 /examples/agents/
 

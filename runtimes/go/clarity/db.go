@@ -120,6 +120,12 @@ func (db *Db) MigrateSource(source string, steps [][]string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	// A database that already has a schema is backed up before it changes (docs/BACKUP-PLAN.md).
+	if done > 0 && done < len(steps) {
+		if err := backupBeforeMigration(s.driver, done+1); err != nil {
+			return 0, err
+		}
+	}
 	for i := done; i < len(steps); i++ {
 		if err := s.driver.apply(i+1, steps[i]); err != nil {
 			return i - done, err

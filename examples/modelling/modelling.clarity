@@ -6,6 +6,10 @@ use model
 settings
     language
     theme
+    // The folder of the fcdm repository, which the import reads.
+    fcdmFolder: folder, label @fcdmFolderLabel
+    // The folder the app writes its C# into: a copy of the repository, or the repository itself when chosen so.
+    outputFolder: folder, label @outputFolderLabel
 
 app Modelling
     title @modellingTitle
@@ -14,90 +18,267 @@ app Modelling
         button @languageCaption name languageButton icon "languages" on click -> language
         button @themeCaption name themeButton icon "palette" on click -> theme
 
-// A row of the tree at the left: a domain, or a class under its domain.
+// Writes the C# of the data objects and enums as the fcdm repository has
+// it; its source is in engines/fcdm.
+engine Fcdm from "fcdm.wasm"
+    function class_code(object: ObjectSpec, properties: list<PropertySpec>) -> text
+    function interface_code(object: ObjectSpec, properties: list<PropertySpec>) -> text
+    function enum_code(spec: EnumSpec, values: list<EnumValueSpec>) -> text
+    function read_files(files: list<SourceFile>) -> list<ReadRow>
+    function diff_text(path: text, on_disk: text, written: text) -> text
+    function file_bytes(text: text) -> bytes
+
+// A file the app writes, compared with the one on disk: the same, differs, or new.
+record CompareRow
+    path: text
+    state: text
+    kind: text
+    version: ref ObjectVersion
+    enum_type: ref EnumType
+
+// A file of the fcdm repository, as the engine reads it.
+record SourceFile
+    path: text
+    text: text
+
+// A row of what the engine read: a domain's package, a version of a data
+// object, a property of the one before, an enum, a value of the enum
+// before, or a note for the import report.
+record ReadRow
+    kind: text
+    path: text
+    domain: text
+    name: text
+    version: integer
+    root: bool
+    keyed: bool
+    newtonsoft: bool
+    obsolete: text
+    role: text
+    package_id: text
+    property_kind: text
+    nullable: bool
+    type_name: text
+    type_version: integer
+    initial: text
+    computed: text
+    number: integer
+    note: text
+    renames: bool
+
+// A version of a data object, as the engine writes it.
+record ObjectSpec
+    domain: text
+    name: text
+    root: bool
+    keyed: bool
+    newtonsoft: bool
+    version: integer
+    summary: text
+    obsolete: text
+
+// A property, as the engine writes it: the version of a held object is the
+// newest up to the version it is in.
+record PropertySpec
+    name: text
+    kind: PropertyKind
+    nullable: bool
+    type_name: text
+    type_version: integer
+    initial: text
+    computed: text
+    obsolete: text
+
+record EnumSpec
+    domain: text
+    name: text
+
+record EnumValueSpec
+    name: text
+    number: integer
+
+// A row of the tree at the left: a domain, the data objects, enums and
+// versions under it, an object and its versions, a child object under the
+// version that holds it, an enum, a version of the domain and the objects as
+// they are in it.
 record Node
     key: text
     parent: text
     label: text
     kind: text
     domain: ref Domain
-    model: ref ModelClass
+    data_object: ref DataObject
+    version: ref ObjectVersion
+    enum_type: ref EnumType
+    level: integer
 
 // What the diagram view draws of the domain.
 enum DiagramKind
     ClassDiagram label @diagramKindClass
     Erd label @diagramKindErd
 
-// The workspace: the domains and their classes in the tree at the left, the
-// domain picked in the middle. A class picked opens the class editor, which
-// slides out from the right; the domain's diagrams slide up from the footer.
+// The workspace: the domains in the tree at the left, the domain picked in
+// the middle. A data object's version opens in the object editor and an
+// enum in the enum editor, both sliding out from the right; the domain's
+// diagrams slide up from the footer.
 page Workspace: window
     title @workspaceTitle
     size 1280 x 800
     data nodes: list<Node>
     data domain: Domain
     on open: workspaceOpened
+    on return: workspaceReturned
 
     heading @domainHeading name domainHeading at 1,1 span 8
     label @pickADomain name pickADomain at 1,2 span 8
     label @domainNameCaption name domainNameLabel at 1,3 span 2 for domainNameBox
-    textbox name domainNameBox at 3,3 span 5 bind domain.name
+    textbox name domainNameBox at 3,3 span 5 bind domain.name placeholder @domainNamePlaceholder
     label @domainSummaryCaption name domainSummaryLabel at 1,4 span 2 for domainSummaryBox
-    memo name domainSummaryBox at 3,4 span 5 rows 3 bind domain.summary
-    button @saveDomainCaption name saveDomainButton at 6,7 span 2 on click: saveDomainClicked
+    memo name domainSummaryBox at 3,4 span 5 rows 2 bind domain.summary
+    label @modelPackageCaption name modelPackageLabel at 1,6 span 2 for modelPackageBox
+    textbox name modelPackageBox at 3,6 span 4 bind domain.model_package placeholder @modelPackagePlaceholder
+    textbox name modelVersionBox at 7,6 span 1 bind domain.model_version placeholder @packageVersionPlaceholder
+    label @messagesPackageCaption name messagesPackageLabel at 1,7 span 2 for messagesPackageBox
+    textbox name messagesPackageBox at 3,7 span 4 bind domain.messages_package placeholder @messagesPackagePlaceholder
+    textbox name messagesVersionBox at 7,7 span 1 bind domain.messages_version placeholder @packageVersionPlaceholder
+    checkbox @domainNewtonsoftLabel name newtonsoftBox at 3,8 span 3 bind domain.newtonsoft
+    button @saveDomainCaption name saveDomainButton at 6,8 span 2 on click: saveDomainClicked
 
-    slideout @classSlideout name classPanel view ClassEditor width 620 resizable min 420 max 1000 pinnable span 6 rows 13 on close: classPanelClosed on saved: classSaved
+    slideout @objectSlideout name objectPanel view ObjectEditor width 720 resizable min 480 max 1200 pinnable span 8 rows 14 on saved: objectSaved
+    slideout @enumSlideout name enumPanel view EnumEditor width 520 resizable min 380 max 900 pinnable span 6 rows 12 on saved: enumSaved
     slideout @diagramSlideout name diagramPanel side bottom view DiagramCanvas height 400 resizable min 220 max 900 pinnable span 12 rows 9
 
-    sidebar left name explorer width 300 grid 6 columns
+    sidebar left name explorer width 320 grid 6 columns
         button @newDomainCaption name newDomainButton at 1,1 span 3 icon "plus" on click: newDomainClicked
-        button @newClassCaption name newClassButton at 4,1 span 3 icon "plus" on click: newClassClicked
-        tree name modelTree at 1,2 span 6 rows 14 bind nodes key key parent parent show label on select: nodePicked
-        button @deleteCaption name deleteButton at 4,16 span 3 icon "trash" on click: deleteClicked
+        button @newObjectCaption name newObjectButton at 4,1 span 3 icon "plus" on click: newObjectClicked
+        tree name modelTree at 1,2 span 6 rows 13 bind nodes key key parent parent show label on select: nodePicked
+        button @newEnumCaption name newEnumButton at 1,15 span 3 icon "plus" on click: newEnumClicked
+        button @deleteCaption name deleteButton at 4,15 span 3 icon "trash" on click: deleteClicked
+        button @importCaption name importButton at 1,16 span 3 icon "download" on click -> ImportDialog
+        button @compareCaption name compareButton at 4,16 span 3 icon "git-compare" on click -> CompareDialog
     footer
         status @workspaceStatus
 
-// A class: its name, what it is and its properties in order, and the C#
-// class the adapter's code has for it, to read and copy. It tells the
-// window when it saved.
-page ClassEditor: view
+// Reads the fcdm repository into the app: its domains with their packages,
+// their data objects with every version, and their enums. A domain read
+// again replaces the one there was. The report says what was read and
+// what was tidied on the way.
+page ImportDialog: dialog
+    title @importTitle
+    size 720 x 560
+    data report: text
+    grid 6 columns
+
+    label @fcdmFolderLabel name folderLabel at 1,1 span 2 for folderBox
+    folder name folderBox at 3,1 span 4 bind settings.fcdmFolder
+    button @importNowCaption name importNowButton at 5,2 span 2 default on click: importClicked
+    memo name reportBox at 1,3 span 6 rows 9 bind report readonly copy placeholder @reportPlaceholder
+    button @closeCaption name closeButton at 5,12 span 2 cancel on click -> close
+
+// What the app would write next to what the fcdm folder holds: every class,
+// interface and enum, the same, different or new, and the differences of
+// the one picked, before anything is written.
+page CompareDialog: dialog
+    title @compareTitle
+    size 1180 x 740
+    data rows: list<CompareRow>
+    data summary: text
+    data diffText: text
+    on open: compareOpened
+    grid 12 columns
+
+    text name summaryText at 1,1 span 12 bind summary
+    table name fileTable at 1,2 span 5 rows 13 bind rows columns path 360, state 100 striped on select: filePicked
+    memo name diffBox at 6,2 span 7 rows 13 bind diffText readonly code diff copy placeholder @diffPlaceholder
+    label @outputFolderLabel name outputFolderLabel at 1,15 span 2 for outputFolderBox
+    folder name outputFolderBox at 3,15 span 4 bind settings.outputFolder
+    button @writeFileCaption name writeFileButton at 7,15 span 2 icon "save" on click: writeFileClicked
+    button @writeAllCaption name writeAllButton at 9,15 span 2 icon "save-all" on click: writeAllClicked
+    button @closeCaption name closeCompareButton at 11,15 span 2 cancel on click -> close
+
+// A version of a data object: what it is, its properties in order with all
+// they say, and the C# class and interface the engine writes for it. It
+// tells the window when it saved.
+page ObjectEditor: view
     tells saved
-    data editedClass: ModelClass
+    data editedObject: DataObject
+    data editedVersion: ObjectVersion
     data properties: list<Property>
-    data classNames: list<text>
-    data csharpText: text
+    data picked: Property
+    data classText: text
+    data interfaceText: text
 
-    tabs name classTabs at 1,1 span 6 rows 13
+    tabs name objectTabs at 1,1 span 8 rows 14
+        tab @objectTab
+            label @objectNameCaption name objectNameLabel at 1,1 span 2 for objectNameBox
+            textbox name objectNameBox at 3,1 span 3 bind editedObject.name placeholder @objectNamePlaceholder
+            dropdown name objectKindBox at 6,1 span 2 bind editedObject.kind
+            checkbox @objectKeyedLabel name objectKeyedBox at 8,1 span 1 bind editedObject.keyed
+            label @objectSummaryCaption name objectSummaryLabel at 1,2 span 2 for objectSummaryBox
+            memo name objectSummaryBox at 3,2 span 6 rows 2 bind editedObject.summary placeholder @objectSummaryPlaceholder
+            label @versionNumberCaption name versionNumberLabel at 1,4 span 2 for versionNumberBox
+            spinbox name versionNumberBox at 3,4 span 2 bind editedVersion.number min 1 max 99
+            textbox name versionObsoleteBox at 5,4 span 4 bind editedVersion.obsolete placeholder @obsoletePlaceholder
+            table name propertyTable at 1,5 span 8 rows 5 bind properties columns name 200, kind 170, nullable edit name, kind, nullable reorder by position add remove confirm on add: addPropertyClicked on remove: removePropertyClicked on change: propertyChanged on reorder: propertiesMoved on select: propertyPicked
+            label @targetCaption name targetLabel at 1,11 span 2 for targetBox
+            dropdown name targetBox at 3,11 span 3 bind picked.target placeholder @targetPlaceholder on change: pickedChanged
+            dropdown name choiceBox at 6,11 span 3 bind picked.choice placeholder @choicePlaceholder on change: pickedChanged
+            label @initialCaption name initialLabel at 1,12 span 2 for initialBox
+            textbox name initialBox at 3,12 span 2 bind picked.initial placeholder @initialPlaceholder on leave: pickedChanged
+            textbox name computedBox at 5,12 span 4 bind picked.computed placeholder @computedPlaceholder on leave: pickedChanged
+            textbox name propertyObsoleteBox at 3,13 span 6 bind picked.obsolete placeholder @obsoletePlaceholder on leave: pickedChanged
+            button @newVersionCaption name newVersionButton at 1,14 span 3 icon "plus" on click: newVersionClicked
+            button @saveObjectCaption name saveObjectButton at 7,14 span 2 default on click: saveObjectClicked
         tab @classTab
-            label @classNameCaption name classNameLabel at 1,1 span 2 for classNameBox
-            textbox name classNameBox at 3,1 span 4 bind editedClass.name
-            label @classSummaryCaption name classSummaryLabel at 1,2 span 2 for classSummaryBox
-            memo name classSummaryBox at 3,2 span 4 rows 2 bind editedClass.summary
-            heading @propertiesHeading name propertiesHeading at 1,4 span 6
-            table name propertyTable at 1,5 span 6 rows 6 bind properties columns name 180, type 160, optional edit name, type, optional reorder by position add remove confirm on add: addPropertyClicked on remove: removePropertyClicked on change: propertyChanged on reorder: propertiesMoved
-            button @saveClassCaption name saveClassButton at 5,12 span 2 default on click: saveClassClicked
-        tab @csharpTab
-            memo name csharpBox at 1,1 span 6 rows 12 bind csharpText readonly code csharp copy
+            memo name classBox at 1,1 span 8 rows 13 bind classText readonly code csharp copy
+        tab @interfaceTab
+            memo name interfaceBox at 1,1 span 8 rows 13 bind interfaceText readonly code csharp copy
 
-// The diagrams of a domain: its classes with their properties and lines, or
-// the tables the adapter keeps them in, with their keys.
+// An enum of a domain: its values with their numbers, and its C#.
+page EnumEditor: view
+    tells saved
+    data editedEnum: EnumType
+    data values: list<EnumValue>
+    data enumText: text
+
+    tabs name enumTabs at 1,1 span 6 rows 12
+        tab @enumTab
+            label @enumNameCaption name enumNameLabel at 1,1 span 2 for enumNameBox
+            textbox name enumNameBox at 3,1 span 4 bind editedEnum.name placeholder @enumNamePlaceholder
+            memo name enumSummaryBox at 1,2 span 6 rows 2 bind editedEnum.summary placeholder @enumSummaryPlaceholder
+            table name valueTable at 1,4 span 6 rows 7 bind values columns name 220, number 90 edit name, number reorder by position add remove confirm on add: addValueClicked on remove: removeValueClicked on change: valueChanged on reorder: valuesMoved
+            button @saveEnumCaption name saveEnumButton at 5,11 span 2 default on click: saveEnumClicked
+        tab @enumCodeTab
+            memo name enumCodeBox at 1,1 span 6 rows 11 bind enumText readonly code csharp copy
+
+// The diagrams of a domain at one of its versions: its data objects as they
+// are in that version, with their properties and lines, or the tables the
+// adapter keeps them in, with their keys.
 page DiagramCanvas: view
     data kind: DiagramKind
-    data classes: list<ModelClass>
+    data level: integer, default 1
+    data shown: list<ObjectVersion>
+    data boxes: list<DataObject>
     data members: list<Property>
 
-    radio name diagramKindRadio at 1,1 span 6 bind kind horizontal
-    canvas name diagramCanvas at 1,2 span 12 rows 8 units 1600 x 600 zoom grid 20 snap background panel mode objects classes at x, y on draw: drawDiagram on change: classMoved on bend: lineBent
+    radio name diagramKindRadio at 1,1 span 5 bind kind horizontal
+    label @levelCaption name levelLabel at 7,1 span 2 for levelBox
+    spinbox name levelBox at 9,1 span 2 bind level min 1 max 99
+    canvas name diagramCanvas at 1,2 span 12 rows 8 units 2400 x 1200 zoom grid 20 snap background panel mode objects boxes at x, y on draw: drawDiagram on change: boxMoved on bend: lineBent
 
 code Workspace
     handler workspaceOpened
         refreshTree()
         showDomain()
+        loadDiagram()
 
     handler refreshTree
         let domains = find d in Domain order by d.name
-        let allClasses = find c in ModelClass order by c.name
-        nodes = outline(domains, allClasses)
+        let objects = find o in DataObject order by o.name
+        let versions = find v in ObjectVersion order by v.number
+        let held = find p in Property where p.kind == HeldObjects or p.kind == HeldObject order by p.position
+        let enums = find e in EnumType order by e.name
+        nodes = outline(domains, objects, versions, held, enums)
 
     // Picks the row of that key in the tree, which opens the rows above it.
     handler pickNode(key: text)
@@ -107,12 +288,17 @@ code Workspace
 
     // The middle shows the domain picked, or says to pick one.
     handler showDomain
-        let picked = domain.id != 0
-        pickADomain.visible = not picked
-        domainNameBox.enabled = picked
-        domainSummaryBox.enabled = picked
-        saveDomainButton.enabled = picked
-        newClassButton.enabled = picked
+        let chosen = domain.id != 0
+        pickADomain.visible = not chosen
+        domainNameBox.enabled = chosen
+        domainSummaryBox.enabled = chosen
+        modelPackageBox.enabled = chosen
+        modelVersionBox.enabled = chosen
+        messagesPackageBox.enabled = chosen
+        messagesVersionBox.enabled = chosen
+        saveDomainButton.enabled = chosen
+        newObjectButton.enabled = chosen
+        newEnumButton.enabled = chosen
 
     handler nodePicked
         let node = modelTree.selected
@@ -120,24 +306,49 @@ code Workspace
             return
         let chosen = node.domain
         domain = chosen
-        loadDiagram()
         showDomain()
-        if node.kind == "class"
-            let found = node.model
-            editedClass = found
-            properties = find p in Property where p.owner == editedClass order by p.position
-            csharpText = csharp_class(editedClass, properties, classNames)
-            classPanel.visible = true
+        if node.kind == "version" or node.kind == "resolved"
+            let found = node.version
+            openVersion(found)
+        if node.kind == "object"
+            let all = find v in ObjectVersion where v.owner == node.data_object order by v.number
+            if count(all) > 0
+                openVersion(all[count(all)])
+        if node.kind == "enum"
+            let found = node.enum_type
+            openEnum(found)
+        if node.kind == "level"
+            level = node.level
+        loadDiagram()
 
-    // The diagram view shows the classes of the domain picked; it draws the properties of those.
+    // The object editor shows a version of a data object, its properties and its C#.
+    handler openVersion(v: ObjectVersion)
+        editedVersion = v
+        let owner = v.owner
+        editedObject = owner
+        properties = find p in Property where p.owner == v order by p.position
+        picked = new Property
+        classText = class_text(editedObject, editedVersion, properties)
+        interfaceText = interface_text(editedObject, editedVersion, properties)
+        objectPanel.visible = true
+
+    handler openEnum(e: EnumType)
+        editedEnum = e
+        values = find x in EnumValue where x.owner == e order by x.position
+        enumText = enum_text(e, values)
+        enumPanel.visible = true
+
+    // The diagram view shows the domain's data objects as they are in the version chosen.
     handler loadDiagram
-        classes = find c in ModelClass where c.domain == domain order by c.name
+        let versions = find v in ObjectVersion order by v.number
+        let objects = find o in DataObject where o.domain == domain order by o.name
+        shown = as_in(objects, versions, level)
+        boxes = objects
         members = find p in Property order by p.position
-        classNames = class_names(classes)
 
     handler newDomainClicked
         let d = new Domain
-        d.name = new_name("Domain", find x in Domain order by x.name)
+        d.name = free_domain_name(@newDomainName, find x in Domain order by x.name)
         save d
         domain = d
         refreshTree()
@@ -145,95 +356,193 @@ code Workspace
         loadDiagram()
         showDomain()
 
-    handler newClassClicked
+    // A new data object starts with its first version, empty.
+    handler newObjectClicked
         if domain.id == 0
             return
-        let existing = find c in ModelClass where c.domain == domain order by c.name
-        let c = new ModelClass
+        let existing = find o in DataObject where o.domain == domain order by o.name
+        let o = new DataObject
         let next = count(existing) + 1
-        c.domain = domain
-        c.name = "Class{next}"
-        c.x = 40 + 320 * column_of(count(existing))
-        c.y = 40 + 300 * row_of(count(existing))
-        save c
-        editedClass = c
-        properties = find p in Property where p.owner == c order by p.position
+        o.domain = domain
+        o.name = "Object{next}"
+        o.x = 40 + 320 * column_of(count(existing))
+        o.y = 40 + 300 * row_of(count(existing))
+        save o
+        let v = new ObjectVersion
+        v.owner = o
+        v.number = 1
+        save v
         refreshTree()
-        pickNode("c{c.id}")
+        pickNode("o{o.id}")
         loadDiagram()
-        csharpText = csharp_class(editedClass, properties, classNames)
-        classPanel.visible = true
+        openVersion(v)
+
+    handler newEnumClicked
+        if domain.id == 0
+            return
+        let e = new EnumType
+        e.domain = domain
+        e.name = @newEnumName
+        save e
+        refreshTree()
+        pickNode("e{e.id}")
+        openEnum(e)
 
     handler saveDomainClicked
         save domain
         refreshTree()
 
-    // Deletes the domain or class picked in the tree, after asking.
+    // Deletes the domain, data object, version or enum picked in the tree, after asking.
     handler deleteClicked
         let node = modelTree.selected
-        if node.key == ""
+        if node.key == "" or node.kind == "objects" or node.kind == "enums" or node.kind == "levels" or node.kind == "level" or node.kind == "resolved"
             return
         ask @deleteNode(name = node.label) yes @delete no @keep then deleteConfirmed
 
     handler deleteConfirmed
         let node = modelTree.selected
-        if node.kind == "class"
-            let gone = node.model
+        if node.kind == "object"
+            let gone = node.data_object
             delete gone
-            classPanel.visible = false
+        else if node.kind == "version"
+            let gone = node.version
+            delete gone
+        else if node.kind == "enum"
+            let gone = node.enum_type
+            delete gone
+            enumPanel.visible = false
         else
             let gone = node.domain
             delete gone
             domain = new Domain
-            classPanel.visible = false
+        objectPanel.visible = false
         refreshTree()
         loadDiagram()
         showDomain()
 
-    // What the class editor saved shows in the tree and on the diagram at once.
-    handler classSaved
+    // What an import read shows in the tree once its dialog closes.
+    handler workspaceReturned
         refreshTree()
         loadDiagram()
 
-    // Its properties, changed without Save, show once it slides away.
-    handler classPanelClosed
+    // What the editors saved shows in the tree and on the diagram at once.
+    handler objectSaved
         refreshTree()
         loadDiagram()
 
-code ClassEditor
-    handler showCsharp
-        csharpText = csharp_class(editedClass, properties, classNames)
+    handler enumSaved
+        refreshTree()
+
+code ObjectEditor
+    handler showCode
+        classText = class_text(editedObject, editedVersion, properties)
+        interfaceText = interface_text(editedObject, editedVersion, properties)
+
+    handler reloadProperties
+        properties = find x in Property where x.owner == editedVersion order by x.position
+        showCode()
 
     handler addPropertyClicked
-        if editedClass.id == 0
-            save editedClass
+        if editedVersion.id == 0
+            return
         let p = new Property
-        p.owner = editedClass
+        p.owner = editedVersion
         let next = count(properties) + 1
         p.position = next
-        p.name = "property{next}"
-        p.type = "string"
+        p.name = "Property{next}"
         save p
-        properties = find x in Property where x.owner == editedClass order by x.position
-        showCsharp()
+        reloadProperties()
 
     handler removePropertyClicked
         delete propertyTable.selected
-        properties = find x in Property where x.owner == editedClass order by x.position
-        showCsharp()
+        picked = new Property
+        reloadProperties()
 
     handler propertyChanged
         save propertyTable.selected
-        showCsharp()
+        showCode()
 
     handler propertiesMoved
         for p in properties
             save p
-        showCsharp()
+        showCode()
 
-    handler saveClassClicked
-        save editedClass
-        showCsharp()
+    // The details below the table are the property picked.
+    handler propertyPicked
+        let p = propertyTable.selected
+        picked = p
+
+    handler pickedChanged
+        if picked.id == 0
+            return
+        save picked
+        reloadProperties()
+
+    // A new version starts as a copy of the one shown, numbered after the newest.
+    handler newVersionClicked
+        if editedVersion.id == 0
+            return
+        let all = find v in ObjectVersion where v.owner == editedObject order by v.number
+        let v = new ObjectVersion
+        v.owner = editedObject
+        v.number = all[count(all)].number + 1
+        save v
+        for p in properties
+            let copy = new Property
+            copy.owner = v
+            copy.position = p.position
+            copy.name = p.name
+            copy.kind = p.kind
+            copy.nullable = p.nullable
+            copy.choice = p.choice
+            copy.target = p.target
+            copy.initial = p.initial
+            copy.computed = p.computed
+            copy.obsolete = p.obsolete
+            save copy
+        editedVersion = v
+        reloadProperties()
+        tell saved()
+
+    handler saveObjectClicked
+        save editedObject
+        save editedVersion
+        showCode()
+        tell saved()
+
+code EnumEditor
+    handler reloadValues
+        values = find x in EnumValue where x.owner == editedEnum order by x.position
+        enumText = enum_text(editedEnum, values)
+
+    handler addValueClicked
+        if editedEnum.id == 0
+            return
+        let v = new EnumValue
+        v.owner = editedEnum
+        v.position = count(values) + 1
+        v.number = count(values)
+        let next = count(values) + 1
+        v.name = "VALUE{next}"
+        save v
+        reloadValues()
+
+    handler removeValueClicked
+        delete valueTable.selected
+        reloadValues()
+
+    handler valueChanged
+        save valueTable.selected
+        reloadValues()
+
+    handler valuesMoved
+        for v in values
+            save v
+        reloadValues()
+
+    handler saveEnumClicked
+        save editedEnum
+        reloadValues()
         tell saved()
 
 code DiagramCanvas
@@ -244,58 +553,65 @@ code DiagramCanvas
         else
             drawClasses()
 
-    // The class diagram: a box per class with its properties, and a line to
-    // each class a property's type names.
+    // The class diagram: a box per data object with its properties, a line to
+    // each object it holds, a dashed one to each it names by business key.
     handler drawClasses
-        for c in classes
+        for v in shown
             for p in members
-                if p.owner.id == c.id
-                    for target in classes
-                        if refers_to(p.type, target.name)
-                            diagramCanvas.link("p{p.id}", c.x + 130, c.y + 20, target.x + 130, target.y + 20, p.via, "muted", 2, "", "arrow")
-        for c in classes
-            let lines: list<text> = []
-            for p in members
-                if p.owner.id == c.id
-                    lines = lines + [property_line(p.name, p.type, p.optional)]
-            drawBox(c, c.name, lines, "accent")
+                if p.owner.id == v.id and p.target != none
+                    for target in shown
+                        if p.target.id == target.owner.id
+                            let o = v.owner
+                            let t = target.owner
+                            // From the middle of one box's header to the middle of the other's.
+                            let from = o.x + box_width(version_title(o.name, v.number), class_lines(v, members)) / 2
+                            let to = t.x + box_width(version_title(t.name, target.number), class_lines(target, members)) / 2
+                            if p.kind == BusinessKey
+                                diagramCanvas.link("p{p.id}", from, o.y + 20, to, t.y + 20, p.via, "muted", 2, "", "arrow", "", "dashed")
+                            else if p.kind == HeldObjects
+                                diagramCanvas.link("p{p.id}", from, o.y + 20, to, t.y + 20, p.via, "muted", 2, "filledDiamond", "many")
+                            else if p.kind == HeldObject
+                                diagramCanvas.link("p{p.id}", from, o.y + 20, to, t.y + 20, p.via, "muted", 2, "filledDiamond", "one")
+        for v in shown
+            drawBox(v.owner, version_title(v.owner.name, v.number), class_lines(v, members), "accent")
 
-    // The ERD: a table per class as the adapter keeps it, its business key
-    // first, a foreign key for each class a property names, and its two
-    // moments; a line to each table a foreign key points at.
+    // The ERD: a table per data object as the adapter keeps it, its business
+    // key first, its values, and its two moments; a line to each table a
+    // business key points at.
     handler drawErd
-        for c in classes
+        for v in shown
             for p in members
-                if p.owner.id == c.id
-                    for target in classes
-                        if refers_to(p.type, target.name)
-                            diagramCanvas.link("p{p.id}", c.x + 130, c.y + 20, target.x + 130, target.y + 20, p.via, "muted", 2, "many", "one")
-        for c in classes
-            let lines: list<text> = ["PK  Bk"]
-            for p in members
-                if p.owner.id == c.id
-                    lines = lines + [column_line(p.name, p.type, class_names(classes))]
-            lines = lines + ["    LastModified", "    LastProcessed"]
-            drawBox(c, c.name, lines, "success")
+                if p.owner.id == v.id and p.kind == BusinessKey and p.target != none
+                    for target in shown
+                        if p.target.id == target.owner.id
+                            let o = v.owner
+                            let t = target.owner
+                            let from = o.x + box_width(table_name(o.name, v.number), erd_lines(v, members)) / 2
+                            let to = t.x + box_width(table_name(t.name, target.number), erd_lines(target, members)) / 2
+                            diagramCanvas.link("p{p.id}", from, o.y + 20, to, t.y + 20, p.via, "muted", 2, "many", "one")
+        for v in shown
+            drawBox(v.owner, table_name(v.owner.name, v.number), erd_lines(v, members), "success")
 
-    handler drawBox(c: ModelClass, title: text, lines: list<text>, edge: text)
+    // A box as wide as its title and its longest line ask.
+    handler drawBox(o: DataObject, title: text, lines: list<text>, edge: text)
+        let w = box_width(title, lines)
         let h = 40 + 22 * count(lines)
-        diagramCanvas.object(c, c.x, c.y, 260, h)
-        diagramCanvas.rect(c.x - 2, c.y - 2, 264, h + 4, edge)
-        diagramCanvas.rect(c.x, c.y, 260, h, "raised")
-        diagramCanvas.rect(c.x, c.y, 260, 32, "accent_soft")
-        diagramCanvas.text(c.x + 130, c.y + 16, title, "text", 13, "center", "bold")
+        diagramCanvas.object(o, o.x, o.y, w, h)
+        diagramCanvas.rect(o.x - 2, o.y - 2, w + 4, h + 4, edge)
+        diagramCanvas.rect(o.x, o.y, w, h, "raised")
+        diagramCanvas.rect(o.x, o.y, w, 32, "accent_soft")
+        diagramCanvas.text(o.x + w / 2, o.y + 16, title, "text", 13, "center", "bold")
         // Its rows, every other one on a stripe so the eye keeps the line.
-        let row = c.y + 50
+        let row = o.y + 50
         let striped = false
         for line in lines
             if striped
-                diagramCanvas.rect(c.x + 1, row - 11, 258, 22, "accent_soft")
-            diagramCanvas.text(c.x + 12, row, line, "text", 11, "left", "mono")
+                diagramCanvas.rect(o.x + 1, row - 11, w - 2, 22, "accent_soft")
+            diagramCanvas.text(o.x + 12, row, line, "text", 11, "left", "mono")
             row = row + 22
             striped = not striped
 
-    handler classMoved
+    handler boxMoved
         save diagramCanvas.selected
 
     // A line bent: its property keeps the points.
@@ -306,30 +622,566 @@ code DiagramCanvas
                 save p
         members = find p in Property order by p.position
 
-// The tree's rows: each domain, and its classes under it.
-function outline(domains: list<Domain>, classes: list<ModelClass>) -> list<Node>
+code CompareDialog
+    // Every file the app writes, compared with the folder's.
+    handler compareOpened
+        let disk = files f in fcdm where f.extension == "cs"
+        let found: list<CompareRow> = []
+        let same = 0
+        let differ = 0
+        let fresh = 0
+        for d in find x in Domain order by x.name
+            for o in find x in DataObject where x.domain == d order by x.name
+                for v in find x in ObjectVersion where x.owner == o order by x.number
+                    let r = new CompareRow
+                    r.path = class_path(d.name, o.name, v.number)
+                    r.kind = "class"
+                    r.version = v
+                    found = found + [r]
+                    if o.kind == Root
+                        let i = new CompareRow
+                        i.path = interface_path(d.name, o.name, v.number)
+                        i.kind = "interface"
+                        i.version = v
+                        found = found + [i]
+            for e in find x in EnumType where x.domain == d order by x.name
+                let r = new CompareRow
+                r.path = "Fontys.Fcdm.{d.name}/{e.name}.cs"
+                r.kind = "enum"
+                r.enum_type = e
+                found = found + [r]
+        for r in found
+            let onDisk = disk_text(disk, r.path)
+            if onDisk == ""
+                r.state = @compareNew
+                fresh = fresh + 1
+            else if Fcdm.diff_text(r.path, onDisk, written_for(r)) == ""
+                r.state = @compareSame
+                same = same + 1
+            else
+                r.state = @compareDiffers
+                differ = differ + 1
+        rows = found
+        summary = @compareSummary(same = same, differ = differ, fresh = fresh)
+
+    // The differences of the file picked, or that it is new.
+    handler filePicked
+        let r = fileTable.selected
+        let onDisk = disk_text(files f in fcdm where f.path == r.path, r.path)
+        if onDisk == ""
+            diffText = written_for(r)
+        else
+            diffText = Fcdm.diff_text(r.path, onDisk, written_for(r))
+
+    // The file picked, written into the folder chosen.
+    handler writeFileClicked
+        let r = fileTable.selected
+        if r.path == ""
+            return
+        if settings.outputFolder == ""
+            message warning @chooseOutputFolder
+            return
+        write_file(r)
+        summary = @wroteFile(path = r.path)
+
+    // Every file the app writes, into the folder chosen, after asking.
+    handler writeAllClicked
+        if settings.outputFolder == ""
+            message warning @chooseOutputFolder
+            return
+        let all = count(rows)
+        ask @writeAllAsk(count = all, folder = settings.outputFolder) yes @writeAllYes no @keep then writeAllConfirmed
+
+    handler writeAllConfirmed
+        for r in rows
+            write_file(r)
+        let all = count(rows)
+        summary = @wroteAll(count = all, folder = settings.outputFolder)
+
+code ImportDialog
+    // Every C# file and project file of the folder, read by the engine, then stored.
+    handler importClicked
+        let found = files f in fcdm where f.extension == "cs" or f.extension == "csproj"
+        let sources: list<SourceFile> = []
+        for f in found
+            if not (f.path contains "/obj/" or f.path contains "/bin/")
+                let s = new SourceFile
+                s.path = f.path
+                s.text = read text of f
+                sources = sources + [s]
+        let rows = Fcdm.read_files(sources)
+        report = import_rows(rows)
+
+// Where a version's class stands in the fcdm folder: its domain's project, in vN from version 2.
+function class_path(domain: text, name: text, number: integer) -> text
+    if number > 1
+        return "Fontys.Fcdm.{domain}/v{number}/{name}.cs"
+    return "Fontys.Fcdm.{domain}/{name}.cs"
+
+function interface_path(domain: text, name: text, number: integer) -> text
+    if number > 1
+        return "Fontys.Fcdm.{domain}/Interfaces/v{number}/I{name}.cs"
+    return "Fontys.Fcdm.{domain}/Interfaces/I{name}.cs"
+
+// The text of the file at `path` among `disk`; empty when it is not there.
+action disk_text(disk: list<file>, path: text) -> text
+    effects files.read
+    for f in disk
+        if f.path == path
+            return read text of f
+    return ""
+
+// A file of the comparison, written into the output folder as the repository keeps its files.
+action write_file(r: CompareRow)
+    effects db.read, files.write
+    write Fcdm.file_bytes(written_for(r)) to output r.path
+
+// What the app writes for a file of the comparison.
+action written_for(r: CompareRow) -> text
+    effects db.read
+    if r.kind == "enum"
+        let e = r.enum_type
+        return enum_text(e, find x in EnumValue where x.owner == e order by x.position)
+    let v = r.version
+    let o = v.owner
+    let properties = find x in Property where x.owner == v order by x.position
+    if r.kind == "interface"
+        return interface_text(o, v, properties)
+    return class_text(o, v, properties)
+
+// Stores what the engine read: the domains it names replace those there
+// were, then their enums and data objects with their versions, then the
+// properties, whose enums and data objects are found by name. Gives the
+// report.
+action import_rows(rows: list<ReadRow>) -> text
+    effects db.write
+    let lines: list<text> = []
+    // The domains read, emptied: each read again replaces the one there was.
+    let names: list<text> = []
+    for r in rows
+        if r.kind == "object" or r.kind == "enum" or r.kind == "domain"
+            if not (names contains r.domain)
+                names = names + [r.domain]
+    // Their properties go first: they point at data objects across domains, which go with their domains.
+    for name in names
+        for old in find d in Domain where d.name == name
+            for o in find x in DataObject where x.domain == old
+                for v in find x in ObjectVersion where x.owner == o
+                    for p in find x in Property where x.owner == v
+                        delete p
+    for name in names
+        for old in find d in Domain where d.name == name
+            delete old
+        let d = new Domain
+        d.name = name
+        save d
+    // Their packages, enums and data objects with their versions.
+    let placed = 0
+    let currentEnum = new EnumType
+    let position = 0
+    let objects = 0
+    let versions = 0
+    let enums = 0
+    for r in rows
+        let found = find d in Domain where d.name == r.domain
+        if r.kind == "domain" and count(found) > 0
+            let d = found[1]
+            if r.role == "model"
+                d.model_package = r.package_id
+                d.model_version = r.name
+                d.newtonsoft = r.newtonsoft
+            else
+                d.messages_package = r.package_id
+                d.messages_version = r.name
+            save d
+        if r.kind == "enum" and count(found) > 0
+            let e = new EnumType
+            e.domain = found[1]
+            e.name = r.name
+            save e
+            currentEnum = e
+            position = 0
+            enums = enums + 1
+        if r.kind == "value" and currentEnum.id != 0
+            position = position + 1
+            let v = new EnumValue
+            v.owner = currentEnum
+            v.position = position
+            v.name = r.name
+            v.number = r.number
+            save v
+        if r.kind == "object" and count(found) > 0
+            let d = found[1]
+            let existing = find o in DataObject where o.domain == d and o.name == r.name
+            let o = new DataObject
+            if count(existing) > 0
+                o = existing[1]
+            else
+                o.domain = d
+                o.name = r.name
+                o.kind = Child
+                o.x = 40 + 320 * column_of(placed)
+                o.y = 40 + 300 * row_of(placed)
+                placed = placed + 1
+                objects = objects + 1
+            if r.root
+                o.kind = Root
+            o.keyed = r.keyed
+            save o
+            let v = new ObjectVersion
+            v.owner = o
+            v.number = r.version
+            v.obsolete = r.obsolete
+            save v
+            versions = versions + 1
+    // The properties, each of the version read before it.
+    let currentVersion = new ObjectVersion
+    let properties = 0
+    for r in rows
+        if r.kind == "object"
+            let d = find x in Domain where x.name == r.domain
+            let o = find x in DataObject where x.domain == d[1] and x.name == r.name
+            let v = find x in ObjectVersion where x.owner == o[1] and x.number == r.version
+            currentVersion = v[1]
+            position = 0
+        if r.kind == "property" and currentVersion.id != 0
+            position = position + 1
+            let p = new Property
+            p.owner = currentVersion
+            p.position = position
+            p.name = r.name
+            p.kind = kind_named(r.property_kind)
+            p.nullable = r.nullable
+            p.initial = r.initial
+            p.computed = r.computed
+            p.via = []
+            if p.kind == EnumChoice
+                let e = find x in EnumType where x.name == r.type_name
+                if count(e) > 0
+                    p.choice = e[1]
+            if p.kind == HeldObject or p.kind == HeldObjects or p.kind == BusinessKey
+                let t = find x in DataObject where x.name == r.type_name
+                if count(t) > 0
+                    p.target = t[1]
+                else if p.kind == BusinessKey
+                    lines = lines + ["{r.note}.{r.name}: no data object is called {r.type_name}; the key names none"]
+            save p
+            properties = properties + 1
+    let domains = count(names)
+    let summary = "Read {domains} domains, {objects} data objects with {versions} versions, {properties} properties and {enums} enums."
+    let report: list<text> = [summary, ""]
+    for r in rows
+        if r.kind == "note"
+            if r.renames
+                report = report + ["{r.note} (renames a public name)"]
+            else
+                report = report + [r.note]
+    return join(report + lines, "\n")
+
+// A kind of property by the name the engine gives it.
+function kind_named(word: text) -> PropertyKind
+    if word == "WholeNumber"
+        return WholeNumber
+    if word == "DecimalNumber"
+        return DecimalNumber
+    if word == "YesNo"
+        return YesNo
+    if word == "Moment"
+        return Moment
+    if word == "MomentWithOffset"
+        return MomentWithOffset
+    if word == "DayOnly"
+        return DayOnly
+    if word == "EnumChoice"
+        return EnumChoice
+    if word == "HeldObject"
+        return HeldObject
+    if word == "HeldObjects"
+        return HeldObjects
+    if word == "BusinessKey"
+        return BusinessKey
+    return TextValue
+
+// The tree's rows: each domain with its data objects (their versions, and
+// the child objects a version holds under it), its enums, and its versions,
+// each listing the data objects as they are in it.
+function outline(domains: list<Domain>, objects: list<DataObject>, versions: list<ObjectVersion>, held: list<Property>, enums: list<EnumType>) -> list<Node>
     let all: list<Node> = []
     for d in domains
         let n = new Node
         n.key = "d{d.id}"
-        n.label = d.name
+        n.label = domain_label(d.name, d.model_version)
         n.kind = "domain"
         n.domain = d
         all = all + [n]
-        for c in classes
-            if c.domain.id == d.id
-                let m = new Node
-                m.key = "c{c.id}"
-                m.parent = "d{d.id}"
-                m.label = c.name
-                m.kind = "class"
-                m.domain = d
-                m.model = c
-                all = all + [m]
+        let objectsNode = new Node
+        objectsNode.key = "os{d.id}"
+        objectsNode.parent = "d{d.id}"
+        objectsNode.label = @dataObjectsNode
+        objectsNode.kind = "objects"
+        objectsNode.domain = d
+        all = all + [objectsNode]
+        let highest = 1
+        for o in objects
+            if o.domain.id == d.id
+                for v in versions
+                    if v.owner.id == o.id and v.number > highest
+                        highest = v.number
+            if o.domain.id == d.id and o.kind == Root
+                let on = new Node
+                on.key = "o{o.id}"
+                on.parent = "os{d.id}"
+                on.label = o.name
+                on.kind = "object"
+                on.domain = d
+                on.data_object = o
+                all = all + [on]
+                for v in versions
+                    if v.owner.id == o.id
+                        let vn = new Node
+                        vn.key = "v{v.id}"
+                        vn.parent = "o{o.id}"
+                        vn.label = version_label(v.number, v.obsolete)
+                        vn.kind = "version"
+                        vn.domain = d
+                        vn.data_object = o
+                        vn.version = v
+                        all = all + [vn]
+                        // The child objects this version holds, as they are in it.
+                        for p in held
+                            if p.owner.id == v.id and p.target.kind == Child
+                                let at = newest_number(versions, p.target.id, v.number)
+                                for cv in versions
+                                    if cv.owner.id == p.target.id and cv.number == at
+                                        let child = p.target
+                                        let cn = new Node
+                                        cn.key = "c{cv.id}in{v.id}"
+                                        cn.parent = "v{v.id}"
+                                        cn.label = version_title(child.name, cv.number)
+                                        cn.kind = "version"
+                                        cn.domain = d
+                                        cn.data_object = child
+                                        cn.version = cv
+                                        all = all + [cn]
+        let enumsNode = new Node
+        enumsNode.key = "es{d.id}"
+        enumsNode.parent = "d{d.id}"
+        enumsNode.label = @enumsNode
+        enumsNode.kind = "enums"
+        enumsNode.domain = d
+        all = all + [enumsNode]
+        for e in enums
+            if e.domain.id == d.id
+                let en = new Node
+                en.key = "e{e.id}"
+                en.parent = "es{d.id}"
+                en.label = e.name
+                en.kind = "enum"
+                en.domain = d
+                en.enum_type = e
+                all = all + [en]
+        // The domain's versions: each holds every root object at its newest version up to it.
+        let levelsNode = new Node
+        levelsNode.key = "ls{d.id}"
+        levelsNode.parent = "d{d.id}"
+        levelsNode.label = @versionsNode
+        levelsNode.kind = "levels"
+        levelsNode.domain = d
+        all = all + [levelsNode]
+        for level in 1 to highest
+            let ln = new Node
+            ln.key = "l{d.id}at{level}"
+            ln.parent = "ls{d.id}"
+            ln.label = "v{level}"
+            ln.kind = "level"
+            ln.domain = d
+            ln.level = level
+            all = all + [ln]
+            for o in objects
+                if o.domain.id == d.id and o.kind == Root
+                    let at = newest_number(versions, o.id, level)
+                    for v in versions
+                        if v.owner.id == o.id and v.number == at
+                            let rn = new Node
+                            rn.key = "r{v.id}at{level}"
+                            rn.parent = "l{d.id}at{level}"
+                            rn.label = version_title(o.name, v.number)
+                            rn.kind = "resolved"
+                            rn.domain = d
+                            rn.data_object = o
+                            rn.version = v
+                            rn.level = level
+                            all = all + [rn]
     return all
 
-// A name not taken yet: the word, or the word with the first number free.
-function new_name(word: text, domains: list<Domain>) -> text
+// The number of the newest version of a data object up to `level`; 0 when it has none yet.
+function newest_number(versions: list<ObjectVersion>, owner: integer, level: integer) -> integer
+    let best = 0
+    for v in versions
+        if v.owner.id == owner and v.number <= level and v.number > best
+            best = v.number
+    return best
+
+// The data objects as they are at a version of their domain: each at its newest version up to it.
+function as_in(objects: list<DataObject>, versions: list<ObjectVersion>, level: integer) -> list<ObjectVersion>
+    let found: list<ObjectVersion> = []
+    for o in objects
+        let at = newest_number(versions, o.id, level)
+        for v in versions
+            if v.owner.id == o.id and v.number == at
+                found = found + [v]
+    return found
+
+// The C# class of a version, as the engine writes it.
+function class_text(o: DataObject, v: ObjectVersion, properties: list<Property>) -> text
+    let versions = find x in ObjectVersion order by x.number
+    return Fcdm.class_code(object_spec(o, v), property_specs(properties, versions, v.number))
+
+// The interface of a root's version; a child has none.
+function interface_text(o: DataObject, v: ObjectVersion, properties: list<Property>) -> text
+    if o.kind != Root
+        return ""
+    let versions = find x in ObjectVersion order by x.number
+    return Fcdm.interface_code(object_spec(o, v), property_specs(properties, versions, v.number))
+
+function enum_text(e: EnumType, values: list<EnumValue>) -> text
+    let spec = new EnumSpec
+    let owner = e.domain
+    spec.domain = owner.name
+    spec.name = e.name
+    let specs: list<EnumValueSpec> = []
+    for v in values
+        let s = new EnumValueSpec
+        s.name = v.name
+        s.number = v.number
+        specs = specs + [s]
+    return Fcdm.enum_code(spec, specs)
+
+function object_spec(o: DataObject, v: ObjectVersion) -> ObjectSpec
+    let spec = new ObjectSpec
+    let owner = o.domain
+    spec.domain = owner.name
+    spec.name = o.name
+    spec.root = o.kind == Root
+    spec.keyed = o.keyed
+    spec.newtonsoft = owner.newtonsoft
+    spec.version = v.number
+    spec.summary = o.summary
+    spec.obsolete = v.obsolete
+    return spec
+
+// The properties as the engine takes them: a held object at its newest version up to this one.
+function property_specs(properties: list<Property>, versions: list<ObjectVersion>, own: integer) -> list<PropertySpec>
+    let specs: list<PropertySpec> = []
+    for p in properties
+        let s = new PropertySpec
+        s.name = p.name
+        s.kind = p.kind
+        s.nullable = p.nullable
+        s.initial = p.initial
+        s.computed = p.computed
+        s.obsolete = p.obsolete
+        if p.kind == EnumChoice
+            let e = p.choice
+            s.type_name = e.name
+        if p.kind == HeldObject or p.kind == HeldObjects
+            let t = p.target
+            s.type_name = t.name
+            s.type_version = newest_number(versions, t.id, own)
+        specs = specs + [s]
+    return specs
+
+function domain_label(name: text, version: text) -> text
+    if version == ""
+        return name
+    return "{name}  {version}"
+
+function version_label(number: integer, obsolete: text) -> text
+    if obsolete != ""
+        return "v{number} (obsolete)"
+    return "v{number}"
+
+function version_title(name: text, number: integer) -> text
+    if number > 1
+        return "{name} v{number}"
+    return name
+
+// The adapter's table of a version: its name, with V and the number from version 2.
+function table_name(name: text, number: integer) -> text
+    if number > 1
+        return "{name}V{number}"
+    return name
+
+// What a kind of property is written as on the diagrams.
+function kind_word(kind: PropertyKind) -> text
+    if kind == WholeNumber
+        return "int"
+    if kind == DecimalNumber
+        return "decimal"
+    if kind == YesNo
+        return "bool"
+    if kind == Moment
+        return "DateTime"
+    if kind == MomentWithOffset
+        return "DateTimeOffset"
+    if kind == DayOnly
+        return "DateOnly"
+    if kind == EnumChoice
+        return "enum"
+    if kind == HeldObject
+        return "object"
+    if kind == HeldObjects
+        return "list"
+    if kind == BusinessKey
+        return "key"
+    return "string"
+
+// A line of a box: its name and kind, a question mark when it may be empty.
+function property_line(name: text, kind: text, nullable: bool) -> text
+    if nullable
+        return "{name}: {kind}?"
+    return "{name}: {kind}"
+
+// The lines of a data object's box on the class diagram: its business key, then its properties.
+function class_lines(v: ObjectVersion, all: list<Property>) -> list<text>
+    let lines: list<text> = []
+    if v.owner.kind == Root and v.owner.keyed
+        lines = lines + ["Bk: string"]
+    for p in all
+        if p.owner.id == v.id
+            let kindText = kind_word(p.kind)
+            lines = lines + [property_line(p.name, kindText, p.nullable)]
+    return lines
+
+// The lines of a table on the ERD, as the adapter keeps it: its business key
+// first, its stored values, and its two moments.
+function erd_lines(v: ObjectVersion, all: list<Property>) -> list<text>
+    let lines: list<text> = ["PK  Bk"]
+    for p in all
+        if p.owner.id == v.id and p.kind != HeldObjects and p.kind != HeldObject and p.computed == ""
+            lines = lines + [column_line(p.name, p.kind)]
+    return lines + ["    LastModified", "    LastProcessed"]
+
+// How wide a box is, in the canvas's units: room for its bold title (13) and
+// its longest line in the mono font (11), at least 160, on the grid of 20.
+function box_width(title: text, lines: list<text>) -> integer
+    let widest = length(title) * 8
+    for line in lines
+        if length(line) * 7 > widest
+            widest = length(line) * 7
+    let w = widest + 24
+    if w < 160
+        w = 160
+    return snapped(w + 10, 20)
+
+// A column of a table: a foreign key for a business key, the value itself otherwise.
+function column_line(name: text, kind: PropertyKind) -> text
+    if kind == BusinessKey
+        return "FK  {name}"
+    return "    {name}"
+
+// A name no domain has yet: the word, or the word with the first number free.
+function free_domain_name(word: text, domains: list<Domain>) -> text
     let name = word
     let n = 1
     for step in 1 to 1000
@@ -342,60 +1194,6 @@ function new_name(word: text, domains: list<Domain>) -> text
         n = n + 1
         name = "{word}{n}"
     return name
-
-// The C# class the adapter's code has for a class: its summary as a doc
-// comment, and a property for each of its properties, in order.
-function csharp_class(c: ModelClass, props: list<Property>, classes: list<text>) -> text
-    let lines: list<text> = []
-    if c.summary != ""
-        lines = lines + ["/// <summary>", "/// {c.summary}", "/// </summary>"]
-    lines = lines + ["public class {c.name}", "{{"]
-    for p in props
-        let type = csharp_type(p.type, p.optional, classes)
-        let start = csharp_start(p.type, classes)
-        lines = lines + ["    public {type} {p.name} {{ get; set; }}{start}"]
-    lines = lines + ["}}"]
-    return join(lines, "\n")
-
-// A property's type in C#: a list of a class or value type is a List, and
-// an optional value may be null.
-function csharp_type(type: text, optional: bool, classes: list<text>) -> text
-    for name in classes + ["string", "int", "decimal", "bool", "DateTime"]
-        if type == "list<{name}>"
-            return "List<{name}>"
-    if optional
-        return "{type}?"
-    return type
-
-// What a property starts as: a list starts empty.
-function csharp_start(type: text, classes: list<text>) -> text
-    for name in classes + ["string", "int", "decimal", "bool", "DateTime"]
-        if type == "list<{name}>"
-            return " = new();"
-    return ""
-
-// Whether a property's type names the class: the class itself or a list of it.
-function refers_to(type: text, name: text) -> bool
-    return type == name or type == "list<{name}>"
-
-function class_names(classes: list<ModelClass>) -> list<text>
-    let names: list<text> = []
-    for c in classes
-        names = names + [c.name]
-    return names
-
-// A line of a class box: its name and type, a question mark when it may be empty.
-function property_line(name: text, type: text, optional: bool) -> text
-    if optional
-        return "{name}: {type}?"
-    return "{name}: {type}"
-
-// A column of a table: a foreign key for a class, the property itself otherwise.
-function column_line(name: text, type: text, classes: list<text>) -> text
-    for c in classes
-        if type == c
-            return "FK  {name}Bk"
-    return "    {name}"
 
 // Where the n-th box of a domain goes, from 0: five to a row.
 function column_of(n: integer) -> integer

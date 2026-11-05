@@ -9,4 +9,6 @@ project Modelling
     output "out"
     language "en"
     theme Studio Midnight
+    filestore fcdm "setting:fcdmFolder"
+    filestore output "setting:outputFolder"
     datasource main sqlite "data/modelling.db"

@@ -429,4 +429,9 @@ impl Part for TextBoxPart {
     fn base(&self) -> &PartBase {
         &self.base
     }
+
+    /// A memo of code shows a document, as a markdown part does, so it takes the height the window has left.
+    fn grows(&self) -> bool {
+        self.base.spec.text("code").is_some()
+    }
 }

@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use skia_safe::Canvas;
 
-use crate::element::{self, Composition, Cx, Element, ElementId, Request};
+use crate::element::{self, Composition, Cx, Element, ElementId, FocusedPart, Request};
 use crate::fonts::Fonts;
 use crate::geometry::Rect;
 use crate::input::{Cursor, Key, KeyInput, Modifiers, PointerButton, PointerInput};
@@ -42,6 +42,8 @@ pub type LooksFor = Box<dyn Fn(bool) -> Arc<ThemeLook>>;
 
 pub struct Screen {
     root: Box<dyn Element>,
+    /// The part the focus was last found in, by the element with the focus (`Cx::focused_part`).
+    focus_part: RefCell<(Option<ElementId>, Option<FocusedPart>)>,
     look: Arc<ThemeLook>,
     fonts: Rc<Fonts>,
     clipboard: Rc<RefCell<Box<dyn Clipboard>>>,
@@ -85,6 +87,7 @@ impl Screen {
         let fonts = Rc::new(Fonts::new(look.clone()));
         let mut screen = Screen {
             root,
+            focus_part: RefCell::new((None, None)),
             look,
             fonts,
             clipboard: Rc::new(RefCell::new(Box::new(OwnClipboard::default()))),
@@ -428,7 +431,9 @@ impl Screen {
     // -- What elements ask -------------------------------------------------------
 
     fn cx(&self) -> Cx {
-        Cx::new(self.look.clone(), self.fonts.clone(), self.clipboard.clone(), (self.now)(), self.whole(), self.focused).with_places(self.places.clone())
+        let mut cx = Cx::new(self.look.clone(), self.fonts.clone(), self.clipboard.clone(), (self.now)(), self.whole(), self.focused).with_places(self.places.clone());
+        cx.focused_part = self.focused_part();
+        cx
     }
 
     /// Keeps where each shown named part of the window is, once it is laid out (`Cx::part_place`).
@@ -1035,6 +1040,22 @@ impl Screen {
         }
         let hooked = self.keys.as_mut().is_some_and(|keys| keys(key, cx));
         hooked || element::safely(self.root.as_mut(), cx, false, |root, cx| root.window_key(key, cx))
+    }
+
+    /// The part with the focus, or the first part it is in: in the overlays, top first, then in the window.
+    /// Found once per element that has the focus; looked for again while it is in no part yet.
+    fn focused_part(&self) -> Option<FocusedPart> {
+        let focused = self.focused;
+        let (at, known) = self.focus_part.borrow().clone();
+        if at == focused && (known.is_some() || focused.is_none()) {
+            return known;
+        }
+        let found = focused.and_then(|f| {
+            let roots = self.overlays.iter().rev().map(|o| o.content.as_ref()).chain([self.root.as_ref()]);
+            roots.into_iter().find_map(|root| crate::window::focused_part_in(root, f))
+        });
+        *self.focus_part.borrow_mut() = (focused, found.clone());
+        found
     }
 
     /// The focused element, when the person may use it.

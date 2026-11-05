@@ -1,28 +1,88 @@
 module model
 
-// A part of the business the model covers, as Hr or Education: its classes
-// are designed together and drawn on one diagram.
+// A domain of the canonical data model, as Hr or Onderwijs: one namespace,
+// and the two packages its data objects and their events are published in.
 entity Domain
     name: text(80), required, unique, label @domainNameLabel
     summary: text, label @domainSummaryLabel
+    model_package: text(120), label @domainModelPackageLabel
+    model_version: text(20), label @domainModelVersionLabel
+    messages_package: text(120), label @domainMessagesPackageLabel
+    messages_version: text(20), label @domainMessagesVersionLabel
+    // Whether its model project uses Newtonsoft.Json, so its enums get that converter too.
+    newtonsoft: bool, default true, label @domainNewtonsoftLabel
 
-// A class of a domain: a box of the class diagram and a table of the ERD.
-entity ModelClass
-    domain: ref Domain, required, cascade, label @classDomainLabel
-    name: text(80), required, label @classNameLabel
-    summary: text, label @classSummaryLabel
+// A data object stands on its own (a root, with a business key and an
+// interface) or lives in the lists of another (a child).
+enum ObjectKind
+    Root label @objectKindRoot
+    Child label @objectKindChild
+
+// A data object of a domain, as Medewerker or Arbeidscontract, whatever its
+// versions: its classes and entities are made from its versions.
+entity DataObject
+    domain: ref Domain, required, cascade, label @objectDomainLabel
+    name: text(80), required, label @objectNameLabel
+    kind: ObjectKind, default Root, label @objectKindLabel
+    // Whether it has a business key (Bk): every root has, but a few.
+    keyed: bool, default true, label @objectKeyedLabel
+    summary: text, label @objectSummaryLabel
     // Where its box is on the domain's diagrams, in the canvas's units.
-    x: integer, label @classXLabel
-    y: integer, label @classYLabel
+    x: integer, label @objectXLabel
+    y: integer, label @objectYLabel
 
-// A property of a class. Its type is a value type (string, int, decimal,
-// bool, DateTime) or the name of another class of the domain, or a list of
-// one (list<Name>): a line on the class diagram, a foreign key in the ERD.
+// What a data object looks like from a version on: 1 is the domain's own
+// namespace, 2 and up its vN namespaces. A version of the domain holds each
+// data object at its newest version up to that number.
+entity ObjectVersion
+    owner: ref DataObject, required, cascade, label @versionOwnerLabel
+    number: integer, min 1, default 1, label @versionNumberLabel
+    // Why it is no longer to be used; empty while it is.
+    obsolete: text(400), label @versionObsoleteLabel
+
+// What a property holds: a value, one of the domain's enums, a data object
+// held inside, a list of those, or the business key of another data object.
+enum PropertyKind
+    TextValue label @kindText
+    WholeNumber label @kindWholeNumber
+    DecimalNumber label @kindDecimalNumber
+    YesNo label @kindYesNo
+    Moment label @kindMoment
+    MomentWithOffset label @kindMomentWithOffset
+    DayOnly label @kindDayOnly
+    EnumChoice label @kindEnumChoice
+    HeldObject label @kindHeldObject
+    HeldObjects label @kindHeldObjects
+    BusinessKey label @kindBusinessKey
+
+// A property of a version of a data object, in its order.
 entity Property
-    owner: ref ModelClass, required, cascade, label @propertyOwnerLabel
+    owner: ref ObjectVersion, required, cascade, label @propertyOwnerLabel
     position: integer, min 1, default 1, label @propertyPositionLabel
-    name: text(60), required, label @propertyNameLabel
-    type: text(60), required, default "string", label @propertyTypeLabel
-    optional: bool, default false, label @propertyOptionalLabel
-    // The bend points of its line on the diagrams, when it names a class: x, y, x, y, ...
+    name: text(80), required, label @propertyNameLabel
+    kind: PropertyKind, default TextValue, label @propertyKindLabel
+    nullable: bool, default false, label @propertyNullableLabel
+    // The enum of an enum choice.
+    choice: ref EnumType, label @propertyChoiceLabel
+    // The data object it holds, or whose business key it is (in any domain).
+    target: ref DataObject, label @propertyTargetLabel
+    // What it starts as when it was added later (null, 0): it is not breaking then.
+    initial: text(80), label @propertyInitialLabel
+    // Worked out from the others, never stored: an expression in C#.
+    computed: text(400), label @propertyComputedLabel
+    obsolete: text(400), label @propertyObsoleteLabel
+    // The bend points of its line on the diagrams: x, y, x, y, ...
     via: list<integer>, label @propertyViaLabel
+
+// An enum of a domain, never versioned.
+entity EnumType
+    domain: ref Domain, required, cascade, label @enumDomainLabel
+    name: text(80), required, label @enumNameLabel
+    summary: text, label @enumSummaryLabel
+
+// A value of an enum, with the number it is kept as.
+entity EnumValue
+    owner: ref EnumType, required, cascade, label @enumValueOwnerLabel
+    position: integer, min 1, default 1, label @enumValuePositionLabel
+    name: text(80), required, label @enumValueNameLabel
+    number: integer, label @enumValueNumberLabel

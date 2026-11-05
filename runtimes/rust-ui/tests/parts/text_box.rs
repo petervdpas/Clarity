@@ -448,10 +448,18 @@ fn a_read_only_memo_of_code_looks_as_the_theme_s_code_part_not_as_an_input() {
     assert_ne!(code, look.color("input"));
     let mut screen = window(r#"<Memo at="1,1" span="6" rows="4" name="code" bind="code" readonly="true" code="csharp" />"#, host.clone());
     let b = text_box(&screen, "code").node().bounds;
-    let mut shot = Shot::of(&mut screen, 800, 300, 1.0);
+    let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
     assert_eq!(code, shot.pixel((b.x + b.width - 20.0) as i32, (b.y + b.height - 10.0) as i32));
     // One that can be typed in looks as an input.
     let mut screen = window(r#"<Memo at="1,1" span="6" rows="4" name="code" bind="code" code="csharp" />"#, host);
-    let mut shot = Shot::of(&mut screen, 800, 300, 1.0);
+    let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
     assert_eq!(look.color("input"), shot.pixel((b.x + b.width - 20.0) as i32, (b.y + b.height - 10.0) as i32));
+}
+
+#[test]
+fn a_memo_of_code_takes_the_height_the_window_has_left_and_a_plain_one_keeps_its_rows() {
+    use clarity_ui::parts::Part;
+    let screen = window(r#"<Memo name="code" at="1,1" span="6" rows="3" code="csharp" /><Memo name="plain" at="7,1" span="6" rows="3" />"#, TestHost::new());
+    assert!(text_box(&screen, "code").grows(), "a code memo shows a document, as a markdown part does");
+    assert!(!text_box(&screen, "plain").grows());
 }

@@ -6,8 +6,8 @@
 //! muted colors, so every theme colors code its own way.
 
 /// The languages a memo can color, by the word `code` takes.
-pub const LANGUAGES: [&str; 18] = [
-    "clarity", "csharp", "rust", "go", "c", "cpp", "java", "javascript", "typescript", "python", "sql", "json", "xml", "html", "css", "yaml", "markdown", "shell",
+pub const LANGUAGES: [&str; 19] = [
+    "clarity", "csharp", "rust", "go", "c", "cpp", "java", "javascript", "typescript", "python", "sql", "json", "xml", "html", "css", "yaml", "markdown", "shell", "diff",
 ];
 
 /// What a stretch of code is, which says its color.
@@ -18,6 +18,10 @@ pub enum Ink {
     Text,
     Number,
     Comment,
+    /// A line a diff adds.
+    Added,
+    /// A line a diff takes out.
+    Removed,
 }
 
 impl Ink {
@@ -29,6 +33,8 @@ impl Ink {
             Ink::Text => "code_text",
             Ink::Number => "code_number",
             Ink::Comment => "code_comment",
+            Ink::Added => "code_added",
+            Ink::Removed => "code_removed",
         }
     }
 
@@ -39,6 +45,8 @@ impl Ink {
             Ink::Type => "success",
             Ink::Text | Ink::Number => "warning",
             Ink::Comment => "muted",
+            Ink::Added => "success",
+            Ink::Removed => "error",
         }
     }
 }
@@ -48,6 +56,8 @@ impl Ink {
 enum Shape {
     /// Words, texts, numbers and comments, as most programming languages are.
     Words,
+    /// Lines added and taken out, as a unified diff writes them.
+    Diff,
     /// Tags with attributes: XML and HTML.
     Markup,
     /// Headings and inline code.
@@ -138,7 +148,7 @@ const CLARITY_KEYWORDS: &[&str] = &[
 ];
 const CLARITY_TYPES: &[&str] = &["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "list", "ref", "file", "folder", "color", "picture", "secret", "bytes", "email", "url", "values", "id"];
 
-const LANGUAGE_LIST: [Language; 18] = [
+const LANGUAGE_LIST: [Language; 19] = [
     Language { name: "clarity", shape: Shape::Words, line_comments: &["//"], block_comments: &[], quotes: &['"'], keywords: CLARITY_KEYWORDS, types: CLARITY_TYPES, capital_types: true, any_case: false, hash_after_space: false, char_quotes: false },
     Language { name: "csharp", shape: Shape::Words, line_comments: &["//"], block_comments: &[("/*", "*/")], quotes: &['"', '\''], keywords: CSHARP_KEYWORDS, types: CSHARP_TYPES, capital_types: true, any_case: false, hash_after_space: false, char_quotes: false },
     Language { name: "rust", shape: Shape::Words, line_comments: &["//"], block_comments: &[("/*", "*/")], quotes: &['"', '\''], keywords: RUST_KEYWORDS, types: RUST_TYPES, capital_types: true, any_case: false, hash_after_space: false, char_quotes: true },
@@ -156,6 +166,7 @@ const LANGUAGE_LIST: [Language; 18] = [
     Language { name: "css", shape: Shape::Words, line_comments: &[], block_comments: &[("/*", "*/")], quotes: &['"', '\''], keywords: CSS_KEYWORDS, types: &[], capital_types: false, any_case: false, hash_after_space: false, char_quotes: false },
     Language { name: "yaml", shape: Shape::Yaml, line_comments: &["#"], block_comments: &[], quotes: &['"', '\''], keywords: &["true", "false", "null", "yes", "no"], types: &[], capital_types: false, any_case: false, hash_after_space: true, char_quotes: false },
     Language { name: "markdown", shape: Shape::Markdown, line_comments: &[], block_comments: &[], quotes: &[], keywords: &[], types: &[], capital_types: false, any_case: false, hash_after_space: false, char_quotes: false },
+    Language { name: "diff", shape: Shape::Diff, line_comments: &[], block_comments: &[], quotes: &[], keywords: &[], types: &[], capital_types: false, any_case: false, hash_after_space: false, char_quotes: false },
     Language { name: "shell", shape: Shape::Words, line_comments: &["#"], block_comments: &[], quotes: &['"', '\''], keywords: SHELL_KEYWORDS, types: &[], capital_types: false, any_case: false, hash_after_space: true, char_quotes: false },
 ];
 
@@ -169,6 +180,7 @@ pub fn spans(language: &Language, text: &[char]) -> Vec<(usize, usize, Ink)> {
     match language.shape {
         Shape::Words => words(language, text),
         Shape::Markup => markup(language, text),
+        Shape::Diff => diff(text),
         Shape::Markdown => markdown(text),
         Shape::Yaml => yaml(language, text),
         Shape::Json => json(text),
@@ -349,6 +361,26 @@ fn markup(language: &Language, text: &[char]) -> Vec<(usize, usize, Ink)> {
                 i += 1;
             }
         }
+    }
+    out
+}
+
+/// A unified diff: the files' names quiet, each part's header marked, lines added and taken out in their colors.
+fn diff(text: &[char]) -> Vec<(usize, usize, Ink)> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < text.len() {
+        let end = line_end(text, i);
+        if starts(text, i, "+++") || starts(text, i, "---") {
+            out.push((i, end, Ink::Comment));
+        } else if starts(text, i, "@@") {
+            out.push((i, end, Ink::Keyword));
+        } else if text[i] == '+' {
+            out.push((i, end, Ink::Added));
+        } else if text[i] == '-' {
+            out.push((i, end, Ink::Removed));
+        }
+        i = end + 1;
     }
     out
 }

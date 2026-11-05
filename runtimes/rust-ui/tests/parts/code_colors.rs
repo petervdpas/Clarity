@@ -65,3 +65,16 @@ fn the_languages_are_the_ones_the_checker_takes() {
     let listed: Vec<&str> = file["languages"].as_array().unwrap().iter().map(|l| l.as_str().unwrap()).collect();
     assert_eq!(listed, code_colors::LANGUAGES);
 }
+
+#[test]
+fn a_diff_marks_what_was_added_and_what_was_taken_out() {
+    let found = inks("diff", "--- Medewerker.cs\n+++ Medewerker.cs\n@@ -1,3 +1,3 @@\n namespace Hr\n-    string functieBK,\n+    string functieBk,\n");
+    has(&found, "--- Medewerker.cs", Ink::Comment);
+    has(&found, "+++ Medewerker.cs", Ink::Comment);
+    has(&found, "@@ -1,3 +1,3 @@", Ink::Keyword);
+    has(&found, "-    string functieBK,", Ink::Removed);
+    has(&found, "+    string functieBk,", Ink::Added);
+    assert!(!found.iter().any(|(t, _)| t.contains("namespace")), "a line both have keeps the text's color");
+    assert_eq!(Ink::Added.role(), "code_added");
+    assert_eq!(Ink::Removed.role(), "code_removed");
+}

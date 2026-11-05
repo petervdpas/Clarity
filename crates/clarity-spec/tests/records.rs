@@ -161,3 +161,13 @@ fn a_record_and_an_entity_have_names_of_their_own() {
     let both = format!("{SHAPES}\nentity Shape\n    name: text\n");
     assert_has(&messages(&both, Severity::Error), "Shape");
 }
+
+/// Code builds a list of stored records as it builds one of records made in
+/// code: an empty one of its type, then the records added one by one.
+#[test]
+fn code_builds_a_list_of_stored_records() {
+    let source = "module m\n\nentity Project\n    name: text(80)\n\nfunction named(projects: list<Project>, word: text) -> list<Project>\n    let found: list<Project> = []\n    for p in projects\n        if p.name contains word\n            found = found + [p]\n    return found\n";
+    let project = clarity_spec::load_sources([("m.clarity", source)]);
+    let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
+    assert!(errors.is_empty(), "{errors:#?}");
+}

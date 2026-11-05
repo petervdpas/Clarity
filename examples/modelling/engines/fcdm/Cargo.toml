@@ -1,0 +1,25 @@
+# The Fcdm engine of the modelling example: writes the C# of the canonical
+# data model's classes, interfaces and enums as the fcdm repository has
+# them. Built with
+#   cargo build --release --target wasm32-unknown-unknown
+# into ../fcdm.wasm (see examples/build-engines.sh).
+[package]
+name = "fcdm"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+clarity-engine = { path = "../../../../runtimes/rust-engine" }
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+
+[workspace]

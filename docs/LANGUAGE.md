@@ -665,7 +665,7 @@ Every part sits on the grid of the window or of the container it is in:
 - `span n` is the number of columns it covers. The default comes from the part's kind.
 - `rows n` is the number of rows it covers. The default also comes from the part's kind.
 
-Rows have a fixed height in the designer. In a running application the columns share the width of the window, and rows that hold something that grows (a table, a list, an image, a canvas, a custom part declared with `grows`, or a container with one of these inside) share the extra height. Everything else keeps its height, also in a row that grows: it stands at the top of its rows, as high as they are at their least.
+Rows have a fixed height in the designer. In a running application the columns share the width of the window, and rows that hold something that grows (a table, a list, an image, a canvas, a memo with `code`, a custom part declared with `grows`, or a container with one of these inside) share the extra height. Everything else keeps its height, also in a row that grows: it stands at the top of its rows, as high as they are at their least.
 
 When no row of a grid grows and the grid is higher than its rows, `bottom` on a part sticks it to the bottom: the rows from the first row of a part with `bottom` down move down by the height to spare, keeping their heights. Buttons under a form in a pane that a list beside it makes taller sit at the bottom of the pane: `button @saveCaption name save at 3,11 span 2 bottom`. Where a row grows, `bottom` changes nothing.
 
@@ -991,7 +991,7 @@ form name details at 1,1 span 12 rows 3 bind customer
 
 | Property | On | Meaning |
 |---|---|---|
-| `code csharp` | memo | Code: the text in the mono font, its comments, texts, numbers, keywords and type names in the theme's colors (`code_keyword`, `code_type`, `code_text`, `code_number`, `code_comment`); read only, it takes the theme's `code` part look, its own background (`code_background`) and a quieter border. The languages: clarity, csharp, rust, go, c, cpp, java, javascript, typescript, python, sql, json, xml, html, css, yaml, markdown, shell. |
+| `code csharp` | memo | Code: the text in the mono font, its comments, texts, numbers, keywords and type names in the theme's colors (`code_keyword`, `code_type`, `code_text`, `code_number`, `code_comment`); read only, it takes the theme's `code` part look, its own background (`code_background`) and a quieter border. The languages: clarity, csharp, rust, go, c, cpp, java, javascript, typescript, python, sql, json, xml, html, css, yaml, markdown, shell, and diff, whose added and removed lines take `code_added` and `code_removed`. |
 | `copy` | textbox, memo | A button in its corner (a memo's top right) puts its text on the clipboard, read only too; Clarity's word `copyText` names it. |
 | `placeholder @key` | textbox, memo, password, number, spinbox, folder, date, color, tags, dropdown | Shown in a muted color while the input is empty: nothing typed, no day, no color, no tag, nothing chosen. Tags without one say Clarity's word `addTag`. |
 | `readonly` | inputs | Shows the value, which cannot be changed. Handlers can change this. |
@@ -1320,7 +1320,7 @@ theme Shop
 |---|---|
 | `title @nightOwlTheme` | The name people see when they choose the theme, by its key. A theme the application offers needs one. |
 | `mode light`, `mode dark`, `mode system` | The theme is always light, always dark, or follows the system. |
-| `color name "#rrggbb"` | A color, written `#rrggbb` or `#rgb`; `dark "#rrggbb"` after it gives its value in dark mode. Code in a memo takes `code_background` (read only) and the colors of its words, `code_keyword`, `code_type`, `code_text`, `code_number` and `code_comment`. |
+| `color name "#rrggbb"` | A color, written `#rrggbb` or `#rgb`; `dark "#rrggbb"` after it gives its value in dark mode. Code in a memo takes `code_background` (read only) and the colors of its words, `code_keyword`, `code_type`, `code_text`, `code_number` and `code_comment`, and a diff's `code_added` and `code_removed`. |
 | `font "Families"`, `font heading ...`, `font mono ...` | The fonts of text, headings and code, as a list of families: `"Inter, sans-serif"`. |
 | `size n`, `size small n`, `size heading n` | Text sizes in pixels: the text, small text (help, captions) and headings. |
 | `radius n`, `radius input n`, `radius button n`, `radius panel n` | Corner radii in pixels: of everything, or of one kind. |
@@ -2183,7 +2183,7 @@ The types of values follow the data dictionary:
 | `duration` | duration; durations add up (`+`, `-`), scale by a number (`*`, `/`), compare, and take a number of seconds: `let total: duration = 0` |
 | an enum | that enum |
 | a record | an entity, a `ref` |
-| a list of records | `list<Entity>`, a list in the window's data |
+| a list of records | `list<Entity>`, a list in the window's data or one a query finds; code builds one too, stored records or records made in code alike: `let found: list<Project> = []`, then `found = found + [p]` |
 | a list of values | `list<text>`, `list<integer>`, `list<decimal>`, `list<bool>`, `list<date>`, `list<Enum>`: in code, in what an engine keeps and in list fields; a list is a value, so a copy changes on its own |
 | `image` | an `image` field; compared with and set to `none`, or set to a file |
 | `file`, `list<file>` | a file of a file store, and a list of them; see [Files](#files) |

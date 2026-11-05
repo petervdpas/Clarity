@@ -18,6 +18,7 @@
     "css",
     "yaml",
     "markdown",
-    "shell"
+    "shell",
+    "diff"
   ]
 }

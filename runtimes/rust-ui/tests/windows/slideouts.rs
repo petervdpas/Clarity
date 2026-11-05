@@ -426,3 +426,18 @@ fn pinned_at_the_top_it_pushes_the_parts_down() {
     draw(&mut screen);
     assert_eq!(Rect::new(0.0, HANDLE_WIDTH + 200.0, WIDTH, HEIGHT - HANDLE_WIDTH - 200.0), view(&screen).body_place());
 }
+
+#[test]
+fn a_press_on_a_canvas_in_it_gives_the_canvas_the_focus_so_ctrl_z_takes_back_its_bend() {
+    let (mut screen, _host, _) = opened(
+        r#"<Slideout name="details" caption="Diagram" slideWidth="500" span="6" rows="6">
+            <Radio name="kindBox" at="1,1" span="3" />
+            <Canvas name="board" at="1,2" span="6" rows="5" undoScope="board" ondraw="drawn" onbend="bent" />
+        </Slideout>"#,
+    );
+    let board = id_of(&screen, "board");
+    let b = screen.element(board).unwrap().node().bounds;
+    screen.pointer_pressed(b.x + b.width / 2.0, b.y + b.height / 2.0, PointerButton::Left, 1);
+    screen.pointer_released(b.x + b.width / 2.0, b.y + b.height / 2.0, PointerButton::Left);
+    assert_eq!(Some(board), screen.focused(), "the canvas pressed has the focus, not the first part of the slide-out");
+}

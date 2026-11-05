@@ -206,7 +206,19 @@ impl<'a> Emitter<'a> {
                     && matches!(self.project.entity(&owner).and_then(|e| e.field(&member.name)).map(|f| &f.ty), Some(FieldType::Ref { .. }))
                 {
                     let object = self.object(object);
-                    let stored = if matches!(value.kind, ExprKind::Empty) { "None".to_string() } else { format!("Some({}.id)", self.object(value)) };
+                    // Another reference is copied as it is, set or not.
+                    let copied = match &value.kind {
+                        ExprKind::Member { object: from, member: field } => match self.types.type_of(from) {
+                            TypeInfo::Record(source) if matches!(self.project.entity(&source).and_then(|e| e.field(&field.name)).map(|f| &f.ty), Some(FieldType::Ref { .. })) => Some(format!("{}.{}", self.object(from), ident(&field.name))),
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    let stored = match copied {
+                        _ if matches!(value.kind, ExprKind::Empty) => "None".to_string(),
+                        Some(reference) => reference,
+                        None => format!("Some({}.id)", self.object(value)),
+                    };
                     out.push_str(&format!("{pad}{object}.{} = {stored};\n", ident(&member.name)));
                     return;
                 }

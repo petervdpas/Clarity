@@ -1,0 +1,32 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Data objects and versions"
+    rename entity ModelClass to DataObject
+    add field Domain.model_package: text(120)
+    add field Domain.model_version: text(20)
+    add field Domain.messages_package: text(120)
+    add field Domain.messages_version: text(20)
+    add field DataObject.kind: ObjectKind, default Root
+    add entity ObjectVersion
+        owner: ref DataObject
+        number: integer, default 1
+        obsolete: text(400)
+    rename field Property.optional to nullable
+    change field Property.owner: ref ObjectVersion
+    change field Property.name: text(80)
+    add field Property.kind: PropertyKind, default TextValue
+    add field Property.choice: ref EnumType
+    add field Property.target: ref DataObject
+    add field Property.initial: text(80)
+    add field Property.computed: text(400)
+    add field Property.obsolete: text(400)
+    remove field Property.type
+    add entity EnumType
+        domain: ref Domain
+        name: text(80)
+        summary: text
+    add entity EnumValue
+        owner: ref EnumType
+        position: integer, default 1
+        name: text(80)
+        number: integer

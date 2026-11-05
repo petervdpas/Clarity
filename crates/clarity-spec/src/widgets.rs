@@ -483,8 +483,8 @@ const TEXT_BOX: &[WidgetProperty] = &[WidgetProperty::Placeholder, WidgetPropert
 const MEMO: &[WidgetProperty] = &[WidgetProperty::Placeholder, WidgetProperty::Code, WidgetProperty::Copy, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];
 
 /// The languages a memo colors as code (`code csharp`), as conformance/code-languages.json lists them for every renderer.
-pub const CODE_LANGUAGES: [&str; 18] = [
-    "clarity", "csharp", "rust", "go", "c", "cpp", "java", "javascript", "typescript", "python", "sql", "json", "xml", "html", "css", "yaml", "markdown", "shell",
+pub const CODE_LANGUAGES: [&str; 19] = [
+    "clarity", "csharp", "rust", "go", "c", "cpp", "java", "javascript", "typescript", "python", "sql", "json", "xml", "html", "css", "yaml", "markdown", "shell", "diff",
 ];
 
 const PICKED: &[WidgetProperty] = &[WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];

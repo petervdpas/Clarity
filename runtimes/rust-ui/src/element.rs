@@ -128,6 +128,13 @@ pub enum Request {
 
 /// What an element's handlers reach of the screen: its look, fonts,
 /// clipboard and time, and the requests it makes of it.
+/// The part with the focus, or the first part the focused element is in.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FocusedPart {
+    pub name: String,
+    pub button: bool,
+}
+
 pub struct Cx {
     look: Arc<ThemeLook>,
     fonts: Rc<Fonts>,
@@ -136,13 +143,15 @@ pub struct Cx {
     whole: Rect,
     focused: Option<ElementId>,
     places: Rc<RefCell<std::collections::HashMap<String, (ElementId, Rect)>>>,
+    /// The part with the focus, wherever it lies: in the window or in an overlay over it (a slide-out, a popover).
+    pub(crate) focused_part: Option<FocusedPart>,
     pub(crate) requests: Vec<Request>,
     pub(crate) redraw: bool,
 }
 
 impl Cx {
     pub(crate) fn new(look: Arc<ThemeLook>, fonts: Rc<Fonts>, clipboard: Rc<RefCell<Box<dyn Clipboard>>>, now: Instant, whole: Rect, focused: Option<ElementId>) -> Cx {
-        Cx { look, fonts, clipboard, now, whole, focused, places: Rc::default(), requests: Vec::new(), redraw: false }
+        Cx { look, fonts, clipboard, now, whole, focused, places: Rc::default(), focused_part: None, requests: Vec::new(), redraw: false }
     }
 
     /// The places of the window's named parts as the screen last laid them out.

@@ -820,13 +820,13 @@ impl WindowStack {
     }
 
     /// The part with the focus, or the first part it is in, when it is no button: its name.
-    fn focused_input(&self, focused: Option<ElementId>) -> Option<String> {
-        let ids = element::chain(self, focused?)?;
-        let part = ids.iter().rev().filter_map(|id| element::find(self, *id)).find_map(|e| e.as_part())?;
-        if part.base().spec.kind.eq_ignore_ascii_case("button") {
-            return None;
-        }
-        part.base().spec.name().map(str::to_string)
+    /// The part with the focus, in the window or in a slide-out or popover over it; none for a button.
+    fn focused_input(&self, cx: &Cx) -> Option<String> {
+        let found = match cx.focused().and_then(|f| focused_part_in(self, f)) {
+            Some(part) => Some(part),
+            None => cx.focused_part.clone(),
+        }?;
+        (!found.button).then_some(found.name)
     }
 
 }
@@ -862,7 +862,7 @@ impl Element for WindowStack {
         }
         // The part with the focus gives its undo scope, which `-> undo` and
         // `-> redo` act on; a button that runs them keeps the one before.
-        if let (Some(host), Some(part)) = (self.current().cloned(), self.focused_input(cx.focused())) {
+        if let (Some(host), Some(part)) = (self.current().cloned(), self.focused_input(cx)) {
             host.set_focused(&part);
         }
         let hosts: Vec<Rc<ProgramHost>> = self.stack.last().map(|s| s.host.clone()).into_iter().chain(self.dialogs.iter().map(|d| d.host.clone())).collect();
@@ -982,7 +982,7 @@ pub(crate) fn undo_key(root: &mut dyn Element, host: Option<&Rc<ProgramHost>>, k
             return true;
         }
     }
-    let part = focused.and_then(|f| part_of(root, f));
+    let part = focused.and_then(|f| part_of(root, f)).or_else(|| cx.focused_part.as_ref().map(|p| p.name.clone()));
     if let (Some(host), Some(part)) = (host, part) {
         if let Some(scope) = host.scope(&part) {
             host.undo(&scope, back);
@@ -992,6 +992,14 @@ pub(crate) fn undo_key(root: &mut dyn Element, host: Option<&Rc<ProgramHost>>, k
 }
 
 /// The part `focused` is, or the first part it is in, under `root`: its name.
+/// The part `focused` is, or the first part it is in, under `root`.
+pub(crate) fn focused_part_in(root: &dyn Element, focused: ElementId) -> Option<element::FocusedPart> {
+    let ids = element::chain(root, focused)?;
+    let part = ids.iter().rev().filter_map(|id| element::find(root, *id)).find_map(|e| e.as_part())?;
+    let name = part.base().spec.name()?.to_string();
+    Some(element::FocusedPart { name, button: part.base().spec.kind.eq_ignore_ascii_case("button") })
+}
+
 fn part_of(root: &dyn Element, focused: ElementId) -> Option<String> {
     let ids = element::chain(root, focused)?;
     ids.iter().rev().filter_map(|id| element::find(root, *id)).find_map(|e| e.as_part().and_then(|p| p.base().spec.name().map(str::to_string)))

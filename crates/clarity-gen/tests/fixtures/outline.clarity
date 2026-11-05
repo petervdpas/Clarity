@@ -40,6 +40,14 @@ function outline(projects: list<Project>) -> list<Node>
         all = all + [n, node(p.name + "/c", p.name, "Classes", Class)]
     return all
 
+// A list of stored records built in code: the projects whose name holds a word.
+function named(projects: list<Project>, word: text) -> list<Project>
+    let found: list<Project> = []
+    for p in projects
+        if p.name contains word
+            found = found + [p]
+    return found
+
 function deepest(nodes: list<Node>) -> integer
     let most = 0
     for n in nodes
@@ -61,7 +69,8 @@ page Outline: window
 
 code Outline
     handler loadNodes
-        projects = find p in Project order by p.name
+        let all = find p in Project order by p.name
+        projects = named(all, "")
         nodes = outline(projects)
         if count(nodes) > 1
             nav.selected = nodes[2]

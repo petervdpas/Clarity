@@ -3302,7 +3302,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 if items.is_empty() {
                     return match expected {
                         Some(ty @ Ty::Values(_)) => ty,
-                        Some(ty @ Ty::List(record)) if record.record => ty,
+                        Some(ty @ Ty::List(_)) => ty,
                         _ => {
                             self.error("an empty list needs its type, as in let squares: list<integer> = []", expr.span);
                             Ty::Unknown
@@ -3314,10 +3314,8 @@ impl<'a> BodyChecker<'_, 'a> {
                     _ => None,
                 };
                 let first = self.expr(&items[0], wanted);
-                // A list of records (DESIGN 5.12): every item the same record.
-                if let Ty::Record(record) = first
-                    && record.record
-                {
+                // A list of records (DESIGN 5.12), made in code or stored: every item the same record.
+                if let Ty::Record(record) = first {
                     for other in &items[1..] {
                         let ty = self.expr(other, Some(first));
                         if !first.accepts(&ty) {
@@ -4176,9 +4174,8 @@ impl<'a> BodyChecker<'_, 'a> {
                     }
                     return l;
                 }
-                // A list of records grows by a list of the same records: `shapes + [dot]`.
+                // A list of records, made in code or stored, grows by a list of the same records: `shapes + [dot]`.
                 if let (Ty::List(a), Ty::List(b)) = (l, r)
-                    && a.record
                     && op == BinaryOp::Add
                 {
                     if !std::ptr::eq(a, b) {

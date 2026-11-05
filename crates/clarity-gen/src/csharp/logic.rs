@@ -336,7 +336,14 @@ impl<'a> Emitter<'a> {
                 // A record given to a reference field is stored as its id.
                 if self.is_reference_field(target) {
                     let stored = self.stored_reference(target);
-                    let record = if matches!(value.kind, ExprKind::Empty) { "null".to_string() } else { format!("{}.Id", self.value(value)) };
+                    // Another reference is copied as it is, set or not.
+                    let record = if matches!(value.kind, ExprKind::Empty) {
+                        "null".to_string()
+                    } else if self.is_reference_field(value) {
+                        self.stored_reference(value)
+                    } else {
+                        format!("{}.Id", self.value(value))
+                    };
                     out.push_str(&format!("{pad}{stored} = {record};\n"));
                     return;
                 }

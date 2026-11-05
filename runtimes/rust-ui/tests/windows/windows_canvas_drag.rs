@@ -49,6 +49,15 @@ const SIZED_BOARD: &str = r#"<Window name="Main">
 </Window>
 "#;
 
+/// The board in a slide-out, as the modelling example's diagram slides up from the bottom.
+const SLID_BOARD: &str = r#"<Window name="Main">
+  <Slideout name="details" caption="Diagram" side="bottom" slideHeight="400" span="12" rows="8">
+    <Radio name="kindBox" at="1,1" span="3" />
+    <Canvas name="board" at="1,2" span="12" rows="7" undoScope="board" units="{&quot;width&quot;:4000,&quot;height&quot;:3000}" zoom="true" grid="20" snap="true" ondrag="moved" ondrop="dropped" onbend="bent" />
+  </Slideout>
+</Window>
+"#;
+
 const MODEL: &str = r#"{"project": {"locale": {"language": "en"}, "files": [{"pages": [{"name": {"name": "Main"}, "kind": "window", "title": "Board"}]}]}, "keys": []}"#;
 
 const FILES: AppFiles = AppFiles { windows: &[("Main", BOARD)], apps: &[], themes: &[], model: MODEL, resources: &[], title: "Board", width: 800.0, height: 500.0 };
@@ -58,6 +67,8 @@ const LINKED_FILES: AppFiles = AppFiles { windows: &[("Main", LINKED_BOARD)], ..
 const CARRY_FILES: AppFiles = AppFiles { windows: &[("Main", CARRY_BOARD)], ..FILES };
 
 const SIZED_FILES: AppFiles = AppFiles { windows: &[("Main", SIZED_BOARD)], ..FILES };
+
+const SLID_FILES: AppFiles = AppFiles { windows: &[("Main", SLID_BOARD)], ..FILES };
 
 /// The box: where it is and how big.
 const BOX: (i64, i64, i64, i64) = (1000, 1000, 400, 200);
@@ -80,6 +91,8 @@ struct Board {
     readonly: bool,
     /// Whether its window starts with `canvas.resizable` set false.
     fixed: bool,
+    /// Whether its window starts with the slide-out `details` out.
+    slid: bool,
 }
 
 fn reply(state: WindowState) -> Reply {
@@ -140,6 +153,9 @@ impl Program for Board {
         }
         if self.fixed {
             state.parts.entry("board".into()).or_default().resizable = Some(false);
+        }
+        if self.slid {
+            state.parts.entry("details".into()).or_default().visible = Some(true);
         }
         draw(&mut state);
         Ok(reply(state))
@@ -225,7 +241,8 @@ impl Program for Board {
         draw(&mut state);
         Ok(reply(state))
     }
-    fn undo_edit(&self, state: WindowState, _scope: &str, _back: bool) -> Answer<Reply> {
+    fn undo_edit(&self, state: WindowState, scope: &str, back: bool) -> Answer<Reply> {
+        self.log.lock().unwrap().push(format!("{} {scope}", if back { "undo" } else { "redo" }));
         Ok(reply(state))
     }
     fn reorder_event(&self, state: WindowState, _reorder: program::Reorder) -> Answer<Reply> {
@@ -778,4 +795,20 @@ fn a_canvas_without_on_resize_shows_no_grip() {
     screen.pointer_moved(gx - 2.0, gy - 2.0);
     assert_ne!(clarity_ui::input::Cursor::ResizeCorner, screen.cursor());
     assert!(board.log.lock().unwrap().is_empty());
+}
+
+#[test]
+fn ctrl_z_takes_back_a_bend_on_a_canvas_in_a_slide_out() {
+    let (mut screen, board) = started_with(Board { slid: true, ..Board::default() }, SLID_FILES);
+    // All the way out.
+    let later = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    screen.now = Box::new(move || later);
+    clarity_ui::testing::Shot::of(&mut screen, 800, 500, 1.0);
+    let (x, y) = on_screen(&screen, 2100.0, 1800.0);
+    screen.pointer_pressed(x, y, PointerButton::Left, 1);
+    screen.pointer_moved(x + 10.0, y);
+    screen.pointer_moved(x + 30.0, y - 20.0);
+    screen.pointer_released(x + 30.0, y - 20.0, PointerButton::Left);
+    screen.key_pressed(clarity_ui::KeyInput::new(clarity_ui::Key::Z, Modifiers::CONTROL));
+    assert_eq!(vec!["board bent", "undo board"], *board.log.lock().unwrap());
 }

@@ -30,7 +30,7 @@ use crate::parser::{Cursor, Node, ParseResult, first_word, no_children};
 /// The colors every theme has, which the renderer itself uses. Clarity's
 /// own theme sets them all; another sets those it changes, and can name
 /// colors of its own for its styles and parts.
-pub const ROLES: [&str; 27] = [
+pub const ROLES: [&str; 29] = [
     "background",
     "panel",
     "raised",
@@ -59,6 +59,9 @@ pub const ROLES: [&str; 27] = [
     "code_text",
     "code_number",
     "code_comment",
+    // A diff in a memo (`code diff`): the lines it adds and those it takes out.
+    "code_added",
+    "code_removed",
 ];
 
 /// The fonts, text sizes and radii a theme sets, by role.
@@ -628,6 +631,8 @@ const CREAM_GREEN: &[(&str, &str)] = &[
     ("code_text", "#a0522d"),
     ("code_number", "#b45309"),
     ("code_comment", "#8a8572"),
+    ("code_added", "#3d7a2a"),
+    ("code_removed", "#a62b1f"),
 ];
 
 /// The text of a new theme called `name`, starting from `start`: every

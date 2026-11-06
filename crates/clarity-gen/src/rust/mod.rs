@@ -247,6 +247,12 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     files.push(text("src/main.rs", main_text));
     // Built on the crates in Clarity's repository when CLARITY_RUNTIME names them.
     files.extend(local_patch_file(clarity)?);
+    // The program file's icon and version on Windows, linked by build.rs (docs/APP-ICON-SPLASH-PLAN.md, docs/VERSION-PLAN.md).
+    let icons = crate::windows_resources::object_files(project, &clarity_project::title(settings), &crate_name, crate::windows_resources::object_path);
+    if !icons.is_empty() {
+        files.extend(icons);
+        files.push(text("build.rs", crate::windows_resources::RUST_BUILD.to_string()));
+    }
     Ok(files)
 }
 

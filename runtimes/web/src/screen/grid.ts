@@ -53,18 +53,24 @@ export function rowAt(grid: HTMLElement, offset: number, shownHeight: number): n
     .gridTemplateRows.split(" ")
     .map((t) => parseFloat(t))
     .filter((t) => !Number.isNaN(t));
-  return rowIn(tracks, offset / scale, Number(grid.dataset.rowHeight) || ROW_HEIGHT);
+  return rowIn(tracks, offset / scale, Number(grid.dataset.rowHeight) || ROW_HEIGHT, gapOf(grid));
 }
 
-/** The row at `offset` among rows of the heights `tracks`, with GAP between them; past them, rows are `row` high. */
-export function rowIn(tracks: number[], offset: number, row = ROW_HEIGHT): number {
+/** The gap between a grid element's columns and rows, as Clarity.UI laid it out (`data-gap`): none on a page's own exact grid. */
+export function gapOf(grid: HTMLElement): number {
+  const gap = Number(grid.dataset.gap);
+  return Number.isFinite(gap) && grid.dataset.gap !== undefined ? gap : GAP;
+}
+
+/** The row at `offset` among rows of the heights `tracks`, with `gap` between them; past them, rows are `row` high. */
+export function rowIn(tracks: number[], offset: number, row = ROW_HEIGHT, gap = GAP): number {
   let top = 0;
   for (let i = 0; i < tracks.length; i++) {
-    const bottom = top + tracks[i] + GAP;
+    const bottom = top + tracks[i] + gap;
     if (offset < bottom) return i + 1;
     top = bottom;
   }
-  return tracks.length + Math.max(0, Math.floor((offset - top) / (row + GAP))) + 1;
+  return tracks.length + Math.max(0, Math.floor((offset - top) / (row + gap))) + 1;
 }
 
 /**

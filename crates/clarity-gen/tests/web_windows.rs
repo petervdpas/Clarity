@@ -132,7 +132,8 @@ fn a_project_s_row_height_is_on_every_window_s_root() {
     assert!(!files_written.is_empty());
     for file in &files_written {
         let root = file.text.lines().find(|l| l.starts_with("<Window ")).unwrap();
-        assert!(root.contains(" rowHeight=\"30\""), "{root}");
+        // A page with its own exact grid (the splash) says its cells instead.
+        assert!(root.contains(" rowHeight=\"30\"") || root.contains(" cell=\""), "{root}");
     }
     let designed = files(&preview::files_json(&project, "Todo", &Shown::Window("Main".into()), true, &Default::default()));
     assert!(designed["windows"]["Main"].as_str().unwrap().contains("<Window name=\"Main\" rowHeight=\"30\" designItem="), "{designed}");
@@ -566,4 +567,39 @@ fn a_striped_table_says_so_in_the_markup() {
     let line = |name: &str| markup.lines().find(|l| l.contains(&format!("name=\"{name}\""))).unwrap_or_default().to_string();
     assert!(line("orders").contains(" striped=\"true\""), "{markup}");
     assert!(!line("plain").contains("striped"), "{markup}");
+}
+
+/// A timer's tick is no action of the person's: the preview runs no handler
+/// for it and says nothing, so a timer of every tenth of a second does not
+/// pile up notes (the walker example).
+#[test]
+fn the_preview_says_nothing_for_a_timer_s_tick() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/walker");
+    let project = clarity_project::load_modules(&dir).unwrap();
+    let program = PreviewProgram::new(project, "Field");
+    let opened = program.answer("open_window", &json!({ "window": "Field", "with": {} }));
+    let state = opened["value"]["state"].clone();
+    let ticked = program.answer("dispatch_event", &json!({ "state": state, "handler": "stepped" }));
+    assert_eq!(ticked["value"]["messages"], json!([]), "{ticked:#}");
+    assert_eq!(ticked["value"]["state"], state);
+    // A click still says where its handler runs.
+    let clicked = program.answer("dispatch_event", &json!({ "state": state, "handler": "walkClicked" }));
+    assert_eq!(clicked["value"]["messages"][0]["text"]["key"], json!("previewRunsNoHandler"));
+}
+
+/// The designer and the preview show the window picked, not the app's start:
+/// their files name no splash, so it never stands in for the window asked
+/// for; the splash page itself still shows when it is the one picked.
+#[test]
+fn the_preview_shows_the_window_picked_not_the_splash() {
+    let (_, project) = todo();
+    assert!(project.apps().any(|a| a.splash.is_some()), "the todo example has a splash");
+    for design in [false, true] {
+        let shown = files(&preview::files_json(&project, "Todo", &Shown::Window("Main".into()), design, &Default::default()));
+        let app = shown["apps"].as_object().and_then(|a| a.values().next()).and_then(Value::as_str).unwrap_or_default().to_string();
+        assert!(app.starts_with("<?xml") || app.contains("<App "), "{app}");
+        assert!(!app.contains("splash="), "{app}");
+        let welcome = files(&preview::files_json(&project, "Todo", &Shown::Window("Welcome".into()), design, &Default::default()));
+        assert!(welcome["windows"]["Welcome"].as_str().unwrap().contains("frame=\"none\""));
+    }
 }

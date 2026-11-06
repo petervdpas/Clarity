@@ -7,6 +7,7 @@
 #include "clarity/db.h"
 #include "clarity/json.h"
 #include "clarity/json_read.h"
+#include "clarity/splash.h"
 #include "clarity/sql.h"
 #include "clarity/ui.h"
 

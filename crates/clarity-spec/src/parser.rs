@@ -792,10 +792,11 @@ pub(crate) fn starts_with_keyword(
 // ---------------------------------------------------------------------------
 // Pages
 
-/// Page settings (`title`, `size`, `data`, `grid`) as opposed to widget lines.
+/// Page settings (`title`, `size`, `style`, `data`, `grid`) as opposed to widget lines.
 pub(crate) fn is_page_setting(tokens: &[Token]) -> bool {
     starts_with_keyword(tokens, "title", Some(TokenKind::Str))
         || starts_with_keyword(tokens, "size", Some(TokenKind::Number))
+        || starts_with_keyword(tokens, "style", Some(TokenKind::Ident))
         || starts_with_keyword(tokens, "data", Some(TokenKind::Ident))
         || starts_with_keyword(tokens, "grid", Some(TokenKind::Number))
         || starts_with_keyword(tokens, "on", Some(TokenKind::Ident))
@@ -812,14 +813,15 @@ fn parse_page(
         TokenKind::Colon,
         "':' and a page kind, as in 'page X: window'",
     )?;
-    let kind_ident = cursor.expect_ident("a page kind ('window', 'dialog' or 'view')")?;
+    let kind_ident = cursor.expect_ident("a page kind ('window', 'dialog', 'view' or 'splash')")?;
     let kind = match kind_ident.name.as_str() {
         "window" => PageKind::Window,
         "dialog" => PageKind::Dialog,
         "view" => PageKind::View,
+        "splash" => PageKind::Splash,
         other => {
             return Err(Diagnostic::error(
-                format!("unknown page kind '{other}', expected 'window', 'dialog' or 'view'"),
+                format!("unknown page kind '{other}', expected 'window', 'dialog', 'view' or 'splash'"),
                 kind_ident.span,
             ));
         }
@@ -833,8 +835,10 @@ fn parse_page(
         kind,
         title: None,
         size: None,
+        style: None,
         data: Vec::new(),
         columns: DEFAULT_PAGE_COLUMNS,
+        cell: None,
         widgets: Vec::new(),
         frame: Frame::default(),
         handlers: Vec::new(),
@@ -909,6 +913,14 @@ fn parse_page_setting(node: &Node, page: &mut Page, grid_seen: &mut bool) -> Par
             let height = cursor.expect_number("a height in pixels, as in 'size 320 x 460'")?;
             page.size = Some(WindowSize { width, height });
         }
+        // `style splashBack`: a style of the theme for the window itself.
+        "style" => {
+            if page.style.is_some() {
+                return Err(Diagnostic::error("duplicate 'style'", node.line.span));
+            }
+            page.style = Some(cursor.expect_ident("a style of the project's theme")?.name);
+            cursor.expect_end()?;
+        }
         "data" => {
             page.data.push(parse_data(&mut cursor, node.line.span)?);
         }
@@ -937,6 +949,10 @@ fn parse_page_setting(node: &Node, page: &mut Page, grid_seen: &mut bool) -> Par
             page.columns = cursor.expect_number("a number of columns")?;
             if !cursor.eat_keyword("columns") {
                 return Err(cursor.error_here("expected 'columns', as in 'grid 12 columns'"));
+            }
+            // `rows 10`: the page's own exact grid, rows of 10 pixels.
+            if cursor.eat_keyword("rows") {
+                page.cell = Some(cursor.expect_number("a row height in pixels, as in 'grid 56 columns rows 10'")?);
             }
         }
     }
@@ -1008,6 +1024,7 @@ fn parse_data(cursor: &mut Cursor, span: Span) -> ParseResult<DataDecl> {
 pub(crate) fn is_app_setting(tokens: &[Token]) -> bool {
     starts_with_keyword(tokens, "title", Some(TokenKind::Str))
         || starts_with_keyword(tokens, "main", Some(TokenKind::Ident))
+        || starts_with_keyword(tokens, "splash", Some(TokenKind::Ident))
         || starts_with_keyword(tokens, "on", Some(TokenKind::Ident))
         || starts_with_keyword(tokens, "data", Some(TokenKind::Ident))
 }
@@ -1031,6 +1048,8 @@ fn parse_app(
         name,
         title: None,
         main: None,
+        splash: None,
+        splash_for: None,
         data: Vec::new(),
         frame: Frame::default(),
         handlers: Vec::new(),
@@ -1070,6 +1089,23 @@ fn parse_app_setting(node: &Node, app: &mut App) -> ParseResult<()> {
                 return Err(Diagnostic::error("duplicate 'main'", node.line.span));
             }
             app.main = Some(cursor.expect_ident("the main window")?);
+        }
+        // `splash Welcome for 2 seconds`: the splash page, and how long it shows at least.
+        "splash" => {
+            if app.splash.is_some() {
+                return Err(Diagnostic::error("duplicate 'splash'", node.line.span));
+            }
+            app.splash = Some(cursor.expect_ident("the splash page")?);
+            if cursor.eat_keyword("for") {
+                let wrong = || Diagnostic::error("write 'for' and how many seconds the splash shows at least, from 0.1 to 30: splash Welcome for 2 seconds", node.line.span);
+                let number = cursor.expect(TokenKind::Number, "a number of seconds").map_err(|_| wrong())?;
+                let seconds: f64 = number.text.parse().map_err(|_| wrong())?;
+                if !(cursor.eat_keyword("seconds") || cursor.eat_keyword("second")) || !(0.1..=30.0).contains(&seconds) {
+                    return Err(wrong());
+                }
+                app.splash_for = Some((seconds * 1000.0).round() as u32);
+            }
+            cursor.expect_end()?;
         }
         "on" => {
             let owner = app.name.name.clone();

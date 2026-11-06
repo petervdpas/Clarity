@@ -161,6 +161,15 @@ pub struct Settings {
     pub name: String,
     /// The name people see, when it differs from the one derived from `name`.
     pub title: Option<String>,
+    /// The application's icon, a picture among its resources (`icon "app.png"`):
+    /// its windows, its taskbar button, its program file and its web page show
+    /// it. Without one, Clarity's (docs/APP-ICON-SPLASH-PLAN.md).
+    #[serde(default)]
+    pub icon: Option<String>,
+    /// The application's version (`version "1.2.0"`, docs/VERSION-PLAN.md):
+    /// `app.version` in code and `{app.version}` in texts; optional.
+    #[serde(default)]
+    pub version: Option<String>,
     pub stack: Stack,
     pub datasources: Vec<DataSource>,
     /// The language the project's texts are written in, as a language tag
@@ -326,6 +335,8 @@ pub fn starter(name: &str, module: &str) -> Settings {
     Settings {
         name: name.to_string(),
         title: None,
+        icon: None,
+        version: None,
         stack: Stack {
             backend: Backend::Rust,
             ui: Ui::Clarity,
@@ -838,6 +849,8 @@ fn hand_over(dir: &Path, project: &mut clarity_spec::Project) {
     }
     if let Some(settings) = settings {
         project.keys_editable = settings.keys_editable;
+        project.icon = settings.icon.clone();
+        project.version = settings.version.clone();
         project.row_height = row_height(&settings);
         project.locale = clarity_spec::model::Locale {
             language: settings.language,
@@ -873,9 +886,34 @@ pub(crate) fn stack_line(stack: &Stack) -> String {
 /// The `cli` target and the modules' `cli` block and commands go together,
 /// and the block is named after the project (DESIGN 5.20). `file` is the
 /// project file, where a missing block is reported.
+/// The icon the project file names is a picture among the resources; a
+/// resources folder that holds `icon.png` while the project names no icon
+/// is told to name it (docs/APP-ICON-SPLASH-PLAN.md).
+fn icon_problems(settings: &Settings, project: &clarity_spec::Project, file: &str) -> Vec<clarity_spec::Diagnostic> {
+    use clarity_spec::Diagnostic;
+    let Some(resources) = &project.resources else { return Vec::new() };
+    let has = |name: &str| resources.files.iter().any(|f| f.name == name);
+    match &settings.icon {
+        Some(icon) if !has(icon) => vec![Diagnostic::error(format!("icon \"{icon}\": there is no {icon} in the resources folder"), clarity_spec::Span::default()).in_file(file)],
+        Some(icon) if !clarity_spec::resources::is_picture(icon) => {
+            vec![Diagnostic::error(format!("icon \"{icon}\" is no picture: the icon is a PNG, JPEG, WebP or SVG file"), clarity_spec::Span::default()).in_file(file)]
+        }
+        None if has("icon.png") => vec![Diagnostic::warning("the resources hold icon.png, but the project names no icon: write icon \"icon.png\" in the project file to show it on the windows", clarity_spec::Span::default()).in_file(file)],
+        _ => Vec::new(),
+    }
+}
+
 pub fn target_problems(settings: &Settings, project: &clarity_spec::Project, file: &str) -> Vec<clarity_spec::Diagnostic> {
     use clarity_spec::Diagnostic;
     let mut found = Vec::new();
+    found.extend(icon_problems(settings, project, file));
+    // `app.version` or `{app.version}` needs a version to show.
+    if settings.version.is_none()
+        && let Some((path, span)) = project.app_version_use()
+    {
+        let message = "the project has no version for app.version to show: write version \"1.0.0\" in the project file";
+        found.push(if path.is_empty() { clarity_spec::Diagnostic::error(message, span).in_file(file) } else { clarity_spec::Diagnostic::error(message, span).in_file(&path) });
+    }
     let cli = settings.stack.has(Target::Cli);
     // The keys window opens where the project file allows it (DESIGN 5.28).
     if !settings.keys_editable

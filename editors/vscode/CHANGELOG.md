@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.32
+
+- Colors `splash`, the app's line that names its splash screen, and `version`, the project file's line with the application's version.
+
 ## 0.1.28
 
 - Colors the words it lacked: `port` (the project's web port), `editable`, `grows` and `keys`.

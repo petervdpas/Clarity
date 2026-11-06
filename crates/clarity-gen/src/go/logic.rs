@@ -661,6 +661,11 @@ impl<'a> Emitter<'a> {
                     _ => out.push_str(&format!("{target} := {code}\n")),
                 }
             }
+            StmtKind::Assign { target, value } if clarity_spec::code::sets_splash_status(target) => {
+                let text = self.shown(value, &mut pre);
+                out.push_str(&pre);
+                out.push_str(&format!("clarity.SetSplashStatus({text})\n"));
+            }
             StmtKind::Assign { target, value } => {
                 if let Some((part, property)) = self.part_property(target)
                     && self.custom_property(&part, &property)
@@ -1422,6 +1427,11 @@ impl<'a> Emitter<'a> {
 
     /// An expression as a value.
     fn value(&mut self, expr: &Expr, pre: &mut String) -> String {
+        // `app.version`: the project's version, written as the literal text it is.
+        if clarity_spec::code::reads_app_version(expr) {
+            let literal = Expr { kind: ExprKind::Str { value: self.project.version.clone().unwrap_or_default() }, span: expr.span };
+            return self.value(&literal, pre);
+        }
         let ty = self.types.type_of(expr);
         match &expr.kind {
             // A list of records (DESIGN 5.12): a copy of each, as code holds records by pointer.

@@ -1052,3 +1052,11 @@ code Tally
     let code: String = files.iter().filter(|f| f.path.ends_with(".rs")).map(|f| f.text.as_str()).collect();
     assert!(code.contains("for t in w.tiles.clone().iter() {"), "{code}");
 }
+
+/// A web page's tab shows the application's icon, a picture among its resources.
+#[test]
+fn the_page_shows_the_application_s_icon() {
+    let page = clarity_gen::web_browser::page("Shop", Some("app.png"));
+    assert!(page.contains("<link rel=\"icon\" href=\"clarity/resources/app.png\">"), "{page}");
+    assert!(!clarity_gen::web_browser::page("Shop", None).contains("rel=\"icon\""));
+}

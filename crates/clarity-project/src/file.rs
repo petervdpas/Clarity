@@ -177,6 +177,8 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     };
 
     let mut title = None;
+    let mut icon = None;
+    let mut version = None;
     let mut stack = None;
     let mut out = None;
     let mut keeps: Option<Vec<String>> = None;
@@ -257,7 +259,26 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         match keyword {
             "title" => {
                 once(title.is_some())?;
-                title = Some(string(line, a.first(), "the title")?);
+                let written = string(line, a.first(), "the title")?;
+                // The program's name (its settings folder, its package): no slots.
+                if written.contains('{') || written.contains('}') {
+                    return Err(format!("line {line}: the project's title is plain text, the program's name; show the version in a window's or the app's title with {{app.version}}, like \"Todo v{{app.version}}\""));
+                }
+                title = Some(written);
+            }
+            "version" => {
+                once(version.is_some())?;
+                match a.first() {
+                    Some(t) if t.kind == TokenKind::Str && a.len() == 1 && is_version(&t.text) => version = Some(t.text.clone()),
+                    _ => return Err(format!("line {line}: write 'version' and the version as major.minor.patch in quotes, like: version \"1.2.0\" (or \"2.0.0-beta.1\")")),
+                }
+            }
+            "icon" => {
+                once(icon.is_some())?;
+                match a.first() {
+                    Some(t) if t.kind == TokenKind::Str && a.len() == 1 => icon = Some(t.text.clone()),
+                    _ => return Err(format!("line {line}: write 'icon' and the picture among the resources in quotes, like: icon \"app.png\"")),
+                }
             }
             // `output keeps "vendor"` names folders in the output that are
             // the project's own; `output "folder"` says where it is.
@@ -459,7 +480,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
             "auth" => return Err(format!("line {line}: 'auth' belongs under a datasource line, indented")),
             other => {
                 return Err(format!(
-                    "line {line}: unknown setting '{other}'; the settings are title, stack, output, language, currency, theme, keys, engines, port, row height, datasource and filestore"
+                    "line {line}: unknown setting '{other}'; the settings are title, icon, stack, output, language, currency, theme, keys, engines, port, row height, datasource and filestore"
                 ));
             }
         }
@@ -470,6 +491,8 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     Ok(Settings {
         name,
         title,
+        icon,
+        version,
         stack,
         datasources,
         language,
@@ -555,6 +578,12 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
     let mut lines: Vec<(String, usize, String)> = vec![("project".into(), 0, format!("project {}", settings.name))];
     if let Some(title) = &settings.title {
         lines.push(("title".into(), 1, format!("title {}", quote(title))));
+    }
+    if let Some(icon) = &settings.icon {
+        lines.push(("icon".into(), 1, format!("icon {}", quote(icon))));
+    }
+    if let Some(version) = &settings.version {
+        lines.push(("version".into(), 1, format!("version {}", quote(version))));
     }
     lines.push(("stack".into(), 1, stack_line));
     // A file that never named an output folder keeps building into `out`
@@ -644,4 +673,16 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
         out.pop();
     }
     Ok(out.join("\n") + "\n")
+}
+
+/// Whether `text` is a version as `major.minor.patch`, with an optional
+/// pre-release after a hyphen: `1.2.0`, `2.0.0-beta.1`.
+pub fn is_version(text: &str) -> bool {
+    let (core, pre) = match text.split_once('-') {
+        Some((core, pre)) => (core, Some(pre)),
+        None => (text, None),
+    };
+    let numbers: Vec<&str> = core.split('.').collect();
+    let number = |n: &&str| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit());
+    numbers.len() == 3 && numbers.iter().all(number) && pre.is_none_or(|p| !p.is_empty() && p.split('.').all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric())))
 }

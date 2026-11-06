@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { VERSION_PATTERN, versionWritten } from "./version";
+  import type { Settings } from "@clarity/ui/generated/Settings.ts";
   import IconField from "./IconField.svelte";
   import FrameProperties from "./FrameProperties.svelte";
   import TextField from "./TextField.svelte";
@@ -32,6 +34,8 @@
     onedit,
     onapplied,
     app = null,
+    settings = null,
+    onsavesettings = null,
   }: {
     preview: Preview;
     page: Page;
@@ -40,6 +44,9 @@
     onapplied: (preview: Preview) => void;
     /** Set when the page stands for the app (see `appAsPage`). */
     app?: App | null;
+    /** The project file's settings, which the app's version is one of; with how to save them. */
+    settings?: Settings | null;
+    onsavesettings?: ((settings: Settings) => void) | null;
   } = $props();
 
   const selected = $derived(pageDesigner.selected);
@@ -54,7 +61,8 @@
   /** What has fields: the entities, and the records (DESIGN 5.12) code builds and nothing stores. */
   const entities = $derived(preview.project.files.flatMap((f) => [...f.entities, ...f.records]));
   const targets = $derived([
-    ...allPages(preview).map((x) => x.name.name).filter((n) => n !== page.name.name),
+    // A splash page is the application's to show as it starts: nothing opens it.
+    ...allPages(preview).filter((x) => x.kind !== "splash").map((x) => x.name.name).filter((n) => n !== page.name.name),
   ]);
 
   /** Fields a widget can bind to, as `data.field`, from the page's single-record data. */
@@ -262,6 +270,7 @@
   const enums = $derived(preview.project.files.flatMap((f) => f.enums).map((e) => e.name.name));
   /** The project's views, which a slide-out, tab, step or section can show. */
   const views = $derived(preview.project.files.flatMap((f) => f.pages).filter((page) => page.kind === "view").map((page) => page.name.name));
+  const splashPages = $derived(preview.project.files.flatMap((f) => f.pages).filter((page) => page.kind === "splash").map((page) => page.name.name));
   /** Only records come as a list. */
   const listable = $derived(entities.some((e) => e.name.name === dataOf));
 
@@ -1130,10 +1139,66 @@
           {/each}
         </select>
       </label>
+      <!-- The application's version, a line of the project file; optional. -->
+      {#if settings && onsavesettings}
+        <label class="prop">
+          <span>Version</span>
+          <input
+            class="mono"
+            value={settings.version ?? ""}
+            placeholder="none"
+            spellcheck="false"
+            pattern={VERSION_PATTERN.source}
+            onchange={(e) => {
+              const version = versionWritten(e.currentTarget.value);
+              if (version !== undefined && settings && onsavesettings) onsavesettings({ ...settings, version });
+            }}
+          />
+        </label>
+      {/if}
+      <!-- Optional: an app without a splash starts with its main window. -->
+      <label class="prop">
+        <span>Splash screen</span>
+        <select value={app.splash?.name ?? ""} onchange={(e) => onedit({ op: "setSplash", app: app.span.start, splash: e.currentTarget.value, ms: app.splashFor })}>
+          <option value="">(none)</option>
+          {#each splashPages as splash (splash)}
+            <option value={splash}>{splash}</option>
+          {/each}
+        </select>
+      </label>
+      {#if app.splash}
+        <label class="prop">
+          <span>Shows at least (s)</span>
+          <input
+            type="number"
+            min="0.1"
+            max="30"
+            step="0.1"
+            value={app.splashFor === null ? "" : app.splashFor / 1000}
+            placeholder="until the main window shows"
+            onchange={(e) => {
+              const seconds = e.currentTarget.valueAsNumber;
+              onedit({ op: "setSplash", app: app.span.start, splash: app.splash?.name ?? "", ms: Number.isFinite(seconds) ? Math.round(seconds * 1000) : null });
+            }}
+          />
+        </label>
+      {/if}
     {:else}
     <label class="prop">
       <span>Grid columns</span>
-      <input type="number" min="1" max="24" value={page.columns} onchange={(e) => onedit({ op: "setGrid", page: page.span.start, columns: numberOf(e) })} />
+      <input type="number" min="1" max="96" value={page.columns} onchange={(e) => onedit({ op: "setGrid", page: page.span.start, columns: numberOf(e), rows: page.cell })} />
+    </label>
+    <!-- The page's own exact grid: rows of this many pixels, cells without gaps, for a designed page such as a splash. Empty for the project's rows. -->
+    <label class="prop">
+      <span>Grid rows (px)</span>
+      <input
+        type="number"
+        min="8"
+        max="64"
+        value={page.cell ?? ""}
+        placeholder="the project's rows"
+        onchange={(e) => onedit({ op: "setGrid", page: page.span.start, columns: page.columns, rows: textOf(e) === null ? null : numberOf(e) })}
+      />
     </label>
     <!-- The size its desktop window opens at; both empty for the standard size. -->
     <div class="prop size">
@@ -1142,6 +1207,19 @@
       <span class="times">x</span>
       <input type="number" min={WINDOW_MIN_HEIGHT} max={WINDOW_MAX_HEIGHT} aria-label="Height in pixels" placeholder={String(WINDOW_HEIGHT)} value={page.size?.height ?? ""} onchange={(e) => setSize(page.size?.width ?? WINDOW_WIDTH, e.currentTarget.value)} />
     </div>
+    <!-- The window's own style: its background and the text of its parts, as a splash screen's deep color. -->
+    <label class="prop">
+      <span>Style</span>
+      {#if styles.length > 0 || page.style}
+        <select value={page.style ?? ""} onchange={(e) => onedit({ op: "setPageStyle", page: page.span.start, style: e.currentTarget.value })}>
+          <option value="">none</option>
+          {#each styles as s (s)}<option value={s}>{s}</option>{/each}
+          {#if page.style && !styles.includes(page.style)}<option value={page.style}>{page.style} (not in the theme)</option>{/if}
+        </select>
+      {:else}
+        <span class="muted">Name a theme with styles in the project file to style the window.</span>
+      {/if}
+    </label>
     {/if}
 
     <fieldset class="checks">

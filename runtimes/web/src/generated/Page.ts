@@ -19,11 +19,23 @@ export type Page = { name: Ident, kind: PageKind, title: string | null,
  * The size its desktop window opens at (`size 320 x 460`); none for
  * the standard size (layout::WINDOW_WIDTH and WINDOW_HEIGHT).
  */
-size: WindowSize | null, data: Array<DataDecl>, 
+size: WindowSize | null, 
+/**
+ * A style of the project's theme for the window itself (`style
+ * splashBack`): its background and the text of its parts.
+ */
+style: string | null, data: Array<DataDecl>, 
 /**
  * Number of grid columns.
  */
-columns: number, widgets: Array<Widget>, 
+columns: number, 
+/**
+ * The height of a row of the page's own exact grid (`grid 56 columns
+ * rows 10`), in pixels: cells without gaps or padding, rows that keep
+ * their height, for a designed page such as a splash. None for the
+ * project's rows.
+ */
+cell: number | null, widgets: Array<Widget>, 
 /**
  * Regions of a window that override the app's.
  */

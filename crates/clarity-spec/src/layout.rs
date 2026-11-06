@@ -30,8 +30,14 @@ pub fn window_size_problem() -> String {
 /// project file says no `row height`.
 pub const ROW_HEIGHT: u32 = 36;
 
+/// The size of a splash page that names none, in the screen's units.
+pub const SPLASH_SIZE: (u32, u32) = (480, 280);
+
 /// The least and most a project's `row height` may be, in pixels.
 pub const ROW_HEIGHTS: (u32, u32) = (24, 64);
+
+/// The least and most a row of a page's own exact grid may be, in pixels (`grid 56 columns rows 10`).
+pub const CELL_HEIGHTS: (u32, u32) = (8, 64);
 
 /// Whether `height` is a row height a project may have.
 pub fn row_height_fits(height: u32) -> bool {

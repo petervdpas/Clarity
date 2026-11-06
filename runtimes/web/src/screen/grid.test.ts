@@ -83,3 +83,11 @@ test("dragging a window's edge sizes it in whole pixels, within the sizes a wind
   assert.deepEqual(resized(start, "corner", -1000, -1000, 1), { width: 200, height: 150 });
   assert.deepEqual(resized(start, "corner", 9000, 9000, 1), { width: 3840, height: 2160 });
 });
+
+test("on a page's own exact grid the cells have no gaps between them", () => {
+  // grid 56 columns rows 10: every row 10 pixels, the next starting where the last ends.
+  const tracks = [10, 10, 10];
+  assert.equal(rowIn(tracks, 9, 10, 0), 1);
+  assert.equal(rowIn(tracks, 10, 10, 0), 2);
+  assert.equal(rowIn(tracks, 35, 10, 0), 4, "past the rows laid out, more of the same height");
+});

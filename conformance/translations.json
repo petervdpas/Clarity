@@ -71,14 +71,17 @@
           "en": {
             "draw": "Draw",
             "yourMove": "Your move, {name}",
-            "onlyEnglish": "Only in English"
+            "onlyEnglish": "Only in English",
+            "versionLine": "Version {app.version}"
           },
           "nl": {
             "draw": "Gelijkspel",
             "yourMove": "{name}, jij bent aan zet",
-            "onlyEnglish": ""
+            "onlyEnglish": "",
+            "versionLine": "Versie {app.version}"
           }
-        }
+        },
+        "version": "1.2.0"
       }
     },
     "cases": [
@@ -127,6 +130,13 @@
         "key": "nowhere",
         "values": {},
         "gives": "nowhere"
+      },
+      {
+        "what": "the app's version, which Clarity fills itself (docs/VERSION-PLAN.md)",
+        "language": "nl",
+        "key": "versionLine",
+        "values": {},
+        "gives": "Versie 1.2.0"
       }
     ]
   }

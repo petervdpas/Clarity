@@ -248,6 +248,9 @@ internal sealed class ProgramWire : IDesktop
             // Engine frames run on threads of their own, an instance at a time; everything else one at a time.
             if (command is "engine_frame" or "engine_hears")
                 return Engine(command, given);
+            // The splash's status is asked while the app's on start holds the program.
+            if (command is "splash_status")
+                return Value(WireJson.Text(Splash.Status));
             // A long call's watch is asked from the screen's thread while its handler holds the program.
             if (command is "watches" or "start_watch" or "watch_progress" or "stop_watch" or "end_watch")
                 return Watch(command, given["id"]?.GetValue<ulong>() ?? 0);

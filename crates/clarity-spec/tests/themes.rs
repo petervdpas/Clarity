@@ -342,3 +342,17 @@ fn a_new_theme_starts_from_a_look_of_its_choice() {
     assert_eq!(cream.colors.len(), own.colors.len());
     assert!(cream.colors.iter().all(|c| c.dark.is_none()));
 }
+
+/// A window picks a style for itself (`style quiet` among its settings): its
+/// whole background and the text of its parts, as a splash screen's deep color.
+#[test]
+fn a_window_picks_a_style_of_the_projects_theme() {
+    let page = "page Welcome: window\n    style loud\n    label \"Hello\" name label1 at 1,1 span 3\n";
+    let styled = project(&format!("{THEME}\n{page}"), &["Shop"]);
+    assert!(errors(&styled).is_empty(), "{:#?}", errors(&styled));
+    assert_eq!(styled.files[0].pages[0].style.as_deref(), Some("loud"));
+    let missing = project(&format!("{THEME}\n{}", page.replace("style loud", "style nowhere")), &["Shop"]);
+    assert!(errors(&missing).iter().any(|e| e.contains("theme Shop has no style 'nowhere'")), "{:#?}", errors(&missing));
+    let twice = project(&format!("{THEME}\n{}", page.replace("    style loud\n", "    style loud\n    style quiet\n")), &["Shop"]);
+    assert!(errors(&twice).iter().any(|e| e.contains("duplicate 'style'")), "{:#?}", errors(&twice));
+}

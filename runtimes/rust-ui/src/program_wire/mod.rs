@@ -207,6 +207,10 @@ impl<A: Asks + 'static> Program for WireProgram<A> {
         self.tell("start_watch", args(json!({ "id": id })));
     }
 
+    fn splash_status(&self) -> Option<Text> {
+        serde_json::from_value(self.maybe("splash_status", Map::new())?).ok()
+    }
+
     fn watch_progress(&self, id: u64) -> Option<(i64, i64)> {
         let progress = self.maybe("watch_progress", args(json!({ "id": id })))?;
         let pair = progress.as_array()?;

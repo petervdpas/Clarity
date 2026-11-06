@@ -219,6 +219,54 @@ pub struct WindowSpec {
     /// How high a row of its grid is: the project's `row height`, which the
     /// root says where it is not the standard (`rowHeight="30"`), within `grid::ROW_HEIGHTS`.
     pub row_height: f64,
+    /// What it says of its desktop window, as an Avalonia `Window` does in its XAML.
+    pub look: WindowLook,
+    /// A style of the theme for the window itself (`style="splashBack"`): its background and its parts' text.
+    pub style: Option<String>,
+    /// The row height of the page's own exact grid (`cell="10"`): square-ish
+    /// cells without gaps or padding, rows that keep their height; none for the project's rows.
+    pub cell: Option<f64>,
+}
+
+/// What a window's root says of the desktop window it shows in, as an
+/// Avalonia `Window` says it: `width="480" height="280"` (Width, Height),
+/// `decorations="none"` (SystemDecorations), `startup="centerScreen"`
+/// (WindowStartupLocation), `resizable="false"` (CanResize), `topmost="true"`
+/// (Topmost), `taskbar="false"` (ShowInTaskbar), `frame="none"` (none of
+/// the app's menu, toolbar or ribbon). A window that says nothing
+/// is the system's own window, as it always was. A splash page says them all.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WindowLook {
+    pub size: Option<(f64, f64)>,
+    pub decorations: bool,
+    pub centre: bool,
+    pub resizable: bool,
+    pub topmost: bool,
+    pub taskbar: bool,
+    /// Whether it shows the app's frame (its menu, toolbar, ribbon); `frame="none"` shows none.
+    pub app_frame: bool,
+}
+
+impl Default for WindowLook {
+    fn default() -> Self {
+        WindowLook { size: None, decorations: true, centre: false, resizable: true, topmost: false, taskbar: true, app_frame: true }
+    }
+}
+
+impl WindowLook {
+    fn of(root: &XmlElement) -> WindowLook {
+        let number = |name: &str| root.attribute(name).and_then(|v| v.trim().parse::<f64>().ok()).filter(|v| v.is_finite() && *v > 0.0);
+        let is = |name: &str, value: &str| root.attribute(name).is_some_and(|v| v.trim() == value);
+        WindowLook {
+            size: number("width").zip(number("height")),
+            decorations: !is("decorations", "none"),
+            centre: is("startup", "centerScreen"),
+            resizable: !is("resizable", "false"),
+            topmost: is("topmost", "true"),
+            taskbar: !is("taskbar", "false"),
+            app_frame: !is("frame", "none"),
+        }
+    }
 }
 
 /// The attribute the IDE's designer gives each window, part, page and menu
@@ -264,7 +312,10 @@ pub fn read(markup: &str) -> Result<WindowSpec, MarkupError> {
         }
     }
     let row_height = root.attribute("rowHeight").and_then(|h| h.trim().parse::<f64>().ok()).filter(|h| h.is_finite()).map(|h| h.clamp(crate::grid::ROW_HEIGHTS.0, crate::grid::ROW_HEIGHTS.1)).unwrap_or(crate::grid::ROW_HEIGHT);
-    Ok(WindowSpec { frame, parts, name: root.attribute("name").map(str::to_string), columns, item: root.attribute(DESIGN_ITEM).map(str::to_string), row_height })
+    let look = WindowLook::of(&root);
+    let style = root.attribute("style").map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+    let cell = root.attribute("cell").and_then(|c| c.trim().parse::<f64>().ok()).filter(|c| c.is_finite()).map(|c| c.clamp(crate::grid::CELL_HEIGHTS.0, crate::grid::CELL_HEIGHTS.1));
+    Ok(WindowSpec { frame, parts, name: root.attribute("name").map(str::to_string), columns, item: root.attribute(DESIGN_ITEM).map(str::to_string), row_height: cell.unwrap_or(row_height), look, style, cell })
 }
 
 /// An app's frame as its markup writes it: its regions.

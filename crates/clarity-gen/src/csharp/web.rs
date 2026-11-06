@@ -51,7 +51,7 @@ pub(super) fn generate(project: &Project, settings: &Settings, desktop: Vec<OutF
     files.push(text(&format!("Server/{name}.Server.csproj"), server_csproj(&name, &drivers)));
     files.push(text("Server/Program.cs", server_cs(&name, &main, &clarity_project::serve_address(settings), engines, &project.locale.currency.as_deref().map_or_else(|| "null".to_string(), string))));
     // The page; Clarity puts the library's browser files beside it, and the application carries them all.
-    files.push(text(crate::web_browser::PAGE, crate::web_browser::page(&clarity_project::title(settings))));
+    files.push(text(crate::web_browser::PAGE, crate::web_browser::page(&clarity_project::title(settings), settings.icon.as_deref())));
     files.push(text("README.md", readme(&name, &clarity_project::serve_address(settings))));
     Ok(files)
 }

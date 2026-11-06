@@ -463,9 +463,14 @@ thread_local! {
 /// as the look of everything it draws. None for a part without one.
 pub fn style_of(base: &PartBase, p: &Painter) -> Option<crate::painter::StyledLook> {
     let name = base.spec.text("style").filter(|s| !s.is_empty())?;
+    style_named(name, base.node.bounds, p.look.radius("input"), p)
+}
+
+/// The style `name` of the theme over `bounds`: its fill and border drawn
+/// here (rounded as it says, else by `radius`), and the look of what is drawn in it.
+pub fn style_named(name: &str, bounds: crate::geometry::Rect, radius: f64, p: &Painter) -> Option<crate::painter::StyledLook> {
     let style = p.look.style(name);
-    let bounds = base.node.bounds;
-    let radius = style.radius.map(|r| r as f64).unwrap_or_else(|| p.look.radius("input"));
+    let radius = style.radius.map(|r| r as f64).unwrap_or(radius);
     if let Some(fill) = style.background {
         p.fill(bounds, fill, radius);
     }

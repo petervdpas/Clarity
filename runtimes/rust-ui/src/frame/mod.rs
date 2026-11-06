@@ -42,10 +42,11 @@ pub use spec::{FrameSpec, ShownFrame};
 pub use toolbar::FrameToolbar;
 
 /// The regions of the app's frame a window shows where it has none of its
-/// own: the first app's (`AppFiles::first_app`); none for a dialog, or a
-/// program without an app. What `WindowView::with_frame` takes.
+/// own: the first app's (`AppFiles::first_app`); none for a dialog, the
+/// splash, or a program without an app. What `WindowView::with_frame` takes.
 pub fn app_frame_of(files: &AppFiles, window: &str) -> Option<Vec<XmlElement>> {
-    if crate::facts::ModelFacts::of(files.model).is_dialog(window) {
+    // A dialog, and a window whose own markup says `frame="none"` (a splash), show their own parts only.
+    if crate::facts::ModelFacts::of(files.model).is_dialog(window) || !files.window_look(window).app_frame {
         return None;
     }
     files.first_app().and_then(|app| markup::read_app(app).ok())

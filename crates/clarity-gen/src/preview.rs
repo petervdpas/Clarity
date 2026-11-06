@@ -47,7 +47,8 @@ impl Shown {
 }
 
 /// `files.json` for the IDE: the project's windows, apps, themes, model
-/// and resources, the title, and the size of the window shown. For the
+/// and resources, the title, and the size of the window shown. The window
+/// picked shows at once: the app's splash is left out (Run shows it). For the
 /// designer (`design`), every window, part, page and menu item carries its
 /// `designItem`; an app is shown as an empty window of its name, framed by
 /// it, which is the app itself in the design.
@@ -59,7 +60,15 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
         Shown::App(_) => (clarity_spec::layout::WINDOW_WIDTH, clarity_spec::layout::WINDOW_HEIGHT),
     };
     // The preview shows each view in its window's part; the designer shows the part as written, empty.
-    let placed = if design { project.clone() } else { clarity_spec::views::placed(project) };
+    // Texts that show the app's version carry it, as in the program.
+    let filled = clarity_spec::translations::with_app_slots(project);
+    let project = &filled;
+    let mut placed = if design { project.clone() } else { clarity_spec::views::placed(project) };
+    // The window picked shows, not the app's start: no splash stands in for it (Run shows the splash).
+    for app in placed.files.iter_mut().flat_map(|f| f.apps.iter_mut()) {
+        app.splash = None;
+        app.splash_for = None;
+    }
     let write = || crate::web_browser::files_json_as(&placed, title, size);
     let text = if design { crate::web_windows::designed_showing(showing, write) } else { write() };
     // A view is no window of a program, but the designer and preview draw it on its own as one.
@@ -157,6 +166,10 @@ impl PreviewProgram {
             }
             "dispatch_event" | "answer_event" => {
                 let handler = args.get("handler").and_then(Value::as_str).unwrap_or_default();
+                // A timer's tick is no action of the person's: nothing runs and nothing is said.
+                if self.ticks(handler) {
+                    return reply(sent_state(args), Vec::new());
+                }
                 // Clarity's own words, in the person's language where the project translates them.
                 let (key, english) = clarity_spec::translations::PREVIEW_KEYS[0];
                 let said = json!({ "key": key, "text": english, "values": { "handler": { "kind": "text", "value": handler } } });
@@ -225,6 +238,20 @@ impl PreviewProgram {
 }
 
 /// Whether a part named `name` is among `widgets` or inside them.
+impl PreviewProgram {
+    /// Whether a timer of the project runs `handler` on its tick.
+    fn ticks(&self, handler: &str) -> bool {
+        fn in_widgets(widgets: &[clarity_spec::model::Widget], handler: &str) -> bool {
+            widgets.iter().any(|w| {
+                w.props.handlers.iter().any(|h| h.handler == handler && h.event == clarity_spec::widgets::Event::Tick)
+                    || in_widgets(&w.children, handler)
+                    || w.pages.iter().any(|p| in_widgets(&p.children, handler))
+            })
+        }
+        self.project.pages().any(|p| in_widgets(&p.widgets, handler))
+    }
+}
+
 fn named_in(widgets: &[clarity_spec::model::Widget], name: &str) -> bool {
     widgets.iter().any(|w| w.props.name.as_deref() == Some(name) || named_in(&w.children, name) || w.pages.iter().any(|p| named_in(&p.children, name)))
 }

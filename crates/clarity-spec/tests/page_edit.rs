@@ -322,17 +322,24 @@ fn adds_tabs_data_grid_and_pages() {
     );
     assert!(text.contains("    data c: Customer\n    data orders: list<Order>\n"));
 
-    let (text, _) = edit(PAGE, Edit::SetGrid { page, columns: 16 });
+    let (text, _) = edit(PAGE, Edit::SetGrid { page, columns: 16, rows: None });
     assert!(text.contains("    data c: Customer\n    grid 16 columns\n"));
     let (text, _) = edit(
         &text,
         Edit::SetGrid {
             page: at(&text, "page Card"),
             columns: 8,
+            rows: None,
         },
     );
     assert!(text.contains("    grid 8 columns\n") && !text.contains("16"));
-    assert!(error(PAGE, Edit::SetGrid { page, columns: 40 }).contains("1 to 24"));
+    assert!(error(PAGE, Edit::SetGrid { page, columns: 97, rows: None }).contains("1 to 96"));
+    // A page's own exact grid: square cells of 10 pixels, and back to the project's rows.
+    let (text, _) = edit(&text, Edit::SetGrid { page: at(&text, "page Card"), columns: 56, rows: Some(10) });
+    assert!(text.contains("    grid 56 columns rows 10\n"), "{text}");
+    let (text, _) = edit(&text, Edit::SetGrid { page: at(&text, "page Card"), columns: 56, rows: None });
+    assert!(text.contains("    grid 56 columns\n") && !text.contains("rows 10"), "{text}");
+    assert!(error(PAGE, Edit::SetGrid { page, columns: 56, rows: Some(4) }).contains("8 to 64"));
 
     // The window's size: set, changed, and removed for the standard one.
     let (text, _) = edit(PAGE, Edit::SetSize { page, width: Some(320), height: Some(460) });
@@ -341,6 +348,15 @@ fn adds_tabs_data_grid_and_pages() {
     assert!(text.contains("    size 400 x 300\n") && !text.contains("320"), "{text}");
     let (text, _) = edit(&text, Edit::SetSize { page: at(&text, "page Card"), width: None, height: None });
     assert!(!text.contains("size"), "{text}");
+
+    // The window's own style: set, changed, and removed.
+    let (text, _) = edit(PAGE, Edit::SetPageStyle { page, style: "splashBack".into() });
+    assert!(text.contains("    data c: Customer\n    style splashBack\n"), "{text}");
+    let (text, _) = edit(&text, Edit::SetPageStyle { page: at(&text, "page Card"), style: "quiet".into() });
+    assert!(text.contains("    style quiet\n") && !text.contains("splashBack"), "{text}");
+    let (text, _) = edit(&text, Edit::SetPageStyle { page: at(&text, "page Card"), style: String::new() });
+    assert!(!text.contains("style"), "{text}");
+    assert!(error(PAGE, Edit::SetPageStyle { page, style: "not a name".into() }).contains("not a style name"));
 
     let (text, focus) = edit(
         PAGE,

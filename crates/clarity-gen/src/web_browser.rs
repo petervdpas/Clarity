@@ -38,10 +38,12 @@ pub const FILES_JSON: &str = "browser/clarity/files.json";
 pub const RESOURCES: &str = "browser/clarity/resources";
 
 /// The page every web program serves at `/`: a canvas filling the window
-/// and the library's page script, which starts the rest.
-pub fn page(title: &str) -> String {
+/// and the library's page script, which starts the rest; the tab shows the
+/// application's icon (`icon`, among the resources) when it names one.
+pub fn page(title: &str, icon: Option<&str>) -> String {
+    let icon = icon.map(|name| format!("<link rel=\"icon\" href=\"clarity/resources/{}\">\n", escaped(name))).unwrap_or_default();
     format!(
-        "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>{}</title>\n<style>html, body {{ margin: 0; height: 100%; overflow: hidden; }} #clarity-ui {{ display: block; width: 100vw; height: 100vh; touch-action: none; }}</style>\n</head>\n<body>\n<canvas id=\"clarity-ui\"></canvas>\n<script src=\"clarity-ui-page.js\"></script>\n</body>\n</html>\n",
+        "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>{}</title>\n{icon}<style>html, body {{ margin: 0; height: 100%; overflow: hidden; }} #clarity-ui {{ display: block; width: 100vw; height: 100vh; touch-action: none; }}</style>\n</head>\n<body>\n<canvas id=\"clarity-ui\"></canvas>\n<script src=\"clarity-ui-page.js\"></script>\n</body>\n</html>\n",
         escaped(title)
     )
 }
@@ -105,7 +107,7 @@ pub fn files_json_as(project: &Project, title: &str, (width, height): (u32, u32)
 /// and the resources. The library's files come with `with_library`.
 pub fn site(project: &Project, settings: &Settings) -> Vec<OutFile> {
     let mut files = vec![
-        OutFile { path: PAGE.to_string(), text: page(&clarity_project::title(settings)), bytes: None },
+        OutFile { path: PAGE.to_string(), text: page(&clarity_project::title(settings), settings.icon.as_deref()), bytes: None },
         OutFile { path: FILES_JSON.to_string(), text: files_json(project, settings), bytes: None },
     ];
     files.extend(crate::web::resource_files(project, RESOURCES));

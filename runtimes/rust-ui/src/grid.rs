@@ -18,6 +18,9 @@ pub const ROW_HEIGHT: f64 = 36.0;
 /// The least and most a project's row height may be.
 pub const ROW_HEIGHTS: (f64, f64) = (24.0, 64.0);
 
+/// The least and most a row of a page's own exact grid may be (`cell="10"`).
+pub const CELL_HEIGHTS: (f64, f64) = (8.0, 64.0);
+
 thread_local! {
     static ROW: Cell<f64> = const { Cell::new(ROW_HEIGHT) };
 }
@@ -28,10 +31,10 @@ pub fn row_height() -> f64 {
     ROW.with(Cell::get)
 }
 
-/// The row height the windows are laid out by, kept within `ROW_HEIGHTS`;
-/// a window sets it from its markup as it is made.
+/// The row height the windows are laid out by, kept within `ROW_HEIGHTS`, or
+/// `CELL_HEIGHTS` for a page's own exact grid; a window sets it from its markup as it is made.
 pub fn set_row_height(height: f64) {
-    let height = if height.is_finite() { height.clamp(ROW_HEIGHTS.0, ROW_HEIGHTS.1) } else { ROW_HEIGHT };
+    let height = if height.is_finite() { height.clamp(CELL_HEIGHTS.0, ROW_HEIGHTS.1) } else { ROW_HEIGHT };
     ROW.with(|r| r.set(height));
 }
 

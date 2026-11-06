@@ -753,6 +753,18 @@ pub fn parse(text: &str) -> (Translation, Vec<Diagnostic>) {
     (translation, diagnostics)
 }
 
+/// The project with `{app.version}` filled in every text by key, as Clarity
+/// fills it itself (docs/VERSION-PLAN.md); unchanged without a version.
+pub fn with_app_slots(project: &Project) -> Project {
+    let mut filled = project.clone();
+    if let Some(version) = &project.version {
+        for text in filled.translations.values_mut().flat_map(|v| v.values_mut()) {
+            *text = text.replace("{app.version}", version);
+        }
+    }
+    filled
+}
+
 /// The slots of a text: `{name}`, without the braces of `{{`.
 pub fn slots(text: &str) -> Vec<String> {
     let mut found = Vec::new();
@@ -850,7 +862,8 @@ pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a st
                 Some(value) => {
                     let wanted = slots(value);
                     let given = u.args.clone().unwrap_or_default();
-                    for slot in wanted.iter().filter(|s| !given.contains(s)) {
+                    // Clarity fills `{app.version}` itself: no use gives it.
+                    for slot in wanted.iter().filter(|s| !given.contains(s) && !crate::code::APP_SLOTS.contains(&s.as_str())) {
                         found.push(place(Diagnostic::error(format!("@{} needs a value for {{{slot}}}", u.key), u.span)));
                     }
                     for slot in given.iter().filter(|s| !wanted.contains(s)) {

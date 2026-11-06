@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { VERSION_PATTERN, versionWritten } from "./version";
   // The project settings from the project file: name, folders, stack and data sources.
   // Every change is saved at once; the Rust backend checks it and refuses
   // settings with problems, with the reason.
@@ -42,6 +43,9 @@
     /** Opens a theme in its own view, where it is written. */
     onopentheme: (name: string) => void;
   } = $props();
+
+  /** The pictures among the resources, which can be the application's icon. */
+  const pictures = $derived((preview.project.resources?.files ?? []).map((f) => f.name).filter((n) => /\.(png|jpe?g|webp|svg)$/i.test(n)));
 
   const catalog = $derived(project.catalog);
   /** The SQL data sources Clarity owns: each has its own migration steps. */
@@ -213,9 +217,36 @@
             id="project-title"
             value={settings.title ?? ""}
             placeholder={project.title}
-            onchange={(e) => save({ title: e.currentTarget.value.trim() || null })}
+            onchange={(e) => {
+              // The program's name: plain text, no slots (a version goes in a window's or the app's title).
+              const title = e.currentTarget.value.trim();
+              if (!/[{}]/.test(title)) save({ title: title || null });
+            }}
           />
-          <p class="form-help">Shown in the window title. Empty follows the name.</p>
+          <p class="form-help">The program's name, in the title of a window that has none of its own and none from the app. Plain text: to show the version, write {"{app.version}"} in a window's or the app's title in Design, like "Todo v{"{app.version}"}". Empty follows the name.</p>
+          <label class="form-label" for="project-icon">Icon</label>
+          <select id="project-icon" value={settings.icon ?? ""} onchange={(e) => save({ icon: e.currentTarget.value || null })}>
+            <option value="">Clarity's own</option>
+            {#each pictures as picture (picture)}
+              <option value={picture}>{picture}</option>
+            {/each}
+          </select>
+          <p class="form-help">A picture among the resources (PNG, JPEG, WebP or SVG, square, 256 by 256 or larger): the windows, the taskbar and the web page show it.</p>
+          <label class="form-label" for="project-version">Version</label>
+          <input
+            id="project-version"
+            class="mono"
+            value={settings.version ?? ""}
+            placeholder="none"
+            spellcheck="false"
+            pattern={VERSION_PATTERN.source}
+            onchange={(e) => {
+              // Only a version as major.minor.patch is kept; empty takes it away.
+              const version = versionWritten(e.currentTarget.value);
+              if (version !== undefined) save({ version });
+            }}
+          />
+          <p class="form-help">Optional, as major.minor.patch, like 1.2.0 or 2.0.0-beta.1. Code reads it as app.version, and a text shows it with the slot {"{app.version}"}, such as "Version {"{app.version}"}" on a splash.</p>
           <span class="form-label">Folder</span>
           <span class="mono path">{folder}</span>
           <p class="form-help">The project's folder: its modules, pictures, translations and migrations.</p>

@@ -457,6 +457,9 @@ pub fn use_themes(project: &mut Project, offered: &[&str]) {
     for file in &project.files {
         let mut uses = Vec::new();
         for page in &file.pages {
+            if let Some(style) = &page.style {
+                uses.push((style.clone(), page.name.span));
+            }
             styled(&page.widgets, &mut uses);
         }
         for (style, span) in uses {

@@ -63,11 +63,7 @@ const TYPES: [&str; 22] = [
 ];
 
 fn page_kind(kind: &PageKind) -> &'static str {
-    match kind {
-        PageKind::Window => "window",
-        PageKind::Dialog => "dialog",
-        PageKind::View => "view",
-    }
+    kind.word()
 }
 
 #[test]

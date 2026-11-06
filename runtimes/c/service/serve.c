@@ -9,6 +9,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "clarity/splash.h"
 #include "clarity/text.h"
 
 #ifdef _WIN32
@@ -236,6 +237,14 @@ static cJSON* answered(ClarityServer* server, const char* command, cJSON* args, 
     if (strcmp(command, "watches") == 0) {
         cJSON* out = cJSON_CreateObject();
         cJSON_AddBoolToObject(out, "value", server->options->watches);
+        return out;
+    }
+    // What the splash page says is loading, asked while the app's on start holds the turn.
+    if (strcmp(command, "splash_status") == 0) {
+        char* said = clarity_splash_status();
+        cJSON* out = cJSON_CreateObject();
+        cJSON_AddItemToObject(out, "value", said ? cJSON_Parse(said) : cJSON_CreateNull());
+        free(said);
         return out;
     }
     // Engines beside the screen run in the program, each canvas's by its number, without waiting for the turn.

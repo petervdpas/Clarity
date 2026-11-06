@@ -1,5 +1,7 @@
 project Todo
     title "Todo"
+    icon "todo.svg"
+    version "1.0.0"
     stack csharp desktop
     output "out"
     language "en"

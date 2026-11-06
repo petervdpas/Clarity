@@ -89,7 +89,7 @@ impl BrowserHost {
     /// made goes to the page to keep (`choices`).
     #[allow(clippy::too_many_arguments)]
     pub fn start_kept(program: Arc<dyn Program>, files: AppFiles, width: f64, height: f64, scale: f32, dark: bool, tell: Tell, kept: BTreeMap<String, String>) -> BrowserHost {
-        let mut driven = BrowserHost::driven(program.clone(), files, &tell, kept.clone());
+        let mut driven = BrowserHost::driven(program.clone(), files, &tell, kept.clone(), true);
         let clipboard: Rc<RefCell<Option<String>>> = Rc::default();
         let sounds: Rc<RefCell<Sounds>> = Rc::default();
         let page_files = Arc::new(PageFiles::new(tell.clone()));
@@ -129,11 +129,12 @@ impl BrowserHost {
         host
     }
 
-    fn driven(program: Arc<dyn Program>, files: AppFiles, tell: &Tell, kept: BTreeMap<String, String>) -> Driven {
+    /// The screen it drives; `splashed`, the app's splash page fills it while `on start` runs.
+    fn driven(program: Arc<dyn Program>, files: AppFiles, tell: &Tell, kept: BTreeMap<String, String>, splashed: bool) -> Driven {
         crate::fonts::carry_fallbacks(files.resources);
         let keeps = tell.clone();
         let keeper: crate::choices::Keeper = Arc::new(move |choices: &BTreeMap<String, String>| keeps(json!({ "tell": "choices", "choices": choices })));
-        Driven::start_keeping(program, files, Some((kept, keeper)))
+        if splashed { Driven::start_splashed(program, files, Some((kept, keeper))) } else { Driven::start_keeping(program, files, Some((kept, keeper))) }
     }
 
     /// Starts the program again from new files (its windows' markup, its
@@ -163,7 +164,8 @@ impl BrowserHost {
             let screen = self.screen();
             (screen.width(), screen.height(), screen.scale(), screen.dark())
         };
-        self.driven = BrowserHost::driven(self.program.clone(), files, &self.tell, self.kept.clone());
+        // A reload follows a change of the design: the splash showed when it started.
+        self.driven = BrowserHost::driven(self.program.clone(), files, &self.tell, self.kept.clone(), false);
         let screen = self.driven.screen();
         screen.set_clipboard(Box::new(PageClipboard::new(self.tell.clone(), self.clipboard.clone())));
         screen.set_dark(dark);

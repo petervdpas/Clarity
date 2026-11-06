@@ -15,6 +15,15 @@ export type App = { name: Ident, title: string | null,
  */
 main: Ident | null, 
 /**
+ * The splash page shown while the application starts, before its main
+ * window (`splash Welcome for 2 seconds`); none for no splash.
+ */
+splash: Ident | null, 
+/**
+ * How long the splash shows at least, in milliseconds; none to close it as soon as the main window shows.
+ */
+splashFor: number | null, 
+/**
  * Data for widgets in the sidebars and the footer.
  */
 data: Array<DataDecl>, frame: Frame, 

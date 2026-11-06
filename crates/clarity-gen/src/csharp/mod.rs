@@ -246,6 +246,13 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     // The themes offered, as Clarity resolves them for light and dark mode (DESIGN 7.9).
     files.extend(themes::theme_files(project, &name));
     files.extend(crate::web::resource_files(project, "resources"));
+    // The program file's icon on Windows, as C# takes it (docs/APP-ICON-SPLASH-PLAN.md).
+    if let Some(ico) = crate::windows_resources::ico_file(project) {
+        files.push(ico);
+        if let Some(csproj) = files.first_mut() {
+            csproj.text = csproj.text.replacen("    <OutputType>WinExe</OutputType>\n", &format!("    <OutputType>WinExe</OutputType>\n    <ApplicationIcon>{}</ApplicationIcon>\n", crate::windows_resources::ICO_PATH.replace('/', "\\")), 1);
+        }
+    }
     Ok(files)
 }
 
@@ -573,6 +580,8 @@ fn unconnected_host(project: &Project) -> clarity_spec::model::Page {
         kind: PageKind::Window,
         title: None,
         size: None,
+        style: None,
+        cell: None,
         data: Vec::new(),
         columns: 12,
         widgets: Vec::new(),

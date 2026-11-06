@@ -181,6 +181,10 @@ impl<'a> Emitter<'a> {
                 };
                 out.push_str(&format!("{pad}{code}\n"));
             }
+            StmtKind::Assign { target, value } if clarity_spec::code::sets_splash_status(target) => {
+                let text = self.shown(value);
+                out.push_str(&format!("{pad}clarity_runtime::splash::set_status({text});\n"));
+            }
             StmtKind::Assign { target, value } => {
                 let to = self.types.type_of(target);
                 let from = self.types.type_of(value);
@@ -792,6 +796,11 @@ impl<'a> Emitter<'a> {
 
     /// An expression as an owned value.
     fn value(&mut self, expr: &Expr) -> String {
+        // `app.version`: the project's version, written as the literal text it is.
+        if clarity_spec::code::reads_app_version(expr) {
+            let literal = Expr { kind: ExprKind::Str { value: self.project.version.clone().unwrap_or_default() }, span: expr.span };
+            return self.value(&literal);
+        }
         let ty = self.types.type_of(expr);
         match &expr.kind {
             ExprKind::Ask { question, form } => self.ask_value(question, form),

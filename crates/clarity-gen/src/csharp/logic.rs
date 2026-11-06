@@ -295,6 +295,10 @@ impl<'a> Emitter<'a> {
                 };
                 out.push_str(&format!("{pad}{ty} {} = {value};\n", camel(&name.name)));
             }
+            StmtKind::Assign { target, value } if clarity_spec::code::sets_splash_status(target) => {
+                let text = self.shown(value);
+                out.push_str(&format!("{pad}Clarity.Runtime.Splash.SetStatus({text});\n"));
+            }
             StmtKind::Assign { target, value } => {
                 if let Some((part, property, _, _)) = self.custom_property(target) {
                     let value = self.value(value);
@@ -928,6 +932,11 @@ impl<'a> Emitter<'a> {
     }
 
     fn value(&mut self, expr: &Expr) -> String {
+        // `app.version`: the project's version, written as the literal text it is.
+        if clarity_spec::code::reads_app_version(expr) {
+            let literal = Expr { kind: ExprKind::Str { value: self.project.version.clone().unwrap_or_default() }, span: expr.span };
+            return self.value(&literal);
+        }
         let code = self.shared_value(expr);
         // A record is a value (DESIGN 5.12): what keeps or gets one read from
         // a name, a field, a list or a part takes a copy of its own, as a

@@ -73,14 +73,22 @@ pub struct IconImage {
 /// Clarity's own icon, which a window shows when the application carries none.
 pub const CLARITY_ICON: &[u8] = include_bytes!("icon.png");
 
+/// The size an SVG icon is drawn at before it is sized down for each system's use.
+const ICON_DRAWN: i32 = 256;
+
 /// The sizes systems pick a window's icon from.
 pub const ICON_SIZES: [u32; 5] = [16, 32, 48, 64, 128];
 
-/// The window's icon: the one the application carries (`icon.png` among its
-/// resources), else Clarity's; at the sizes systems show, none larger than
+/// The window's icon: the one the application names (`icon "app.png"`, a
+/// picture among its resources), else Clarity's; at the sizes systems show, none larger than
 /// the picture itself (16 at least). Empty when neither can be read.
 pub fn icon(app: Option<&[u8]>) -> Vec<IconImage> {
-    let image = app.and_then(|bytes| Image::from_encoded(Data::new_copy(bytes))).or_else(|| Image::from_encoded(Data::new_copy(CLARITY_ICON)));
+    // An SVG is drawn at the largest size a system asks for; any other picture is decoded as it is.
+    let read = |bytes: &[u8]| match crate::picture::is_svg("", bytes) {
+        true => crate::picture::SvgPicture::read(bytes).and_then(|svg| svg.image_at(ICON_DRAWN, ICON_DRAWN)),
+        false => Image::from_encoded(Data::new_copy(bytes)),
+    };
+    let image = app.and_then(read).or_else(|| Image::from_encoded(Data::new_copy(CLARITY_ICON)));
     let Some(image) = image else { return Vec::new() };
     let largest = image.width().max(16) as u32;
     ICON_SIZES.iter().filter(|s| **s <= largest).filter_map(|s| sized(&image, *s)).collect()

@@ -13,6 +13,7 @@
   import { layout } from "./layout.svelte";
   import PartTile from "./PartTile.svelte";
   import { portal } from "./portal";
+  import { grown, nudged } from "./designLayer";
   import { applyEdit } from "./applyEdit";
   import type { Category } from "@clarity/ui/generated/Category.ts";
   import type { PartDecl } from "@clarity/ui/generated/PartDecl.ts";
@@ -24,6 +25,7 @@
   import type { Page } from "@clarity/ui/generated/Page.ts";
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
   import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
+  import type { Settings } from "@clarity/ui/generated/Settings.ts";
   import type { WidgetInfo } from "@clarity/ui/generated/WidgetInfo.ts";
   import { NO_FRAME, findApp, findFrameElement, shownFrame } from "@clarity/ui/screen/frame.ts";
   import { describeType, themeArea, themeOf, tr } from "@clarity/ui/screen/model.ts";
@@ -50,6 +52,8 @@
     file,
     onapplied,
     app = null,
+    settings = null,
+    onsavesettings = null,
   }: {
     preview: Preview;
     /** The page, or the app shown as a page (see `appAsPage`). */
@@ -58,6 +62,9 @@
     onapplied: (preview: Preview) => void;
     /** Set when designing the app: only its frame is edited. */
     app?: App | null;
+    /** The project file's settings (the app's version among them), and how to save them. */
+    settings?: Settings | null;
+    onsavesettings?: ((settings: Settings) => void) | null;
   } = $props();
 
   const CATEGORIES: { key: Category; name: string }[] = [
@@ -377,6 +384,24 @@
       }
     } else if (e.key === "Escape") {
       pageDesigner.selected = null;
+    } else if (e.key.startsWith("Arrow") && selected !== null && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      const found = locateWidget(preview, page, selected);
+      if (!found) return;
+      const p = found.widget.props;
+      if (e.shiftKey) {
+        // Shift: the selected part grows or shrinks one cell, a container's parts scaling with it, as a drag of its corner does.
+        const size = grown(p, found.container.columns, e.key);
+        if (!size) return;
+        e.preventDefault();
+        const edits = resizeEdits(found.widget, size.width, size.height);
+        edit(edits.length === 1 ? edits[0] : { op: "batch", edits });
+      } else {
+        // The selected part moves one cell that way, on any page's grid; undo takes it back.
+        const to = nudged(p, found.container.columns, e.key);
+        if (!to) return;
+        e.preventDefault();
+        edit({ op: "updateWidget", item: selected, container: null, props: withProps(p, to) });
+      }
     }
   }
 
@@ -551,7 +576,7 @@
         </span>
       </div>
       <div class="properties" class:hidden={coding}>
-        <PageProperties {preview} {page} {app} onedit={edit} {onapplied} />
+        <PageProperties {preview} {page} {app} {settings} {onsavesettings} onedit={edit} {onapplied} />
       </div>
       <!-- Mounted once opened, so switching tabs keeps unsaved text. -->
       {#if codeOpened}

@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { cellsOf, commandsOf, heldBy, layerOf, placeIn } from "./designLayer.ts";
+import { cellsOf, commandsOf, grown, heldBy, layerOf, nudged, placeIn } from "./designLayer.ts";
 import { chosenOf, filesAddress, startOptions } from "./clarityWindow.ts";
 import type { Page } from "@clarity/ui/generated/Page.ts";
 import type { Widget } from "@clarity/ui/generated/Widget.ts";
@@ -75,6 +75,15 @@ test("cells and a drop place follow the rows as Clarity.UI laid them out", () =>
   assert.equal(placeIn(grid, { col: 1, row: 5, width: 1, height: 1 }).y, 36 + 8 + 116 + 8 + 36 + 8 + 36 + 8);
 });
 
+test("below the last part the cells go on to the bottom of the grid, at the row height given", () => {
+  // A page's own exact grid: 10 pixel rows, no gaps, the window 290 high and its parts reaching 230.
+  const grid = { item: 1, columns: 2, gap: 0, box: { x: 0, y: 0, width: 20, height: 290 }, rows: Array(23).fill(10), inside: [] };
+  assert.equal(cellsOf(grid).length, 2 * 23, "without a row height, only the rows laid out");
+  const cells = cellsOf(grid, 10);
+  assert.equal(cells.length, 2 * 29, "290 pixels of 10 pixel rows");
+  assert.deepEqual(cells.at(-1), { x: 10, y: 280, width: 10, height: 10 });
+});
+
 test("past the last row, a drop place follows the project's row height", () => {
   const grid = layerOf(layout, page).grids[0];
   assert.equal(placeIn(grid, { col: 1, row: 5, width: 1, height: 2 }, 30).y, 36 + 8 + 116 + 8 + 36 + 8 + 30 + 8);
@@ -145,4 +154,28 @@ test("the preview takes input and has the accessible mirror; the design canvas n
   const design = startOptions("http://x/s/", { window: "Main" }, true, 1);
   assert.equal(design.input, false);
   assert.equal(design.access, false);
+});
+
+test("an arrow key moves a part one cell, never out of its grid", () => {
+  const at = { col: 2, row: 3, width: 4, height: 2 };
+  assert.deepEqual(nudged(at, 12, "ArrowLeft"), { col: 1, row: 3 });
+  assert.deepEqual(nudged(at, 12, "ArrowRight"), { col: 3, row: 3 });
+  assert.deepEqual(nudged(at, 12, "ArrowUp"), { col: 2, row: 2 });
+  assert.deepEqual(nudged(at, 12, "ArrowDown"), { col: 2, row: 4 });
+  assert.equal(nudged({ ...at, col: 1 }, 12, "ArrowLeft"), null, "the first column is the edge");
+  assert.equal(nudged({ ...at, col: 9 }, 12, "ArrowRight"), null, "its last column on the grid's last");
+  assert.equal(nudged({ ...at, row: 1 }, 12, "ArrowUp"), null);
+  assert.equal(nudged(at, 12, "Enter"), null, "only the arrows");
+});
+
+test("shift and an arrow key resize a part one cell, never below one or out of its grid", () => {
+  const at = { col: 2, row: 3, width: 4, height: 2 };
+  assert.deepEqual(grown(at, 12, "ArrowRight"), { width: 5, height: 2 });
+  assert.deepEqual(grown(at, 12, "ArrowLeft"), { width: 3, height: 2 });
+  assert.deepEqual(grown(at, 12, "ArrowDown"), { width: 4, height: 3 });
+  assert.deepEqual(grown(at, 12, "ArrowUp"), { width: 4, height: 1 });
+  assert.equal(grown({ ...at, width: 1 }, 12, "ArrowLeft"), null, "one cell is the least");
+  assert.equal(grown({ ...at, height: 1 }, 12, "ArrowUp"), null);
+  assert.equal(grown({ ...at, col: 9 }, 12, "ArrowRight"), null, "its last column on the grid's last");
+  assert.equal(grown(at, 12, "Tab"), null);
 });

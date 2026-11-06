@@ -51,12 +51,23 @@ fn picked(l: &Languages) -> Option<String> {
 /// and the default language (`project.locale.language`).
 pub fn load(model: &str) {
     let model: serde_json::Value = serde_json::from_str(model).unwrap_or_default();
-    let values: Values = serde_json::from_value(model["project"]["translations"].clone()).unwrap_or_default();
+    let mut values: Values = serde_json::from_value(model["project"]["translations"].clone()).unwrap_or_default();
+    // `{app.version}` is the project's version, which Clarity fills itself (docs/VERSION-PLAN.md).
+    if let Some(version) = model["project"]["version"].as_str() {
+        for text in values.values_mut().flat_map(|v| v.values_mut()) {
+            *text = with_version(text, version);
+        }
+    }
     let default = model["project"]["locale"]["language"].as_str().unwrap_or("en").to_string();
     if let Ok(mut l) = LANGUAGES.write() {
         l.values = values;
         l.default = default;
     }
+}
+
+/// `text` with the app's version in its `{app.version}` slots.
+pub fn with_version(text: &str, version: &str) -> String {
+    text.replace("{app.version}", version)
 }
 
 /// The language texts show in, as the screen picked it; none for the default.

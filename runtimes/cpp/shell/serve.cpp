@@ -27,6 +27,8 @@ using Socket = int;
 #define SERVE_INVALID (-1)
 #endif
 
+#include "clarity/splash.hpp"
+
 namespace clarity::shell {
 
 namespace {
@@ -164,6 +166,11 @@ std::string serve_answer(Server& server, const std::string& request) {
         // How far a long call is, and its Stop, beside the service.
         if (command == "watches") return reply("200 OK", "application/json", nlohmann::json{{"value", server.service().options().watches}}.dump());
         if (Watches::is_command(command)) return reply("200 OK", "application/json", server.watches().answer(command, number("id")).dump());
+        // What the splash page says is loading, while the app's on start runs.
+        if (command == "splash_status") {
+            auto said = clarity::splash::status();
+            return reply("200 OK", "application/json", nlohmann::json{{"value", said ? nlohmann::json(*said) : nlohmann::json(nullptr)}}.dump());
+        }
         // Engines beside the screen run in the program, each canvas's by its number.
         if (command.rfind("engine_", 0) == 0) {
             const auto& engines = server.service().options().screen_engines;

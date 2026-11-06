@@ -31,6 +31,7 @@ pub mod painter;
 pub mod parts;
 pub mod picture;
 pub mod screen;
+pub mod splash;
 pub mod shortcuts;
 pub mod system_theme;
 pub mod testing;

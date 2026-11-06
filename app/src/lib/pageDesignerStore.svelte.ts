@@ -9,7 +9,7 @@ import type { Preview } from "@clarity/ui/generated/Preview.ts";
 import type { RegionKind } from "@clarity/ui/generated/RegionKind.ts";
 import type { WidgetKind } from "@clarity/ui/generated/WidgetKind.ts";
 import type { WidgetProps } from "@clarity/ui/generated/WidgetProps.ts";
-import { GAP, rowAt } from "@clarity/ui/screen/pages.ts";
+import { gapOf, rowAt } from "@clarity/ui/screen/pages.ts";
 
 
 /** What is dragged onto the window: a new part, a field, a part moved or sized, or a frame region. */
@@ -201,8 +201,9 @@ class PageDesigner {
     const columns = Number(grid.dataset.columns);
     const container = Number(grid.dataset.grid);
     const rect = grid.getBoundingClientRect();
-    const colWidth = (rect.width - GAP * (columns - 1)) / columns;
-    const cellCol = Math.min(columns, Math.max(1, Math.floor((x - rect.left) / (colWidth + GAP)) + 1));
+    const gap = gapOf(grid);
+    const colWidth = (rect.width - gap * (columns - 1)) / columns;
+    const cellCol = Math.min(columns, Math.max(1, Math.floor((x - rect.left) / (colWidth + gap)) + 1));
     const cellRow = rowAt(grid, y - rect.top, rect.height);
 
     if (source.kind === "resize") {

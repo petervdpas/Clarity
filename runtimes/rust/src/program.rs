@@ -233,6 +233,13 @@ pub trait Program: Send + Sync + 'static {
         let _ = id;
     }
 
+    /// What the splash screen says is loading, as code last set it
+    /// (`splash.status`); none while it said nothing. The screen asks a few
+    /// times a second while the app starts.
+    fn splash_status(&self) -> Option<crate::ui::Text> {
+        crate::splash::status()
+    }
+
     /// How far the long call of watch `id` is, done of total, as it last
     /// said; none while it said nothing. The screen asks a few times a second.
     fn watch_progress(&self, id: u64) -> Option<(i64, i64)> {

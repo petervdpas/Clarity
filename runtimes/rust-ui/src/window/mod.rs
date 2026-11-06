@@ -119,8 +119,11 @@ impl Running {
     }
 
     /// A window's title as shown: its own, else the program's.
+    /// The title a window shows: its own, else the app's (as the app's
+    /// markup says it), else the project's name; a key in the person's language.
     pub fn title_of(&self, window: &str) -> String {
-        match self.facts.window(window).and_then(|w| w.title.clone()).filter(|t| !t.is_empty()) {
+        let own = self.facts.window(window).and_then(|w| w.title.clone()).filter(|t| !t.is_empty());
+        match own.or_else(|| self.files.app_title()) {
             Some(title) => crate::facts::shown(&title, &title),
             None => self.files.title.to_string(),
         }
@@ -193,6 +196,9 @@ struct Unconnecting {
 /// What a long call gives back on the screen's thread, and the number of its watch.
 struct LongDone(Answer<Reply>, u64);
 
+/// The part of a splash page that says what is loading.
+pub const SPLASH_STATUS: &str = "status";
+
 /// The number of the next long call's watch (`Program::start_watch`), unique in the process.
 static NEXT_WATCH: AtomicU64 = AtomicU64::new(1);
 
@@ -225,7 +231,22 @@ pub struct WindowStack {
     dialog: bool,
     unconnected: Option<Unconnecting>,
     language: String,
+    /// The app starting behind its splash page in this same screen (the browser's whole page).
+    starting: Option<InPlace>,
 }
+
+/// While the app starts behind its splash page in the same screen: how long
+/// the splash shows at least and since when, whether `on start` was asked,
+/// and what it answered once it did.
+struct InPlace {
+    at_least: std::time::Duration,
+    opened: std::time::Instant,
+    asked: bool,
+    reply: Option<Answer<Reply>>,
+}
+
+/// What the app's `on start` answered, asked without waiting.
+struct StartDone(Answer<Reply>);
 
 /// The view of window `name` over `host`, from its markup; one the program does not carry, or that does not read, says why in its place.
 pub fn view_of(files: AppFiles, host: &Rc<ProgramHost>, name: &str) -> WindowView {
@@ -235,7 +256,7 @@ pub fn view_of(files: AppFiles, host: &Rc<ProgramHost>, name: &str) -> WindowVie
         return WindowView::failed(why, as_host);
     };
     match markup::read(markup) {
-        // Every window but a dialog shows the app's frame where it has none of its own.
+        // Every window but a dialog or the splash shows the app's frame where it has none of its own.
         Ok(spec) => WindowView::new(&spec, as_host).with_frame(crate::frame::app_frame_of(&files, name)),
         Err(err) => WindowView::failed(err.0, as_host),
     }
@@ -266,6 +287,7 @@ impl WindowStack {
             dialog: false,
             unconnected: None,
             language: crate::choices::language(),
+            starting: None,
         }
     }
 
@@ -273,19 +295,120 @@ impl WindowStack {
     /// window opens; when its databases did not open, what keeps the
     /// connection shows first.
     pub fn start(program: Arc<dyn Program>, files: AppFiles) -> WindowStack {
+        let running = WindowStack::prepare(program, files);
+        let started = running.program.started();
+        WindowStack::begin(running, started)
+    }
+
+    /// Starts a prepared program as `start` does, from how it `started`.
+    pub fn begin(running: Rc<Running>, started: clarity_runtime::program::Started) -> WindowStack {
+        let mut stack = WindowStack::empty(running);
+        match started.unconnected {
+            Some(unconnected) => stack.start_unconnected(unconnected, None),
+            None => stack.start_main(None),
+        }
+        stack
+    }
+
+    /// What the program's windows share, its texts loaded and its language
+    /// told, before anything of it runs.
+    pub fn prepare(program: Arc<dyn Program>, files: AppFiles) -> Rc<Running> {
         clarity_runtime::i18n::load(files.model);
         // A language kept from an earlier run: the program hears it before
         // it answers anything, as when it is chosen (a server keeps it per browser).
         if let Some(picked) = crate::choices::language_picked() {
             program.set_language(Some(&picked));
         }
-        let running = Running::new(program, files);
+        Running::new(program, files)
+    }
+
+    /// The splash screen `name`, shown while the app's `on start` runs elsewhere.
+    pub fn splash(running: Rc<Running>, name: &str) -> WindowStack {
         let mut stack = WindowStack::empty(running);
-        let started = stack.running.program.started();
-        match started.unconnected {
-            Some(unconnected) => stack.start_unconnected(unconnected, None),
-            None => stack.start_main(None),
+        stack.open_window(name, Map::new(), None);
+        stack
+    }
+
+    /// The splash page `splash` fills this screen while the app's `on start`
+    /// runs, asked without waiting where the host can (the browser), else on
+    /// a thread of its own; the main window takes its place once it answered
+    /// and the splash showed its time. Where the databases did not open, it starts as `begin` does.
+    pub fn start_in_place(running: Rc<Running>, splash: &crate::app_files::Splash) -> WindowStack {
+        let started = running.program.started();
+        if started.unconnected.is_some() {
+            return WindowStack::begin(running, started);
         }
+        let mut stack = WindowStack::splash(running, &splash.page);
+        stack.starting = Some(InPlace { at_least: splash.at_least, opened: std::time::Instant::now(), asked: false, reply: None });
+        stack
+    }
+
+    /// Whether the splash page still shows while the app starts.
+    pub fn starting(&self) -> bool {
+        self.starting.is_some()
+    }
+
+    /// `on start` is asked to run, once.
+    fn ask_start(&mut self, cx: &mut Cx) {
+        let Some(starting) = self.starting.as_mut() else { return };
+        starting.asked = true;
+        let program = self.running.program.clone();
+        let answered: crate::later::Answered = Box::new(|answer| Box::new(StartDone(crate::program_wire::read("start_app", answer))) as crate::later::Done);
+        let work: crate::later::Work = Box::new(move || Box::new(StartDone(program.start_app())) as crate::later::Done);
+        cx.later_ask(self.node.id(), crate::later::Asked { command: "start_app".into(), args: Map::new(), answered, work });
+        cx.wake(self.node.id(), std::time::Instant::now() + crate::splash::STATUS_EVERY);
+    }
+
+    /// While the splash shows: what loads is shown, and once `on start`
+    /// answered and the splash showed its time, the main window takes its place.
+    fn follow_start(&mut self, cx: &mut Cx) {
+        let Some(starting) = self.starting.as_ref() else { return };
+        if !starting.asked {
+            return self.ask_start(cx);
+        }
+        let shown_for = starting.opened.elapsed();
+        let answered = starting.reply.is_some();
+        if !crate::splash::closes(answered, shown_for, starting.at_least) {
+            // Asked until the splash goes: a quick `on start` still leaves what it said last.
+            if let Some(text) = self.running.program.splash_status() {
+                self.show_status(text);
+                cx.invalidate();
+            }
+            let next = crate::splash::next_look(shown_for, starting.at_least, answered);
+            cx.wake(self.node.id(), std::time::Instant::now() + next);
+            return;
+        }
+        let Some(reply) = self.starting.take().and_then(|s| s.reply) else { return };
+        if let Some(top) = self.stack.pop() {
+            let _ = top.host.closing();
+        }
+        if let Some(index) = self.view_index() {
+            self.node.remove(index, cx);
+        }
+        cx.focus(None);
+        self.open_main(reply, Some(cx));
+        cx.invalidate();
+    }
+
+    /// What the window on top's markup says of its desktop window; the system's own window for one that says nothing.
+    pub fn window_look(&self) -> crate::markup::WindowLook {
+        self.current().map(|h| self.running.files.window_look(&h.window())).unwrap_or_default()
+    }
+
+    /// What the splash screen says is loading: the caption of its part `status`.
+    pub fn show_status(&self, text: Text) {
+        let Some(host) = self.current() else { return };
+        let mut state = host.state(Some(SPLASH_STATUS)).unwrap_or_default();
+        if state.caption.as_ref() != Some(&text) {
+            state.caption = Some(text);
+            host.set_state(SPLASH_STATUS, state);
+        }
+    }
+
+    /// The main window, once the app's `on start` ran elsewhere (while the splash showed) and answered `reply`.
+    pub fn started(running: Rc<Running>, reply: Answer<Reply>) -> WindowStack {
+        let mut stack = WindowStack::empty(running);
+        stack.open_main(reply, None);
         stack
     }
 
@@ -303,8 +426,14 @@ impl WindowStack {
 
     /// The app's `on start`, then its main window.
     fn start_main(&mut self, cx: Option<&mut Cx>) {
+        let reply = self.running.program.start_app();
+        self.open_main(reply, cx);
+    }
+
+    /// What the app's `on start` said, then its main window.
+    fn open_main(&mut self, reply: Answer<Reply>, cx: Option<&mut Cx>) {
         let main = self.running.program.started().main;
-        match self.running.program.start_app() {
+        match reply {
             Ok(reply) => {
                 if !reply.messages.is_empty() {
                     self.early.push(Effect::Say(reply.messages));
@@ -391,6 +520,10 @@ impl WindowStack {
         }
         if self.opener.is_some() {
             return size;
+        }
+        // A window whose markup gives its size (a splash, as an Avalonia window's Width and Height) opens at it.
+        if let Some(size) = top.as_deref().and_then(|w| self.running.files.window_look(w).size) {
+            return Some(size);
         }
         let files = &self.running.files;
         (files.width > 0.0 && files.height > 0.0).then_some((files.width, files.height))
@@ -917,8 +1050,31 @@ impl Element for WindowStack {
         }
     }
 
-    /// A long call ended: its bar goes, and its reply is the window's.
+    /// `on start` is asked at the first wake, once the splash page is on the
+    /// screen and the host has given how it sends requests (the browser's asker).
+    fn on_attached(&mut self, cx: &mut Cx) {
+        if self.starting.is_some() {
+            cx.wake(self.node.id(), std::time::Instant::now());
+        }
+    }
+
+    fn on_wake(&mut self, cx: &mut Cx) {
+        self.follow_start(cx);
+    }
+
+    /// A long call ended: its bar goes, and its reply is the window's. Or
+    /// the app's `on start` answered while its splash page shows.
     fn on_later(&mut self, done: crate::later::Done, cx: &mut Cx) {
+        let done = match done.downcast::<StartDone>() {
+            Ok(started) => {
+                if let Some(starting) = self.starting.as_mut() {
+                    starting.reply = Some(started.0);
+                }
+                self.follow_start(cx);
+                return;
+            }
+            Err(other) => other,
+        };
         let Ok(done) = done.downcast::<LongDone>() else { return };
         // A Stop pressed as the call ended is forgotten with its watch.
         self.running.program.end_watch(done.1);

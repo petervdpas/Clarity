@@ -92,9 +92,17 @@ pub enum Edit {
         list: bool,
     },
     /// Set the number of grid columns of a page.
-    SetGrid { page: u32, columns: u32 },
+    /// A page's grid: its columns, and the row height of its own exact grid (`grid 56 columns rows 10`); none for the project's rows.
+    SetGrid {
+        page: u32,
+        columns: u32,
+        #[serde(default)]
+        rows: Option<u32>,
+    },
     /// Set the size a window opens at, in pixels; none for the standard size.
     SetSize { page: u32, width: Option<u32>, height: Option<u32> },
+    /// The window's own style of the theme (`style splashBack`); empty for none.
+    SetPageStyle { page: u32, style: String },
     /// Add an empty page at the end of the file.
     AddPage { name: String, kind: PageKind },
     /// Add a window at the end of the file, blank or from a template.
@@ -143,6 +151,9 @@ pub enum Edit {
     AddApp { name: String },
     /// Set the main window of an app.
     SetMain { app: u32, main: String },
+    /// Set the app's splash page and how long it shows at least, in
+    /// milliseconds (`splash Welcome for 2 seconds`); an empty name takes the splash away.
+    SetSplash { app: u32, splash: String, ms: Option<u32> },
     /// Wire one of a window's or the app's own events (open, close, return,
     /// start) to a handler, or unwire it with None.
     SetOwnerEvent {
@@ -899,8 +910,9 @@ impl Doc {
                 entity,
                 list,
             } => self.add_data(*page, name, entity, *list),
-            Edit::SetGrid { page, columns } => self.set_grid(*page, *columns),
+            Edit::SetGrid { page, columns, rows } => self.set_grid(*page, *columns, *rows),
             Edit::SetSize { page, width, height } => self.set_size(*page, *width, *height),
+            Edit::SetPageStyle { page, style } => self.set_page_style(*page, style),
             Edit::AddPage { name, kind } => self.add_page(name, *kind),
             Edit::AddWindow { .. } | Edit::PlaceField { .. } => {
                 fail("this edit needs the whole project and cannot be part of a batch")
@@ -915,6 +927,7 @@ impl Doc {
             Edit::NameParts => self.name_parts(),
             Edit::AddApp { name } => self.add_app(name),
             Edit::SetMain { app, main } => self.set_main(*app, main),
+            Edit::SetSplash { app, splash, ms } => self.set_splash(*app, splash, *ms),
             Edit::SetOwnerEvent { owner, event, handler } => self.set_owner_event(*owner, *event, handler.as_deref()),
             Edit::AddRegion {
                 owner,
@@ -1421,12 +1434,21 @@ impl Doc {
         Ok(Some(id))
     }
 
-    fn set_grid(&mut self, page: u32, columns: u32) -> EditResult<Option<u32>> {
+    fn set_grid(&mut self, page: u32, columns: u32, rows: Option<u32>) -> EditResult<Option<u32>> {
         let (path, _) = self.find(page, "a page", |k| k == Kind::Page)?;
         if columns == 0 || columns > MAX_PAGE_COLUMNS {
             return fail(format!("a page grid has 1 to {MAX_PAGE_COLUMNS} columns"));
         }
-        let text = format!("grid {columns} columns");
+        let (least, most) = crate::layout::CELL_HEIGHTS;
+        if let Some(rows) = rows
+            && !(least..=most).contains(&rows)
+        {
+            return fail(format!("a page's rows are {least} to {most} pixels high"));
+        }
+        let text = match rows {
+            Some(rows) => format!("grid {columns} columns rows {rows}"),
+            None => format!("grid {columns} columns"),
+        };
         let existing = self
             .node(&path)
             .children
@@ -1475,6 +1497,32 @@ impl Doc {
         Ok(Some(page))
     }
 
+    fn set_page_style(&mut self, page: u32, style: &str) -> EditResult<Option<u32>> {
+        let (path, _) = self.find(page, "a page", |k| k == Kind::Page)?;
+        let style = style.trim();
+        if !style.is_empty() && !is_identifier(style) {
+            return fail(format!("'{style}' is not a style name"));
+        }
+        let existing = self.node(&path).children.iter().position(|c| c.tokens.len() == 2 && starts_with_keyword(&c.tokens, "style", Some(TokenKind::Ident)));
+        if style.is_empty() {
+            if let Some(index) = existing {
+                self.node_mut(&path).children.remove(index);
+            }
+            return Ok(Some(page));
+        }
+        let text = format!("style {style}");
+        match existing {
+            Some(index) => self.node_mut(&path).children[index].set_text(text),
+            None => {
+                let indent = self.node(&path).child_indent();
+                let line = self.fresh_node(indent, text);
+                let index = self.settings_end(&path);
+                self.node_mut(&path).children.insert(index, line);
+            }
+        }
+        Ok(Some(page))
+    }
+
     fn check_new_name(&self, name: &str) -> EditResult<()> {
         if !is_identifier(name) {
             return fail(format!("'{name}' is not a valid window name"));
@@ -1500,6 +1548,9 @@ impl Doc {
         }
         if *template == PageTemplate::View {
             return self.add_page(name, PageKind::View);
+        }
+        if *template == PageTemplate::Splash {
+            return self.add_splash(name);
         }
         self.check_new_name(name)?;
         let text = templates::page_from_template(project, name, template).map_err(EditError)?;
@@ -1541,11 +1592,7 @@ impl Doc {
 
     fn add_page(&mut self, name: &str, kind: PageKind) -> EditResult<Option<u32>> {
         self.check_new_name(name)?;
-        let kind = match kind {
-            PageKind::Window => "window",
-            PageKind::Dialog => "dialog",
-            PageKind::View => "view",
-        };
+        let kind = kind.word();
         let mut page = self.fresh_node(0, format!("page {name}: {kind}"));
         page.leading.push(Trivia {
             indent: 0,
@@ -1617,6 +1664,50 @@ impl Doc {
             }
         }
         Ok(Some(app))
+    }
+
+    fn set_splash(&mut self, app: u32, splash: &str, ms: Option<u32>) -> EditResult<Option<u32>> {
+        let (path, _) = self.find(app, "an app", |k| k == Kind::App)?;
+        let splash = splash.trim();
+        if !splash.is_empty() && !is_identifier(splash) {
+            return fail(format!("'{splash}' is not a valid page name"));
+        }
+        if let Some(ms) = ms
+            && !(100..=30_000).contains(&ms)
+        {
+            return fail("a splash shows from 0.1 to 30 seconds");
+        }
+        let existing = self.node(&path).children.iter().position(|c| starts_with_keyword(&c.tokens, "splash", Some(TokenKind::Ident)));
+        if let Some(index) = existing {
+            self.node_mut(&path).children.remove(index);
+        }
+        if splash.is_empty() {
+            return Ok(Some(app));
+        }
+        // Seconds as a person writes them: 2, 1.5, 0.25.
+        let line = match ms {
+            Some(ms) => format!("splash {splash} for {} seconds", format!("{}.{:03}", ms / 1000, ms % 1000).trim_end_matches('0').trim_end_matches('.')),
+            None => format!("splash {splash}"),
+        };
+        let indent = self.node(&path).child_indent();
+        let node = self.fresh_node(indent, line);
+        let index = existing.unwrap_or_else(|| self.owner_settings_end(&path, Kind::App));
+        self.node_mut(&path).children.insert(index, node);
+        Ok(Some(app))
+    }
+
+    /// A splash page: sized as a splash is, its name and a status that code sets as the app starts.
+    fn add_splash(&mut self, name: &str) -> EditResult<Option<u32>> {
+        let id = self.add_page(name, PageKind::Splash)?;
+        let key = crate::names::camel_case(name);
+        let page = self.nodes.last_mut().expect("the page just added");
+        page.children.truncate(0);
+        let lines = ["size 480 x 280".to_string(), format!("heading @{key}Title name titleHeading at 1,2 span 12"), format!("label @{key}Starting name status at 1,5 span 12")];
+        for line in lines {
+            let node = self.fresh_node(INDENT_STEP, line);
+            self.nodes.last_mut().expect("the page just added").children.push(node);
+        }
+        Ok(id)
     }
 
     fn set_owner_event(&mut self, owner: u32, event: Event, handler: Option<&str>) -> EditResult<Option<u32>> {

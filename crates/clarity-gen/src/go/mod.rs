@@ -201,6 +201,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     files.push(text("go.mod", go_mod_text));
     files.push(text("go.sum", go_sum(&groups) + &part_sums + &library_sums));
+    // The program file's icon and version on Windows: a .syso per processor, which go build links for its own (docs/APP-ICON-SPLASH-PLAN.md, docs/VERSION-PLAN.md).
+    files.extend(crate::windows_resources::object_files(project, &clarity_project::title(settings), &module, crate::windows_resources::syso_path));
     Ok(files)
 }
 

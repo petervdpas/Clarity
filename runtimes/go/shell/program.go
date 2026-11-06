@@ -148,6 +148,8 @@ func (p *Program) answerIn(ctx context.Context, command string, args []byte, thr
 	switch command {
 	case "started":
 		return p.started(ctx)
+	case "splash_status":
+		return value(clarity.SplashStatus())
 	case "watches", "start_watch", "watch_progress", "stop_watch", "end_watch":
 		return p.watch(command, numbered(args), thread)
 	case "facts":

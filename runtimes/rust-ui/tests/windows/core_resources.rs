@@ -24,3 +24,15 @@ fn the_host_answers_a_resource_by_its_name() {
     assert_eq!(host.resource("logo.png"), Some(LOGO.to_vec()));
     assert_eq!(host.resource("missing.png"), None);
 }
+
+/// The application's icon is the picture the project names (`icon "app.png"`,
+/// in the model), never a resource found by its file's name.
+#[test]
+fn the_icon_is_the_picture_the_project_names() {
+    let named = AppFiles { model: r#"{"project":{"icon":"app.png"}}"#, resources: &[("app.png", LOGO), ("icon.png", LOGO)], ..FILES };
+    assert_eq!(named.icon(), Some(LOGO));
+    let unnamed = AppFiles { model: r#"{"project":{}}"#, resources: &[("icon.png", LOGO)], ..FILES };
+    assert_eq!(unnamed.icon(), None, "a file named icon.png is no icon until the project names it");
+    let missing = AppFiles { model: r#"{"project":{"icon":"gone.png"}}"#, resources: &[], ..FILES };
+    assert_eq!(missing.icon(), None);
+}

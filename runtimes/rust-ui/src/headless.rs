@@ -129,6 +129,16 @@ impl Driven {
     /// `keeping` (what was kept, and what keeps them) instead of in the
     /// program's settings folder, as the browser's page keeps them.
     pub fn start_keeping(program: Arc<dyn Program>, files: AppFiles, keeping: Option<(std::collections::BTreeMap<String, String>, crate::choices::Keeper)>) -> Driven {
+        Driven::start_with(program, files, keeping, false)
+    }
+
+    /// Starts as `start_keeping` does, the app's splash page (when it names
+    /// one) filling the screen while its `on start` runs: the browser's whole page.
+    pub fn start_splashed(program: Arc<dyn Program>, files: AppFiles, keeping: Option<(std::collections::BTreeMap<String, String>, crate::choices::Keeper)>) -> Driven {
+        Driven::start_with(program, files, keeping, true)
+    }
+
+    fn start_with(program: Arc<dyn Program>, files: AppFiles, keeping: Option<(std::collections::BTreeMap<String, String>, crate::choices::Keeper)>, splashed: bool) -> Driven {
         match keeping {
             Some((kept, keeper)) => crate::choices::start_kept(&files, kept, keeper),
             None => {
@@ -138,7 +148,10 @@ impl Driven {
         }
         let given = Arc::new(Given::default());
         crate::files::set_system(given.clone());
-        let stack = WindowStack::start(program, files);
+        let stack = match files.splash().filter(|_| splashed) {
+            Some(splash) => WindowStack::start_in_place(WindowStack::prepare(program, files), &splash),
+            None => WindowStack::start(program, files),
+        };
         let mut screen = Screen::new(Box::new(stack), crate::choices::look(&files, false));
         screen.follow(Box::new(move |dark| crate::choices::look(&files, dark)));
         screen.resize(START_SIZE.0, START_SIZE.1, 1.0);

@@ -262,3 +262,20 @@ fn adds_an_app_and_sets_its_main_window() {
     assert!(text.ends_with("    title \"Shop\"\n    main Card\n"));
     assert!(error(&text, Edit::AddApp { name: "x".into() }).contains("already has an app"));
 }
+
+/// The designer names the app's splash page and how long it shows at least,
+/// or takes the splash away: one line, `splash Welcome for 2 seconds`.
+#[test]
+fn sets_and_removes_the_app_s_splash() {
+    let source = "module m\n\napp shop\n    title \"Shop\"\n    main Card\n";
+    let app = at(source, "app ");
+    let text = edit(source, Edit::SetSplash { app, splash: "Welcome".into(), ms: Some(2000) });
+    assert!(text.ends_with("    main Card\n    splash Welcome for 2 seconds\n"), "{text}");
+    let text = edit(&text, Edit::SetSplash { app, splash: "Welcome".into(), ms: Some(1500) });
+    assert!(text.ends_with("    splash Welcome for 1.5 seconds\n"), "{text}");
+    let text = edit(&text, Edit::SetSplash { app, splash: "Welcome".into(), ms: None });
+    assert!(text.ends_with("    splash Welcome\n"), "{text}");
+    let text = edit(&text, Edit::SetSplash { app, splash: String::new(), ms: None });
+    assert_eq!(text, source, "no splash, no line");
+    assert!(error(source, Edit::SetSplash { app, splash: "Welcome".into(), ms: Some(40_000) }).contains("from 0.1 to 30"));
+}

@@ -283,3 +283,12 @@ func TestEachBrowserHasItsOwnSettingsAndLanguage(t *testing.T) {
 		t.Fatalf("a forgotten: %v", a)
 	}
 }
+
+func TestTheSplashStatusIsAnsweredWhileTheAppStarts(t *testing.T) {
+	c, _ := service(t)
+	p := NewProgram(ProgramOptions{Options: c.Options()})
+	clarity.SetSplashStatus(clarity.PlainText("Loading the catalogue"))
+	if got := string(p.Answer("splash_status", nil, 1)); got != `{"value":"Loading the catalogue"}` {
+		t.Fatalf("splash_status: %s", got)
+	}
+}

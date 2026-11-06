@@ -609,6 +609,8 @@ struct Env<'a> {
     settings: Option<&'a Entity>,
     /// Functions of the same module declared in files before this one.
     earlier_functions: Vec<&'a FunctionDecl>,
+    /// Whether an app shows a splash screen, whose status code can set.
+    splash: bool,
 }
 
 impl<'a> Env<'a> {
@@ -632,6 +634,7 @@ impl<'a> Env<'a> {
             visible,
             settings: files.iter().flat_map(|f| &f.entities).find(|e| e.settings),
             earlier_functions,
+            splash: files.iter().flat_map(|f| &f.apps).any(|a| a.splash.is_some()),
         }
     }
 
@@ -2273,6 +2276,11 @@ impl<'a> BodyChecker<'_, 'a> {
         self.scopes.pop();
     }
 
+    /// `splash.x = ...` where no local, data or part is named splash: the splash screen.
+    fn splash_target(&self, target: &Expr) -> bool {
+        matches!(&target.kind, ExprKind::Member { object, .. } if matches!(&object.kind, ExprKind::Name { name } if name == "splash" && self.local("splash").is_none() && self.part("splash").is_none() && self.data("splash").is_none()))
+    }
+
     fn local(&self, name: &str) -> Option<Ty<'a>> {
         self.scopes.iter().rev().find_map(|s| s.get(name).copied())
     }
@@ -2926,6 +2934,18 @@ impl<'a> BodyChecker<'_, 'a> {
         }
     }
     fn assign(&mut self, target: &Expr, value: &Expr) {
+        if self.splash_target(target) {
+            if !crate::code::sets_splash_status(target) {
+                self.error("the splash has only a status to set: splash.status = @loadingData", target.span);
+            } else if !self.env.splash {
+                self.error("the app shows no splash: write splash Welcome in the app", target.span);
+            }
+            let shown = self.shown_text(value);
+            if !Ty::Text.accepts(&shown) {
+                self.error(format!("cannot set text to {}", shown.name()), value.span);
+            }
+            return;
+        }
         let place = self.place(target);
         let (ty, writable) = match place {
             Some(Place::Value { ty, writable }) => (ty, writable),
@@ -3043,6 +3063,16 @@ impl<'a> BodyChecker<'_, 'a> {
                 }
                 self.error(format!("unknown name '{name}'"), expr.span);
                 None
+            }
+            // `app.version`: the project's version, a text code reads.
+            ExprKind::Member { object, member }
+                if matches!(&object.kind, ExprKind::Name { name } if name == "app" && self.local("app").is_none() && self.part("app").is_none() && self.data("app").is_none()) =>
+            {
+                if member.name != "version" {
+                    self.error(format!("the app has no '{}' to read; code reads app.version", member.name), member.span);
+                    return None;
+                }
+                Some(Place::Value { ty: Ty::Text, writable: Err("app.version is the project's version and cannot be set; change it in the project file".to_string()) })
             }
             ExprKind::Member { object, member } => {
                 let m = member.name.as_str();

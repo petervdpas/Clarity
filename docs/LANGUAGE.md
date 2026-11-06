@@ -59,6 +59,7 @@ The project file holds one `project` block:
 ```clarity
 project Shop
     title "Shop"
+    icon "shop.png"
     stack rust desktop
     output "out"
     language "en"
@@ -70,7 +71,9 @@ project Shop
 
 | Setting | Required | Meaning |
 |---|---|---|
-| `title "text"` | no | The name people see. When it is left out, it is derived from the project name. |
+| `title "text"` | no | The name people see, the program's name: its settings folder and package use it, and a window shows it when neither the window nor the app has a title. Plain text, without slots: a version shows in a window's or the app's title with `{app.version}`. When it is left out, it is derived from the project name. |
+| `icon "app.png"` | no | The application's icon: a picture among the project's resources (PNG, JPEG, WebP or SVG, square, best 256 by 256 or larger). Its windows and taskbar button show it on every desktop stack, its web page's tab, and on Windows its program file: Clarity draws every size Windows asks for and writes them into the generated program's `windows/` folder (`app.ico`, which C# names as its `ApplicationIcon`, and a resource object per processor, which Rust, C and C++ link, and Go as `resources_windows_<processor>.syso` beside `main.go`, together with the version when the project has one), so no build needs a tool of its own. Without it, Clarity's own. A resources folder that holds `icon.png` while the project names no icon gets a warning to name it. |
+| `version "1.2.0"` | no | The application's version, as `major.minor.patch` with an optional pre-release (`2.0.0-beta.1`). Code reads it as `app.version`, and a text by key shows it with the slot `{app.version}`, which Clarity fills itself (`welcomeVersion "Version {app.version}"`), so a splash, a title or an About dialog shows it where the designer puts it. Each stack's package carries it (C#'s `<Version>`, Rust's `Cargo.toml`, CMake's `project(... VERSION)`), and on Windows the program file's Properties show it. Optional: without it nothing shows a version, and a use of `app.version` is an error that says to add the line (docs/VERSION-PLAN.md). |
 | `stack language ui target...` | yes | The stack the project is transpiled into, read by position. Languages: `rust`, `go`, `csharp`, `c`, `cpp`. No language names a UI (the windows are drawn by Clarity.UI), so the targets follow the language: `stack csharp desktop`, `stack go desktop`. Targets: `desktop` for the program with windows, `web` for a web server that serves it to a browser (every language; the web program of Rust, Go, C and C++ serves the shared screen and is generated alone, `stack go web`, until Clarity.UI draws in the browser; with both, `--serve` serves in place of the window; `--address host:port` says where), and `cli` for a command-line program beside it (`stack go desktop cli`); a project whose only target is `cli` names no UI (`stack go cli`). See [Commands](#commands). |
 | `output "folder"` | no | Where the generated application goes, relative to the project folder. The default is `out`. |
 | `output keeps "name", ...` | no | Folders in the output that are the project's own, which Clarity leaves alone: each the name of one folder, not a path. |
@@ -570,8 +573,39 @@ page CustomerForm: window
 | `window` | a window of its own, which can have a menu, toolbar, ribbon, sidebars and a footer |
 | `dialog` | a modal window; `dialog gives Type` closes with a value of that type (see [Asking the person](#asking-the-person)) |
 | `view` | content shown inside the app's frame |
+| `splash` | the splash screen the app shows while it starts (see [Splash screen](#splash-screen)) |
 
 Only a `window` has frame regions of its own.
+
+### Splash screen
+
+An application may show a splash screen while it starts; it is optional, and an app without one opens its main window as before. The splash is a page of the kind `splash`, designed as any page is (a picture, the name, a progress bar), and the app names it with how long it shows at least:
+
+```clarity
+app Shop
+    main Main
+    splash Welcome for 2 seconds
+    on start: loadCatalogue
+
+page Welcome: splash
+    size 560 x 290
+    style splashBack
+    image source "logo.png" name logo at 1,1 span 4 rows 5
+    heading @shopTitle name titleHeading at 5,2 span 8 rows 2 style splashTitle
+    label @shopTagline name tagline at 5,4 span 8 style splashTagline
+    busy @welcomeStarting name status at 5,5 span 8 style splashStatus
+
+code Shop
+    handler loadCatalogue
+        splash.status = @loadingCatalogue
+```
+
+- It shows first, while the app's `on start` runs, and goes once the main window shows, but not before the time the line gives (0.1 to 30 seconds; without `for`, as soon as the main window shows).
+- `splash.status = text` in code says what loads: the caption of the splash page's part named `status`, a `label`, or a `busy` part that spins while it shows. Code anywhere may set it; it shows while the splash does.
+- On the desktop (every stack, through Clarity.UI) it is a borderless window in the middle of the screen, above the others. In the browser it fills the page until the main window takes its place.
+- As in Avalonia, the generated markup says it: the splash's own window file (`windows/Welcome.cxaml`) declares its window, `<Window name="Welcome" width="480" height="280" decorations="none" startup="centerScreen" resizable="false" topmost="true" taskbar="false" frame="none">` (Avalonia's Width, Height, SystemDecorations, WindowStartupLocation, CanResize, Topmost and ShowInTaskbar, and none of the app's menu, toolbar or ribbon, as an Avalonia window holds only what its XAML holds), and the app's markup names it, `<App name="Shop" splash="Welcome" splashFor="2">`. A splash page without `size` is 480 by 280.
+- The application shows and closes it: nothing opens it (`on click -> Welcome` is refused), it has no events of its own, and it cannot be the main window. A splash page no app names is warned about.
+- When the databases did not open, the app starts without its splash and shows what keeps the connection.
 
 ### Views
 
@@ -644,14 +678,16 @@ An application has one desktop window, on every stack. `open` shows a window in 
 
 | Setting | Meaning |
 |---|---|
-| `title "text"` | The window's title. |
+| `title "text"` | The window's title, in its title bar; a key may hold `{app.version}`, as `mainTitle "Todo v{app.version}"`. Without one, the window shows the app's title. |
 | `size W x H` | The size its desktop window opens at, in pixels, like `size 320 x 460`: 200 to 3840 wide and 150 to 2160 high. Without it a window opens at 1100 x 760. A desktop window takes the size of the window it shows first; a window opened in place keeps the desktop window's size. The designer shows a window at its size. |
+| `style name` | A style of the project's theme for the window itself: its background fills the whole window and its text color is its parts' text, as a splash screen's deep color. Every theme the application offers must have it. |
 | `data name: Entity` | One record the window works on. |
 | `data name: list<Entity>` | A list of records the window works on. |
 | `data name: Record`, `data name: list<Record>` | A [record](#records) the window holds, new when it opens, or a list of them, empty when it opens; code fills them, nothing stores them. |
 | `data name: type` | A plain value the window holds: `data shown: decimal`, `data pending: Operation`, `data readings: list<decimal>`. The type is `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`, an enum, or a list of text, integers, decimals or dates, which starts empty. It is no record and is never stored; it lives as long as the window. |
 | `data name: type, default value` | A plain value that starts at `value`: `data fresh: bool, default true`. Without a default it starts empty: 0, empty text, false, no date, or the enum's first value. |
-| `grid N columns` | The number of grid columns, 1 to 24. The default is 12. |
+| `grid N columns` | The number of grid columns, 1 to 96. The default is 12. |
+| `grid N columns rows R` | The page's own exact grid, for a designed page such as a splash: rows of R pixels (8 to 64), cells without gaps or padding, rows that keep their height. `grid 56 columns rows 10` on a 560 px window is square cells of 10 pixels. |
 | `on open: handler` | Runs when the window has opened and its data is loaded. |
 | `on close: handler` | Runs when the window is about to close. |
 | `on return: handler` | Runs when a window this one opened has closed, and this one is on top again. This is where a list reloads after a form saved a record. |
@@ -1245,8 +1281,9 @@ app Shop
 
 | Setting | Meaning |
 |---|---|
-| `title "text"` | The application's title. |
+| `title "text"` | The application's title: what a window without a title of its own shows in its title bar. A key may hold `{app.version}`. |
 | `main Window` | The window shown at start; it must be a `window`. |
+| `splash Page for 2 seconds` | Optional: the [splash screen](#splash-screen) shown while the application starts, at least the seconds given. |
 | `data name: Entity` | Data for the parts in the sidebars and the footer. |
 | `on start: handler` | Runs when the application starts, before its main window opens. Its code is in `code AppName`. |
 | `on unconnected: handler` | Runs when the databases did not open, such as a server that is down or a [secret setting](#secret-settings) not kept yet, instead of the main window; `handler notConnected(reason: text)` gets why, in the person's language (Clarity's texts `unconnectedNotKept` and `unconnectedFailed`). What it opens shows first. Closing the last window, or the desktop window from its title bar, then connects again if a setting changed, and the main window opens once it does; closing it unchanged ends the application. |
@@ -2050,6 +2087,7 @@ translation en
 - A key is `@` and its name; with slots, `@key(slot = value, ...)` gives each slot of its text a value. Every slot the default language's text has gets one, and no other.
 - A value is checked like any expression; a whole record or list is no value to show, so `customer = order.customer` is an error that suggests one of its fields.
 - A value shows as its field shows it: money with its currency, a date in the locale and the field's `format`, an enum value by its label. A local or a parameter shows as its type does.
+- The slot `{app.version}` is the project's version, which Clarity fills itself: a use gives it no value, and a caption shows it as it is (`versionLabel` with `@welcomeVersion`, `"Version {app.version}"`).
 - A keyed text is a text like any other: code keeps it in a local, passes it to a function, returns it, and puts it in a text value.
 - Where it goes straight to the screen (a message, a refusal, a caption, an error, a text value a handler sets), the backend sends the key with each value, and the screen shows its text in the person's language and fills the slots in the person's format.
 - Anywhere else, such as a function's result, the backend takes the key's text in the language the screen picked and fills its slots plainly.

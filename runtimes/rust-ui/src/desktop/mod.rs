@@ -166,19 +166,41 @@ pub fn run_shared(program: Arc<dyn Program>, files: AppFiles) -> ExitCode {
     let kept = clarity_runtime::settings::file(files.title).and_then(|f| f.parent().map(|p| p.to_path_buf()));
     crate::choices::start(&files, kept);
     prepare();
-    let stack = WindowStack::start(program, files);
+    let running = WindowStack::prepare(program, files);
+    let started = running.program.started();
+    // The splash screen the app names shows first, unless the databases did not open.
+    if let (Some(splash), None) = (files.splash(), &started.unconnected) {
+        return show_splash(running, splash, files);
+    }
+    let stack = WindowStack::begin(running, started);
     // Dialogs, the keys window and new windows get desktop windows of their own.
     stack.running().set_apart(true);
     let title = stack.title();
     let (width, height) = grow::open_size(&stack);
     let screen = Screen::new(Box::new(stack), crate::choices::look(&files, false));
     let options = ShowOptions::new(title).size(width, height).following(move |dark| crate::choices::look(&files, dark));
-    show(screen, options.icon(files.resource("icon.png")))
+    show(screen, options.icon(files.icon()))
+}
+
+/// Shows the app's splash screen while its `on start` runs, then its main window (see `splash`).
+fn show_splash(running: Rc<Running>, splash: crate::app_files::Splash, files: AppFiles) -> ExitCode {
+    running.set_apart(true);
+    let stack = WindowStack::splash(running.clone(), &splash.page);
+    let (width, height) = grow::open_size(&stack);
+    let screen = Screen::new(Box::new(stack), crate::choices::look(&files, false));
+    let options = ShowOptions::new(files.title).size(width, height).following(move |dark| crate::choices::look(&files, dark)).icon(files.icon());
+    let starting = Starting { running, at_least: splash.at_least, opened: None, asked: false, reply: None, next_status: Instant::now() };
+    show_starting(screen, options, Some(starting))
 }
 
 /// Shows a screen in a desktop window until the window closes (or, for a
 /// program's `WindowStack`, until its own windows closed).
-pub fn show(screen: Screen, mut options: ShowOptions) -> ExitCode {
+pub fn show(screen: Screen, options: ShowOptions) -> ExitCode {
+    show_starting(screen, options, None)
+}
+
+/// As `show`; with `starting`, the screen is the app's splash and the main window follows.
+fn show_starting(screen: Screen, mut options: ShowOptions, starting: Option<Starting>) -> ExitCode {
     let event_loop = match EventLoop::<Wake>::with_user_event().build() {
         Ok(event_loop) => event_loop,
         Err(why) => return failed(&why.to_string()),
@@ -188,6 +210,10 @@ pub fn show(screen: Screen, mut options: ShowOptions) -> ExitCode {
     *OUTSIDE.lock().unwrap_or_else(|p| p.into_inner()) = Some(event_loop.create_proxy());
     host.untold = untold_moves(&event_loop);
     host.add(screen, options.title.clone(), (options.width, options.height), None, false);
+    if starting.is_some() {
+        host.wins[0].splash = true;
+        host.starting = starting;
+    }
     let ran = event_loop.run_app(&mut host);
     *OUTSIDE.lock().unwrap_or_else(|p| p.into_inner()) = None;
     // The system's light or dark is no longer followed once the windows are gone.
@@ -203,6 +229,25 @@ pub fn show(screen: Screen, mut options: ShowOptions) -> ExitCode {
         (Err(why), None) => failed(&why.to_string()),
         (Ok(()), None) => ExitCode::SUCCESS,
     }
+}
+
+/// The desktop window stays out of the taskbar: on Windows by its own
+/// setting; on X11 a borderless one is a splash window, which taskbars leave
+/// out. Wayland and macOS have no such setting for a single window.
+#[allow(unused_mut)]
+fn not_in_taskbar(mut attributes: WindowAttributes, decorations: bool) -> WindowAttributes {
+    #[cfg(target_os = "windows")]
+    {
+        use winit::platform::windows::WindowAttributesExtWindows;
+        attributes = attributes.with_skip_taskbar(true);
+    }
+    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
+    if !decorations {
+        use winit::platform::x11::{WindowAttributesExtX11, WindowType};
+        attributes = attributes.with_x11_window_type(vec![WindowType::Splash]);
+    }
+    let _ = decorations;
+    attributes
 }
 
 /// Says why the window could not show, and ends with a failure.
@@ -258,6 +303,8 @@ fn untold_moves(event_loop: &EventLoop<Wake>) -> bool {
 #[derive(Debug)]
 enum Wake {
     Done,
+    /// The app's `on start` ran on its own thread while the splash showed: what it answered.
+    Started(clarity_runtime::program::Answer<clarity_runtime::ui::Reply>),
     Dark(bool),
     /// Woken from another thread (`wake`): every window draws anew.
     Outside,
@@ -464,6 +511,23 @@ struct Win {
     caret: Option<Rect>,
     /// The window view whose sidebars were last seen, and how wide they were: one that opens grows the desktop window.
     sidebars: Option<(ElementId, f64)>,
+    /// It is the app's splash screen, which closes once the main window shows.
+    splash: bool,
+    /// What its window's markup says of the desktop window: borderless, centred, on top...
+    look: crate::markup::WindowLook,
+}
+
+/// While the app starts behind its splash screen: what its windows share,
+/// how long the splash shows at least and since when, whether `on start`
+/// was asked to run, what it answered once it did, and when the status is
+/// asked for next.
+struct Starting {
+    running: Rc<Running>,
+    at_least: Duration,
+    opened: Option<Instant>,
+    asked: bool,
+    reply: Option<clarity_runtime::program::Answer<clarity_runtime::ui::Reply>>,
+    next_status: Instant,
 }
 
 /// Every desktop window, and what they share.
@@ -487,6 +551,8 @@ struct Host {
     active: Option<u64>,
     files: Arc<SystemFilePicker>,
     icon: Option<Icon>,
+    /// The app starting behind its splash screen; none once the splash closed, or without one.
+    starting: Option<Starting>,
     fail_safe: FailSafe,
     /// What failed and is to be said in the window the person works in.
     failures: Rc<RefCell<Vec<String>>>,
@@ -519,6 +585,7 @@ impl Host {
             active: None,
             files: desktop_files(),
             icon,
+            starting: None,
             fail_safe,
             failures,
         }
@@ -568,6 +635,7 @@ impl Host {
         screen.set_waker(self.waker.clone());
         let key = self.next_key;
         self.next_key += 1;
+        let look = screen.root().as_any().downcast_ref::<WindowStack>().map(WindowStack::window_look).unwrap_or_default();
         self.wins.push(Win {
             key,
             screen,
@@ -583,6 +651,8 @@ impl Host {
             caret: None,
             sidebars: None,
             reader: None,
+            splash: false,
+            look,
         });
     }
 
@@ -624,6 +694,28 @@ impl Host {
                 .with_window_icon(self.icon.clone())
                 // Shown once the screen reader's adapter is made, as AccessKit asks.
                 .with_visible(false);
+            // What the window's markup says of its desktop window, as an Avalonia window's XAML does (a splash says it all).
+            let look = win.look;
+            attributes = attributes.with_decorations(look.decorations);
+            if !look.resizable {
+                attributes = attributes.with_resizable(false);
+            }
+            if look.topmost {
+                attributes = attributes.with_window_level(winit::window::WindowLevel::AlwaysOnTop);
+            }
+            if !look.taskbar {
+                attributes = not_in_taskbar(attributes, look.decorations);
+            }
+            if look.centre && over.is_none() {
+                if let Some(monitor) = event_loop.primary_monitor().or_else(|| event_loop.available_monitors().next()) {
+                    let scale = monitor.scale_factor();
+                    let size = ((win.size.0 * scale) as u32, (win.size.1 * scale) as u32);
+                    let at = monitor.position();
+                    let room = monitor.size();
+                    let (x, y) = crate::splash::centred((at.x, at.y), (room.width, room.height), size);
+                    attributes = attributes.with_position(PhysicalPosition::new(x, y));
+                }
+            }
             if let Some(over) = over {
                 if let Ok(at) = over.window.outer_position() {
                     let there = over.window.outer_size();
@@ -662,6 +754,11 @@ impl Host {
                     }
                     let key = self.wins[i].key;
                     self.set_active(Some(key));
+                    if self.wins[i].splash
+                        && let Some(starting) = self.starting.as_mut()
+                    {
+                        starting.opened = Some(Instant::now());
+                    }
                     self.safely(|host| host.fit(i));
                     if let Some(shown) = &self.wins[i].shown {
                         shown.window.request_redraw();
@@ -674,6 +771,61 @@ impl Host {
                 }
             }
         }
+    }
+
+    /// While the splash shows: `on start` runs on a thread of its own once the
+    /// splash is on the screen, what loads is asked for every little while,
+    /// and once `on start` answered and its time is up the splash closes and
+    /// the main window opens: the splash finishes before the rest shows.
+    /// When to look again; none once there is nothing to wait for.
+    fn follow_start(&mut self) -> Option<Instant> {
+        let starting = self.starting.as_mut()?;
+        let opened = starting.opened?;
+        let at = self.wins.iter().position(|w| w.splash)?;
+        if !starting.asked {
+            starting.asked = true;
+            let program = starting.running.program.clone();
+            let proxy = self.proxy.clone();
+            std::thread::spawn(move || {
+                // What fails in `on start` is said in the main window, as when it runs on the screen's thread.
+                let reply = catch_unwind(AssertUnwindSafe(|| program.start_app())).unwrap_or_else(|payload| Err(Text::plain(panic_text(payload.as_ref()))));
+                let _ = proxy.send_event(Wake::Started(reply));
+            });
+        }
+        let now = Instant::now();
+        let answered = starting.reply.is_some();
+        if crate::splash::closes(answered, now - opened, starting.at_least) {
+            let key = self.wins[at].key;
+            let Some(starting) = self.starting.take() else { return None };
+            if let Some(reply) = starting.reply {
+                // The main window is added before the splash goes, so the program never has no window of its own.
+                self.open_main(starting.running, reply);
+            }
+            self.close(key);
+            return None;
+        }
+        if now >= starting.next_status {
+            starting.next_status = now + crate::splash::STATUS_EVERY;
+            if let Some(text) = starting.running.program.splash_status() {
+                let win = &mut self.wins[at];
+                win.screen.act_root::<WindowStack, _>(|stack, _| stack.show_status(text));
+                win.screen.invalidate();
+                if let Some(shown) = &win.shown {
+                    shown.window.request_redraw();
+                }
+            }
+        }
+        Some(now + crate::splash::next_look(now - opened, starting.at_least, answered))
+    }
+
+    /// The splash finished: the main window opens with what `on start` answered, its own desktop window.
+    fn open_main(&mut self, running: Rc<Running>, reply: clarity_runtime::program::Answer<clarity_runtime::ui::Reply>) {
+        let files = running.files;
+        let stack = WindowStack::started(running, reply);
+        let title = stack.title();
+        let size = grow::open_size(&stack);
+        let screen = Screen::new(Box::new(stack), crate::choices::look(&files, false));
+        self.add(screen, title, size, None, false);
     }
 
     /// The screen takes the window's size in its units, at the system's content scale.
@@ -1129,6 +1281,13 @@ impl ApplicationHandler<Wake> for Host {
                 self.safely(|host| host.on_reader(asked));
                 return;
             }
+            Wake::Started(reply) => {
+                // Kept until the splash finishes; looked at on the next turn.
+                if let Some(starting) = self.starting.as_mut() {
+                    starting.reply = Some(reply);
+                }
+                return;
+            }
             other => other,
         };
         if let Wake::Dark(dark) = event {
@@ -1176,6 +1335,8 @@ impl ApplicationHandler<Wake> for Host {
             return;
         }
         self.safely(|host| host.follow_stacks(event_loop));
+        let mut splash_look = None;
+        self.safely(|host| splash_look = host.follow_start());
         self.open_waiting(event_loop);
         self.place_ime();
         let now = Instant::now();
@@ -1205,6 +1366,10 @@ impl ApplicationHandler<Wake> for Host {
                 (a, b) => a.or(b),
             };
         }
+        next = match (next, splash_look) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
         let flow = match next {
             Some(at) if !animating => ControlFlow::WaitUntil(at),
             _ => ControlFlow::Wait,

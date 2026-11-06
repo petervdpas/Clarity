@@ -235,10 +235,10 @@ fn unbound_inputs_are_fine_and_unknown_click_targets_warn() {
 fn checks_containers_and_grid_size() {
     let errs = errors(
         "page P: window
-    grid 30 columns
+    grid 97 columns
 ",
     );
-    assert_has(&errs, "1 to 24 columns");
+    assert_has(&errs, "1 to 96 columns");
 
     let errs = errors(
         "page Q: window

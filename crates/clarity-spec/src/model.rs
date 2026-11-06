@@ -372,6 +372,20 @@ pub enum PageKind {
     Window,
     Dialog,
     View,
+    /// The splash screen the app shows itself while it starts (`splash Welcome` in the app).
+    Splash,
+}
+
+impl PageKind {
+    /// The word a page line writes it with: `page Welcome: splash`.
+    pub fn word(self) -> &'static str {
+        match self {
+            PageKind::Window => "window",
+            PageKind::Dialog => "dialog",
+            PageKind::View => "view",
+            PageKind::Splash => "splash",
+        }
+    }
 }
 
 /// A widget-first page: widgets placed on a snap grid (see the widget
@@ -385,9 +399,19 @@ pub struct Page {
     /// The size its desktop window opens at (`size 320 x 460`); none for
     /// the standard size (layout::WINDOW_WIDTH and WINDOW_HEIGHT).
     pub size: Option<WindowSize>,
+    /// A style of the project's theme for the window itself (`style
+    /// splashBack`): its background and the text of its parts.
+    #[serde(default)]
+    pub style: Option<String>,
     pub data: Vec<DataDecl>,
     /// Number of grid columns.
     pub columns: u32,
+    /// The height of a row of the page's own exact grid (`grid 56 columns
+    /// rows 10`), in pixels: cells without gaps or padding, rows that keep
+    /// their height, for a designed page such as a splash. None for the
+    /// project's rows.
+    #[serde(default)]
+    pub cell: Option<u32>,
     pub widgets: Vec<Widget>,
     /// Regions of a window that override the app's.
     pub frame: Frame,
@@ -413,7 +437,7 @@ pub struct WindowSize {
 }
 
 pub const DEFAULT_PAGE_COLUMNS: u32 = 12;
-pub const MAX_PAGE_COLUMNS: u32 = 24;
+pub const MAX_PAGE_COLUMNS: u32 = 96;
 
 /// The space a canvas draws in, in its own units: `units 200 x 100`. The
 /// renderer scales it to fit the part, keeping its proportion.
@@ -879,6 +903,14 @@ pub struct App {
     pub title: Option<String>,
     /// The window shown at start.
     pub main: Option<Ident>,
+    /// The splash page shown while the application starts, before its main
+    /// window (`splash Welcome for 2 seconds`); none for no splash.
+    #[serde(default)]
+    pub splash: Option<Ident>,
+    /// How long the splash shows at least, in milliseconds; none to close it as soon as the main window shows.
+    #[serde(default, rename = "splashFor")]
+    #[ts(rename = "splashFor")]
+    pub splash_for: Option<u32>,
     /// Data for widgets in the sidebars and the footer.
     pub data: Vec<DataDecl>,
     pub frame: Frame,
@@ -1123,6 +1155,16 @@ pub struct Project {
     /// The project's language and currency, for showing values (section
     /// 1.5 of the design). Default when the project was loaded without them.
     pub locale: Locale,
+    /// The application's icon, a picture among its resources, as the project
+    /// file names it (`icon "app.png"`); none for Clarity's own
+    /// (docs/APP-ICON-SPLASH-PLAN.md).
+    #[serde(default)]
+    pub icon: Option<String>,
+    /// The application's version as the project file says it (`version
+    /// "1.2.0"`): `app.version` in code, `{app.version}` in texts; none
+    /// without one (docs/VERSION-PLAN.md).
+    #[serde(default)]
+    pub version: Option<String>,
     /// The project's translations per language: each text a person sees,
     /// as written, with its translation (design section 1.5, I1c).
     pub translations: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
@@ -1251,6 +1293,31 @@ impl Project {
 
     pub fn in_web_api(&self, entity: &str) -> bool {
         self.source_of(entity).is_some_and(|source| self.sources.iter().any(|s| s.name == source && !s.sql))
+    }
+
+    /// Where the project reads its version: the first `app.version` in its
+    /// code, or the first text that shows `{app.version}`, as its file and
+    /// span (docs/VERSION-PLAN.md); none when it reads it nowhere.
+    pub fn app_version_use(&self) -> Option<(String, crate::span::Span)> {
+        let mut found: Option<(String, crate::span::Span)> = None;
+        for file in &self.files {
+            let mut look = |body: &[crate::code::Stmt]| {
+                crate::code::each_expr_in(body, &mut |e| {
+                    if found.is_none() && crate::code::reads_app_version(e) {
+                        found = Some((file.path.clone(), e.span));
+                    }
+                });
+            };
+            for block in &file.code {
+                block.handlers.iter().for_each(|h| look(&h.body));
+                block.events.iter().for_each(|e| look(&e.body));
+            }
+            file.functions.iter().for_each(|f| look(&f.body));
+        }
+        found.or_else(|| {
+            let shows = self.translations.values().flat_map(|v| v.values()).any(|text| crate::translations::slots(text).iter().any(|s| s == "app.version"));
+            shows.then(|| (String::new(), crate::span::Span::default()))
+        })
     }
 
     /// Whether any code of the project calls a web API (DESIGN 5.23): a

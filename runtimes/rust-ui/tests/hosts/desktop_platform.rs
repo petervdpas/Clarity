@@ -174,10 +174,34 @@ fn a_window_shows_the_application_s_icon_or_clarity_s() {
     let app = icon(Some(png.as_bytes()));
     assert_eq!(vec![16, 32], app.iter().map(|i| i.size).collect::<Vec<_>>());
     assert_eq!(&[200, 30, 30, 255], &app[1].rgba[0..4]);
+    // An SVG icon is drawn sharp at every size the system picks from.
+    let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><rect width="24" height="24" fill="#1e64c8"/></svg>"##;
+    let drawn = icon(Some(svg));
+    assert_eq!(ICON_SIZES.to_vec(), drawn.iter().map(|i| i.size).collect::<Vec<_>>());
+    assert_eq!(&[30, 100, 200, 255], &drawn[4].rgba[0..4]);
 }
 
 #[test]
 fn a_picker_is_the_parts_file_dialogs() {
     let picker = SystemFilePicker::with(Box::new(|_, _| None), Box::new(|_| {}));
     assert!(picker.picks_folders());
+}
+
+/// The splash screen lies in the middle of the screen and finishes once
+/// `on start` answered, but not sooner than the app asks; then the main window shows.
+#[test]
+fn the_splash_lies_in_the_middle_and_stays_its_time() {
+    use clarity_ui::splash::{centred, closes, next_look, STATUS_EVERY};
+    use std::time::Duration;
+    assert_eq!(centred((0, 0), (1920, 1080), (480, 280)), (720, 400));
+    assert_eq!(centred((1920, 0), (1280, 1024), (480, 280)), (2320, 372), "on the second screen");
+    assert_eq!(centred((0, 0), (400, 200), (480, 280)), (0, 0), "a screen smaller than the splash shows its corner");
+    let two = Duration::from_secs(2);
+    assert!(!closes(false, Duration::from_secs(5), two), "not before on start answered");
+    assert!(!closes(true, Duration::from_millis(500), two), "not before its time");
+    assert!(closes(true, two, two));
+    assert!(closes(true, Duration::from_millis(10), Duration::ZERO), "without a time it finishes once on start answered");
+    assert_eq!(next_look(Duration::from_millis(500), two, false), STATUS_EVERY);
+    assert_eq!(next_look(Duration::from_millis(500), two, true), STATUS_EVERY, "the status is still asked for while it shows");
+    assert_eq!(next_look(Duration::from_millis(1950), two, true), Duration::from_millis(50), "and it is looked at when its time is up");
 }

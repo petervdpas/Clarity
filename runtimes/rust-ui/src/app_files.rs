@@ -39,6 +39,36 @@ impl AppFiles {
         self.resources.iter().find(|(n, _)| *n == name).map(|(_, b)| *b)
     }
 
+    /// The application's icon: the picture among its resources the project
+    /// names (`icon "app.png"`, carried in the model); none for Clarity's own.
+    pub fn icon(&self) -> Option<&'static [u8]> {
+        let model: serde_json::Value = serde_json::from_str(self.model).ok()?;
+        self.resource(model.get("project")?.get("icon")?.as_str()?)
+    }
+
+    /// The splash screen the app shows while it starts, as its markup names
+    /// it (`<App splash="Welcome" splashFor="2">`, as an Avalonia app starts
+    /// its splash window), when the program carries that window.
+    pub fn splash(&self) -> Option<Splash> {
+        let root = crate::xml::parse(self.first_app()?).ok()?;
+        let page = root.attribute("splash")?.trim().to_string();
+        self.window(&page)?;
+        let seconds = root.attribute("splashFor").and_then(|s| s.trim().parse::<f64>().ok()).filter(|s| s.is_finite() && *s > 0.0).unwrap_or(0.0);
+        Some(Splash { page, at_least: std::time::Duration::from_secs_f64(seconds) })
+    }
+
+    /// The app's title, as its markup says it (`<App title="@todoTitle">`): a
+    /// key or a text; none when it says none.
+    pub fn app_title(&self) -> Option<String> {
+        let root = crate::xml::parse(self.first_app()?).ok()?;
+        root.attribute("title").map(str::trim).filter(|t| !t.is_empty()).map(str::to_string)
+    }
+
+    /// What window `name`'s markup says of its desktop window; the system's own window for one that says nothing.
+    pub fn window_look(&self, name: &str) -> crate::markup::WindowLook {
+        self.window(name).and_then(|m| crate::markup::read(m).ok()).map(|s| s.look).unwrap_or_default()
+    }
+
     /// The first app's frame, which every window but a dialog shows; none for a program without an app.
     pub fn first_app(&self) -> Option<&'static str> {
         self.apps.first().map(|(_, m)| *m)
@@ -49,6 +79,13 @@ impl AppFiles {
         let mode = if dark { ".dark" } else { ".light" };
         self.themes.iter().find(|(n, _)| n.ends_with(mode) && !n.starts_with("clarity.")).map(|(_, t)| *t)
     }
+}
+
+/// The splash screen of an application: its page, and how long it shows at least.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Splash {
+    pub page: String,
+    pub at_least: std::time::Duration,
 }
 
 impl AppFiles {

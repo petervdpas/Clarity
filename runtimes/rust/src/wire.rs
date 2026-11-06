@@ -184,6 +184,7 @@ fn answered<P: Program + ?Sized>(app: &P, command: &str, args: &Value) -> Value 
             }
             json!({ "value": null })
         }
+        "splash_status" => json!({ "value": app.splash_status() }),
         "watch_progress" => json!({ "value": app.watch_progress(id(&args)).map(|(done, all)| json!([done, all])) }),
         "facts" => json!({ "value": app.facts_json() }),
         "engine_open" => match app.engine_open(&arg::<String>(&args, "name").unwrap_or_default()) {

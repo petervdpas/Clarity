@@ -29,6 +29,7 @@ mod dialogs_keys;
 mod dialogs_long_call;
 mod dialogs_windows;
 mod slideouts;
+mod splash;
 mod frame_keyboard;
 mod frame_state;
 mod looks_escape_dialog;

@@ -881,11 +881,20 @@ pub struct GridPanel {
     /// markup the IDE's designer draws): the window, a container or a page
     /// that holds the grid. None in a program's own markup.
     pub item: Option<String>,
+    /// An exact grid (a page's own cells): no gaps, and no row grows.
+    pub exact: bool,
 }
 
 impl GridPanel {
     pub fn new(columns: i64) -> GridPanel {
-        GridPanel { node: Node::new(), places: Vec::new(), columns: columns.max(1), gap: grid::GAP, content: 0.0, rows: Vec::new(), item: None }
+        GridPanel { node: Node::new(), places: Vec::new(), columns: columns.max(1), gap: grid::GAP, content: 0.0, rows: Vec::new(), item: None, exact: false }
+    }
+
+    /// The grid as exact cells: no gaps between them, and every row keeps its height.
+    pub fn exact(mut self) -> GridPanel {
+        self.exact = true;
+        self.gap = 0.0;
+        self
     }
 
     /// The grid as held by the design's `item` (see `item`).
@@ -915,7 +924,7 @@ impl GridPanel {
         self.places
             .iter()
             .zip(self.node.children())
-            .map(|(p, c)| GridItem { around: p.around.max(c.around()), ..*p })
+            .map(|(p, c)| GridItem { around: p.around.max(c.around()), grows: p.grows && !self.exact, ..*p })
             .collect()
     }
 }

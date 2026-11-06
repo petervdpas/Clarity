@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "clarity/db.hpp"
+#include "clarity/splash.hpp"
 
 namespace clarity {
 

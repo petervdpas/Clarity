@@ -12,6 +12,7 @@
 #include "clarity/code.h"
 #include "clarity/disk.h"
 #include "clarity/settings.h"
+#include "clarity/splash.h"
 #include "desktop/desktop.h"
 #include "engine/screen.h"
 #include "tests.h"
@@ -149,6 +150,9 @@ void the_layer_answers_the_librarys_commands(void) {
     REQUIRE(program != NULL);
     CHECK_JSON(asked(program, "started", "{}"), "{\"value\":{\"main\":\"Card\",\"unconnected\":null}}");
     CHECK_JSON(asked(program, "watches", "{}"), "{\"value\":true}");
+    // What the splash screen says is loading, as code set it.
+    clarity_splash_set_status(clarity_plain_text("Loading the catalogue"));
+    CHECK_JSON(asked(program, "splash_status", "{}"), "{\"value\":\"Loading the catalogue\"}");
     CHECK_JSON(asked(program, "facts", "{}"), "{\"value\":{\"windows\":{\"Card\":{\"name\":\"text\"}}}}");
     // A record's stored file is base64, or null when it has none.
     CHECK_JSON(asked(program, "field_bytes", "{\"entity\":\"Card\",\"id\":1,\"field\":\"photo\"}"), "{\"value\":\"iVBORw==\"}");

@@ -17,7 +17,7 @@ import { findEntity, findEnum, tr, type Row } from "./model.ts";
 import { dataEntity, isList, startValue, translatedDefaults, valueField } from "./windowData.ts";
 import type { DataDecl } from "../generated/DataDecl.ts";
 
-export { CONTENT_PADDING, GAP, POPOVER_COLUMN, ROW_HEIGHT, WINDOW_HEIGHT, WINDOW_WIDTH, resizeEdits, rowAt, rowIn, scaledColumns, windowSize } from "./grid";
+export { CONTENT_PADDING, GAP, POPOVER_COLUMN, ROW_HEIGHT, WINDOW_HEIGHT, WINDOW_WIDTH, gapOf, resizeEdits, rowAt, rowIn, scaledColumns, windowSize } from "./grid";
 
 export function allPages(preview: Preview): Page[] {
   return preview.project.files.flatMap((f) => f.pages);
@@ -37,6 +37,8 @@ export function appAsPage(app: App): Page {
     kind: "window",
     title: app.title,
     size: null,
+    style: null,
+    cell: null,
     gives: null,
     tells: [],
     data: app.data,

@@ -15,7 +15,18 @@ name: string,
 /**
  * The name people see, when it differs from the one derived from `name`.
  */
-title: string | null, stack: Stack, datasources: Array<DataSource>, 
+title: string | null, 
+/**
+ * The application's icon, a picture among its resources (`icon "app.png"`):
+ * its windows, its taskbar button, its program file and its web page show
+ * it. Without one, Clarity's (docs/APP-ICON-SPLASH-PLAN.md).
+ */
+icon: string | null, 
+/**
+ * The application's version (`version "1.2.0"`, docs/VERSION-PLAN.md):
+ * `app.version` in code and `{app.version}` in texts; optional.
+ */
+version: string | null, stack: Stack, datasources: Array<DataSource>, 
 /**
  * The language the project's texts are written in, as a language tag
  * (`en`, `nl-NL`). Formats follow the locale of the person using the

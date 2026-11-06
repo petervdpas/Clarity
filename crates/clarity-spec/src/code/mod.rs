@@ -302,6 +302,22 @@ pub struct Expr {
     pub span: Span,
 }
 
+/// Whether an expression reads the application's version: `app.version`
+/// (docs/VERSION-PLAN.md), which every stack writes as the project's version.
+pub fn reads_app_version(expr: &Expr) -> bool {
+    matches!(&expr.kind, ExprKind::Member { object, member } if member.name == "version" && matches!(&object.kind, ExprKind::Name { name } if name == "app"))
+}
+
+/// The slots of a text by key that Clarity fills itself, from the project:
+/// `{app.version}`. A use gives them no value.
+pub const APP_SLOTS: [&str; 1] = ["app.version"];
+
+/// Whether an assignment's target is the splash screen's status:
+/// `splash.status = @loadingData`, which every stack sets in its runtime.
+pub fn sets_splash_status(target: &Expr) -> bool {
+    matches!(&target.kind, ExprKind::Member { object, member } if member.name == "status" && matches!(&object.kind, ExprKind::Name { name } if name == "splash"))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export)]

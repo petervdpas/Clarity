@@ -53,7 +53,9 @@
             ? { kind: "settings" }
             : kind === "view"
               ? { kind: "view" }
-              : { kind: "blank" };
+              : kind === "splash"
+                ? { kind: "splash" }
+                : { kind: "blank" };
     onsubmit(target, name.trim(), template);
   }
 
@@ -74,6 +76,7 @@
       <select bind:value={start}>
         <option value="blank">Blank window</option>
         <option value="view">Blank view (shown in a slide-out)</option>
+        <option value="splash">Splash screen (shows while the app starts)</option>
         {#if hasSettings}<option value="settings">Settings window</option>{/if}
         {#each entities as entity (entity)}
           <option value="form:{entity}">Form for {entity}</option>

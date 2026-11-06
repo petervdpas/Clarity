@@ -481,6 +481,10 @@ impl<'a> Emitter<'a> {
                     }
                 }
             }
+            StmtKind::Assign { target, value } if clarity_spec::code::sets_splash_status(target) => {
+                let text = self.shown(value);
+                let _ = writeln!(out, "clarity::splash::set_status({text});");
+            }
             StmtKind::Assign { target, value } => {
                 if let Some((part, property)) = self.part_property(target)
                     && self.custom_property(&part, &property)
@@ -1096,6 +1100,11 @@ impl<'a> Emitter<'a> {
     }
 
     fn value(&mut self, expr: &Expr) -> String {
+        // `app.version`: the project's version, written as the literal text it is.
+        if clarity_spec::code::reads_app_version(expr) {
+            let literal = Expr { kind: ExprKind::Str { value: self.project.version.clone().unwrap_or_default() }, span: expr.span };
+            return self.value(&literal);
+        }
         let ty = self.types.type_of(expr);
         match &expr.kind {
             ExprKind::ListOf { items } => {

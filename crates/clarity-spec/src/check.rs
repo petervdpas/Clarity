@@ -382,10 +382,27 @@ impl<'a> Checker<'a> {
     // -- pages ------------------------------------------------------------
 
     fn check_page(&mut self, file: usize, page: &'a Page) {
+        if page.kind == PageKind::Splash {
+            // Optional, but a splash page is there to be shown: one no app names is said.
+            let shown = self.files.iter().flat_map(|f| &f.apps).any(|a| a.splash.as_ref().is_some_and(|s| s.name == page.name.name));
+            if !shown {
+                self.warning(file, format!("{} is a splash page no app shows: write splash {} in the app", page.name.name, page.name.name), page.name.span);
+            }
+            // The application shows and closes it: it has no open, close or return of its own.
+            if let Some(handler) = page.handlers.first() {
+                self.error(file, format!("a splash page shows while the application starts and closes when the main window shows; it has no 'on {}' of its own", handler.event.keyword()), page.name.span);
+            }
+        }
         if let Some(size) = page.size
             && !crate::layout::window_size_fits(size.width, size.height)
         {
             self.error(file, crate::layout::window_size_problem(), page.name.span);
+        }
+        if let Some(cell) = page.cell
+            && !(crate::layout::CELL_HEIGHTS.0..=crate::layout::CELL_HEIGHTS.1).contains(&cell)
+        {
+            let (least, most) = crate::layout::CELL_HEIGHTS;
+            self.error(file, format!("a page's rows are {least} to {most} pixels high"), page.name.span);
         }
         if page.columns == 0 || page.columns > MAX_PAGE_COLUMNS {
             self.error(
@@ -578,6 +595,9 @@ impl<'a> Checker<'a> {
             ),
             Some(main) => self.check_main(file, main),
         }
+        if let Some(splash) = &app.splash {
+            self.check_splash(file, splash);
+        }
         let context = self.data_context(file, &app.data);
         self.check_frame(file, &context, &app.frame);
         self.check_names(file, &[], &app.frame);
@@ -644,6 +664,20 @@ impl<'a> Checker<'a> {
     }
 
     /// The main window is a page of kind window.
+    /// The app's splash (`splash Welcome`) is a page of the kind splash.
+    fn check_splash(&mut self, file: usize, splash: &Ident) {
+        let found = self.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == splash.name);
+        match found {
+            None => self.error(file, format!("there is no splash page '{}': write page {}: splash", splash.name, splash.name), splash.span),
+            Some(page) if page.kind != PageKind::Splash => self.error(
+                file,
+                format!("{} is a {}; the app's splash shows a splash page: write page {}: splash", splash.name, page_kind_word(page.kind), splash.name),
+                splash.span,
+            ),
+            Some(_) => {}
+        }
+    }
+
     fn check_main(&mut self, file: usize, main: &Ident) {
         let visible = self.visible_modules(file);
         let found = self.decls.get(main.name.as_str()).and_then(|ds| {
@@ -1900,6 +1934,11 @@ impl<'a> Checker<'a> {
         if self.overlays.contains(target) {
             return;
         }
+        // The splash screen is the application's to show while it starts.
+        if self.files.iter().flat_map(|f| &f.pages).any(|p| p.name.name == target && p.kind == PageKind::Splash) {
+            self.error(file, format!("{target} is the splash screen, which the application shows itself as it starts; nothing opens it"), span);
+            return;
+        }
         let visible = self.visible_modules(file);
         let kinds: Vec<DeclKind> = self
             .decls
@@ -2247,9 +2286,5 @@ fn frame_keys<'a>(file: usize, menu: &'a Option<crate::model::Menu>, toolbar: &'
 
 /// How a page's kind reads in a message: `window Card`, `dialog Ask`.
 fn page_kind_word(kind: PageKind) -> &'static str {
-    match kind {
-        PageKind::Window => "window",
-        PageKind::Dialog => "dialog",
-        PageKind::View => "view",
-    }
+    kind.word()
 }

@@ -24,6 +24,7 @@ mod rust;
 mod schema;
 pub mod web;
 pub mod web_windows;
+pub mod windows_resources;
 pub mod web_browser;
 pub mod preview;
 
@@ -694,6 +695,9 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if project.has_errors() {
         return Err(vec!["the project has errors; fix the errors before generating it".to_string()]);
     }
+    // The texts that show the app's version carry it, in every stack (docs/VERSION-PLAN.md).
+    let filled = clarity_spec::translations::with_app_slots(project);
+    let project = &filled;
     check_stores(project, settings)?;
     check_web_secrets(project)?;
     check_parts_in_browser(project, settings)?;
@@ -726,6 +730,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         Backend::C => c::generate(project, settings)?,
         Backend::Cpp => cpp::generate(project, settings)?,
     };
+    // The package carries the app's version, as each stack's build keeps it (docs/VERSION-PLAN.md).
+    if let Some(version) = &project.version {
+        versioned(&mut files, version);
+    }
     // A program that writes its own README (C#'s web program: a server and a
     // browser program) keeps it, with where its data is; the others get the
     // README of their stack.
@@ -1267,4 +1275,27 @@ fn check_web_secrets(project: &Project) -> Result<(), Vec<String>> {
         .map(|(s, secret)| format!("data source '{}': {}", s.name, clarity_project::keychain_problem(secret)))
         .collect();
     if found.is_empty() { Ok(()) } else { Err(found) }
+}
+
+/// The program's build files with the app's version: Rust's `Cargo.toml`
+/// (`version`), C#'s project (`<Version>`), and CMake's `project(... VERSION)`
+/// for C and C++, which takes only its numbers (a pre-release stays out).
+pub fn versioned(files: &mut [OutFile], version: &str) {
+    let numbers = version.split('-').next().unwrap_or(version);
+    for file in files.iter_mut() {
+        if file.path == "Cargo.toml" {
+            file.text = file.text.replacen("version = \"0.1.0\"\n", &format!("version = \"{version}\"\n"), 1);
+        } else if file.path.ends_with(".csproj") && !file.path.contains('/') {
+            file.text = file.text.replacen("    <OutputType>", &format!("    <Version>{version}</Version>\n    <OutputType>"), 1);
+        } else if file.path == "CMakeLists.txt" {
+            for language in [" LANGUAGES C)", " LANGUAGES CXX)"] {
+                if let Some(at) = file.text.find(language)
+                    && file.text[..at].rfind("project(").is_some_and(|start| !file.text[start..at].contains('\n'))
+                {
+                    file.text.insert_str(at, &format!(" VERSION {numbers}"));
+                    break;
+                }
+            }
+        }
+    }
 }

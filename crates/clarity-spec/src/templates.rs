@@ -20,6 +20,8 @@ pub enum PageTemplate {
     Blank,
     /// An empty view, which a window's slide-out shows (DESIGN 5.33).
     View,
+    /// The app's splash screen: its name and a status code sets while the app starts.
+    Splash,
     /// A label and an input for every field of the entity, and Save and
     /// Close buttons.
     Form { entity: String },
@@ -46,6 +48,7 @@ pub fn page_from_template(
     match template {
         PageTemplate::Blank => Ok(format!("page {name}: window\n    title {}", quote(&title))),
         PageTemplate::View => Ok(format!("page {name}: view")),
+        PageTemplate::Splash => Ok(format!("page {name}: splash")),
         PageTemplate::Form { entity } => {
             let entity = find_entity(project, entity)?;
             Ok(form_page(name, &title, entity))

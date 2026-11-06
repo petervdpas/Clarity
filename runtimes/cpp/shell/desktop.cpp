@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <set>
 
+#include "clarity/splash.hpp"
 #include "clarity/text.hpp"
 #include "clarity/watch.hpp"
 
@@ -28,6 +29,11 @@ std::optional<std::string> DesktopProgram::call(std::string_view command_view, s
     }
     if (!args.is_object()) args = json::object();
     if (command == "watches") return value(service_.options().watches).dump();
+    // Asked from the screen's thread while the app's on start runs.
+    if (command == "splash_status") {
+        auto said = clarity::splash::status();
+        return value(said ? json(*said) : json(nullptr)).dump();
+    }
     if (Watches::is_command(command)) return watches_.answer(command, args.value("id", uint64_t(0))).dump();
     // Engines beside the screen run in the program, each canvas's by its number.
     if (command.rfind("engine_", 0) == 0) {

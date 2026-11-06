@@ -16,6 +16,18 @@ export type Project = { files: Array<SpecFile>, diagnostics: Array<Diagnostic>,
  */
 locale: Locale, 
 /**
+ * The application's icon, a picture among its resources, as the project
+ * file names it (`icon "app.png"`); none for Clarity's own
+ * (docs/APP-ICON-SPLASH-PLAN.md).
+ */
+icon: string | null, 
+/**
+ * The application's version as the project file says it (`version
+ * "1.2.0"`): `app.version` in code, `{app.version}` in texts; none
+ * without one (docs/VERSION-PLAN.md).
+ */
+version: string | null, 
+/**
  * The project's translations per language: each text a person sees,
  * as written, with its translation (design section 1.5, I1c).
  */

@@ -11,6 +11,7 @@
 
 #include "check.hpp"
 #include "clarity/settings.hpp"
+#include "clarity/splash.hpp"
 #include "clarity/watch.hpp"
 #include "engine/engine.hpp"
 #include "shell/desktop.hpp"
@@ -111,6 +112,9 @@ TEST(the_desktop_answers_the_librarys_commands) {
     CHECK_EQ(called(program, "engine_open", {{"name", "Board"}}), json("none"));
     CHECK_EQ(called(program, "nonsense"), json("none"));
     CHECK_EQ(called(program, "watches"), json::parse(R"({"value":false})"));
+    // What the splash screen says is loading, as code set it.
+    clarity::splash::set_status(clarity::Text::plain("Loading the catalogue"));
+    CHECK_EQ(called(program, "splash_status"), json::parse(R"({"value":"Loading the catalogue"})"));
     // A record's file goes as base64.
     CHECK_EQ(called(program, "field_bytes", {{"entity", "Card"}, {"id", 1}, {"field", "photo"}}), json::parse(R"({"value":"AQID"})"));
     CHECK_EQ(called(program, "field_bytes", {{"entity", "Card"}, {"id", 2}, {"field", "photo"}}), json::parse(R"({"value":null})"));

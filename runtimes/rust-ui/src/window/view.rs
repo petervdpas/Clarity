@@ -34,6 +34,10 @@ pub struct WindowView {
     frame: Rc<WindowFrame>,
     /// The window's name (`Main`), by which the person's keys know its commands.
     pub name: Option<String>,
+    /// A style of the theme for the window itself: its background and its parts' text.
+    style: Option<String>,
+    /// The space around its grid: none on a page's own exact grid, whose cells reach its edges.
+    padding: f64,
     /// Why the window shows nothing: its markup could not be read.
     pub problem: Option<String>,
     /// How far the window's content is scrolled down, and how far it can be.
@@ -65,6 +69,10 @@ impl WindowView {
         // Its rows, and what follows them, are as high as its project says.
         crate::grid::set_row_height(spec.row_height);
         let mut grid = GridPanel::new(spec.columns).owned(spec.item.as_deref());
+        // A page's own exact grid: cells without gaps, rows that keep their height.
+        if spec.cell.is_some() {
+            grid = grid.exact();
+        }
         for part in &spec.parts {
             let made = parts::make(part.clone(), host.clone());
             let place = parts::place_of(made.as_ref());
@@ -76,7 +84,7 @@ impl WindowView {
         let body = Showing::new(Box::new(grid), move || filling.filling().is_none());
         let mut node = Node::new();
         node.add(Box::new(body));
-        let mut view = WindowView { node, host, own_frame: spec.frame.clone(), frame, name: spec.name.clone(), problem: None, scroll_y: 0.0, max_scroll_y: 0.0, drag_from: None, hover_x: 0.0, strips: Vec::new() };
+        let mut view = WindowView { node, host, own_frame: spec.frame.clone(), frame, name: spec.name.clone(), style: spec.style.clone(), padding: if spec.cell.is_some() { 0.0 } else { CONTENT_PADDING }, problem: None, scroll_y: 0.0, max_scroll_y: 0.0, drag_from: None, hover_x: 0.0, strips: Vec::new() };
         view.add_regions();
         view
     }
@@ -144,7 +152,7 @@ impl WindowView {
 
     /// A window whose markup could not be read: it says why in its place.
     pub fn failed(problem: String, host: Rc<dyn PartHost>) -> WindowView {
-        let spec = WindowSpec { frame: Vec::new(), parts: Vec::new(), name: None, columns: crate::markup::STANDARD_COLUMNS, item: None, row_height: crate::grid::row_height() };
+        let spec = WindowSpec { frame: Vec::new(), parts: Vec::new(), name: None, columns: crate::markup::STANDARD_COLUMNS, item: None, row_height: crate::grid::row_height(), look: Default::default(), style: None, cell: None };
         WindowView { problem: Some(problem), ..WindowView::new(&spec, host) }
     }
 
@@ -286,13 +294,13 @@ impl WindowView {
 
     /// The place of the grid: inside the frame, inside the padding.
     fn inside(&self) -> Rect {
-        self.frame.body().inset(CONTENT_PADDING)
+        self.frame.body().inset(self.padding)
     }
 
     /// How high the window's rows and its frame's regions are with no spare height: what a window that names no height needs.
     pub fn content_height(&self, width: f64) -> f64 {
         let (high, wide) = self.frame.room(self.regions());
-        self.grid().content_for((width - wide - 2.0 * CONTENT_PADDING).max(0.0), 0.0) + 2.0 * CONTENT_PADDING + high
+        self.grid().content_for((width - wide - 2.0 * self.padding).max(0.0), 0.0) + 2.0 * self.padding + high
     }
 
     /// Where the scroll bar runs: the padding at the window's right, beside the content.
@@ -574,6 +582,11 @@ fn all_items(items: &[CommandSpec]) -> Vec<CommandSpec> {
 }
 
 impl Element for WindowView {
+    /// The window's own style: its fill under everything, square, and its text for every part in it.
+    fn styled(&self, painter: &Painter) -> Option<crate::painter::StyledLook> {
+        crate::parts::style_named(self.style.as_deref()?, self.node.bounds, 0.0, painter)
+    }
+
     crate::element_node!();
 
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {

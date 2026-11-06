@@ -35,6 +35,7 @@ pub mod screen;
 pub mod secrets;
 pub mod serve;
 pub mod settings;
+pub mod splash;
 pub mod sql;
 pub mod steps;
 mod store;

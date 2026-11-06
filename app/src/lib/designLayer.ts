@@ -115,14 +115,19 @@ export function layerOf(layout: Layout, page: Page, appFrame: Frame | null = nul
   return { parts, grids };
 }
 
-/** The cells of a grid, each column by each row, in its own pixels from its top left. */
-export function cellsOf(grid: LayerGrid): Box[] {
+/** The cells of a grid, each column by each row, in its own pixels from its top left; with `row`, rows of that height go on below the last laid out, to the grid's bottom. */
+export function cellsOf(grid: LayerGrid, row?: number): Box[] {
   const column = (grid.box.width - grid.gap * (grid.columns - 1)) / grid.columns;
   const out: Box[] = [];
   let y = 0;
-  for (const height of grid.rows) {
+  const across = (height: number) => {
     for (let c = 0; c < grid.columns; c++) out.push({ x: c * (column + grid.gap), y, width: column, height });
     y += height + grid.gap;
+  };
+  for (const height of grid.rows) across(height);
+  // The empty rows to the bottom: where a part may still be dropped.
+  if (row && row > 0) {
+    while (y + row <= grid.box.height + 0.5) across(row);
   }
   return out;
 }
@@ -136,4 +141,26 @@ export function placeIn(grid: LayerGrid, at: { col: number; row: number; width: 
   let height = 0;
   for (let r = at.row; r < at.row + at.height; r++) height += rowHeight(r) + (r > at.row ? grid.gap : 0);
   return { x: (at.col - 1) * (column + grid.gap), y: top, width: at.width * column + (at.width - 1) * grid.gap, height };
+}
+
+/** Where an arrow key moves a part in a grid of `columns`: one cell that way; null for another key, or at the grid's edge. */
+export function nudged(at: { col: number; row: number; width: number }, columns: number, key: string): { col: number; row: number } | null {
+  const step: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  const by = step[key];
+  if (!by) return null;
+  const col = at.col + by[0];
+  const row = at.row + by[1];
+  if (col < 1 || row < 1 || col + at.width - 1 > columns) return null;
+  return { col, row };
+}
+
+/** How Shift and an arrow key resize a part in a grid of `columns`: one cell wider (right), narrower (left), taller (down) or shorter (up); null for another key, below one cell, or past the grid's edge. */
+export function grown(at: { col: number; width: number; height: number }, columns: number, key: string): { width: number; height: number } | null {
+  const step: Record<string, [number, number]> = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1] };
+  const by = step[key];
+  if (!by) return null;
+  const width = at.width + by[0];
+  const height = at.height + by[1];
+  if (width < 1 || height < 1 || at.col + width - 1 > columns) return null;
+  return { width, height };
 }

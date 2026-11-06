@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "clarity/core.h"
+#include "clarity/splash.h"
 #include "clarity/watch.h"
 
 struct ClarityDesktopProgram {
@@ -85,6 +86,16 @@ char* clarity_desktop_answer(ClarityDesktopProgram* p, const char* command, cons
         return clarity_watches_answer(p->watches, command, id);
     }
     if (strcmp(command, "watches") == 0) return value_of(p->options->watches);
+    // Asked from the screen's thread while the app's on start holds the turn.
+    if (strcmp(command, "splash_status") == 0) {
+        char* said = clarity_splash_status();
+        size_t size = (said ? strlen(said) : 4) + 16;
+        char* text = malloc(size);
+        if (text) snprintf(text, size, "{\"value\":%s}", said ? said : "null");
+        free(said);
+        command_done();
+        return text;
+    }
     // Engines beside the screen run in the program, each canvas's by its number,
     // without waiting for the service's turn: each instance takes its own.
     if (strncmp(command, "engine_", 7) == 0) {

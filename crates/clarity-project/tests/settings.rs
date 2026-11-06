@@ -36,6 +36,8 @@ fn shop() -> Settings {
     Settings {
         name: "Shop".into(),
         title: None,
+        icon: None,
+        version: None,
         stack: Stack {
             backend: Backend::Csharp,
             ui: Ui::Clarity,
@@ -144,7 +146,7 @@ fn names_the_expected_values_for_an_unknown_one() {
 #[test]
 fn refuses_unknown_settings_and_a_wrong_shape() {
     let err = parse(&SHOP.replace("    stack", "    frontend svelte\n    stack")).unwrap_err();
-    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, stack, output, language, currency, theme, keys, engines, port, row height, datasource and filestore");
+    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, icon, stack, output, language, currency, theme, keys, engines, port, row height, datasource and filestore");
     assert_eq!(parse("module shop\n").unwrap_err(), "line 1: a project file starts with 'project Name'");
     assert_eq!(
         parse("project Shop\n    datasource main sqlite \"x.db\"\n").unwrap_err(),
@@ -841,4 +843,21 @@ fn a_web_api_says_how_it_pages() {
     ] {
         assert_eq!(paged(paging.clone()), [problem], "{paging:?}");
     }
+}
+
+/// The application's icon (docs/APP-ICON-SPLASH-PLAN.md): `icon "app.png"`,
+/// a picture among the project's resources; without the line, Clarity's.
+#[test]
+fn the_project_names_its_icon() {
+    let text = format!("{SHOP}    icon \"app.png\"\n");
+    let settings = parse(&text).unwrap();
+    assert_eq!(settings.icon.as_deref(), Some("app.png"));
+    assert_eq!(parse(SHOP).unwrap().icon, None);
+    let written = write(Some(SHOP), &settings).unwrap();
+    assert!(written.contains("\n    icon \"app.png\"\n"), "{written}");
+    assert_eq!(parse(&written).unwrap(), settings);
+    let off = write(Some(&written), &Settings { icon: None, ..settings }).unwrap();
+    assert!(!off.contains("icon"), "{off}");
+    assert_eq!(parse(&format!("{SHOP}    icon app\n")).unwrap_err(), "line 11: write 'icon' and the picture among the resources in quotes, like: icon \"app.png\"");
+    assert!(parse(&format!("{SHOP}    icon \"a.png\"\n    icon \"b.png\"\n")).unwrap_err().contains("set twice"));
 }

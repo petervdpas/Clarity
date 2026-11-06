@@ -105,6 +105,14 @@ public sealed class WireLongCallTests
     // -- Quit, keys, a window of its own ------------------------------------------------
 
     [Fact]
+    public void The_splash_status_is_answered_while_the_app_starts()
+    {
+        var (wire, _) = Started();
+        Splash.SetStatus(Text.Plain("Loading the catalogue"));
+        Assert.Equal("Loading the catalogue", Value(wire.Answer("splash_status", "{}"))!.GetValue<string>());
+    }
+
+    [Fact]
     public void Quitting_from_code_says_quit_in_the_reply_once_and_closes_no_window_itself()
     {
         var (wire, _) = Started();

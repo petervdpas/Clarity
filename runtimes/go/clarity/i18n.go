@@ -9,6 +9,7 @@ package clarity
 
 import (
 	"encoding/json"
+	"strings"
 	"sync"
 )
 
@@ -25,12 +26,21 @@ func LoadTranslations(model []byte) {
 	var m struct {
 		Project struct {
 			Translations map[string]map[string]string `json:"translations"`
+			Version      *string                      `json:"version"`
 			Locale       struct {
 				Language *string `json:"language"`
 			} `json:"locale"`
 		} `json:"project"`
 	}
 	_ = json.Unmarshal(model, &m)
+	// {app.version} is the project's version, which Clarity fills itself (docs/VERSION-PLAN.md).
+	if m.Project.Version != nil {
+		for _, values := range m.Project.Translations {
+			for key, text := range values {
+				values[key] = strings.ReplaceAll(text, "{app.version}", *m.Project.Version)
+			}
+		}
+	}
 	i18n.Lock()
 	defer i18n.Unlock()
 	i18n.values = m.Project.Translations

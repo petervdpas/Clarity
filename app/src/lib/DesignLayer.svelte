@@ -9,16 +9,21 @@
   import type { Frame } from "@clarity/ui/generated/Frame.ts";
   import type { Page } from "@clarity/ui/generated/Page.ts";
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
-  import { GAP, rowAt } from "@clarity/ui/screen/grid.ts";
+  import { gapOf, rowAt } from "@clarity/ui/screen/grid.ts";
   import { locateWidget, widgetInfo, withProps } from "@clarity/ui/screen/pages.ts";
   import type { Layout } from "./clarityWindow";
-  import { cellsOf, layerOf, placeIn, type LayerPart } from "./designLayer";
+  import { cellsOf, layerOf, placeIn, type LayerGrid, type LayerPart } from "./designLayer";
   import { pageDesigner } from "./pageDesignerStore.svelte";
 
   let { layout, page, preview, appFrame = null }: { layout: Layout | null; page: Page; preview: Preview; appFrame?: Frame | null } = $props();
 
   const layer = $derived(layout ? layerOf(layout, page, appFrame) : { parts: [], grids: [] });
   const DOCKS = ["top", "bottom", "left", "right"] as const;
+
+  /** How high a row of a grid is when it holds nothing: on a page with its own cells (`grid 56 columns rows 10`) every grid's, else the project's. */
+  function rowHeightOf(_grid: LayerGrid): number {
+    return page.cell ?? preview.project.rowHeight;
+  }
 
   function where(box: { x: number; y: number; width: number; height: number }): string {
     return `left: ${box.x}px; top: ${box.y}px; width: ${box.width}px; height: ${box.height}px;`;
@@ -85,13 +90,14 @@
     const p = found.widget.props;
     const el = e.currentTarget as HTMLElement;
     const rect = el.getBoundingClientRect();
-    const cellWidth = (rect.width - GAP * (p.width - 1)) / p.width;
     // The row grabbed, counted in the grid's own rows: some are taller than others.
     const grid = el.parentElement?.querySelector<HTMLElement>(`[data-grid="${found.container.offset}"]`);
+    const gap = grid ? gapOf(grid) : 0;
+    const cellWidth = (rect.width - gap * (p.width - 1)) / p.width;
     const gridRect = grid?.getBoundingClientRect();
     const row = grid && gridRect ? rowAt(grid, e.clientY - gridRect.top, gridRect.height) : p.row;
     const grab = {
-      dc: Math.min(p.width - 1, Math.max(0, Math.floor((e.clientX - rect.left) / (cellWidth + GAP)))),
+      dc: Math.min(p.width - 1, Math.max(0, Math.floor((e.clientX - rect.left) / (cellWidth + gap)))),
       dr: Math.min(p.height - 1, Math.max(0, row - p.row)),
     };
     pageDesigner.press(e, { kind: "move", item: part.item, from: found.container.offset, props: p, grab, label: widgetInfo(preview, p.kind).name }, pick);
@@ -111,17 +117,18 @@
       class="grid"
       data-grid={grid.item}
       data-columns={grid.columns}
-      data-row-height={preview.project.rowHeight}
+      data-row-height={rowHeightOf(grid)}
+      data-gap={grid.gap}
       data-inside={grid.inside.join(" ")}
       style="{where(grid.box)} grid-template-rows: {grid.rows.map((r) => `${r}px`).join(' ')}; row-gap: {grid.gap}px;"
     >
       {#if pageDesigner.showGrid}
-        {#each cellsOf(grid) as cell, i (i)}
+        {#each cellsOf(grid, rowHeightOf(grid)) as cell, i (i)}
           <span class="cell" style={where(cell)}></span>
         {/each}
       {/if}
       {#if pageDesigner.hover && pageDesigner.hover.container === grid.item}
-        <span class="ghost" style={where(placeIn(grid, pageDesigner.hover, preview.project.rowHeight))}></span>
+        <span class="ghost" style={where(placeIn(grid, pageDesigner.hover, rowHeightOf(grid)))}></span>
       {/if}
     </div>
   {/each}

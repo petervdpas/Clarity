@@ -1654,7 +1654,7 @@
               onopen={(kind, name) => select({ kind, name })}
             />
           {:else if tab === "design" && openApp && appPage && file}
-            <PageDesigner {preview} page={appPage} app={openApp} {file} onapplied={applyPreview} />
+            <PageDesigner {preview} page={appPage} app={openApp} {file} settings={projectFile?.settings ?? null} onsavesettings={saveSettings} onapplied={applyPreview} />
           {:else if tab === "design" && page && file}
             <PageDesigner {preview} {page} {file} onapplied={applyPreview} />
           {:else if page}

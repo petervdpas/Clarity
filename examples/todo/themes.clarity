@@ -3,7 +3,21 @@ module themes
 theme Light
     title @lightTheme
     mode light
+    color splashDeep "#0d1838"
+    color splashSoft "#a8b8de"
+    color splashQuiet "#7f8fb8"
+    style splashBack background splashDeep, text "#ffffff"
+    style splashTitle text "#ffffff", size 48, weight bold, font heading
+    style splashTagline text splashSoft, size 16
+    style splashStatus text splashQuiet, size 13
 
 theme Dark
     title @darkTheme
     mode dark
+    color splashDeep "#0d1838"
+    color splashSoft "#a8b8de"
+    color splashQuiet "#7f8fb8"
+    style splashBack background splashDeep, text "#ffffff"
+    style splashTitle text "#ffffff", size 48, weight bold, font heading
+    style splashTagline text splashSoft, size 16
+    style splashStatus text splashQuiet, size 13

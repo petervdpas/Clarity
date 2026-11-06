@@ -11,8 +11,9 @@ import type { ShownText } from "./format";
 export type Values = Record<string, Record<string, string>>;
 
 /** The values to look keys up in: the language picked (null for the
- *  default) and the default language. */
-export type Texts = { values: Values; picked: string | null; fallback: string };
+ *  default) and the default language; and the app's version, which fills
+ *  `{app.version}` (docs/VERSION-PLAN.md). */
+export type Texts = { values: Values; picked: string | null; fallback: string; version?: string | null };
 
 const primary = (tag: string) => tag.split("-")[0].toLowerCase();
 
@@ -31,7 +32,9 @@ export function pickLanguage(locale: string, available: readonly string[], base:
  *  where that one leaves it empty; undefined when no language has it. */
 export function keyValue(key: string, texts: Texts): string | undefined {
   const of = (language: string | null) => (language ? texts.values[language]?.[key] || undefined : undefined);
-  return of(texts.picked) ?? of(texts.fallback);
+  const value = of(texts.picked) ?? of(texts.fallback);
+  // `{app.version}` is the project's version, which Clarity fills itself.
+  return value !== undefined && texts.version ? value.replaceAll("{app.version}", texts.version) : value;
 }
 
 /** A text of the project as people read it: a key's value (`@saveCaption`),

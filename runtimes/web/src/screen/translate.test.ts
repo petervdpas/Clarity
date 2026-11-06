@@ -8,7 +8,7 @@ import { keyValue, languageName, languagesOf, pickLanguage, rememberedChoice, tr
 
 type Pick = { what: string; locale: string; available: string[]; base: string | null; picks: string | null };
 type KeyCase = { what: string; language: string | null; key: string; gives: string };
-type Code = { model: { project: { locale: { language: string }; translations: Texts["values"] } }; cases: KeyCase[] };
+type Code = { model: { project: { locale: { language: string }; translations: Texts["values"]; version?: string } }; cases: KeyCase[] };
 const cases: { picks: Pick[]; code: Code } = JSON.parse(readFileSync(new URL("../../../../conformance/translations.json", import.meta.url), "utf8"));
 
 test("the language is picked as the conformance cases say", () => {
@@ -18,7 +18,7 @@ test("the language is picked as the conformance cases say", () => {
 test("a key takes its value in the language picked, else the default's, as every runtime does", () => {
   const project = cases.code.model.project;
   for (const c of cases.code.cases) {
-    const texts: Texts = { values: project.translations, picked: c.language, fallback: project.locale.language };
+    const texts: Texts = { values: project.translations, picked: c.language, fallback: project.locale.language, version: project.version };
     // The renderer fills slots itself; the cases without slots check the lookup.
     if (!c.gives.includes("Ada")) assert.equal(keyValue(c.key, texts) ?? c.key, c.gives, c.what);
   }

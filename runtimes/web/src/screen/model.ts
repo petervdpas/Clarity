@@ -50,7 +50,7 @@ export function languageOf(preview: Preview): string | null {
 
 /** The values to look keys up in, in the language texts show in. */
 export function textsOf(preview: Preview): Texts {
-  return { values: preview.project.translations, picked: languageOf(preview), fallback: preview.project.locale.language ?? "en" };
+  return { values: preview.project.translations, picked: languageOf(preview), fallback: preview.project.locale.language ?? "en", version: preview.project.version };
 }
 
 /** The text of Markdown file `name` of the project's resources. */

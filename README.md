@@ -61,6 +61,8 @@ What to install on Windows, Linux and macOS, step by step with the commands, is 
 
 ## Commands
 
+The installed Clarity has the `clarity` command-line tool beside the IDE (`/usr/bin/clarity` on Linux, the install folder on Windows), at the IDE's version: `clarity gen shop.clarity`, `clarity data migrate`, `clarity --help`. Built from source, it is `cargo run -p clarity-cli --`, as below.
+
 Check a project:
 
 ```sh

@@ -305,6 +305,22 @@ pub fn set_bundled(folder: PathBuf) {
     let _ = BUNDLED.set(folder);
 }
 
+/// The IDE's product name (tauri.conf.json's productName), which names its
+/// resource folder on Linux.
+pub const PRODUCT_NAME: &str = "Clarity IDE";
+
+/// The resource folder of the installed Clarity, for a program in `exe_dir`
+/// (the IDE or the command-line tool beside it) on `os`: the package's
+/// `lib/Clarity IDE` on Linux, the program's own folder on Windows, the
+/// bundle's Resources on macOS. It holds `clarity-ui` and `clarity-ui-browser`.
+pub fn installed_resources(exe_dir: &Path, os: &str) -> PathBuf {
+    match os {
+        "windows" => exe_dir.to_path_buf(),
+        "macos" => exe_dir.join("..").join("Resources"),
+        _ => exe_dir.join("..").join("lib").join(PRODUCT_NAME),
+    }
+}
+
 /// Where the library comes from on this machine.
 pub fn library() -> Library {
     let os = std::env::consts::OS;

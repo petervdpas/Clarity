@@ -49,6 +49,8 @@ fi
 # The package carries Clarity.UI's library for Go, C and C++ builds (DESIGN 7.9);
 # Skia's text needs fontconfig and freetype, the sound part ALSA.
 bash .github/scripts/stage-clarity-ui.sh
+# The package ships the clarity command-line tool as /usr/bin/clarity.
+bash .github/scripts/stage-clarity-cli.sh
 
 cd app
 npm ci
@@ -62,7 +64,7 @@ if [ "$format" = deb ]; then
     # The program on its own (it still needs the system's WebKitGTK).
     stage="$(mktemp -d)/$name"
     mkdir -p "$stage"
-    cp target/release/clarity-app "$stage/"
+    cp target/release/clarity-app target/release/clarity "$stage/"
     cp README.md "$stage/"
     tar -C "$(dirname "$stage")" -czf "out/$name.tar.gz" "$(basename "$stage")"
 fi

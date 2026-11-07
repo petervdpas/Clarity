@@ -4,8 +4,15 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use clarity_spec::{Preview, Severity};
 
+/// The release's version, which the installer's build names (CLARITY_VERSION, the
+/// IDE's version); the workspace's when built from source.
+const VERSION: &str = match option_env!("CLARITY_VERSION") {
+    Some(version) => version,
+    None => env!("CARGO_PKG_VERSION"),
+};
+
 #[derive(Parser)]
-#[command(name = "clarity", version, about = "Clarity development environment")]
+#[command(name = "clarity", version = VERSION, about = "Clarity development environment")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -171,6 +178,12 @@ enum SpecCommand {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    // Installed beside the IDE, the tool takes the library and browser files its package carries.
+    if let Some(dir) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(std::path::Path::to_path_buf)) {
+        let resources = clarity_gen::clarity_ui::installed_resources(&dir, std::env::consts::OS);
+        clarity_gen::clarity_ui::set_bundled(resources.join("clarity-ui"));
+        clarity_gen::clarity_ui::set_bundled_browser(resources.join("clarity-ui-browser"));
+    }
     match cli.command {
         Command::Spec { command } => match command {
             SpecCommand::Check { dir } => check(&dir),

@@ -1,5 +1,6 @@
 {
   "bundle": {
+    "externalBin": ["binaries/clarity"],
     "resources": {
       "clarity-ui/**/*": "clarity-ui/",
       "clarity-ui-browser/**/*": "clarity-ui-browser/"

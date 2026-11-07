@@ -187,6 +187,13 @@ jobs:
         shell: bash
         run: bash .github/scripts/stage-clarity-ui.sh
 
+      # The installer ships the clarity command-line tool beside the IDE.
+      - name: Build the clarity command-line tool
+        shell: bash
+        env:
+          VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: VERSION="${VERSION#v}" bash .github/scripts/stage-clarity-cli.sh
+
       - name: Build installers
         working-directory: app
         run: npm run tauri build -- --bundles nsis,msi --config src-tauri/tauri.clarity-ui.conf.json

@@ -33,4 +33,8 @@ if [ -n "$missing" ]; then
     exit 1
 fi
 ls /usr/share/applications/ | grep -i clarity
+# The command-line tool comes with it, at the IDE's version.
+cli=/usr/bin/clarity
+test -x "$cli" || { echo "$cli is not installed" >&2; exit 1; }
+"$cli" --version
 echo "installed: $package"

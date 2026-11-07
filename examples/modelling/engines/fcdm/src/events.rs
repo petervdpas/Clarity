@@ -16,6 +16,7 @@ use crate::{parameter, quoted, INDENT, ONE_LINE, ONE_LINE_PARAMETERS};
 
 /// An event, as the application hands it over.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EventSpec {
     pub domain: String,
     pub name: String,
@@ -39,6 +40,7 @@ pub struct EventSpec {
 
 /// A field of a field event, in its constructor's order.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EventFieldSpec {
     pub name: String,
     /// A property kind: TextValue, BusinessKey, HeldObject, HeldObjects, Moment, MomentWithOffset, ...

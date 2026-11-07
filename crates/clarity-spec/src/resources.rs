@@ -26,7 +26,7 @@ pub const PICTURE_EXTENSIONS: [&str; 7] = ["png", "jpg", "jpeg", "gif", "bmp", "
 
 /// The sound files every stack plays (DESIGN 5.22): the browser engines of
 /// the web stacks and C# read these alike.
-pub const SOUND_EXTENSIONS: [&str; 3] = ["wav", "mp3", "flac"];
+pub const SOUND_EXTENSIONS: [&str; 4] = ["wav", "mp3", "flac", "ogg"];
 
 /// A file of the resources folder that the application carries as it is,
 /// such as a picture. The renderer knows it by name; the bytes go into
@@ -224,7 +224,7 @@ fn named_problem(said: &str, picture: &str, pictures: &[&str]) -> Option<String>
 /// What is wrong with the file a part names as its `source`.
 fn source_problem(kind: WidgetKind, source: &str, pictures: &[&str], documents: &[&str], sounds: &[&str]) -> Option<String> {
     Some(match kind {
-        WidgetKind::Sound if !is_sound(source) => format!("'{source}' is not a sound every stack can play; use a .wav, .mp3 or .flac file"),
+        WidgetKind::Sound if !is_sound(source) => format!("'{source}' is not a sound every stack can play; use a .wav, .mp3, .flac or .ogg file"),
         WidgetKind::Sound if sounds.contains(&source) => return None,
         WidgetKind::Sound if sounds.is_empty() => format!("sound '{source}' is not in the resources folder, which has no sounds yet"),
         WidgetKind::Sound => format!("sound '{source}' is not in the resources folder; it has {}", sounds.join(", ")),
@@ -270,6 +270,40 @@ fn key_problems(project: &Project, kind: WidgetKind, key: &str, names: &[&str]) 
 }
 
 /// Every widget of `widgets`, with what they hold, in order.
+/// Whether the project plays songs (docs/AUDIO-PLAN.md), which the desktop
+/// plays through Clarity.Audio, so the generator adds it: a sound part whose
+/// source is no WAV (mp3, flac, ogg), one wired `on end` or `on fail`, or
+/// code that plays a sound a file, pauses, resumes or seeks it.
+pub fn plays_songs(project: &Project) -> bool {
+    let mut songs = false;
+    let mut sounds = Vec::new();
+    for file in &project.files {
+        for page in &file.pages {
+            each_widget(&page.widgets, &mut |widget| {
+                if widget.props.kind != WidgetKind::Sound {
+                    return;
+                }
+                songs |= widget.props.source.as_deref().is_some_and(|source| is_sound(source) && !has_extension(source, &["wav"]));
+                songs |= !widget.props.handlers.is_empty();
+                sounds.extend(widget.props.name.clone());
+            });
+        }
+    }
+    if songs || sounds.is_empty() {
+        return songs;
+    }
+    for block in project.files.iter().flat_map(|f| &f.code) {
+        for handler in &block.handlers {
+            crate::code::check::each_stmt(&handler.body, &mut |stmt| {
+                if let crate::code::StmtKind::Hear { part, hear, args } = &stmt.kind {
+                    songs |= sounds.contains(&part.name) && (matches!(hear.name.as_str(), "pause" | "resume" | "seek") || (hear.name == "play" && !args.is_empty()));
+                }
+            });
+        }
+    }
+    songs
+}
+
 pub(crate) fn each_widget(widgets: &[Widget], found: &mut impl FnMut(&Widget)) {
     for widget in widgets {
         found(widget);

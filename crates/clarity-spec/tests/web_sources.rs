@@ -15,14 +15,14 @@ entity Order
     number: text(20)
     total: money
 
-action list_orders(status: text) -> list<Order>
+action listOrders(status: text) -> list<Order>
     effects net
     let reply = http get \"/orders\" from shop query \"status\": status query \"limit\": \"50\"
     if not reply.ok
         refuse \"shop answered {reply.status}: {reply.text}\"
     return read list<Order> from json reply.text
 
-action create_order(order: Order) -> Order
+action createOrder(order: Order) -> Order
     effects net
     let reply = http post \"/orders\" from shop with json of order header \"Content-Type\": \"application/json\"
     return read Order from json reply.text

@@ -166,7 +166,7 @@ page Templates: window
 
 code Templates
     handler loadClicked
-        templates = list_templates(\"published\")
+        templates = listTemplates(\"published\")
 ";
 
 /// A project folder in the target directory, with the description and a
@@ -231,9 +231,9 @@ fn the_module_holds_what_the_picks_need() {
     assert!(!text.contains("entity Entry"), "{text}");
     for line in [
         "    name: text",
-        "    created_at: datetime",
+        "    createdAt: datetime",
         "    status: TemplateStatus",
-        "    field_count: integer",
+        "    fieldCount: integer",
         "    price: decimal(18, 6)",
         "    tags: list<text>",
         "    active: bool",
@@ -250,12 +250,12 @@ fn the_module_holds_what_the_picks_need() {
     // An action per picked operation, on the calls of the language.
     for line in [
         // An optional parameter has a default; it is sent only when it differs.
-        "action list_templates(status: text, limit: integer = 0, sort: text = \"name\", archived: bool = false) -> list<Template>",
+        "action listTemplates(status: text, limit: integer = 0, sort: text = \"name\", archived: bool = false) -> list<Template>",
         "    let reply = http get \"/templates\" from forms query \"status\": status query \"limit\": \"{limit}\" when limit != 0 query \"sort\": sort when sort != \"name\" query \"archived\": \"true\" when archived",
         "    return read list<Template> from json reply.text",
-        "action get_template(template_id: integer) -> Template",
-        "    let reply = http get \"/templates/{template_id}\" from forms",
-        "action create_template(template: Template) -> Template",
+        "action getTemplate(templateId: integer) -> Template",
+        "    let reply = http get \"/templates/{templateId}\" from forms",
+        "action createTemplate(template: Template) -> Template",
         "    let reply = http post \"/templates\" from forms with json of template header \"Content-Type\": \"application/json\"",
         "        refuse \"forms createTemplate answered {reply.status}: {reply.text}\"",
     ] {
@@ -297,7 +297,7 @@ fn a_new_revision_updates_the_entities() {
     let second = std::fs::read_to_string(&written).unwrap();
     assert!(second.contains("    description: text"), "{second}");
     assert!(second.contains("Formidable 2.2.0"), "{second}");
-    assert!(!second.contains("get_template"), "{second}");
+    assert!(!second.contains("getTemplate"), "{second}");
     // Nothing changed: the file is left as it is.
     let modified = std::fs::metadata(&written).unwrap().modified().unwrap();
     clarity_project::refresh_apis(&file).unwrap();
@@ -336,8 +336,8 @@ fn a_patch_is_picked_as_any_operation() {
     let written = openapi::module("forms", "forms.yaml", &description, &["renameTemplate".into()], &[], None);
     assert!(written.warnings.is_empty(), "{:?}", written.warnings);
     for line in [
-        "action rename_template(template_id: integer, template: Template) -> Template",
-        "    let reply = http patch \"/templates/{template_id}\" from forms with json of template header \"Content-Type\": \"application/json\"",
+        "action renameTemplate(templateId: integer, template: Template) -> Template",
+        "    let reply = http patch \"/templates/{templateId}\" from forms with json of template header \"Content-Type\": \"application/json\"",
     ] {
         assert!(written.text.contains(line), "no {line:?} in\n{}", written.text);
     }
@@ -354,11 +354,11 @@ fn a_list_on_a_source_that_pages_reads_every_page() {
     let written = openapi::module("forms", "forms.yaml", &description, &["listTemplates".into(), "getTemplate".into()], &[], Some(&numbered));
     assert!(written.warnings.is_empty(), "{:?}", written.warnings);
     for line in [
-        "action list_templates(status: text, sort: text = \"name\", archived: bool = false) -> list<Template>",
+        "action listTemplates(status: text, sort: text = \"name\", archived: bool = false) -> list<Template>",
         "    let reply = http get \"/templates\" from forms every page query \"status\": status query \"sort\": sort when sort != \"name\" query \"archived\": \"true\" when archived",
         "    return read list<Template> from json reply.text",
         // One record is no list: read as it is.
-        "    let reply = http get \"/templates/{template_id}\" from forms\n",
+        "    let reply = http get \"/templates/{templateId}\" from forms\n",
     ] {
         assert!(written.text.contains(line), "no {line:?} in\n{}", written.text);
     }
@@ -366,7 +366,7 @@ fn a_list_on_a_source_that_pages_reads_every_page() {
     let cursor = Paging { kind: PagingKind::Cursor, param: "after".into(), size_param: String::new(), size: 0, next: "next".into(), items: "data".into() };
     let written = openapi::module("forms", "forms.yaml", &description, &["listEntryPages".into()], &[], Some(&cursor));
     for line in [
-        "action list_entry_pages(template: integer = 0) -> list<Entry>",
+        "action listEntryPages(template: integer = 0) -> list<Entry>",
         "    let reply = http get \"/entry-pages\" from forms every page query \"template\": \"{template}\" when template != 0",
         "    return read list<Entry> from json reply.text",
         "entity Entry\n",

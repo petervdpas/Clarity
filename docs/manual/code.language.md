@@ -10,7 +10,7 @@ Comments start with `//` and run to the end of the line, on a line of their own 
 
 ## Names
 
-A name starts with a letter or `_`, followed by letters, digits and `_`. Names are case sensitive. Entities, enums and windows are `PascalCase` by convention (`OrderLine`), and fields, data and functions `snake_case` (`vat_number`). The parts of a window and their handlers must be `camelCase`: letters and digits only, starting with a small letter (`newGame`, `saveClicked`).
+A name starts with a letter. Names are case sensitive. Entities, enums and their values, windows and the app are `PascalCase` (`OrderLine`). Every other name is `camelCase`: letters and digits only, starting with a small letter. That holds for the parts of a window and their handlers (`newGame`, `saveClicked`), and for fields, settings, data, functions, actions, parameters and locals (`vatNumber`, `withinCredit`); the checker reports any other. A field is stored in the column of its name in snake case (`vatNumber` in `vat_number`), unless it names its `column`.
 
 Every part has a name, which its events and code go by. The designer names a part after its purpose when it is placed or once it knows it (`vatNumberLabel`, `addLine`; `button1` until then), and you can rename it in its properties. A part without a name is an error; **Name them** under Problems names every such part in the file. For a project written before names were required, `clarity spec names shop.clarity` names its parts and makes its part and handler names camelCase, in its modules and translations.
 
@@ -66,7 +66,7 @@ Parentheses group.
 ## Statements
 
 - `let total = 0` or `let total: money = 0` makes a local.
-- `target = expr` sets a local, a field (`customer.credit_limit`) or a part property (`save.enabled`).
+- `target = expr` sets a local, a field (`customer.creditLimit`) or a part property (`save.enabled`).
 - `if`, `else if`, `else` and `for item in list` run blocks.
 - `name(args)` calls a function or action; `handler_name()` runs another handler.
 - `return` and `return expr` leave.
@@ -76,6 +76,6 @@ Parentheses group.
 
 ## Expressions
 
-Besides values, names and operators: calls (`within_credit(order)`, `count(list)`, `length(text)`, `round(total, 2)`, `today()`, `now()`; `round` keeps at most that many decimals, rounding half away from zero), `new Entity` for a new record with its defaults, `find` and `files` queries, and `read text of f`.
+Besides values, names and operators: calls (`withinCredit(order)`, `count(list)`, `length(text)`, `round(total, 2)`, `today()`, `now()`; `round` keeps at most that many decimals, rounding half away from zero), `new Entity` for a new record with its defaults, `find` and `files` queries, and `read text of f`.
 
 The full grammar is in [the language reference](../LANGUAGE.md#12-grammar-summary), with every statement under [Statements](../LANGUAGE.md#statements) and every expression under [Expressions](../LANGUAGE.md#expressions).

@@ -21,11 +21,11 @@ entity Order
     status: OrderStatus
     customer: ref Customer
     total: money
-    ordered_on: date
+    orderedOn: date
     paid: bool
     discount: decimal(6, 4), format percent
 
-function within_credit(order: Order) -> bool
+function withinCredit(order: Order) -> bool
     return order.total < 1000
 
 app Shop
@@ -58,7 +58,7 @@ page OrderForm: window
     switch \"Rush\" name switch1 at 7,3 span 3 bind order.paid
     dropdown name dropdown1 at 1,4 span 4 bind order.status
     dropdown name customerPick at 5,4 span 4 bind order.customer
-    date name date1 at 9,4 span 3 bind order.ordered_on
+    date name date1 at 9,4 span 3 bind order.orderedOn
     text name text1 at 1,5 span 4 bind order.status
     table name grid at 1,6 span 12 rows 4 bind orders columns number, status, total on select: gridSelected on open: gridOpened
     textbox name numberFilter at 1,10 span 4 on change: filterChanged
@@ -77,7 +77,7 @@ code OrderForm
         reload order
 
     handler approveClicked
-        if not within_credit(order)
+        if not withinCredit(order)
             message warning \"Order {order.number} is too large\"
             approveButton.enabled = false
             return
@@ -290,7 +290,7 @@ fn an_enum_value_in_text_shows_its_label() {
 fn the_selected_row_is_a_record_in_any_expression() {
     let source = SHOP.replace(
         "    handler gridOpened\n",
-        "    handler gridOpened\n        if within_credit(grid.selected)\n            message \"{grid.selected.number} of {grid.selected.customer.name} fits\"\n",
+        "    handler gridOpened\n        if withinCredit(grid.selected)\n            message \"{grid.selected.number} of {grid.selected.customer.name} fits\"\n",
     );
     let project = load_keyed([("shop.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
@@ -559,7 +559,7 @@ fn every_field_s_facts_are_in_fields() {
     has(&fields, "public static readonly IReadOnlyDictionary<string, FieldFacts> All = new Dictionary<string, FieldFacts>\n    {");
     has(&fields, "[\"Order.total\"] = new(\"@orderTotalLabel\", new FieldFormat(FormatKind.Money), Required: false, Min: null, Max: null, Refers: null, Parent: null),");
     has(&fields, "[\"Order.customer\"] = new(\"@orderCustomerLabel\", null, Required: false, Min: null, Max: null, Refers: \"Customer\", Parent: null),");
-    has(&fields, "[\"Order.ordered_on\"] = new(\"@orderOrderedOnLabel\", new FieldFormat(FormatKind.Date), Required: false,");
+    has(&fields, "[\"Order.orderedOn\"] = new(\"@orderOrderedOnLabel\", new FieldFormat(FormatKind.Date), Required: false,");
     has(&fields, "[\"Customer.name\"] = new(\"@customerNameLabel\", null, Required: true,");
 
     let project = load_keyed([("music.clarity", GENRES)], &[], "en");

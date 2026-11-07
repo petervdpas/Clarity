@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 /// A file of the repository: its path in the folder (`Fontys.Fcdm.Hr/v2/Medewerker.cs`) and its text.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SourceFile {
     pub path: String,
     pub text: String,
@@ -18,6 +19,7 @@ pub struct SourceFile {
 /// `property` of the object read before it, an `enum`, a `value` of the enum
 /// read before it, or a `note` for the report.
 #[derive(Debug, Clone, Default, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadRow {
     pub kind: String,
     pub path: String,

@@ -99,6 +99,12 @@ mod entry {
         web::pasted(text(pasted));
     }
 
+    /// How the page's song `id` plays: playing, paused and ended as 0 or 1, seconds played and its length.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn clarity_ui_song_said(id: f64, playing: i32, paused: i32, ended: i32, position: f64, length: f64) {
+        web::song_said(id as u64, clarity_ui::browser::page::SongSaid { playing: playing != 0, paused: paused != 0, ended: ended != 0, position, length });
+    }
+
     #[unsafe(no_mangle)]
     pub extern "C" fn clarity_ui_sound_ended(id: f64) {
         web::sound_ended(id as u64);

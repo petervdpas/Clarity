@@ -18,9 +18,9 @@ entity Customer
     email: email
     kind: Kind
     active: bool
-    credit_limit: money
+    creditLimit: money
 
-action add_customer(name: text) -> Customer
+action addCustomer(name: text) -> Customer
     effects db.write
     let c = new Customer
     c.name = name
@@ -50,8 +50,8 @@ const GOOD: &str = "command customer add(name: text, email: text)
     help \"Adds a customer\"
     option vip: bool, help \"A business customer\"
     option limit: money, default 1000, min 0, max 5000, help \"The credit limit\"
-    let c = add_customer(name)
-    c.credit_limit = limit
+    let c = addCustomer(name)
+    c.creditLimit = limit
     if vip
         c.kind = Business
     save c

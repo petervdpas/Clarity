@@ -21,13 +21,13 @@ app Modelling
 // Writes the C# of the data objects and enums as the fcdm repository has
 // it; its source is in engines/fcdm.
 engine Fcdm from "fcdm.wasm"
-    function class_code(object: ObjectSpec, properties: list<PropertySpec>) -> text
-    function interface_code(object: ObjectSpec, properties: list<PropertySpec>) -> text
-    function enum_code(spec: EnumSpec, values: list<EnumValueSpec>) -> text
-    function read_files(files: list<SourceFile>) -> list<ReadRow>
-    function diff_text(path: text, on_disk: text, written: text) -> text
-    function file_bytes(text: text) -> bytes
-    function event_code(spec: EventSpec, fields: list<EventFieldSpec>) -> text
+    function classCode(object: ObjectSpec, properties: list<PropertySpec>) -> text
+    function interfaceCode(object: ObjectSpec, properties: list<PropertySpec>) -> text
+    function enumCode(spec: EnumSpec, values: list<EnumValueSpec>) -> text
+    function readFiles(files: list<SourceFile>) -> list<ReadRow>
+    function diffText(path: text, onDisk: text, written: text) -> text
+    function fileBytes(text: text) -> bytes
+    function eventCode(spec: EventSpec, fields: list<EventFieldSpec>) -> text
 
 // A file the app writes, compared with the one on disk: the same, differs, or new.
 record CompareRow
@@ -35,8 +35,8 @@ record CompareRow
     state: text
     kind: text
     version: ref ObjectVersion
-    enum_type: ref EnumType
-    event_type: ref EventType
+    enumType: ref EnumType
+    eventType: ref EventType
 
 // A file of the fcdm repository, as the engine reads it.
 record SourceFile
@@ -57,18 +57,18 @@ record ReadRow
     newtonsoft: bool
     obsolete: text
     role: text
-    package_id: text
-    property_kind: text
+    packageId: text
+    propertyKind: text
     nullable: bool
-    type_name: text
-    type_version: integer
+    typeName: text
+    typeVersion: integer
     initial: text
     computed: text
     number: integer
     note: text
     renames: bool
     namespace: text
-    event_kind: text
+    eventKind: text
     base: bool
     list: text
     access: text
@@ -87,8 +87,8 @@ record EventSpec
     namespace: text
     kind: text
     base: bool
-    type_name: text
-    type_version: integer
+    typeName: text
+    typeVersion: integer
     obsolete: text
 
 // A field of an event, as the engine writes it.
@@ -96,8 +96,8 @@ record EventFieldSpec
     name: text
     kind: PropertyKind
     nullable: bool
-    type_name: text
-    type_version: integer
+    typeName: text
+    typeVersion: integer
     list: text
     access: text
     obsolete: text
@@ -119,8 +119,8 @@ record PropertySpec
     name: text
     kind: PropertyKind
     nullable: bool
-    type_name: text
-    type_version: integer
+    typeName: text
+    typeVersion: integer
     initial: text
     computed: text
     obsolete: text
@@ -143,10 +143,10 @@ record Node
     label: text
     kind: text
     domain: ref Domain
-    data_object: ref DataObject
+    dataObject: ref DataObject
     version: ref ObjectVersion
-    enum_type: ref EnumType
-    event_type: ref EventType
+    enumType: ref EnumType
+    eventType: ref EventType
     level: integer
 
 // What the diagram view draws of the domain.
@@ -173,11 +173,11 @@ page Workspace: window
     label @domainSummaryCaption name domainSummaryLabel at 1,4 span 2 for domainSummaryBox
     memo name domainSummaryBox at 3,4 span 5 rows 2 bind domain.summary
     label @modelPackageCaption name modelPackageLabel at 1,6 span 2 for modelPackageBox
-    textbox name modelPackageBox at 3,6 span 4 bind domain.model_package placeholder @modelPackagePlaceholder
-    textbox name modelVersionBox at 7,6 span 1 bind domain.model_version placeholder @packageVersionPlaceholder
+    textbox name modelPackageBox at 3,6 span 4 bind domain.modelPackage placeholder @modelPackagePlaceholder
+    textbox name modelVersionBox at 7,6 span 1 bind domain.modelVersion placeholder @packageVersionPlaceholder
     label @messagesPackageCaption name messagesPackageLabel at 1,7 span 2 for messagesPackageBox
-    textbox name messagesPackageBox at 3,7 span 4 bind domain.messages_package placeholder @messagesPackagePlaceholder
-    textbox name messagesVersionBox at 7,7 span 1 bind domain.messages_version placeholder @packageVersionPlaceholder
+    textbox name messagesPackageBox at 3,7 span 4 bind domain.messagesPackage placeholder @messagesPackagePlaceholder
+    textbox name messagesVersionBox at 7,7 span 1 bind domain.messagesVersion placeholder @packageVersionPlaceholder
     checkbox @domainNewtonsoftLabel name newtonsoftBox at 3,8 span 3 bind domain.newtonsoft
     button @saveDomainCaption name saveDomainButton at 6,8 span 2 on click: saveDomainClicked
 
@@ -327,7 +327,7 @@ page EventEditor: view
                 dropdown name heldObjectBox at 3,5 span 4 bind heldPick.object placeholder @heldPlaceholder on change: heldChanged
                 spinbox name heldNumberBox at 7,5 span 2 bind heldPick.number min 1 max 99 on change: heldChanged
                 label @eventFieldKeyOfLabel name keyOfLabel at 1,6 span 2 for keyOfBox
-                dropdown name keyOfBox at 3,6 span 3 bind pickedField.key_of placeholder @keyOfPlaceholder on change: pickedFieldChanged
+                dropdown name keyOfBox at 3,6 span 3 bind pickedField.keyOf placeholder @keyOfPlaceholder on change: pickedFieldChanged
                 textbox name fieldObsoleteBox at 6,6 span 3 bind pickedField.obsolete placeholder @obsoletePlaceholder on leave: pickedFieldChanged
             button @saveEventCaption name saveEventButton at 7,13 span 2 default on click: saveEventClicked
         tab @eventCodeTab
@@ -395,14 +395,14 @@ code Workspace
             let found = node.version
             openVersion(found)
         if node.kind == "object"
-            let all = find v in ObjectVersion where v.owner == node.data_object order by v.number
+            let all = find v in ObjectVersion where v.owner == node.dataObject order by v.number
             if count(all) > 0
                 openVersion(all[count(all)])
         if node.kind == "enum"
-            let found = node.enum_type
+            let found = node.enumType
             openEnum(found)
         if node.kind == "event"
-            let found = node.event_type
+            let found = node.eventType
             openEvent(found)
         if node.kind == "level"
             level = node.level
@@ -415,14 +415,14 @@ code Workspace
         editedObject = owner
         properties = find p in Property where p.owner == v order by p.position
         picked = new Property
-        classText = class_text(editedObject, editedVersion, properties)
-        interfaceText = interface_text(editedObject, editedVersion, properties)
+        classText = classText(editedObject, editedVersion, properties)
+        interfaceText = interfaceText(editedObject, editedVersion, properties)
         objectPanel.visible = true
 
     handler openEnum(e: EnumType)
         editedEnum = e
         values = find x in EnumValue where x.owner == e order by x.position
-        enumText = enum_text(e, values)
+        enumText = enumText(e, values)
         enumPanel.visible = true
 
     // The event editor shows an event: what it carries or its fields, and its C#.
@@ -438,7 +438,7 @@ code Workspace
             let v = e.carries
             carriedPick.object = v.owner
             carriedPick.number = v.number
-        eventText = event_text(e, fields)
+        eventText = eventText(e, fields)
         // A base event carries a data object; any other has fields.
         carriesPanel.visible = e.base
         fieldsPanel.visible = not e.base
@@ -448,13 +448,13 @@ code Workspace
     handler loadDiagram
         let versions = find v in ObjectVersion order by v.number
         let objects = find o in DataObject where o.domain == domain order by o.name
-        shown = as_in(objects, versions, level)
+        shown = asIn(objects, versions, level)
         boxes = objects
         members = find p in Property order by p.position
 
     handler newDomainClicked
         let d = new Domain
-        d.name = free_domain_name(@newDomainName, find x in Domain order by x.name)
+        d.name = freeDomainName(@newDomainName, find x in Domain order by x.name)
         save d
         domain = d
         refreshTree()
@@ -471,8 +471,8 @@ code Workspace
         let next = count(existing) + 1
         o.domain = domain
         o.name = "Object{next}"
-        o.x = 40 + 320 * column_of(count(existing))
-        o.y = 40 + 300 * row_of(count(existing))
+        o.x = 40 + 320 * columnOf(count(existing))
+        o.y = 40 + 300 * rowOf(count(existing))
         save o
         let v = new ObjectVersion
         v.owner = o
@@ -506,7 +506,7 @@ code Workspace
         e.domain = domain
         e.name = @newEventName
         e.number = highest
-        e.namespace = folder_namespace(domain.name, highest)
+        e.namespace = folderNamespace(domain.name, highest)
         e.kind = EventKind.Changed
         e.base = true
         save e
@@ -528,17 +528,17 @@ code Workspace
     handler deleteConfirmed
         let node = modelTree.selected
         if node.kind == "object"
-            let gone = node.data_object
+            let gone = node.dataObject
             delete gone
         else if node.kind == "version"
             let gone = node.version
             delete gone
         else if node.kind == "enum"
-            let gone = node.enum_type
+            let gone = node.enumType
             delete gone
             enumPanel.visible = false
         else if node.kind == "event"
-            let gone = node.event_type
+            let gone = node.eventType
             delete gone
             eventPanel.visible = false
         else
@@ -568,8 +568,8 @@ code Workspace
 
 code ObjectEditor
     handler showCode
-        classText = class_text(editedObject, editedVersion, properties)
-        interfaceText = interface_text(editedObject, editedVersion, properties)
+        classText = classText(editedObject, editedVersion, properties)
+        interfaceText = interfaceText(editedObject, editedVersion, properties)
 
     handler reloadProperties
         properties = find x in Property where x.owner == editedVersion order by x.position
@@ -646,7 +646,7 @@ code ObjectEditor
 code EnumEditor
     handler reloadValues
         values = find x in EnumValue where x.owner == editedEnum order by x.position
-        enumText = enum_text(editedEnum, values)
+        enumText = enumText(editedEnum, values)
 
     handler addValueClicked
         if editedEnum.id == 0
@@ -680,7 +680,7 @@ code EnumEditor
 
 code EventEditor
     handler showEventCode
-        eventText = event_text(editedEvent, fields)
+        eventText = eventText(editedEvent, fields)
 
     // A base event carries a data object; any other has fields.
     handler eventShapeChanged
@@ -690,7 +690,7 @@ code EventEditor
 
     // The data object and its version picked: the version it carries, when there is one.
     handler carriedChanged
-        let v = version_of(carriedPick.object, carriedPick.number)
+        let v = versionOf(carriedPick.object, carriedPick.number)
         carriedNumberBox.error = ""
         if v.id != 0
             editedEvent.carries = v
@@ -738,7 +738,7 @@ code EventEditor
     handler heldChanged
         if pickedField.id == 0
             return
-        let v = version_of(heldPick.object, heldPick.number)
+        let v = versionOf(heldPick.object, heldPick.number)
         heldNumberBox.error = ""
         if v.id != 0
             pickedField.holds = v
@@ -783,8 +783,8 @@ code DiagramCanvas
                             let o = v.owner
                             let t = target.owner
                             // From the middle of one box's header to the middle of the other's.
-                            let from = o.x + box_width(version_title(o.name, v.number), class_lines(v, members)) / 2
-                            let to = t.x + box_width(version_title(t.name, target.number), class_lines(target, members)) / 2
+                            let from = o.x + boxWidth(versionTitle(o.name, v.number), classLines(v, members)) / 2
+                            let to = t.x + boxWidth(versionTitle(t.name, target.number), classLines(target, members)) / 2
                             if p.kind == BusinessKey
                                 diagramCanvas.link("p{p.id}", from, o.y + 20, to, t.y + 20, p.via, "muted", 2, "", "arrow", "", "dashed")
                             else if p.kind == HeldObjects
@@ -792,7 +792,7 @@ code DiagramCanvas
                             else if p.kind == HeldObject
                                 diagramCanvas.link("p{p.id}", from, o.y + 20, to, t.y + 20, p.via, "muted", 2, "filledDiamond", "one")
         for v in shown
-            drawBox(v.owner, version_title(v.owner.name, v.number), class_lines(v, members), "accent")
+            drawBox(v.owner, versionTitle(v.owner.name, v.number), classLines(v, members), "accent")
 
     // The ERD: a table per data object as the adapter keeps it, its business
     // key first, its values, and its two moments; a line to each table a
@@ -805,15 +805,15 @@ code DiagramCanvas
                         if p.target.id == target.owner.id
                             let o = v.owner
                             let t = target.owner
-                            let from = o.x + box_width(table_name(o.name, v.number), erd_lines(v, members)) / 2
-                            let to = t.x + box_width(table_name(t.name, target.number), erd_lines(target, members)) / 2
+                            let from = o.x + boxWidth(tableName(o.name, v.number), erdLines(v, members)) / 2
+                            let to = t.x + boxWidth(tableName(t.name, target.number), erdLines(target, members)) / 2
                             diagramCanvas.link("p{p.id}", from, o.y + 20, to, t.y + 20, p.via, "muted", 2, "many", "one")
         for v in shown
-            drawBox(v.owner, table_name(v.owner.name, v.number), erd_lines(v, members), "success")
+            drawBox(v.owner, tableName(v.owner.name, v.number), erdLines(v, members), "success")
 
     // A box as wide as its title and its longest line ask.
     handler drawBox(o: DataObject, title: text, lines: list<text>, edge: text)
-        let w = box_width(title, lines)
+        let w = boxWidth(title, lines)
         let h = 40 + 22 * count(lines)
         diagramCanvas.object(o, o.x, o.y, w, h)
         diagramCanvas.rect(o.x - 2, o.y - 2, w + 4, h + 4, edge)
@@ -853,13 +853,13 @@ code CompareDialog
             for o in find x in DataObject where x.domain == d order by x.name
                 for v in find x in ObjectVersion where x.owner == o order by x.number
                     let r = new CompareRow
-                    r.path = class_path(d.name, o.name, v.number)
+                    r.path = classPath(d.name, o.name, v.number)
                     r.kind = "class"
                     r.version = v
                     found = found + [r]
                     if o.kind == Root
                         let i = new CompareRow
-                        i.path = interface_path(d.name, o.name, v.number)
+                        i.path = interfacePath(d.name, o.name, v.number)
                         i.kind = "interface"
                         i.version = v
                         found = found + [i]
@@ -867,20 +867,20 @@ code CompareDialog
                 let r = new CompareRow
                 r.path = "Fontys.Fcdm.{d.name}/{e.name}.cs"
                 r.kind = "enum"
-                r.enum_type = e
+                r.enumType = e
                 found = found + [r]
             for e in find x in EventType where x.domain == d order by x.number, x.name
                 let r = new CompareRow
-                r.path = event_path(d.name, e.name, e.number)
+                r.path = eventPath(d.name, e.name, e.number)
                 r.kind = "event"
-                r.event_type = e
+                r.eventType = e
                 found = found + [r]
         for r in found
-            let onDisk = disk_text(disk, r.path)
+            let onDisk = diskText(disk, r.path)
             if onDisk == ""
                 r.state = @compareNew
                 fresh = fresh + 1
-            else if Fcdm.diff_text(r.path, onDisk, written_for(r)) == ""
+            else if Fcdm.diffText(r.path, onDisk, writtenFor(r)) == ""
                 r.state = @compareSame
                 same = same + 1
             else
@@ -892,11 +892,11 @@ code CompareDialog
     // The differences of the file picked, or that it is new.
     handler filePicked
         let r = fileTable.selected
-        let onDisk = disk_text(files f in fcdm where f.path == r.path, r.path)
+        let onDisk = diskText(files f in fcdm where f.path == r.path, r.path)
         if onDisk == ""
-            diffText = written_for(r)
+            diffText = writtenFor(r)
         else
-            diffText = Fcdm.diff_text(r.path, onDisk, written_for(r))
+            diffText = Fcdm.diffText(r.path, onDisk, writtenFor(r))
 
     // The file picked, written into the folder chosen.
     handler writeFileClicked
@@ -906,7 +906,7 @@ code CompareDialog
         if settings.outputFolder == ""
             message warning @chooseOutputFolder
             return
-        write_file(r)
+        writeFile(r)
         summary = @wroteFile(path = r.path)
 
     // Every file the app writes, into the folder chosen, after asking.
@@ -919,7 +919,7 @@ code CompareDialog
 
     handler writeAllConfirmed
         for r in rows
-            write_file(r)
+            writeFile(r)
         let all = count(rows)
         summary = @wroteAll(count = all, folder = settings.outputFolder)
 
@@ -934,22 +934,22 @@ code ImportDialog
                 s.path = f.path
                 s.text = read text of f
                 sources = sources + [s]
-        let rows = Fcdm.read_files(sources)
-        report = import_rows(rows)
+        let rows = Fcdm.readFiles(sources)
+        report = importRows(rows)
 
 // Where a version's class stands in the fcdm folder: its domain's project, in vN from version 2.
-function class_path(domain: text, name: text, number: integer) -> text
+function classPath(domain: text, name: text, number: integer) -> text
     if number > 1
         return "Fontys.Fcdm.{domain}/v{number}/{name}.cs"
     return "Fontys.Fcdm.{domain}/{name}.cs"
 
-function interface_path(domain: text, name: text, number: integer) -> text
+function interfacePath(domain: text, name: text, number: integer) -> text
     if number > 1
         return "Fontys.Fcdm.{domain}/Interfaces/v{number}/I{name}.cs"
     return "Fontys.Fcdm.{domain}/Interfaces/I{name}.cs"
 
 // The text of the file at `path` among `disk`; empty when it is not there.
-action disk_text(disk: list<file>, path: text) -> text
+action diskText(disk: list<file>, path: text) -> text
     effects files.read
     for f in disk
         if f.path == path
@@ -957,31 +957,31 @@ action disk_text(disk: list<file>, path: text) -> text
     return ""
 
 // A file of the comparison, written into the output folder as the repository keeps its files.
-action write_file(r: CompareRow)
+action writeFile(r: CompareRow)
     effects db.read, files.write
-    write Fcdm.file_bytes(written_for(r)) to output r.path
+    write Fcdm.fileBytes(writtenFor(r)) to output r.path
 
 // What the app writes for a file of the comparison.
-action written_for(r: CompareRow) -> text
+action writtenFor(r: CompareRow) -> text
     effects db.read
     if r.kind == "enum"
-        let e = r.enum_type
-        return enum_text(e, find x in EnumValue where x.owner == e order by x.position)
+        let e = r.enumType
+        return enumText(e, find x in EnumValue where x.owner == e order by x.position)
     if r.kind == "event"
-        let e = r.event_type
-        return event_text(e, find x in EventField where x.owner == e order by x.position)
+        let e = r.eventType
+        return eventText(e, find x in EventField where x.owner == e order by x.position)
     let v = r.version
     let o = v.owner
     let properties = find x in Property where x.owner == v order by x.position
     if r.kind == "interface"
-        return interface_text(o, v, properties)
-    return class_text(o, v, properties)
+        return interfaceText(o, v, properties)
+    return classText(o, v, properties)
 
 // Stores what the engine read: the domains it names replace those there
 // were, then their enums and data objects with their versions, then the
 // properties, whose enums and data objects are found by name. Gives the
 // report.
-action import_rows(rows: list<ReadRow>) -> text
+action importRows(rows: list<ReadRow>) -> text
     effects db.read, db.write
     let lines: list<text> = []
     // The domains read, emptied: each read again replaces the one there was.
@@ -1019,12 +1019,12 @@ action import_rows(rows: list<ReadRow>) -> text
         if r.kind == "domain" and count(found) > 0
             let d = found[1]
             if r.role == "model"
-                d.model_package = r.package_id
-                d.model_version = r.name
+                d.modelPackage = r.packageId
+                d.modelVersion = r.name
                 d.newtonsoft = r.newtonsoft
             else
-                d.messages_package = r.package_id
-                d.messages_version = r.name
+                d.messagesPackage = r.packageId
+                d.messagesVersion = r.name
             save d
         if r.kind == "enum" and count(found) > 0
             let e = new EnumType
@@ -1052,8 +1052,8 @@ action import_rows(rows: list<ReadRow>) -> text
                 o.domain = d
                 o.name = r.name
                 o.kind = Child
-                o.x = 40 + 320 * column_of(placed)
-                o.y = 40 + 300 * row_of(placed)
+                o.x = 40 + 320 * columnOf(placed)
+                o.y = 40 + 300 * rowOf(placed)
                 placed = placed + 1
                 objects = objects + 1
             if r.root
@@ -1083,21 +1083,21 @@ action import_rows(rows: list<ReadRow>) -> text
             p.owner = currentVersion
             p.position = position
             p.name = r.name
-            p.kind = kind_named(r.property_kind)
+            p.kind = kindNamed(r.propertyKind)
             p.nullable = r.nullable
             p.initial = r.initial
             p.computed = r.computed
             p.via = []
             if p.kind == EnumChoice
-                let e = find x in EnumType where x.name == r.type_name
+                let e = find x in EnumType where x.name == r.typeName
                 if count(e) > 0
                     p.choice = e[1]
             if p.kind == HeldObject or p.kind == HeldObjects or p.kind == BusinessKey
-                let t = find x in DataObject where x.name == r.type_name
+                let t = find x in DataObject where x.name == r.typeName
                 if count(t) > 0
                     p.target = t[1]
                 else if p.kind == BusinessKey
-                    lines = lines + ["{r.note}.{r.name}: no data object is called {r.type_name}; the key names none"]
+                    lines = lines + ["{r.note}.{r.name}: no data object is called {r.typeName}; the key names none"]
             save p
             properties = properties + 1
     // The events, each with its fields after it; the data objects they carry are found by name and version.
@@ -1113,12 +1113,12 @@ action import_rows(rows: list<ReadRow>) -> text
                 e.name = r.name
                 e.number = r.version
                 e.namespace = r.namespace
-                e.kind = event_kind_named(r.event_kind)
+                e.kind = eventKindNamed(r.eventKind)
                 e.base = r.base
                 e.obsolete = r.obsolete
                 e.review = r.review
                 if r.base
-                    let v = found_version(r.domain, r.type_name, r.type_version)
+                    let v = foundVersion(r.domain, r.typeName, r.typeVersion)
                     if v.id != 0
                         e.carries = v
                 save e
@@ -1133,23 +1133,23 @@ action import_rows(rows: list<ReadRow>) -> text
             f.owner = currentEvent
             f.position = position
             f.name = r.name
-            f.kind = kind_named(r.property_kind)
+            f.kind = kindNamed(r.propertyKind)
             f.nullable = r.nullable
-            f.list = list_named(r.list)
-            f.access = access_named(r.access)
+            f.list = listNamed(r.list)
+            f.access = accessNamed(r.access)
             f.obsolete = r.obsolete
             if f.kind == HeldObject or f.kind == HeldObjects
                 let at = r.domain
                 if at == ""
                     let owner = currentEvent.domain
                     at = owner.name
-                let v = found_version(at, r.type_name, r.type_version)
+                let v = foundVersion(at, r.typeName, r.typeVersion)
                 if v.id != 0
                     f.holds = v
             if f.kind == BusinessKey
-                let t = find x in DataObject where x.name == r.type_name
+                let t = find x in DataObject where x.name == r.typeName
                 if count(t) > 0
-                    f.key_of = t[1]
+                    f.keyOf = t[1]
             save f
     let domains = count(names)
     let summary = "Read {domains} domains, {objects} data objects with {versions} versions, {properties} properties, {enums} enums and {events} events ({reviews} to review)."
@@ -1163,7 +1163,7 @@ action import_rows(rows: list<ReadRow>) -> text
     return join(report + lines, "\n")
 
 // A kind of property by the name the engine gives it.
-function kind_named(word: text) -> PropertyKind
+function kindNamed(word: text) -> PropertyKind
     if word == "WholeNumber"
         return WholeNumber
     if word == "DecimalNumber"
@@ -1187,7 +1187,7 @@ function kind_named(word: text) -> PropertyKind
     return TextValue
 
 // The version `number` of the data object `name` of a domain; none when there is no such version.
-action found_version(domain: text, name: text, number: integer) -> ObjectVersion
+action foundVersion(domain: text, name: text, number: integer) -> ObjectVersion
     effects db.read
     let d = find x in Domain where x.name == domain
     if count(d) == 0
@@ -1201,7 +1201,7 @@ action found_version(domain: text, name: text, number: integer) -> ObjectVersion
     return v[1]
 
 // The version `number` of a data object; an empty one (id 0) when it has no such version.
-action version_of(o: DataObject, number: integer) -> ObjectVersion
+action versionOf(o: DataObject, number: integer) -> ObjectVersion
     effects db.read
     if o.id == 0
         return new ObjectVersion
@@ -1210,7 +1210,7 @@ action version_of(o: DataObject, number: integer) -> ObjectVersion
         return new ObjectVersion
     return v[1]
 
-function event_kind_named(word: text) -> EventKind
+function eventKindNamed(word: text) -> EventKind
     if word == "Deleted"
         return EventKind.Deleted
     if word == "Created"
@@ -1221,7 +1221,7 @@ function event_kind_named(word: text) -> EventKind
         return EventKind.Other
     return EventKind.Changed
 
-function event_kind_word(kind: EventKind) -> text
+function eventKindWord(kind: EventKind) -> text
     if kind == EventKind.Deleted
         return "Deleted"
     if kind == EventKind.Created
@@ -1232,7 +1232,7 @@ function event_kind_word(kind: EventKind) -> text
         return "Other"
     return "Changed"
 
-function list_named(word: text) -> ListStyle
+function listNamed(word: text) -> ListStyle
     if word == "IEnumerable"
         return Sequence
     if word == "Array"
@@ -1241,7 +1241,7 @@ function list_named(word: text) -> ListStyle
         return ListOf
     return Single
 
-function list_word(style: ListStyle) -> text
+function listWord(style: ListStyle) -> text
     if style == Sequence
         return "IEnumerable"
     if style == ArrayOf
@@ -1250,14 +1250,14 @@ function list_word(style: ListStyle) -> text
         return "List"
     return ""
 
-function access_named(word: text) -> Access
+function accessNamed(word: text) -> Access
     if word == "get"
         return GetOnly
     if word == "set"
         return GetSet
     return InitOnly
 
-function access_word(access: Access) -> text
+function accessWord(access: Access) -> text
     if access == GetOnly
         return "get"
     if access == GetSet
@@ -1265,55 +1265,55 @@ function access_word(access: Access) -> text
     return "init"
 
 // Where an event stands in the domain's messages project: Events/, or Events/vN from version 2.
-function event_path(domain: text, name: text, number: integer) -> text
+function eventPath(domain: text, name: text, number: integer) -> text
     if number > 1
         return "Fontys.Messages.{domain}/Events/v{number}/{name}.cs"
     return "Fontys.Messages.{domain}/Events/{name}.cs"
 
 // The namespace an event's folder gives, which a new event starts with.
-function folder_namespace(domain: text, number: integer) -> text
+function folderNamespace(domain: text, number: integer) -> text
     if number > 1
         return "Fontys.Messages.{domain}.Events.v{number}"
     return "Fontys.Messages.{domain}.Events"
 
 // The C# of an event, as the engine writes it.
-function event_text(e: EventType, fields: list<EventField>) -> text
+function eventText(e: EventType, fields: list<EventField>) -> text
     let spec = new EventSpec
     let d = e.domain
     spec.domain = d.name
     spec.name = e.name
     spec.version = e.number
     spec.namespace = e.namespace
-    spec.kind = event_kind_word(e.kind)
+    spec.kind = eventKindWord(e.kind)
     spec.base = e.base
     spec.obsolete = e.obsolete
     if e.carries != none
         let v = e.carries
         let o = v.owner
-        spec.type_name = o.name
-        spec.type_version = v.number
+        spec.typeName = o.name
+        spec.typeVersion = v.number
     let specs: list<EventFieldSpec> = []
     for f in fields
         let fs = new EventFieldSpec
         fs.name = f.name
         fs.kind = f.kind
         fs.nullable = f.nullable
-        fs.list = list_word(f.list)
-        fs.access = access_word(f.access)
+        fs.list = listWord(f.list)
+        fs.access = accessWord(f.access)
         fs.obsolete = f.obsolete
         if f.holds != none
             let v = f.holds
             let o = v.owner
-            fs.type_name = o.name
-            fs.type_version = v.number
-        if f.key_of != none
-            let k = f.key_of
-            fs.type_name = k.name
+            fs.typeName = o.name
+            fs.typeVersion = v.number
+        if f.keyOf != none
+            let k = f.keyOf
+            fs.typeName = k.name
         specs = specs + [fs]
-    return Fcdm.event_code(spec, specs)
+    return Fcdm.eventCode(spec, specs)
 
 // A row of the tree for something that asks for a review: its label, marked.
-function review_label(label: text, review: text) -> text
+function reviewLabel(label: text, review: text) -> text
     if review == ""
         return label
     return @reviewMark(label = label)
@@ -1335,7 +1335,7 @@ function outline(domains: list<Domain>, objects: list<DataObject>, versions: lis
         let model = new Node
         model.key = "pm{d.id}"
         model.parent = "d{d.id}"
-        model.label = domain_label(project_name(d.model_package, "Fontys.Fcdm.{d.name}"), d.model_version)
+        model.label = domainLabel(projectName(d.modelPackage, "Fontys.Fcdm.{d.name}"), d.modelVersion)
         model.kind = "model"
         model.domain = d
         all = all + [model]
@@ -1364,33 +1364,33 @@ function outline(domains: list<Domain>, objects: list<DataObject>, versions: lis
                 on.label = o.name
                 on.kind = "object"
                 on.domain = d
-                on.data_object = o
+                on.dataObject = o
                 all = all + [on]
                 for v in versions
                     if v.owner.id == o.id
                         let vn = new Node
                         vn.key = "v{v.id}"
                         vn.parent = "o{o.id}"
-                        vn.label = review_label(version_label(v.number, v.obsolete), v.review)
+                        vn.label = reviewLabel(versionLabel(v.number, v.obsolete), v.review)
                         vn.kind = "version"
                         vn.domain = d
-                        vn.data_object = o
+                        vn.dataObject = o
                         vn.version = v
                         all = all + [vn]
                         // The child objects this version holds, as they are in it.
                         for p in held
                             if p.owner.id == v.id and p.target != none and p.target.kind == Child
-                                let at = newest_number(versions, p.target.id, v.number)
+                                let at = newestNumber(versions, p.target.id, v.number)
                                 for cv in versions
                                     if cv.owner.id == p.target.id and cv.number == at
                                         let child = p.target
                                         let cn = new Node
                                         cn.key = "c{cv.id}in{v.id}"
                                         cn.parent = "v{v.id}"
-                                        cn.label = review_label(version_title(child.name, cv.number), cv.review)
+                                        cn.label = reviewLabel(versionTitle(child.name, cv.number), cv.review)
                                         cn.kind = "version"
                                         cn.domain = d
-                                        cn.data_object = child
+                                        cn.dataObject = child
                                         cn.version = cv
                                         all = all + [cn]
         let enumsNode = new Node
@@ -1408,7 +1408,7 @@ function outline(domains: list<Domain>, objects: list<DataObject>, versions: lis
                 en.label = e.name
                 en.kind = "enum"
                 en.domain = d
-                en.enum_type = e
+                en.enumType = e
                 all = all + [en]
         // The domain's versions: each holds every root object at its newest version up to it.
         let levelsNode = new Node
@@ -1429,16 +1429,16 @@ function outline(domains: list<Domain>, objects: list<DataObject>, versions: lis
             all = all + [ln]
             for o in objects
                 if o.domain.id == d.id and o.kind == Root
-                    let at = newest_number(versions, o.id, level)
+                    let at = newestNumber(versions, o.id, level)
                     for v in versions
                         if v.owner.id == o.id and v.number == at
                             let rn = new Node
                             rn.key = "r{v.id}at{level}"
                             rn.parent = "l{d.id}at{level}"
-                            rn.label = version_title(o.name, v.number)
+                            rn.label = versionTitle(o.name, v.number)
                             rn.kind = "resolved"
                             rn.domain = d
-                            rn.data_object = o
+                            rn.dataObject = o
                             rn.version = v
                             rn.level = level
                             all = all + [rn]
@@ -1446,7 +1446,7 @@ function outline(domains: list<Domain>, objects: list<DataObject>, versions: lis
         let messages = new Node
         messages.key = "pe{d.id}"
         messages.parent = "d{d.id}"
-        messages.label = domain_label(project_name(d.messages_package, "Fontys.Messages.{d.name}"), d.messages_version)
+        messages.label = domainLabel(projectName(d.messagesPackage, "Fontys.Messages.{d.name}"), d.messagesVersion)
         messages.kind = "messages"
         messages.domain = d
         all = all + [messages]
@@ -1479,21 +1479,21 @@ function outline(domains: list<Domain>, objects: list<DataObject>, versions: lis
                     let en = new Node
                     en.key = "ev{e.id}"
                     en.parent = "evl{d.id}at{number}"
-                    en.label = review_label(e.name, e.review)
+                    en.label = reviewLabel(e.name, e.review)
                     en.kind = "event"
                     en.domain = d
-                    en.event_type = e
+                    en.eventType = e
                     all = all + [en]
     return all
 
 // A project's name: its package, or the name the repository gives it when none is set.
-function project_name(package: text, fallback: text) -> text
+function projectName(package: text, fallback: text) -> text
     if package == ""
         return fallback
     return package
 
 // The number of the newest version of a data object up to `level`; 0 when it has none yet.
-function newest_number(versions: list<ObjectVersion>, owner: integer, level: integer) -> integer
+function newestNumber(versions: list<ObjectVersion>, owner: integer, level: integer) -> integer
     let best = 0
     for v in versions
         if v.owner.id == owner and v.number <= level and v.number > best
@@ -1501,28 +1501,28 @@ function newest_number(versions: list<ObjectVersion>, owner: integer, level: int
     return best
 
 // The data objects as they are at a version of their domain: each at its newest version up to it.
-function as_in(objects: list<DataObject>, versions: list<ObjectVersion>, level: integer) -> list<ObjectVersion>
+function asIn(objects: list<DataObject>, versions: list<ObjectVersion>, level: integer) -> list<ObjectVersion>
     let found: list<ObjectVersion> = []
     for o in objects
-        let at = newest_number(versions, o.id, level)
+        let at = newestNumber(versions, o.id, level)
         for v in versions
             if v.owner.id == o.id and v.number == at
                 found = found + [v]
     return found
 
 // The C# class of a version, as the engine writes it.
-function class_text(o: DataObject, v: ObjectVersion, properties: list<Property>) -> text
+function classText(o: DataObject, v: ObjectVersion, properties: list<Property>) -> text
     let versions = find x in ObjectVersion order by x.number
-    return Fcdm.class_code(object_spec(o, v), property_specs(properties, versions, v.number))
+    return Fcdm.classCode(objectSpec(o, v), propertySpecs(properties, versions, v.number))
 
 // The interface of a root's version; a child has none.
-function interface_text(o: DataObject, v: ObjectVersion, properties: list<Property>) -> text
+function interfaceText(o: DataObject, v: ObjectVersion, properties: list<Property>) -> text
     if o.kind != Root
         return ""
     let versions = find x in ObjectVersion order by x.number
-    return Fcdm.interface_code(object_spec(o, v), property_specs(properties, versions, v.number))
+    return Fcdm.interfaceCode(objectSpec(o, v), propertySpecs(properties, versions, v.number))
 
-function enum_text(e: EnumType, values: list<EnumValue>) -> text
+function enumText(e: EnumType, values: list<EnumValue>) -> text
     let spec = new EnumSpec
     let owner = e.domain
     spec.domain = owner.name
@@ -1533,9 +1533,9 @@ function enum_text(e: EnumType, values: list<EnumValue>) -> text
         s.name = v.name
         s.number = v.number
         specs = specs + [s]
-    return Fcdm.enum_code(spec, specs)
+    return Fcdm.enumCode(spec, specs)
 
-function object_spec(o: DataObject, v: ObjectVersion) -> ObjectSpec
+function objectSpec(o: DataObject, v: ObjectVersion) -> ObjectSpec
     let spec = new ObjectSpec
     let owner = o.domain
     spec.domain = owner.name
@@ -1549,7 +1549,7 @@ function object_spec(o: DataObject, v: ObjectVersion) -> ObjectSpec
     return spec
 
 // The properties as the engine takes them: a held object at its newest version up to this one.
-function property_specs(properties: list<Property>, versions: list<ObjectVersion>, own: integer) -> list<PropertySpec>
+function propertySpecs(properties: list<Property>, versions: list<ObjectVersion>, own: integer) -> list<PropertySpec>
     let specs: list<PropertySpec> = []
     for p in properties
         let s = new PropertySpec
@@ -1561,37 +1561,37 @@ function property_specs(properties: list<Property>, versions: list<ObjectVersion
         s.obsolete = p.obsolete
         if p.kind == EnumChoice
             let e = p.choice
-            s.type_name = e.name
+            s.typeName = e.name
         if p.kind == HeldObject or p.kind == HeldObjects
             let t = p.target
-            s.type_name = t.name
-            s.type_version = newest_number(versions, t.id, own)
+            s.typeName = t.name
+            s.typeVersion = newestNumber(versions, t.id, own)
         specs = specs + [s]
     return specs
 
-function domain_label(name: text, version: text) -> text
+function domainLabel(name: text, version: text) -> text
     if version == ""
         return name
     return "{name}  {version}"
 
-function version_label(number: integer, obsolete: text) -> text
+function versionLabel(number: integer, obsolete: text) -> text
     if obsolete != ""
         return @obsoleteVersionMark(number = number)
     return "v{number}"
 
-function version_title(name: text, number: integer) -> text
+function versionTitle(name: text, number: integer) -> text
     if number > 1
         return "{name} v{number}"
     return name
 
 // The adapter's table of a version: its name, with V and the number from version 2.
-function table_name(name: text, number: integer) -> text
+function tableName(name: text, number: integer) -> text
     if number > 1
         return "{name}V{number}"
     return name
 
 // What a kind of property is written as on the diagrams.
-function kind_word(kind: PropertyKind) -> text
+function kindWord(kind: PropertyKind) -> text
     if kind == WholeNumber
         return "int"
     if kind == DecimalNumber
@@ -1615,34 +1615,34 @@ function kind_word(kind: PropertyKind) -> text
     return "string"
 
 // A line of a box: its name and kind, a question mark when it may be empty.
-function property_line(name: text, kind: text, nullable: bool) -> text
+function propertyLine(name: text, kind: text, nullable: bool) -> text
     if nullable
         return "{name}: {kind}?"
     return "{name}: {kind}"
 
 // The lines of a data object's box on the class diagram: its business key, then its properties.
-function class_lines(v: ObjectVersion, all: list<Property>) -> list<text>
+function classLines(v: ObjectVersion, all: list<Property>) -> list<text>
     let lines: list<text> = []
     if v.owner.kind == Root and v.owner.keyed
         lines = lines + ["Bk: string"]
     for p in all
         if p.owner.id == v.id
-            let kindText = kind_word(p.kind)
-            lines = lines + [property_line(p.name, kindText, p.nullable)]
+            let kindText = kindWord(p.kind)
+            lines = lines + [propertyLine(p.name, kindText, p.nullable)]
     return lines
 
 // The lines of a table on the ERD, as the adapter keeps it: its business key
 // first, its stored values, and its two moments.
-function erd_lines(v: ObjectVersion, all: list<Property>) -> list<text>
+function erdLines(v: ObjectVersion, all: list<Property>) -> list<text>
     let lines: list<text> = ["PK  Bk"]
     for p in all
         if p.owner.id == v.id and p.kind != HeldObjects and p.kind != HeldObject and p.computed == ""
-            lines = lines + [column_line(p.name, p.kind)]
+            lines = lines + [columnLine(p.name, p.kind)]
     return lines + ["    LastModified", "    LastProcessed"]
 
 // How wide a box is, in the canvas's units: room for its bold title (13) and
 // its longest line in the mono font (11), at least 160, on the grid of 20.
-function box_width(title: text, lines: list<text>) -> integer
+function boxWidth(title: text, lines: list<text>) -> integer
     let widest = length(title) * 8
     for line in lines
         if length(line) * 7 > widest
@@ -1653,13 +1653,13 @@ function box_width(title: text, lines: list<text>) -> integer
     return snapped(w + 10, 20)
 
 // A column of a table: a foreign key for a business key, the value itself otherwise.
-function column_line(name: text, kind: PropertyKind) -> text
+function columnLine(name: text, kind: PropertyKind) -> text
     if kind == BusinessKey
         return "FK  {name}"
     return "    {name}"
 
 // A name no domain has yet: the word, or the word with the first number free.
-function free_domain_name(word: text, domains: list<Domain>) -> text
+function freeDomainName(word: text, domains: list<Domain>) -> text
     let name = word
     let n = 1
     for step in 1 to 1000
@@ -1674,14 +1674,14 @@ function free_domain_name(word: text, domains: list<Domain>) -> text
     return name
 
 // Where the n-th box of a domain goes, from 0: five to a row.
-function column_of(n: integer) -> integer
+function columnOf(n: integer) -> integer
     let left = n
     for step in 1 to 1000
         if left >= 5
             left = left - 5
     return left
 
-function row_of(n: integer) -> integer
+function rowOf(n: integer) -> integer
     let left = n
     let row = 0
     for step in 1 to 1000

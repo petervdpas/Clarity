@@ -164,6 +164,10 @@ pub enum Event {
     Remove,
     /// A timer's time has come round again (DESIGN 5.26).
     Tick,
+    /// A sound's song played to its end (docs/AUDIO-PLAN.md); not when stopped.
+    End,
+    /// A sound's song could not play: missing, not a sound; its `problem` says why.
+    Fail,
     /// The app's databases did not open, as when a connection kept as a
     /// secret setting is not kept yet (DESIGN 5.27).
     Unconnected,
@@ -171,7 +175,7 @@ pub enum Event {
 
 /// The events a window has, in the order the designer lists them.
 /// Every event, in the order the language lists them.
-pub const ALL_EVENTS: [Event; 25] = [
+pub const ALL_EVENTS: [Event; 27] = [
     Event::Click,
     Event::Change,
     Event::Enter,
@@ -196,6 +200,8 @@ pub const ALL_EVENTS: [Event; 25] = [
     Event::Add,
     Event::Remove,
     Event::Tick,
+    Event::End,
+    Event::Fail,
     Event::Unconnected,
 ];
 
@@ -231,6 +237,8 @@ impl Event {
             Event::Add => "add",
             Event::Remove => "remove",
             Event::Tick => "tick",
+            Event::End => "end",
+            Event::Fail => "fail",
             Event::Unconnected => "unconnected",
         }
     }
@@ -261,6 +269,8 @@ impl Event {
             "add" => Some(Event::Add),
             "remove" => Some(Event::Remove),
             "tick" => Some(Event::Tick),
+            "end" => Some(Event::End),
+            "fail" => Some(Event::Fail),
             "unconnected" => Some(Event::Unconnected),
             _ => None,
         }
@@ -1058,7 +1068,7 @@ const ENTRIES: &[Entry] = &[
         input: false,
         container: None,
         clickable: false,
-        events: &[],
+        events: &[Event::End, Event::Fail],
         properties: &[WidgetProperty::Source, WidgetProperty::Volume, WidgetProperty::Repeat],
     },
     Entry {
@@ -1496,6 +1506,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
         }
         if props.repeat {
             parts.push("repeat".to_string());
+        }
+        for h in &props.handlers {
+            parts.push(format!("on {}: {}", h.event.keyword(), handler_call(h)));
         }
         return parts.join(" ");
     }

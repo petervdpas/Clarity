@@ -223,7 +223,7 @@ fn a_resource_has_a_type_by_its_extension() {
     assert_eq!(listed[1].2, ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"]);
     assert_eq!(listed[2], (ResourceKind::Pdf, "PDF".to_string(), vec!["pdf".to_string()]));
     assert_eq!(listed[3], (ResourceKind::Drawing, "Drawing".to_string(), vec!["dxf".to_string()]));
-    assert_eq!(listed[4], (ResourceKind::Sound, "Sound".to_string(), vec!["wav".to_string(), "mp3".to_string(), "flac".to_string()]));
+    assert_eq!(listed[4], (ResourceKind::Sound, "Sound".to_string(), vec!["wav".to_string(), "mp3".to_string(), "flac".to_string(), "ogg".to_string()]));
     assert_eq!(listed[5], (ResourceKind::File, "Other file".to_string(), vec![]));
 }
 
@@ -243,4 +243,30 @@ fn a_picture_a_canvas_draws_is_in_the_folder() {
     assert_eq!(errors(&with_files(FIELD, &["pill.svg"])), Vec::<String>::new());
     assert_eq!(errors(&with_files(FIELD, &["paddle.svg", "rules.md"])), ["field.image draws 'pill.svg', which is not in the resources folder; it has paddle.svg"]);
     assert_eq!(errors(&with_files(&FIELD.replace("pill.svg", "pill.tiff"), &["pill.tiff"])), ["field.image draws 'pill.tiff', which is not a picture every stack can show; use a .png, .jpg, .gif, .bmp, .webp or .svg file"]);
+}
+
+#[test]
+fn a_project_plays_songs_when_a_sound_plays_more_than_wav() {
+    let chime = "module shop\n\npage Home: window\n    sound name chime source \"chime.wav\"\n";
+    assert!(!resources::plays_songs(&with_files(chime, &["chime.wav"])));
+    for song in ["song.mp3", "song.flac", "song.ogg", "SONG.MP3"] {
+        let source = format!("module shop\n\npage Home: window\n    sound name music source \"{song}\"\n");
+        let project = with_files(&source, &[song]);
+        assert_eq!(errors(&project), Vec::<String>::new(), "{song}");
+        assert!(resources::plays_songs(&project), "{song}");
+    }
+    assert!(!resources::plays_songs(&with_files(HOME, &["logo.png"])));
+}
+
+#[test]
+fn a_project_plays_songs_when_code_plays_a_sound_a_file() {
+    let file = "module shop\n\npage Home: window\n    sound name music\n    button \"Play\" name playButton at 1,1 span 2 on click: playClicked\n\ncode Home\n    handler playClicked\n        BODY\n";
+    for body in ["music.play(\"/music/song.flac\")", "music.pause()", "music.seek(3)", "if true\n            music.resume()"] {
+        let project = with_files(&file.replace("BODY", body), &[]);
+        assert_eq!(errors(&project), Vec::<String>::new(), "{body}");
+        assert!(resources::plays_songs(&project), "{body}");
+    }
+    assert!(!resources::plays_songs(&with_files(&file.replace("BODY", "music.tone(440, 1)"), &[])));
+    let wired = "module shop\n\npage Home: window\n    sound name music on end: songEnded\n\ncode Home\n    handler songEnded\n        music.stop()\n";
+    assert!(resources::plays_songs(&with_files(wired, &[])));
 }

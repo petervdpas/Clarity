@@ -408,7 +408,7 @@ fn renames_pages_and_widget_tabs() {
 fn edits_keep_the_example_page_valid() {
     let source = include_str!("../../../examples/shop/desk.clarity");
     let mut props = new_props(WidgetKind::Number, 8, 3);
-    props.bind = Some("customer.credit_limit".into());
+    props.bind = Some("customer.creditLimit".into());
     props.width = 2;
     let (text, _) = edit(
         source,

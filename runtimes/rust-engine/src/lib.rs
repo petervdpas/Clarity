@@ -45,6 +45,8 @@ macro_rules! interface {
 #[macro_export]
 macro_rules! function {
     ($name:ident, $function:expr) => {
+        // A function keeps the project's camelCase name, which the host calls it by.
+        #[allow(non_snake_case)]
         #[unsafe(no_mangle)]
         pub extern "C" fn $name(at: i32, len: i32) -> i64 {
             $crate::answer(at, len, $function)

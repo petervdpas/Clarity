@@ -305,6 +305,35 @@ fn sound_plays_through_the_page() {
     assert!(first.ended());
 }
 
+/// Songs play in the page's audio elements: the page is told to play, pause,
+/// seek and stop, and what it says of the song is what the song reads.
+#[test]
+fn songs_play_through_the_page() {
+    use clarity_ui::browser::page::{PageMusic, SongSaid, Songs};
+    use clarity_ui::parts::sound::Music;
+    use std::time::Duration;
+    let (tell, said) = told();
+    let songs: std::rc::Rc<std::cell::RefCell<Songs>> = Default::default();
+    let music = PageMusic::new(tell, songs.clone());
+    let mut song = music.player().unwrap();
+    song.set_volume(0.5);
+    song.play_bytes(b"ID3".to_vec(), Some("mp3")).unwrap();
+    assert_eq!(tells(&said, "songPlay"), [json!({ "tell": "songPlay", "id": 1, "data": "SUQz", "kind": "mp3", "volume": 0.5 })]);
+    assert!(song.playing());
+    songs.borrow_mut().said(1, SongSaid { playing: false, paused: true, ended: false, position: 12.5, length: 200.0 });
+    assert!(song.paused() && !song.playing());
+    assert_eq!(Duration::from_secs_f64(12.5), song.position());
+    assert_eq!(Some(Duration::from_secs(200)), song.length());
+    song.pause();
+    song.seek(Duration::from_secs(30)).unwrap();
+    let done: Vec<(Value, Value)> = tells(&said, "songDo").iter().map(|t| (t["do"].clone(), t["value"].clone())).collect();
+    assert_eq!(done, [(json!("volume"), json!(0.5)), (json!("pause"), json!(0.0)), (json!("seek"), json!(30.0))]);
+    // A browser plays no files of the computer's disk.
+    assert_eq!("audioNoDisk", song.play_file("/music/song.flac").unwrap_err().key);
+    drop(song);
+    assert_eq!(tells(&said, "songDo").last().map(|t| t["do"].clone()), Some(json!("stop")));
+}
+
 /// files.json without a size (the main window has none): the program
 /// starts all the same, on the page's canvas, which is the window's size.
 #[test]

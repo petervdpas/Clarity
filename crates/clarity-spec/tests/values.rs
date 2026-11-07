@@ -8,7 +8,7 @@ const SHOP: &str = "module shop
 
 entity Customer
     name: text(80)
-    credit_limit: money
+    creditLimit: money
     since: date
 
 entity Order
@@ -53,7 +53,7 @@ orders = find o in Order where o.customer == none or o.shipped != none order by 
 #[test]
 fn other_values_are_never_none() {
     assert_eq!(errors("if customer.name == none\n    return"), ["text is never none; empty text is \"\""]);
-    assert_eq!(errors("customer.credit_limit = none"), ["money is never none; only a date, a date and time or a reference can be"]);
+    assert_eq!(errors("customer.creditLimit = none"), ["money is never none; only a date, a date and time or a reference can be"]);
     assert_eq!(errors("let x = none"), ["'none' needs a date, a date and time or a reference to be the empty value of"]);
 }
 
@@ -80,13 +80,13 @@ entity Track
     title: text(80)
     length: duration, min 0
 
-function album_length(tracks: list<Track>) -> duration
+function albumLength(tracks: list<Track>) -> duration
     let total: duration = 0
     for track in tracks
         total = total + track.length
     return total
 
-function long_tracks() -> list<Track>
+function longTracks() -> list<Track>
     return find t in Track where t.length > 600 order by t.length desc
 
 action double(track: Track)

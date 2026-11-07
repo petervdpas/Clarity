@@ -23,7 +23,7 @@ entity Order
     owner: User
     lines: list<Line>
 
-function owner_name(order: Order) -> text
+function ownerName(order: Order) -> text
     return order.owner.name
 
 function quantity(order: Order) -> integer
@@ -32,7 +32,7 @@ function quantity(order: Order) -> integer
         total = total + line.quantity
     return total
 
-action fetch_order() -> Order
+action fetchOrder() -> Order
     effects net
     let reply = http get \"/order\" from shop
     return read Order from json reply.text

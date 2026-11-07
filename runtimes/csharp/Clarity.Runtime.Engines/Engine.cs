@@ -118,7 +118,7 @@ public sealed class Engine
     /// Values as Clarity writes them.
     public static readonly JsonSerializerOptions Json = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNamingPolicy = ClarityNaming.Instance,
         Converters = { new DecimalAsText(), new JsonStringEnumConverter() },
     };
 

@@ -60,6 +60,17 @@ jobs:
             exit 1
           fi
 
+      # The clarity-audio its `audio` feature names must be on crates.io already.
+      - name: Clarity.Audio it needs is released
+        run: |
+          set -euo pipefail
+          needed="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "clarity-ui") | .dependencies[] | select(.name == "clarity-audio") | .req' | tr -d '^=~ ')"
+          status="$(curl -s -o /dev/null -w '%{http_code}' -A 'Clarity release (github.com/petervdpas/Clarity)' "https://crates.io/api/v1/crates/clarity-audio/$needed")"
+          if [ "$status" != "200" ]; then
+            echo "::error::clarity-audio $needed is not on crates.io yet: release it first (tag runtimes/rust-audio/v$needed)"
+            exit 1
+          fi
+
       - name: Test the library
         run: cargo test -p clarity-ui
 

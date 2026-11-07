@@ -13,7 +13,7 @@ enum OrderStatus
 
 entity Customer
     name: text(80), required
-    credit_limit: money, default 100
+    creditLimit: money, default 100
     active: bool, default true
     since: date, format long
 
@@ -24,8 +24,8 @@ entity Order
     total: money
     event: text(20)
 
-function within_credit(order: Order) -> bool
-    return order.total <= order.customer.credit_limit
+function withinCredit(order: Order) -> bool
+    return order.total <= order.customer.creditLimit
 
 function doubled(n: integer) -> money
     ensure result >= 0
@@ -34,7 +34,7 @@ function doubled(n: integer) -> money
         return 0
     return x + 0.5
 
-function big_orders(limit: money) -> list<Order>
+function bigOrders(limit: money) -> list<Order>
     return find o in Order where o.total >= limit and o.status in [Pending, Approved] order by o.total desc, o.number
 
 function described(order: Order) -> text
@@ -47,14 +47,14 @@ function described(order: Order) -> text
 
 action approve(order: Order)
     require order.status == Pending
-    require within_credit(order)
+    require withinCredit(order)
     effects db.write
     order.status = Approved
     save order
 
 code Order
     before save
-        if order.status == Approved and not within_credit(order)
+        if order.status == Approved and not withinCredit(order)
             refuse \"Order {order.number} is over its customer's credit limit\"
 
     after delete
@@ -191,7 +191,7 @@ fn enums_and_entities_become_go_types() {
     has(sales, "\tOrderStatusApproved OrderStatus = \"Approved\"\n");
     has(sales, "func (v OrderStatus) Label() string {");
     has(sales, "\tcase OrderStatusApproved:\n\t\treturn \"Approved by sales\"\n");
-    has(sales, "type Customer struct {\n\tID          int64           `json:\"id\"`\n\tName        string          `json:\"name\"`\n\tCreditLimit decimal.Decimal `json:\"credit_limit\"`\n\tActive      bool            `json:\"active\"`\n\tSince       *clarity.Date   `json:\"since\"`\n}");
+    has(sales, "type Customer struct {\n\tID          int64           `json:\"id\"`\n\tName        string          `json:\"name\"`\n\tCreditLimit decimal.Decimal `json:\"creditLimit\"`\n\tActive      bool            `json:\"active\"`\n\tSince       *clarity.Date   `json:\"since\"`\n}");
     // A new record has its defaults.
     has(sales, "func NewCustomer() Customer {\n\treturn Customer{CreditLimit: decimal.NewFromInt(100), Active: true}\n}");
     has(sales, "func (*Customer) Table() string {\n\treturn \"customer\"\n}");
@@ -224,7 +224,7 @@ fn functions_and_actions_return_their_errors() {
 }",
     );
     has(sales, "func Approve(db *clarity.Db, order *Order) error {");
-    has(sales, "\tv1, err := WithinCredit(db, order)\n\tif err != nil {\n\t\treturn err\n\t}\n\tif err := clarity.Require(v1, \"within_credit(order)\"); err != nil {\n\t\treturn err\n\t}");
+    has(sales, "\tv1, err := WithinCredit(db, order)\n\tif err != nil {\n\t\treturn err\n\t}\n\tif err := clarity.Require(v1, \"withinCredit(order)\"); err != nil {\n\t\treturn err\n\t}");
     has(sales, "\torder.Status = OrderStatusApproved\n\tif err := clarity.Save(db, order); err != nil {\n\t\treturn err\n\t}\n\treturn nil\n}");
     // An ensure checks the result of the body.
     has(sales, "func Doubled(db *clarity.Db, n int64) (decimal.Decimal, error) {");
@@ -245,7 +245,7 @@ fn queries_text_and_loops() {
 /// that can fail runs only when the left does not decide.
 #[test]
 fn and_or_keep_short_circuiting() {
-    let source = format!("{SALES}\nfunction both(order: Order) -> bool\n    return order.total > 10 and within_credit(order)\n");
+    let source = format!("{SALES}\nfunction both(order: Order) -> bool\n    return order.total > 10 and withinCredit(order)\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     has(
         file(&files, "sales_module.go"),
@@ -293,11 +293,11 @@ entity Order
     status: OrderStatus
     customer: ref Customer
     total: money
-    ordered_on: date
+    orderedOn: date
     paid: bool
     discount: decimal(6, 4), format percent
 
-function within_credit(order: Order) -> bool
+function withinCredit(order: Order) -> bool
     return order.total < 1000
 
 app Shop
@@ -330,7 +330,7 @@ page OrderForm: window
     switch \"Rush\" name switch1 at 7,3 span 3 bind order.paid
     dropdown name dropdown1 at 1,4 span 4 bind order.status
     dropdown name customerPick at 5,4 span 4 bind order.customer
-    date name date1 at 9,4 span 3 bind order.ordered_on
+    date name date1 at 9,4 span 3 bind order.orderedOn
     text name text1 at 1,5 span 4 bind order.status
     table name grid at 1,6 span 12 rows 4 bind orders columns number, status, total on select: gridSelected on open: gridOpened
     textbox name numberFilter at 1,10 span 4 on change: filterChanged
@@ -349,7 +349,7 @@ code OrderForm
         reload order
 
     handler approveClicked
-        if not within_credit(order)
+        if not withinCredit(order)
             message warning \"Order {order.number} is too large\"
             approveButton.enabled = false
             return
@@ -490,7 +490,7 @@ fn an_external_source_keeps_its_names_and_is_never_migrated() {
 #[test]
 fn a_query_goes_through_a_reference() {
     let source = format!(
-        "{SALES}\nfunction of_customers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.credit_limit > 10 order by o.customer.name desc, o.customer.credit_limit\n"
+        "{SALES}\nfunction ofCustomers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.creditLimit > 10 order by o.customer.name desc, o.customer.creditLimit\n"
     );
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "sales_module.go");

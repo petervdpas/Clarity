@@ -220,6 +220,19 @@ CLARITY_API ClarityStatus clarity_program_new(const ClarityProgramCallbacks *cal
 CLARITY_API void clarity_program_free(ClarityProgram *program);
 
 /* ------------------------------------------------------------------------
+ * Songs
+ * ------------------------------------------------------------------------ */
+
+/* Clarity.Audio's table (clarity_audio.h). */
+struct ClarityAudioApi;
+
+/* Songs (mp3, flac, ogg) of the sound parts play through Clarity.Audio from
+ * now on, on this thread: call it before clarity_desktop_run with
+ * clarity_audio_api(). NULL sends them to the speakers as every sound again.
+ * The table must live as long as the program. */
+CLARITY_API ClarityStatus clarity_ui_use_audio(const struct ClarityAudioApi *api);
+
+/* ------------------------------------------------------------------------
  * The desktop
  * ------------------------------------------------------------------------ */
 

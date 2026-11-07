@@ -210,7 +210,7 @@ fn record(project: &Project, entity: &Entity) -> String {
             let column = entity.column_of(&f.name.name);
             let store = f.modifiers.store.as_deref().map(|s| format!(", Store: {}", string(s))).unwrap_or_default();
             let name = if f.ty == FieldType::File { format!(", Name: {}", string(&format!("{column}_name"))) } else { String::new() };
-            format!("{{Column: {}{store}{name}}}", string(column))
+            format!("{{Column: {}{store}{name}}}", string(&column))
         })
         .collect();
     if !pictures.is_empty() {

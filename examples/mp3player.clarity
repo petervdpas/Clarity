@@ -1,0 +1,8 @@
+project Mp3player
+    title "Mp3 player"
+    version "1.0.0"
+    stack csharp desktop
+    output "out"
+    language "en"
+    datasource main sqlite "data/mp3player.db"
+    filestore music "setting:musicFolder"

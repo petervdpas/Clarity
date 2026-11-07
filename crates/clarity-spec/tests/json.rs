@@ -12,7 +12,7 @@ entity Order
     number: text(20)
     total: money
 
-function orders_in(text: text) -> list<Order>
+function ordersIn(text: text) -> list<Order>
     return read list<Order> from json text at \"data.orders\"
 
 action send(order: Order) -> integer
@@ -28,7 +28,7 @@ page Orders: window
 code Orders
     handler loadClicked
         let reply = http get \"https://api.example.com/orders\"
-        orders = orders_in(reply.text)
+        orders = ordersIn(reply.text)
         message json of orders
 ";
 

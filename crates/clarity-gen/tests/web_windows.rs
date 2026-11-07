@@ -297,7 +297,7 @@ fn the_preview_program_opens_windows_with_sample_data_and_runs_no_handler() {
     assert_eq!(data["extra"], json!(1));
     // A reference names its record by number, as a program holds it; the dropdown's choices by the same numbers.
     let tasks = program.answer("open_window", &json!({ "window": "Main", "with": {} }))["value"]["state"]["data"]["tasks"].clone();
-    assert!(tasks.as_array().unwrap().iter().any(|t| t["finished_by"].is_number()), "{tasks}");
+    assert!(tasks.as_array().unwrap().iter().any(|t| t["finishedBy"].is_number()), "{tasks}");
     let options = program.answer("ref_options", &json!({ "entity": "Person" }))["value"].clone();
     assert_eq!(options[0]["id"], json!(1));
     // A handler is not run: the window stays as it was and says where it runs.

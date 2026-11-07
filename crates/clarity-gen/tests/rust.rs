@@ -10,7 +10,7 @@ enum OrderStatus
 
 entity Customer
     name: text(80), required
-    credit_limit: money, default 100
+    creditLimit: money, default 100
     active: bool, default true
     since: date, format long
 
@@ -20,8 +20,8 @@ entity Order
     customer: ref Customer
     total: money
 
-function within_credit(order: Order) -> bool
-    return order.total <= order.customer.credit_limit
+function withinCredit(order: Order) -> bool
+    return order.total <= order.customer.creditLimit
 
 function doubled(n: integer) -> money
     ensure result >= 0
@@ -30,12 +30,12 @@ function doubled(n: integer) -> money
         return 0
     return x + 0.5
 
-function big_orders(limit: money) -> list<Order>
+function bigOrders(limit: money) -> list<Order>
     return find o in Order where o.total >= limit and o.status in [Pending, Approved] order by o.total desc, o.number
 
 action approve(order: Order)
     require order.status == Pending
-    require within_credit(order)
+    require withinCredit(order)
     effects db.write
     order.status = Approved
     save order
@@ -53,7 +53,7 @@ page OrderForm: window
 
 code OrderForm
     handler approveClicked
-        if not within_credit(order)
+        if not withinCredit(order)
             message warning \"Too much\"
             approveButton.enabled = false
             return
@@ -140,10 +140,10 @@ fn entities_become_records_with_their_defaults() {
     let files = files();
     let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("pub struct Customer {"), "{sales}");
-    assert!(sales.contains("    pub credit_limit: Decimal,"), "{sales}");
+    assert!(sales.contains("    pub creditLimit: Decimal,"), "{sales}");
     assert!(sales.contains("    pub since: Option<NaiveDate>,"), "{sales}");
     assert!(sales.contains("    pub customer: Option<Id>,"), "{sales}");
-    assert!(sales.contains("credit_limit: Decimal::new(100, 0),"), "{sales}");
+    assert!(sales.contains("creditLimit: Decimal::new(100, 0),"), "{sales}");
     assert!(sales.contains("active: true,"), "{sales}");
     assert!(sales.contains("const TABLE: &'static str = \"order\";"), "{sales}");
     assert!(sales.contains("pub enum OrderStatus {"), "{sales}");
@@ -172,14 +172,14 @@ fn the_schema_is_the_first_migration() {
 fn functions_and_actions_become_rust_functions() {
     let files = files();
     let sales = file(&files, "src/modules/sales.rs");
-    assert!(sales.contains("pub fn within_credit(db: &Db, order: &Order) -> Result<bool> {"), "{sales}");
+    assert!(sales.contains("pub fn withinCredit(db: &Db, order: &Order) -> Result<bool> {"), "{sales}");
     assert!(
-        sales.contains("(order.total <= db.load::<Customer>(order.customer)?.credit_limit)"),
+        sales.contains("(order.total <= db.load::<Customer>(order.customer)?.creditLimit)"),
         "{sales}"
     );
     assert!(sales.contains("pub fn approve(db: &Db, order: &mut Order) -> Result<()> {"), "{sales}");
     assert!(sales.contains("require((order.status == OrderStatus::Pending), \"order.status == Pending\")?;"), "{sales}");
-    assert!(sales.contains("require(within_credit(db, order)?, \"within_credit(order)\")?;"), "{sales}");
+    assert!(sales.contains("require(withinCredit(db, order)?, \"withinCredit(order)\")?;"), "{sales}");
     assert!(sales.contains("order.status = OrderStatus::Approved;"), "{sales}");
     assert!(sales.contains("db.save(order)?;"), "{sales}");
     // Integers widen where a decimal is expected, and ensure wraps the body.
@@ -206,7 +206,7 @@ fn handlers_work_on_the_window_and_the_screen() {
         sales.contains("pub fn order_form__approve_clicked(db: &Db, w: &mut OrderFormWindow, ui: &mut Ui) -> Result<()> {"),
         "{sales}"
     );
-    assert!(sales.contains("if !within_credit(db, &w.order)? {"), "{sales}");
+    assert!(sales.contains("if !withinCredit(db, &w.order)? {"), "{sales}");
     // Shown text goes to the screen as text with slots, which the screen
     // fills in the format of the person using the application.
     assert!(sales.contains("ui.message(Level::Warning, Text::plain(\"Too much\"));"), "{sales}");
@@ -329,7 +329,7 @@ const FIRST_STEP: &str = "migration \"First\"
 ";
 
 const SECOND_STEP: &str = "migration \"Tidy up\"
-    rename field Customer.limit to credit_limit
+    rename field Customer.limit to creditLimit
     change field Order.total: money
     remove field Order.note
     add unique Order.number
@@ -596,7 +596,7 @@ fn a_reference_field_takes_a_record() {
 /// `none`, the empty value of a date or reference (X2).
 #[test]
 fn none_is_an_empty_option() {
-    let source = format!("{SALES}\nfunction unplaced(order: Order) -> bool\n    return order.customer == none or order.customer.since != none\n\naction clear(order: Order, customer: Customer)\n    effects db.write\n    customer.since = none\n    order.customer = none\n    save order\n\nfunction without_customer() -> list<Order>\n    return find o in Order where o.customer == none\n");
+    let source = format!("{SALES}\nfunction unplaced(order: Order) -> bool\n    return order.customer == none or order.customer.since != none\n\naction clear(order: Order, customer: Customer)\n    effects db.write\n    customer.since = none\n    order.customer = none\n    save order\n\nfunction withoutCustomer() -> list<Order>\n    return find o in Order where o.customer == none\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
     for line in ["order.customer.is_none()", "!db.load::<Customer>(order.customer)?.since.is_none()", "customer.since = None;", "order.customer = None;", "Cond::is_none(\"customer\")"] {
@@ -628,7 +628,7 @@ fn an_unbound_checkbox_is_checked_in_the_window_state() {
     assert!(sales.contains("ui.set_checked(\"mine\", false);"), "{sales}");
 }
 
-const MUSIC: &str = "module music\n\nentity Track\n    title: text(80)\n    length: duration, min 0, default 180\n\nfunction album_length(tracks: list<Track>) -> duration\n    let total: duration = 0\n    for track in tracks\n        total = total + track.length\n    return total\n\ncode Track\n    before save\n        if track.length > 7200\n            refuse \"{track.title} lasts {track.length}\"\n\npage Tracks: window\n    data track: Track\n    number name number1 at 1,1 span 3 bind track.length\n    text name text1 at 4,1 span 3 bind track.length\n";
+const MUSIC: &str = "module music\n\nentity Track\n    title: text(80)\n    length: duration, min 0, default 180\n\nfunction albumLength(tracks: list<Track>) -> duration\n    let total: duration = 0\n    for track in tracks\n        total = total + track.length\n    return total\n\ncode Track\n    before save\n        if track.length > 7200\n            refuse \"{track.title} lasts {track.length}\"\n\npage Tracks: window\n    data track: Track\n    number name number1 at 1,1 span 3 bind track.length\n    text name text1 at 4,1 span 3 bind track.length\n";
 
 /// A duration is whole seconds; its slot shows it as 3:45 (X2).
 #[test]
@@ -647,7 +647,7 @@ fn a_duration_is_seconds_with_its_own_slot() {
 #[test]
 fn a_query_goes_through_a_reference() {
     let source = format!(
-        "{SALES}\nfunction of_customers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.credit_limit > 10 order by o.customer.name desc, o.customer.credit_limit\n"
+        "{SALES}\nfunction ofCustomers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.creditLimit > 10 order by o.customer.name desc, o.customer.creditLimit\n"
     );
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
@@ -663,7 +663,7 @@ fn a_query_goes_through_a_reference() {
 /// list, as on the other stacks.
 #[test]
 fn a_loop_changes_and_saves_its_records() {
-    let source = format!("{SALES}\naction approve_all(orders: list<Order>)\n    effects db.write\n    let found = orders\n    for order in found\n        order.status = Approved\n        save order\n    for order in found\n        let n = order.number\n");
+    let source = format!("{SALES}\naction approveAll(orders: list<Order>)\n    effects db.write\n    let found = orders\n    for order in found\n        order.status = Approved\n        save order\n    for order in found\n        let n = order.number\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("for order in found.iter_mut() {"), "{sales}");
@@ -998,7 +998,7 @@ action moved(b: Box)
     b.x = b.x + 20
     save b
 
-action moved_twice(b: Box)
+action movedTwice(b: Box)
     effects db.write
     moved(b)
     moved(b)
@@ -1018,7 +1018,7 @@ action widest(boxes: list<Box>) -> integer
     let code: String = files.iter().filter(|f| f.path.ends_with(".rs")).map(|f| f.text.as_str()).collect();
     assert!(code.contains("pub fn width(db: &Db, b: &Box) -> Result<i64>"), "{code}");
     assert!(code.contains("pub fn moved(db: &Db, b: &mut Box) -> Result<()>"), "{code}");
-    assert!(code.contains("pub fn moved_twice(db: &Db, b: &mut Box) -> Result<()>"), "a record handed on to an action that changes it is changed: {code}");
+    assert!(code.contains("pub fn movedTwice(db: &Db, b: &mut Box) -> Result<()>"), "a record handed on to an action that changes it is changed: {code}");
     assert!(code.contains("for b in boxes.iter() {"), "{code}");
     assert!(code.contains("width(db, b)?"), "a record the loop only reads goes as it is: {code}");
 }

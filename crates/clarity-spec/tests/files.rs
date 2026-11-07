@@ -15,7 +15,7 @@ entity Photo
     taken: datetime
     size: integer
 
-action index_photos()
+action indexPhotos()
     effects db.write, files.read
     let found = files f in photos where f.extension == \"jpg\" or f.extension == \"png\" order by f.path
     for f in found
@@ -27,10 +27,10 @@ action index_photos()
         photo.picture = f
         save photo
 
-action export_titles(photos_found: list<file>)
+action exportTitles(photosFound: list<file>)
     effects files.read, files.write
     let lines = \"\"
-    for f in photos_found
+    for f in photosFound
         lines = lines + f.name + \"\\n\"
     let notes = files n in photos where n.name == \"notes.txt\"
     for n in notes
@@ -43,7 +43,7 @@ page Catalog: window
 
 code Catalog
     handler indexClicked
-        index_photos()
+        indexPhotos()
         let found = files f in photos
         let n = count(found)
         message \"{n} files\"
@@ -102,9 +102,9 @@ fn code_reaches_only_the_file_stores_of_the_settings() {
 #[test]
 fn reading_and_writing_files_are_effects() {
     let source = with("    effects db.write, files.read\n", "    effects db.write\n");
-    assert_eq!(errors(&load(&source, &["photos"])), ["action 'index_photos' lists files, which needs 'effects files.read'"]);
+    assert_eq!(errors(&load(&source, &["photos"])), ["action 'indexPhotos' lists files, which needs 'effects files.read'"]);
     let source = with("    effects files.read, files.write\n", "    effects files.read\n");
-    assert_eq!(errors(&load(&source, &["photos"])), ["action 'export_titles' writes a file, which needs 'effects files.write'"]);
+    assert_eq!(errors(&load(&source, &["photos"])), ["action 'exportTitles' writes a file, which needs 'effects files.write'"]);
     let function = "\nfunction names() -> text\n    let found = files f in photos\n    return \"\"\n";
     let source = format!("{}{function}", CATALOG);
     assert_eq!(errors(&load(&source, &["photos"])), ["function 'names' cannot reach files; an action can, with 'effects files.read'"]);
@@ -134,7 +134,7 @@ const DOCUMENTS: &str = "module catalog
 function reversed(content: bytes) -> bytes
     return content
 
-action copy_pictures()
+action copyPictures()
     effects files.read, files.write
     for f in files f in photos where f.extension == \"png\"
         let content: bytes = read bytes of f

@@ -29,3 +29,4 @@ obj/
 
 # The Release Helper's plans; it deletes each when done.
 /releases/
+/runtimes/csharp/Clarity.Audio/runtimes/

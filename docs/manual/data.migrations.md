@@ -18,7 +18,7 @@ A step holds one `migration` block with a title and its changes. It changes only
 
 ```clarity
 migration "Phone and VAT"
-    rename field Customer.vat_number to vat
+    rename field Customer.vatNumber to vat
     add field Customer.phone: text(20)
     change field Order.number: text(20)
     add unique Customer.email

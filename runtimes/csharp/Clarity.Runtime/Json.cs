@@ -30,13 +30,26 @@ public sealed record JsonKind(string Is, string[]? Values = null, JsonKind? Item
 /// <summary>A field of an entity, as JSON is fitted to it.</summary>
 public sealed record JsonField(string Name, JsonKind Kind);
 
+/// <summary>Clarity's names on the wire: a member's name with its first letter small, so CreditLimit
+/// (or CreditLimit_, where the name was taken) is <c>creditLimit</c>, the name the project wrote.</summary>
+public sealed class ClarityNaming : JsonNamingPolicy
+{
+    public static readonly ClarityNaming Instance = new();
+
+    public override string ConvertName(string name)
+    {
+        var bare = name.TrimEnd('_');
+        return bare.Length == 0 ? bare : char.ToLowerInvariant(bare[0]) + bare[1..];
+    }
+}
+
 /// <summary>Values as Clarity's JSON, and records read from a service's JSON.</summary>
 public static class JsonValues
 {
-    /// <summary>Values as Clarity writes them: names in snake case, decimals as exact text, enums by name.</summary>
+    /// <summary>Values as Clarity writes them: names as the project wrote them, decimals as exact text, enums by name.</summary>
     public static readonly JsonSerializerOptions Options = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNamingPolicy = ClarityNaming.Instance,
         Converters = { new DecimalAsText(), new JsonStringEnumConverter() },
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };

@@ -86,7 +86,7 @@ fn parses_modifiers_and_resolves_label() {
     let file = parse_ok(
         "module m
 entity E
-    credit_limit: money, required, min 0, max 1000.50, default 0, help \"Max credit\"
+    creditLimit: money, required, min 0, max 1000.50, default 0, help \"Max credit\"
     email: email, unique, label \"E-mail\"
     active: bool, default true
 ",

@@ -70,6 +70,7 @@ fn text(v: &Value) -> Result<&str, String> {
 
 macro_rules! function {
     ($name:ident, $body:expr) => {
+        #[allow(non_snake_case)]
         #[unsafe(no_mangle)]
         pub extern "C" fn $name(at: i32, len: i32) -> i64 {
             answer(at, len, $body)
@@ -93,8 +94,8 @@ function!(total, |args| {
     Ok(json!(sum.to_string()))
 });
 
-// size_of(n: integer) -> Size
-function!(size_of, |args| Ok(json!(if integer(&args[0])? < 10 { "Small" } else { "Large" })));
+// sizeOf(n: integer) -> Size
+function!(sizeOf, |args| Ok(json!(if integer(&args[0])? < 10 { "Small" } else { "Large" })));
 
 // discounted(order: Order) -> Order: its total less 10%, rounded to cents.
 function!(discounted, |args| {

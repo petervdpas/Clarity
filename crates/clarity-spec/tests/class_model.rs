@@ -15,7 +15,7 @@ const SKETCH: &str = "classDiagram
             +email: email, unique
         }
         class Order {
-            +ordered_on: date
+            +orderedOn: date
             +customer: ref Customer
         }
     }

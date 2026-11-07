@@ -249,7 +249,7 @@ impl WindowCtx {
     fn widgets(&mut self, widgets: &[Widget]) {
         for widget in widgets {
             if let Some(name) = &widget.props.name {
-                let custom = widget.props.part.clone().map(|kind| (kind, widget.props.values.clone()));
+                let custom = crate::parts::kept_of(&widget.props);
                 let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, closed: matches!(widget.props.kind, clarity_spec::widgets::WidgetKind::Popover | clarity_spec::widgets::WidgetKind::Slideout), grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
                 self.parts.insert(name.clone(), info);
             }
@@ -1534,9 +1534,7 @@ impl<'a> Emitter<'a> {
     /// Whether `property` is a custom part's own (DESIGN 5.19).
     fn custom_property(&self, part: &str, property: &str) -> bool {
         let info = self.window.and_then(|w| w.parts.get(part));
-        info.and_then(|i| i.custom.as_ref())
-            .and_then(|(kind, _)| crate::parts::declaration(self.project, kind))
-            .is_some_and(|d| d.properties.iter().any(|p| p.name.name == property))
+        info.and_then(|i| i.custom.as_ref()).is_some_and(|(kind, _)| crate::parts::keeps(self.project, kind, property))
     }
 
     /// Reading a part property in a handler; the selected row is a copy of its record.

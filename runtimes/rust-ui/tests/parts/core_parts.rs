@@ -11,7 +11,8 @@ use clarity_runtime::ui::Hear;
 use clarity_ui::element::{Composition, Cx, Element, Node};
 use clarity_ui::files::{ChosenFile, FileFilter, FilePicker};
 use clarity_ui::later::Done;
-use clarity_ui::parts::sound::{self, Playing, SoundOutput, SoundPart};
+use clarity_ui::parts::PartHost;
+use clarity_ui::parts::sound::{self, Music, MusicPlayer, MusicProblem, Playing, SoundOutput, SoundPart};
 use clarity_ui::parts::timer::TimerPart;
 use clarity_ui::testing::{part_named, window_of, Shot, TestHost};
 use clarity_ui::{melodies, Screen, ThemeLook};
@@ -129,6 +130,210 @@ fn a_sound_stops_as_its_window_leaves_the_screen() {
     assert_eq!(1, speakers.asked.borrow().len());
     screen.dispose();
     assert_eq!(1, *speakers.stopped.borrow());
+}
+
+/// Clarity.Audio as a test sees it: what each player was told, and whether its song ended.
+#[derive(Default)]
+struct Songs {
+    told: Rc<RefCell<Vec<String>>>,
+    ended: Rc<RefCell<bool>>,
+}
+
+struct Song {
+    told: Rc<RefCell<Vec<String>>>,
+    ended: Rc<RefCell<bool>>,
+}
+
+impl Music for Songs {
+    fn player(&self) -> Result<Box<dyn MusicPlayer>, MusicProblem> {
+        self.told.borrow_mut().push("new player".into());
+        Ok(Box::new(Song { told: self.told.clone(), ended: self.ended.clone() }))
+    }
+}
+
+impl MusicPlayer for Song {
+    fn play_file(&mut self, path: &str) -> Result<(), MusicProblem> {
+        self.told.borrow_mut().push(format!("file {path}"));
+        if path.contains("gone") {
+            return Err(MusicProblem { key: "audioMissing".into(), detail: path.into() });
+        }
+        *self.ended.borrow_mut() = false;
+        Ok(())
+    }
+    fn play_bytes(&mut self, bytes: Vec<u8>, hint: Option<&str>) -> Result<(), MusicProblem> {
+        self.told.borrow_mut().push(format!("{} bytes of {}", bytes.len(), hint.unwrap_or("?")));
+        Ok(())
+    }
+    fn pause(&mut self) {
+        self.told.borrow_mut().push("pause".into());
+    }
+    fn resume(&mut self) {
+        self.told.borrow_mut().push("resume".into());
+    }
+    fn seek(&mut self, at: std::time::Duration) -> Result<(), MusicProblem> {
+        *self.ended.borrow_mut() = false;
+        self.told.borrow_mut().push(format!("seek {}", at.as_millis()));
+        Ok(())
+    }
+    fn stop(&mut self) {
+        self.told.borrow_mut().push("stop".into());
+    }
+    fn set_volume(&mut self, volume: f32) {
+        self.told.borrow_mut().push(format!("volume {volume}"));
+    }
+    fn playing(&self) -> bool {
+        !*self.ended.borrow()
+    }
+    fn paused(&self) -> bool {
+        false
+    }
+    fn ended(&self) -> bool {
+        *self.ended.borrow()
+    }
+    fn position(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(1500)
+    }
+    fn length(&self) -> Option<std::time::Duration> {
+        Some(std::time::Duration::from_secs(200))
+    }
+    fn tags(&self) -> clarity_ui::parts::sound::SongTags {
+        clarity_ui::parts::sound::SongTags { title: "Morning Tone".into(), artist: "Clarity Band".into(), album: "Test Album".into(), track: 7 }
+    }
+}
+
+#[test]
+fn a_source_that_is_no_wav_plays_through_clarity_audio() {
+    let speakers = Rc::new(Speakers::default());
+    sound::set_output(speakers.clone());
+    let songs = Rc::new(Songs::default());
+    sound::set_music(Some(songs.clone()));
+    let host = TestHost::new();
+    host.resources.borrow_mut().insert("song.mp3".to_string(), vec![0xFF, 0xFB, 1, 2]);
+    let mut screen = window_of(r#"<Sound name="music" source="song.mp3" volume="40" />"#, host.clone());
+    Shot::of(&mut screen, 200, 100, 1.0);
+    hear(&host, "music", "play", vec![]);
+    Shot::of(&mut screen, 200, 100, 1.0);
+    hear(&host, "music", "volume", vec![json!(80)]);
+    hear(&host, "music", "tone", vec![json!(440), json!(0.1)]);
+    Shot::of(&mut screen, 200, 100, 1.0);
+    // The song goes to Clarity.Audio, the tone to the speakers as before.
+    assert_eq!(vec!["new player", "volume 0.4", "4 bytes of mp3", "volume 0.8"], *songs.told.borrow());
+    assert_eq!(1, speakers.asked.borrow().len());
+    hear(&host, "music", "stop", vec![]);
+    Shot::of(&mut screen, 200, 100, 1.0);
+    assert_eq!(Some("stop"), songs.told.borrow().last().map(String::as_str));
+    sound::set_music(None);
+}
+
+#[test]
+fn a_song_that_repeats_starts_again_at_its_end() {
+    sound::set_output(Rc::new(Speakers::default()));
+    let songs = Rc::new(Songs::default());
+    sound::set_music(Some(songs.clone()));
+    let host = TestHost::new();
+    host.resources.borrow_mut().insert("loop.ogg".to_string(), vec![b'O', b'g', b'g', b'S']);
+    let mut screen = window_of(r#"<Sound name="music" source="loop.ogg" repeat="true" />"#, host.clone());
+    hear(&host, "music", "play", vec![]);
+    Shot::of(&mut screen, 200, 100, 1.0);
+    *songs.ended.borrow_mut() = true;
+    host.change();
+    Shot::of(&mut screen, 200, 100, 1.0);
+    assert_eq!(Some("seek 0"), songs.told.borrow().last().map(String::as_str));
+    sound::set_music(None);
+}
+
+#[test]
+fn without_clarity_audio_a_song_goes_to_the_speakers_as_before() {
+    let speakers = Rc::new(Speakers::default());
+    sound::set_output(speakers.clone());
+    sound::set_music(None);
+    let host = TestHost::new();
+    host.resources.borrow_mut().insert("song.flac".to_string(), b"fLaC".to_vec());
+    let mut screen = window_of(r#"<Sound name="music" source="song.flac" />"#, host.clone());
+    hear(&host, "music", "play", vec![]);
+    Shot::of(&mut screen, 200, 100, 1.0);
+    assert_eq!(vec!["4 bytes at 1 once"], *speakers.asked.borrow());
+}
+
+/// Runs the wake-ups that are due, as the screen's loop does.
+fn wake(screen: &mut Screen) {
+    screen.wake_due(std::time::Instant::now() + Duration::from_secs(1));
+}
+
+fn said(host: &TestHost, name: &str) -> serde_json::Map<String, Value> {
+    host.state(Some(name)).and_then(|s| s.values).unwrap_or_default()
+}
+
+const PLAYER: &str = r#"<Sound name="music" volume="80" onend="songEnded" onfail="songFailed" />"#;
+
+#[test]
+fn code_plays_a_file_pauses_and_seeks_and_reads_what_plays() {
+    sound::set_output(Rc::new(Speakers::default()));
+    let songs = Rc::new(Songs::default());
+    sound::set_music(Some(songs.clone()));
+    let host = TestHost::new();
+    let mut screen = window_of(PLAYER, host.clone());
+    hear(&host, "music", "play", vec![json!("/music/song.flac")]);
+    hear(&host, "music", "pause", vec![]);
+    hear(&host, "music", "resume", vec![]);
+    hear(&host, "music", "seek", vec![json!(90.5)]);
+    Shot::of(&mut screen, 200, 100, 1.0);
+    assert_eq!(vec!["new player", "volume 0.8", "file /music/song.flac", "pause", "resume", "seek 90500"], *songs.told.borrow());
+    let values = said(&host, "music");
+    assert_eq!(Some(&json!(true)), values.get("playing"));
+    assert_eq!(Some(&json!(false)), values.get("paused"));
+    assert_eq!(Some(&json!(1)), values.get("position"));
+    assert_eq!(Some(&json!(200)), values.get("length"));
+    assert_eq!(Some(&json!("/music/song.flac")), values.get("file"));
+    assert_eq!(Some(&json!("")), values.get("problem"));
+    assert_eq!((Some(&json!("Morning Tone")), Some(&json!("Clarity Band")), Some(&json!("Test Album")), Some(&json!(7))), (values.get("title"), values.get("artist"), values.get("album"), values.get("track")));
+    sound::set_music(None);
+}
+
+#[test]
+fn a_song_that_played_to_its_end_runs_on_end_once() {
+    sound::set_output(Rc::new(Speakers::default()));
+    let songs = Rc::new(Songs::default());
+    sound::set_music(Some(songs.clone()));
+    let host = TestHost::new();
+    let mut screen = window_of(PLAYER, host.clone());
+    hear(&host, "music", "play", vec![json!("/music/song.flac")]);
+    Shot::of(&mut screen, 200, 100, 1.0);
+    *songs.ended.borrow_mut() = true;
+    host.change();
+    Shot::of(&mut screen, 200, 100, 1.0);
+    wake(&mut screen);
+    host.change();
+    Shot::of(&mut screen, 200, 100, 1.0);
+    wake(&mut screen);
+    let ends: Vec<String> = host.logged().into_iter().filter(|l| l.contains(" end ")).collect();
+    assert_eq!(vec!["run music end songEnded"], ends);
+    assert_eq!(Some(&json!(false)), said(&host, "music").get("playing"));
+    sound::set_music(None);
+}
+
+#[test]
+fn a_song_that_cannot_play_runs_on_fail_with_its_problem() {
+    sound::set_output(Rc::new(Speakers::default()));
+    let songs = Rc::new(Songs::default());
+    sound::set_music(Some(songs.clone()));
+    let host = TestHost::new();
+    let mut screen = window_of(PLAYER, host.clone());
+    hear(&host, "music", "play", vec![json!("/music/gone.mp3")]);
+    Shot::of(&mut screen, 200, 100, 1.0);
+    wake(&mut screen);
+    assert!(host.logged().iter().any(|l| l == "run music fail songFailed"), "{:?}", host.logged());
+    assert_eq!(Some(&json!("no such file: /music/gone.mp3")), said(&host, "music").get("problem"));
+    // Without Clarity.Audio a file cannot play at all, and says so.
+    sound::set_music(None);
+    let host = TestHost::new();
+    let mut screen = window_of(PLAYER, host.clone());
+    hear(&host, "music", "play", vec![json!("/music/song.mp3")]);
+    Shot::of(&mut screen, 200, 100, 1.0);
+    wake(&mut screen);
+    assert!(host.logged().iter().any(|l| l == "run music fail songFailed"));
+    let problem = said(&host, "music").get("problem").and_then(|p| p.as_str().map(str::to_string)).unwrap_or_default();
+    assert!(problem.contains("Clarity.Audio"), "{problem}");
 }
 
 // -- Timer -----------------------------------------------------------------------

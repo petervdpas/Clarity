@@ -202,7 +202,7 @@ fn a_part_is_named_after_its_purpose() {
     };
     assert_eq!(part(WidgetKind::Label, &|p| p.for_part = Some("vatNumber".into())), Some("vatNumberLabel".into()));
     assert_eq!(part(WidgetKind::Help, &|p| p.for_part = Some("vatNumber".into())), Some("vatNumberHelp".into()));
-    assert_eq!(part(WidgetKind::Textbox, &|p| p.bind = Some("customer.vat_number".into())), Some("vatNumber".into()));
+    assert_eq!(part(WidgetKind::Textbox, &|p| p.bind = Some("customer.vatNumber".into())), Some("vatNumber".into()));
     assert_eq!(part(WidgetKind::Text, &|p| p.bind = Some("customer.notes".into())), Some("notesText".into()));
     assert_eq!(part(WidgetKind::Number, &|p| p.bind = Some("count".into())), Some("count".into()));
     assert_eq!(part(WidgetKind::Table, &|p| p.bind = Some("orders".into())), Some("ordersTable".into()));
@@ -233,7 +233,7 @@ const FORM: &str = "module m
 page Card: window
     data customer: Customer
     data orders: list<Customer>
-    textbox name vatNumber at 4,1 span 4 bind customer.vat_number
+    textbox name vatNumber at 4,1 span 4 bind customer.vatNumber
     label \"VAT number\" name label1 at 1,1 span 3
     label \"Used\" name label2 at 1,2 span 3
     button \"Add line\" at 1,3 span 2
@@ -243,7 +243,7 @@ code Card
         label2.caption = \"x\"
 
 entity Customer
-    vat_number: text(20)
+    vatNumber: text(20)
 ";
 
 fn part_line(text: &str, start: &str) -> String {
@@ -290,4 +290,75 @@ fn name_them_names_a_part_after_its_purpose() {
     use clarity_spec::edit::{Edit, apply};
     let text = apply(FORM, &Edit::NameParts).unwrap().text;
     assert!(text.contains("button \"Add line\" name addLine at 1,3 span 2"), "{text}");
+}
+
+/// Every other name is camelCase too: fields, settings, data, functions,
+/// actions, parameters and locals (2026-11-06).
+const SHOP: &str = "module shop
+
+entity Customer
+    creditLimit: money
+
+record Line
+    unitPrice: money
+
+settings
+    musicFolder: folder
+
+library Words
+    nuget \"Humanizer.Core\" 2.14.1
+    function isLoud(words: text) -> bool
+
+function withinCredit(customer: Customer, orderTotal: money) -> bool
+    let spare = customer.creditLimit - orderTotal
+    for each in [1, 2]
+        spare = spare + 0
+    return spare >= 0
+
+action raiseLimit(customer: Customer)
+    effects db.write
+    customer.creditLimit = customer.creditLimit + 10
+
+page Main: window
+    data shownTotal: money
+    text name totalText at 1,1 span 6 bind shownTotal
+";
+
+#[test]
+fn every_name_in_camel_case_checks_clean() {
+    assert!(errors(SHOP).is_empty(), "{:#?}", errors(SHOP));
+}
+
+#[test]
+fn every_kind_of_name_is_camel_case() {
+    for (from, to, said) in [
+        ("creditLimit", "credit_limit", "field 'credit_limit' is not camelCase"),
+        ("unitPrice", "unit_price", "field 'unit_price' is not camelCase"),
+        ("musicFolder", "music_folder", "setting 'music_folder' is not camelCase"),
+        ("isLoud", "is_loud", "function 'is_loud' is not camelCase"),
+        ("withinCredit", "within_credit", "function 'within_credit' is not camelCase"),
+        ("raiseLimit", "raise_limit", "action 'raise_limit' is not camelCase"),
+        ("orderTotal", "order_total", "parameter 'order_total' is not camelCase"),
+        ("spare", "spare_money", "local 'spare_money' is not camelCase"),
+        ("for each in", "for each_one in", "local 'each_one' is not camelCase"),
+        ("shownTotal", "shown_total", "data 'shown_total' is not camelCase"),
+    ] {
+        let source = SHOP.replace(from, to);
+        assert_has(&errors(&source), said);
+    }
+}
+
+/// The functions an engine answers the host by keep their fixed names.
+#[test]
+fn the_hooks_of_an_engine_keep_their_names() {
+    let source = "module sky
+
+engine Sky
+    keep frames: integer
+    function clarity_tick(seconds: decimal) -> bool
+        frames = frames + 1
+        return true
+";
+    let found = errors(source);
+    assert!(!found.iter().any(|m| m.contains("not camelCase")), "{found:#?}");
 }

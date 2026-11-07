@@ -189,7 +189,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let mut files = vec![
         text(
             "CMakeLists.txt",
-            cmake_lists(&program, engines || screen_engines, project.calls_out(), !project.secret_settings().is_empty(), desktop, web, &themes) + &parts::cmake_lines(&program, &parts) + &crate::libraries::cmake_lines(project, &program),
+            cmake_lists(&program, engines || screen_engines, project.calls_out(), !project.secret_settings().is_empty(), desktop, web, &themes) + &parts::cmake_lines(&program, &parts) + &crate::libraries::cmake_lines(project, &program) + &crate::c::audio_cmake_lines(project, settings, &program),
         ),
         text("CMakePresets.json", PRESETS.to_string()),
     ];
@@ -568,6 +568,15 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
     } else {
         ("#include \"secrets/secrets.hpp\"\n\n".to_string(), "    clarity::secrets_use();\n".to_string())
     };
+    // Songs play through Clarity.Audio, whose library lies beside Clarity.UI's (docs/AUDIO-PLAN.md).
+    let (secrets_include, use_secrets) = if crate::uses_clarity_ui(&settings.stack) && clarity_spec::resources::plays_songs(project) {
+        (
+            format!("{secrets_include}#include \"clarity_audio.h\"\n#include \"clarity_ui.h\"\n\n"),
+            format!("{use_secrets}    // The sound parts' songs (mp3, flac, ogg) play through Clarity.Audio.\n    if (clarity_ui_use_audio(clarity_audio_api()) != CLARITY_OK) std::cerr << \"Clarity.Audio was not taken by Clarity.UI\\n\";\n"),
+        )
+    } else {
+        (secrets_include, use_secrets)
+    };
     let sources: Vec<String> = databases.iter().map(|(name, _, at)| format!("{{{}, clarity::Dialect::Sqlite, {}}}", string(name), string(at))).collect();
     let stores: Vec<String> = crate::fixed_stores(settings).iter().map(|s| format!("{{{}, {}}}", string(&s.name), string(&s.location))).collect();
     // A store whose folder is a folder setting follows the person's settings.
@@ -727,7 +736,7 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
             string(&e.name.name),
             string(&f.name.name),
             e.name.name,
-            string(e.column_of(&f.name.name))
+            string(&e.column_of(&f.name.name))
         );
     }
     let ready = string(&format!("{}: the databases are ready.", names::pascal(&settings.name)));

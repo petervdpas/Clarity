@@ -183,10 +183,21 @@ void load_translations(const std::string& model) {
     std::string fallback = "en";
     if (parsed.is_object() && parsed.contains("project")) {
         const auto& project = parsed["project"];
+        // {app.version} is the project's version, which Clarity fills itself (docs/VERSION-PLAN.md).
+        const std::string slot = "{app.version}";
+        const bool versioned = project.contains("version") && project["version"].is_string();
+        const std::string version = versioned ? project["version"].get<std::string>() : std::string();
         if (project.contains("translations")) {
             for (const auto& [language, values] : project["translations"].items()) {
                 for (const auto& [key, value] : values.items()) {
-                    if (value.is_string()) all[language][key] = value.get<std::string>();
+                    if (!value.is_string()) continue;
+                    auto text = value.get<std::string>();
+                    if (versioned) {
+                        for (auto at = text.find(slot); at != std::string::npos; at = text.find(slot, at + version.size())) {
+                            text.replace(at, slot.size(), version);
+                        }
+                    }
+                    all[language][key] = std::move(text);
                 }
             }
         }

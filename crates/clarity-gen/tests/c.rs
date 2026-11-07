@@ -15,7 +15,7 @@ enum OrderStatus
 
 entity Customer
     name: text(80), required
-    credit_limit: money, default 100
+    creditLimit: money, default 100
     active: bool, default true
     since: date
 
@@ -25,8 +25,8 @@ entity Order
     customer: ref Customer
     total: money
 
-function within_credit(order: Order) -> bool
-    return order.total <= order.customer.credit_limit
+function withinCredit(order: Order) -> bool
+    return order.total <= order.customer.creditLimit
 
 action approve(order: Order)
     require order.status == Pending
@@ -125,14 +125,14 @@ fn enums_and_entities_become_c_types() {
     let records = file(&files, "src/records.h");
     has(records, "typedef enum { ORDER_STATUS_PENDING, ORDER_STATUS_APPROVED } OrderStatus;");
     has(records, "typedef struct {\n    Order* items;\n    size_t count;\n} OrderList;");
-    has(records, "struct Customer {\n    int64_t id;\n    const char* name;\n    ClarityDecimal credit_limit;\n    bool active;\n    ClarityDate since;\n};");
+    has(records, "struct Customer {\n    int64_t id;\n    const char* name;\n    ClarityDecimal creditLimit;\n    bool active;\n    ClarityDate since;\n};");
     has(records, "bool order_save(ClarityDb* db, Order* record);");
     has(records, "bool order_find(ClarityDb* db, const ClarityQuery* query, OrderList* out);");
     let source = file(&files, "src/records.c");
     has(source, "    case ORDER_STATUS_APPROVED: return \"Approved by us\";");
     has(source, "    if (!clarity_get_text(\"status\", values[1], &status_name)) return false;\n    r->status = order_status_from(status_name);");
     has(source, "    cJSON_AddItemToObject(out, \"customer\", clarity_json_reference(r->customer));");
-    has(source, "Customer customer_new(void) {\n    return (Customer){\n        .name = \"\",\n        .credit_limit = clarity_decimal(100, 0),\n        .active = true,\n    };\n}");
+    has(source, "Customer customer_new(void) {\n    return (Customer){\n        .name = \"\",\n        .creditLimit = clarity_decimal(100, 0),\n        .active = true,\n    };\n}");
     has(source, "    .table = \"order\",");
     has(source, "    .before_save = order_before_save,");
     has(source, "static bool order_before_save(ClarityDb* db, void* record) {\n    return before_save_order(db, record);\n}");
@@ -142,7 +142,7 @@ fn enums_and_entities_become_c_types() {
 fn functions_and_actions_say_whether_they_worked() {
     let files = files();
     let sales = file(&files, "src/modules/sales.c");
-    has(sales, "bool within_credit(ClarityDb* db, Order* order, bool* result) {\n    Customer v1 = {0};\n    if (!customer_load(db, order->customer, &v1)) return false;\n    *result = clarity_decimal_compare(order->total, v1.credit_limit) <= 0;\n    return true;\n}");
+    has(sales, "bool withinCredit(ClarityDb* db, Order* order, bool* result) {\n    Customer v1 = {0};\n    if (!customer_load(db, order->customer, &v1)) return false;\n    *result = clarity_decimal_compare(order->total, v1.creditLimit) <= 0;\n    return true;\n}");
     has(sales, "bool approve(ClarityDb* db, Order* order) {\n    if (!clarity_require(order->status == ORDER_STATUS_PENDING, \"order.status == Pending\")) return false;\n    order->status = ORDER_STATUS_APPROVED;\n    if (!order_save(db, order)) return false;\n    return true;\n}");
     has(sales, "if (!order_find(db, clarity_order_by(clarity_order_by_number(clarity_where(clarity_query(), clarity_and(clarity_number(\"total\", CLARITY_GT_EQ, clarity_decimal_value(limit)), clarity_one_of(\"status\", 2, (ClarityValue[]){clarity_text_value(order_status_name(ORDER_STATUS_PENDING)), clarity_text_value(order_status_name(ORDER_STATUS_APPROVED))}))), \"total\", true), \"number\", false), &v1)) return false;");
     has(sales, "bool before_save_order(ClarityDb* db, Order* order) {\n    (void)db;\n    if (clarity_same_text(order->number, \"\")) {\n        return clarity_refuse(clarity_plain_text(\"An order needs a number\"));\n    }\n    return true;\n}");

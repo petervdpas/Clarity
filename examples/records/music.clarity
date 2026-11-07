@@ -27,8 +27,8 @@ entity Album
     genre: ref Genre, label @albumGenreLabel
     year: integer, format plain, min 1900, max 2100, label @albumYearLabel
     format: Format, default Cd, label @albumFormatLabel
-    record_label: text(60), search, label @albumRecordLabelLabel
-    bought_on: date, label @albumBoughtOnLabel
+    recordLabel: text(60), search, label @albumRecordLabelLabel
+    boughtOn: date, label @albumBoughtOnLabel
     price: money, min 0, label @albumPriceLabel
     rating: integer, min 0, max 5, help @albumRatingHelp, label @albumRatingLabel
     cover: image, help @albumCoverHelp, label @albumCoverLabel
@@ -44,7 +44,7 @@ entity Track
     length: duration, min 0, label @trackLengthLabel
 
 // The length of a set of tracks.
-function total_length(tracks: list<Track>) -> duration
+function totalLength(tracks: list<Track>) -> duration
     ensure result >= 0
     let total: duration = 0
     for track in tracks
@@ -60,7 +60,7 @@ engine Images from "images.wasm"
 // Photos dropped in the photos folder, named after the artist
 // (Miles Davis.jpg), become the photos of artists that have none, when
 // they are at least 200 pixels on each side.
-action find_artist_photos()
+action findArtistPhotos()
     effects db.write, files.read
     let found = files f in photos where f.extension == "jpg" or f.extension == "png"
     let artists = find a in Artist where a.photo == none
@@ -73,7 +73,7 @@ action find_artist_photos()
                     save artist
 
 // A copy of every photo in the exports folder, byte for byte.
-action back_up_photos()
+action backUpPhotos()
     effects files.read, files.write
     let found = files f in photos
     for f in found
@@ -81,7 +81,7 @@ action back_up_photos()
         write content to exports "photos/" + f.path
 
 // The collection as a text file in the exports folder.
-action export_collection()
+action exportCollection()
     effects files.write
     let albums = find a in Album order by a.artist.name, a.title
     let lines = ""
@@ -125,7 +125,7 @@ page AlbumEditor: view
                 label @formatLabel name formatLabel at 1,5 span 3 for format
                 radio name format at 4,5 span 9 bind album.format vertical rows 3
                 label @recordLabelLabel name recordLabelLabel at 1,8 span 3 for recordLabel
-                dropdown name recordLabel at 4,8 span 9 bind album.record_label typed
+                dropdown name recordLabel at 4,8 span 9 bind album.recordLabel typed
                 label @tagsLabel name tagsLabel at 1,9 span 3 for tags
                 tags name tags at 4,9 span 9 bind album.tags
         pane
@@ -135,7 +135,7 @@ page AlbumEditor: view
                     label name length at 1,7 span 9
                 tab @albumFormPurchaseTab
                     label @boughtOnLabel name boughtOnLabel at 1,1 span 3 for boughtOn
-                    date name boughtOn at 4,1 span 4 bind album.bought_on
+                    date name boughtOn at 4,1 span 4 bind album.boughtOn
                     label @priceLabel name priceLabel at 1,2 span 3 for price
                     number name price at 4,2 span 4 bind album.price
                     label @ratingLabel name ratingLabel at 1,3 span 3 for rating
@@ -262,12 +262,12 @@ code AlbumBrowse
 
     handler showTracks
         tracks = find t in Track where t.album == album order by t.number
-        let total = total_length(tracks)
+        let total = totalLength(tracks)
         let count = count(tracks)
         length.caption = @countTracksTotal(count = count, total = total)
 
     handler exportClicked
-        export_collection()
+        exportCollection()
         message @savedTheListInCollection
 
 code AlbumEditor
@@ -328,11 +328,11 @@ code ArtistBrowse
         artistSlide.visible = true
 
     handler photosClicked
-        find_artist_photos()
+        findArtistPhotos()
         filterChanged()
 
     handler backupClicked
-        back_up_photos()
+        backUpPhotos()
         message @copiedThePhotosToThe
 
 code ArtistEditor

@@ -48,7 +48,7 @@ impl Playing for Played {
 /// Plays WAV data on `mixer` (the speakers', or a test's own); plays nothing for data that is no WAV.
 pub fn play_on(mixer: &Mixer, file: &[u8], volume: f32, repeat: bool) -> Box<dyn Playing> {
     let Some((channels, rate, samples)) = read_wav(file) else {
-        eprintln!("{}", crate::locale::translate("soundNotWav", "a sound that is no WAV data plays nothing"));
+        eprintln!("{}", crate::locale::translate("soundNotWav", "a sound that is no WAV data plays nothing without Clarity.Audio"));
         return Box::new(Played(None));
     };
     let (Some(channels), Some(rate)) = (NonZero::new(channels), NonZero::new(rate)) else { return Box::new(Played(None)) };

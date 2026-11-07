@@ -14,17 +14,17 @@ function size(n: integer) -> Size
         return Small
     return Large
 
-function size_small() -> Size
+function sizeSmall() -> Size
     return size(1)
 
-function new_order() -> Order
+function newOrder() -> Order
     return new Order
 
-function main_window() -> integer
+function mainWindow() -> integer
     return 1
 
 function sources() -> integer
-    return main_window()
+    return mainWindow()
 
 page Main: window
     title "Shop"

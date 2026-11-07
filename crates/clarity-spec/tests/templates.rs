@@ -97,7 +97,7 @@ fn a_browse_has_a_filter_a_table_and_buttons() {
         "{page}"
     );
     assert!(
-        page.contains("table name customersTable at 1,2 span 12 rows 8 bind customers columns name, email, kind, vat_number, credit_limit"),
+        page.contains("table name customersTable at 1,2 span 12 rows 8 bind customers columns name, email, kind, vatNumber, creditLimit"),
         "{page}"
     );
     assert!(page.contains("button @openCaption"), "{page}");
@@ -163,12 +163,12 @@ fn a_dropped_field_brings_its_label_and_help() {
         col: 1,
         row: 20,
         room: 12,
-        bind: "customer.vat_number".into(),
+        bind: "customer.vatNumber".into(),
     };
     let outcome = apply_in(&project, &source, &edit).unwrap_or_else(|e| panic!("{e}"));
     assert!(
         outcome.text.contains(
-            "    label @customerVatNumberLabel name vatNumberLabel at 1,20 span 3 for vatNumber\n    textbox name vatNumber at 4,20 span 4 bind customer.vat_number\n    help name vatNumberHelp at 8,20 span 5 for vatNumber\n"
+            "    label @customerVatNumberLabel name vatNumberLabel at 1,20 span 3 for vatNumber\n    textbox name vatNumber at 4,20 span 4 bind customer.vatNumber\n    help name vatNumberHelp at 8,20 span 5 for vatNumber\n"
         ),
         "{}",
         outcome.text
@@ -202,6 +202,6 @@ fn edit_at(project: &Project, row: u32) -> Edit {
         col: 1,
         row,
         room: 12,
-        bind: "customer.vat_number".into(),
+        bind: "customer.vatNumber".into(),
     }
 }

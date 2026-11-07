@@ -17,7 +17,7 @@ entity Basket
     buyer: Buyer
     lines: list<Item>
 
-action items_in(status: text) -> list<Item>
+action itemsIn(status: text) -> list<Item>
     effects net
     let reply = http get "/items" from shop query "status": status
     if not reply.ok

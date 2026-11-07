@@ -216,7 +216,7 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
             let column = entity.column_of(&f.name.name);
             let store = f.modifiers.store.as_deref().map_or("std::nullopt".to_string(), string);
             let name = if f.ty == FieldType::File { format!(", {}", string(&format!("{column}_name"))) } else { String::new() };
-            format!("{{{}, {store}{name}}}", string(column))
+            format!("{{{}, {store}{name}}}", string(&column))
         })
         .collect();
     let source_name = project.source_of(name).unwrap_or_default();

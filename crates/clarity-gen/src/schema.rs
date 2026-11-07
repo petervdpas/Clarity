@@ -63,7 +63,7 @@ impl Writer<'_> {
     /// databases add it at the end of the step.
     fn column_sql(&self, column: &Column) -> String {
         let (ty, default) = self.sql.storage(column, |e| self.enum_first(e));
-        let name = self.q(column.stored());
+        let name = self.q(&column.stored());
         match (self.local_target(column), default) {
             (Some(entity), _) if self.sql == Sql::Sqlite => {
                 let (target, key) = self.target(entity);
@@ -133,11 +133,11 @@ impl Writer<'_> {
         let mut sources = vec![self.q(before.key_column())];
         for column in &after.columns {
             let Some(old) = before.column(&column.name) else { continue };
-            targets.push(self.q(column.stored()));
+            targets.push(self.q(&column.stored()));
             sources.push(self.converted(old, column));
             if let (Some(name_now), Some(name_was)) = (column.name_column(), old.name_column()) {
-                targets.push(self.q(name_now.stored()));
-                sources.push(self.q(name_was.stored()));
+                targets.push(self.q(&name_now.stored()));
+                sources.push(self.q(&name_was.stored()));
             }
         }
         self.push(format!(
@@ -155,7 +155,7 @@ impl Writer<'_> {
     /// An old column's value as the new column stores it, or None when it
     /// starts empty: a reference that points at another entity now.
     fn conversion(&self, old: &Column, new: &Column) -> Option<String> {
-        let name = self.q(old.stored());
+        let name = self.q(&old.stored());
         let (old_ty, _) = self.sql.storage(old, |e| self.enum_first(e));
         let (new_ty, _) = self.sql.storage(new, |e| self.enum_first(e));
         match (&old.ty, &new.ty) {
@@ -184,7 +184,7 @@ impl Writer<'_> {
     /// references and its unique index.
     fn release(&mut self, table: &Table, column: &Column) {
         if self.local_target(column).is_some() {
-            for statement in self.sql.drop_foreign_keys(&table.table_name(), column.stored()) {
+            for statement in self.sql.drop_foreign_keys(&table.table_name(), &column.stored()) {
                 self.push(statement);
             }
         }
@@ -196,7 +196,7 @@ impl Writer<'_> {
     fn remove_column(&mut self, before: &Table, column: &Column) {
         self.release(before, column);
         for gone in std::iter::once(column.clone()).chain(column.name_column()) {
-            for statement in self.sql.drop_column(&before.table_name(), gone.stored()) {
+            for statement in self.sql.drop_column(&before.table_name(), &gone.stored()) {
                 self.push(statement);
             }
         }
@@ -219,14 +219,14 @@ impl Writer<'_> {
             self.push(format!(
                 "UPDATE {} SET {} = {};",
                 self.q(&table),
-                self.q(fresh.stored()),
+                self.q(&fresh.stored()),
                 self.converted(old, new)
             ));
         }
-        for statement in self.sql.drop_column(&table, old.stored()) {
+        for statement in self.sql.drop_column(&table, &old.stored()) {
             self.push(statement);
         }
-        self.push(self.sql.rename_column(&table, fresh.stored(), new.stored()));
+        self.push(self.sql.rename_column(&table, &fresh.stored(), &new.stored()));
         if new.unique {
             self.check_unique(entity, new);
             self.push(self.sql.unique_index(after, new, false));
@@ -250,9 +250,9 @@ impl Writer<'_> {
         if from.unique {
             self.push(self.sql.drop_unique(table_before, from));
         }
-        self.push(self.sql.rename_column(&table_after.table_name(), from.stored(), to.stored()));
+        self.push(self.sql.rename_column(&table_after.table_name(), &from.stored(), &to.stored()));
         if let (Some(name_from), Some(name_to)) = (from.name_column(), to.name_column()) {
-            self.push(self.sql.rename_column(&table_after.table_name(), name_from.stored(), name_to.stored()));
+            self.push(self.sql.rename_column(&table_after.table_name(), &name_from.stored(), &name_to.stored()));
         }
         if to.unique {
             self.push(self.sql.unique_index(table_after, to, self.baseline));
@@ -352,7 +352,7 @@ impl Writer<'_> {
             let Some(column) = table.column(&field) else { continue };
             let Some(target) = self.local_target(column) else { continue };
             let (target, key) = self.target(target);
-            let statement = self.sql.add_foreign_key(&table.table_name(), column.stored(), &target, &key);
+            let statement = self.sql.add_foreign_key(&table.table_name(), &column.stored(), &target, &key);
             self.out.push(statement);
         }
         self.out.extend(builds);

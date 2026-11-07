@@ -15,6 +15,27 @@ pub fn native_parts(project: &Project) -> Vec<&PartDecl> {
     project.files.iter().flat_map(|f| &f.parts).filter(|p| matches!(p.library, Some(PartLibrary::Native { .. }))).collect()
 }
 
+/// The kind under which a sound part keeps what code reads of it
+/// (docs/AUDIO-PLAN.md): lower case, so no declared part has it.
+pub(crate) const SOUND_KIND: &str = "sound";
+
+/// What a part keeps in its values for code to read, as the generators
+/// carry it: a custom part's kind and the values on its line, or a sound's.
+pub(crate) fn kept_of(props: &clarity_spec::model::WidgetProps) -> Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)> {
+    match props.kind {
+        clarity_spec::widgets::WidgetKind::Sound => Some((SOUND_KIND.to_string(), Default::default())),
+        _ => props.part.clone().map(|kind| (kind, props.values.clone())),
+    }
+}
+
+/// Whether a part of `kind` keeps `property` in its values: a custom part's own, or what a sound says.
+pub(crate) fn keeps(project: &Project, kind: &str, property: &str) -> bool {
+    if kind == SOUND_KIND {
+        return clarity_spec::sound::read(property).is_some();
+    }
+    declaration(project, kind).is_some_and(|d| d.properties.iter().any(|p| p.name.name == property))
+}
+
 /// The declaration of the custom part of kind `kind`.
 pub(crate) fn declaration<'a>(project: &'a Project, kind: &str) -> Option<&'a PartDecl> {
     project.files.iter().flat_map(|f| &f.parts).find(|p| p.name.name == kind)
@@ -26,6 +47,9 @@ pub(crate) fn declaration<'a>(project: &'a Project, kind: &str) -> Option<&'a Pa
 pub(crate) fn fallback_json(project: &Project, kind: &str, written: &std::collections::BTreeMap<String, clarity_spec::model::Literal>, property: &str) -> String {
     use clarity_spec::code::ExprKind;
     use clarity_spec::model::Literal;
+    if kind == SOUND_KIND {
+        return clarity_spec::sound::read_fallback(property).to_string();
+    }
     let Some(declared) = declaration(project, kind).and_then(|d| d.properties.iter().find(|p| p.name.name == property)) else {
         return "null".into();
     };

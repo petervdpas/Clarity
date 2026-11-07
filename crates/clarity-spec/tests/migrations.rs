@@ -16,7 +16,7 @@ entity Customer
     name: text(80), required
     email: email, unique
     kind: Kind, default Private
-    credit_limit: money, default 0
+    creditLimit: money, default 0
 
 entity Order
     number: text(12), unique
@@ -31,7 +31,7 @@ migration \"Customers and orders\"
         name: text(80)
         email: email, unique
         kind: Kind, default Private
-        vat_number: text(14)
+        vatNumber: text(14)
     add entity Order
         number: text(12), unique
         customer: ref Customer
@@ -75,8 +75,8 @@ fn replaying_the_steps_gives_the_schema() {
 #[test]
 fn every_step_changes_the_schema_it_finds() {
     let second = "migration \"Tidy up\"
-    rename field Customer.vat_number to vat
-    add field Customer.credit_limit: money, default 0
+    rename field Customer.vatNumber to vat
+    add field Customer.creditLimit: money, default 0
     change field Order.number: text(20)
     remove unique Order.number
     remove field Customer.vat
@@ -88,7 +88,7 @@ fn every_step_changes_the_schema_it_finds() {
     let schema = migrate::schema(&project, "main");
     let customer = schema.table("Customer").unwrap();
     let fields: Vec<&str> = customer.columns.iter().map(|c| c.name.as_str()).collect();
-    assert_eq!(fields, ["name", "email", "kind", "credit_limit"]);
+    assert_eq!(fields, ["name", "email", "kind", "creditLimit"]);
     let number = schema.table("Order").unwrap().column("number").unwrap();
     assert_eq!(number.ty, FieldType::Text { max_length: Some(20) });
     assert!(!number.unique);
@@ -126,14 +126,14 @@ fn dictionary_changes_not_in_a_step_are_pending() {
     assert_eq!(
         pending(&project, &[]),
         [
-            "add field Customer.credit_limit: money, default 0",
-            "remove field Customer.vat_number",
+            "add field Customer.creditLimit: money, default 0",
+            "remove field Customer.vatNumber",
             "remove entity Note",
         ]
     );
     let warnings = messages(&project, Severity::Warning);
     assert!(
-        warnings.iter().any(|w| w == "Customer has changes that are not in a migration yet: add field credit_limit, remove field vat_number"),
+        warnings.iter().any(|w| w == "Customer has changes that are not in a migration yet: add field creditLimit, remove field vatNumber"),
         "{warnings:#?}"
     );
     assert!(warnings.iter().any(|w| w == "entity 'Note' is removed, but not in a migration yet"), "{warnings:#?}");
@@ -151,28 +151,28 @@ fn a_project_in_step_with_its_migrations_has_nothing_pending() {
 
 #[test]
 fn renames_are_proposed_and_decided() {
-    let renamed = SHOP.replace("    credit_limit: money, default 0\n", "    vat: text(14)\n");
+    let renamed = SHOP.replace("    creditLimit: money, default 0\n", "    vat: text(14)\n");
     let project = load_with_migrations([("shop.clarity", renamed.as_str())], [("0001.clarity", FIRST)]);
     let proposed = migrate::proposed_renames(&project, "main");
     assert_eq!(
         proposed,
         [Rename {
             entity: Some("Customer".into()),
-            from: "vat_number".into(),
+            from: "vatNumber".into(),
             to: "vat".into(),
         }]
     );
     let taken = pending(&project, &proposed);
-    assert_eq!(taken[0], "rename field Customer.vat_number to vat");
+    assert_eq!(taken[0], "rename field Customer.vatNumber to vat");
     // Declined, the old field goes and a new one comes.
     let declined = pending(&project, &[]);
-    assert!(declined.contains(&"remove field Customer.vat_number".to_string()), "{declined:#?}");
+    assert!(declined.contains(&"remove field Customer.vatNumber".to_string()), "{declined:#?}");
     assert!(declined.contains(&"add field Customer.vat: text(14)".to_string()), "{declined:#?}");
 }
 
 #[test]
 fn an_entity_rename_is_proposed_when_its_fields_stay() {
-    let renamed = SHOP.replace("entity Order\n", "entity SalesOrder\n").replace("    credit_limit: money, default 0\n", "");
+    let renamed = SHOP.replace("entity Order\n", "entity SalesOrder\n").replace("    creditLimit: money, default 0\n", "");
     let project = load_with_migrations([("shop.clarity", renamed.as_str())], [("0001.clarity", FIRST)]);
     let proposed = migrate::proposed_renames(&project, "main");
     assert!(
@@ -194,7 +194,7 @@ fn changes_that_can_lose_data_are_marked() {
     let risky: Vec<String> = ops.iter().filter(|op| op.loses_data()).map(migrate::op_text).collect();
     assert_eq!(
         risky,
-        ["remove field Customer.vat_number", "change field Order.number: integer", "remove entity Note"]
+        ["remove field Customer.vatNumber", "change field Order.number: integer", "remove entity Note"]
     );
 }
 

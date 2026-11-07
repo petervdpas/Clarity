@@ -12,7 +12,7 @@ source shop
 entity Order
     number: text(20)
 
-action list_orders(status: text) -> list<Order>
+action listOrders(status: text) -> list<Order>
     effects net
     let reply = http get \"/orders\" from shop every page query \"status\": status
     if not reply.ok

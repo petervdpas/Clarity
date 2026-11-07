@@ -14,7 +14,7 @@ entity Part
     name: text(40)
     target: ref Thing
 
-action copy_part(p: Part)
+action copyPart(p: Part)
     effects db.write
     let copy = new Part
     copy.name = p.name

@@ -34,6 +34,19 @@ pub fn camel_case(name: &str) -> String {
     out
 }
 
+/// The functions an engine answers its host by: fixed names, which a
+/// project writes as they are.
+pub const HOOKS: [&str; 7] = ["clarity_tick", "clarity_draw", "clarity_pointer", "clarity_key", "clarity_open", "clarity_alloc", "clarity_free"];
+
+/// What the checker says of `name`, a `what` (field, function, local...),
+/// when it is not camelCase. Fine are `_`, the hooks of an engine, and a
+/// camelCase name with one `_` after it, which steps around a word Clarity
+/// keeps (`key_`, as an imported description names a field `key`).
+pub fn name_problem(what: &str, name: &str) -> Option<String> {
+    let bare = name.strip_suffix('_').unwrap_or(name);
+    (name != "_" && !is_camel_case(bare) && !HOOKS.contains(&name)).then(|| camel_case_problem(what, name))
+}
+
 /// What the checker says of a name that is not camelCase.
 pub fn camel_case_problem(what: &str, name: &str) -> String {
     format!("{what} '{name}' is not camelCase: letters and digits, starting with a small letter, such as '{}'", camel_case(name))

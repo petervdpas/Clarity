@@ -245,8 +245,8 @@ impl<'a> Window<'a> {
         let column = entity.column_of(entity.field(field)?.name.name.as_str());
         crate::required_fields(self.project, entity)
             .iter()
-            .any(|(c, _)| c == column)
-            .then(|| format!("Field = ({}, {})", string(data), string(column)))
+            .any(|(c, _)| *c == column)
+            .then(|| format!("Field = ({}, {})", string(data), string(&column)))
     }
 
     /// A binding as the AXAML path: `order.number` as `Order.Number`.
@@ -298,7 +298,7 @@ impl<'a> Window<'a> {
         };
         for widget in &self.parts {
             if let Some(n) = &widget.props.name {
-                let custom = widget.props.part.clone().map(|kind| (kind, widget.props.values.clone()));
+                let custom = crate::parts::kept_of(&widget.props);
                 // A canvas of objects chooses a record of its list, as a table of its bound list does.
                 let bind = widget.props.objects.as_ref().map(|o| o.list.clone()).or_else(|| widget.props.bind.clone());
                 ctx.parts.insert(n.clone(), PartInfo { bind, custom, mode: widget.props.mode });
@@ -372,7 +372,7 @@ impl<'a> Window<'a> {
             let fetcher = picture_fetch(data, field);
             fetches.insert(
                 fetcher.clone(),
-                ("Task<byte[]?>", format!("() => Fetched(nameof({fetcher}), () => Db.PictureOf<{}>({}.Id, {}))", entity.name.name, member(data), string(entity.column_of(field)))),
+                ("Task<byte[]?>", format!("() => Fetched(nameof({fetcher}), () => Db.PictureOf<{}>({}.Id, {}))", entity.name.name, member(data), string(&entity.column_of(field)))),
             );
             if let Some(store) = entity.field(field).and_then(|f| f.modifiers.store.as_deref()) {
                 let fetcher = picture_file(data, field);

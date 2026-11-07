@@ -11,21 +11,21 @@ entity Friend
 entity Loan
     album: ref Album, required, label @loanAlbumLabel
     friend: ref Friend, required, label @loanFriendLabel
-    lent_on: date, required, label @loanLentOnLabel
-    returned_on: date, help @loanReturnedOnHelp, label @loanReturnedOnLabel
+    lentOn: date, required, label @loanLentOnLabel
+    returnedOn: date, help @loanReturnedOnHelp, label @loanReturnedOnLabel
 
 // Whether an album is with a friend now, other than in `loan`.
-function lent_elsewhere(loan: Loan) -> bool
-    let open = find l in Loan where l.album == loan.album and l.returned_on == none
+function lentElsewhere(loan: Loan) -> bool
+    let open = find l in Loan where l.album == loan.album and l.returnedOn == none
     for other in open
         if other.id != loan.id
             return true
     return false
 
-action bring_back(loan: Loan)
-    require loan.returned_on == none
+action bringBack(loan: Loan)
+    require loan.returnedOn == none
     effects db.write
-    loan.returned_on = today()
+    loan.returnedOn = today()
     save loan
 
 page LoanBrowse: window
@@ -37,7 +37,7 @@ page LoanBrowse: window
     heading @loansHeadingCaption name loansHeading at 1,1 span 6
     checkbox @showReturnedCaption name showReturned at 9,1 span 4 on change: windowReturned
     // Add lends an album in the dialog; the trash takes a loan away for good.
-    table name loanGrid at 1,2 span 12 rows 8 bind loans columns album, friend, lent_on, returned_on sortable add remove confirm on add: lendClicked on remove: removeClicked on open: openClicked
+    table name loanGrid at 1,2 span 12 rows 8 bind loans columns album, friend, lentOn, returnedOn sortable add remove confirm on add: lendClicked on remove: removeClicked on open: openClicked
     button @friendsCaption name friends at 1,10 span 2 on click -> FriendBrowse
     button @backButtonCaption name backButton at 11,10 span 2 on click: backClicked
 
@@ -51,9 +51,9 @@ page LoanDialog: dialog
     label @friendLabel name friendLabel at 1,2 span 3 for friend
     dropdown name friend at 4,2 span 9 bind loan.friend search show name, phone
     label @lentOnLabel name lentOnLabel at 1,3 span 3 for lentOn
-    date name lentOn at 4,3 span 4 bind loan.lent_on
+    date name lentOn at 4,3 span 4 bind loan.lentOn
     label @returnedOnLabel name returnedOnLabel at 1,4 span 3 for returnedOn
-    date name returnedOn at 4,4 span 4 bind loan.returned_on
+    date name returnedOn at 4,4 span 4 bind loan.returnedOn
     help name returnedOnHelp at 8,4 span 5 for returnedOn
     button @saveCaption name saveLoan at 9,6 span 2 style primary default on click: saveClicked
     button @cancelCaption name cancelLoan at 11,6 span 2 cancel on click -> close
@@ -81,9 +81,9 @@ page FriendDialog: dialog
 code LoanBrowse
     handler windowReturned
         if showReturned.checked
-            loans = find l in Loan order by l.lent_on desc
+            loans = find l in Loan order by l.lentOn desc
         else
-            loans = find l in Loan where l.returned_on == none order by l.lent_on
+            loans = find l in Loan where l.returnedOn == none order by l.lentOn
 
     handler openClicked
         open LoanDialog with loan = loanGrid.selected
@@ -96,15 +96,15 @@ code LoanBrowse
         windowReturned()
 
     handler backClicked
-        bring_back(loanGrid.selected)
+        bringBack(loanGrid.selected)
         message @titleIsBack(title = loanGrid.selected.album.title)
         windowReturned()
 
 code LoanDialog
     handler dialogOpened
         // A new loan starts today.
-        if loan.lent_on == none
-            loan.lent_on = today()
+        if loan.lentOn == none
+            loan.lentOn = today()
 
     handler saveClicked
         album.error = ""
@@ -145,5 +145,5 @@ code FriendDialog
 
 code Loan
     before save
-        if loan.returned_on == none and lent_elsewhere(loan)
+        if loan.returnedOn == none and lentElsewhere(loan)
             refuse @titleIsWithAnotherFriend(title = loan.album.title)

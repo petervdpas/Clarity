@@ -57,7 +57,7 @@ Its entities map onto the tables and columns that are there:
 entity Invoice
     table "tblInvoice"
     key "InvoiceID"
-    inv_no: text(20), required, unique, column "InvNo"
+    invNo: text(20), required, unique, column "InvNo"
     amount: decimal(18, 6), column "Amount"
 ```
 

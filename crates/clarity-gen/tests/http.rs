@@ -12,7 +12,7 @@ const API: &str = "module api
 entity Order
     summary: text(200)
 
-action send_order(order: Order, token: text) -> integer
+action sendOrder(order: Order, token: text) -> integer
     effects net
     let reply = http post \"https://api.example.com/orders\" with order.summary header \"Authorization\": \"Bearer {token}\" header \"Accept\": \"text/plain\"
     if not reply.ok

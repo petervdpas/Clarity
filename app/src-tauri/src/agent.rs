@@ -97,6 +97,12 @@ changes.
 
 How you work:
 - Start a task by looking at the project (project_overview), and read a file before you change it.
+- Take a request for an application, or a feature of one, in this order. Read the manual topics it touches. Find \
+what Clarity does itself: the parts tool lists every built-in part with its properties and events, and the \
+manual says what code can do and tells each part (design.sound, for one); use those. Reach for a library or a custom part only for what nothing built in does, \
+and tell the person why. When the request needs data, design it in a diagram first (below). Then write the windows \
+and their code, fix what each write's check reports, build with the build tool and fix what the build reports. \
+Finish by saying what works and what Clarity cannot do yet; never invent syntax or a part to fill a gap.
 - Before you write Clarity you have not written in this conversation, read the manual topics the task needs with the \
 manual tool, and the exact syntax with the reference tool. Do not invent syntax. When unsure of a part's properties, \
 use the parts tool.
@@ -109,7 +115,9 @@ letter, such as `newGame`, `statusText` and `newGameClicked`. Name a part after 
 `label2`: an input after its field (`name`, `vatNumber`), its label and help after the input (`nameLabel`, \
 `nameHelp`), a button after what it does in its window (`saveOrder`, `openAlbum`, `newCustomer`), a container after \
 what it holds (`identityPanel`, `albumTabs`). A part's name is not a word code uses, such as `save` or `close`. \
-Fields, data and functions stay snake_case.
+Every other name is camelCase too: fields, data, settings, functions, actions, parameters and locals \
+(`vatNumber`, `withinCredit`, `isPlaying`), never snake_case; entities, enums and their values, windows and the app \
+are PascalCase.
 - Every text people read is a key: `title @customerCardTitle`, `button @saveCaption name saveOrder ...`, \
 `message @savedName(name = customer.name)`, `label @customerNameLabel` on every field. Give each key its text in the \
 default language's file, `translations/en.clarity` (read it first; lines like `saveCaption \"Save\"`), and the same \
@@ -126,10 +134,17 @@ from a package. Both are written in the project's own language: C or C++ (`nativ
 (`go`), C# (`nuget`, `dll`); never another stack's. Read the manual topics design.custom-parts and code.libraries \
 first. The overview lists their folders and files: read and write those files by their paths (like \
 parts/Arena/src/lib.rs). The file Clarity writes from the declaration (src/clarity.rs, clarity.go, the clarity \
-folder's header, the .g.cs half) is read only: change the declaration and the file follows. Build one on its own \
-with the build tool's part to see its compiler's errors. A sound (`sound name rattle source \"roll.wav\"`, see \
+folder's header, the .g.cs half) is read only: change the declaration and the file follows. Read that file before \
+you write the library's own file, and write exactly the functions it names, with its names and types. In C#, \
+`libraries/Player/Player.g.cs` declares `namespace ClarityLibraries;` and `public static partial class Player` with \
+a `public static partial` method per function in PascalCase (`isPlaying` is `IsPlaying`, an `integer` is `long`); \
+`Player.cs` is the other half: the same namespace and class, and each method again as `public static partial`, with \
+its body. Go writes each function in PascalCase in the library's package, Rust as the snake_case methods of the \
+trait in src/clarity.rs, C and C++ as the header declares them. Build one on its own with the build tool's part to \
+see its compiler's errors. A sound (`sound name rattle source \"roll.wav\"`, see \
 design.sound) plays sound files of the resources, tones and melodies; it has no place in the window. Sound files you \
-cannot write; use those the overview lists.
+cannot write; use those the overview lists. It plays music files too (`music.play(path)`, pause, seek, `on end`, \
+what it plays; design.sound), so music needs no library of its own.
 - Lay windows out to use the full width of their grid: inputs and tables reach the last column, labels sit left of \
 their inputs, buttons sit together at the bottom right.
 - Before you change data in bulk, or when the person asks, take a backup with backup_data; list_backups shows what there is and \
@@ -1195,7 +1210,7 @@ mod tests {
         assert!(!picked.is_error, "{}", picked.text);
         assert!(std::fs::read_to_string(&file).unwrap().contains("        pick \"listTemplates\"\n"));
         let module = std::fs::read_to_string(dir.join("apis/forms.clarity")).unwrap();
-        assert!(module.contains("action list_templates() -> list<Template>") && module.contains("every page"), "{module}");
+        assert!(module.contains("action listTemplates() -> list<Template>") && module.contains("every page"), "{module}");
         assert!(picked.text.contains("No problems."), "{}", picked.text);
         assert!(tools.call("api", &json!({"source": "forms"})).text.contains("[x] listTemplates"));
         // One change of the project file, for Undo.
@@ -1272,7 +1287,7 @@ mod tests {
         assert!(!applied.is_error, "{}", applied.text);
         assert!(applied.text.contains("Applied 2 proposals"), "{}", applied.text);
         let module = std::fs::read_to_string(dir.join("todo.clarity")).unwrap();
-        assert!(module.contains("entity Invoice\n    issued_on: date, required, label @invoiceIssuedOnLabel\n    customer: ref Customer"), "{module}");
+        assert!(module.contains("entity Invoice\n    issuedOn: date, required, label @invoiceIssuedOnLabel\n    customer: ref Customer"), "{module}");
         let en = std::fs::read_to_string(dir.join("translations/en.clarity")).unwrap();
         assert!(en.contains("invoiceIssuedOnLabel \"Issued on\""), "{en}");
         assert!(tools.call("diagram_proposals", &json!({"name": "billing"})).text.contains("matches the project"));
@@ -1410,6 +1425,8 @@ mod tests {
     fn the_agent_is_told_of_parts_libraries_and_sound() {
         let told = instructions();
         assert!(told.contains("custom part") && told.contains("library") && told.contains("sound"), "{told}");
+        // Music plays through the sound part, not a library the agent writes.
+        assert!(told.contains("music.play(path)") && told.contains("on end") && told.contains("needs no library of its own"), "{told}");
         for topic in ["design.custom-parts", "code.libraries", "design.sound"] {
             assert!(manual_topic(topic).is_ok(), "{topic}");
         }

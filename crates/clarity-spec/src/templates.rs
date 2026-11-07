@@ -117,20 +117,9 @@ fn find_entity<'a>(project: &'a Project, name: &str) -> Result<&'a Entity, Strin
         .ok_or_else(|| format!("'{name}' is not an entity"))
 }
 
-/// `Customer` -> `customer`, `OrderLine` -> `order_line`.
+/// `Customer` -> `customer`, `OrderLine` -> `orderLine`.
 fn data_name(entity: &str) -> String {
-    let mut out = String::new();
-    for (i, c) in entity.chars().enumerate() {
-        if c.is_uppercase() {
-            if i > 0 {
-                out.push('_');
-            }
-            out.extend(c.to_lowercase());
-        } else {
-            out.push(c);
-        }
-    }
-    out
+    crate::names::camel_case(entity)
 }
 
 /// `customer` -> `customers`, `category` -> `categories`.
@@ -344,7 +333,7 @@ mod tests {
     #[test]
     fn names_data_after_the_entity() {
         assert_eq!(data_name("Customer"), "customer");
-        assert_eq!(data_name("OrderLine"), "order_line");
+        assert_eq!(data_name("OrderLine"), "orderLine");
         assert_eq!(plural("customer"), "customers");
         assert_eq!(plural("category"), "categories");
         assert_eq!(plural("address"), "addresses");

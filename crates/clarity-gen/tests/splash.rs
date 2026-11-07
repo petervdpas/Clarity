@@ -88,7 +88,9 @@ fn every_stack_carries_the_app_s_version() {
         let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{stack}: {e:?}"));
         assert!(files.iter().any(|f| f.text.contains(code)), "{stack}: app.version as {code}");
         assert!(files.iter().any(|f| f.text.replace('\\', "").contains("Version 9.8.7")), "{stack}: the text carries the version");
-        assert!(!files.iter().any(|f| f.text.contains("{app.version}")), "{stack}: no slot left");
+        // The project's files, not the runtime's sources carried beside them, which fill the slot as the program starts.
+        let left: Vec<&str> = files.iter().filter(|f| !f.path.starts_with("clarity-runtime/") && f.text.contains("{app.version}")).map(|f| f.path.as_str()).collect();
+        assert!(left.is_empty(), "{stack}: no slot left, but in {left:?}");
         // The package says it, as the stack's build keeps a version.
         let text_of = |path: &str| files.iter().find(|f| f.path == path || (path == ".csproj" && f.path.ends_with(".csproj") && !f.path.contains('/'))).map(|f| f.text.clone()).unwrap_or_default();
         match stack {

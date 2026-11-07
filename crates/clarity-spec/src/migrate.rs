@@ -50,9 +50,10 @@ impl Column {
         }
     }
 
-    /// The column the field is stored in.
-    pub fn stored(&self) -> &str {
-        self.column.as_deref().unwrap_or(&self.name)
+    /// The column the field is stored in: its `column`, else its name in
+    /// snake case (`creditLimit` in `credit_limit`).
+    pub fn stored(&self) -> String {
+        self.column.clone().unwrap_or_else(|| snake_case(&self.name))
     }
 
     /// The column beside a `file` field that holds the file's name
@@ -107,8 +108,8 @@ impl Table {
     }
 
     /// The column field `field` is stored in.
-    pub fn column_name<'a>(&'a self, field: &'a str) -> &'a str {
-        self.column(field).map_or(field, Column::stored)
+    pub fn column_name(&self, field: &str) -> String {
+        self.column(field).map_or_else(|| snake_case(field), Column::stored)
     }
 
     pub fn column(&self, name: &str) -> Option<&Column> {

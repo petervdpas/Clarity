@@ -158,6 +158,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             cargo_toml(
                 &crate_name,
                 clarity,
+                clarity && clarity_spec::resources::plays_songs(project),
                 &features,
                 &rust_parts.iter().map(|p| (parts::package_of(project, &p.name.name), p.name.name.clone())).collect::<Vec<_>>(),
                 &crate::libraries::libraries(project).iter().map(|l| (crate::libraries::rust_package(project, &l.name.name), l.name.name.clone())).collect::<Vec<_>>(),
@@ -621,9 +622,14 @@ fn main_window(project: &Project) -> Option<String> {
 /// databases its data sources are. `clarity`: the desktop program, which
 /// Clarity.UI draws; without it the web program, which serves Clarity.UI's
 /// browser files.
-fn cargo_toml(name: &str, clarity: bool, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)]) -> String {
-    // Clarity.UI, which draws the windows with Skia in the system's own window (DESIGN 7.9).
-    let ui = if clarity { format!("clarity-ui = \"{}\"\n", ui_version()) } else { String::new() };
+fn cargo_toml(name: &str, clarity: bool, songs: bool, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)]) -> String {
+    // Clarity.UI, which draws the windows with Skia in the system's own window (DESIGN 7.9);
+    // with songs to play, its `audio` feature brings Clarity.Audio (docs/AUDIO-PLAN.md).
+    let ui = match (clarity, songs) {
+        (true, true) => format!("clarity-ui = {{ version = \"{}\", features = [\"audio\"] }}\n", ui_version()),
+        (true, false) => format!("clarity-ui = \"{}\"\n", ui_version()),
+        _ => String::new(),
+    };
     let features = features.iter().map(|f| format!("{f:?}")).collect::<Vec<_>>().join(", ");
     // On the desktop, and with custom parts, every dependency (Clarity.UI, which lays out and draws
     // every frame; a part's game engine) builds optimized in a debug build too, so the windows run
@@ -1363,7 +1369,7 @@ fn required_inputs(project: &Project) -> String {
                 let column = entity.column_of(entity.field(field)?.name.name.as_str());
                 crate::required_fields(project, entity)
                     .iter()
-                    .any(|(c, _)| c == column)
+                    .any(|(c, _)| *c == column)
                     .then(|| format!("Bound {{ part: {part:?}, data: {data:?}, table: {:?}, column: {column:?} }}", entity.table_name()))
             })
             .collect();

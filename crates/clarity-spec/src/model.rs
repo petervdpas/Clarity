@@ -108,9 +108,10 @@ impl Entity {
         self.key.as_deref().unwrap_or("id")
     }
 
-    /// The column a field is stored in.
-    pub fn column_of<'a>(&'a self, field: &'a str) -> &'a str {
-        self.field(field).and_then(|f| f.modifiers.column.as_deref()).unwrap_or(field)
+    /// The column a field is stored in: its `column`, else its name in
+    /// snake case (`creditLimit` in `credit_limit`).
+    pub fn column_of(&self, field: &str) -> String {
+        self.field(field).and_then(|f| f.modifiers.column.clone()).unwrap_or_else(|| snake_case(field))
     }
 }
 

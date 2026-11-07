@@ -16,7 +16,7 @@ settings
 entity Order
     summary: text(200)
 
-action send_order(order: Order, token: text)
+action sendOrder(order: Order, token: text)
     effects net
     let reply = http post \"https://api.example.com/orders\" with order.summary header \"Authorization\": \"Bearer {token}\" header \"Accept\": \"text/plain\"
     if not reply.ok
@@ -34,7 +34,7 @@ code Status
         let gone = http delete \"https://api.example.com/orders/1\"
         let put = http put \"https://api.example.com/orders/1\" with \"done\"
         message \"{gone.status} {put.ok}\"
-        send_order(order, settings.apiToken)
+        sendOrder(order, settings.apiToken)
 ";
 
 fn load(source: &str) -> Project {
@@ -85,7 +85,7 @@ fn parses_the_call_its_body_and_headers() {
 #[test]
 fn an_action_that_calls_out_declares_net() {
     let errs = errors(&with("    effects net\n", ""));
-    assert_eq!(errs, ["action 'send_order' calls out, which needs 'effects net'"], "{errs:?}");
+    assert_eq!(errs, ["action 'sendOrder' calls out, which needs 'effects net'"], "{errs:?}");
 }
 
 #[test]

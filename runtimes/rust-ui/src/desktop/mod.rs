@@ -29,6 +29,8 @@ pub mod fail_safe;
 pub mod files;
 pub mod grow;
 pub mod input;
+#[cfg(feature = "audio")]
+pub mod music;
 pub mod sound;
 pub mod theme_events;
 pub mod window_system;
@@ -128,9 +130,12 @@ thread_local! {
 /// What the desktop gives the parts before its first window: sound through
 /// rodio (the speakers opened when a sound first plays) and the system's
 /// file dialogs, which every window's parts use. The picker given is the
-/// one the host asks whether a dialog is open.
+/// one the host asks whether a dialog is open. With the `audio` feature,
+/// songs play through Clarity.Audio.
 pub fn prepare() -> Arc<SystemFilePicker> {
     crate::parts::sound::set_output(Rc::new(self::sound::Speakers::default()));
+    #[cfg(feature = "audio")]
+    crate::parts::sound::set_music(Some(Rc::new(self::music::ClarityAudio::default())));
     desktop_files()
 }
 

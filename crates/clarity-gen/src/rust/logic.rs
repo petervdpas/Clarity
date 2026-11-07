@@ -625,8 +625,7 @@ impl<'a> Emitter<'a> {
             return None;
         }
         let (kind, written) = self.window.as_ref()?.parts.get(name)?.custom.clone()?;
-        let declared = crate::parts::declaration(self.project, &kind)?;
-        declared.properties.iter().any(|p| p.name.name == member.name).then(|| (name.clone(), member.name.clone(), kind, written))
+        crate::parts::keeps(self.project, &kind, &member.name).then(|| (name.clone(), member.name.clone(), kind, written))
     }
 
     /// Reading a custom part's property: as a handler set it, else as written or declared.
@@ -1474,7 +1473,7 @@ impl WindowCtx {
                         tool: crate::canvas_tool(&widget.props),
                         brush: widget.props.brush.unwrap_or(2),
                         ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()),
-                        custom: widget.props.part.clone().map(|kind| (kind, widget.props.values.clone())),
+                        custom: crate::parts::kept_of(&widget.props),
                     },
                 );
             }

@@ -809,8 +809,7 @@ impl<'a> Emitter<'a> {
             return None;
         }
         let (kind, written) = self.window?.parts.get(name)?.custom.clone()?;
-        let declared = crate::parts::declaration(self.project, &kind)?;
-        declared.properties.iter().any(|p| p.name.name == prop.name).then(|| (member(name), prop.name.clone(), kind, written))
+        crate::parts::keeps(self.project, &kind, &prop.name).then(|| (member(name), prop.name.clone(), kind, written))
     }
 
     /// Reading a custom part's property: as written or set, else as declared.

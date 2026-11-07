@@ -1,0 +1,6 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Names in camelCase"
+    rename field Customer.vat_number to vatNumber
+    rename field Customer.credit_limit to creditLimit
+    rename field Order.ordered_on to orderedOn

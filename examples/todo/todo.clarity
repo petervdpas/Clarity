@@ -7,7 +7,7 @@ entity Person
 entity Task
     title: text(120), required, search, label @taskTitleLabel
     done: bool, default false, label @taskDoneLabel
-    finished_by: ref Person, label @taskFinishedByLabel
+    finishedBy: ref Person, label @taskFinishedByLabel
 
 // What each person sets for themselves, kept on their machine.
 settings
@@ -47,7 +47,7 @@ page Main: window
     label @searchLabel name searchLabel at 1,1 span 2 for searchBox
     textbox name searchBox at 3,1 span 10 placeholder @searchPlaceholder on change: showTasks
     // The table adds and removes its tasks itself: Add above it, the trash on each row.
-    table name grid at 1,2 span 12 rows 9 bind tasks columns title, done, finished_by resizable edit title, done as switch, finished_by add remove confirm on add: addClicked on remove: deleteClicked on change: taskChanged
+    table name grid at 1,2 span 12 rows 9 bind tasks columns title, done, finishedBy resizable edit title, done as switch, finishedBy add remove confirm on add: addClicked on remove: deleteClicked on change: taskChanged
     button @usersButtonCaption name usersButton at 1,12 span 2 on click -> Users
 
 page Users: window
@@ -145,7 +145,7 @@ code Users
     // A person who finished tasks stays; any other is removed after the question, asked here in code.
     handler deletePersonClicked
         let gone = peopleGrid.selected
-        let tasks = find t in Task where t.finished_by == gone
+        let tasks = find t in Task where t.finishedBy == gone
         if count(tasks) > 0
             message error @nameHasFinishedTasksAnd(name = gone.name)
             return

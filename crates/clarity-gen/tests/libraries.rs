@@ -17,6 +17,7 @@ library Words
     function spell(n: integer) -> text
     function rounded(amount: money, places: integer) -> money
     function shout(words: text, loud: bool) -> text
+    function isLoud(words: text) -> bool
 
 page Orders: window
     data order: Order
@@ -26,6 +27,8 @@ code Orders
     handler spellClicked
         order.words = Words.shout(Words.spell(42), true)
         order.total = Words.rounded(order.total, 2)
+        if Words.isLoud(order.words)
+            order.words = \"loud\"
 ";
 
 fn line(backend: Backend) -> &'static str {
@@ -77,6 +80,24 @@ fn csharp_calls_the_adapter_and_references_the_package() {
     assert!(code.contains("public static partial string Spell(long n);"));
     assert!(code.contains("<PackageReference Include=\"Newtonsoft.Json\" Version=\"13.0.1\" />"));
     assert!(files.iter().any(|f| f.path == "libraries/Words/Words.cs"));
+}
+
+/// A function named in snake_case is one name in C#: declared and called as IsLoud.
+#[test]
+fn csharp_names_a_snake_case_function_in_pascal_case() {
+    let code = all_code(&generated(Backend::Csharp));
+    assert!(code.contains("public static partial bool IsLoud(string words);"), "{code}");
+    assert!(code.contains("ClarityLibraries.Words.IsLoud("), "{code}");
+    assert!(!code.contains("Is_loud"), "{code}");
+}
+
+/// The same in Go: the interface and the call say IsLoud.
+#[test]
+fn go_names_a_snake_case_function_in_pascal_case() {
+    let code = all_code(&generated(Backend::Go));
+    assert!(code.contains("wordslib.IsLoud("), "{code}");
+    assert!(code.contains(")(IsLoud),"), "{code}");
+    assert!(!code.contains("Is_loud"), "{code}");
 }
 
 #[test]

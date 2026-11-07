@@ -14,11 +14,15 @@
 //! - `show` {name, data, type}: a file opened in a tab of its own, as its media type; only
 //!   kinds that run nothing in the page's origin (`shown_type`), others are a `download`.
 //! - `play` {id, data, volume, repeat}: a sound (WAV, base64) plays; `stop` {id} stops it.
+//! - `songPlay` {id, data, kind, volume}: a song (mp3, flac, ogg, base64) plays in an audio
+//!   element; `songDo` {id, do, value} pauses, resumes, seeks (seconds), sets the volume or
+//!   stops it. The page says how it plays with each change (`song_said`).
 //! - `choices` {choices}: the person's choices (language, theme, columns), all of them, for the page to keep.
 //! - `ended` {quit}: the program's windows closed.
 
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::time::Duration;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
@@ -27,7 +31,7 @@ use serde_json::{Value, json};
 
 use crate::files::{ChosenFile, FileFilter, FilePicker};
 use crate::overlay::Clipboard;
-use crate::parts::sound::{Playing, SoundOutput};
+use crate::parts::sound::{Music, MusicPlayer, MusicProblem, Playing, SoundOutput};
 
 /// What sends the page a message.
 pub type Tell = Arc<dyn Fn(Value) + Send + Sync>;
@@ -116,6 +120,127 @@ impl Sounds {
     /// The page told sound `id` played to its end.
     pub fn ended(&mut self, id: u64) {
         self.ended.insert(id);
+    }
+}
+
+/// What the page said of a song as it plays.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct SongSaid {
+    pub playing: bool,
+    pub paused: bool,
+    pub ended: bool,
+    /// Seconds played, and its length in seconds (0 while the page does not know).
+    pub position: f64,
+    pub length: f64,
+}
+
+/// The songs the page plays, by number, and what it said of each.
+#[derive(Default)]
+pub struct Songs {
+    next: u64,
+    said: BTreeMap<u64, SongSaid>,
+}
+
+impl Songs {
+    /// The page said how song `id` plays.
+    pub fn said(&mut self, id: u64, said: SongSaid) {
+        if let Some(kept) = self.said.get_mut(&id) {
+            *kept = said;
+        }
+    }
+}
+
+/// Songs through the page's audio elements: in a browser the page plays them, no Clarity.Audio.
+pub struct PageMusic {
+    tell: Tell,
+    songs: Rc<RefCell<Songs>>,
+}
+
+impl PageMusic {
+    pub fn new(tell: Tell, songs: Rc<RefCell<Songs>>) -> PageMusic {
+        PageMusic { tell, songs }
+    }
+}
+
+impl Music for PageMusic {
+    fn player(&self) -> Result<Box<dyn MusicPlayer>, MusicProblem> {
+        let id = {
+            let mut songs = self.songs.borrow_mut();
+            songs.next += 1;
+            songs.next
+        };
+        Ok(Box::new(PageSong { id, tell: self.tell.clone(), songs: self.songs.clone(), volume: 1.0 }))
+    }
+}
+
+/// A sound part's song in the page.
+struct PageSong {
+    id: u64,
+    tell: Tell,
+    songs: Rc<RefCell<Songs>>,
+    volume: f32,
+}
+
+impl PageSong {
+    fn said(&self) -> SongSaid {
+        self.songs.borrow().said.get(&self.id).copied().unwrap_or_default()
+    }
+
+    fn act(&self, act: &str, value: f64) {
+        (self.tell)(json!({ "tell": "songDo", "id": self.id, "do": act, "value": value }));
+    }
+}
+
+impl Drop for PageSong {
+    fn drop(&mut self) {
+        self.act("stop", 0.0);
+        self.songs.borrow_mut().said.remove(&self.id);
+    }
+}
+
+impl MusicPlayer for PageSong {
+    /// A page has no files of the computer's disk to play.
+    fn play_file(&mut self, path: &str) -> Result<(), MusicProblem> {
+        Err(MusicProblem { key: "audioNoDisk".into(), detail: path.to_string() })
+    }
+    fn play_bytes(&mut self, bytes: Vec<u8>, hint: Option<&str>) -> Result<(), MusicProblem> {
+        self.songs.borrow_mut().said.insert(self.id, SongSaid { playing: true, ..SongSaid::default() });
+        (self.tell)(json!({ "tell": "songPlay", "id": self.id, "data": base64(&bytes), "kind": hint.unwrap_or_default(), "volume": self.volume }));
+        Ok(())
+    }
+    fn pause(&mut self) {
+        self.act("pause", 0.0);
+    }
+    fn resume(&mut self) {
+        self.act("resume", 0.0);
+    }
+    fn seek(&mut self, at: Duration) -> Result<(), MusicProblem> {
+        self.act("seek", at.as_secs_f64());
+        Ok(())
+    }
+    fn stop(&mut self) {
+        self.act("stop", 0.0);
+        self.songs.borrow_mut().said.remove(&self.id);
+    }
+    fn set_volume(&mut self, volume: f32) {
+        self.volume = volume;
+        self.act("volume", volume as f64);
+    }
+    fn playing(&self) -> bool {
+        self.said().playing
+    }
+    fn paused(&self) -> bool {
+        self.said().paused
+    }
+    fn ended(&self) -> bool {
+        self.said().ended
+    }
+    fn position(&self) -> Duration {
+        Duration::from_secs_f64(self.said().position.max(0.0))
+    }
+    fn length(&self) -> Option<Duration> {
+        let length = self.said().length;
+        (length > 0.0 && length.is_finite()).then(|| Duration::from_secs_f64(length))
     }
 }
 

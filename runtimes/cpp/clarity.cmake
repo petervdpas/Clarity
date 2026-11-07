@@ -91,6 +91,30 @@ function(clarity_ui_beside target)
   endif()
 endfunction()
 
+# Clarity.Audio (docs/AUDIO-PLAN.md) for a program whose sound parts play
+# songs: its library lies beside Clarity.UI's in the folder CLARITY_UI names
+# (include/clarity_audio.h and lib/). Linked to `target` and put beside it.
+function(clarity_use_audio target)
+  if(NOT TARGET clarity_audio)
+    if(NOT EXISTS "${CLARITY_UI}/include/clarity_audio.h")
+      message(FATAL_ERROR "The program plays songs, but Clarity.Audio's library is not in '${CLARITY_UI}': use a Clarity.UI folder with include/clarity_audio.h and its library in lib/")
+    endif()
+    add_library(clarity_audio SHARED IMPORTED GLOBAL)
+    set_target_properties(clarity_audio PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${CLARITY_UI}/include")
+    if(WIN32)
+      find_library(CLARITY_AUDIO_IMPORT NAMES clarity_audio.dll.lib libclarity_audio.dll.a clarity_audio.lib PATHS "${CLARITY_UI}/lib" NO_DEFAULT_PATH REQUIRED)
+      set_target_properties(clarity_audio PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/clarity_audio.dll" IMPORTED_IMPLIB "${CLARITY_AUDIO_IMPORT}")
+    elseif(APPLE)
+      set_target_properties(clarity_audio PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/libclarity_audio.dylib")
+    else()
+      set_target_properties(clarity_audio PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/libclarity_audio.so" IMPORTED_NO_SONAME TRUE)
+    endif()
+  endif()
+  target_link_libraries(${target} PRIVATE clarity_audio)
+  add_custom_command(TARGET ${target} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_audio> $<TARGET_FILE_DIR:${target}>)
+endfunction()
+
 # The bytes of `file` as a C++ initializer in `out`: a string literal where
 # the compiler takes a long one cheaply (GCC, Clang), else a list of bytes
 # (MSVC limits string literals). Either ends with a zero byte past the file.

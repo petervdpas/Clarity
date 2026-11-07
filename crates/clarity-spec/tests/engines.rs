@@ -23,14 +23,14 @@ engine Pricing from \"test.wasm\"
     uses clock, random, log, language
     function add(a: integer, b: integer) -> integer
     function total(lines: list<Line>) -> money
-    function size_of(n: integer) -> Size
+    function sizeOf(n: integer) -> Size
     function discounted(line: Line) -> Line
 
 function answer(a: integer) -> integer
     return Pricing.add(a, 40)
 
 function sized(lines: list<Line>) -> Size
-    return Pricing.size_of(count(lines))
+    return Pricing.sizeOf(count(lines))
 ";
 
 fn project(source: &str, files: Vec<EngineFile>) -> Project {
@@ -58,7 +58,7 @@ fn an_engine_declares_its_file_and_functions() {
     let pricing = &file.engines[0];
     assert_eq!((pricing.name.name.as_str(), pricing.file.as_str()), ("Pricing", "test.wasm"));
     let names: Vec<&str> = pricing.functions.iter().map(|f| f.name.name.as_str()).collect();
-    assert_eq!(names, ["add", "total", "size_of", "discounted"]);
+    assert_eq!(names, ["add", "total", "sizeOf", "discounted"]);
     assert_eq!(pricing.functions[1].returns.as_ref().map(|r| &r.kind), Some(&TypeRefKind::Money));
     assert!(errors(SHOP, test_engine()).is_empty(), "{:#?}", errors(SHOP, test_engine()));
 }

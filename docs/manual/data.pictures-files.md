@@ -72,7 +72,7 @@ In a store, a picture's file is named after the SHA-256 of its bytes, so the sam
 Code reaches files only in the file stores. `files f in store` lists every file of a store and its folders, and `where` and `order by` work as in `find`. A file has `name`, `path`, `extension`, `size` and `modified`.
 
 ```clarity
-action export_collection()
+action exportCollection()
     effects files.write
     let lines = ""
     for album in find a in Album order by a.title

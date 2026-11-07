@@ -76,11 +76,13 @@ fn code_tells_a_sound_what_to_play() {
 #[test]
 fn what_code_tells_a_sound_is_checked() {
     let e = errors(&with_sounds(&TABLE.replace("rollSound.stop()", "rollSound.jump()"), &["roll.wav"]));
-    assert!(has(&e, "a sound hears play, stop, tone, melody or volume, not 'jump'"), "{e:?}");
+    assert!(has(&e, "a sound hears play, pause, resume, seek, stop, tone, melody or volume, not 'jump'"), "{e:?}");
     let e = errors(&with_sounds(&TABLE.replace("tune.tone(440, 0.5)", "tune.tone(\"high\", 0.5)"), &["roll.wav"]));
     assert!(has(&e, "value 'hertz' of tune.tone is integer"), "{e:?}");
     let e = errors(&with_sounds(&TABLE.replace("rollSound.play()", "rollSound.play(1)"), &["roll.wav"]));
-    assert!(has(&e, "rollSound.play takes 0 values, not 1"), "{e:?}");
+    assert!(has(&e, "value 'path' of rollSound.play is text, not integer"), "{e:?}");
+    let e = errors(&with_sounds(&TABLE.replace("rollSound.play()", "rollSound.play(\"a\", \"b\")"), &["roll.wav"]));
+    assert!(has(&e, "rollSound.play takes 0 or 1 values, not 2"), "{e:?}");
 }
 
 #[test]
@@ -101,8 +103,9 @@ fn the_source_is_a_sound_of_the_resources() {
     assert_eq!(e, ["sound 'roll.wav' is not in the resources folder; it has dice.mp3"]);
     let e = errors(&with_sounds(TABLE, &[]));
     assert_eq!(e, ["sound 'roll.wav' is not in the resources folder, which has no sounds yet"]);
-    let e = errors(&with_sounds(&TABLE.replace("roll.wav", "roll.ogg"), &["roll.ogg"]));
-    assert_eq!(e, ["'roll.ogg' is not a sound every stack can play; use a .wav, .mp3 or .flac file"]);
+    assert!(errors(&with_sounds(&TABLE.replace("roll.wav", "roll.ogg"), &["roll.ogg"])).is_empty());
+    let e = errors(&with_sounds(&TABLE.replace("roll.wav", "roll.aiff"), &["roll.aiff"]));
+    assert_eq!(e, ["'roll.aiff' is not a sound every stack can play; use a .wav, .mp3, .flac or .ogg file"]);
 }
 
 #[test]
@@ -118,4 +121,53 @@ fn melodies_read_alike_on_every_stack() {
         assert_eq!(serde_json::Value::from(plays), case["plays"], "{notes}");
         assert_eq!(serde_json::to_value(&skips).unwrap(), case["skips"], "{notes}");
     }
+}
+
+const PLAYER: &str = "module m
+
+page Player: window
+    data shown: text
+    data at: decimal
+    sound name music volume 80 on end: songEnded on fail: songFailed
+    button \"Play\" name playButton at 1,1 span 2 on click: playClicked
+
+code Player
+    handler playClicked
+        music.play(\"/music/song.flac\")
+        if music.paused
+            music.resume()
+        else
+            music.pause()
+        music.seek(90)
+        music.seek(1.5)
+        at = music.position + music.length
+        shown = music.file
+
+    handler songEnded
+        shown = \"done\"
+
+    handler songFailed
+        shown = music.problem
+        if music.playing
+            music.stop()
+";
+
+#[test]
+fn code_plays_a_file_pauses_seeks_and_reads_what_plays() {
+    let project = with_sounds(PLAYER, &[]);
+    assert_eq!(errors(&project), Vec::<String>::new());
+    let music = &project.files[0].pages[0].widgets[0].props;
+    let events: Vec<&str> = music.handlers.iter().map(|h| h.event.keyword()).collect();
+    assert_eq!(events, ["end", "fail"]);
+    assert_eq!(widget_line(music), "sound name music volume 80 on end: songEnded on fail: songFailed");
+}
+
+#[test]
+fn what_a_sound_says_is_read_not_set() {
+    let e = errors(&with_sounds(&PLAYER.replace("shown = music.file", "music.position = 3"), &[]));
+    assert!(has(&e, "music.position is read, not set"), "{e:?}");
+    let e = errors(&with_sounds(&PLAYER.replace("shown = music.file", "shown = music.speed"), &[]));
+    assert!(!e.is_empty(), "{e:?}");
+    let e = errors(&with_sounds(&PLAYER.replace("music.seek(90)", "music.seek(\"later\")"), &[]));
+    assert!(has(&e, "value 'seconds' of music.seek is decimal"), "{e:?}");
 }

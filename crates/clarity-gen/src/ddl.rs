@@ -257,7 +257,7 @@ impl Sql {
     /// empty; SQL Server leaves out missing values too, which the others do
     /// by themselves.
     pub fn unique_index(self, table: &Table, column: &Column, baseline: bool) -> String {
-        let name = self.quote(column.stored());
+        let name = self.quote(&column.stored());
         let index = self.index_name(table, column);
         let on = self.quote(&table.table_name());
         let textual = matches!(column.ty, FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret);
@@ -291,7 +291,7 @@ impl Sql {
     /// with LIKE, as its full-text search is seldom installed. The names
     /// and the document match the runtimes' queries.
     pub fn search_index(self, table: &Table, baseline: bool) -> Vec<String> {
-        let columns: Vec<String> = table.columns.iter().filter(|c| c.search).map(|c| self.quote(c.stored())).collect();
+        let columns: Vec<String> = table.columns.iter().filter(|c| c.search).map(|c| self.quote(&c.stored())).collect();
         if columns.is_empty() {
             return vec![];
         }

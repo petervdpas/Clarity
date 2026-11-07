@@ -236,7 +236,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     // Custom parts are kinds of part of Clarity.UI, built into the program (DESIGN 7.9): on the desktop only.
     let custom = if desktop { parts::parts(project) } else { Vec::new() };
     let mut files = vec![
-        text("CMakeLists.txt", cmake_lists(&program, &links, &carried) + &parts::cmake_lines(&program, &custom) + &crate::libraries::cmake_lines(project, &program)),
+        text("CMakeLists.txt", cmake_lists(&program, &links, &carried) + &parts::cmake_lines(&program, &custom) + &crate::libraries::cmake_lines(project, &program) + &audio_cmake_lines(project, settings, &program)),
         text("CMakePresets.json", PRESETS.to_string()),
     ];
     if !custom.is_empty() {
@@ -560,6 +560,15 @@ clarity_carry({program}{browser})
     out
 }
 
+/// The CMake line that links Clarity.Audio when the desktop program plays songs (docs/AUDIO-PLAN.md); C's and C++'s.
+pub(crate) fn audio_cmake_lines(project: &Project, settings: &Settings, program: &str) -> String {
+    if crate::uses_clarity_ui(&settings.stack) && clarity_spec::resources::plays_songs(project) {
+        format!("\n# The sound parts' songs play through Clarity.Audio, whose library lies beside Clarity.UI's.\nclarity_use_audio({program})\n")
+    } else {
+        String::new()
+    }
+}
+
 /// The debug and release builds, each configured and built by one workflow.
 const PRESETS: &str = r#"{
   "version": 6,
@@ -675,6 +684,15 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
         (String::new(), String::new())
     } else {
         ("#include \"secrets/secrets.h\"\n\n".to_string(), "    clarity_secrets_use();\n".to_string())
+    };
+    // Songs play through Clarity.Audio, whose library lies beside Clarity.UI's (docs/AUDIO-PLAN.md).
+    let (secrets_include, use_secrets) = if crate::uses_clarity_ui(&settings.stack) && clarity_spec::resources::plays_songs(project) {
+        (
+            format!("{secrets_include}#include \"clarity_audio.h\"\n#include \"clarity_ui.h\"\n\n"),
+            format!("{use_secrets}    // The sound parts' songs (mp3, flac, ogg) play through Clarity.Audio.\n    if (clarity_ui_use_audio(clarity_audio_api()) != CLARITY_OK) fputs(\"Clarity.Audio was not taken by Clarity.UI\\n\", stderr);\n"),
+        )
+    } else {
+        (secrets_include, use_secrets)
     };
     let sources: Vec<String> = databases.iter().map(|(name, _, at)| format!("    {{{}, CLARITY_SQLITE, {}}},", string(name), string(at))).collect();
     let mut stores: Vec<String> = crate::fixed_stores(settings).iter().map(|s| format!("    if (!clarity_add_store(db, {}, {})) return closed(db);", string(&s.name), string(&s.location))).collect();
@@ -871,7 +889,7 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
             string(&e.name.name),
             string(&f.name.name),
             prefix(&e.name.name),
-            string(e.column_of(&f.name.name))
+            string(&e.column_of(&f.name.name))
         );
     }
     let ready = string(&format!("{}: the databases are ready.", names::pascal(&settings.name)));

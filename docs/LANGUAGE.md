@@ -26,7 +26,7 @@ Clarity is line based. Each declaration, setting, part or statement is one line,
 - **Indentation** uses spaces; a tab is an error. Four spaces per level is the convention, and the designer writes four.
 - **Comments** start with `//` and run to the end of the line. They can stand on their own line or follow code. The designer keeps them when it rewrites a file.
 - **Blank lines** are free and are kept too.
-- **Names** start with a letter or `_`, followed by letters, digits and `_`: `customer`, `vat_number`, `OrderLine`. Names are case sensitive. Entities, enums, windows and the app are written in `PascalCase` by convention. The parts of a window and their handlers must be `camelCase`: letters and digits only, starting with a small letter (`newGame`, `square1`, `saveClicked`); the checker reports any other. Fields, data and functions are `snake_case` by convention.
+- **Names** start with a letter, followed by letters and digits: `customer`, `vatNumber`, `OrderLine`. Names are case sensitive. Entities, enums and their values, windows and the app are written in `PascalCase`. Every other name must be `camelCase`, letters and digits only, starting with a small letter: the parts of a window and their handlers (`newGame`, `square1`, `saveClicked`), and fields, settings, data, functions, actions, parameters, locals, constants and what an engine keeps (`vatNumber`, `withinCredit`); the checker reports any other. Two kinds of name are left as written: the functions an engine answers its host by (`clarity_tick`, `clarity_draw`, `clarity_pointer`, `clarity_key`), and a name with one `_` after it, which steps around a word Clarity keeps (`key_`). A field is stored in the column of its name in snake case (`vatNumber` in `vat_number`) unless it names its `column`; every stack turns names into its own style.
 - **Every part has a name** (`button @saveCaption name save at 1,3`), which its events and code go by. The designer names a part after what it shows or is for when it is placed (`ordersTable`, `email`), or `button1` when it does not know yet, and renames a numbered part after its purpose once it knows it (a label given `for vatNumber` becomes `vatNumberLabel`), unless code goes by the number. A part written without a name is an error, and **Name them** under Problems names every such part in the file the same way.
 - **Keys** name the texts people read: `@saveCaption`, `@customerCardTitle`. A key's text is in the language files, one per language (see [Translations](#translations)); a title, a caption, a label, a message are keys. Only a text without letters, such as a calculator's `"7"`, is written as it is.
 - **Strings** are written in double quotes: `"logo.png"`. Inside them, `\"` is a quote, `\\` a backslash and `\n` a new line. Other backslashes are kept as written, so `"^[0-9]\d+$"` is a valid pattern.
@@ -36,7 +36,7 @@ Clarity is line based. Each declaration, setting, part or statement is one line,
 
 Words such as `page`, `data` and `bind` are keywords only where the grammar expects them. Outside those places they are ordinary names, so a field may be called `data` and a part may be called `close_button`. The words `and`, `or`, `not` and `in` are reserved in expressions.
 
-A text people see is a key (`label @customerVatNumberLabel`), whose text the language files give; see [Translations](#translations). **Make texts keys** writes a key for each text a project wrote as it was, and gives it a text derived from the name where there was none: `vat_number` becomes "Vat number", and `CustomerCard` becomes "Customer card".
+A text people see is a key (`label @customerVatNumberLabel`), whose text the language files give; see [Translations](#translations). **Make texts keys** writes a key for each text a project wrote as it was, and gives it a text derived from the name where there was none: `vatNumber` becomes "Vat number", and `CustomerCard` becomes "Customer card".
 
 ## 2. The project file
 
@@ -238,8 +238,8 @@ entity Customer
     name: text(80), required, label @customerNameLabel
     email: email, unique, label @customerEmailLabel
     kind: CustomerKind, default Private, label @customerKindLabel
-    vat_number: text(14), help @customerVatNumberHelp, label @customerVatNumberLabel
-    credit_limit: money, min 0, default 0, label @customerCreditLimitLabel
+    vatNumber: text(14), help @customerVatNumberHelp, label @customerVatNumberLabel
+    creditLimit: money, min 0, default 0, label @customerCreditLimitLabel
     active: bool, default true, label @customerActiveLabel
     since: date, label @customerSinceLabel
     notes: text, help @customerNotesHelp, label @customerNotesLabel
@@ -379,7 +379,7 @@ A database follows the dictionary through migration steps. Every SQL data source
 
 ```clarity
 migration "Phone and VAT"
-    rename field Customer.vat_number to vat
+    rename field Customer.vatNumber to vat
     add field Customer.phone: text(20)
     change field Order.number: text(20)
     add unique Customer.email
@@ -398,7 +398,7 @@ migration "Phone and VAT"
 | `add search Entity.name`, `remove search Entity.name` | puts a field in its entity's full-text index, or takes it out |
 | `map table Entity to "name"` | stores the entity in a table of another name (renames the table); `to default` goes back to the entity's name |
 | `map key Entity to "name"` | names the key column (renames it); `to default` is `id` |
-| `map column Entity.field to "name"` | stores a field in a column of another name (renames the column); `to default` is the field's name |
+| `map column Entity.field to "name"` | stores a field in a column of another name (renames the column); `to default` is the field's name in snake case |
 
 Fields in a step are written as in an entity. Only what is stored counts: the type, `unique`, `column`, and `default` for the records that already exist. Labels, help texts and checks such as `min` belong to the dictionary alone. An added entity can name its table and key with `table` and `key` lines, as in the dictionary; renaming a field whose column is mapped changes nothing in the database.
 
@@ -468,8 +468,8 @@ Its entities live in a module with `source erp`, and they map onto the tables an
 entity Invoice
     table "tblInvoice"
     key "InvoiceID"
-    inv_no: text(20), required, unique, column "InvNo"
-    cust_id: ref Customers, column "CustID"
+    invNo: text(20), required, unique, column "InvNo"
+    custId: ref Customers, column "CustID"
     amount: decimal(18, 6), column "Amount"
 ```
 
@@ -820,7 +820,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
-| `sound` | nothing; it has no place in the window: no `at`, `span` or `rows` | `source "file"` for a sound of the resources folder; `volume 0` to `100`, 100 without it; `repeat`; see [Sound](#sound) | none |
+| `sound` | nothing; it has no place in the window: no `at`, `span` or `rows` | `source "file"` for a sound of the resources folder; `volume 0` to `100`, 100 without it; `repeat`; see [Sound](#sound) | `end`, `fail` |
 | `timer` | nothing; it has no place in the window: no `at`, `span` or `rows` | `every n`, seconds between its ticks, 0.1 to 86400; see [Live graphs](#live-graphs) | `tick` |
 
 `select` fires when another row is chosen, and `open` on a double-click or Enter. `reorder` fires when the person moved a row of a part that reorders; see [Reordering](#reordering). `enter` and `leave` fire when the focus moves into and out of an input.
@@ -1162,7 +1162,42 @@ code Table
 | `rattle.volume(50)` | how loud it plays from now on, 0 to 100 |
 
 - A note is a letter `A` to `G`, then `#` or `b`, then an octave `0` to `8`, 4 unless given: `C4`, `F#3`, `Bb`. `-` is a rest. Each lasts a beat; `*2` makes it two beats, `/2` half a beat. A melody written in the code is checked; one made while the program runs skips the words that are not notes.
-- A sound file is a `.wav`, `.mp3` or `.flac` file of the resources folder: those every stack plays. Its resource view in Clarity plays it.
+- A sound file is a `.wav`, `.mp3`, `.flac` or `.ogg` file of the resources folder: those every stack plays. Its resource view in Clarity plays it.
+
+**Songs** (docs/AUDIO-PLAN.md). A sound plays a song from disk too, and code follows it as it plays:
+
+```clarity
+page Player: window
+    data played: integer
+    sound name music on end: songEnded on fail: songFailed
+    timer name clock every 0.5 on tick: clockTicked
+    slider name progress at 1,2 span 8 bind played min 0 max 100 on change: progressChanged
+
+code Player
+    handler playClicked
+        music.play(chosen.path)
+
+    handler progressChanged
+        music.seek(played)
+
+    handler clockTicked
+        played = music.position
+```
+
+| Code | What it does |
+|---|---|
+| `music.play(path)` | plays the song at `path` (mp3, flac, ogg, wav), read as it plays |
+| `music.pause()`, `music.resume()` | holds the song where it is, and plays on |
+| `music.seek(90)` | moves the song to 90 seconds from its start |
+| `music.playing`, `music.paused` | whether a song plays now, or is held |
+| `music.position`, `music.length` | whole seconds played, and the song's length in whole seconds (0 when its file does not say) |
+| `music.file` | the path of the song that plays; empty for none or a resource |
+| `music.problem` | why the last song did not play; empty when it did |
+| `music.title`, `music.artist`, `music.album`, `music.track` | what the playing song's file says of it (ID3 in mp3, Vorbis comments in flac and ogg); empty, and 0 for the track, when it does not say |
+| `on end: handler` | runs when a song played to its end; not when stopped |
+| `on fail: handler` | runs when a song cannot play (missing, not a sound); `problem` says why |
+
+What a sound says is read, not set. On the desktop songs play through Clarity.Audio, which Clarity adds to a program that plays them; in a browser the page plays a song of the resources, and a file of the computer's disk cannot play there (`on fail`).
 
 ### Custom parts
 
@@ -1690,7 +1725,7 @@ An entity's code block holds its data events: code that runs whenever one of its
 ```clarity
 code Order
     before save
-        if order.status == Approved and not within_credit(order)
+        if order.status == Approved and not withinCredit(order)
             refuse @orderOverCreditLimit(number = order.number)
 
     after save
@@ -1708,7 +1743,7 @@ code Order
 | `before delete` | before a record is removed |
 | `after delete` | after it is removed |
 
-- **The record** is named after the entity in snake case: `order` in the events of `Order`, `order_line` in those of `OrderLine`. A new record has id 0 in `before save`.
+- **The record** is named after the entity in camelCase: `order` in the events of `Order`, `orderLine` in those of `OrderLine`. A new record has id 0 in `before save`.
 - **An event is an action** on its record. It can read and change records, `save` and `delete` others, and call functions and actions; it declares no effects. Like an action, it does not talk to the screen: no `message`, `open`, `close` or part properties.
 - **`refuse "text"`** stops the save or delete. The text is the error the window shows, so a refusal reads as the message for the person using the application.
 - **All or nothing.** The save or delete runs in one transaction with its events, and with the saves and deletes they make in the same database. When an event fails or refuses, none of it is kept, and a new record is still new.
@@ -1720,10 +1755,10 @@ code Order
 Logic that is not tied to one window goes into functions and actions in a module. Handlers, functions and actions can call them.
 
 ```clarity
-function within_credit(order: Order) -> bool
-    return order.total <= order.customer.credit_limit
+function withinCredit(order: Order) -> bool
+    return order.total <= order.customer.creditLimit
 
-function order_total(order: Order) -> money
+function orderTotal(order: Order) -> money
     ensure result >= 0
     let total: money = 0
     for line in order.lines
@@ -1732,7 +1767,7 @@ function order_total(order: Order) -> money
 
 action approve(order: Order)
     require order.status == Pending
-    require within_credit(order)
+    require withinCredit(order)
     effects db.write
     order.status = Approved
     save order
@@ -1774,12 +1809,12 @@ engine Pricing from "pricing.wasm"
     state per app
     on open
     function total(lines: list<Line>) -> money
-    function size_of(count: integer) -> Size
+    function sizeOf(count: integer) -> Size
     function discounted(order: Order) -> Order
 ```
 
 ```clarity
-function order_total(order: Order) -> money
+function orderTotal(order: Order) -> money
     return Pricing.total(order.lines)
 ```
 
@@ -1973,7 +2008,7 @@ command customer add(name: text, email: text)
     let c = new Customer
     c.name = name
     c.email = email
-    c.credit_limit = limit
+    c.creditLimit = limit
     save c
     print @customerAdded(name = c.name)
 
@@ -2011,7 +2046,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 |---|---|---|
 | `let name = expr` | A local, with the type of the expression. | everywhere |
 | `let name: type = expr` | A local with a declared type. | everywhere |
-| `target = expr` | Sets a local, a data field (`customer.credit_limit`), an item of a list (`squares[3] = 1`) or a part property (`save.enabled`). | everywhere; part properties in handlers |
+| `target = expr` | Sets a local, a data field (`customer.creditLimit`), an item of a list (`squares[3] = 1`) or a part property (`save.enabled`). | everywhere; part properties in handlers |
 | `if expr` / `else if expr` / `else` | Runs a block when the condition, which must be bool, is true. | everywhere |
 | `for item in list` | Runs the block once per item of a list. `for i in 1 to n` counts from 1 to n, as `1 to n` is that list. | everywhere |
 | `name(args)` | Calls a function or action on its own line. | everywhere |
@@ -2094,8 +2129,8 @@ translation en
 - Text joined with `+` in a message, a refusal, a caption or an error is a warning that suggests a key with slots, since such text cannot be translated and its values do not follow the locale.
 
 ```clarity
-function credit_note(order: Order) -> text
-    if within_credit(order)
+function creditNote(order: Order) -> text
+    if withinCredit(order)
         return @withinCredit(number = order.number)
     return @overCredit(number = order.number)
 ```
@@ -2154,7 +2189,7 @@ Code reaches files only in the file stores of the project settings, the folders 
 ```clarity
 // Photos dropped in the photos folder, named after the artist
 // (Miles Davis.jpg), become the photos of artists that have none.
-action find_artist_photos()
+action findArtistPhotos()
     effects db.write, files.read
     let found = files f in photos where f.extension == "jpg" or f.extension == "png"
     let artists = find a in Artist where a.photo == none
@@ -2164,7 +2199,7 @@ action find_artist_photos()
                 artist.photo = f
                 save artist
 
-action export_collection()
+action exportCollection()
     effects files.write
     let lines = ""
     for album in find a in Album order by a.title
@@ -2184,7 +2219,7 @@ action export_collection()
 Code calls a web API with `http`, and gets its reply.
 
 ```clarity
-action send_order(order: Order, token: text)
+action sendOrder(order: Order, token: text)
     effects net
     let reply = http post "https://api.example.com/orders" with order.summary header "Authorization": "Bearer {token}"
     if not reply.ok
@@ -2206,7 +2241,7 @@ code Status
 - **Records inside records.** An entity of a web API holds the records its service nests: `owner: User` holds one, `lines: list<Line>` several, and code reads them as any record and list (`order.owner.name`, `for line in order.lines`); `json of` writes them nested too. What it holds lives in the web API as well, and a record never holds itself, through any number of records: a list may, as it can be empty. A stored entity refers to another with `ref User` instead, and keeps its lists in their own table.
 - A key does not belong in the code: a header named `Authorization`, or one that holds `key`, `token` or `secret`, with a plain text as its value is a warning. Keep the key in a setting and put it in with a slot.
 - `json of value` is the JSON of a record, a list of records or a value, as Clarity writes values everywhere: names as the fields are named, decimals and money as exact text, enums by name, dates as `2026-10-25`. A post sends a record with `http post url with json of order header "Content-Type": "application/json"`.
-- `read Order from json text` reads one record and `read list<Order> from json text` a list; `at "data.orders"` starts inside the JSON, at those names. A service's JSON is fitted to the entity: a name matches also ignoring case, underscores and hyphens (`creditLimit` is `credit_limit`), numbers and strings of numbers stand for each other, a date and time keeps its date where a date is wanted, an enum value matches in any case. What the JSON leaves out or gives as null keeps its default; other names, `id` and the fields that are references, pictures, files and lists of stored records are not read. A record held inside (`owner: User`) and a list of them (`lines: list<Line>`) are read from the nested object and list, each fitted to its own entity, and an error says where: `field 'lines' of Order, item 2: field 'quantity' of Line is an integer, not "three"`. The records are new, so `save` adds them. JSON that does not fit stops the code with a message that says where (`field 'lines' of Order is an integer, not "three"`). Reading JSON has no effect, so a function may do it; an engine does not.
+- `read Order from json text` reads one record and `read list<Order> from json text` a list; `at "data.orders"` starts inside the JSON, at those names. A service's JSON is fitted to the entity: a name matches also ignoring case, underscores and hyphens (`creditLimit` matches `credit_limit` and `CreditLimit`), numbers and strings of numbers stand for each other, a date and time keeps its date where a date is wanted, an enum value matches in any case. What the JSON leaves out or gives as null keeps its default; other names, `id` and the fields that are references, pictures, files and lists of stored records are not read. A record held inside (`owner: User`) and a list of them (`lines: list<Line>`) are read from the nested object and list, each fitted to its own entity, and an error says where: `field 'lines' of Order, item 2: field 'quantity' of Line is an integer, not "three"`. The records are new, so `save` adds them. JSON that does not fit stops the code with a message that says where (`field 'lines' of Order is an integer, not "three"`). Reading JSON has no effect, so a function may do it; an engine does not.
 
 ### Types
 
@@ -2254,7 +2289,7 @@ enum CustomerKind
 entity Customer
     name: text(80), required, label @customerNameLabel
     kind: CustomerKind, default Private, label @customerKindLabel
-    vat_number: text(14), help @customerVatNumberHelp, label @customerVatNumberLabel
+    vatNumber: text(14), help @customerVatNumberHelp, label @customerVatNumberLabel
     notes: text, label @customerNotesLabel
 
 app Shop
@@ -2282,7 +2317,7 @@ page CustomerForm: window
         label @kindLabel name kindLabel at 1,2 span 3 for kind
         radio name kind at 4,2 span 6 bind customer.kind on change: kindChanged
         label @vatNumberLabel name vatNumberLabel at 1,3 span 3 for vatNumber
-        textbox name vatNumber at 4,3 span 4 bind customer.vat_number
+        textbox name vatNumber at 4,3 span 4 bind customer.vatNumber
         help name vatNumberHelp at 8,3 span 5 for vatNumber
         label @notesLabel name notesLabel at 1,4 span 3 for notes
         textbox name notes at 4,4 span 9 bind customer.notes
@@ -2293,7 +2328,7 @@ code Customer
     before save
         // Only business customers keep a VAT number, whichever window saves them.
         if customer.kind == Private
-            customer.vat_number = ""
+            customer.vatNumber = ""
 
 code CustomerBrowse
     handler windowReturned
@@ -2316,7 +2351,7 @@ code CustomerForm
         if customer.name == ""
             name.error = @nameIsRequired
             return
-        if customer.kind == Business and customer.vat_number == ""
+        if customer.kind == Business and customer.vatNumber == ""
             vatNumber.error = @neededForBusinessCustomers
             return
         save customer

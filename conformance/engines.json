@@ -5,7 +5,7 @@
     "add",
     "greet",
     "total",
-    "size_of",
+    "sizeOf",
     "discounted",
     "fail",
     "spin",
@@ -76,7 +76,7 @@
       }
     },
     {
-      "function": "size_of",
+      "function": "sizeOf",
       "args": [
         3
       ],
@@ -85,7 +85,7 @@
       }
     },
     {
-      "function": "size_of",
+      "function": "sizeOf",
       "args": [
         12
       ],

@@ -154,7 +154,7 @@ function within_credit(order: Order) -> bool
 function label(order: Order) -> text
     return \"Order \" + order.number + \" for \" + order.customer.name
 
-function orders_of(customer: Customer) -> list<Order>
+function ordersOf(customer: Customer) -> list<Order>
     return find o in Order where o.customer == customer and o.total > 50 order by o.total desc
 
 function named(part: text) -> list<Customer>
@@ -162,7 +162,7 @@ function named(part: text) -> list<Customer>
 
 action approve(order: Order)
     require order.status == Pending
-    require within_credit(order)
+    require withinCredit(order)
     effects db.write
     order.status = Approved
     save order
@@ -200,7 +200,7 @@ const STEPS: [(&str, &str); 2] = [
     (
         "0002.clarity",
         "migration \"Tidy up\"
-    rename field Customer.limit to credit_limit
+    rename field Customer.limit to creditLimit
     change field Order.total: money
     remove field Order.note
     add unique Order.number
@@ -224,7 +224,7 @@ fn approves_within_the_credit_limit() {
     db.migrate(schema::SOURCES[0].1).unwrap();
     let mut ada = Customer { name: "Ada".into(), ..Customer::default() };
     db.save(&mut ada).unwrap();
-    assert_eq!(ada.credit_limit, Decimal::new(100, 0));
+    assert_eq!(ada.creditLimit, Decimal::new(100, 0));
 
     let mut order = Order { number: "ORD-1".into(), customer: Some(ada.id), total: Decimal::new(9950, 2), ..Order::default() };
     db.save(&mut order).unwrap();
@@ -235,7 +235,7 @@ fn approves_within_the_credit_limit() {
     // Approving twice breaks the first require; a big order the second.
     assert_eq!(approve(&db, &mut order), Err(Error::Contract("order.status == Pending".into())));
     let mut big = Order { customer: Some(ada.id), total: Decimal::new(500, 0), ..Order::default() };
-    assert_eq!(approve(&db, &mut big), Err(Error::Contract("within_credit(order)".into())));
+    assert_eq!(approve(&db, &mut big), Err(Error::Contract("withinCredit(order)".into())));
 
     // Data events: an approved order stays, a negative total is never saved.
     // A refusal keeps its slots for the screen, and reads plainly elsewhere.
@@ -253,7 +253,7 @@ fn approves_within_the_credit_limit() {
         let mut o = Order { customer: Some(customer), total: Decimal::new(total, 2), ..Order::default() };
         db.save(&mut o).unwrap();
     }
-    let totals: Vec<String> = orders_of(&db, &ada).unwrap().iter().map(|o| o.total.to_string()).collect();
+    let totals: Vec<String> = ordersOf(&db, &ada).unwrap().iter().map(|o| o.total.to_string()).collect();
     assert_eq!(totals, ["1200.00", "99.50"]);
     let names: Vec<String> = named(&db, String::from("RAC")).unwrap().into_iter().map(|c| c.name).collect();
     assert_eq!(names, ["Grace"]);
@@ -421,7 +421,7 @@ fn every_engine_function_answers_from_clarity_code() {
     assert_eq!(greeting(&db, "Grüße".into()).unwrap(), "Hello, Grüße!");
     let lines = vec![Line { price: Decimal::new(995, 2), count: 3, ..Line::default() }, Line { price: Decimal::new(10, 2), count: 1, ..Line::default() }];
     assert_eq!(sum(&db, &lines).unwrap(), Decimal::new(2995, 2));
-    assert_eq!(size_class(&db, 12).unwrap(), Size::Large);
+    assert_eq!(sizeClass(&db, 12).unwrap(), Size::Large);
     let mut order = Order { id: 7, number: "ORD-7".into(), total: Decimal::new(10005, 2) };
     let cheaper = cheaper(&db, &mut order).unwrap();
     assert_eq!((cheaper.id, cheaper.total), (7, Decimal::new(9005, 2)));

@@ -11,7 +11,7 @@ const MUSIC: &str = "module music
 entity Album
     title: text(120), required
     artist: text(80)
-    release_year: integer
+    releaseYear: integer
     cover: image
 
 page Main: window
@@ -34,18 +34,18 @@ fn errors(part: &str) -> Vec<String> {
 
 #[test]
 fn a_table_reads_widths_options_and_its_first_order_and_writes_them_back() {
-    let line = "table name grid at 1,1 span 12 rows 6 bind albums columns title 240, artist, release_year 60 resizable sortable order by release_year desc";
+    let line = "table name grid at 1,1 span 12 rows 6 bind albums columns title 240, artist, releaseYear 60 resizable sortable order by releaseYear desc";
     let text = with(line);
     let (file, diagnostics) = parse(&text, "music.clarity");
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let props = &file.pages[0].widgets[0].props;
-    assert_eq!(props.columns, ["title", "artist", "release_year"]);
+    assert_eq!(props.columns, ["title", "artist", "releaseYear"]);
     assert_eq!(props.widths.get("title"), Some(&240));
     assert_eq!(props.widths.get("artist"), None, "a column without a width shares what is left");
-    assert_eq!(props.widths.get("release_year"), Some(&60));
+    assert_eq!(props.widths.get("releaseYear"), Some(&60));
     assert!(props.resizable && props.sortable);
     let order = props.order.as_ref().unwrap();
-    assert_eq!((order.field.as_str(), order.desc), ("release_year", true));
+    assert_eq!((order.field.as_str(), order.desc), ("releaseYear", true));
     assert_eq!(widgets::widget_line(props), line);
     assert!(errors(line).is_empty(), "{:?}", errors(line));
 }
@@ -83,10 +83,10 @@ fn the_options_belong_to_the_table() {
 fn naming_the_parts_leaves_the_fields_of_a_table_alone() {
     // A part named as a field: renaming it must not touch the field after a width, nor the order.
     let text = format!(
-        "{MUSIC}    table name grid at 1,1 span 12 rows 6 bind albums columns title 240, release_year order by release_year\n    text name release_year at 1,7 span 6\n"
+        "{MUSIC}    table name grid at 1,1 span 12 rows 6 bind albums columns title 240, releaseYear order by releaseYear\n    text name release_year at 1,7 span 6\n"
     );
     let (named, renames) = clarity_spec::names::camel_names_with(&text);
-    assert_eq!(renames, vec![("release_year".to_string(), "releaseYear".to_string())]);
-    assert!(named.contains("columns title 240, release_year order by release_year\n"), "{named}");
-    assert!(named.contains("text name releaseYear at 1,7"), "{named}");
+    assert_eq!(renames, vec![("release_year".to_string(), "releaseYear2".to_string())]);
+    assert!(named.contains("columns title 240, releaseYear order by releaseYear\n"), "{named}");
+    assert!(named.contains("text name releaseYear2 at 1,7"), "{named}");
 }

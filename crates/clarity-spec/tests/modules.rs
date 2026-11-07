@@ -10,7 +10,7 @@ enum OrderStatus
 
 entity Customer
     name: text(80)
-    credit_limit: money
+    creditLimit: money
 
 entity Line
     amount: money
@@ -20,7 +20,7 @@ entity Order
     customer: ref Customer
     lines: list<Line>
 
-function order_total(order: Order) -> money
+function orderTotal(order: Order) -> money
     ensure result >= 0
     let total: money = 0
     for line in order.lines
@@ -29,7 +29,7 @@ function order_total(order: Order) -> money
 
 action approve(order: Order)
     require order.status == Pending
-    require order_total(order) <= order.customer.credit_limit
+    require orderTotal(order) <= order.customer.creditLimit
     effects db.write
     order.status = Approved
     save order
@@ -41,7 +41,7 @@ page OrderForm: window
 code OrderForm
     handler approveClicked
         approve(order)
-        let total = order_total(order)
+        let total = orderTotal(order)
         message \"Total {total}\"
 ";
 
@@ -78,7 +78,7 @@ fn parses_functions_and_actions() {
     assert_eq!(file.functions.len(), 2);
     let total = &file.functions[0];
     assert_eq!(total.kind, FunctionKind::Function);
-    assert_eq!(total.name.name, "order_total");
+    assert_eq!(total.name.name, "orderTotal");
     assert_eq!(total.params.len(), 1);
     assert_eq!(total.params[0].name.name, "order");
     assert!(total.returns.is_some());
@@ -124,8 +124,8 @@ fn actions_declare_their_effects() {
         ]
     );
     assert_eq!(
-        errors(&with("action approve_all(order: Order)\n    effects db.read\n    approve(order)\n")),
-        ["action 'approve_all' calls 'approve', which needs 'effects db.write'"]
+        errors(&with("action approveAll(order: Order)\n    effects db.read\n    approve(order)\n")),
+        ["action 'approveAll' calls 'approve', which needs 'effects db.write'"]
     );
     assert_eq!(
         errors(&with("action shout(order: Order)\n    message \"hi\"\n")),
@@ -136,12 +136,12 @@ fn actions_declare_their_effects() {
 #[test]
 fn checks_calls() {
     assert_eq!(
-        errors(&SALES.replace("let total = order_total(order)", "let total = order_total(order, order)")),
-        ["order_total takes 1 argument, not 2"]
+        errors(&SALES.replace("let total = orderTotal(order)", "let total = orderTotal(order, order)")),
+        ["orderTotal takes 1 argument, not 2"]
     );
     assert_eq!(
-        errors(&SALES.replace("let total = order_total(order)", "let total = order_total(order.status)")),
-        ["argument 'order' of order_total is an Order, not OrderStatus"]
+        errors(&SALES.replace("let total = orderTotal(order)", "let total = orderTotal(order.status)")),
+        ["argument 'order' of orderTotal is an Order, not OrderStatus"]
     );
     assert_eq!(
         errors(&SALES.replace("approve(order)\n", "nope(order)\n")),
@@ -184,7 +184,7 @@ fn checks_loops_conditions_and_typed_locals() {
         ["'for' needs a list, not Order"]
     );
     assert_eq!(
-        errors(&SALES.replace("require order.status == Pending", "require order.customer.credit_limit")),
+        errors(&SALES.replace("require order.status == Pending", "require order.customer.creditLimit")),
         ["a condition must be bool, not money"]
     );
     assert_eq!(
@@ -204,8 +204,8 @@ fn checks_loops_conditions_and_typed_locals() {
 #[test]
 fn names_are_unique_per_module() {
     assert_eq!(
-        errors(&with("function order_total(order: Order) -> money\n    return 0\n")),
-        ["function 'order_total' is declared twice"]
+        errors(&with("function orderTotal(order: Order) -> money\n    return 0\n")),
+        ["function 'orderTotal' is declared twice"]
     );
 }
 

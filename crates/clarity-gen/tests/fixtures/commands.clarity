@@ -9,13 +9,13 @@ entity Customer
     email: email
     kind: Kind
     active: bool
-    credit_limit: money
+    creditLimit: money
     since: date
 
 settings
     pageSize: integer, default 20
 
-action add_customer(name: text) -> Customer
+action addCustomer(name: text) -> Customer
     effects db.write
     let c = new Customer
     c.name = name
@@ -31,9 +31,9 @@ command customer add(name: text, email: text)
     option vip: bool, help "A business customer"
     option limit: money, default 1000, min 0, max 5000, help "The credit limit"
     option since: date, help "Customer since"
-    let c = add_customer(name)
+    let c = addCustomer(name)
     c.email = email
-    c.credit_limit = limit
+    c.creditLimit = limit
     c.since = since
     if vip
         c.kind = Business
@@ -46,7 +46,7 @@ command customer list
     let found = find c in Customer where c.active == true order by c.name
     if all
         found = find c in Customer order by c.name
-    print found columns name, email, kind, credit_limit
+    print found columns name, email, kind, creditLimit
 
 command customer remove(name: text)
     help "Removes a customer"

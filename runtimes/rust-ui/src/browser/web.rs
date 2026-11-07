@@ -237,6 +237,10 @@ pub fn pasted(text: &str) {
     with(|web| web.host.pasted(text))
 }
 
+pub fn song_said(id: u64, said: super::page::SongSaid) {
+    with(|web| web.host.song_said(id, said))
+}
+
 pub fn sound_ended(id: u64) {
     with(|web| web.host.sound_ended(id))
 }

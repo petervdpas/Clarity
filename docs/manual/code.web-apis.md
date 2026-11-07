@@ -53,7 +53,7 @@ A key or a token does not belong in the code, where everyone who reads the proje
 Most services answer in JSON, and many want it sent. `json of` writes a record, a list or a value as JSON, and `read ... from json` reads records from it:
 
 ```clarity
-action send_order(order: Order) -> integer
+action sendOrder(order: Order) -> integer
     effects net
     let reply = http post "https://api.example.com/orders" with json of order header "Content-Type": "application/json"
     return reply.status
@@ -65,7 +65,7 @@ code Orders
 ```
 
 - `read Order from json text` reads one record, `read list<Order> from json text` a list. `at "data"` starts inside the JSON, at the names given with dots between: `at "result.items"`.
-- A service names its fields its own way, so names match also ignoring case, underscores and hyphens: `creditLimit` fills `credit_limit`. A number fills a money or decimal field, and a string of a number fills an integer. A date and time fills a date with its date. An enum value matches in any case.
+- A service names its fields its own way, so names match also ignoring case, underscores and hyphens: `creditLimit` fills `creditLimit`. A number fills a money or decimal field, and a string of a number fills an integer. A date and time fills a date with its date. An enum value matches in any case.
 - What the JSON leaves out keeps its default, and what the entity does not have is left aside. The id is never read, nor references, pictures, files and lists of stored records. The records are new: `save` adds them.
 - An entity of a web API holds the records its service nests: `owner: User` holds one, `lines: list<Line>` several. They are read from the nested object and list, each fitted to its own entity, and `json of` writes them nested. Code reads them as any record and list: `order.owner.name`, `for line in order.lines`.
 - JSON that does not fit stops the handler with a message that says where, such as `field 'lines' of Order is an integer, not "three"`, as a refused save does.

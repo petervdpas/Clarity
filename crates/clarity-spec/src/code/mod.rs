@@ -90,7 +90,7 @@ pub struct EventDecl {
 
 /// The name of the record in the events of `entity`.
 pub fn record_name(entity: &str) -> String {
-    crate::model::snake_case(entity)
+    crate::names::camel_case(entity)
 }
 
 impl EventDecl {

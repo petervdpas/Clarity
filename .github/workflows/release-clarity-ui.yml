@@ -7,8 +7,11 @@ name: Release Clarity.UI library
 # runtimes/rust-ui-ffi/Cargo.toml: bump that first, commit, then tag.
 #
 # Each archive is the folder a build's CLARITY_UI names (DESIGN 7.9):
-#   include/clarity_ui.h
+#   include/clarity_ui.h, include/clarity_audio.h
 #   lib/libclarity_ui.so | libclarity_ui.dylib | clarity_ui.dll and clarity_ui.dll.lib
+#   lib/libclarity_audio.so | libclarity_audio.dylib | clarity_audio.dll and clarity_audio.dll.lib
+# Clarity.Audio (docs/AUDIO-PLAN.md) rides along: a program links it only
+# when its sound parts play songs.
 # named clarity-ui-<version>-<rid>.tar.gz (Windows has tar too), for linux-x64,
 # linux-arm64, win-x64, win-arm64, osx-x64 and osx-arm64. The libraries are
 # built as the C# packages' are (release-csharp-runtime.yml): on each system's
@@ -97,7 +100,7 @@ jobs:
 
       - name: Build the library
         shell: bash
-        run: cargo build --release -p clarity-ui-ffi --target ${{ matrix.target }}
+        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi --target ${{ matrix.target }}
 
       - name: Pack the archive
         shell: bash
@@ -106,9 +109,10 @@ jobs:
           version="${GITHUB_REF_NAME#runtimes/rust-ui-ffi/v}"
           name="clarity-ui-$version-${{ matrix.rid }}"
           mkdir -p "out/$name/include" "out/$name/lib"
-          cp runtimes/rust-ui-ffi/include/clarity_ui.h "out/$name/include/"
+          cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h "out/$name/include/"
           for f in ${{ matrix.files }}; do
             cp "target/${{ matrix.target }}/release/$f" "out/$name/lib/"
+            cp "target/${{ matrix.target }}/release/${f/clarity_ui/clarity_audio}" "out/$name/lib/"
           done
           cp LICENSE "out/$name/"
           cd out

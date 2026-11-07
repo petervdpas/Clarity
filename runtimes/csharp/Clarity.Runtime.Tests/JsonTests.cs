@@ -52,13 +52,13 @@ public sealed class JsonTests
         public DateOnly? Since { get; set; }
     }
 
-    /// <summary>Records written and read as Clarity's JSON: snake case, decimals as text.</summary>
+    /// <summary>Records written and read as Clarity's JSON: names as the project wrote them, decimals as text.</summary>
     [Fact]
     public void RecordsTravelAsClaritysJson()
     {
         var order = new Order { Id = 4, Number = "A-1", CreditLimit = 12.50m, Since = new DateOnly(2026, 10, 25) };
-        Assert.Equal("{\"id\":4,\"number\":\"A-1\",\"credit_limit\":\"12.50\",\"since\":\"2026-10-25\"}", JsonValues.Of(order));
-        var fields = new[] { new JsonField("number", new JsonKind("text")), new JsonField("credit_limit", new JsonKind("decimal")), new JsonField("since", new JsonKind("date")) };
+        Assert.Equal("{\"id\":4,\"number\":\"A-1\",\"creditLimit\":\"12.50\",\"since\":\"2026-10-25\"}", JsonValues.Of(order));
+        var fields = new[] { new JsonField("number", new JsonKind("text")), new JsonField("creditLimit", new JsonKind("decimal")), new JsonField("since", new JsonKind("date")) };
         var read = JsonValues.ReadList("{\"orders\": [{\"creditLimit\": 99.95}]}", "orders", "Order", fields, new Order());
         Assert.Equal(("new", 99.95m, (DateOnly?)null, 0L), (read[0].Number, read[0].CreditLimit, read[0].Since, read[0].Id));
     }

@@ -1,0 +1,8 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Names in camelCase"
+    rename field Domain.model_package to modelPackage
+    rename field Domain.model_version to modelVersion
+    rename field Domain.messages_package to messagesPackage
+    rename field Domain.messages_version to messagesVersion
+    rename field EventField.key_of to keyOf

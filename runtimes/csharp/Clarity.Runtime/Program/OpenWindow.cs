@@ -149,7 +149,7 @@ internal sealed class OpenWindow : IDisposable
             {
                 continue;
             }
-            data[Members.Snake(property.Name)] = WireJson.Value(value);
+            data[Members.Named(property.Name)] = WireJson.Value(value);
         }
         return data;
     }

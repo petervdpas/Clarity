@@ -225,12 +225,39 @@ static void forget_translations(void) {
     language_default = NULL;
 }
 
+// `text` with each {app.version} as `version`, the project's version, which
+// Clarity fills itself (docs/VERSION-PLAN.md); a copy of `text` without one.
+static char* with_version(const char* text, const char* version) {
+    static const char slot[] = "{app.version}";
+    const size_t slot_len = sizeof slot - 1;
+    if (!version) return lasting(text);
+    size_t found = 0;
+    for (const char* at = strstr(text, slot); at; at = strstr(at + slot_len, slot)) found++;
+    if (found == 0) return lasting(text);
+    size_t version_len = strlen(version);
+    char* out = malloc(strlen(text) + found * version_len + 1);
+    if (!out) return NULL;
+    char* to = out;
+    const char* from = text;
+    for (const char* at = strstr(from, slot); at; at = strstr(from, slot)) {
+        memcpy(to, from, (size_t)(at - from));
+        to += at - from;
+        memcpy(to, version, version_len);
+        to += version_len;
+        from = at + slot_len;
+    }
+    strcpy(to, from);
+    return out;
+}
+
 void clarity_load_translations(const char* model) {
     forget_translations();
     cJSON* parsed = cJSON_Parse(model ? model : "");
     const cJSON* project = cJSON_GetObjectItemCaseSensitive(parsed, "project");
     const cJSON* fallback = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(project, "locale"), "language");
     language_default = lasting(cJSON_IsString(fallback) ? fallback->valuestring : "en");
+    const cJSON* version = cJSON_GetObjectItemCaseSensitive(project, "version");
+    const char* app_version = cJSON_IsString(version) ? version->valuestring : NULL;
     const cJSON* all = cJSON_GetObjectItemCaseSensitive(project, "translations");
     size_t n = (size_t)cJSON_GetArraySize(all);
     if (n == 0) return;
@@ -247,7 +274,7 @@ void clarity_load_translations(const char* model) {
         cJSON_ArrayForEach(pair, language) {
             if (!cJSON_IsString(pair) || !l->keys || !l->values) continue;
             l->keys[l->count] = lasting(pair->string);
-            l->values[l->count] = lasting(pair->valuestring);
+            l->values[l->count] = with_version(pair->valuestring, app_version);
             l->count++;
         }
     }

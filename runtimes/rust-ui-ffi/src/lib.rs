@@ -8,6 +8,7 @@
 //! failing call returns a status and leaves its message for the thread
 //! (`clarity_last_error`).
 
+pub mod audio;
 pub mod canvas;
 pub mod custom;
 pub mod desktop;

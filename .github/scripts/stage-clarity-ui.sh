@@ -2,8 +2,9 @@
 # Builds Clarity.UI's library (clarity-ui-ffi) in release for this system and
 # puts it where the IDE's installer takes it from (tauri.clarity-ui.conf.json):
 # app/src-tauri/clarity-ui/, the folder CLARITY_UI names (DESIGN 7.9):
-#   include/clarity_ui.h
+#   include/clarity_ui.h, include/clarity_audio.h
 #   lib/libclarity_ui.so | libclarity_ui.dylib | clarity_ui.dll and clarity_ui.dll.lib
+#   lib/ the same of clarity_audio: Clarity.Audio, for programs that play songs
 # The installed Clarity hands it to Go, C and C++ builds. Beside it, the
 # browser files every language's web server serves (round B) go to
 # app/src-tauri/clarity-ui-browser/:
@@ -26,12 +27,12 @@ if [ "$browser_ready" = 0 ]; then
 fi
 cp LICENSE "$browser/"
 
-cargo build --release -p clarity-ui-ffi
+cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi
 
 stage=app/src-tauri/clarity-ui
 rm -rf "$stage"
 mkdir -p "$stage/include" "$stage/lib"
-cp runtimes/rust-ui-ffi/include/clarity_ui.h "$stage/include/"
+cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h "$stage/include/"
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) files="clarity_ui.dll clarity_ui.dll.lib" ;;
     Darwin) files="libclarity_ui.dylib" ;;
@@ -39,6 +40,7 @@ case "$(uname -s)" in
 esac
 for f in $files; do
     cp "target/release/$f" "$stage/lib/"
+    cp "target/release/${f/clarity_ui/clarity_audio}" "$stage/lib/"
 done
 cp LICENSE "$stage/"
 ls -lR "$stage" "$browser"

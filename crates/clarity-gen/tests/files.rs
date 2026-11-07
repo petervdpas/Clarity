@@ -14,7 +14,7 @@ entity Photo
     cover: image
     size: integer
 
-action index_photos()
+action indexPhotos()
     effects db.write, files.read
     let found = files f in photos where f.extension == \"jpg\" and f.size > 0 order by f.path desc, f.name
     for f in found
@@ -25,7 +25,7 @@ action index_photos()
         photo.cover = f
         save photo
 
-action export_titles()
+action exportTitles()
     effects files.read, files.write
     let lines = \"\"
     for n in files n in photos where n.name == \"notes.txt\"

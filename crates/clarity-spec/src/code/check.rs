@@ -224,6 +224,11 @@ fn check_libraries(env: &Env, file: &SpecFile, out: &mut Output) {
                 out.push(Diagnostic::error(format!("library {name} has two functions named '{}'", function.name.name), function.name.span));
             }
             seen.push(&function.name.name);
+            for (what, ident) in std::iter::once(("function", &function.name)).chain(function.params.iter().map(|p| ("parameter", &p.name))) {
+                if let Some(problem) = crate::names::name_problem(what, &ident.name) {
+                    out.push(Diagnostic::error(problem, ident.span));
+                }
+            }
             for ty in function.params.iter().map(|p| &p.ty).chain(&function.returns) {
                 match env.type_ref(ty) {
                     Ok(t) if !matches!(t, Ty::Text | Ty::Integer | Ty::Decimal | Ty::Money | Ty::Bool | Ty::Date | Ty::DateTime | Ty::Duration | Ty::Unknown) => {
@@ -332,6 +337,9 @@ fn check_command(env: &Env, command: &CommandDecl, out: &mut Output) {
             out.push(Diagnostic::error(format!("command {line} has two arguments or options named '{}'", name.name), name.span));
         }
         names.push(name.name.clone());
+        if let Some(problem) = crate::names::name_problem(if option { "option" } else { "parameter" }, &name.name) {
+            out.push(Diagnostic::error(problem, name.span));
+        }
         let ty = env.type_ref(ty).unwrap_or_else(|message| {
             out.push(Diagnostic::error(message, ty.span));
             Ty::Unknown
@@ -1265,6 +1273,11 @@ fn check_block(env: &Env, owner: &Owner, block: &CodeBlock, out: &mut Output) {
         if !crate::names::is_camel_case(name) {
             out.push(Diagnostic::error(crate::names::camel_case_problem("handler", name), handler.name.span));
         }
+        for param in &handler.params {
+            if let Some(problem) = crate::names::name_problem("parameter", &param.name.name) {
+                out.push(Diagnostic::error(problem, param.name.span));
+            }
+        }
         // A handler is in use when an event runs it, or another handler does.
         let mut called = false;
         for other in block.handlers.iter().filter(|h| h.name.name != name) {
@@ -1345,6 +1358,15 @@ fn check_engines(env: &Env, file: &SpecFile, out: &mut Output) {
             out.push(Diagnostic::error(format!("there is already an engine {}", engine.name.name), engine.name.span));
         }
         seen.push(&engine.name.name);
+        if engine.body.is_none() {
+            for function in &engine.functions {
+                for (what, ident) in std::iter::once(("function", &function.name)).chain(function.params.iter().map(|p| ("parameter", &p.name))) {
+                    if let Some(problem) = crate::names::name_problem(what, &ident.name) {
+                        out.push(Diagnostic::error(problem, ident.span));
+                    }
+                }
+            }
+        }
         if engine.beside {
             let name = &engine.name.name;
             if engine.state != crate::code::EngineState::None {
@@ -1460,6 +1482,9 @@ fn check_consts(env: &Env, consts: &[ConstDecl], engine: Option<&EngineDecl>, ou
         if seen.contains(&name) {
             out.push(Diagnostic::error(format!("there is already a const {name}"), decl.name.span));
         }
+        if let Some(problem) = crate::names::name_problem("const", name) {
+            out.push(Diagnostic::error(problem, decl.name.span));
+        }
         seen.push(name);
         if !written_out(&decl.value) {
             out.push(Diagnostic::error(format!("const {name} is written out: a number, text, yes or no, a key, an enum value or a list of them"), decl.value.span));
@@ -1569,6 +1594,9 @@ fn check_engine_body(env: &Env, engine: &EngineDecl, body: &EngineBody, out: &mu
         if kept.contains_key(&keep.name.name) {
             out.push(Diagnostic::error(format!("engine {} keeps {} twice", engine.name.name, keep.name.name), keep.name.span));
         }
+        if let Some(problem) = crate::names::name_problem("kept value", &keep.name.name) {
+            out.push(Diagnostic::error(problem, keep.name.span));
+        }
         // What it starts as: a value written out, checked against its type.
         let mut checker = BodyChecker {
             env,
@@ -1625,6 +1653,14 @@ fn check_body_in<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent
             out.push(Diagnostic::error(record_refers(record), span));
         }
     };
+    if event.is_none() {
+        let named = std::iter::once((decl.kind.keyword(), &decl.name)).chain(decl.params.iter().map(|p| ("parameter", &p.name)));
+        for (what, ident) in named {
+            if let Some(problem) = crate::names::name_problem(what, &ident.name) {
+                out.push(Diagnostic::error(problem, ident.span));
+            }
+        }
+    }
     for param in &decl.params {
         let ty = env.type_ref(&param.ty).unwrap_or_else(|message| {
             out.push(Diagnostic::error(message, param.ty.span));
@@ -2121,16 +2157,18 @@ impl<'a> BodyChecker<'_, 'a> {
     /// What code tells a sound (DESIGN 5.22): its values, and the notes of a melody written in the code.
     fn sound_hear(&mut self, part: &Ident, hear: &Ident, args: &[Expr]) {
         let Some(params) = crate::sound::hear(&hear.name) else {
-            self.error(format!("a sound hears play, stop, tone, melody or volume, not '{}'", hear.name), hear.span);
+            self.error(format!("a sound hears play, pause, resume, seek, stop, tone, melody or volume, not '{}'", hear.name), hear.span);
             for arg in args {
                 self.expr(arg, None);
             }
             return;
         };
         let called = format!("{}.{}", part.name, hear.name);
-        if args.len() != params.len() {
+        let least = crate::sound::least(&hear.name);
+        if args.len() < least || args.len() > params.len() {
             let n = params.len();
-            self.error(format!("{called} takes {n} value{}, not {}", if n == 1 { "" } else { "s" }, args.len()), hear.span);
+            let takes = if least == n { format!("{n} value{}", if n == 1 { "" } else { "s" }) } else { format!("{least} or {n} values") };
+            self.error(format!("{called} takes {takes}, not {}", args.len()), hear.span);
         }
         for (i, arg) in args.iter().enumerate() {
             let expected = params.get(i).map(|(_, ty)| match ty {
@@ -2319,6 +2357,9 @@ impl<'a> BodyChecker<'_, 'a> {
     fn stmt(&mut self, stmt: &Stmt) {
         match &stmt.kind {
             StmtKind::Let { name, ty, value } => {
+                if let Some(problem) = crate::names::name_problem("local", &name.name) {
+                    self.error(problem, name.span);
+                }
                 let declared = ty.as_ref().map(|t| {
                     self.env.type_ref(t).unwrap_or_else(|message| {
                         self.error(message, t.span);
@@ -2362,6 +2403,9 @@ impl<'a> BodyChecker<'_, 'a> {
                 }
             }
             StmtKind::For { var, list, body } => {
+                if let Some(problem) = crate::names::name_problem("local", &var.name) {
+                    self.error(problem, var.span);
+                }
                 let ty = self.expr(list, None);
                 let item = match ty {
                     Ty::List(entity) => Ty::Record(entity),
@@ -2602,7 +2646,7 @@ impl<'a> BodyChecker<'_, 'a> {
             AskForm::Value { ty, default, from } => {
                 let asked = self.asked_value(ty, default.as_ref(), from.as_ref());
                 if let (Ty::Record(entity), None) = (asked, from) {
-                    let list = format!("{}s", crate::model::snake_case(&entity.name.name));
+                    let list = format!("{}s", crate::names::camel_case(&entity.name.name));
                     self.error(format!("a command asks for a record from a list: 'ask ... for {} from {list}'", entity.name.name), ty.span);
                 }
                 asked
@@ -3163,6 +3207,15 @@ impl<'a> BodyChecker<'_, 'a> {
             // A sidebar folded to its button, or filling the window.
             "collapsed" if matches!(part, Part::Sidebar(p) if p.collapsible) => value(Ty::Bool),
             "maximized" if matches!(part, Part::Sidebar(p) if p.maximizable) => value(Ty::Bool),
+            // What a sound plays, read as it plays (docs/AUDIO-PLAN.md).
+            _ if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Sound) && crate::sound::read(property).is_some() => {
+                let ty = match crate::sound::read(property) {
+                    Some(TypeInfo::Bool) => Ty::Bool,
+                    Some(TypeInfo::Integer) => Ty::Integer,
+                    _ => Ty::Text,
+                };
+                Some(Place::Value { ty, writable: Err(format!("{name}.{property} is read, not set: it is what the sound plays")) })
+            }
             // A pinnable slide-out pinned open beside the window's parts.
             "pinned" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Slideout && p.pinnable) => value(Ty::Bool),
             // A canvas's grid, in its units (0 for none), and whether code snaps to it: as its line says, until code sets them.

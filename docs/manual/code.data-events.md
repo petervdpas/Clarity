@@ -9,7 +9,7 @@ Data events live in a `code` block with the entity's name, in the same file as t
 ```clarity
 code Order
     before save
-        if order.status == Approved and not within_credit(order)
+        if order.status == Approved and not withinCredit(order)
             refuse @orderOverCreditLimit(number = order.number)
 
     after save
@@ -31,7 +31,7 @@ Each event is written once per entity. An entity's code block holds only these e
 
 ## The record
 
-The record is named after the entity in snake case: `order` in the events of `Order`, `order_line` in those of `OrderLine`. A new record has id 0 in `before save`, so `order.id == 0` tells you it is new.
+The record is named after the entity in camelCase: `order` in the events of `Order`, `orderLine` in those of `OrderLine`. A new record has id 0 in `before save`, so `order.id == 0` tells you it is new.
 
 ## What an event can do
 

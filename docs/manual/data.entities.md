@@ -11,7 +11,7 @@ entity Customer
     name: text(80), required, label @customerNameLabel
     email: email, unique, label @customerEmailLabel
     kind: CustomerKind, default Private, label @customerKindLabel
-    credit_limit: money, min 0, default 0, label @customerCreditLimitLabel
+    creditLimit: money, min 0, default 0, label @customerCreditLimitLabel
     active: bool, default true, label @customerActiveLabel
     since: date, label @customerSinceLabel
     notes: text, help @customerNotesHelp, label @customerNotesLabel

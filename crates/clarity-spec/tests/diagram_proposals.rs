@@ -31,7 +31,7 @@ const ERD: &str = "erDiagram
         email email UK
     }
     Order {
-        date ordered_on \"required\"
+        date orderedOn \"required\"
     }
     Customer ||--o{ Order : places
     Invoice }o..|| Order : bills
@@ -68,7 +68,7 @@ fn an_erd_proposes_what_it_adds_changes_and_leaves_out() {
     assert_eq!(proposals[0].description, "name: text(80), no longer required");
     assert_eq!(proposals[1].description, "email: email, unique");
     assert_eq!(proposals[2].description, "orders: list<Order>, owned");
-    assert_eq!(proposals[4].description, "entity Order in module sales: ordered_on, customer");
+    assert_eq!(proposals[4].description, "entity Order in module sales: orderedOn, customer");
     assert_eq!(proposals[5].description, "order: ref Order, required", "exactly one at the end referred to: required");
     assert_eq!(proposals[1].span.line, 4, "a proposal points at its line of the diagram");
 }
@@ -88,7 +88,7 @@ fn applying_the_ticked_proposals_writes_each_module_once_with_keys() {
     assert!(sales.contains("    email: email, unique, label @"), "{sales}");
     assert!(sales.contains("    orders: list<Order>, owned, label @"), "{sales}");
     assert!(sales.contains("    notes: text"), "the removal was not ticked: {sales}");
-    assert!(sales.contains("entity Order\n    ordered_on: date, required, label @"), "{sales}");
+    assert!(sales.contains("entity Order\n    orderedOn: date, required, label @"), "{sales}");
     assert!(sales.contains("    customer: ref Customer, required, label @"), "{sales}");
     assert!(!written[0].keys.is_empty(), "the new labels became keys");
     assert!(written[1].text.contains("    order: ref Order, required, label @"), "{}", written[1].text);

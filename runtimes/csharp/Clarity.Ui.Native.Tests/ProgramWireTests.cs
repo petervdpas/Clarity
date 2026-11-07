@@ -51,13 +51,13 @@ public sealed class ProgramWireTests
         Assert.Equal("Shelf", state["window"]?.GetValue<string>());
         Assert.Equal(shelf.Instance, state["instance"]?.GetValue<long>());
         var data = state["data"]!.AsObject();
-        Assert.Equal("nobody", data["finished_by"]?.GetValue<string>());
+        Assert.Equal("nobody", data["finishedBy"]?.GetValue<string>());
         Assert.Equal("Dune", data["books"]![0]!["title"]?.GetValue<string>());
         Assert.Equal(474, data["books"]![1]!["pages"]?.GetValue<long>());
         // Part states, choices and commands are no values of the window.
-        Assert.Null(data["person_choices"]);
-        Assert.Null(data["save_command"]);
-        Assert.Null(data["save_button"]);
+        Assert.Null(data["personChoices"]);
+        Assert.Null(data["saveCommand"]);
+        Assert.Null(data["saveButton"]);
     }
 
     [Fact]

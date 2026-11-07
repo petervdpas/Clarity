@@ -126,7 +126,7 @@ int main() {
         EXPECT(greeting(db, "Grüße") == "Hello, Grüße!", "greeting");
         std::vector<Line> lines{{0, clarity::Decimal::parse("9.95"), 3}, {0, clarity::Decimal::parse("0.10"), 1}};
         EXPECT(sum(db, lines) == clarity::Decimal::parse("29.95"), "sum");
-        EXPECT(size_class(db, 12) == Size::Large, "size");
+        EXPECT(sizeClass(db, 12) == Size::Large, "size");
         Order order{7, "ORD-7", clarity::Decimal::parse("100.05")};
         auto less = cheaper(db, order);
         EXPECT(less.id == 7 && less.total == clarity::Decimal::parse("90.05"), "cheaper");

@@ -23,6 +23,25 @@ action describe(order: Order)
 | Go | `go "module/path" v1.0.0` | a module whose package has the functions (`clarity.go` types them) |
 | C, C++ | `cmake "Package"` | a CMake target `Words` with the functions of `clarity/Words.h` or `.hpp` |
 
+## Writing the adapter
+
+The file Clarity writes from the declaration names each function as your language spells it, with its types; the adapter writes exactly those. Read it first.
+
+- **C#**: `Words.g.cs` holds `namespace ClarityLibraries;` and `public static partial class Words`, with a `public static partial` method per function in PascalCase: `spell` is `Spell`, `isLoud` is `IsLoud`. An `integer` is a `long`, `text` a `string`, `bool` a `bool`. `Words.cs` is the other half: the same namespace and class, each method again as `public static partial`, now with its body.
+
+```csharp
+namespace ClarityLibraries;
+
+public static partial class Words
+{
+    public static partial string Spell(long n) => Humanizer.NumberToWordsExtension.ToWords((int)n);
+}
+```
+
+- **Go**: each function in PascalCase in the library's package (`Spell`).
+- **Rust**: the methods of the `WordsLibrary` trait in snake_case (`spell`, `is_loud`).
+- **C, C++**: the functions as the header declares them.
+
 ## Using one
 
 - Code calls a function as `Words.spell(42)`, checked like an engine's. Values in and out are text, a number, a date, a duration or bool.

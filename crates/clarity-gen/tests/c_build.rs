@@ -74,7 +74,7 @@ int main(void) {
     ClarityDecimal total;
     EXPECT(sum(NULL, lines, &total) && clarity_decimal_compare(total, clarity_decimal(2995, 2)) == 0, "sum");
     Size size;
-    EXPECT(size_class(NULL, 12, &size) && size == SIZE_LARGE, "size");
+    EXPECT(sizeClass(NULL, 12, &size) && size == SIZE_LARGE, "size");
     Order order = {.id = 7, .number = "ORD-7", .total = clarity_decimal(10005, 2)};
     Order less;
     EXPECT(cheaper(NULL, &order, &less) && less.id == 7 && clarity_decimal_compare(less.total, clarity_decimal(9005, 2)) == 0, "cheaper");

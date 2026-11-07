@@ -11,7 +11,7 @@ const SHOP: &str = "classDiagram
     namespace sales {
         class Order {
             +String number
-            +ordered_on: date, required
+            +orderedOn: date, required
             +total: decimal(10, 2), computed
         }
         class OrderLine {
@@ -38,8 +38,8 @@ const SHOP: &str = "classDiagram
     }
     class sales {
         <<module>>
-        +order_total(lines: List~OrderLine~) money
-        +within_credit(order: Order, limit: decimal) bool
+        +orderTotal(lines: List~OrderLine~) money
+        +withinCredit(order: Order, limit: decimal) bool
     }
     Customer \"1\" --> \"*\" Order : places
     Order *-- OrderLine
@@ -62,7 +62,7 @@ fn classes_become_entities_in_their_namespaces_module() {
 
     let order = &diagram.entities[0];
     let fields: Vec<(&str, &str)> = order.fields.iter().map(|f| (f.name.as_str(), f.type_text.as_str())).collect();
-    assert_eq!(fields, vec![("number", "text"), ("ordered_on", "date"), ("total", "decimal(10, 2)")]);
+    assert_eq!(fields, vec![("number", "text"), ("orderedOn", "date"), ("total", "decimal(10, 2)")]);
     assert!(order.fields[1].modifiers.required && order.fields[2].modifiers.computed);
     assert_eq!(order.fields[0].span.line, 5);
 
@@ -91,7 +91,7 @@ fn an_engine_and_a_module_have_their_functions() {
     let sales = &diagram.modules[0];
     assert_eq!(sales.name, "sales");
     let functions: Vec<String> = sales.functions.iter().map(|f| f.signature()).collect();
-    assert_eq!(functions, vec!["order_total(lines: list<OrderLine>) -> money", "within_credit(order: Order, limit: decimal) -> bool"]);
+    assert_eq!(functions, vec!["orderTotal(lines: list<OrderLine>) -> money", "withinCredit(order: Order, limit: decimal) -> bool"]);
 }
 
 #[test]

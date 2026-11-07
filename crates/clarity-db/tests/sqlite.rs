@@ -44,17 +44,17 @@ source erp
 entity Customers
     table \"tblCustomers\"
     key \"CustID\"
-    cust_name: text(80), required, column \"CustName\"
+    custName: text(80), required, column \"CustName\"
     email: text, unique, column \"Email\"
-    credit_limit: decimal(10, 2), column \"CreditLimit\"
+    creditLimit: decimal(10, 2), column \"CreditLimit\"
     active: bool, column \"Active\"
     since: date, column \"Since\"
 
 entity Invoice
     table \"tblInvoice\"
     key \"InvoiceID\"
-    inv_no: text(20), required, unique, column \"InvNo\"
-    cust_id: ref Customers, column \"CustID\"
+    invNo: text(20), required, unique, column \"InvNo\"
+    custId: ref Customers, column \"CustID\"
     amount: decimal(18, 6), column \"Amount\"
     issued: datetime, column \"Issued\"
     // Scan is not imported: binary data is not supported yet.
@@ -107,7 +107,7 @@ fn names_already_in_the_project_are_not_taken_again() {
     let result = import(&schema, &["tblInvoice".to_string()], "erp", "erp", &["Invoice".to_string()]);
     assert!(result.text.contains("\nentity InvoiceErp\n"), "{}", result.text);
     // A reference to a table that is not imported stays an integer.
-    assert!(result.text.contains("    cust_id: integer, column \"CustID\"\n"), "{}", result.text);
+    assert!(result.text.contains("    custId: integer, column \"CustID\"\n"), "{}", result.text);
     std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
 }
 
@@ -127,7 +127,7 @@ fn reports_where_the_dictionary_no_longer_fits_the_database() {
         &[SourceRef::sql("main"), SourceRef::sql("erp").external()],
     );
     let found: Vec<(Severity, String)> = drift(&project, "erp", &schema).into_iter().map(|d| (d.severity, d.message)).collect();
-    assert!(found.contains(&(Severity::Error, "Customers.cust_name: table 'tblCustomers' has no column 'Name'".to_string())), "{found:#?}");
+    assert!(found.contains(&(Severity::Error, "Customers.custName: table 'tblCustomers' has no column 'Name'".to_string())), "{found:#?}");
     assert!(
         found.contains(&(Severity::Warning, "Customers.since: column 'Since' holds DATE, which does not fit bool".to_string())),
         "{found:#?}"

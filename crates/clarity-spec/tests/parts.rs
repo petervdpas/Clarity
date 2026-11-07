@@ -27,7 +27,7 @@ entity Note
 page Card: window
     data customer: Customer
     data other: Customer
-    data note_list: list<Note>
+    data noteList: list<Note>
     heading \"Customer\" name heading1 at 1,1 span 12
     form \"Details\" name details at 1,2 span 12 rows 6 bind customer on submit: detailsSubmitted
         label \"Name\" name label1 at 1,1 span 3 for name
@@ -211,7 +211,7 @@ fn for_names_an_input_in_the_window() {
 
 #[test]
 fn a_form_binds_one_record_and_holds_its_inputs() {
-    let list = with("rows 6 bind customer on", "rows 6 bind note_list on");
+    let list = with("rows 6 bind customer on", "rows 6 bind noteList on");
     assert_has(&errors(&list), "form at 1,2: a form binds to one record, as in 'bind customer'");
 
     let field = with("rows 6 bind customer on", "rows 6 bind customer.name on");

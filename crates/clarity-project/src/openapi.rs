@@ -257,27 +257,27 @@ pub fn json_of(text: &str) -> Result<String, String> {
     Ok(out)
 }
 
-/// A name of the description as a Clarity name in snake case:
-/// `createdAt` and `created-at` are `created_at`.
-fn snake(name: &str) -> String {
-    let mut out = String::new();
+/// A name of the description as a Clarity name, in camelCase:
+/// `created_at`, `created-at` and `CreatedAt` are `createdAt`.
+fn clarity_name(name: &str) -> String {
+    let mut words = String::new();
     let mut previous_lower = false;
     for c in name.chars() {
         if c.is_ascii_alphanumeric() {
-            if c.is_ascii_uppercase() && previous_lower && !out.ends_with('_') {
-                out.push('_');
+            if c.is_ascii_uppercase() && previous_lower && !words.ends_with('_') {
+                words.push('_');
             }
-            out.push(c.to_ascii_lowercase());
+            words.push(c.to_ascii_lowercase());
             previous_lower = c.is_ascii_lowercase() || c.is_ascii_digit();
         } else {
-            if !out.is_empty() && !out.ends_with('_') {
-                out.push('_');
+            if !words.is_empty() && !words.ends_with('_') {
+                words.push('_');
             }
             previous_lower = false;
         }
     }
-    let out = out.trim_matches('_').to_string();
-    let out = if out.starts_with(|c: char| c.is_ascii_digit()) || out.is_empty() { format!("n_{out}") } else { out };
+    let out = clarity_spec::names::camel_case(&words);
+    let out = if out.is_empty() { "n".to_string() } else { out };
     // A word Clarity keeps for itself gets an underscore; JSON still finds it,
     // as names match without underscores.
     if RESERVED.contains(&out.as_str()) { format!("{out}_") } else { out }
@@ -476,7 +476,7 @@ pub fn module(source: &str, file: &str, description: &Description, picks: &[Stri
         let mut fields = String::new();
         let mut enums = String::new();
         for (property, shape) in &schema.properties {
-            let name = snake(property);
+            let name = clarity_name(property);
             // Every record has its own id; the service's is never read.
             if name == "id" {
                 continue;
@@ -588,7 +588,7 @@ fn action(source: &str, op: &Operation, pages: Option<&Shape>, paged: &[&str]) -
         if pages.is_some() && p.at == "query" && paged.contains(&p.name.as_str()) {
             continue;
         }
-        let name = snake(&p.name);
+        let name = clarity_name(&p.name);
         let (ty, slotted) = parameter_type(&p.shape);
         match p.at.as_str() {
             "path" => {
@@ -610,7 +610,7 @@ fn action(source: &str, op: &Operation, pages: Option<&Shape>, paged: &[&str]) -
     let mut body = String::new();
     match &op.body {
         Some(Shape::Named(schema)) => {
-            let name = snake(schema);
+            let name = clarity_name(schema);
             params.push(format!("{name}: {}", pascal(schema)));
             body = format!(" with json of {name} header \"Content-Type\": \"application/json\"");
         }
@@ -634,7 +634,7 @@ fn action(source: &str, op: &Operation, pages: Option<&Shape>, paged: &[&str]) -
     for line in &unpassed {
         out.push_str(line);
     }
-    out.push_str(&format!("action {}({}){returns}\n    effects net\n", snake(&op.id), params.join(", ")));
+    out.push_str(&format!("action {}({}){returns}\n    effects net\n", clarity_name(&op.id), params.join(", ")));
     let every = if pages.is_some() { " every page" } else { "" };
     out.push_str(&format!("    let reply = http {} \"{path}\" from {source}{every}{body}{clauses}\n", op.method));
     out.push_str(&format!("    if not reply.ok\n        refuse \"{source} {} answered {{reply.status}}: {{reply.text}}\"\n", op.id));

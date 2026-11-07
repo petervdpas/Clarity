@@ -8,8 +8,8 @@ entity Customer
     name: text(80), required, search, label @customerNameLabel
     email: email, unique, search, label @customerEmailLabel
     kind: CustomerKind, default Private, label @customerKindLabel
-    vat_number: text(14), help @customerVatNumberHelp, label @customerVatNumberLabel
-    credit_limit: money, min 0, default 0, label @customerCreditLimitLabel
+    vatNumber: text(14), help @customerVatNumberHelp, label @customerVatNumberLabel
+    creditLimit: money, min 0, default 0, label @customerCreditLimitLabel
     active: bool, default true, label @customerActiveLabel
     since: date, label @customerSinceLabel
     notes: text, search, help @customerNotesHelp, label @customerNotesLabel
@@ -26,7 +26,7 @@ page CustomerBrowse: window
 
     label @searchLabel name searchLabel at 1,1 span 2 for searchBox
     textbox name searchBox at 3,1 span 10 placeholder @searchPlaceholder on change: filterChanged
-    table name grid at 1,2 span 12 rows 9 bind customers columns name, email, kind, credit_limit, active, tags sortable page 20 add remove confirm on add: newClicked on remove: removeClicked on open: openClicked
+    table name grid at 1,2 span 12 rows 9 bind customers columns name, email, kind, creditLimit, active, tags sortable page 20 add remove confirm on add: newClicked on remove: removeClicked on open: openClicked
     slideout @customerSlideout name customerPanel view CustomerEditor width 760 resizable min 520 max 1200 pinnable span 12 rows 9 on saved: filterChanged
 
 // A customer: who they are, their money, and notes.
@@ -54,9 +54,9 @@ page CustomerEditor: view
             tab @customerFormFinanceTab
                 panel @creditPanelCaption name creditPanel at 1,1 span 12 rows 3 foldable
                     label @creditLimitLabel name creditLimitLabel at 1,1 span 3 for creditLimit
-                    number name creditLimit at 4,1 span 3 bind customer.credit_limit
+                    number name creditLimit at 4,1 span 3 bind customer.creditLimit
                     label @vatNumberLabel name vatNumberLabel at 1,2 span 3 for vatNumber
-                    textbox name vatNumber at 4,2 span 4 bind customer.vat_number
+                    textbox name vatNumber at 4,2 span 4 bind customer.vatNumber
                     help name vatNumberHelp at 8,2 span 5 for vatNumber
                 label @contractLabel name contractLabel at 1,5 span 3 for contract
                 file name contract at 4,5 span 9 bind customer.contract
@@ -98,7 +98,7 @@ code CustomerEditor
         if customer.name == ""
             name.error = @nameIsRequired
             return
-        if customer.kind == Business and customer.vat_number == ""
+        if customer.kind == Business and customer.vatNumber == ""
             vatNumber.error = @neededForBusinessCustomers
             message warning @aBusinessCustomerNeedsA
             return
@@ -110,5 +110,5 @@ code CustomerEditor
 // or action.
 code Customer
     before save
-        if customer.kind == Private and customer.credit_limit > 1000
+        if customer.kind == Private and customer.creditLimit > 1000
             refuse @aPrivateCustomerSCredit

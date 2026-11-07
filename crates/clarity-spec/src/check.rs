@@ -340,6 +340,9 @@ impl<'a> Checker<'a> {
                         field.name.span,
                     );
                 }
+                if let Some(problem) = crate::names::name_problem(if entity.settings { "setting" } else { "field" }, &field.name.name) {
+                    self.error(file_index, problem, field.name.span);
+                }
                 self.check_field(file_index, field);
             }
         }
@@ -350,6 +353,9 @@ impl<'a> Checker<'a> {
             for field in &record.fields {
                 if !seen.insert(field.name.name.as_str()) {
                     self.error(file_index, format!("duplicate field '{}'", field.name.name), field.name.span);
+                }
+                if let Some(problem) = crate::names::name_problem("field", &field.name.name) {
+                    self.error(file_index, problem, field.name.span);
                 }
                 if matches!(field.ty, FieldType::Image | FieldType::File) {
                     self.error(file_index, format!("record {} has field {}: a record's fields are values or references to stored records, not pictures or files", record.name.name, field.name.name), field.name.span);
@@ -452,6 +458,9 @@ impl<'a> Checker<'a> {
             if decl.made {
                 data.insert(&decl.name.name, Held::Record(self.settings()));
                 continue;
+            }
+            if let Some(problem) = crate::names::name_problem("data", &decl.name.name) {
+                self.error(file, problem, decl.name.span);
             }
             if self.settings().is_some() && decl.name.name == crate::parser::SETTINGS_DATA {
                 self.error(file, "every window has 'settings' of its own; give this data another name", decl.name.span);

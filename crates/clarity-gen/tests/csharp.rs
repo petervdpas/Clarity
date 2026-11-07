@@ -13,7 +13,7 @@ enum OrderStatus
 
 entity Customer
     name: text(80), required
-    credit_limit: money, default 100
+    creditLimit: money, default 100
     active: bool, default true
     since: date, format long
 
@@ -24,8 +24,8 @@ entity Order
     total: money
     event: text(20)
 
-function within_credit(order: Order) -> bool
-    return order.total <= order.customer.credit_limit
+function withinCredit(order: Order) -> bool
+    return order.total <= order.customer.creditLimit
 
 function doubled(n: integer) -> money
     ensure result >= 0
@@ -34,7 +34,7 @@ function doubled(n: integer) -> money
         return 0
     return x + 0.5
 
-function big_orders(limit: money) -> list<Order>
+function bigOrders(limit: money) -> list<Order>
     return find o in Order where o.total >= limit and o.status in [Pending, Approved] order by o.total desc, o.number
 
 function described(order: Order) -> text
@@ -47,14 +47,14 @@ function described(order: Order) -> text
 
 action approve(order: Order)
     require order.status == Pending
-    require within_credit(order)
+    require withinCredit(order)
     effects db.write
     order.status = Approved
     save order
 
 code Order
     before save
-        if order.status == Approved and not within_credit(order)
+        if order.status == Approved and not withinCredit(order)
             refuse \"Order {order.number} is over its customer's credit limit\"
 
     after delete
@@ -179,7 +179,7 @@ fn enums_and_entities_become_csharp_types() {
     has(sales, "    public long? Customer { get => _customer; set => SetProperty(ref _customer, value); }");
     has(sales, "    public OrderStatus Status { get => _status; set => SetProperty(ref _status, value); }");
     has(sales, "    public object?[] ToValues() => [Number, Sql.Name(Status), Customer, Total, Event];");
-    has(sales, "        CreditLimit = Sql.GetDecimal(\"credit_limit\", values[1]),");
+    has(sales, "        CreditLimit = Sql.GetDecimal(\"creditLimit\", values[1]),");
     has(sales, "        Status = Sql.GetName<OrderStatus>(\"status\", values[1]),");
     has(sales, "    public static string TableName => \"order\";");
 }
@@ -206,7 +206,7 @@ fn functions_and_actions_become_methods_of_logic() {
         "    public static void Approve(Db db, Order order)
     {
         Contracts.Require((order.Status == OrderStatus.Pending), \"order.status == Pending\");
-        Contracts.Require(WithinCredit(db, order), \"within_credit(order)\");
+        Contracts.Require(WithinCredit(db, order), \"withinCredit(order)\");
         order.Status = OrderStatus.Approved;
         db.Save(order);
     }",
@@ -374,7 +374,7 @@ fn a_reference_field_takes_a_record() {
 /// `none`, the empty value of a date or reference (X2).
 #[test]
 fn none_is_null() {
-    let source = format!("{SALES}\nfunction unplaced(order: Order) -> bool\n    return order.customer == none or order.customer.since != none\n\naction clear(order: Order, customer: Customer)\n    effects db.write\n    customer.since = none\n    order.customer = none\n    save order\n\nfunction without_customer() -> list<Order>\n    return find o in Order where o.customer == none\n");
+    let source = format!("{SALES}\nfunction unplaced(order: Order) -> bool\n    return order.customer == none or order.customer.since != none\n\naction clear(order: Order, customer: Customer)\n    effects db.write\n    customer.since = none\n    order.customer = none\n    save order\n\nfunction withoutCustomer() -> list<Order>\n    return find o in Order where o.customer == none\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "Modules/Sales.cs");
     for line in ["(order.Customer == null)", "!(db.Load<Customer>(order.Customer).Since == null)", "customer.Since = null;", "order.Customer = null;", "Cond.IsNone(\"customer\")"] {
@@ -392,7 +392,7 @@ fn today_reads_the_clock() {
     has(sales, "(customer.Since > Clock.Today())");
 }
 
-const MUSIC: &str = "module music\n\nentity Track\n    title: text(80)\n    length: duration, min 0, default 180\n\nfunction album_length(tracks: list<Track>) -> duration\n    let total: duration = 0\n    for track in tracks\n        total = total + track.length\n    return total\n\ncode Track\n    before save\n        if track.length > 7200\n            refuse \"{track.title} lasts {track.length}\"\n\npage Tracks: window\n    data track: Track\n    number name number1 at 1,1 span 3 bind track.length\n    text name text1 at 4,1 span 3 bind track.length\n";
+const MUSIC: &str = "module music\n\nentity Track\n    title: text(80)\n    length: duration, min 0, default 180\n\nfunction albumLength(tracks: list<Track>) -> duration\n    let total: duration = 0\n    for track in tracks\n        total = total + track.length\n    return total\n\ncode Track\n    before save\n        if track.length > 7200\n            refuse \"{track.title} lasts {track.length}\"\n\npage Tracks: window\n    data track: Track\n    number name number1 at 1,1 span 3 bind track.length\n    text name text1 at 4,1 span 3 bind track.length\n";
 
 /// A duration is whole seconds; its slot and its parts show it as 3:45 (X2).
 #[test]
@@ -411,7 +411,7 @@ fn a_duration_is_seconds_shown_as_minutes_and_seconds() {
 #[test]
 fn a_query_goes_through_a_reference() {
     let source = format!(
-        "{SALES}\nfunction of_customers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.credit_limit > 10 order by o.customer.name desc, o.customer.credit_limit\n"
+        "{SALES}\nfunction ofCustomers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.creditLimit > 10 order by o.customer.name desc, o.customer.creditLimit\n"
     );
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "Modules/Sales.cs");

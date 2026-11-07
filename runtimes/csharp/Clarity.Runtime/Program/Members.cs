@@ -1,5 +1,5 @@
 // A view model's members by their Clarity names, as the C# generator names
-// them (crates/clarity-gen/src/csharp): `finished_by` is FinishedBy, or
+// them (crates/clarity-gen/src/csharp): `finishedBy` is FinishedBy, or
 // FinishedBy_ where the name is taken; a handler `approve` is the command
 // ApproveCommand; a call with values `digit(7)` the command Digit7. What
 // each type has is found once, by reflection, and kept per type.
@@ -17,7 +17,7 @@ internal static class Members
 {
     static readonly ConcurrentDictionary<(Type, string), PropertyInfo?> members = new();
 
-    /// <summary>A Clarity name in Pascal case, as clarity-gen's pascal: <c>finished_by</c> is FinishedBy; nothing, or a digit first, starts with _.</summary>
+    /// <summary>A Clarity name in Pascal case, as clarity-gen's pascal: <c>finishedBy</c> is FinishedBy; nothing, or a digit first, starts with _.</summary>
     public static string Pascal(string name)
     {
         var pascal = new StringBuilder();
@@ -37,10 +37,10 @@ internal static class Members
         return pascal.ToString();
     }
 
-    /// <summary>A member's Clarity name, as Clarity's JSON writes it: FinishedBy (or FinishedBy_) is <c>finished_by</c>.</summary>
-    public static string Snake(string member) => JsonNamingPolicy.SnakeCaseLower.ConvertName(member.TrimEnd('_'));
+    /// <summary>A member's Clarity name, as Clarity's JSON writes it: FinishedBy (or FinishedBy_) is <c>finishedBy</c>.</summary>
+    public static string Named(string member) => ClarityNaming.Instance.ConvertName(member);
 
-    /// <summary>A property by its Clarity name: <c>finished_by</c> is FinishedBy, or FinishedBy_ where the name is taken.</summary>
+    /// <summary>A property by its Clarity name: <c>finishedBy</c> is FinishedBy, or FinishedBy_ where the name is taken.</summary>
     public static PropertyInfo? Member(Type type, string name) => members.GetOrAdd((type, name), key =>
     {
         var pascal = Pascal(key.Item2);

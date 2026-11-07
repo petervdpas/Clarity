@@ -3,6 +3,7 @@
 //! writes them. They are the library's own tests (one test binary, so Skia
 //! is linked once); tests/c_header.rs builds a C program against the header.
 
+mod audio;
 mod basics;
 mod custom;
 mod program;

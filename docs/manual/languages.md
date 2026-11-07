@@ -67,8 +67,8 @@ translation nl
 A key's text names its values in slots, and code gives each slot its value by name:
 
 ```clarity
-function credit_note(order: Order) -> text
-    if within_credit(order)
+function creditNote(order: Order) -> text
+    if withinCredit(order)
         return @withinCredit(number = order.number)
     return @overCredit(number = order.number)
 ```

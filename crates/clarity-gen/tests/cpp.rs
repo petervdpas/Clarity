@@ -14,7 +14,7 @@ enum OrderStatus
 
 entity Customer
     name: text(80), required
-    credit_limit: money, default 100
+    creditLimit: money, default 100
     active: bool, default true
     since: date
 
@@ -24,8 +24,8 @@ entity Order
     customer: ref Customer
     total: money
 
-function within_credit(order: Order) -> bool
-    return order.total <= order.customer.credit_limit
+function withinCredit(order: Order) -> bool
+    return order.total <= order.customer.creditLimit
 
 action approve(order: Order)
     require order.status == Pending
@@ -128,7 +128,7 @@ fn enums_and_entities_become_cpp_types() {
     let files = files();
     let records = file(&files, "src/records.hpp");
     has(records, "enum class OrderStatus { Pending, Approved };");
-    has(records, "struct Customer {\n    int64_t id = 0;\n    std::string name;\n    clarity::Decimal credit_limit = clarity::Decimal::parse(\"100\");\n    bool active = true;\n    std::optional<clarity::Date> since;\n");
+    has(records, "struct Customer {\n    int64_t id = 0;\n    std::string name;\n    clarity::Decimal creditLimit = clarity::Decimal::parse(\"100\");\n    bool active = true;\n    std::optional<clarity::Date> since;\n");
     has(records, "    static constexpr const char* table = \"order\";");
     let source = file(&files, "src/records.cpp");
     has(source, "    case OrderStatus::Approved: return \"Approved by us\";");
@@ -140,7 +140,7 @@ fn enums_and_entities_become_cpp_types() {
 fn functions_and_actions_throw_what_fails() {
     let files = files();
     let sales = file(&files, "src/modules/sales.cpp");
-    has(sales, "bool within_credit(clarity::Db& db, Order& order) {\n    return (order.total <= db.load<Customer>(order.customer).credit_limit);\n}");
+    has(sales, "bool withinCredit(clarity::Db& db, Order& order) {\n    return (order.total <= db.load<Customer>(order.customer).creditLimit);\n}");
     has(sales, "void approve(clarity::Db& db, Order& order) {\n    clarity::require((order.status == OrderStatus::Pending), \"order.status == Pending\");\n    order.status = OrderStatus::Approved;\n    db.save(order);\n}");
     has(sales, "return db.find<Order>(clarity::Query().filter((clarity::Cond::number(\"total\", clarity::Op::GtEq, clarity::sql::decimal(clarity::Decimal(limit))) && clarity::Cond::one_of(\"status\", {clarity::sql::text(name_of(OrderStatus::Pending)), clarity::sql::text(name_of(OrderStatus::Approved))}))).order_number(\"total\", true).order(\"number\", false));");
     has(sales, "void Order::before_save(clarity::Db& db) {\n    before_save_order(db, *this);\n}");

@@ -13,7 +13,7 @@ use loans
 
 entity Album
     title: text(120), required
-    last_loan: ref Loan
+    lastLoan: ref Loan
 
 page AlbumForm: window
     data album: Album
@@ -33,7 +33,7 @@ use music
 
 entity Loan
     album: ref Album, required
-    lent_on: date
+    lentOn: date
 
 page LoanBrowse: window
     data loans: list<Loan>
@@ -86,7 +86,7 @@ const COMMON_NAMES: [&str; 12] = ["records", "windows", "schema", "main", "app",
 fn a_module_never_overwrites_a_file_of_the_stack() {
     let texts: Vec<(String, String)> = COMMON_NAMES
         .iter()
-        .map(|name| (format!("{name}.clarity"), format!("module {name}\n\nfunction {name}_twice(n: integer) -> integer\n    return n * 2\n")))
+        .map(|name| (format!("{name}.clarity"), format!("module {name}\n\nfunction {name}Twice(n: integer) -> integer\n    return n * 2\n")))
         .collect::<Vec<_>>()
         .into_iter()
         .chain([("start.clarity".to_string(), "module start\n\napp Records\n    main Main\n\npage Main: window\n    title \"Main\"\n".to_string())])

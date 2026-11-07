@@ -22,7 +22,7 @@ entity Customer
     name: text(80), unique
     email: email, unique
     kind: Kind
-    credit_limit: money, default 100
+    creditLimit: money, default 100
     vip: bool
     remarks: text
     phone: text(20)
@@ -56,7 +56,7 @@ const FIRST: &str = "migration \"First\"
 ";
 
 const SECOND: &str = "migration \"Second\"
-    rename field Customer.limit to credit_limit
+    rename field Customer.limit to creditLimit
     rename field Customer.notes to remarks
     rename field Customer.active to vip
     remove field Customer.since

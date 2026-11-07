@@ -496,6 +496,58 @@
       }, () => send({ type: "sound-ended", id: tell.id }));
     }
 
+    // Songs (mp3, flac, ogg) through audio elements, which pause, seek and say
+    // where they are: the page says how each plays with every change.
+    const songs = new Map();
+    const songTypes = { mp3: "audio/mpeg", flac: "audio/flac", ogg: "audio/ogg", oga: "audio/ogg", wav: "audio/wav" };
+    function endSong(id) {
+      const song = songs.get(id);
+      if (!song) return;
+      song.element.pause();
+      song.element.removeAttribute("src");
+      URL.revokeObjectURL(song.url);
+      songs.delete(id);
+    }
+    function songPlay(tell) {
+      endSong(tell.id);
+      const url = URL.createObjectURL(new Blob([bytesOf(tell.data)], { type: songTypes[tell.kind] || "audio/mpeg" }));
+      const element = new Audio(url);
+      element.volume = Math.max(0, Math.min(1, tell.volume));
+      const song = { element, url, held: false, failed: false };
+      songs.set(tell.id, song);
+      const say = () => {
+        const length = isFinite(element.duration) ? element.duration : 0;
+        send({ type: "song-said", id: tell.id, playing: !song.held && !song.failed && !element.ended, paused: song.held && !element.ended, ended: element.ended, position: element.currentTime || 0, length });
+      };
+      for (const event of ["play", "pause", "timeupdate", "durationchange", "ended", "seeked"]) element.addEventListener(event, say);
+      element.addEventListener("error", () => {
+        song.failed = true;
+        say();
+      });
+      element.play().catch(() => {
+        song.failed = true;
+        say();
+      });
+    }
+    function songDo(tell) {
+      const song = songs.get(tell.id);
+      if (!song) return;
+      const element = song.element;
+      if (tell.do === "pause") {
+        song.held = true;
+        element.pause();
+      } else if (tell.do === "resume") {
+        song.held = false;
+        element.play().catch(() => {});
+      } else if (tell.do === "seek") {
+        element.currentTime = Math.max(0, tell.value);
+      } else if (tell.do === "volume") {
+        element.volume = Math.max(0, Math.min(1, tell.value));
+      } else if (tell.do === "stop") {
+        endSong(tell.id);
+      }
+    }
+
     // A file shown in a tab has its type (the host sends only kinds that run
     // nothing); one without is downloaded, never shown in this page's origin.
     function save(name, base64, open, type) {
@@ -546,6 +598,8 @@
       download: (t) => save(t.name, t.data, false),
       show: (t) => save(t.name, t.data, true, t.type),
       play,
+      songPlay,
+      songDo,
       stop: (t) => {
         const source = playing.get(t.id);
         if (source) source.stop();
@@ -806,6 +860,7 @@
       // Ends it: no more frames, no more requests.
       stop: () => {
         stopped = true;
+        for (const id of [...songs.keys()]) endSong(id);
         if (worker) worker.terminate();
         if (watching) watching.disconnect();
         window.removeEventListener("resize", resized);

@@ -130,5 +130,6 @@ pub(super) fn read_field(name: &str, field_text: &str, line: &Line, problems: &m
         return None;
     }
     let field = file.entities.into_iter().next()?.fields.into_iter().next()?;
-    Some(DiagramField { name: field.name.name, type_text: field.type_text, modifiers: field.modifiers, span: line.span })
+    // A diagram may name an attribute in snake case (`issued_on`); its field is camelCase.
+    Some(DiagramField { name: crate::names::camel_case(&field.name.name), type_text: field.type_text, modifiers: field.modifiers, span: line.span })
 }

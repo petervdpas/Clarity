@@ -74,7 +74,7 @@ engine Pricing from "pricing.wasm"
     uses clock, random
     limit 2 seconds, 64 MB
     function total(lines: list<Line>) -> money
-    function size_of(count: integer) -> Size
+    function sizeOf(count: integer) -> Size
     function discounted(order: Order) -> Order
 ```
 
@@ -143,7 +143,7 @@ engine Board from "board.wasm"
 Code calls an engine's function by the engine's name:
 
 ```clarity
-function order_total(order: Order) -> money
+function orderTotal(order: Order) -> money
     return Pricing.total(order.lines)
 
 handler discountClicked

@@ -13,8 +13,8 @@ enum CustomerKind
 entity Customer
     name: text(80), required
     kind: CustomerKind
-    vat_number: text(14)
-    credit_limit: money
+    vatNumber: text(14)
+    creditLimit: money
     active: bool
     since: date
 
@@ -27,7 +27,7 @@ entity Order
 page CustomerForm: window
     data customer: Customer
     dropdown name kind at 1,1 span 4 bind customer.kind on change: kindChanged
-    textbox name vatNumber at 1,2 span 4 bind customer.vat_number
+    textbox name vatNumber at 1,2 span 4 bind customer.vatNumber
     button \"Save\" name save at 1,3 span 2 on click: saveClicked
 
 page Orders: window
@@ -44,12 +44,12 @@ code CustomerForm
         if customer.name == \"\"
             message error \"Name is required\"
             return
-        else if customer.credit_limit < 0
+        else if customer.creditLimit < 0
             message warning \"The credit limit is negative\"
         else
             customer.active = true
-        let doubled = customer.credit_limit * 2
-        customer.credit_limit = doubled + 1
+        let doubled = customer.creditLimit * 2
+        customer.creditLimit = doubled + 1
         save customer
         message \"Saved {customer.name}\"
         close
@@ -227,13 +227,13 @@ fn locals_are_scoped_to_their_block() {
 #[test]
 fn checks_types() {
     assert_eq!(errors(&form("if customer.name\n    close")), ["the condition must be bool, not text"]);
-    assert_eq!(errors(&form("customer.credit_limit = \"lots\"")), ["cannot set money to text"]);
+    assert_eq!(errors(&form("customer.creditLimit = \"lots\"")), ["cannot set money to text"]);
     assert_eq!(errors(&form("customer.active = 1")), ["cannot set bool to integer"]);
     assert_eq!(errors(&form("let x = customer.name * 2")), ["'*' needs numbers, not text and integer"]);
     assert_eq!(errors(&form("let x = customer.active and 1")), ["'and' needs bool, not integer"]);
     assert_eq!(errors(&form("let x = customer.name < 3")), ["cannot compare text with integer"]);
     // Integers widen to decimals, and text joins any value.
-    assert_eq!(errors(&form("customer.credit_limit = 5\nlet t = \"Limit: \" + customer.credit_limit")), Vec::<String>::new());
+    assert_eq!(errors(&form("customer.creditLimit = 5\nlet t = \"Limit: \" + customer.creditLimit")), Vec::<String>::new());
 }
 
 #[test]
@@ -467,7 +467,7 @@ fn handlers_change_a_windows_plain_values() {
             .map(|d| d.message)
             .collect()
     };
-    let fine = errors("if fresh\n    shown = 0\nshown = shown * 10 + 7\nchosen = Business\nfresh = not fresh\ncustomer.credit_limit = shown\n");
+    let fine = errors("if fresh\n    shown = 0\nshown = shown * 10 + 7\nchosen = Business\nfresh = not fresh\ncustomer.creditLimit = shown\n");
     assert!(fine.is_empty(), "{fine:#?}");
     assert!(errors("fresh = 3\n").iter().any(|e| e.contains("bool")), "{:#?}", errors("fresh = 3\n"));
     assert!(errors("chosen = Teleport\n").iter().any(|e| e.contains("Teleport")), "{:#?}", errors("chosen = Teleport\n"));
@@ -479,10 +479,10 @@ fn handlers_change_a_windows_plain_values() {
 /// round(value, places) rounds a decimal or money half away from zero.
 #[test]
 fn round_takes_a_number_and_its_decimals() {
-    let fine = errors(&form("let a = round(customer.credit_limit, 2)\ncustomer.credit_limit = a\nlet b = round(1.25, 1) + 1\n"));
+    let fine = errors(&form("let a = round(customer.creditLimit, 2)\ncustomer.creditLimit = a\nlet b = round(1.25, 1) + 1\n"));
     assert!(fine.is_empty(), "{fine:#?}");
     // It keeps the type it is given: money stays money.
-    assert!(errors(&form("let a = round(customer.credit_limit, 2)\ncustomer.active = a\n")).iter().any(|e| e.contains("money")));
+    assert!(errors(&form("let a = round(customer.creditLimit, 2)\ncustomer.active = a\n")).iter().any(|e| e.contains("money")));
     assert_has(&errors(&form("let a = round(customer.name, 2)\n")), "'round' needs a decimal or money, not text");
     assert_has(&errors(&form("let a = round(1.5)\n")), "'round' takes a number and its decimals, as in round(total, 2)");
     assert_has(&errors(&form("let a = round(1.5, 0.5)\n")), "the decimals of 'round' are an integer, not decimal");

@@ -16,7 +16,7 @@ entity Customer
     name: text(80)
     kind: Kind
     active: bool
-    credit_limit: money
+    creditLimit: money
     since: date
 
 entity Order
@@ -24,8 +24,8 @@ entity Order
     customer: ref Customer
     total: money
 
-function big_spenders(limit: money) -> list<Customer>
-    return find c in Customer where c.credit_limit >= limit and c.active order by c.credit_limit desc, c.name
+function bigSpenders(limit: money) -> list<Customer>
+    return find c in Customer where c.creditLimit >= limit and c.active order by c.creditLimit desc, c.name
 
 page Customers: window
     data customers: list<Customer>
@@ -96,7 +96,7 @@ fn parses_a_query_with_its_condition_and_order() {
     assert_eq!(entity.name, "Customer");
     assert!(filter.is_some());
     assert_eq!(order.len(), 2);
-    assert_eq!(order[0].field.name, "credit_limit");
+    assert_eq!(order[0].field.name, "creditLimit");
     assert!(order[0].descending);
     assert_eq!(order[1].field.name, "name");
     assert!(!order[1].descending);
@@ -116,7 +116,7 @@ fn a_query_needs_an_entity_and_its_own_fields() {
 
 #[test]
 fn a_query_compares_a_field_with_a_value() {
-    let two_fields = with("c.credit_limit >= limit", "c.credit_limit >= c.credit_limit");
+    let two_fields = with("c.creditLimit >= limit", "c.creditLimit >= c.creditLimit");
     assert_has(
         &errors(&two_fields),
         "a query compares a field of c with a value, as in 'c.name == x'",
@@ -128,7 +128,7 @@ fn a_query_compares_a_field_with_a_value() {
 
 #[test]
 fn contains_is_for_text() {
-    let source = with("c.name contains nameFilter.text", "c.credit_limit contains nameFilter.text");
+    let source = with("c.name contains nameFilter.text", "c.creditLimit contains nameFilter.text");
     assert_has(&errors(&source), "'contains' needs text, not money and text");
 }
 
@@ -165,7 +165,7 @@ fn the_query_variable_is_only_inside_the_query() {
 fn a_query_goes_through_references() {
     let through = with(
         "orders = find o in Order where o.customer == customer and o.total > 100",
-        "orders = find o in Order where o.customer.name contains nameFilter.text and o.customer.active and o.customer.kind in [Business] and o.customer.since != none and o.customer.credit_limit > 10 order by o.customer.name desc, o.number",
+        "orders = find o in Order where o.customer.name contains nameFilter.text and o.customer.active and o.customer.kind in [Business] and o.customer.since != none and o.customer.creditLimit > 10 order by o.customer.name desc, o.number",
     );
     assert_eq!(problems(&through), Vec::new());
 

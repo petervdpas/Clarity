@@ -7,7 +7,7 @@ entity Item
     low: integer, default 5, min 0, label @itemLowLabel
 
 /// Whether there are so few that more should be ordered.
-function runs_low(item: Item) -> bool
+function runsLow(item: Item) -> bool
     return item.count <= item.low
 
 app Stock
@@ -30,7 +30,7 @@ code Items
     // A new item gets a name no other item has; the person types its own over it.
     handler addClicked
         let item = new Item
-        item.name = free_name(@newItemName, find i in Item order by i.name)
+        item.name = freeName(@newItemName, find i in Item order by i.name)
         save item
         items = find i in Item order by i.name
 
@@ -42,7 +42,7 @@ code Items
         items = find i in Item order by i.name
 
 // The word, or the word with the first number no item has.
-function free_name(word: text, all: list<Item>) -> text
+function freeName(word: text, all: list<Item>) -> text
     let name = word
     let n = 1
     for step in 1 to 1000
@@ -65,7 +65,7 @@ command list
     let all = find i in Item order by i.name
     if low
         for item in all
-            if runs_low(item)
+            if runsLow(item)
                 print @itemLine(name = item.name, count = item.count)
         return
     print all columns name, count, low
@@ -96,7 +96,7 @@ command take(name: text, number: integer)
     item.count = item.count - number
     save item
     print @itemCountIs(name = name, count = item.count)
-    if runs_low(item)
+    if runsLow(item)
         message warning @itemRunsLow(name = name)
 
 command bring(name: text, number: integer)
@@ -115,7 +115,7 @@ command check
     let all = find i in Item order by i.name
     let short = false
     for item in all
-        if runs_low(item)
+        if runsLow(item)
             print item.name
             short = true
     if short

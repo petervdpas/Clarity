@@ -62,7 +62,7 @@ A table showing a list that gets new rows has no row selected afterwards. `today
 Code reaches files only in the file stores of the project settings (`filestore photos "data/photos"`); see [Pictures and files](data.pictures-files.md).
 
 ```clarity
-action export_collection()
+action exportCollection()
     effects files.write
     let lines = ""
     for album in find a in Album order by a.title

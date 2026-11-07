@@ -127,6 +127,15 @@ pub fn library_file(os: &str) -> &'static str {
     }
 }
 
+/// Clarity.Audio's shared library in `lib/` on system `os`, beside Clarity.UI's.
+pub fn audio_file(os: &str) -> &'static str {
+    match os {
+        "windows" => "clarity_audio.dll",
+        "macos" => "libclarity_audio.dylib",
+        _ => "libclarity_audio.so",
+    }
+}
+
 /// Whether `folder` holds the header and the library for system `os`.
 pub fn complete(folder: &Path, os: &str) -> bool {
     folder.join("include").join("clarity_ui.h").is_file() && folder.join("lib").join(library_file(os)).is_file()
@@ -274,8 +283,9 @@ pub fn repository_browser(repo: &Path) -> Option<PathBuf> {
 /// The folder Clarity's repository makes of the library it built (a
 /// Clarity run from source, which has no installer's folder):
 /// `<repo>/target/clarity-ui`, with the header from runtimes/rust-ui-ffi
-/// and the library from target/release copied in when they changed. None
-/// when the library is not built.
+/// and the library from target/release copied in when they changed, and
+/// Clarity.Audio's beside them when it is built. None when Clarity.UI's
+/// library is not built.
 pub fn repository_library(repo: &Path, os: &str) -> Option<PathBuf> {
     let header = repo.join("runtimes").join("rust-ui-ffi").join("include").join("clarity_ui.h");
     let release = repo.join("target").join("release");
@@ -285,6 +295,14 @@ pub fn repository_library(repo: &Path, os: &str) -> Option<PathBuf> {
     }
     if !files.iter().all(|(from, _)| from.is_file()) {
         return None;
+    }
+    let audio_header = repo.join("runtimes").join("rust-audio-ffi").join("include").join("clarity_audio.h");
+    let mut audio = vec![(audio_header, PathBuf::from("include").join("clarity_audio.h")), (release.join(audio_file(os)), PathBuf::from("lib").join(audio_file(os)))];
+    if os == "windows" {
+        audio.push((release.join("clarity_audio.dll.lib"), PathBuf::from("lib").join("clarity_audio.dll.lib")));
+    }
+    if audio.iter().all(|(from, _)| from.is_file()) {
+        files.extend(audio);
     }
     let folder = repo.join("target").join("clarity-ui");
     for (from, to) in files {

@@ -10,7 +10,7 @@ enum Kind
 entity Customer
     name: text
     kind: Kind, default Private
-    best_friend: ref Customer
+    bestFriend: ref Customer
 ";
 
 const SALES: &str = "module sales
@@ -60,7 +60,7 @@ fn renames_an_entity_and_every_reference() {
     let text = |path: &str| files.iter().find(|f| f.path == path).unwrap().text.clone();
     let customers = text("customers.clarity");
     assert!(customers.contains("entity Client\n"));
-    assert!(customers.contains("best_friend: ref Client\n"));
+    assert!(customers.contains("bestFriend: ref Client\n"));
     let sales = text("sales.clarity");
     assert!(sales.contains("customer: ref Client\n    lines: list<Client>\n"), "{sales}");
     assert!(sales.contains("data customer: Client\n    data customers: list<Client>\n"), "{sales}");

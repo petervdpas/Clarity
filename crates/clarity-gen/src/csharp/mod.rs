@@ -12,7 +12,7 @@ pub(crate) mod parts;
 mod cli;
 mod logic;
 mod model;
-mod names;
+pub(crate) mod names;
 pub(crate) use names::value_type as value_type_of;
 mod texts;
 pub(crate) mod themes;
@@ -95,6 +95,10 @@ mod version_tests {
 /// through it Clarity.Runtime (DESIGN 7.9).
 const DESKTOP_PACKAGE: &str = "Clarity.Ui";
 
+/// The package that plays a desktop program's songs (docs/AUDIO-PLAN.md),
+/// carried only when its sound parts play them.
+const AUDIO_PACKAGE: &str = "Clarity.Audio";
+
 /// What a kind of database brings into a project: the runtime's package of
 /// its driver (with the client it stands on), and the class whose Use() turns
 /// the driver on. A program served to a browser carries none: its server does.
@@ -160,7 +164,9 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     if crate::unconnected(project).is_some() && !packaged.iter().any(|d| d.sql == Sql::Sqlite) {
         packaged.push(&DRIVERS[0]);
     }
-    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, ui, &packaged, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, parts::references(project) + &library_references(project)))];
+    // Songs play through Clarity.Audio on the desktop; a browser plays them itself.
+    let songs = ui == DESKTOP_PACKAGE && clarity_spec::resources::plays_songs(project);
+    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, ui, songs, &packaged, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, parts::references(project) + &library_references(project)))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
@@ -278,10 +284,10 @@ fn main_window(project: &Project) -> Option<String> {
 /// property `ClarityRuntime` (or the environment variable CLARITY_RUNTIME) set
 /// to the runtime's folder (runtimes/csharp in Clarity's repository), it
 /// references the runtime's own projects there instead, for working on them.
-fn csproj(name: &str, ui: &str, drivers: &[&Driver], carried: bool, engines: bool, dotnet: String) -> String {
+fn csproj(name: &str, ui: &str, songs: bool, drivers: &[&Driver], carried: bool, engines: bool, dotnet: String) -> String {
     let version = runtime_version();
     // Engines need Wasmtime, which only an application with an engine carries.
-    let packages: Vec<&str> = std::iter::once(ui).chain(drivers.iter().map(|s| s.package)).chain(engines.then_some(ENGINES_PACKAGE)).collect();
+    let packages: Vec<&str> = std::iter::once(ui).chain(songs.then_some(AUDIO_PACKAGE)).chain(drivers.iter().map(|s| s.package)).chain(engines.then_some(ENGINES_PACKAGE)).collect();
     let references: String = packages.iter().map(|p| format!("    <PackageReference Include=\"{p}\" Version=\"{version}\" />\n")).collect();
     let projects: String = packages.iter().map(|p| format!("    <ProjectReference Include=\"$(ClarityRuntime)/{p}/{p}.csproj\" />\n")).collect();
     // The files of the project's resources folder, embedded.
@@ -505,6 +511,8 @@ fn program_cs(project: &Project, name: &str, databases: &[(String, Sql, String)]
         String::new()
     };
     let unconnected = unconnected_start(project, &main_window);
+    // Songs play through Clarity.Audio, handed to Clarity.UI before the first window.
+    let audio = if clarity_spec::resources::plays_songs(project) { "        Clarity.Audio.ClarityAudio.Use();\n" } else { "" };
     // DesktopWindow is Clarity.Ui's.
     let ui_using = "using Clarity.Ui;\n";
     format!(
@@ -539,7 +547,7 @@ public static class Program
         {{
 {unconnected}        }}
         using var databases = opened;
-        DesktopWindow.Run(new {main_window}ViewModel(databases));
+{audio}        DesktopWindow.Run(new {main_window}ViewModel(databases));
         return 0;
     }}
 }}

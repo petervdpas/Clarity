@@ -5,10 +5,10 @@ module model
 entity Domain
     name: text(80), required, unique, label @domainNameLabel
     summary: text, label @domainSummaryLabel
-    model_package: text(120), label @domainModelPackageLabel
-    model_version: text(20), label @domainModelVersionLabel
-    messages_package: text(120), label @domainMessagesPackageLabel
-    messages_version: text(20), label @domainMessagesVersionLabel
+    modelPackage: text(120), label @domainModelPackageLabel
+    modelVersion: text(20), label @domainModelVersionLabel
+    messagesPackage: text(120), label @domainMessagesPackageLabel
+    messagesVersion: text(20), label @domainMessagesVersionLabel
     // Whether its model project uses Newtonsoft.Json, so its enums get that converter too.
     newtonsoft: bool, default true, label @domainNewtonsoftLabel
 
@@ -139,7 +139,7 @@ entity EventField
     // The version of the data object it holds.
     holds: ref ObjectVersion, label @eventFieldHoldsLabel
     // The data object whose business key it is.
-    key_of: ref DataObject, label @eventFieldKeyOfLabel
+    keyOf: ref DataObject, label @eventFieldKeyOfLabel
     list: ListStyle, default Single, label @eventFieldListLabel
     access: Access, default InitOnly, label @eventFieldAccessLabel
     obsolete: text(400), label @eventFieldObsoleteLabel

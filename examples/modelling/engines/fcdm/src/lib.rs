@@ -18,6 +18,7 @@ clarity_engine::interface!();
 
 /// A version of a data object, as the application hands it over.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ObjectSpec {
     pub domain: String,
     pub name: String,
@@ -44,6 +45,7 @@ fn yes() -> bool {
 
 /// A property of a version, in its order.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PropertySpec {
     pub name: String,
     /// The kind by its name in the app: `TextValue`, `HeldObjects`, ...
@@ -68,6 +70,7 @@ pub struct PropertySpec {
 
 /// An enum of a domain.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EnumSpec {
     pub domain: String,
     pub name: String,
@@ -75,18 +78,19 @@ pub struct EnumSpec {
 
 /// A value of an enum, with the number it is kept as.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EnumValueSpec {
     pub name: String,
     pub number: i64,
 }
 
-clarity_engine::function!(class_code, |(object, properties): (ObjectSpec, Vec<PropertySpec>)| Ok(write_class(&object, &properties)));
-clarity_engine::function!(interface_code, |(object, properties): (ObjectSpec, Vec<PropertySpec>)| Ok(write_interface(&object, &properties)));
-clarity_engine::function!(read_files, |(files,): (Vec<read::SourceFile>,)| Ok(read::read_files(&files)));
-clarity_engine::function!(diff_text, |(path, on_disk, written): (String, String, String)| Ok(diff::unified(&path, &on_disk, &written)));
-clarity_engine::function!(file_bytes, |(text,): (String,)| Ok(clarity_engine::Bytes(with_mark(&text))));
-clarity_engine::function!(event_code, |(spec, fields): (events::EventSpec, Vec<events::EventFieldSpec>)| Ok(events::write_event(&spec, &fields)));
-clarity_engine::function!(enum_code, |(spec, values): (EnumSpec, Vec<EnumValueSpec>)| Ok(write_enum(&spec, &values)));
+clarity_engine::function!(classCode, |(object, properties): (ObjectSpec, Vec<PropertySpec>)| Ok(write_class(&object, &properties)));
+clarity_engine::function!(interfaceCode, |(object, properties): (ObjectSpec, Vec<PropertySpec>)| Ok(write_interface(&object, &properties)));
+clarity_engine::function!(readFiles, |(files,): (Vec<read::SourceFile>,)| Ok(read::read_files(&files)));
+clarity_engine::function!(diffText, |(path, on_disk, written): (String, String, String)| Ok(diff::unified(&path, &on_disk, &written)));
+clarity_engine::function!(fileBytes, |(text,): (String,)| Ok(clarity_engine::Bytes(with_mark(&text))));
+clarity_engine::function!(eventCode, |(spec, fields): (events::EventSpec, Vec<events::EventFieldSpec>)| Ok(events::write_event(&spec, &fields)));
+clarity_engine::function!(enumCode, |(spec, values): (EnumSpec, Vec<EnumValueSpec>)| Ok(write_enum(&spec, &values)));
 
 pub(crate) const INDENT: &str = "    ";
 /// The longest constructor line that stays on one line.

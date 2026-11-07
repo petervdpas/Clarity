@@ -18,7 +18,7 @@ const SKETCH: &str = "erDiagram
         integer level \"min 1, default 1\"
     }
     Order {
-        date ordered_on \"required\"
+        date orderedOn \"required\"
         decimal total \"decimal(10, 2), computed\"
         Customer customer FK
         OrderLine[] lines \"owned\"

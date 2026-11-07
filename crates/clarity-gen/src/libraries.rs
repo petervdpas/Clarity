@@ -55,9 +55,10 @@ fn snake(name: &str) -> String {
     out
 }
 
+/// A function's name in C# and Go, as their code calls it: `isPlaying` and
+/// `is_playing` are both `IsPlaying`.
 fn pascal(name: &str) -> String {
-    let mut chars = name.chars();
-    chars.next().map(|c| c.to_ascii_uppercase().to_string() + chars.as_str()).unwrap_or_default()
+    crate::csharp::names::pascal(name)
 }
 
 // -- C# -------------------------------------------------------------------

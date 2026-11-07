@@ -34,7 +34,7 @@ command vaulted(path: text)
     let reply = http get path from vault
     print reply.text
 
-action post_to(url: text, body: text) -> integer
+action postTo(url: text, body: text) -> integer
     effects net
     let reply = http post url with body header "Content-Type": "text/plain"
     return reply.status
@@ -46,7 +46,7 @@ command fetch(url: text)
 
 command send(url: text, body: text)
     help "Posts a text and prints the status"
-    let status = post_to(url, body)
+    let status = postTo(url, body)
     print "{status}"
 
 command replace(url: text, body: text)

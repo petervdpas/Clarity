@@ -3,9 +3,13 @@
 
 use crate::code::check::TypeInfo;
 
-/// What code tells a sound, with the values each takes: `rollSound.play()`.
-pub const HEARS: [(&str, &[(&str, TypeInfo)]); 5] = [
-    ("play", &[]),
+/// What code tells a sound, with the values each takes: `rollSound.play()`,
+/// or `music.play(path)` for a song from disk (docs/AUDIO-PLAN.md).
+pub const HEARS: [(&str, &[(&str, TypeInfo)]); 8] = [
+    ("play", &[("path", TypeInfo::Text)]),
+    ("pause", &[]),
+    ("resume", &[]),
+    ("seek", &[("seconds", TypeInfo::Decimal)]),
     ("stop", &[]),
     ("tone", &[("hertz", TypeInfo::Integer), ("seconds", TypeInfo::Decimal)]),
     ("melody", &[("notes", TypeInfo::Text), ("tempo", TypeInfo::Integer)]),
@@ -15,6 +19,46 @@ pub const HEARS: [(&str, &[(&str, TypeInfo)]); 5] = [
 /// The values a sound's `hear` takes, or None when it hears no such thing.
 pub fn hear(name: &str) -> Option<&'static [(&'static str, TypeInfo)]> {
     HEARS.iter().find(|(n, _)| *n == name).map(|(_, params)| *params)
+}
+
+/// How many of its values a hear needs: `play()` plays its source, `play(path)` a file.
+pub fn least(name: &str) -> usize {
+    if name == "play" { 0 } else { hear(name).map_or(0, <[_]>::len) }
+}
+
+/// What code reads of a sound, as it plays (docs/AUDIO-PLAN.md): kept by
+/// Clarity.UI in the part's values, read as a custom part's are.
+pub const READS: [(&str, TypeInfo); 10] = [
+    ("playing", TypeInfo::Bool),
+    ("paused", TypeInfo::Bool),
+    // Whole seconds played, and the song's length in whole seconds (0 when its
+    // file does not say): what a slider and a time shown take.
+    ("position", TypeInfo::Integer),
+    ("length", TypeInfo::Integer),
+    // The path of the file that plays; empty for a resource or nothing.
+    ("file", TypeInfo::Text),
+    // Why the last song did not play, for `on fail`; empty when it did.
+    ("problem", TypeInfo::Text),
+    // What the playing song's file says of it (ID3, Vorbis comments); empty
+    // when it does not say, and 0 for a track it does not number.
+    ("title", TypeInfo::Text),
+    ("artist", TypeInfo::Text),
+    ("album", TypeInfo::Text),
+    ("track", TypeInfo::Integer),
+];
+
+/// The type of what code reads of a sound, or None when a sound says no such thing.
+pub fn read(name: &str) -> Option<TypeInfo> {
+    READS.iter().find(|(n, _)| *n == name).map(|(_, ty)| ty.clone())
+}
+
+/// What a sound says of `name` before it played anything, as JSON: false, 0 or empty.
+pub fn read_fallback(name: &str) -> &'static str {
+    match read(name) {
+        Some(TypeInfo::Bool) => "false",
+        Some(TypeInfo::Integer) => "0",
+        _ => "\"\"",
+    }
 }
 
 /// A note of a melody: its frequency (None for a rest) and how long it lasts.

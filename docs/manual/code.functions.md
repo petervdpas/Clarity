@@ -7,12 +7,12 @@ How to write logic that is not tied to one window: functions and actions in a mo
 Logic that more than one window needs goes into a module as a function or an action. Handlers, functions and actions call them by name, from their own module and from the modules it uses.
 
 ```clarity
-function within_credit(order: Order) -> bool
-    return order.total <= order.customer.credit_limit
+function withinCredit(order: Order) -> bool
+    return order.total <= order.customer.creditLimit
 
 action approve(order: Order)
     require order.status == Pending
-    require within_credit(order)
+    require withinCredit(order)
     effects db.write
     order.status = Approved
     save order
@@ -47,7 +47,7 @@ A function or action with a result must `return` a value on every path; the chec
 The body is ordinary statements: `let` makes a local, `if`, `else if` and `else` choose, and `for` runs once per item of a list.
 
 ```clarity
-function order_total(order: Order) -> money
+function orderTotal(order: Order) -> money
     ensure result >= 0
     let total: money = 0
     for line in order.lines

@@ -238,8 +238,8 @@ fn entity_name(table: &str) -> String {
 
 /// `CustName` as `cust_name`.
 fn field_name(column: &str) -> String {
-    let name = words(column).iter().map(|w| w.to_ascii_lowercase()).collect::<Vec<_>>().join("_");
-    if name.starts_with(|c: char| c.is_ascii_digit()) || name.is_empty() { format!("f_{name}") } else { name }
+    let name = clarity_spec::names::camel_case(&words(column).iter().map(|w| w.to_ascii_lowercase()).collect::<Vec<_>>().join("_"));
+    if name.starts_with(|c: char| c.is_ascii_digit()) || name.is_empty() { format!("f{name}") } else { name }
 }
 
 /// The text of an imported module, and the tables left out with why.
@@ -313,7 +313,7 @@ pub fn import(schema: &LiveSchema, tables: &[String], module: &str, source: &str
                 modifiers: Modifiers {
                     required: column.not_null,
                     unique: column.unique,
-                    column: (name != column.name).then(|| column.name.clone()),
+                    column: (snake_case(&name) != column.name).then(|| column.name.clone()),
                     ..Modifiers::default()
                 },
             };
@@ -356,7 +356,7 @@ fn entity_drift(entity: &Entity, source: &str, schema: &LiveSchema) -> Vec<Diagn
     let stored: Vec<_> = entity.fields.iter().filter(|f| !matches!(f.ty, FieldType::List { .. })).collect();
     for field in &stored {
         let column = entity.column_of(&field.name.name);
-        match table.column(column) {
+        match table.column(&column) {
             None => found.push(Diagnostic::error(
                 format!("{name}.{}: table '{table_name}' has no column '{column}'", field.name.name),
                 field.span,

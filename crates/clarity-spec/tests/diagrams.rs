@@ -14,7 +14,7 @@ const SHOP: &str = "erDiagram
     }
     Order {
         varchar(12) number UK \"required\"
-        date ordered_on
+        date orderedOn
         decimal total \"decimal(10, 2), computed\"
     }
     Customer ||--o{ Order : places

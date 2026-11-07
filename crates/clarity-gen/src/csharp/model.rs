@@ -426,7 +426,7 @@ fn pictures(entity: &Entity) -> String {
             let column = entity.column_of(&f.name.name);
             let store = f.modifiers.store.as_deref().map_or("null".to_string(), string);
             let name = if f.ty == FieldType::File { format!(", {}", string(&format!("{column}_name"))) } else { String::new() };
-            format!("new({}, {store}{name})", string(column))
+            format!("new({}, {store}{name})", string(&column))
         })
         .collect();
     if columns.is_empty() {

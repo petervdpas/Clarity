@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.33
+
+- Colors `end` and `fail`, the events of a sound that plays songs.
+
 ## 0.1.32
 
 - Colors `splash`, the app's line that names its splash screen, and `version`, the project file's line with the application's version.

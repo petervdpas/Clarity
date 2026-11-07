@@ -221,7 +221,7 @@
   </div>
 
   <form class="add" onsubmit={addField}>
-    <input class="mono" bind:value={newName} placeholder="new_field" spellcheck="false" />
+    <input class="mono" bind:value={newName} placeholder="newField" spellcheck="false" />
     <input class="mono" list="field-types" bind:value={newType} />
     <button type="submit" disabled={!newName.trim()}>Add field</button>
   </form>

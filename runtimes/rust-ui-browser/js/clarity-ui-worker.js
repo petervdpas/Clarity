@@ -16,6 +16,7 @@
 //   key     {down, key, code, held}     text {text}
 //   compose {text, start, end}          paste {text}
 //   file    {name, bytes}               sound-ended {id}
+//   song-said {id, playing, paused, ended, position, length}
 //   step    {id, step}                  shot {id}
 //   reload  {id, files, choices}        layout {id}
 //   access  {on}                        act {node, action, value}
@@ -256,6 +257,7 @@ function clarityUiWorker(scope) {
     compose: (m) => withText(m.text, (at) => ui._clarity_ui_compose(at, m.start == null ? -1 : m.start, m.end == null ? -1 : m.end)),
     paste: (m) => withText(m.text, (at) => ui._clarity_ui_pasted(at)),
     "sound-ended": (m) => ui._clarity_ui_sound_ended(m.id),
+    "song-said": (m) => ui._clarity_ui_song_said(m.id, m.playing ? 1 : 0, m.paused ? 1 : 0, m.ended ? 1 : 0, m.position || 0, m.length || 0),
     file: (m) => {
       const bytes = new Uint8Array(m.bytes);
       const at = ui._malloc(Math.max(bytes.length, 1));

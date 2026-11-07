@@ -1,0 +1,19 @@
+[package]
+name = "clarity-video-ffi"
+description = "The C interface of Clarity.Video: the videos of the programs C#, Go, C and C++ make with Clarity"
+version = "0.1.0"
+edition.workspace = true
+license = "MIT"
+repository = "https://github.com/petervdpas/Clarity"
+homepage = "https://github.com/petervdpas/Clarity"
+# Shipped as a native library beside Clarity.UI's, not on crates.io.
+publish = false
+
+# The library's file is clarity_video on every system: libclarity_video.so,
+# clarity_video.dll, libclarity_video.dylib.
+[lib]
+name = "clarity_video"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+video = { package = "clarity-video", path = "../rust-video" }

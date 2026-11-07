@@ -28,6 +28,7 @@ mod parts_panel;
 mod parts_popover;
 mod parts_read_only_rule;
 mod parts_scroll_view;
+mod parts_video;
 mod parts_small_display;
 mod parts_small_text_parts;
 mod parts_splitter;

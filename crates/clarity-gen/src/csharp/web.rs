@@ -65,7 +65,7 @@ fn library_csproj(desktop: &str) -> String {
         .lines()
         .filter(|line| !DRIVERS.iter().any(|d| line.contains(&format!("\"{}\"", d.package)) || line.contains(&format!("/{}.csproj\"", d.package))))
         // A browser plays songs itself.
-        .filter(|line| !line.contains("\"Clarity.Audio\"") && !line.contains("/Clarity.Audio.csproj\""))
+        .filter(|line| !["Clarity.Audio", "Clarity.Video"].iter().any(|p| line.contains(&format!("\"{p}\"")) || line.contains(&format!("/{p}.csproj\""))))
         .map(|line| format!("{line}\n"))
         .collect();
     library.replacen(

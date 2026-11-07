@@ -115,6 +115,39 @@ function(clarity_use_audio target)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_audio> $<TARGET_FILE_DIR:${target}>)
 endfunction()
 
+# Clarity.Video (docs/VIDEO-PLAN.md) for a program with video parts: its
+# library and Cisco's openh264 lie beside Clarity.UI's in the folder CLARITY_UI
+# names. Linked to `target` and put beside it, openh264 too, so videos play
+# offline.
+function(clarity_use_video target)
+  if(NOT TARGET clarity_video)
+    if(NOT EXISTS "${CLARITY_UI}/include/clarity_video.h")
+      message(FATAL_ERROR "The program plays videos, but Clarity.Video's library is not in '${CLARITY_UI}': use a Clarity.UI folder with include/clarity_video.h and its library in lib/")
+    endif()
+    add_library(clarity_video SHARED IMPORTED GLOBAL)
+    set_target_properties(clarity_video PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${CLARITY_UI}/include")
+    if(WIN32)
+      find_library(CLARITY_VIDEO_IMPORT NAMES clarity_video.dll.lib libclarity_video.dll.a clarity_video.lib PATHS "${CLARITY_UI}/lib" NO_DEFAULT_PATH REQUIRED)
+      set_target_properties(clarity_video PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/clarity_video.dll" IMPORTED_IMPLIB "${CLARITY_VIDEO_IMPORT}")
+    elseif(APPLE)
+      set_target_properties(clarity_video PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/libclarity_video.dylib")
+    else()
+      set_target_properties(clarity_video PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/libclarity_video.so" IMPORTED_NO_SONAME TRUE)
+    endif()
+  endif()
+  target_link_libraries(${target} PRIVATE clarity_video)
+  file(GLOB CLARITY_OPENH264 "${CLARITY_UI}/lib/*openh264-*")
+  add_custom_command(TARGET ${target} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_video> ${CLARITY_OPENH264} $<TARGET_FILE_DIR:${target}>)
+  # The codec libraries the project adds go in a codecs folder beside the program.
+  file(GLOB CLARITY_CODECS "${CMAKE_SOURCE_DIR}/codecs/*")
+  if(CLARITY_CODECS)
+    add_custom_command(TARGET ${target} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:${target}>/codecs
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CLARITY_CODECS} $<TARGET_FILE_DIR:${target}>/codecs)
+  endif()
+endfunction()
+
 # The bytes of `file` as a C++ initializer in `out`: a string literal where
 # the compiler takes a long one cheaply (GCC, Clang), else a list of bytes
 # (MSVC limits string literals). Either ends with a zero byte past the file.

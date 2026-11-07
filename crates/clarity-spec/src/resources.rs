@@ -28,6 +28,9 @@ pub const PICTURE_EXTENSIONS: [&str; 7] = ["png", "jpg", "jpeg", "gif", "bmp", "
 /// the web stacks and C# read these alike.
 pub const SOUND_EXTENSIONS: [&str; 4] = ["wav", "mp3", "flac", "ogg"];
 
+/// Videos every stack plays (docs/VIDEO-PLAN.md).
+pub const VIDEO_EXTENSIONS: [&str; 1] = ["mp4"];
+
 /// A file of the resources folder that the application carries as it is,
 /// such as a picture. The renderer knows it by name; the bytes go into
 /// generated applications.
@@ -71,6 +74,8 @@ pub enum ResourceKind {
     Drawing,
     /// A sound every stack plays, which a sound part plays.
     Sound,
+    /// A video every stack plays, which a video part plays.
+    Video,
     /// Any other file, carried as it is.
     File,
 }
@@ -94,6 +99,7 @@ pub fn kinds() -> Vec<ResourceKindInfo> {
         kind(ResourceKind::Pdf, "PDF", &["pdf"]),
         kind(ResourceKind::Drawing, "Drawing", &["dxf"]),
         kind(ResourceKind::Sound, "Sound", &SOUND_EXTENSIONS),
+        kind(ResourceKind::Video, "Video", &VIDEO_EXTENSIONS),
         kind(ResourceKind::File, "Other file", &[]),
     ]
 }
@@ -116,6 +122,11 @@ pub fn is_picture(name: &str) -> bool {
 /// Whether a file name is a sound every stack can play.
 pub fn is_sound(name: &str) -> bool {
     has_extension(name, &SOUND_EXTENSIONS)
+}
+
+/// Whether a file name is a video every stack can play.
+pub fn is_video(name: &str) -> bool {
+    has_extension(name, &VIDEO_EXTENSIONS)
 }
 
 /// Whether a file name is a Markdown document.
@@ -154,6 +165,7 @@ pub fn attach(project: &mut Project, mut files: Vec<ResourceFile>) {
     let pictures: Vec<&str> = names.iter().copied().filter(|n| is_picture(n)).collect();
     let documents: Vec<&str> = markdown.keys().map(String::as_str).collect();
     let sounds: Vec<&str> = names.iter().copied().filter(|n| is_sound(n)).collect();
+    let videos: Vec<&str> = names.iter().copied().filter(|n| is_video(n)).collect();
     let mut found = Vec::new();
     for file in &project.files {
         for page in &file.pages {
@@ -161,7 +173,7 @@ pub fn attach(project: &mut Project, mut files: Vec<ResourceFile>) {
                 let kind = widget.props.kind;
                 let mut problems = Vec::new();
                 if let Some(source) = widget.props.source.as_deref() {
-                    problems.extend(source_problem(kind, source, &pictures, &documents, &sounds));
+                    problems.extend(source_problem(kind, source, &pictures, &documents, &sounds, &videos));
                 }
                 if let Some(key) = widget.props.caption.as_deref().and_then(crate::translations::key_of) {
                     problems.extend(key_problems(project, kind, key, &names));
@@ -222,12 +234,15 @@ fn named_problem(said: &str, picture: &str, pictures: &[&str]) -> Option<String>
 }
 
 /// What is wrong with the file a part names as its `source`.
-fn source_problem(kind: WidgetKind, source: &str, pictures: &[&str], documents: &[&str], sounds: &[&str]) -> Option<String> {
+fn source_problem(kind: WidgetKind, source: &str, pictures: &[&str], documents: &[&str], sounds: &[&str], videos: &[&str]) -> Option<String> {
     Some(match kind {
         WidgetKind::Sound if !is_sound(source) => format!("'{source}' is not a sound every stack can play; use a .wav, .mp3, .flac or .ogg file"),
         WidgetKind::Sound if sounds.contains(&source) => return None,
         WidgetKind::Sound if sounds.is_empty() => format!("sound '{source}' is not in the resources folder, which has no sounds yet"),
         WidgetKind::Sound => format!("sound '{source}' is not in the resources folder; it has {}", sounds.join(", ")),
+        WidgetKind::Video if !is_video(source) => format!("'{source}' is not a video every stack can play; use an .mp4 file"),
+        WidgetKind::Video if names_contain(videos, source) => return None,
+        WidgetKind::Video => format!("video '{source}' is not in the resources folder"),
         WidgetKind::Image if !is_picture(source) => format!("'{source}' {NOT_A_PICTURE}"),
         WidgetKind::Image if pictures.contains(&source) => return None,
         WidgetKind::Image if pictures.is_empty() => format!("image '{source}' is not in the resources folder, which has no pictures yet"),
@@ -302,6 +317,28 @@ pub fn plays_songs(project: &Project) -> bool {
         }
     }
     songs
+}
+
+/// Whether the project plays videos (docs/VIDEO-PLAN.md): a video part on
+/// a window, which the desktop plays through Clarity.Video, so the generator
+/// adds it.
+pub fn plays_videos(project: &Project) -> bool {
+    let mut videos = false;
+    for file in &project.files {
+        for page in &file.pages {
+            each_widget(&page.widgets, &mut |widget| videos |= widget.props.kind == WidgetKind::Video);
+        }
+    }
+    videos
+}
+
+/// Whether the program carries Clarity.Audio: it plays songs, or videos, whose sound plays through it.
+pub fn carries_audio(project: &Project) -> bool {
+    plays_songs(project) || plays_videos(project)
+}
+
+fn names_contain(names: &[&str], name: &str) -> bool {
+    names.contains(&name)
 }
 
 pub(crate) fn each_widget(widgets: &[Widget], found: &mut impl FnMut(&Widget)) {

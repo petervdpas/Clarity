@@ -224,7 +224,8 @@ fn a_resource_has_a_type_by_its_extension() {
     assert_eq!(listed[2], (ResourceKind::Pdf, "PDF".to_string(), vec!["pdf".to_string()]));
     assert_eq!(listed[3], (ResourceKind::Drawing, "Drawing".to_string(), vec!["dxf".to_string()]));
     assert_eq!(listed[4], (ResourceKind::Sound, "Sound".to_string(), vec!["wav".to_string(), "mp3".to_string(), "flac".to_string(), "ogg".to_string()]));
-    assert_eq!(listed[5], (ResourceKind::File, "Other file".to_string(), vec![]));
+    assert_eq!(listed[5], (ResourceKind::Video, "Video".to_string(), vec!["mp4".to_string()]));
+    assert_eq!(listed[6], (ResourceKind::File, "Other file".to_string(), vec![]));
 }
 
 const FIELD: &str = "module play

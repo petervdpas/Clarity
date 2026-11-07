@@ -820,6 +820,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
+| `video` | nothing | `source "file"` for a video of the resources folder; `volume 0` to `100`; `repeat`; see [Video](#video) | `end`, `fail` |
 | `sound` | nothing; it has no place in the window: no `at`, `span` or `rows` | `source "file"` for a sound of the resources folder; `volume 0` to `100`, 100 without it; `repeat`; see [Sound](#sound) | `end`, `fail` |
 | `timer` | nothing; it has no place in the window: no `at`, `span` or `rows` | `every n`, seconds between its ticks, 0.1 to 86400; see [Live graphs](#live-graphs) | `tick` |
 
@@ -1198,6 +1199,19 @@ code Player
 | `on fail: handler` | runs when a song cannot play (missing, not a sound); `problem` says why |
 
 What a sound says is read, not set. On the desktop songs play through Clarity.Audio, which Clarity adds to a program that plays them; in a browser the page plays a song of the resources, and a file of the computer's disk cannot play there (`on fail`).
+
+### Video
+
+A video part plays a video in its place in the grid (docs/VIDEO-PLAN.md): an `.mp4` of the resources (`source`) or a file from disk, told by code as a sound plays songs, and shown as large as fits, centred, on black.
+
+```clarity
+page Screen: window
+    video name film at 1,1 span 8 rows 6 source "intro.mp4" volume 80 on end: filmEnded on fail: filmFailed
+```
+
+- Code tells it `play()` (its source), `play(path)`, `pause()`, `resume()`, `seek(seconds)`, `stop()` and `volume(level)`, and reads `playing`, `paused`, `position` and `length` (whole seconds), `file` and `problem`; what it says is read, not set.
+- `on end` runs when it played to its end, `on fail` when it could not play.
+- Its pictures come from a codec the project added, the system's own decoder, or Cisco's openh264 carried beside the program; its sound plays through Clarity.Audio, and the pictures follow it.
 
 ### Custom parts
 

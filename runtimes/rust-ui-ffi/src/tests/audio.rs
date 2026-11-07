@@ -111,7 +111,7 @@ fn clarity_audios_own_table_is_taken_and_a_wrong_one_is_not() {
 }
 
 /// The field names of the struct after `start` in `source`, in order: C or Rust.
-fn fields(source: &str, start: &str) -> Vec<String> {
+pub fn fields(source: &str, start: &str) -> Vec<String> {
     let body = source.split(start).nth(1).unwrap().split('}').next().unwrap();
     body.lines()
         .map(str::trim)

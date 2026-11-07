@@ -13,6 +13,7 @@ pub mod code_colors;
 pub mod heading;
 pub mod label;
 pub mod sound;
+pub mod video;
 pub mod text_box;
 pub mod text_editor;
 pub mod timer;
@@ -545,7 +546,7 @@ macro_rules! part_element {
 pub type MakePart = fn(PartSpec, Rc<dyn PartHost>) -> Box<dyn Part>;
 
 /// The kinds Clarity.UI draws, each with the module that makes it.
-const DRAWN: [(&str, MakePart); 11] = [
+const DRAWN: [(&str, MakePart); 12] = [
     ("label", label::make),
     ("heading", heading::make),
     ("button", button::make),
@@ -556,6 +557,7 @@ const DRAWN: [(&str, MakePart); 11] = [
     ("switch", check_box::make),
     ("custom", custom::make),
     ("sound", sound::make),
+    ("video", video::make),
     ("timer", timer::make),
 ];
 

@@ -241,6 +241,15 @@ pub fn song_said(id: u64, said: super::page::SongSaid) {
     with(|web| web.host.song_said(id, said))
 }
 
+#[allow(clippy::too_many_arguments)]
+pub fn video_said(id: u64, playing: bool, paused: bool, ended: bool, failed: bool, position: f64, length: f64) {
+    with(|web| web.host.video_said(id, playing, paused, ended, failed, position, length))
+}
+
+pub fn video_frame(id: u64, width: u32, height: u32, rgba: Vec<u8>) {
+    with(|web| web.host.video_frame(id, width, height, rgba))
+}
+
 pub fn sound_ended(id: u64) {
     with(|web| web.host.sound_ended(id))
 }

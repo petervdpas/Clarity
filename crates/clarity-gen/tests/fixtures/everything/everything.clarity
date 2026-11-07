@@ -367,6 +367,7 @@ page Gallery: window
     canvas name sketch at 5,18 span 4 rows 3 bind album.cover mode paint tools pen, eraser brush 4 ink accent on change: sketched
     canvas name drawing at 9,18 span 4 rows 3 bind album.notes mode vector grid 10 snap on change: sketched
     sound name ding source "ding.wav" volume 80
+    video name clipView at 1,21 span 6 rows 4 source "clip.mp4" volume 60 on end: sampled
     timer name clock every 1 on tick: sampled
 
 page Overview: view

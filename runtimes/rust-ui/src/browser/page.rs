@@ -17,6 +17,9 @@
 //! - `songPlay` {id, data, kind, volume}: a song (mp3, flac, ogg, base64) plays in an audio
 //!   element; `songDo` {id, do, value} pauses, resumes, seeks (seconds), sets the volume or
 //!   stops it. The page says how it plays with each change (`song_said`).
+//! - `videoOpen` {id, data, kind, volume}: a video (base64) plays in a video element, sound
+//!   and all; `videoDo` {id, do, value} pauses, resumes, seeks (seconds), sets the volume or
+//!   stops it. The page sends each new picture (`video_frame`) and how it plays (`video_said`).
 //! - `choices` {choices}: the person's choices (language, theme, columns), all of them, for the page to keep.
 //! - `ended` {quit}: the program's windows closed.
 
@@ -32,6 +35,7 @@ use serde_json::{Value, json};
 use crate::files::{ChosenFile, FileFilter, FilePicker};
 use crate::overlay::Clipboard;
 use crate::parts::sound::{Music, MusicPlayer, MusicProblem, Playing, SoundOutput};
+use crate::parts::video::{Frame, VideoFrames, Videos};
 
 /// What sends the page a message.
 pub type Tell = Arc<dyn Fn(Value) + Send + Sync>;
@@ -241,6 +245,138 @@ impl MusicPlayer for PageSong {
     fn length(&self) -> Option<Duration> {
         let length = self.said().length;
         (length > 0.0 && length.is_finite()).then(|| Duration::from_secs_f64(length))
+    }
+}
+
+/// What the page said of a video: how it plays, and its last picture.
+#[derive(Default)]
+pub struct VideoSaid {
+    pub playing: bool,
+    pub paused: bool,
+    pub ended: bool,
+    pub failed: bool,
+    pub position: f64,
+    pub length: f64,
+    pub frame: Option<Frame>,
+}
+
+/// The videos the page plays, by number.
+#[derive(Default)]
+pub struct PageVideoState {
+    next: u64,
+    said: BTreeMap<u64, VideoSaid>,
+}
+
+impl PageVideoState {
+    /// The page said how video `id` plays.
+    pub fn said(&mut self, id: u64, playing: bool, paused: bool, ended: bool, failed: bool, position: f64, length: f64) {
+        if let Some(kept) = self.said.get_mut(&id) {
+            (kept.playing, kept.paused, kept.ended, kept.failed, kept.position, kept.length) = (playing, paused, ended, failed, position, length);
+        }
+    }
+
+    /// The page sent video `id`'s next picture.
+    pub fn frame(&mut self, id: u64, width: u32, height: u32, rgba: Vec<u8>) {
+        if let Some(kept) = self.said.get_mut(&id)
+            && rgba.len() == width as usize * height as usize * 4
+        {
+            kept.frame = Some(Frame { width, height, rgba: std::sync::Arc::new(rgba) });
+        }
+    }
+}
+
+/// Videos through the page's video elements: in a browser the page plays them, sound and all.
+pub struct PageVideos {
+    tell: Tell,
+    state: Rc<RefCell<PageVideoState>>,
+}
+
+impl PageVideos {
+    pub fn new(tell: Tell, state: Rc<RefCell<PageVideoState>>) -> PageVideos {
+        PageVideos { tell, state }
+    }
+}
+
+impl Videos for PageVideos {
+    /// A page has no files of the computer's disk to play.
+    fn open(&self, path: &str) -> Result<Box<dyn VideoFrames>, MusicProblem> {
+        Err(MusicProblem { key: "audioNoDisk".into(), detail: path.to_string() })
+    }
+
+    fn open_bytes(&self, name: &str, bytes: Vec<u8>) -> Result<Box<dyn VideoFrames>, MusicProblem> {
+        let id = {
+            let mut state = self.state.borrow_mut();
+            state.next += 1;
+            let id = state.next;
+            state.said.insert(id, VideoSaid { playing: true, ..VideoSaid::default() });
+            id
+        };
+        let kind = name.rsplit_once('.').map(|(_, k)| k.to_lowercase()).unwrap_or_default();
+        (self.tell)(json!({ "tell": "videoOpen", "id": id, "data": base64(&bytes), "kind": kind, "volume": 1.0 }));
+        Ok(Box::new(PageVideo { id, tell: self.tell.clone(), state: self.state.clone() }))
+    }
+}
+
+/// A video part's video in the page.
+struct PageVideo {
+    id: u64,
+    tell: Tell,
+    state: Rc<RefCell<PageVideoState>>,
+}
+
+impl PageVideo {
+    fn act(&self, act: &str, value: f64) {
+        (self.tell)(json!({ "tell": "videoDo", "id": self.id, "do": act, "value": value }));
+    }
+
+    fn with<R>(&self, read: impl FnOnce(&VideoSaid) -> R) -> Option<R> {
+        self.state.borrow().said.get(&self.id).map(read)
+    }
+}
+
+impl Drop for PageVideo {
+    fn drop(&mut self) {
+        self.act("stop", 0.0);
+        self.state.borrow_mut().said.remove(&self.id);
+    }
+}
+
+impl VideoFrames for PageVideo {
+    fn size(&self) -> (u32, u32) {
+        self.with(|s| s.frame.as_ref().map_or((0, 0), |f| (f.width, f.height))).unwrap_or_default()
+    }
+    fn length(&self) -> Duration {
+        Duration::from_secs_f64(self.with(|s| s.length).unwrap_or_default().max(0.0))
+    }
+    fn frame_length(&self) -> Duration {
+        Duration::from_millis(33)
+    }
+    fn picture_at(&self, _at: Duration) -> Option<Frame> {
+        self.with(|s| s.frame.clone()).flatten()
+    }
+    fn ended_at(&self, _at: Duration) -> bool {
+        self.with(|s| s.ended).unwrap_or(true)
+    }
+    fn problem(&self) -> Option<MusicProblem> {
+        self.with(|s| s.failed).unwrap_or_default().then(|| MusicProblem { key: "videoUndecodable".into(), detail: "the browser cannot play this video".into() })
+    }
+    fn plays_itself(&self) -> bool {
+        true
+    }
+    fn position(&self) -> Option<Duration> {
+        self.with(|s| Duration::from_secs_f64(s.position.max(0.0)))
+    }
+    fn pause(&self) {
+        self.act("pause", 0.0);
+    }
+    fn resume(&self) {
+        self.act("resume", 0.0);
+    }
+    fn seek(&self, at: Duration) {
+        self.act("seek", at.as_secs_f64());
+    }
+    fn set_volume(&self, volume: f32) {
+        self.act("volume", volume as f64);
     }
 }
 

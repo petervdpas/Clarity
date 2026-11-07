@@ -232,6 +232,15 @@ struct ClarityAudioApi;
  * The table must live as long as the program. */
 CLARITY_API ClarityStatus clarity_ui_use_audio(const struct ClarityAudioApi *api);
 
+/* Clarity.Video's table (clarity_video.h). */
+struct ClarityVideoApi;
+
+/* Video parts play through Clarity.Video from now on, on this thread and the
+ * desktop's: call it before clarity_desktop_run with clarity_video_api().
+ * NULL leaves video parts saying Clarity.Video is missing. The table must live
+ * as long as the program. */
+CLARITY_API ClarityStatus clarity_ui_use_video(const struct ClarityVideoApi *api);
+
 /* ------------------------------------------------------------------------
  * The desktop
  * ------------------------------------------------------------------------ */

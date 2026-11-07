@@ -4,6 +4,7 @@
 //! is linked once); tests/c_header.rs builds a C program against the header.
 
 mod audio;
+mod video;
 mod basics;
 mod custom;
 mod program;

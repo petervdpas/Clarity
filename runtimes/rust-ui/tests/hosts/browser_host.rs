@@ -334,6 +334,38 @@ fn songs_play_through_the_page() {
     assert_eq!(tells(&said, "songDo").last().map(|t| t["do"].clone()), Some(json!("stop")));
 }
 
+/// Videos play in the page's video elements, sound and all: the page is told
+/// to play, pause and seek, and the pictures and times it sends are what the
+/// video part shows and follows.
+#[test]
+fn videos_play_through_the_page() {
+    use clarity_ui::browser::page::{PageVideoState, PageVideos};
+    use clarity_ui::parts::video::Videos;
+    use std::time::Duration;
+    let (tell, said) = told();
+    let state: std::rc::Rc<std::cell::RefCell<PageVideoState>> = Default::default();
+    let videos = PageVideos::new(tell, state.clone());
+    let video = videos.open_bytes("intro.mp4", vec![0, 0, 0, 24]).unwrap();
+    assert_eq!(tells(&said, "videoOpen"), [json!({ "tell": "videoOpen", "id": 1, "data": "AAAAGA==", "kind": "mp4", "volume": 1.0 })]);
+    assert!(video.plays_itself());
+    assert!(video.picture_at(Duration::ZERO).is_none());
+    state.borrow_mut().frame(1, 2, 1, vec![9; 8]);
+    state.borrow_mut().said(1, true, false, false, false, 1.25, 30.0);
+    let frame = video.picture_at(Duration::ZERO).unwrap();
+    assert_eq!((2, 1, 9), (frame.width, frame.height, frame.rgba[0]));
+    assert_eq!(Some(Duration::from_millis(1250)), video.position());
+    assert_eq!(Duration::from_secs(30), video.length());
+    assert!(!video.ended_at(Duration::ZERO));
+    video.pause();
+    video.seek(Duration::from_secs(10));
+    let done: Vec<(Value, Value)> = tells(&said, "videoDo").iter().map(|t| (t["do"].clone(), t["value"].clone())).collect();
+    assert_eq!(done, [(json!("pause"), json!(0.0)), (json!("seek"), json!(10.0))]);
+    // A browser plays no files of the computer's disk.
+    assert_eq!("audioNoDisk", videos.open("/videos/holiday.mp4").err().unwrap().key);
+    drop(video);
+    assert_eq!(tells(&said, "videoDo").last().map(|t| t["do"].clone()), Some(json!("stop")));
+}
+
 /// files.json without a size (the main window has none): the program
 /// starts all the same, on the page's canvas, which is the window's size.
 #[test]

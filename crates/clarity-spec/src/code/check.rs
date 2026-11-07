@@ -2114,6 +2114,11 @@ impl<'a> BodyChecker<'_, 'a> {
         {
             return self.sound_hear(part, hear, args);
         }
+        if let Some((_, Part::Widget(p))) = self.part(&part.name)
+            && p.kind == crate::widgets::WidgetKind::Video
+        {
+            return self.media_hear(part, hear, args, crate::video::hear(&hear.name), crate::video::least(&hear.name), "a video hears play, pause, resume, seek, stop or volume");
+        }
         // A canvas hears for the engine beside the screen it runs (DESIGN 5.12).
         let engine = match self.part(&part.name) {
             Some((_, Part::Widget(p))) => p.runs.as_deref().and_then(|name| self.env.engine(name)),
@@ -2156,15 +2161,26 @@ impl<'a> BodyChecker<'_, 'a> {
 
     /// What code tells a sound (DESIGN 5.22): its values, and the notes of a melody written in the code.
     fn sound_hear(&mut self, part: &Ident, hear: &Ident, args: &[Expr]) {
-        let Some(params) = crate::sound::hear(&hear.name) else {
-            self.error(format!("a sound hears play, pause, resume, seek, stop, tone, melody or volume, not '{}'", hear.name), hear.span);
+        self.media_hear(part, hear, args, crate::sound::hear(&hear.name), crate::sound::least(&hear.name), "a sound hears play, pause, resume, seek, stop, tone, melody or volume");
+        if hear.name == "melody"
+            && let Some(Expr { kind: ExprKind::Str { value: notes }, span, .. }) = args.first()
+        {
+            for word in crate::sound::melody(notes, 60).1 {
+                self.error(format!("'{word}' in the melody is not a note: a note is A to G, then # or b, then an octave 0 to 8, as in C4, F#3, Bb; a rest is -"), *span);
+            }
+        }
+    }
+
+    /// What code tells a sound or a video: the values a hear takes (`params`, of which `least` are needed).
+    fn media_hear(&mut self, part: &Ident, hear: &Ident, args: &[Expr], params: Option<&[(&str, TypeInfo)]>, least: usize, hears: &str) {
+        let Some(params) = params else {
+            self.error(format!("{hears}, not '{}'", hear.name), hear.span);
             for arg in args {
                 self.expr(arg, None);
             }
             return;
         };
         let called = format!("{}.{}", part.name, hear.name);
-        let least = crate::sound::least(&hear.name);
         if args.len() < least || args.len() > params.len() {
             let n = params.len();
             let takes = if least == n { format!("{n} value{}", if n == 1 { "" } else { "s" }) } else { format!("{least} or {n} values") };
@@ -2181,13 +2197,6 @@ impl<'a> BodyChecker<'_, 'a> {
                 && !expected.accepts(&ty)
             {
                 self.error(format!("value '{name}' of {called} is {}, not {}", expected.name(), ty.name()), arg.span);
-            }
-        }
-        if hear.name == "melody"
-            && let Some(Expr { kind: ExprKind::Str { value: notes }, span, .. }) = args.first()
-        {
-            for word in crate::sound::melody(notes, 60).1 {
-                self.error(format!("'{word}' in the melody is not a note: a note is A to G, then # or b, then an octave 0 to 8, as in C4, F#3, Bb; a rest is -"), *span);
             }
         }
     }
@@ -3207,6 +3216,15 @@ impl<'a> BodyChecker<'_, 'a> {
             // A sidebar folded to its button, or filling the window.
             "collapsed" if matches!(part, Part::Sidebar(p) if p.collapsible) => value(Ty::Bool),
             "maximized" if matches!(part, Part::Sidebar(p) if p.maximizable) => value(Ty::Bool),
+            // What a video plays, read as it plays (docs/VIDEO-PLAN.md).
+            _ if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Video) && crate::video::read(property).is_some() => {
+                let ty = match crate::video::read(property) {
+                    Some(TypeInfo::Bool) => Ty::Bool,
+                    Some(TypeInfo::Integer) => Ty::Integer,
+                    _ => Ty::Text,
+                };
+                Some(Place::Value { ty, writable: Err(format!("{name}.{property} is read, not set: it is what the video plays")) })
+            }
             // What a sound plays, read as it plays (docs/AUDIO-PLAN.md).
             _ if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Sound) && crate::sound::read(property).is_some() => {
                 let ty = match crate::sound::read(property) {

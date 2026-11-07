@@ -2,7 +2,7 @@
 name = "clarity-ui"
 description = "Clarity.UI: Clarity's own UI framework, drawn with Skia, the one library behind the programs Clarity generates in every language"
 # Released on its own (tag runtimes/rust-ui/vX.Y.Z), after the clarity-runtime it names.
-version = "0.12.0"
+version = "0.13.0"
 edition.workspace = true
 license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"
@@ -21,6 +21,9 @@ desktop = ["dep:winit", "dep:glutin", "dep:glutin-winit", "dep:arboard", "dep:ro
 # Songs (mp3, flac, ogg) through Clarity.Audio: the generator turns it on for
 # a program whose sound parts play them.
 audio = ["desktop", "dep:clarity-audio"]
+# Videos through Clarity.Video, with their sound through Clarity.Audio: the
+# generator turns it on for a program with video parts.
+video = ["audio", "dep:clarity-video"]
 
 [dependencies]
 clarity-runtime = { path = "../rust", version = "0.49.0", default-features = false }
@@ -53,7 +56,9 @@ arboard = { version = "3.7", optional = true }
 # samples (tones and melodies) and plays them as they are.
 rodio = { version = "0.23", optional = true, default-features = false, features = ["playback"] }
 # Clarity.Audio, which plays songs, only with the `audio` feature.
-clarity-audio = { path = "../rust-audio", version = "0.1.0", optional = true }
+clarity-audio = { path = "../rust-audio", version = "0.2.0", optional = true }
+# Clarity.Video, which plays videos, only with the `video` feature.
+clarity-video = { path = "../rust-video", version = "0.1.0", optional = true }
 # The accessibility tree handed to the system's screen reader: AT-SPI on
 # Linux, UI Automation on Windows, the accessibility API on macOS; the
 # version made for winit 0.30.

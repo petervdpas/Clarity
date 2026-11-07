@@ -5,6 +5,9 @@
 //! the same conformance cases, and runs a generated program through
 //! `clarity_runtime::program::Program`.
 
+/// Clarity.Video, for the generated program to add the codec libraries the project names.
+#[cfg(feature = "video")]
+pub use clarity_video;
 pub mod access;
 pub mod app_files;
 pub mod browser;

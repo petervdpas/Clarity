@@ -101,6 +101,18 @@ fn with_library(toolchain: clarity_gen::Toolchain, settings: &clarity_project::S
     clarity_gen::with_clarity_ui(toolchain, settings.stack.backend, &folder)
 }
 
+/// Each program served to a browser with Clarity.UI's browser files beside
+/// its page, as the IDE writes it (`web_browser::with_library`): the one
+/// CLARITY_UI_BROWSER names, else this repository's build. A Rust web server
+/// carries them in the program, so it does not build without them.
+fn with_browser_files(mut programs: Vec<clarity_gen::Program>) -> Vec<clarity_gen::Program> {
+    if clarity_gen::web_browser::needs_library(&programs) {
+        let folder = clarity_gen::web_browser::local_folder(Some(&repo())).expect("Clarity.UI's browser files: set CLARITY_UI_BROWSER or run runtimes/rust-ui-browser/build.sh");
+        clarity_gen::web_browser::with_library(&mut programs, &folder).unwrap();
+    }
+    programs
+}
+
 /// Whether the Rust program in `dir` is drawn by Clarity.UI (its Cargo.toml names clarity-ui).
 fn on_clarity_ui(dir: &Path) -> bool {
     std::fs::read_to_string(dir.join("Cargo.toml")).is_ok_and(|t| t.contains("clarity-ui"))
@@ -134,7 +146,7 @@ pub fn warnings(said: &str) -> Vec<String> {
 pub fn build_for_run(file: &Path, project: &clarity_spec::Project, settings: &clarity_project::Settings, target: clarity_project::Target) -> (PathBuf, PathBuf) {
     let dir = clarity_project::module_dir(file);
     let built = clarity_project::build_settings(&dir, settings);
-    let programs = clarity_gen::programs(project, &built).unwrap_or_else(|e| panic!("{}: {e:?}", file.display()));
+    let programs = with_browser_files(clarity_gen::programs(project, &built).unwrap_or_else(|e| panic!("{}: {e:?}", file.display())));
     let out = clarity_project::out_dir(file, settings);
     clarity_gen::write_programs(&out, &programs, settings.stack.backend, &settings.keeps).unwrap();
     let program = programs.iter().find(|p| p.target == target).unwrap_or_else(|| panic!("{} has no {target:?} program", file.display()));
@@ -161,7 +173,7 @@ pub fn build_for_run(file: &Path, project: &clarity_spec::Project, settings: &cl
 pub fn builds_without_warnings(file: &Path, project: &clarity_spec::Project, settings: &clarity_project::Settings) {
     let dir = clarity_project::module_dir(file);
     let built = clarity_project::build_settings(&dir, settings);
-    let programs = clarity_gen::programs(project, &built).unwrap_or_else(|e| panic!("{}: {e:?}", file.display()));
+    let programs = with_browser_files(clarity_gen::programs(project, &built).unwrap_or_else(|e| panic!("{}: {e:?}", file.display())));
     let out = clarity_project::out_dir(file, settings);
     clarity_gen::write_programs(&out, &programs, settings.stack.backend, &settings.keeps).unwrap();
     let mut all = Vec::new();

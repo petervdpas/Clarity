@@ -19,7 +19,7 @@ project Shop
     filestore photos "data/photos"
 ```
 
-Only `stack` is required. Each setting appears once, except `datasource` and `filestore`. An unknown setting or value is an error that names the line and lists the words that are accepted.
+Only `stack` is required. Each setting appears once, except `datasource`, `filestore` and `codec`. An unknown setting or value is an error that names the line and lists the words that are accepted.
 
 ## The settings
 
@@ -35,6 +35,7 @@ Only `stack` is required. Each setting appears once, except `datasource` and `fi
 - `engines interpreted`: the engines written in Clarity run with Clarity's interpreter instead of compiled; without the line (or with `engines compiled`) they are compiled to WebAssembly. Both give the same answers on every stack. In Project settings it is the **Engines** choice.
 - `row height 30`: how high a row of the windows' grid is, in pixels: a whole number from 24 to 64. Without the line a row is 36 high. Inputs and buttons are a row high, and a table's rows are never higher. The design canvas, the preview and the application all lay out by it. Clarity's own fields are 30 high, so `row height 30` makes an application's fields match them. In Project settings it is the **Row height** field.
 - `filestore name "folder"`: a folder that keeps pictures and files. See [Pictures and files](data.pictures-files.md).
+- `codec name from "path"`: a codec library the project adds to its videos, its path beside the project without the system's extension (`codec vp9 from "codecs/libvp9"` reads `codecs/libvp9.so` on Linux, `.dylib` on macOS, `.dll` on Windows). See [Video](design.video.md).
 
 ## Data sources
 

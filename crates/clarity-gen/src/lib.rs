@@ -730,6 +730,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         Backend::C => c::generate(project, settings)?,
         Backend::Cpp => cpp::generate(project, settings)?,
     };
+    // The codec libraries the project adds, carried and added as the program starts (docs/VIDEO-PLAN.md).
+    if settings.stack.has(clarity_project::Target::Desktop) {
+        with_codecs(&mut files, crate::codec_libraries(project, settings)?, settings.stack.backend);
+    }
     // The package carries the app's version, as each stack's build keeps it (docs/VERSION-PLAN.md).
     if let Some(version) = &project.version {
         versioned(&mut files, version);
@@ -1113,6 +1117,91 @@ pub fn go_cgo_env(clarity_ui: Option<&std::path::Path>, os: &str) -> Vec<(&'stat
         _ => format!(" -Wl,-rpath,$ORIGIN -Wl,-rpath,{lib}"),
     };
     vec![("CGO_ENABLED", "1".into()), ("CGO_CFLAGS", format!("-I{}", folder.join("include").display())), ("CGO_LDFLAGS", format!("-L{lib}{found}"))]
+}
+
+/// The codec libraries a project with videos adds (docs/VIDEO-PLAN.md), for
+/// this system: each library's file name (`libvp9.so`) and the file carrying
+/// it in the program's `codecs` folder. The `from` of each is resolved by
+/// `clarity_project::build_settings`; a library that is not there is an error.
+pub(crate) fn codec_libraries(project: &Project, settings: &Settings) -> Result<Vec<(String, OutFile)>, Vec<String>> {
+    if settings.codecs.is_empty() || !clarity_spec::resources::plays_videos(project) {
+        return Ok(Vec::new());
+    }
+    let extension = match std::env::consts::OS {
+        "windows" => "dll",
+        "macos" => "dylib",
+        _ => "so",
+    };
+    let mut found = Vec::new();
+    let mut errors = Vec::new();
+    for codec in &settings.codecs {
+        let path = std::path::PathBuf::from(format!("{}.{extension}", codec.from));
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        match std::fs::read(&path) {
+            Ok(bytes) => found.push((name.clone(), OutFile { path: format!("codecs/{name}"), text: String::new(), bytes: Some(bytes.into()) })),
+            Err(_) => errors.push(format!("codec {}: there is no library at {} for this system", codec.name, path.display())),
+        }
+    }
+    if errors.is_empty() { Ok(found) } else { Err(errors) }
+}
+
+/// Puts `added` after the first `marker` of the file `path`; nothing when either is missing.
+fn insert_after(files: &mut [OutFile], path: &str, marker: &str, added: &str) {
+    if let Some(file) = files.iter_mut().find(|f| f.path == path)
+        && let Some(at) = file.text.find(marker)
+    {
+        file.text.insert_str(at + marker.len(), added);
+    }
+}
+
+/// The codec libraries in the program's `codecs` folder, and each stack's
+/// lines that add them to Clarity.Video as the program starts, after it is
+/// handed to Clarity.UI. C and C++ copy the folder beside the program
+/// (`clarity_use_video`), C# copies it to its output, a Go program has it
+/// beside itself, and Clarity.Video also looks in `codecs` where a program runs.
+fn with_codecs(files: &mut Vec<OutFile>, codecs: Vec<(String, OutFile)>, backend: Backend) {
+    if codecs.is_empty() {
+        return;
+    }
+    let names: Vec<String> = codecs.iter().map(|(name, _)| name.clone()).collect();
+    files.extend(codecs.into_iter().map(|(_, file)| file));
+    let quoted = |name: &str| serde_json::Value::String(name.to_string()).to_string();
+    match backend {
+        Backend::Rust => {
+            let lines: String = names.iter().map(|n| format!("    if let Err(why) = clarity_ui::clarity_video::library::add({}) {{\n        eprintln!(\"{{why}}\");\n    }}\n", quoted(n))).collect();
+            if let Some(main) = files.iter_mut().find(|f| f.path == "src/main.rs")
+                && let Some(at) = main.text.find("    clarity_ui::desktop::run(app, FILES)")
+            {
+                main.text.insert_str(at, &format!("    // The codec libraries the project adds (docs/VIDEO-PLAN.md).\n{lines}"));
+            }
+        }
+        Backend::Csharp => {
+            let lines: String = names.iter().map(|n| format!("        Clarity.Video.ClarityVideo.AddCodec({});\n", quoted(n))).collect();
+            insert_after(files, "Program.cs", "Clarity.Video.ClarityVideo.Use();\n", &lines);
+            if let Some(project) = files.iter_mut().find(|f| f.path.ends_with(".csproj") && !f.path.contains('/')) {
+                project.text = project.text.replacen("</Project>", "  <!-- The codec libraries the project adds, beside the program (docs/VIDEO-PLAN.md). -->\n  <ItemGroup>\n    <None Include=\"codecs/**\" CopyToOutputDirectory=\"PreserveNewest\" />\n  </ItemGroup>\n</Project>", 1);
+            }
+        }
+        Backend::Go => {
+            let lines: String = names.iter().map(|n| format!("\tif C.add_codec(C.CString({q}), {len}) != C.CLARITY_VIDEO_OK {{\n\t\tfmt.Fprintln(os.Stderr, \"the codec library {n} could not be added\")\n\t}}\n", q = quoted(n), len = n.len())).collect();
+            insert_after(files, "video.go", "#include \"clarity_ui.h\"\n", "\nstatic int add_codec(const char *file, size_t len) { return clarity_video_api()->add_codec(file, len); }\n");
+            if let Some(video) = files.iter_mut().find(|f| f.path == "video.go")
+                && let Some(at) = video.text.rfind("}\n")
+            {
+                video.text.insert_str(at, &format!("\t// The codec libraries the project adds (docs/VIDEO-PLAN.md).\n{lines}"));
+            }
+        }
+        Backend::C | Backend::Cpp => {
+            let (main, error) = if backend == Backend::C { ("src/main.c", "fputs(\"the codec library NAME could not be added\\n\", stderr);") } else { ("src/main.cpp", "std::cerr << \"the codec library NAME could not be added\\n\";") };
+            let lines: String = names.iter().map(|n| format!("    if (clarity_video_api()->add_codec({}, {}) != CLARITY_VIDEO_OK) {}\n", quoted(n), n.len(), error.replace("NAME", n))).collect();
+            if let Some(file) = files.iter_mut().find(|f| f.path == main)
+                && let Some(at) = file.text.find("clarity_ui_use_video(clarity_video_api())")
+                && let Some(end) = file.text[at..].find('\n')
+            {
+                file.text.insert_str(at + end + 1, &format!("    // The codec libraries the project adds (docs/VIDEO-PLAN.md).\n{lines}"));
+            }
+        }
+    }
 }
 
 /// Whether the windowed build of `stack` (not its command-line program)

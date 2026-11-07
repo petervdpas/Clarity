@@ -17,6 +17,8 @@
 //   compose {text, start, end}          paste {text}
 //   file    {name, bytes}               sound-ended {id}
 //   song-said {id, playing, paused, ended, position, length}
+//   video-said {id, playing, paused, ended, failed, position, length}
+//   video-frame {id, width, height, pixels}
 //   step    {id, step}                  shot {id}
 //   reload  {id, files, choices}        layout {id}
 //   access  {on}                        act {node, action, value}
@@ -257,6 +259,17 @@ function clarityUiWorker(scope) {
     compose: (m) => withText(m.text, (at) => ui._clarity_ui_compose(at, m.start == null ? -1 : m.start, m.end == null ? -1 : m.end)),
     paste: (m) => withText(m.text, (at) => ui._clarity_ui_pasted(at)),
     "sound-ended": (m) => ui._clarity_ui_sound_ended(m.id),
+    "video-said": (m) => ui._clarity_ui_video_said(m.id, m.playing ? 1 : 0, m.paused ? 1 : 0, m.ended ? 1 : 0, m.failed ? 1 : 0, m.position || 0, m.length || 0),
+    "video-frame": (m) => {
+      const bytes = new Uint8Array(m.pixels);
+      const at = ui._malloc(Math.max(bytes.length, 1));
+      ui.HEAPU8.set(bytes, at);
+      try {
+        ui._clarity_ui_video_frame(m.id, m.width, m.height, at, bytes.length);
+      } finally {
+        ui._free(at);
+      }
+    },
     "song-said": (m) => ui._clarity_ui_song_said(m.id, m.playing ? 1 : 0, m.paused ? 1 : 0, m.ended ? 1 : 0, m.position || 0, m.length || 0),
     file: (m) => {
       const bytes = new Uint8Array(m.bytes);

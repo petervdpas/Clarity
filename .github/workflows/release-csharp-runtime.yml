@@ -1,12 +1,14 @@
 name: Release C# runtime
 
 # Push a runtimes/csharp/v* tag (e.g. `git tag runtimes/csharp/v0.72.0 && git
-# push origin runtimes/csharp/v0.72.0`) to publish the nine NuGet packages of
+# push origin runtimes/csharp/v0.72.0`) to publish the ten NuGet packages of
 # Clarity's C# runtime: Clarity.Runtime, Clarity.Runtime.Sqlite,
 # Clarity.Runtime.PostgreSql, Clarity.Runtime.MySql, Clarity.Runtime.SqlServer,
-# Clarity.Runtime.Engines, Clarity.Ui, Clarity.Ui.Server and Clarity.Audio.
-# Clarity.Audio carries the native Clarity.Audio library (runtimes/rust-audio-ffi)
-# the same way Clarity.Ui carries Clarity.UI's, built in the same jobs. Clarity.Ui.Server
+# Clarity.Runtime.Engines, Clarity.Ui, Clarity.Ui.Server, Clarity.Audio and
+# Clarity.Video. Clarity.Audio and Clarity.Video carry their native libraries
+# (runtimes/rust-audio-ffi, runtimes/rust-video-ffi) the same way Clarity.Ui
+# carries Clarity.UI's, built in the same jobs; Clarity.Video carries Cisco's
+# openh264 for each system beside its library (.github/scripts/fetch_openh264.py). Clarity.Ui.Server
 # serves the browser files (release-clarity-ui.yml) that Clarity's generator
 # puts in the application, and carries no native library. The tag must name the version in
 # runtimes/csharp/Directory.Build.props: bump that first, commit, then tag.
@@ -102,16 +104,18 @@ jobs:
 
       - name: Build the library
         shell: bash
-        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi --target ${{ matrix.target }}
+        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi --target ${{ matrix.target }}
 
       - name: Collect the libraries
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p out/ui out/audio
+          mkdir -p out/ui out/audio out/video
           file="${{ matrix.file }}"
           cp "target/${{ matrix.target }}/release/$file" out/ui/
           cp "target/${{ matrix.target }}/release/${file/clarity_ui/clarity_audio}" out/audio/
+          cp "target/${{ matrix.target }}/release/${file/clarity_ui/clarity_video}" out/video/
+          python3 .github/scripts/fetch_openh264.py ${{ matrix.rid }} out/video
           ls -lR out
 
       - name: Upload the libraries
@@ -122,7 +126,7 @@ jobs:
           if-no-files-found: error
 
   # ───────────────────────────────────────────────────────────────
-  # The nine packages, built and tested once, pushed to nuget.org.
+  # The ten packages, built and tested once, pushed to nuget.org.
   # ───────────────────────────────────────────────────────────────
   pack:
     name: Pack and publish
@@ -161,13 +165,13 @@ jobs:
         run: |
           set -euo pipefail
           for rid in linux-x64 linux-arm64 win-x64 win-arm64 osx-x64 osx-arm64; do
-            for part in Ui Audio; do
+            for part in Ui Audio Video; do
               dest="runtimes/csharp/Clarity.$part/runtimes/$rid/native"
               mkdir -p "$dest"
               cp native/native-$rid/${part,,}/* "$dest/"
             done
           done
-          find runtimes/csharp/Clarity.Ui/runtimes runtimes/csharp/Clarity.Audio/runtimes -type f | sort
+          find runtimes/csharp/Clarity.Ui/runtimes runtimes/csharp/Clarity.Audio/runtimes runtimes/csharp/Clarity.Video/runtimes -type f | sort
 
       # Building in Release makes every package (GeneratePackageOnBuild) in
       # its project's bin/Release.
@@ -186,7 +190,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#runtimes/csharp/v}"
-          for p in Clarity.Runtime Clarity.Runtime.Sqlite Clarity.Runtime.PostgreSql Clarity.Runtime.MySql Clarity.Runtime.SqlServer Clarity.Runtime.Engines Clarity.Ui Clarity.Ui.Server Clarity.Audio; do
+          for p in Clarity.Runtime Clarity.Runtime.Sqlite Clarity.Runtime.PostgreSql Clarity.Runtime.MySql Clarity.Runtime.SqlServer Clarity.Runtime.Engines Clarity.Ui Clarity.Ui.Server Clarity.Audio Clarity.Video; do
             nupkg="runtimes/csharp/$p/bin/Release/$p.$version.nupkg"
             test -f "$nupkg" || { echo "::error::$nupkg was not made"; exit 1; }
             mkdir -p packages
@@ -203,7 +207,10 @@ jobs:
             unzip -l "$ui" "$entry" > /dev/null || { echo "::error::Clarity.Ui lacks $entry"; exit 1; }
             audio="packages/Clarity.Audio.$version.nupkg"
             unzip -l "$audio" "${entry/clarity_ui/clarity_audio}" > /dev/null || { echo "::error::Clarity.Audio lacks ${entry/clarity_ui/clarity_audio}"; exit 1; }
+            video="packages/Clarity.Video.$version.nupkg"
+            unzip -l "$video" "${entry/clarity_ui/clarity_video}" > /dev/null || { echo "::error::Clarity.Video lacks ${entry/clarity_ui/clarity_video}"; exit 1; }
           done
+          unzip -l "packages/Clarity.Video.$version.nupkg" | grep -q openh264 || { echo "::error::Clarity.Video carries no openh264"; exit 1; }
           # The server draws nothing: no native library, and no package that brings one.
           server="packages/Clarity.Ui.Server.$version.nupkg"
           if unzip -l "$server" | grep -q clarity_ui; then echo "::error::Clarity.Ui.Server carries the native library"; exit 1; fi

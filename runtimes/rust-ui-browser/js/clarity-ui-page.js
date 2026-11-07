@@ -548,6 +548,80 @@
       }
     }
 
+    // Videos through video elements, sound and all: each new picture is drawn
+    // on a canvas of its own (at most 1280 wide) and its pixels go to the
+    // worker, which draws them in the video part; how it plays goes with it.
+    const videos = new Map();
+    const videoTypes = { mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm" };
+    function endVideo(id) {
+      const video = videos.get(id);
+      if (!video) return;
+      video.stopped = true;
+      video.element.pause();
+      video.element.removeAttribute("src");
+      URL.revokeObjectURL(video.url);
+      videos.delete(id);
+    }
+    function videoOpen(tell) {
+      endVideo(tell.id);
+      const url = URL.createObjectURL(new Blob([bytesOf(tell.data)], { type: videoTypes[tell.kind] || "video/mp4" }));
+      const element = document.createElement("video");
+      element.src = url;
+      element.playsInline = true;
+      element.volume = Math.max(0, Math.min(1, tell.volume));
+      const picture = document.createElement("canvas");
+      const video = { element, url, picture, held: false, failed: false, stopped: false };
+      videos.set(tell.id, video);
+      const say = () => {
+        const length = isFinite(element.duration) ? element.duration : 0;
+        send({ type: "video-said", id: tell.id, playing: !video.held && !video.failed && !element.ended, paused: video.held && !element.ended, ended: element.ended, failed: video.failed, position: element.currentTime || 0, length });
+      };
+      const draw = () => {
+        if (video.stopped || !element.videoWidth) return;
+        const scale = Math.min(1, 1280 / element.videoWidth);
+        const width = Math.max(1, Math.round(element.videoWidth * scale));
+        const height = Math.max(1, Math.round(element.videoHeight * scale));
+        if (picture.width !== width || picture.height !== height) Object.assign(picture, { width, height });
+        const context = picture.getContext("2d", { willReadFrequently: true });
+        context.drawImage(element, 0, 0, width, height);
+        const pixels = context.getImageData(0, 0, width, height).data.buffer;
+        send({ type: "video-frame", id: tell.id, width, height, pixels }, [pixels]);
+        say();
+      };
+      const next = () => {
+        if (video.stopped) return;
+        if (element.requestVideoFrameCallback) element.requestVideoFrameCallback(() => (draw(), next()));
+        else requestAnimationFrame(() => (draw(), next()));
+      };
+      for (const event of ["play", "pause", "durationchange", "ended", "seeked"]) element.addEventListener(event, say);
+      element.addEventListener("seeked", draw);
+      element.addEventListener("loadeddata", draw);
+      element.addEventListener("error", () => {
+        video.failed = true;
+        say();
+      });
+      element.play().catch(() => say());
+      next();
+    }
+    function videoDo(tell) {
+      const video = videos.get(tell.id);
+      if (!video) return;
+      const element = video.element;
+      if (tell.do === "pause") {
+        video.held = true;
+        element.pause();
+      } else if (tell.do === "resume") {
+        video.held = false;
+        element.play().catch(() => {});
+      } else if (tell.do === "seek") {
+        element.currentTime = Math.max(0, tell.value);
+      } else if (tell.do === "volume") {
+        element.volume = Math.max(0, Math.min(1, tell.value));
+      } else if (tell.do === "stop") {
+        endVideo(tell.id);
+      }
+    }
+
     // A file shown in a tab has its type (the host sends only kinds that run
     // nothing); one without is downloaded, never shown in this page's origin.
     function save(name, base64, open, type) {
@@ -600,6 +674,8 @@
       play,
       songPlay,
       songDo,
+      videoOpen,
+      videoDo,
       stop: (t) => {
         const source = playing.get(t.id);
         if (source) source.stop();
@@ -861,6 +937,7 @@
       stop: () => {
         stopped = true;
         for (const id of [...songs.keys()]) endSong(id);
+        for (const id of [...videos.keys()]) endVideo(id);
         if (worker) worker.terminate();
         if (watching) watching.disconnect();
         window.removeEventListener("resize", resized);

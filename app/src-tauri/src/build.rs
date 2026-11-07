@@ -459,7 +459,22 @@ fn with_library(app: &AppHandle, generated: &Generated) -> Result<clarity_gen::T
 /// the one Clarity carries, else fetched now into the cache folder.
 pub(crate) fn library_folder(app: &AppHandle) -> Result<PathBuf, String> {
     let library = clarity_gen::clarity_ui::library();
-    clarity_gen::clarity_ui::provide(library, clarity_gen::clarity_ui::RELEASES, &download, &|line| send_line(app, line))
+    let folder = clarity_gen::clarity_ui::provide(library, clarity_gen::clarity_ui::RELEASES, &download, &|line| send_line(app, line))?;
+    keep_openh264(&folder);
+    Ok(folder)
+}
+
+/// Makes sure the library's folder holds Cisco's openh264, which every video
+/// app carries (docs/VIDEO-PLAN.md): in the background, never holding a build
+/// up, and quietly offline. A folder Clarity carries already has it; one
+/// fetched before it did, or Clarity's own repository build, gets it from Cisco.
+fn keep_openh264(folder: &std::path::Path) {
+    let folder = folder.to_path_buf();
+    std::thread::spawn(move || {
+        if let Err(why) = clarity_gen::clarity_ui::ensure_openh264(&folder, std::env::consts::OS, std::env::consts::ARCH, &download) {
+            eprintln!("openh264 for video apps: {why}");
+        }
+    });
 }
 
 /// The folder of Clarity.UI's browser files for a web program: the one

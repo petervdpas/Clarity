@@ -33,6 +33,8 @@ pub mod input;
 pub mod music;
 pub mod sound;
 pub mod theme_events;
+#[cfg(feature = "video")]
+pub mod videos;
 pub mod window_system;
 
 use std::cell::RefCell;
@@ -136,6 +138,8 @@ pub fn prepare() -> Arc<SystemFilePicker> {
     crate::parts::sound::set_output(Rc::new(self::sound::Speakers::default()));
     #[cfg(feature = "audio")]
     crate::parts::sound::set_music(Some(Rc::new(self::music::ClarityAudio::default())));
+    #[cfg(feature = "video")]
+    crate::parts::video::set_videos(Some(Rc::new(self::videos::ClarityVideo)));
     desktop_files()
 }
 

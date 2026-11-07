@@ -19,11 +19,15 @@ pub fn native_parts(project: &Project) -> Vec<&PartDecl> {
 /// (docs/AUDIO-PLAN.md): lower case, so no declared part has it.
 pub(crate) const SOUND_KIND: &str = "sound";
 
+/// The kind under which a video part keeps what code reads of it (docs/VIDEO-PLAN.md).
+pub(crate) const VIDEO_KIND: &str = "video";
+
 /// What a part keeps in its values for code to read, as the generators
 /// carry it: a custom part's kind and the values on its line, or a sound's.
 pub(crate) fn kept_of(props: &clarity_spec::model::WidgetProps) -> Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)> {
     match props.kind {
         clarity_spec::widgets::WidgetKind::Sound => Some((SOUND_KIND.to_string(), Default::default())),
+        clarity_spec::widgets::WidgetKind::Video => Some((VIDEO_KIND.to_string(), Default::default())),
         _ => props.part.clone().map(|kind| (kind, props.values.clone())),
     }
 }
@@ -32,6 +36,9 @@ pub(crate) fn kept_of(props: &clarity_spec::model::WidgetProps) -> Option<(Strin
 pub(crate) fn keeps(project: &Project, kind: &str, property: &str) -> bool {
     if kind == SOUND_KIND {
         return clarity_spec::sound::read(property).is_some();
+    }
+    if kind == VIDEO_KIND {
+        return clarity_spec::video::read(property).is_some();
     }
     declaration(project, kind).is_some_and(|d| d.properties.iter().any(|p| p.name.name == property))
 }
@@ -49,6 +56,9 @@ pub(crate) fn fallback_json(project: &Project, kind: &str, written: &std::collec
     use clarity_spec::model::Literal;
     if kind == SOUND_KIND {
         return clarity_spec::sound::read_fallback(property).to_string();
+    }
+    if kind == VIDEO_KIND {
+        return clarity_spec::video::read_fallback(property).to_string();
     }
     let Some(declared) = declaration(project, kind).and_then(|d| d.properties.iter().find(|p| p.name.name == property)) else {
         return "null".into();

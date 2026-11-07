@@ -105,6 +105,19 @@ mod entry {
         web::song_said(id as u64, clarity_ui::browser::page::SongSaid { playing: playing != 0, paused: paused != 0, ended: ended != 0, position, length });
     }
 
+    /// How the page's video `id` plays: playing, paused, ended and failed as 0 or 1, seconds played and its length.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn clarity_ui_video_said(id: f64, playing: i32, paused: i32, ended: i32, failed: i32, position: f64, length: f64) {
+        web::video_said(id as u64, playing != 0, paused != 0, ended != 0, failed != 0, position, length);
+    }
+
+    /// Video `id`'s next picture: `len` bytes of RGBA at `bytes`, `width` by `height`.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn clarity_ui_video_frame(id: f64, width: i32, height: i32, bytes: *const u8, len: usize) {
+        let rgba = if bytes.is_null() { Vec::new() } else { unsafe { std::slice::from_raw_parts(bytes, len) }.to_vec() };
+        web::video_frame(id as u64, width.max(0) as u32, height.max(0) as u32, rgba);
+    }
+
     #[unsafe(no_mangle)]
     pub extern "C" fn clarity_ui_sound_ended(id: f64) {
         web::sound_ended(id as u64);

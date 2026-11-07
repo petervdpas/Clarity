@@ -19,6 +19,8 @@ const EXPORTED: &[&str] = &[
     "_clarity_ui_pasted",
     "_clarity_ui_sound_ended",
     "_clarity_ui_song_said",
+    "_clarity_ui_video_said",
+    "_clarity_ui_video_frame",
     "_clarity_ui_file_chosen",
     "_clarity_ui_answered",
     "_clarity_ui_frame",

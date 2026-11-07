@@ -11,4 +11,5 @@
   <Project Path="Clarity.Ui.Server/Clarity.Ui.Server.csproj" />
   <Project Path="Clarity.Ui.Server.Tests/Clarity.Ui.Server.Tests.csproj" />
   <Project Path="Clarity.Ui/Clarity.Ui.csproj" />
+  <Project Path="Clarity.Video/Clarity.Video.csproj" />
 </Solution>

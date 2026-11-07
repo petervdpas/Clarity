@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.34
+
+- Colors `video`, the part that plays a video.
+
 ## 0.1.33
 
 - Colors `end` and `fail`, the events of a sound that plays songs.

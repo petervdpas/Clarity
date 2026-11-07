@@ -57,6 +57,7 @@ fn shop() -> Settings {
         currency: Some("EUR".into()),
         themes: Vec::new(),
         filestores: Vec::new(),
+        codecs: Vec::new(),
         out: "out".into(),
         keeps: Vec::new(),
         keys_editable: false,
@@ -146,7 +147,7 @@ fn names_the_expected_values_for_an_unknown_one() {
 #[test]
 fn refuses_unknown_settings_and_a_wrong_shape() {
     let err = parse(&SHOP.replace("    stack", "    frontend svelte\n    stack")).unwrap_err();
-    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, icon, stack, output, language, currency, theme, keys, engines, port, row height, datasource and filestore");
+    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, icon, stack, output, language, currency, theme, keys, engines, port, row height, datasource, filestore and codec");
     assert_eq!(parse("module shop\n").unwrap_err(), "line 1: a project file starts with 'project Name'");
     assert_eq!(
         parse("project Shop\n    datasource main sqlite \"x.db\"\n").unwrap_err(),
@@ -860,4 +861,16 @@ fn the_project_names_its_icon() {
     assert!(!off.contains("icon"), "{off}");
     assert_eq!(parse(&format!("{SHOP}    icon app\n")).unwrap_err(), "line 11: write 'icon' and the picture among the resources in quotes, like: icon \"app.png\"");
     assert!(parse(&format!("{SHOP}    icon \"a.png\"\n    icon \"b.png\"\n")).unwrap_err().contains("set twice"));
+}
+
+/// A codec library the project adds to Clarity.Video, read and written back.
+#[test]
+fn a_codec_library_is_a_line_of_the_project_file() {
+    let text = "project Films\n    stack go desktop\n    codec vp9 from \"codecs/libvp9\"\n";
+    let settings = clarity_project::parse(text).unwrap();
+    assert_eq!(vec![clarity_project::CodecLibrary { name: "vp9".into(), from: "codecs/libvp9".into() }], settings.codecs);
+    let written = clarity_project::write(None, &settings).unwrap();
+    assert!(written.contains("    codec vp9 from \"codecs/libvp9\"\n"), "{written}");
+    assert!(clarity_project::parse("project Films\n    stack go desktop\n    codec vp9 \"codecs/libvp9\"\n").unwrap_err().contains("codec vp9 from"));
+    assert!(clarity_project::parse("project Films\n    stack go desktop\n    codec vp9 from \"a\"\n    codec vp9 from \"b\"\n").unwrap_err().contains("named twice"));
 }

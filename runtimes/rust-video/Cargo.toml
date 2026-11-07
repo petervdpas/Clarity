@@ -1,0 +1,53 @@
+[package]
+name = "clarity-video"
+description = "Clarity.Video: plays video for the programs Clarity generates, with openh264 as its base codec and codecs a project adds"
+# Released on its own (tag runtimes/rust-video/vX.Y.Z).
+version = "0.1.0"
+edition.workspace = true
+license = "MIT"
+repository = "https://github.com/petervdpas/Clarity"
+homepage = "https://github.com/petervdpas/Clarity"
+readme = "README.md"
+keywords = ["clarity", "video", "h264", "player"]
+categories = ["multimedia::video"]
+include = ["src/**", "README.md", "LICENSE"]
+
+[dependencies]
+# H.264 through Cisco's prebuilt openh264, loaded at run time and checked
+# against its known hashes: Cisco's binary keeps the royalties covered, a build
+# from source would not (user's choice, 2026-11-07).
+openh264 = { version = "0.9", default-features = false, features = ["libloading"] }
+# Reading MP4 files: the tracks, their samples and times (user's choice, 2026-11-07).
+mp4 = "0.14"
+# Codec libraries a project adds, and on Linux GStreamer when installed, are
+# loaded at run time (user's choice, 2026-11-07): nothing of them is needed to
+# build, and Clarity.Video loads where they are missing.
+libloading = "0.8"
+
+[dev-dependencies]
+# The tests fetch Cisco's binary into Clarity's cache (bzip2-compressed, over HTTPS).
+bzip2 = "0.6"
+ureq = "3"
+# The test video is made with openh264's encoder and written with mp4's writer.
+openh264 = { version = "0.9", default-features = false, features = ["libloading"] }
+mp4 = "0.14"
+
+
+# Where Clarity.Video's own library lies (dladdr), so it finds the openh264
+# carried beside it on Linux and macOS.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# Windows: Media Foundation's Source Reader reads and decodes the file itself;
+# part of every Windows, H.264 included (user's choice, 2026-11-07).
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_System_LibraryLoader"] }
+
+# macOS: AVFoundation's asset reader, part of every macOS (user's choice, 2026-11-07).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSArray", "NSDictionary", "NSValue", "NSError", "NSGeometry"] }
+objc2-av-foundation = { version = "0.3", features = ["AVAsset", "AVAssetReader", "AVAssetReaderOutput", "AVAssetTrack", "AVMediaFormat", "AVTime", "objc2-core-media"] }
+objc2-core-media = { version = "0.3", features = ["CMSampleBuffer", "CMTime", "CMTimeRange", "objc2-core-video"] }
+objc2-core-video = { version = "0.3", features = ["CVPixelBuffer", "CVImageBuffer", "CVBuffer", "CVReturn", "CVBase"] }
+objc2-core-foundation = { version = "0.3", features = ["CFString", "CFCGTypes"] }

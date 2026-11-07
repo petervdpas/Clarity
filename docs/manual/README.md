@@ -20,6 +20,7 @@ How to make applications with Clarity, one topic per page. Start with [What Clar
 - [The app and its frame](design.frame.md): The `app` block: the main window, the frame every window shares (menu, toolbar, ribbon, sidebars, footer), keys, and the built-in click targets.
 - [Custom parts](design.custom-parts.md): How to put a part on a window that an outside library draws, such as a game scene drawn with Bevy, written in your project's own language.
 - [Sound](design.sound.md): How a window plays sound files, tones and melodies with the sound part, on every stack.
+- [Video](design.video.md): How a window plays a video with the video part, on every stack.
 - [Design as text](design.text.md): The text panel of the designer: a window as Clarity text, with the canvas following what you type, and the code behind next to it.
 
 ## Writing Clarity code

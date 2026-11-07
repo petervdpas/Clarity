@@ -89,6 +89,10 @@ pub enum WidgetKind {
     /// Sound files of the resources, tones and melodies, which code tells
     /// it to play; it shows nothing and has no place in the grid (DESIGN 5.22).
     Sound,
+    /// Plays a video, a file of the resources or one from disk, which code
+    /// tells to play, pause and seek; it shows the pictures in its place in
+    /// the grid (docs/VIDEO-PLAN.md).
+    Video,
     /// Runs its `tick` handler every so many seconds while its window is
     /// open; it shows nothing and has no place in the grid (DESIGN 5.26).
     Timer,
@@ -1072,6 +1076,21 @@ const ENTRIES: &[Entry] = &[
         properties: &[WidgetProperty::Source, WidgetProperty::Volume, WidgetProperty::Repeat],
     },
     Entry {
+        kind: WidgetKind::Video,
+        keyword: "video",
+        name: "Video",
+        category: Category::Media,
+        size: (8, 6),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[Event::End, Event::Fail],
+        properties: &[WidgetProperty::Source, WidgetProperty::Volume, WidgetProperty::Repeat],
+    },
+    Entry {
         kind: WidgetKind::Timer,
         keyword: "timer",
         name: "Timer",
@@ -1716,6 +1735,15 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(source) = &props.source {
         parts.push(format!("source {}", quote(source)));
+    }
+    // A video's volume and repeat, as a sound's (docs/VIDEO-PLAN.md).
+    if props.kind == WidgetKind::Video {
+        if let Some(volume) = props.volume {
+            parts.push(format!("volume {volume}"));
+        }
+        if props.repeat {
+            parts.push("repeat".to_string());
+        }
     }
     if let Some(target) = props.for_part.as_ref().filter(|_| props.kind != WidgetKind::Popover) {
         parts.push(format!("for {target}"));

@@ -21,7 +21,7 @@ fn every_example_is_here() {
     assert_eq!(found, EXAMPLES, "an example without a build test here, or a test without its example");
 }
 
-const EXAMPLES: [&str; 17] = ["calculator", "dial", "dice", "invaders", "kitchen", "ledger", "modelling", "mp3player", "noughts", "orbs", "pills", "records", "shop", "stock", "todo", "walker", "waves"];
+const EXAMPLES: [&str; 18] = ["calculator", "dial", "dice", "invaders", "kitchen", "ledger", "modelling", "mp3player", "noughts", "orbs", "pills", "records", "shop", "stock", "todo", "videoplayer", "walker", "waves"];
 
 #[test]
 #[ignore = "builds the calculator example (go desktop); run with --ignored, one at a time"]
@@ -123,4 +123,10 @@ fn the_walker_example_builds_without_warnings() {
 #[ignore = "builds the waves example (go desktop); run with --ignored, one at a time"]
 fn the_waves_example_builds_without_warnings() {
     builds_without_warnings("waves");
+}
+
+#[test]
+#[ignore = "builds the videoplayer example (go desktop); run with --ignored, one at a time"]
+fn the_videoplayer_example_builds_without_warnings() {
+    builds_without_warnings("videoplayer");
 }

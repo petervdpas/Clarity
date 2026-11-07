@@ -120,6 +120,17 @@ pub struct FileStore {
     pub location: String,
 }
 
+/// A codec library the project adds (docs/VIDEO-PLAN.md): `codec vp9 from
+/// "codecs/libvp9"`, the library's path relative to the project's folder
+/// without the system's extension (.so, .dylib, .dll); Clarity carries it
+/// beside the program and Clarity.Video loads it as the program starts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct CodecLibrary {
+    pub name: String,
+    pub from: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct DataSource {
@@ -188,6 +199,9 @@ pub struct Settings {
     /// The file stores of image fields kept as files, by name.
     #[serde(default)]
     pub filestores: Vec<FileStore>,
+    /// Codec libraries the project adds to Clarity.Video (docs/VIDEO-PLAN.md).
+    #[serde(default)]
+    pub codecs: Vec<CodecLibrary>,
     /// Where the application is generated and built: a folder relative to
     /// the project's folder, or an absolute one.
     pub out: String,
@@ -358,6 +372,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
         currency: None,
         themes: Vec::new(),
         filestores: Vec::new(),
+        codecs: Vec::new(),
         out: DEFAULT_OUT.to_string(),
         keeps: Vec::new(),
         keys_editable: false,
@@ -1048,6 +1063,12 @@ pub fn build_settings(dir: &Path, settings: &Settings) -> Settings {
         let path = Path::new(&store.location);
         let joined = if path.is_absolute() { path.to_path_buf() } else { dir.join(path) };
         store.location = slashed(&std::path::absolute(&joined).unwrap_or(joined));
+    }
+    // A codec library is found beside the project, as written.
+    for codec in built.codecs.iter_mut() {
+        let path = Path::new(&codec.from);
+        let joined = if path.is_absolute() { path.to_path_buf() } else { dir.join(path) };
+        codec.from = slashed(&std::path::absolute(&joined).unwrap_or(joined));
     }
     built
 }

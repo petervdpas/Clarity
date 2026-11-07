@@ -457,3 +457,38 @@ fn the_repository_s_browser_files_serve_as_the_carried_ones() {
     assert_eq!(repository_browser(&repo), Some(folder));
     std::fs::remove_dir_all(&repo).unwrap();
 }
+
+/// The openh264 file Clarity puts beside a video program is the one the release fetches for that system.
+#[test]
+fn clarity_names_ciscos_openh264_as_the_release_keeps_it() {
+    let known = include_str!("../../../runtimes/rust-video/openh264.sha256");
+    for (os, arch) in [("linux", "x86_64"), ("linux", "aarch64"), ("macos", "x86_64"), ("macos", "aarch64"), ("windows", "x86_64"), ("windows", "aarch64")] {
+        let name = clarity_gen::clarity_ui::openh264_file(os, arch).unwrap();
+        assert!(known.lines().any(|l| l.split_whitespace().nth(1) == Some(name)), "{name}");
+    }
+    assert_eq!(None, clarity_gen::clarity_ui::openh264_file("freebsd", "x86_64"));
+}
+
+/// The folder Clarity builds with gets Cisco's openh264 when it lacks it, checked; never a binary Clarity does not know.
+#[test]
+fn clarity_puts_ciscos_openh264_in_the_library_folder() {
+    let folder = std::env::temp_dir().join(format!("clarity-openh264-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&folder);
+    // A file that is no openh264 is fetched over, and a fetch that brings a wrong binary is refused.
+    std::fs::create_dir_all(folder.join("lib")).unwrap();
+    std::fs::write(folder.join("lib/libopenh264-2.6.0-linux64.8.so"), b"not cisco's").unwrap();
+    let packed = |bytes: &[u8]| {
+        use std::io::Write;
+        let mut packer = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::fast());
+        packer.write_all(bytes).unwrap();
+        packer.finish().unwrap()
+    };
+    let wrong = clarity_gen::clarity_ui::ensure_openh264(&folder, "linux", "x86_64", &|url| {
+        assert_eq!("https://ciscobinary.openh264.org/libopenh264-2.6.0-linux64.8.so.bz2", url);
+        Ok(packed(b"something else"))
+    });
+    assert!(wrong.unwrap_err().contains("not the one Clarity knows"));
+    assert!(clarity_gen::clarity_ui::ensure_openh264(&folder, "linux", "x86_64", &|_| Err("offline".into())).unwrap_err().contains("offline"));
+    assert_eq!(Ok(None), clarity_gen::clarity_ui::ensure_openh264(&folder, "freebsd", "x86_64", &|_| Err("asked".into())));
+    let _ = std::fs::remove_dir_all(&folder);
+}

@@ -191,6 +191,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let mut themes: Option<Vec<String>> = None;
     let mut datasources: Vec<DataSource> = Vec::new();
     let mut filestores: Vec<FileStore> = Vec::new();
+    let mut codecs: Vec<crate::CodecLibrary> = Vec::new();
     let setting_indent = entries.get(1).map(|e| e.indent).unwrap_or(4);
     for entry in &entries[1..] {
         let line = entry.line;
@@ -477,10 +478,23 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                 let location = string(line, Some(location), "the folder of the file store")?;
                 filestores.push(FileStore { name: name.to_string(), location });
             }
+            "codec" => {
+                let (Some(name), Some(from), Some(path), None) = (a.first().and_then(|t| word(t)), a.get(1), a.get(2), a.get(3)) else {
+                    return Err(format!("line {line}: write the codec's name and its library, like: codec vp9 from \"codecs/libvp9\""));
+                };
+                if from.text != "from" {
+                    return Err(format!("line {line}: write the codec's name and its library, like: codec vp9 from \"codecs/libvp9\""));
+                }
+                let from = string(line, Some(path), "the codec library's path")?;
+                if codecs.iter().any(|c: &crate::CodecLibrary| c.name == name) {
+                    return Err(format!("line {line}: codec {name} is named twice"));
+                }
+                codecs.push(crate::CodecLibrary { name: name.to_string(), from });
+            }
             "auth" => return Err(format!("line {line}: 'auth' belongs under a datasource line, indented")),
             other => {
                 return Err(format!(
-                    "line {line}: unknown setting '{other}'; the settings are title, icon, stack, output, language, currency, theme, keys, engines, port, row height, datasource and filestore"
+                    "line {line}: unknown setting '{other}'; the settings are title, icon, stack, output, language, currency, theme, keys, engines, port, row height, datasource, filestore and codec"
                 ));
             }
         }
@@ -499,6 +513,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         currency,
         themes: themes.unwrap_or_default(),
         filestores,
+        codecs,
         out: out.unwrap_or_else(|| DEFAULT_OUT.to_string()),
         keeps: keeps.unwrap_or_default(),
         keys_editable: keys_editable.unwrap_or(false),
@@ -525,6 +540,7 @@ fn key(entry: &Entry, current_source: Option<&str>) -> String {
     match keyword {
         "datasource" => format!("datasource {}", entry.tokens.get(1).map(|t| t.text.as_str()).unwrap_or("")),
         "filestore" => format!("filestore {}", entry.tokens.get(1).map(|t| t.text.as_str()).unwrap_or("")),
+        "codec" => format!("codec {}", entry.tokens.get(1).map(|t| t.text.as_str()).unwrap_or("")),
         "auth" => format!("auth {}", current_source.unwrap_or("")),
         "openapi" => format!("openapi {}", current_source.unwrap_or("")),
         "paging" => format!("paging {}", current_source.unwrap_or("")),
@@ -653,6 +669,9 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
             let picks: Vec<String> = source.pick_schemas.iter().map(|p| quote(p)).collect();
             lines.push((format!("pick schema {}", source.name), 2, format!("pick schema {}", picks.join(", "))));
         }
+    }
+    for codec in &settings.codecs {
+        lines.push((format!("codec {}", codec.name), 1, format!("codec {} from {}", codec.name, quote(&codec.from))));
     }
     for store in &settings.filestores {
         lines.push((format!("filestore {}", store.name), 1, format!("filestore {} {}", store.name, quote(&store.location))));

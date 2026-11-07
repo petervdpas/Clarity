@@ -1,0 +1,135 @@
+module videoplayer
+
+// A video found in the video folder: its name and where its file is.
+record Clip
+    title: text
+    path: text
+
+// What the person sets for themselves: the folder their videos are in.
+settings
+    videoFolder: folder, label @videoFolderSetting
+
+app Videoplayer
+    title @videoplayerTitle
+    main Main
+
+page Main: window
+    title @mainTitle
+    data clips: list<Clip>
+    data current: integer
+    data volume: integer, default 80
+    data played: decimal
+    data chosen: text
+    data shown: text
+    on open: windowOpened
+
+    // A short clip of the resources greets the person; the folder's videos play from disk.
+    video name screen at 1,2 span 8 rows 9 source "welcome.mp4" volume 80 on end: clipEnded on fail: clipFailed
+    // Moves the progress bar along while a video plays.
+    timer name ticker every 0.5 on tick: tickerTicked
+
+    label @folderLabel name folderLabel at 1,1 span 2 for videoFolderBox
+    folder name videoFolderBox at 3,1 span 10 bind settings.videoFolder on change: folderChanged
+    table name clipTable at 9,2 span 4 rows 9 bind clips columns title resizable sortable on select: clipSelected on open: playClicked
+    slider name progressSlider at 1,11 span 12 bind played min 0 max 1000 on change: progressMoved
+    text name shownText at 1,12 span 4 bind shown
+    label @volumeLabel name volumeLabel at 5,12 span 1 for volumeSlider
+    slider name volumeSlider at 6,12 span 2 bind volume min 0 max 100 on change: volumeChanged
+    button @previousCaption name previousClip at 8,12 span 1 on click: previousClicked
+    button @playCaption name playClip at 9,12 span 1 default on click: playClicked
+    button @pauseCaption name pauseClip at 10,12 span 1 on click: pauseClicked
+    button @stopCaption name stopClip at 11,12 span 1 on click: stopClicked
+    button @nextCaption name nextClip at 12,12 span 1 on click: nextClicked
+
+code Main
+    handler windowOpened
+        screen.volume(volume)
+        loadClips()
+        screen.play()
+
+    handler folderChanged
+        stopClicked()
+        loadClips()
+
+    // Lists the videos of the folder, with their folders below it.
+    handler loadClips
+        let found: list<Clip> = []
+        if settings.videoFolder != ""
+            let mp4s = files f in videos where f.extension == "mp4" order by f.path
+            for f in mp4s
+                let c = new Clip
+                c.title = f.path
+                c.path = settings.videoFolder + "/" + f.path
+                found = found + [c]
+        clips = found
+        current = 0
+        chosen = ""
+
+    handler clipSelected
+        chosen = clipTable.selected.path
+
+    // Plays the video at a place of the list.
+    handler startAt(position: integer)
+        if position < 1 or position > count(clips)
+            return
+        let c = clips[position]
+        screen.play(c.path)
+        current = position
+        played = 0
+        shown = c.title
+        chosen = c.path
+        clipTable.selected = c
+
+    // Plays the video picked in the table, or the first one; a held video plays on.
+    handler playClicked
+        if screen.paused
+            screen.resume()
+            return
+        if count(clips) == 0
+            message @noClips
+            return
+        let position = 1
+        if chosen != ""
+            for i in 1 to count(clips)
+                if clips[i].path == chosen
+                    position = i
+        startAt(position)
+
+    handler pauseClicked
+        if screen.paused
+            screen.resume()
+        else
+            screen.pause()
+
+    handler stopClicked
+        screen.stop()
+        played = 0
+        shown = ""
+
+    handler nextClicked
+        if current < count(clips)
+            startAt(current + 1)
+
+    handler previousClicked
+        if current > 1
+            startAt(current - 1)
+
+    handler volumeChanged
+        screen.volume(volume)
+
+    // The progress bar runs from 0 to 1000 over the video; moving it moves the video.
+    handler progressMoved
+        if screen.length > 0
+            screen.seek(played * screen.length / 1000)
+
+    handler tickerTicked
+        if screen.playing and screen.length > 0
+            played = round(screen.position * 1000 / screen.length, 0)
+
+    // When a video has ended, the next one of the folder starts.
+    handler clipEnded
+        if current > 0 and current < count(clips)
+            startAt(current + 1)
+
+    handler clipFailed
+        message error @cannotPlay(why = screen.problem)

@@ -24,7 +24,7 @@ use crate::input::{Cursor, KeyInput, Modifiers, PointerButton, PressCounter};
 use crate::window::WindowStack;
 
 use super::input::{button_of, cursor_css, key_of, modifiers_of, typed_text, wheel_of};
-use super::page::{PageClipboard, PageFiles, PageMusic, PageSound, SongSaid, Songs, Sounds, Tell};
+use super::page::{PageClipboard, PageFiles, PageMusic, PageSound, PageVideoState, PageVideos, SongSaid, Songs, Sounds, Tell};
 
 /// A pointer event of the page, by its kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,6 +66,7 @@ pub struct BrowserHost {
     clipboard: Rc<RefCell<Option<String>>>,
     sounds: Rc<RefCell<Sounds>>,
     songs: Rc<RefCell<Songs>>,
+    videos: Rc<RefCell<PageVideoState>>,
     files: Arc<PageFiles>,
     /// Where the pointer last went down: a file the page gives is taken by a click there again.
     pressed_at: Option<(f64, f64)>,
@@ -94,10 +95,12 @@ impl BrowserHost {
         let clipboard: Rc<RefCell<Option<String>>> = Rc::default();
         let sounds: Rc<RefCell<Sounds>> = Rc::default();
         let songs: Rc<RefCell<Songs>> = Rc::default();
+        let videos: Rc<RefCell<PageVideoState>> = Rc::default();
         let page_files = Arc::new(PageFiles::new(tell.clone()));
         crate::files::set_system(page_files.clone());
         crate::parts::sound::set_output(Rc::new(PageSound::new(tell.clone(), sounds.clone())));
         crate::parts::sound::set_music(Some(Rc::new(PageMusic::new(tell.clone(), songs.clone()))));
+        crate::parts::video::set_videos(Some(Rc::new(PageVideos::new(tell.clone(), videos.clone()))));
         let opener = tell.clone();
         // Only what a link opens on the desktop (`address::opens`): never javascript:, data: and the like.
         crate::window::address::set_opener(Some(Rc::new(move |address: &str| {
@@ -121,6 +124,7 @@ impl BrowserHost {
             clipboard,
             sounds,
             songs,
+            videos,
             files: page_files,
             pressed_at: None,
             title: None,
@@ -325,6 +329,17 @@ impl BrowserHost {
     }
 
     /// A sound the page played reached its end.
+    /// The page said how video `id` plays.
+    #[allow(clippy::too_many_arguments)]
+    pub fn video_said(&mut self, id: u64, playing: bool, paused: bool, ended: bool, failed: bool, position: f64, length: f64) {
+        self.videos.borrow_mut().said(id, playing, paused, ended, failed, position, length);
+    }
+
+    /// The page sent video `id`'s next picture.
+    pub fn video_frame(&mut self, id: u64, width: u32, height: u32, rgba: Vec<u8>) {
+        self.videos.borrow_mut().frame(id, width, height, rgba);
+    }
+
     /// The page said how song `id` plays.
     pub fn song_said(&mut self, id: u64, said: SongSaid) {
         self.songs.borrow_mut().said(id, said);

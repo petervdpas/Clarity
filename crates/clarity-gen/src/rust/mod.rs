@@ -159,6 +159,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
                 &crate_name,
                 clarity,
                 clarity && clarity_spec::resources::plays_songs(project),
+                clarity && clarity_spec::resources::plays_videos(project),
                 &features,
                 &rust_parts.iter().map(|p| (parts::package_of(project, &p.name.name), p.name.name.clone())).collect::<Vec<_>>(),
                 &crate::libraries::libraries(project).iter().map(|l| (crate::libraries::rust_package(project, &l.name.name), l.name.name.clone())).collect::<Vec<_>>(),
@@ -622,12 +623,15 @@ fn main_window(project: &Project) -> Option<String> {
 /// databases its data sources are. `clarity`: the desktop program, which
 /// Clarity.UI draws; without it the web program, which serves Clarity.UI's
 /// browser files.
-fn cargo_toml(name: &str, clarity: bool, songs: bool, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)]) -> String {
+#[allow(clippy::too_many_arguments)]
+fn cargo_toml(name: &str, clarity: bool, songs: bool, videos: bool, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)]) -> String {
     // Clarity.UI, which draws the windows with Skia in the system's own window (DESIGN 7.9);
-    // with songs to play, its `audio` feature brings Clarity.Audio (docs/AUDIO-PLAN.md).
-    let ui = match (clarity, songs) {
-        (true, true) => format!("clarity-ui = {{ version = \"{}\", features = [\"audio\"] }}\n", ui_version()),
-        (true, false) => format!("clarity-ui = \"{}\"\n", ui_version()),
+    // with songs to play, its `audio` feature brings Clarity.Audio (docs/AUDIO-PLAN.md), with
+    // videos its `video` feature brings Clarity.Video and Clarity.Audio (docs/VIDEO-PLAN.md).
+    let ui = match (clarity, videos, songs) {
+        (true, true, _) => format!("clarity-ui = {{ version = \"{}\", features = [\"video\"] }}\n", ui_version()),
+        (true, false, true) => format!("clarity-ui = {{ version = \"{}\", features = [\"audio\"] }}\n", ui_version()),
+        (true, false, false) => format!("clarity-ui = \"{}\"\n", ui_version()),
         _ => String::new(),
     };
     let features = features.iter().map(|f| format!("{f:?}")).collect::<Vec<_>>().join(", ");

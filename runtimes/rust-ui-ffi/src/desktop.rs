@@ -23,6 +23,7 @@ pub unsafe extern "C" fn clarity_desktop_run(program: *const ClarityProgram, fil
         let program: Arc<dyn Program> = unsafe { handle(program) }?.program.clone();
         let files = unsafe { handle(files) }?.app_files();
         crate::audio::take_on_this_thread();
+        crate::video::take_on_this_thread();
         let ended = ui::desktop::run_shared(program, files);
         let code = if ended == std::process::ExitCode::SUCCESS { 0 } else { 1 };
         unsafe { crate::put_maybe(exit_code, code) };

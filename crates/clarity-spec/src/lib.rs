@@ -12,6 +12,7 @@ pub mod formats;
 pub mod engines;
 pub mod resources;
 pub mod sound;
+pub mod video;
 pub mod keyed;
 pub mod themes;
 pub mod translations;
@@ -231,9 +232,9 @@ fn make_hears(files: &mut [model::SpecFile]) {
     use code::{Stmt, StmtKind};
     fn custom_parts(widgets: &[model::Widget], found: &mut Vec<String>) {
         for widget in widgets {
-            // A custom part and a sound hear what code tells them (DESIGN 5.19, 5.22).
+            // A custom part, a sound and a video hear what code tells them (DESIGN 5.19, 5.22, docs/VIDEO-PLAN.md).
             // So does a canvas an engine beside the screen draws, for its engine (DESIGN 5.12).
-            if (matches!(widget.props.kind, widgets::WidgetKind::Custom | widgets::WidgetKind::Sound) || widget.props.runs.is_some())
+            if (matches!(widget.props.kind, widgets::WidgetKind::Custom | widgets::WidgetKind::Sound | widgets::WidgetKind::Video) || widget.props.runs.is_some())
                 && let Some(name) = &widget.props.name
             {
                 found.push(name.clone());

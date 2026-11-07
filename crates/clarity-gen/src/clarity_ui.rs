@@ -136,6 +136,61 @@ pub fn audio_file(os: &str) -> &'static str {
     }
 }
 
+/// Cisco's openh264 for a system and processor (as std names them), which
+/// every app with video carries beside its program (docs/VIDEO-PLAN.md);
+/// the names of runtimes/rust-video/openh264.sha256.
+pub fn openh264_file(os: &str, arch: &str) -> Option<&'static str> {
+    Some(match (os, arch) {
+        ("linux", "x86_64") => "libopenh264-2.6.0-linux64.8.so",
+        ("linux", "aarch64") => "libopenh264-2.6.0-linux-arm64.8.so",
+        ("macos", "x86_64") => "libopenh264-2.6.0-mac-x64.dylib",
+        ("macos", "aarch64") => "libopenh264-2.6.0-mac-arm64.dylib",
+        ("windows", "x86_64") => "openh264-2.6.0-win64.dll",
+        ("windows", "aarch64") => "openh264-2.6.0-win-arm64.dll",
+        _ => return None,
+    })
+}
+
+/// The SHA-256 of each Cisco binary Clarity.Video's openh264 knows, by file name.
+const OPENH264_HASHES: &str = include_str!("../../../runtimes/rust-video/openh264.sha256");
+
+/// Where Cisco serves its binaries, compressed with bzip2.
+pub const OPENH264_RELEASES: &str = "https://ciscobinary.openh264.org";
+
+/// The known SHA-256 of Cisco's file `name`.
+pub fn openh264_hash(name: &str) -> Option<&'static str> {
+    OPENH264_HASHES.lines().find_map(|line| {
+        let mut parts = line.split_whitespace();
+        let hash = parts.next()?;
+        (parts.next()?.trim_start_matches('*') == name).then_some(hash)
+    })
+}
+
+/// Makes sure `folder/lib` holds Cisco's openh264 for this system, as every
+/// video app carries it (docs/VIDEO-PLAN.md): when it lacks it, or holds one
+/// whose hash Clarity does not know, the binary is fetched from Cisco with
+/// `get`, unpacked and checked, then put there. None where Cisco has no
+/// binary for the system; the path otherwise.
+pub fn ensure_openh264(folder: &Path, os: &str, arch: &str, get: &dyn Fn(&str) -> Result<Vec<u8>, String>) -> Result<Option<PathBuf>, String> {
+    let Some(name) = openh264_file(os, arch) else { return Ok(None) };
+    let wanted = openh264_hash(name).ok_or_else(|| format!("Clarity knows no hash for {name}"))?;
+    let path = folder.join("lib").join(name);
+    if std::fs::read(&path).is_ok_and(|bytes| sha256_hex(&bytes) == wanted) {
+        return Ok(Some(path));
+    }
+    let packed = get(&format!("{OPENH264_RELEASES}/{name}.bz2"))?;
+    let mut binary = Vec::new();
+    std::io::Read::read_to_end(&mut bzip2::read::BzDecoder::new(packed.as_slice()), &mut binary).map_err(|why| format!("{name}: {why}"))?;
+    if sha256_hex(&binary) != wanted {
+        return Err(format!("{name} from Cisco is not the one Clarity knows"));
+    }
+    std::fs::create_dir_all(folder.join("lib")).map_err(|why| why.to_string())?;
+    let fresh = folder.join("lib").join(format!("{name}.part"));
+    std::fs::write(&fresh, &binary).map_err(|why| why.to_string())?;
+    std::fs::rename(&fresh, &path).map_err(|why| why.to_string())?;
+    Ok(Some(path))
+}
+
 /// Whether `folder` holds the header and the library for system `os`.
 pub fn complete(folder: &Path, os: &str) -> bool {
     folder.join("include").join("clarity_ui.h").is_file() && folder.join("lib").join(library_file(os)).is_file()
@@ -303,6 +358,23 @@ pub fn repository_library(repo: &Path, os: &str) -> Option<PathBuf> {
     }
     if audio.iter().all(|(from, _)| from.is_file()) {
         files.extend(audio);
+    }
+    let video_header = repo.join("runtimes").join("rust-video-ffi").join("include").join("clarity_video.h");
+    let video_file = library_file(os).replace("clarity_ui", "clarity_video");
+    let mut video = vec![(video_header, PathBuf::from("include").join("clarity_video.h")), (release.join(&video_file), PathBuf::from("lib").join(&video_file))];
+    if os == "windows" {
+        video.push((release.join("clarity_video.dll.lib"), PathBuf::from("lib").join("clarity_video.dll.lib")));
+    }
+    if video.iter().all(|(from, _)| from.is_file()) {
+        files.extend(video);
+    }
+    // Cisco's openh264, from the cache Clarity.Video's tests fetch it into, when it is there.
+    if let Some(name) = openh264_file(os, std::env::consts::ARCH) {
+        let home = std::env::var("XDG_CACHE_HOME").ok().filter(|v| !v.is_empty()).map(PathBuf::from).or_else(|| std::env::var("HOME").ok().map(|h| PathBuf::from(h).join(".cache")));
+        let cached = home.map(|c| c.join("clarity").join("openh264").join("2.6.0").join(name));
+        if let Some(cached) = cached.filter(|c| c.is_file()) {
+            files.push((cached, PathBuf::from("lib").join(name)));
+        }
     }
     let folder = repo.join("target").join("clarity-ui");
     for (from, to) in files {

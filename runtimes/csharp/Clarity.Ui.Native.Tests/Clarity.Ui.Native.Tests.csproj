@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="../Clarity.Ui/Clarity.Ui.csproj" />
     <ProjectReference Include="../Clarity.Audio/Clarity.Audio.csproj" />
+    <ProjectReference Include="../Clarity.Video/Clarity.Video.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Clarity.Ui" />

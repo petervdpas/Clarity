@@ -1,0 +1,8 @@
+project Videoplayer
+    title "Video player"
+    version "1.0.0"
+    stack go desktop
+    output "out"
+    language "en"
+    datasource main sqlite "data/videoplayer.db"
+    filestore videos "setting:videoFolder"

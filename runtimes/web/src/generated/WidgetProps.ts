@@ -4,6 +4,8 @@ import type { CanvasObjects } from "./CanvasObjects";
 import type { CanvasUnits } from "./CanvasUnits";
 import type { ChartKind } from "./ChartKind";
 import type { ChartMeasure } from "./ChartMeasure";
+import type { ColumnLink } from "./ColumnLink";
+import type { DropFrom } from "./DropFrom";
 import type { Handler } from "./Handler";
 import type { Literal } from "./Literal";
 import type { Orientation } from "./Orientation";
@@ -11,6 +13,7 @@ import type { SlideSide } from "./SlideSide";
 import type { Surface } from "./Surface";
 import type { TableOrder } from "./TableOrder";
 import type { TellHandler } from "./TellHandler";
+import type { ToolboxKind } from "./ToolboxKind";
 import type { WidgetKind } from "./WidgetKind";
 
 /**
@@ -45,6 +48,11 @@ onClick: string | null,
  */
 newWindow: boolean, 
 /**
+ * The data the opened window is filled with, each from the data of the
+ * same name of the window the click is in: `on click -> ChapterForm with book`.
+ */
+openWith: Array<string>, 
+/**
  * Handlers in the code behind, per event.
  */
 handlers: Array<Handler>, columns: Array<string>, 
@@ -52,6 +60,14 @@ handlers: Array<Handler>, columns: Array<string>,
  * The columns of a table whose cells are inputs: `edit done`.
  */
 edit: Array<string>, 
+/**
+ * The columns of a table whose cells are links: `link chapter: toChapter`.
+ */
+links: Array<ColumnLink>, 
+/**
+ * Rows of other parts it takes when dragged onto it: `on drop from fragmentList: linkFragment`.
+ */
+drops: Array<DropFrom>, 
 /**
  * The edited bool columns shown as a switch instead of a checkbox:
  * `edit done as switch`.
@@ -71,6 +87,11 @@ resizable: boolean,
  * `side left`, `side top`, `side bottom`: the edge a slide-out comes in from; the right without it.
  */
 side: SlideSide | null, 
+/**
+ * `beside chapterTable`: a slide-out lies against that part, at its `side`
+ * of it, instead of at the window's edge; the part stands in the same container.
+ */
+beside: string | null, 
 /**
  * `width 420`: how wide a slide-out at the left or right is, in pixels; `SLIDEOUT_WIDTH` without it.
  */
@@ -133,6 +154,10 @@ order: TableOrder | null,
  */
 reorder: string | null, 
 /**
+ * `reorder by chapter from 0`: the number the first row at each level gets; 1 without it.
+ */
+reorderFrom: number | null, 
+/**
  * `mode objects types at x, y`, `mode paint`, `mode vector`: what the
  * person does on a canvas (DESIGN 5.31); none: its draw handler draws it.
  */
@@ -145,6 +170,23 @@ objects: CanvasObjects | null,
  * `tools pen, eraser`: the tools of the canvas's mode the person may use; all without it.
  */
 tools: Array<string>, 
+/**
+ * `toolbox popup` or `toolbox slideout`: a painting canvas's tools in a
+ * toolbox (docs/IMAGE-PLAN.md) instead of the strip on the canvas.
+ */
+toolbox: ToolboxKind | null, 
+/**
+ * `toolbox Painting`: the toolbox page whose parts the toolbox shows; none: the built-in one of the canvas's mode.
+ */
+toolboxPage: string | null, 
+/**
+ * The columns of the toolbox page's grid, which its parts are placed on (set where it is placed).
+ */
+toolboxColumns: number | null, 
+/**
+ * `does pencil`: the built-in action of a toolbox's tool (TOOL_ACTIONS).
+ */
+does: string | null, 
 /**
  * `brush 4`: how wide a canvas paints or draws, in pixels.
  */

@@ -8,6 +8,8 @@ pub mod backup;
 pub mod canvas;
 pub mod charts;
 pub mod data_folder;
+pub mod texts;
+pub mod zip;
 pub mod cli;
 pub mod dialect;
 pub mod dropdown_options;

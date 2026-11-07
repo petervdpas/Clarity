@@ -18,6 +18,7 @@
 //! what keeps the connection shows first (DESIGN 5.27).
 
 pub mod address;
+pub mod history;
 pub mod host;
 pub mod messages;
 pub mod paths;
@@ -1015,6 +1016,10 @@ impl Element for WindowStack {
                 hear_parked_sounds(view.as_mut());
             }
         }
+        // The event is done: where the window is now is a step of its history, for Back and Forward.
+        if let Some(host) = self.current().cloned() {
+            host.note_place();
+        }
         // The windows' values changed: the screen draws them again.
         if changes != self.seen {
             self.seen = changes;
@@ -1103,6 +1108,14 @@ impl Element for WindowStack {
         let host = self.current().cloned();
         if undo_key(self, host.as_ref(), key, cx) {
             return true;
+        }
+        // Alt and Left or Right go Back or Forward through the places the person was in this window.
+        if key.modifiers == Modifiers::ALT && matches!(key.key, Key::Left | Key::Right) {
+            if let Some(host) = host.as_ref().filter(|h| h.can_go(key.key == Key::Left)) {
+                host.go(key.key == Key::Left);
+                cx.invalidate();
+                return true;
+            }
         }
         // A dialog in a desktop window of its own closes on Escape that nothing in it took, as its close does (DESIGN 5.14).
         if self.dialog && key.key == Key::Escape && key.modifiers == Modifiers::NONE {

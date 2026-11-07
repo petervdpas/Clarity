@@ -259,7 +259,7 @@ fn data_events_run_from_the_record() {
     has(sales, "    public void AfterDelete(Db db) => Logic.AfterDeleteOrder(db, this);");
     has(
         sales,
-        "            throw new RefusedException(Text.Of(\"orderNumberIsOverIts\").With(\"number\", Slot.OfText(order.Number)));",
+        "            throw new RefusedException(Clarity.Runtime.Text.Of(\"orderNumberIsOverIts\").With(\"number\", Slot.OfText(order.Number)));",
     );
 }
 
@@ -335,6 +335,7 @@ fn an_external_source_keeps_its_names_and_is_never_migrated() {
         auth: None,
         external: true,
         readonly: true,
+        beside: false,
         openapi: None,
         picks: Vec::new(),
         pick_schemas: Vec::new(),

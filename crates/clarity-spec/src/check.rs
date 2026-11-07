@@ -23,6 +23,21 @@ struct PageContext<'a> {
     popovers: HashSet<&'a str>,
 }
 
+/// The slide-outs beside a part inside other parts (`beside chapterTable`).
+fn slideouts_beside<'w>(widgets: &'w [Widget], out: &mut Vec<&'w Widget>) {
+    for w in widgets {
+        for inner in w.children.iter().chain(w.pages.iter().flat_map(|p| &p.children)) {
+            if inner.props.kind == WidgetKind::Slideout && inner.props.beside.is_some() {
+                out.push(inner);
+            }
+        }
+        slideouts_beside(&w.children, out);
+        for page in &w.pages {
+            slideouts_beside(&page.children, out);
+        }
+    }
+}
+
 /// What a window's data holds, as its parts bind it. An entity that does
 /// not resolve is None, reported once where it is declared.
 #[derive(Clone)]
@@ -421,8 +436,15 @@ impl<'a> Checker<'a> {
 
         let mut context = self.data_context(file, &page.data);
         context.popovers = page.widgets.iter().filter(|w| matches!(w.props.kind, WidgetKind::Popover | WidgetKind::Slideout)).filter_map(|w| w.props.name.as_deref()).collect();
+        // A slide-out beside a part stands in that part's container, at any depth.
+        let mut beside = Vec::new();
+        slideouts_beside(&page.widgets, &mut beside);
+        context.popovers.extend(beside.iter().filter_map(|w| w.props.name.as_deref()));
         self.overlays = context.popovers.clone();
         self.check_widgets(file, &context, &page.widgets, page.columns);
+        self.check_beside(file, &page.widgets);
+        self.check_drops(file, &page.widgets);
+        self.check_tools(file, &page.widgets, page.kind == PageKind::Toolbox, false);
         if page.kind != PageKind::Window && !page.frame.is_empty() {
             let kind = if page.kind == PageKind::Dialog {
                 "dialog"
@@ -874,7 +896,7 @@ impl<'a> Checker<'a> {
                 }
             }
             // A slide-out stands on the window, so a view that has one shows nowhere.
-            if found.widgets.iter().any(|w| w.props.kind == WidgetKind::Slideout) {
+            if found.widgets.iter().any(|w| w.props.kind == WidgetKind::Slideout && w.props.beside.is_none()) {
                 self.error(file, format!("{name} has a slide-out of its own, so it cannot show in a {what}"), span);
             }
             let mut theirs = Vec::new();
@@ -1154,7 +1176,7 @@ impl<'a> Checker<'a> {
             if let Some(target) = &p.on_click
                 && !frame::BUILT_IN_COMMANDS.contains(&target.as_str())
             {
-                self.check_click_target(file, target, command.span);
+                self.check_click_target(file, target, &p.open_with, None, command.span);
             }
             self.check_commands(file, &command.items);
         }
@@ -1252,6 +1274,17 @@ impl<'a> Checker<'a> {
             if p.add && !p.handlers.iter().any(|h| h.event == crate::widgets::Event::Add) {
                 self.error(file, "'add' shows an Add button above the table: write 'on add: handler' that adds the row", widget.span);
             }
+            self.check_toolbox_of(file, widget);
+            // A toolbox holds a painting canvas's tools.
+            if p.toolbox.is_some() && !matches!(p.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)) {
+                self.error(file, "a toolbox holds the tools of a canvas in mode paint or mode vector", widget.span);
+            }
+            // A link column is one of the table's columns.
+            for link in &p.links {
+                if !p.columns.contains(&link.column) {
+                    self.error(file, format!("'{}' is no column of this table; a link is a column it shows", link.column), widget.span);
+                }
+            }
             if p.remove && !p.handlers.iter().any(|h| h.event == crate::widgets::Event::Remove) {
                 self.error(file, "'remove' shows a trash button on every row: write 'on remove: handler' that deletes the row", widget.span);
             }
@@ -1263,7 +1296,9 @@ impl<'a> Checker<'a> {
             for nested in inside {
                 match nested.props.kind {
                     WidgetKind::Popover => self.error(file, "a popover stands on the window, not in another part", nested.span),
-                    WidgetKind::Slideout => self.error(file, "a slide-out stands on the window, not in another part", nested.span),
+                    WidgetKind::Slideout if nested.props.beside.is_none() => {
+                        self.error(file, "a slide-out stands on the window, or beside a part of the container it is in: write 'beside' and the part", nested.span)
+                    }
                     WidgetKind::Sound => self.error(file, "a sound stands on the window, not in another part", nested.span),
                     WidgetKind::Timer => self.error(file, "a timer stands on the window, not in another part", nested.span),
                     _ => {}
@@ -1340,12 +1375,14 @@ impl<'a> Checker<'a> {
                 } else if page.popovers.contains(target.as_str()) {
                     // A click opens a popover of its window next to its part, or a slide-out at its side.
                 } else {
-                    self.check_click_target(file, target, widget.span);
+                    self.check_click_target(file, target, &p.open_with, Some(page), widget.span);
                 }
             }
 
             match widgets::container(p.kind) {
                 None => {}
+                // A tool group's tools lie in its flyout, not on a grid.
+                Some(ContainerKind::Plain) if p.kind == WidgetKind::ToolGroup => {}
                 Some(ContainerKind::Plain) => {
                     self.check_widgets(file, page, &widget.children, p.width)
                 }
@@ -1936,12 +1973,157 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// The parts of a toolbox (docs/IMAGE-PLAN.md): they stand in a toolbox page, a group holds tools, a
+    /// tool does a built-in action or runs a handler; a toolbox holds its parts, buttons, labels and lines.
+    fn check_tools(&mut self, file: usize, widgets: &[Widget], toolbox: bool, in_group: bool) {
+        for w in widgets {
+            let kind = w.props.kind;
+            let is_tool_part = matches!(kind, WidgetKind::Tool | WidgetKind::ToolGroup | WidgetKind::ToolSize | WidgetKind::ToolOpacity | WidgetKind::ToolColors | WidgetKind::ToolLayers);
+            if is_tool_part && !toolbox {
+                self.error(file, format!("a {} belongs in a toolbox, a page written 'page Tools: toolbox'", widgets::info(kind).name.to_lowercase()), w.span);
+            } else if toolbox && !is_tool_part && !matches!(kind, WidgetKind::Button | WidgetKind::Label | WidgetKind::Heading | WidgetKind::Separator) {
+                self.error(file, "a toolbox holds tools, tool groups, size, opacity and colours, and buttons, labels, headings and lines", w.span);
+            }
+            if in_group && kind != WidgetKind::Tool {
+                self.error(file, "a tool group holds tools", w.span);
+            }
+            if kind == WidgetKind::Tool {
+                let runs = w.props.handlers.iter().any(|h| h.event == crate::widgets::Event::Click);
+                match &w.props.does {
+                    Some(does) if !crate::model::TOOL_ACTIONS.contains(&does.as_str()) => {
+                        self.error(file, format!("a tool does one of {}, not '{does}'", crate::model::TOOL_ACTIONS.join(", ")), w.span);
+                    }
+                    Some(_) if runs => self.error(file, "a tool does a built-in action or runs a handler, not both", w.span),
+                    None if !runs => self.error(file, "a tool does a built-in action (does pencil) or runs a handler (on click: handler)", w.span),
+                    _ => {}
+                }
+            }
+            self.check_tools(file, &w.children, toolbox, kind == WidgetKind::ToolGroup);
+        }
+    }
+
+    /// A canvas's toolbox page: there is one of that name, and its tools are those of the canvas's mode.
+    fn check_toolbox_of(&mut self, file: usize, widget: &Widget) {
+        let Some(name) = widget.props.toolbox_page.as_deref() else { return };
+        let Some(page) = self.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == name) else {
+            self.error(file, format!("there is no toolbox '{name}'; write one as 'page {name}: toolbox'"), widget.span);
+            return;
+        };
+        if page.kind != PageKind::Toolbox {
+            self.error(file, format!("{name} is no toolbox; a toolbox is written 'page {name}: toolbox'"), widget.span);
+            return;
+        }
+        let Some(mode) = widget.props.mode else { return };
+        let tools = mode.tools();
+        fn does<'w>(widgets: &'w [Widget], out: &mut Vec<&'w str>) {
+            for w in widgets {
+                if let Some(d) = w.props.does.as_deref() {
+                    out.push(d);
+                }
+                does(&w.children, out);
+            }
+        }
+        let mut done = Vec::new();
+        does(&page.widgets, &mut done);
+        // Layers are a picture's.
+        fn has_layers(widgets: &[Widget]) -> bool {
+            widgets.iter().any(|w| w.props.kind == WidgetKind::ToolLayers || has_layers(&w.children))
+        }
+        if mode != crate::model::CanvasMode::Paint && has_layers(&page.widgets) {
+            self.error(file, format!("{name}'s layers are a picture's; a canvas in mode {} has none", mode.keyword()), widget.span);
+        }
+        // The canvas tools of the other mode are not this canvas's; the actions done at once are every painting canvas's.
+        let all_tools: Vec<&str> = crate::model::CanvasMode::Paint.tools().iter().chain(crate::model::CanvasMode::Vector.tools()).copied().collect();
+        for d in done {
+            let picture_only = matches!(d, "rotate" | "flipAcross" | "flipDown" | "crop" | "import" | "export" | "adjust");
+            if (all_tools.contains(&d) && !tools.contains(&d)) || (picture_only && mode != crate::model::CanvasMode::Paint) {
+                self.error(file, format!("{name}'s tool '{d}' is no tool of a canvas in mode {}", mode.keyword()), widget.span);
+            }
+        }
+    }
+
+    /// `on drop from fragmentList`: that part is a list, table or tree of the same window, not the part itself.
+    fn check_drops(&mut self, file: usize, widgets: &[Widget]) {
+        fn all<'w>(widgets: &'w [Widget], out: &mut Vec<&'w Widget>) {
+            for w in widgets {
+                out.push(w);
+                all(&w.children, out);
+                for page in &w.pages {
+                    all(&page.children, out);
+                }
+            }
+        }
+        let mut parts = Vec::new();
+        all(widgets, &mut parts);
+        for w in &parts {
+            for d in &w.props.drops {
+                let from = parts.iter().find(|o| o.props.name.as_deref() == Some(d.from.as_str()));
+                match from {
+                    None => self.error(file, format!("there is no part '{}' in this window to drag rows from", d.from), w.span),
+                    Some(o) if !matches!(o.props.kind, WidgetKind::List | WidgetKind::Table | WidgetKind::Tree | WidgetKind::TreeTable) => {
+                        self.error(file, format!("'{}' has no rows to drag; rows come from a list, table or tree", d.from), w.span)
+                    }
+                    Some(o) if o.props.name == w.props.name => self.error(file, "a part's own rows move with `reorder by`, not `on drop from` itself", w.span),
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+
+    /// `beside part`: the part stands in the same container as the slide-out
+    /// and has a place there, so the slide-out lies against its edge.
+    fn check_beside(&mut self, file: usize, widgets: &[Widget]) {
+        for w in widgets {
+            if let Some(part) = &w.props.beside {
+                match widgets.iter().find(|o| o.props.name.as_deref() == Some(part.as_str())) {
+                    None => self.error(file, format!("there is no part '{part}' beside this slide-out; it lies against a part of the container it is in"), w.span),
+                    Some(o) if matches!(o.props.kind, WidgetKind::Popover | WidgetKind::Slideout) || widgets::off_grid(o.props.kind) => {
+                        self.error(file, format!("'{part}' has no place of its own to lie against"), w.span)
+                    }
+                    Some(_) => {}
+                }
+            }
+            self.check_beside(file, &w.children);
+            for page in &w.pages {
+                self.check_beside(file, &page.children);
+            }
+        }
+    }
+
     /// A click opens a window. Unknown names are warnings: they become
     /// event handlers once code behind is part of the language.
-    fn check_click_target(&mut self, file: usize, target: &str, span: Span) {
+    fn check_click_target(&mut self, file: usize, target: &str, with: &[String], here: Option<&PageContext<'a>>, span: Span) {
         // A popover or slide-out of the window opens as a window does.
         if self.overlays.contains(target) {
+            if !with.is_empty() {
+                self.error(file, format!("'{target}' is part of this window; only a window opens with data"), span);
+            }
             return;
+        }
+        // `with book`: the opened window has data `book`, and a part's own window holds the same.
+        let opened = self.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == target);
+        for name in with {
+            let Some(page) = opened else { break };
+            let Some(theirs) = page.data.iter().find(|d| d.name.name == *name) else {
+                self.error(file, format!("{target} has no data '{name}' to open it with"), span);
+                continue;
+            };
+            let Some(here) = here else { continue };
+            let wanted = match &theirs.of {
+                DataKind::Record { entity } => Some((false, entity.name.as_str())),
+                DataKind::List { entity } => Some((true, entity.name.as_str())),
+                _ => None,
+            };
+            match (here.data.get(name.as_str()), wanted) {
+                (None, _) => self.error(file, format!("this window has no data '{name}' to open {target} with"), span),
+                (Some(Held::Record(Some(e))), Some((false, want))) | (Some(Held::List(Some(e))), Some((true, want))) if e.name.name != want => {
+                    self.error(file, format!("'{name}' here is {}, and {target}'s '{name}' is {want}", e.name.name), span);
+                }
+                (Some(Held::Record(_)), Some((true, _))) | (Some(Held::List(_)), Some((false, _))) | (Some(Held::Value(_)), Some(_)) | (Some(Held::Record(_) | Held::List(_)), None) => {
+                    self.error(file, format!("'{name}' here and {target}'s '{name}' hold different kinds of data"), span);
+                }
+                _ => {}
+            }
         }
         // The splash screen is the application's to show while it starts.
         if self.files.iter().flat_map(|f| &f.pages).any(|p| p.name.name == target && p.kind == PageKind::Splash) {

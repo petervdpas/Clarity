@@ -584,3 +584,17 @@ fn a_custom_part_is_a_kind_of_part_of_clarity_ui() {
     has(cmake, "add_subdirectory(parts/Gauge)\ntarget_link_libraries(Gauge PUBLIC clarity_ui)\ntarget_link_libraries(shop PRIVATE Gauge)");
     has(file(&files, "src/main.c"), ", program_parts_register});");
 }
+
+/// A menu item of the app runs the app's handler whatever window shows: the
+/// app's handlers come before the windows', whose own throw on a name they lack.
+#[test]
+fn the_app_s_menu_handlers_run_from_any_window() {
+    let source = "module m\n\napp Shop\n    main Desk\n    menu name mainMenu\n        item \"Dutch\" name dutchItem on click: toDutch\n\nsettings\n    language\n\npage Desk: window\n    data note: text\n    button \"Go\" name goButton at 1,1 span 2 on click: go\n\ncode Shop\n    handler toDutch\n        settings.language = \"nl\"\n\ncode Desk\n    handler go\n        note = \"went\"\n";
+    let project = load_sources([("m.clarity", source)]);
+    assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let main = file(&files, "src/main.c");
+    let app = main.find("strcmp(handler, \"toDutch\") == 0) {").expect("the app's handler is dispatched");
+    let window = main.find("strcmp(state->window, \"Desk\") == 0) {").expect("the window's handlers are dispatched");
+    assert!(app < window, "the app's handlers come first");
+}

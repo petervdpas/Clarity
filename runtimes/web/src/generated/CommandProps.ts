@@ -27,6 +27,11 @@ onClick: string | null,
  */
 newWindow: boolean, 
 /**
+ * The data the opened window is filled with, each from the data of the
+ * same name of the window the click is in: `on click -> ChapterForm with book`.
+ */
+openWith: Array<string>, 
+/**
  * Handler in the code behind that runs on click.
  */
 handler: string | null, };

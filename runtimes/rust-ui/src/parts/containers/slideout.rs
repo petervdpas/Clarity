@@ -45,6 +45,8 @@ use super::container;
 /// How wide the strip of handles is, and the space along a handle beside its caption.
 pub const HANDLE_WIDTH: f64 = 28.0;
 pub const HANDLE_PADDING: f64 = 14.0;
+/// The room beyond a part a slide-out beside it needs to lie there; with less it lies over the part.
+const MIN_ROOM: f64 = 120.0;
 
 /// How long it takes to slide in.
 pub const SLIDE_TIME: Duration = Duration::from_millis(150);
@@ -84,6 +86,16 @@ impl Side {
         matches!(self, Side::Left | Side::Top)
     }
 
+    /// The side across from this one.
+    pub fn opposite(self) -> Side {
+        match self {
+            Side::Left => Side::Right,
+            Side::Right => Side::Left,
+            Side::Top => Side::Bottom,
+            Side::Bottom => Side::Top,
+        }
+    }
+
     /// The thin edge of `b` toward the window's parts, `thick` deep.
     pub fn inner_edge(self, b: Rect, thick: f64) -> Rect {
         match self {
@@ -101,12 +113,17 @@ pub const EDGE_WIDTH: f64 = 6.0;
 pub const PADDING: f64 = 12.0;
 const BUTTON: f64 = 24.0;
 const SHADOW: f64 = 12.0;
+const SHADOW_BESIDE: f64 = 4.0;
 
 /// What the part, what lies over the window and its buttons share.
 pub struct Slide {
     name: Option<String>,
     host: Rc<dyn PartHost>,
+    /// The edge it comes in from: for one beside a part, the edge across from
+    /// the part's side it lies on (one at a list's right comes in as from the left).
     side: Side,
+    /// The part it lies against (`beside chapterTable`), instead of the window's edge.
+    beside: Option<String>,
     pinnable: bool,
     resizable: bool,
     min: Option<f64>,
@@ -124,17 +141,23 @@ pub struct Slide {
     since: Cell<Option<Instant>>,
     /// Its handle on the window's edge, once the window made it: a press there opens and closes it, never a press beside it.
     handle: Cell<Option<ElementId>>,
+    /// Beside a part: where its handle lies on the screen, over everything, on the part's edge.
+    handle_place: Cell<Rect>,
+    /// Beside a part: whether it was laid against its part in this layout; a part not laid out (its section folded) takes it along.
+    laid: Cell<bool>,
 }
 
 impl Slide {
     fn of(spec: &PartSpec, host: Rc<dyn PartHost>) -> Slide {
         let number = |field: &str| spec.number(field).or_else(|| spec.text(field).and_then(|t| t.trim().parse().ok())).filter(|n: &f64| *n > 0.0);
-        let side = Side::of(spec.text("side"));
+        let beside = spec.text("beside").filter(|b| !b.is_empty()).map(str::to_string);
+        let side = if beside.is_some() { Side::of(spec.text("side")).opposite() } else { Side::of(spec.text("side")) };
         let designed = if side.across() { number("slideHeight").unwrap_or(HEIGHT) } else { number("slideWidth").unwrap_or(WIDTH) };
         Slide {
             name: spec.name().map(str::to_string),
             host,
             side,
+            beside,
             pinnable: spec.flag("pinnable"),
             resizable: spec.flag("resizable"),
             min: number("min"),
@@ -147,12 +170,19 @@ impl Slide {
             band: Cell::new(Rect::default()),
             since: Cell::new(None),
             handle: Cell::new(None),
+            handle_place: Cell::new(Rect::default()),
+            laid: Cell::new(false),
         }
     }
 
     /// Whether it has a handle on the window's edge: one with a caption has.
     pub fn has_handle(&self) -> bool {
         self.caption.is_some()
+    }
+
+    /// The part it lies against, when it does not come from the window's edge.
+    pub fn beside(&self) -> Option<&str> {
+        self.beside.as_deref()
     }
 
     /// Its caption as shown, translated; empty for none.
@@ -279,6 +309,8 @@ pub struct SlideoutPart {
     slide: Rc<Slide>,
     /// The id of the overlay it lies in while open; shared with the overlay's `closed`, which empties it.
     opened: Rc<Cell<Option<ElementId>>>,
+    /// Beside a part: the overlay its handle lies in, over every container, so the part's container never cuts it off.
+    handle_open: Rc<Cell<Option<ElementId>>>,
     /// Whether it was open the last time it was laid out, and whether its `on open` or `on close` waits to run.
     was_open: bool,
     due: Option<&'static str>,
@@ -289,7 +321,8 @@ pub struct SlideoutPart {
 
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
     let slide = Rc::new(Slide::of(&spec, host.clone()));
-    Box::new(SlideoutPart { base: PartBase::new(spec, host), slide, opened: Rc::new(Cell::new(None)), was_open: false, due: None, before: None, inside: Vec::new() })
+    let base = PartBase::new(spec, host);
+    Box::new(SlideoutPart { base, slide, opened: Rc::new(Cell::new(None)), handle_open: Rc::new(Cell::new(None)), was_open: false, due: None, before: None, inside: Vec::new() })
 }
 
 impl SlideoutPart {
@@ -408,7 +441,7 @@ impl Element for SlideoutPart {
         Some(self)
     }
 
-    /// In the window's grid it shows nothing: what it holds lies over the window.
+    /// In the window's grid it shows nothing: what it holds lies over the window, and beside a part its handle too.
     fn is_shown(&self) -> bool {
         false
     }
@@ -420,6 +453,72 @@ impl Element for SlideoutPart {
 
     fn draw(&self, _p: &Painter) {}
 
+    fn beside(&self) -> Option<&str> {
+        self.slide.beside()
+    }
+
+    /// Against `part`: its handle on the part's edge at its side (inside the
+    /// part when its grid has no room beyond it, so the handle is never cut
+    /// off), and the band it slides out over beyond it, over whatever lies
+    /// there up to the window's edge; with too little room in the window,
+    /// over the part from that edge.
+    fn lay_beside(&mut self, part: Rect, grid: Rect, window: Rect, cx: &mut Cx) {
+        if part.width <= 0.0 || part.height <= 0.0 {
+            self.slide.band.set(Rect::default());
+            self.slide.handle_place.set(Rect::default());
+            if let Some(open) = self.handle_open.take() {
+                cx.close(open);
+            }
+            return;
+        }
+        let long = if self.slide.has_handle() { cx.fonts().measure(&self.slide.caption(), "text", cx.look().size("small"), false) + 2.0 * HANDLE_PADDING } else { 0.0 };
+        let thick = if self.slide.has_handle() { HANDLE_WIDTH } else { 0.0 };
+        let wanted = self.slide.size();
+        // Along the part's edge: its start, length and room; across: where the edge is, and which way is outward.
+        let across = self.slide.side.across();
+        let (start, length) = if across { (part.x, part.width) } else { (part.y, part.height) };
+        // `side` is the edge it comes in from: from the left means it lies at the part's right, going outward toward the end.
+        let outward_end = self.slide.side.from_start();
+        let (edge, window_end) = match (across, outward_end) {
+            (false, true) => (part.right(), window.right()),
+            (false, false) => (part.x, window.x),
+            (true, true) => (part.bottom(), window.bottom()),
+            (true, false) => (part.y, window.y),
+        };
+        let sign = if outward_end { 1.0 } else { -1.0 };
+        // The handle just beyond the part's edge, over what lies beside it; at the window's edge, just inside it.
+        let outside = (window_end - edge) * sign >= thick - 0.5;
+        let handle_from = if outside == outward_end { edge } else { edge - thick };
+        let band_edge = if outside { edge + sign * thick } else { edge };
+        let room = (window_end - band_edge) * sign;
+        let (band_from, deep) = if room >= MIN_ROOM {
+            let deep = wanted.min(room).max(0.0);
+            (if outward_end { band_edge } else { band_edge - deep }, deep)
+        } else {
+            let inner = if across { part.height } else { part.width };
+            let deep = wanted.min(inner).max(0.0);
+            (if outward_end { edge - deep } else { edge }, deep)
+        };
+        // Along the edge it takes the whole height (or width) of the part's container, the handle at the part's start.
+        let (handle, band) = if across {
+            (Rect::new(start, handle_from, long.min(length), thick), Rect::new(grid.x, band_from, grid.width, deep))
+        } else {
+            (Rect::new(handle_from, start, thick, long.min(length)), Rect::new(band_from, grid.y, deep, grid.height))
+        };
+        self.slide.band.set(band);
+        self.slide.handle_place.set(handle);
+        self.slide.laid.set(true);
+        if self.slide.has_handle() && self.handle_open.get().is_none() {
+            let mut overlay = Overlay::new(Box::new(SlideoutHandle::floating(self.slide.clone())), Rect::default());
+            // It is always there: a press beside it goes on to what is under, and nothing closes it but its part leaving.
+            overlay.stays = Some(Rc::new(|| true));
+            overlay.through = true;
+            let gone = self.handle_open.clone();
+            overlay.closed = Some(Box::new(move || gone.set(None)));
+            self.handle_open.set(Some(cx.open(overlay)));
+        }
+    }
+
     fn on_wake(&mut self, _cx: &mut Cx) {
         if let Some(event) = self.due.take() {
             self.base.fire(event);
@@ -429,6 +528,9 @@ impl Element for SlideoutPart {
     /// Leaving the screen, what it opened goes with it; its state stays as it is.
     fn on_detached(&mut self, cx: &mut Cx) {
         if let Some(open) = self.opened.take() {
+            cx.close(open);
+        }
+        if let Some(open) = self.handle_open.take() {
             cx.close(open);
         }
     }
@@ -495,6 +597,11 @@ impl SlideoutFrame {
 
 impl Element for SlideoutFrame {
     crate::element_node!();
+
+    /// Beside a part, only while that part is laid out (not in a folded section).
+    fn is_shown(&self) -> bool {
+        self.slide.beside().is_none() || self.slide.band.get().width > 0.0
+    }
 
     fn arrange(&mut self, _area: Rect, cx: &mut Cx) {
         let place = self.slide.place(cx.now());
@@ -583,10 +690,10 @@ impl Element for SlideoutFrame {
     fn draw(&self, p: &Painter) {
         let look = p.look;
         let b = self.node.bounds;
-        // The shadow toward the window, fading out.
-        let steps = 6;
+        // The shadow toward the window, fading out; beside a part a light one, as it lies inside the window.
+        let (steps, deep) = if self.slide.beside().is_some() { (3, SHADOW_BESIDE) } else { (6, SHADOW) };
         for i in 0..steps {
-            let reach = SHADOW * (i + 1) as f64 / steps as f64;
+            let reach = deep * (i + 1) as f64 / steps as f64;
             let shade = match self.slide.side {
                 Side::Left => Rect::new(b.right(), b.y, reach, b.height),
                 Side::Right => Rect::new(b.x - reach, b.y, reach, b.height),
@@ -705,11 +812,18 @@ impl Element for SlideoutButton {
 pub struct SlideoutHandle {
     node: Node,
     slide: Rc<Slide>,
+    /// On a part's edge rather than in a strip of the window: it carries its own fill and border.
+    floating: bool,
 }
 
 impl SlideoutHandle {
     pub fn new(slide: Rc<Slide>) -> SlideoutHandle {
-        SlideoutHandle { node: Node::new(), slide }
+        SlideoutHandle { node: Node::new(), slide, floating: false }
+    }
+
+    /// A handle on the edge of the part its slide-out lies beside.
+    pub fn floating(slide: Rc<Slide>) -> SlideoutHandle {
+        SlideoutHandle { node: Node::new(), slide, floating: true }
     }
 
     /// What it shares with its slide-out.
@@ -735,8 +849,22 @@ impl SlideoutHandle {
 impl Element for SlideoutHandle {
     crate::element_node!();
 
+    /// On a part's edge, only while that part is laid out.
+    fn is_shown(&self) -> bool {
+        !self.floating || self.node.bounds.width > 0.0
+    }
+
     fn arrange(&mut self, area: Rect, _cx: &mut Cx) {
-        self.node.bounds = area;
+        // On a part's edge it lies where its slide-out laid it, over everything; when the
+        // window's layout did not reach its part (a folded section), it is not there, nor its panel.
+        self.node.bounds = if !self.floating {
+            area
+        } else if self.slide.laid.replace(false) {
+            self.slide.handle_place.get()
+        } else {
+            self.slide.band.set(Rect::default());
+            Rect::default()
+        };
         self.slide.handle.set(Some(self.node.id()));
     }
 
@@ -765,7 +893,10 @@ impl Element for SlideoutHandle {
         let b = self.node.bounds;
         let open = self.slide.is_open();
         let hover = self.node.hovered;
-        if open || hover {
+        if self.floating {
+            p.fill(b, look.color(if open { "accent_soft" } else { "panel" }), 0.0);
+            p.stroke(b, look.color("border"), 1.0, 0.0);
+        } else if open || hover {
             p.fill(b, look.color(if open { "accent_soft" } else { "panel" }), 0.0);
         }
         // A bar on the side toward the window's parts marks the one that is out.

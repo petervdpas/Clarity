@@ -146,3 +146,17 @@ fn tabs_ask_room_for_their_strip_so_a_page_of_their_own_rows_needs_no_scrolling(
     assert!(tabs.around() >= STRIP_HEIGHT);
     assert_eq!(0.0, tabs.views()[0].max_scroll_y());
 }
+
+/// A tab with columns of its own (a view keeps its grid, `columns`) lays its parts out on them: a part in its last columns stays
+/// inside the tabs, though they span fewer of the window's columns.
+#[test]
+fn a_tab_with_columns_of_its_own_keeps_its_parts_inside() {
+    let host = TestHost::new();
+    let markup = r#"<Tabs name="parts" at="1,1" span="9" rows="4"><Tab title="View" columns="12"><Button name="saveButton" at="11,1" span="2" /></Tab><Tab title="Own"><Button name="ownButton" at="8,1" span="2" /></Tab></Tabs>"#;
+    let mut screen = window(markup, host, 1200.0);
+    Shot::of(&mut screen, 1200, 400, 1.0);
+    let tabs = screen.element(part_named(&screen, "parts")).unwrap().node().bounds;
+    let save = screen.element(part_named(&screen, "saveButton")).unwrap().node().bounds;
+    assert!(save.x + save.width <= tabs.x + tabs.width + 0.5, "the button at 11,1 of 12 ends at {} but the tabs end at {}", save.x + save.width, tabs.x + tabs.width);
+    assert!(save.width > 0.0);
+}

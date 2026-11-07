@@ -28,11 +28,39 @@ use crate::locale;
 use crate::painter::{Painter, TextAlign};
 use crate::parts::text_editor::TextEditor;
 
+/// The spray can: fine dots scattered around each point, within the brush's width, the same dots for the same stroke.
+pub fn spray(canvas: &skia_safe::Canvas, points: &[Point], brush: f64, pen: &Paint) {
+    let mut dot = pen.clone();
+    dot.set_style(PaintStyle::Fill);
+    let radius = (brush.max(2.0) * 2.0) as f32;
+    let per_point = (brush * 3.0).clamp(6.0, 80.0) as usize;
+    let mut seed: u32 = 0x9e37_79b9;
+    let mut next = || {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        (seed as f32) / (u32::MAX as f32)
+    };
+    for p in points {
+        for _ in 0..per_point {
+            let (angle, reach) = (next() * std::f32::consts::TAU, next().sqrt() * radius);
+            canvas.draw_circle((p.x + angle.cos() * reach, p.y + angle.sin() * reach), 0.8, &dot);
+        }
+    }
+}
+
+/// A picture file chosen to import, its bytes; none when the person chose none.
+pub(super) struct Imported(pub Option<Vec<u8>>);
+/// The exported picture was saved where the person chose, or nowhere.
+pub(super) struct Exported;
+
 /// The tools of each mode, in the order its toolbar shows them.
-pub const PAINT_TOOLS: [&str; 2] = ["pen", "eraser"];
+pub const PAINT_TOOLS: [&str; 12] = ["pen", "pencil", "spray", "eraser", "fill", "picker", "select", "ellipseSelect", "lasso", "line", "rect", "ellipse"];
 pub const VECTOR_TOOLS: [&str; 6] = ["select", "line", "rect", "ellipse", "path", "text"];
 
 const TOOL_HEIGHT: f64 = 24.0;
+/// How near a colour is to the one pressed for the fill bucket to take it, 0 to 100.
+const FILL_TOLERANCE: f64 = 12.0;
 
 /// A tool's name in the person's language.
 pub fn tool_word(tool: &str) -> String {
@@ -45,6 +73,21 @@ pub fn tool_word(tool: &str) -> String {
         "text" => locale::translate("toolText", "Text"),
         "pen" => locale::translate("toolPen", "Pen"),
         "eraser" => locale::translate("toolEraser", "Eraser"),
+        "pencil" => locale::translate("toolPencil", "Pencil"),
+        "fill" => locale::translate("toolFill", "Fill"),
+        "picker" => locale::translate("toolPicker", "Pick a colour"),
+        "ellipseSelect" => locale::translate("toolEllipseSelect", "Ellipse select"),
+        "lasso" => locale::translate("toolLasso", "Lasso"),
+        "spray" => locale::translate("toolSpray", "Spray can"),
+        "rotate" => locale::translate("rotatePicture", "Turn a quarter clockwise"),
+        "flipAcross" => locale::translate("flipAcross", "Mirror left to right"),
+        "flipDown" => locale::translate("flipDown", "Mirror top to bottom"),
+        "crop" => locale::translate("cropPicture", "Crop to the selection"),
+        "import" => locale::translate("importPicture", "Import a picture"),
+        "export" => locale::translate("exportPicture", "Export the picture"),
+        "zoomIn" => locale::translate("zoomIn", "Zoom in"),
+        "zoomOut" => locale::translate("zoomOut", "Zoom out"),
+        "adjust" => locale::translate("adjustColors", "Colours"),
         other => other.to_string(),
     }
 }
@@ -69,7 +112,7 @@ struct Sketching {
 }
 
 /// A bound field's value and the record it is in.
-type PaintedFor = (Option<Value>, Option<Value>);
+pub(super) type PaintedFor = (Option<Value>, Option<Value>);
 
 /// What a canvas keeps of what the person does on it with a mode.
 #[derive(Default)]
@@ -92,6 +135,12 @@ pub(super) struct ModeState {
     toolbar: RefCell<Vec<(&'static str, Rect)>>,
     /// The shape chosen of a canvas without a name, its place in the drawing from 0; a named one's is the window's.
     chosen: Option<usize>,
+    /// What the toolbox holds beyond the canvas's state: opacity, the background colour, where it is (toolbox.rs).
+    pub(super) toolbox: std::rc::Rc<super::toolbox::Toolbox>,
+    /// The raster tools' shape, selection and lifted pixels (raster.rs).
+    raster: super::raster::RasterState,
+    /// The layers while the person works with them (layers.rs).
+    layers: super::layers::Layers,
 }
 
 fn n(shape: &Map<String, Value>, name: &str) -> f64 {
@@ -202,7 +251,7 @@ pub fn with_object_moved(shapes: Vec<Shape>, place: usize, dx: f64, dy: f64) -> 
 /// The picture after a stroke through `points` (in the picture's pixels)
 /// with `tool`, as a PNG: the pen paints with `ink`, the eraser takes the
 /// paint away.
-pub fn painted_with(before: Option<&Image>, width: i32, height: i32, points: &[(f64, f64)], tool: &str, ink: Color, brush: f64) -> Vec<u8> {
+pub fn painted_with(before: Option<&Image>, width: i32, height: i32, points: &[(f64, f64)], tool: &str, ink: Color, brush: f64, opacity: f64) -> Vec<u8> {
     let info = ImageInfo::new((width, height), ColorType::RGBA8888, AlphaType::Premul, None);
     let Some(mut surface) = surfaces::raster(&info, None, None) else { return Vec::new() };
     let canvas = surface.canvas();
@@ -212,15 +261,21 @@ pub fn painted_with(before: Option<&Image>, width: i32, height: i32, points: &[(
         canvas.draw_image_rect_with_sampling_options(before, None, place, SamplingOptions::default(), &Paint::default());
     }
     let mut pen = Paint::default();
-    pen.set_color(ink);
-    pen.set_anti_alias(true);
+    // Opacity (0 to 100) thins the paint; the pencil paints hard pixels, the pen soft edges.
+    let alpha = (f64::from(ink.a()) * opacity.clamp(0.0, 100.0) / 100.0).round() as u8;
+    pen.set_color(ink.with_a(alpha));
+    pen.set_anti_alias(tool != "pencil");
     pen.set_style(PaintStyle::Stroke);
     pen.set_stroke_width(brush.max(1.0) as f32);
     pen.set_stroke_cap(PaintCap::Round);
     pen.set_stroke_join(PaintJoin::Round);
     pen.set_blend_mode(if tool == "eraser" { BlendMode::Clear } else { BlendMode::SrcOver });
     let pixels: Vec<Point> = points.iter().map(|(x, y)| Point::new(*x as f32, *y as f32)).collect();
-    polyline(canvas, &pixels, &pen);
+    if tool == "spray" {
+        spray(canvas, &pixels, brush, &pen);
+    } else {
+        polyline(canvas, &pixels, &pen);
+    }
     surface.image_snapshot().encode(None, EncodedImageFormat::PNG, None).map(|d| d.as_bytes().to_vec()).unwrap_or_default()
 }
 
@@ -297,8 +352,88 @@ impl CanvasPart {
 
     // -- The toolbar -------------------------------------------------------------
 
-    /// Its toolbar's buttons on the screen, in the order of its tools.
+    /// How its toolbox shows (`toolbox popup` or `toolbox slideout`): none without one, or when it is no painting canvas.
+    pub fn toolbox_shows(&self) -> Option<super::toolbox::Shows> {
+        if !matches!(self.mode().as_str(), "paint" | "vector") {
+            return None;
+        }
+        match self.base.spec.text("toolbox") {
+            Some("popup") => Some(super::toolbox::Shows::Popup),
+            Some("slideout") => Some(super::toolbox::Shows::Slideout),
+            _ => None,
+        }
+    }
+
+    /// Its toolbox, which shows while the person may paint on it.
+    pub fn toolbox(&self) -> &std::rc::Rc<super::toolbox::Toolbox> {
+        &self.modes.toolbox
+    }
+
+    /// Laid out: its toolbox opens, follows it, or goes when it may no longer be painted on.
+    pub(super) fn follow_toolbox(&mut self, cx: &mut Cx) {
+        let shows = self.toolbox_shows().filter(|_| self.acts());
+        let Some(name) = self.base.name().map(str::to_string) else { return };
+        let link: (std::rc::Rc<dyn crate::parts::PartHost>, String) = (self.base.host.clone(), name);
+        let tools = self.tools_shown();
+        let paints = self.mode() == "paint";
+        // The toolbox page's parts, placed in the canvas; without one, the built-in toolbox of its mode.
+        let (parts, columns) = if self.base.spec.children.is_empty() {
+            (super::toolbox::built_in(paints, &tools), 4)
+        } else {
+            (self.base.spec.children.clone(), self.base.spec.number("toolboxColumns").map_or(4, |c| c as i64))
+        };
+        self.follow_adjust(cx);
+        self.check_layers();
+        let following = super::toolbox::Following { shows, paints, canvas: self.base.node.bounds, link, parts, columns, written: (self.brush(), self.ink()) };
+        self.modes.toolbox.follow(following, cx);
+        match self.modes.toolbox.take_ask() {
+            Some(super::toolbox::Ask::Import) => {
+                let picker = crate::files::system();
+                let title = locale::translate("importPicture", "Import a picture");
+                let filter = crate::files::FileFilter { name: title.clone(), patterns: ["*.png", "*.jpg", "*.jpeg", "*.webp"].iter().map(|p| p.to_string()).collect() };
+                cx.later(self.base.node.id(), move || Imported(picker.open_file(&title, Some(&filter)).map(|c| c.bytes)));
+            }
+            Some(super::toolbox::Ask::Export) => {
+                let bytes = clarity_image::encode(&self.painted_pixels());
+                let picker = crate::files::system();
+                let title = locale::translate("exportPicture", "Export the picture");
+                let name = format!("{}.png", self.base.name().unwrap_or("picture"));
+                cx.later(self.base.node.id(), move || {
+                    picker.save_file(&title, &name, &bytes);
+                    Exported
+                });
+            }
+            Some(super::toolbox::Ask::Transform(t)) => self.transform(t, cx),
+            Some(super::toolbox::Ask::Zoom(closer)) => self.zoom_step(closer, cx),
+            Some(super::toolbox::Ask::Adjust) => self.open_adjust(cx),
+            Some(super::toolbox::Ask::Layer(ask)) => self.layer_ask(ask, cx),
+            None => {}
+        }
+    }
+
+    /// A picture file the person chose, laid on the paper: scaled to fit it, in the middle, over what is painted; one edit.
+    pub fn import(&mut self, bytes: &[u8], cx: &mut Cx) {
+        let Ok(picture) = clarity_image::decode(bytes) else {
+            eprintln!("{}: the file is no picture", self.base.name().unwrap_or("canvas"));
+            return;
+        };
+        let mut paper = self.painted_pixels();
+        let (pw, ph) = (f64::from(paper.width()), f64::from(paper.height()));
+        let fit = (pw / f64::from(picture.width())).min(ph / f64::from(picture.height())).min(1.0);
+        let (w, h) = (((f64::from(picture.width()) * fit).round() as u32).max(1), ((f64::from(picture.height()) * fit).round() as u32).max(1));
+        let scaled = clarity_image::ops::resize(&picture, w, h);
+        clarity_image::ops::blend(&mut paper, &scaled, ((pw - f64::from(w)) / 2.0) as i64, ((ph - f64::from(h)) / 2.0) as i64, 100);
+        let png = clarity_image::encode(&paper);
+        *self.modes.painted.borrow_mut() = Some((self.painted_for(), Image::from_encoded(skia_safe::Data::new_copy(&png))));
+        cx.invalidate();
+        self.act(json!({ "stroke": FieldContent::New(png).value() }));
+    }
+
+    /// Its toolbar's buttons on the screen, in the order of its tools; none when its tools are in a toolbox.
     pub fn tool_buttons(&self, cx_fonts: &crate::fonts::Fonts, look: &crate::theme::ThemeLook) -> Vec<(&'static str, Rect)> {
+        if self.toolbox_shows().is_some() {
+            return Vec::new();
+        }
         let b = self.base.node.bounds;
         let mut x = b.x + 6.0;
         self.tools_shown()
@@ -396,7 +531,7 @@ impl CanvasPart {
     }
 
     /// The bound field's value and the record it is in.
-    fn painted_for(&self) -> PaintedFor {
+    pub(super) fn painted_for(&self) -> PaintedFor {
         let Some(bind) = self.base.bound() else { return (None, None) };
         let value = self.base.host.read(bind);
         let record = bind.rfind('.').filter(|d| *d > 0).and_then(|d| self.base.host.read(&bind[..d]));
@@ -421,12 +556,129 @@ impl CanvasPart {
         let sx = width as f64 / uw.max(1.0);
         let sy = height as f64 / uh.max(1.0);
         let scaled: Vec<(f64, f64)> = points.iter().map(|(x, y)| (x * sx, y * sy)).collect();
-        let bytes = painted_with(self.painted().as_ref(), width, height, &scaled, self.tool_in_hand(), color_of(cx.look(), &self.ink()), self.brush() * sx);
+        let bytes = painted_with(self.painted().as_ref(), width, height, &scaled, self.tool_in_hand(), color_of(cx.look(), &self.ink()), self.brush() * sx, self.modes.toolbox.opacity());
         // Shown as painted at once; the field's picture follows from the runtime.
         *self.modes.painted.borrow_mut() = Some((self.painted_for(), Image::from_encoded(skia_safe::Data::new_copy(&bytes))));
         cx.invalidate();
         let stroke = FieldContent::New(bytes).value();
         self.act(json!({ "stroke": stroke }));
+    }
+
+    /// The picture painted on as pixels, a blank one of its size when there is none yet.
+    /// The pixels the tools work on: the layer in hand when there are layers, else the picture.
+    pub(super) fn painted_pixels(&self) -> clarity_image::RgbaImage {
+        let layers = &self.modes.layers;
+        if layers.active() {
+            return layers.list[layers.in_hand].pixels.clone();
+        }
+        self.field_pixels()
+    }
+
+    /// The picture as shown, the layers composed.
+    pub(super) fn field_pixels(&self) -> clarity_image::RgbaImage {
+        let (width, height) = self.picture_size();
+        self.painted()
+            .and_then(|i| i.encode(None, EncodedImageFormat::PNG, None))
+            .and_then(|png| clarity_image::decode(png.as_bytes()).ok())
+            .unwrap_or_else(|| clarity_image::RgbaImage::new(width.max(1) as u32, height.max(1) as u32))
+    }
+
+    /// The picture's pixel under a point in units.
+    fn pixel_of(&self, unit: (f64, f64), pixels: &clarity_image::RgbaImage) -> Option<(u32, u32)> {
+        let (uw, uh) = self.units();
+        let (x, y) = (unit.0 * f64::from(pixels.width()) / uw.max(1.0), unit.1 * f64::from(pixels.height()) / uh.max(1.0));
+        (x >= 0.0 && y >= 0.0 && x < f64::from(pixels.width()) && y < f64::from(pixels.height())).then_some((x as u32, y as u32))
+    }
+
+    /// The fill bucket: the area of near colours under the point takes the ink, as one edit.
+    fn fill_at(&mut self, unit: (f64, f64), cx: &mut Cx) {
+        let mut pixels = self.painted_pixels();
+        let Some((x, y)) = self.pixel_of(unit, &pixels) else { return };
+        let ink = color_of(cx.look(), &self.ink());
+        let alpha = (f64::from(ink.a()) * self.modes.toolbox.opacity() / 100.0).round() as u8;
+        clarity_image::ops::fill(&mut pixels, x, y, clarity_image::Rgba([ink.r(), ink.g(), ink.b(), alpha]), FILL_TOLERANCE);
+        self.show_and_send(clarity_image::encode(&pixels), cx);
+    }
+
+    /// A new picture painted: shown at once, and sent as one edit; the field's picture follows from the runtime.
+    pub(super) fn show_and_send(&mut self, png: Vec<u8>, cx: &mut Cx) {
+        // With layers, what the tools made is the layer in hand; the layers composed are kept.
+        if self.modes.layers.active() {
+            if let Ok(pixels) = clarity_image::decode(&png) {
+                let at = self.modes.layers.in_hand;
+                self.modes.layers.list[at].pixels = pixels;
+            }
+            self.send_composed(cx);
+            return;
+        }
+        self.send_picture(png, cx);
+    }
+
+    /// The picture shown and kept as one edit.
+    pub(super) fn send_picture(&mut self, png: Vec<u8>, cx: &mut Cx) {
+        *self.modes.painted.borrow_mut() = Some((self.painted_for(), Image::from_encoded(skia_safe::Data::new_copy(&png))));
+        cx.invalidate();
+        self.act(json!({ "stroke": FieldContent::New(png).value() }));
+    }
+
+    /// A picture shown while the person works (a selection lifted), not sent; with layers, the layer in hand as it would be.
+    pub(super) fn show_only(&self, png: &[u8]) {
+        let shown = if self.modes.layers.active() {
+            let (w, h) = self.field_pixels_size();
+            let mut layers: Vec<super::layers::Layer> = self.modes.layers.list.clone();
+            if let Ok(pixels) = clarity_image::decode(png) {
+                layers[self.modes.layers.in_hand].pixels = pixels;
+            }
+            let all = super::layers::Layers { list: layers, in_hand: self.modes.layers.in_hand, sent: Vec::new(), seen: None };
+            clarity_image::encode(&all.composed(w, h))
+        } else {
+            png.to_vec()
+        };
+        *self.modes.painted.borrow_mut() = Some((self.painted_for(), Image::from_encoded(skia_safe::Data::new_copy(&shown))));
+    }
+
+    /// The picture's size in pixels.
+    pub(super) fn field_pixels_size(&self) -> (u32, u32) {
+        let (w, h) = self.picture_size();
+        (w.max(1) as u32, h.max(1) as u32)
+    }
+
+    pub(super) fn modes_layers(&self) -> &super::layers::Layers {
+        &self.modes.layers
+    }
+
+    pub(super) fn modes_layers_mut(&mut self) -> &mut super::layers::Layers {
+        &mut self.modes.layers
+    }
+
+    /// The toolbox's layers tool sees the layers as they are.
+    pub(super) fn share_layers(&self) {
+        self.modes.toolbox.set_layer_rows(self.modes.layers.rows());
+    }
+
+    /// The opacity the toolbox paints with, 0 to 100.
+    pub(super) fn opacity(&self) -> f64 {
+        self.modes.toolbox.opacity()
+    }
+
+    /// What the raster tools keep while the person works (raster.rs).
+    pub(super) fn raster(&mut self) -> &mut super::raster::RasterState {
+        &mut self.modes.raster
+    }
+
+    pub(super) fn raster_ref(&self) -> &super::raster::RasterState {
+        &self.modes.raster
+    }
+
+    /// The colour picker: the pixel under the point becomes the ink, written out.
+    fn pick_at(&mut self, unit: (f64, f64)) {
+        let pixels = self.painted_pixels();
+        let Some((x, y)) = self.pixel_of(unit, &pixels) else { return };
+        let p = pixels.get_pixel(x, y);
+        let ink = format!("#{:02x}{:02x}{:02x}", p[0], p[1], p[2]);
+        if let Some(name) = self.base.name() {
+            crate::parts::change_state(&*self.base.host, name, |s| s.ink = Some(ink.clone()));
+        }
     }
 
     // -- vector ------------------------------------------------------------------
@@ -573,6 +825,10 @@ impl CanvasPart {
             cx.invalidate();
             return took;
         }
+        // A painting canvas's selection: cut, copy, paste, delete, select all, deselect.
+        if self.acts() && self.mode() == "paint" && self.raster_key(key, cx) {
+            return true;
+        }
         // Delete deletes the chosen shape of a vector canvas.
         if !self.acts() || self.mode() != "vector" || !matches!(key.key, Key::Delete | Key::Backspace) || key.modifiers != Modifiers::NONE {
             return false;
@@ -609,7 +865,12 @@ impl CanvasPart {
                 self.modes.shown_objects = self.object_records();
                 self.modes.dragging = Some(Dragging { place, at: (at.x, at.y), from: (x, y), by: (0.0, 0.0), moved: false });
             }
-            "paint" => self.modes.stroke = Some(vec![unit]),
+            "paint" => match self.tool_in_hand() {
+                "fill" => self.fill_at(unit, cx),
+                "picker" => self.pick_at(unit),
+                tool @ ("select" | "ellipseSelect" | "lasso" | "line" | "rect" | "ellipse") => self.raster_pressed(tool, unit, cx),
+                _ => self.modes.stroke = Some(vec![unit]),
+            },
             "vector" => {
                 let tool = self.tool_in_hand();
                 if tool == "text" {
@@ -647,6 +908,10 @@ impl CanvasPart {
             return true;
         }
         let unit = self.unit_at(at.x, at.y);
+        if self.raster_moved(unit) {
+            cx.invalidate();
+            return true;
+        }
         if let Some(stroke) = self.modes.stroke.as_mut() {
             stroke.push(unit);
             cx.invalidate();
@@ -675,6 +940,9 @@ impl CanvasPart {
             }
             // What the runtime kept shows from its drawing; a refused drop puts the box back.
             cx.invalidate();
+            return true;
+        }
+        if self.raster_released(cx) {
             return true;
         }
         if let Some(stroke) = self.modes.stroke.take() {
@@ -706,6 +974,7 @@ impl CanvasPart {
         self.modes.dragging = None;
         self.modes.stroke = None;
         self.modes.sketching = None;
+        self.raster_cancelled();
     }
 
     // -- drawing ----------------------------------------------------------------------
@@ -718,6 +987,20 @@ impl CanvasPart {
         let (uw, uh) = self.units();
         match self.mode().as_str() {
             "paint" => {
+                // The picture is a sheet of paper on a desk: the paper its units, in the canvas's
+                // background colour (white without one), with a light shadow; the desk around it.
+                let start = at(0.0, 0.0);
+                let sheet = Rect::new(f64::from(start.x), f64::from(start.y), uw * v.scale, uh * v.scale);
+                {
+                    let _clip = p.clip(self.base.node.bounds);
+                    p.fill(self.base.node.bounds, p.look.color("raised"), 0.0);
+                    for i in 1..=4 {
+                        let reach = f64::from(i);
+                        p.fill(Rect::new(sheet.x + reach, sheet.y + reach, sheet.width, sheet.height), Color::from_argb(18, 0, 0, 0), 0.0);
+                    }
+                    let paper = self.paper();
+                    p.fill(sheet, color_of(p.look, if paper.is_empty() { "#ffffff" } else { &paper }), 0.0);
+                }
                 if let Some(picture) = self.painted() {
                     let start = at(0.0, 0.0);
                     let place = skia_safe::Rect::from_xywh(start.x, start.y, (uw * v.scale) as f32, (uh * v.scale) as f32);
@@ -728,15 +1011,22 @@ impl CanvasPart {
                     let paper = self.paper();
                     let ink = if self.tool_in_hand() == "eraser" { color_of(p.look, if paper.is_empty() { "panel" } else { &paper }) } else { color_of(p.look, &self.ink()) };
                     let mut pen = Paint::default();
-                    pen.set_color(ink);
-                    pen.set_anti_alias(true);
+                    // As it will be painted: thinned by the opacity, hard-edged with the pencil.
+                    let alpha = (f64::from(ink.a()) * self.modes.toolbox.opacity() / 100.0).round() as u8;
+                    pen.set_color(ink.with_a(alpha));
+                    pen.set_anti_alias(self.tool_in_hand() != "pencil");
                     pen.set_style(PaintStyle::Stroke);
                     pen.set_stroke_width((self.brush().max(1.0) * v.scale) as f32);
                     pen.set_stroke_cap(PaintCap::Round);
                     pen.set_stroke_join(PaintJoin::Round);
                     let pixels: Vec<Point> = stroke.iter().map(|(x, y)| at(*x, *y)).collect();
-                    polyline(canvas, &pixels, &pen);
+                    if self.tool_in_hand() == "spray" {
+                        spray(canvas, &pixels, self.brush() * v.scale, &pen);
+                    } else {
+                        polyline(canvas, &pixels, &pen);
+                    }
                 }
+                self.draw_raster(p, v);
             }
             "vector" => {
                 let shapes = self.vector_shapes();
@@ -773,7 +1063,8 @@ impl CanvasPart {
             }
             _ => {}
         }
-        if !self.tools_shown().is_empty() {
+        // With a toolbox, the tools are in it, not on the canvas.
+        if !self.tools_shown().is_empty() && self.toolbox_shows().is_none() {
             self.draw_toolbar(p);
         }
     }

@@ -898,12 +898,22 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     }
     // The app's handlers run from any window, on the app's own data.
     for o in owners.iter().filter(|o| o.is_app) {
+        let settings = crate::app_carries_settings(project, &o.name);
+        let (read, give, data) = if settings {
+            (
+                "            if let Some(kept) = state.data.get(\"settings\") {\n                app.settings = serde_json::from_value(kept.clone()).map_err(|e| clarity_runtime::Error::Invalid(e.to_string()))?;\n            }\n",
+                "            let mut data = state.data.clone();\n            data.insert(\"settings\".to_string(), serde_json::to_value(&app.settings).map_err(|e| clarity_runtime::Error::Invalid(e.to_string()))?);\n",
+                "data",
+            )
+        } else {
+            ("", "", "state.data.clone()")
+        };
         for (handler, function) in &o.handlers {
             dispatch.push_str(&format!(
                 "        (_, {:?}) => {{
             let mut app = {m}::{s}::load(db)?;
-            {m}::{function}(db, &mut app, &mut ui)?;
-            Ok(ui.reply(&state.window, state.data.clone()))
+{read}            {m}::{function}(db, &mut app, &mut ui)?;
+{give}            Ok(ui.reply(&state.window, {data}))
         }}
 ",
                 handler,

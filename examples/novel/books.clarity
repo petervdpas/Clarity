@@ -1,0 +1,211 @@
+module books
+
+// What kind of book: a novel, a screenplay, a play.
+enum Form
+    Novel label @formNovel
+    Screenplay label @formScreenplay
+    Play label @formPlay
+    Stories label @formStories
+    Other label @formOther
+
+// How far a chapter is.
+enum Status
+    Idea label @statusIdea
+    Context label @statusContext
+    Notebook label @statusNotebook
+    TypedUp label @statusTypedUp
+    Done label @statusDone
+
+// What a fragment is: a fact found, something invented, a question.
+enum FragmentKind
+    Fact label @kindFact
+    Invented label @kindInvented
+    Question label @kindQuestion
+
+// Who brought a fragment in.
+enum Contributor
+    Author label @fromAuthor
+    Assistant label @fromAssistant
+
+// What kind of document: research, outline, style or a note.
+enum DocumentKind
+    Research label @docResearch
+    Outline label @docOutline
+    Style label @docStyle
+    Note label @docNote
+
+// A book, with what an export needs to know about it.
+entity Book
+    title: text(200), required, unique, label @bookTitleLabel
+    subtitle: text(200), label @bookSubtitleLabel
+    form: Form, default Novel, label @bookFormLabel
+    author: text(120), label @bookAuthorLabel
+    languageCode: text(10), default "en", label @bookLanguageLabel
+    note: text, label @bookNoteLabel
+    goal: integer, default 80000, min 0, label @bookGoalLabel
+    dailyGoal: integer, default 500, min 0, label @bookDailyGoalLabel
+    last: integer, label @bookLastLabel
+    cover: image, label @bookCoverLabel
+
+// A time layer of a book, such as 1699 or 2054, dream or waking.
+entity Layer
+    name: text(80), required, label @layerNameLabel
+    book: ref Book, required, cascade, label @layerBookLabel
+    year: integer, format plain, label @layerYearLabel
+    dream: bool, default false, label @layerDreamLabel
+
+// A chapter: the context it is written with. Its number follows from its
+// place: the first place is chapter 0, a prologue.
+entity Chapter
+    title: text(120), required, label @chapterTitleLabel
+    book: ref Book, required, cascade, label @chapterBookLabel
+    position: integer, label @chapterPositionLabel
+    number: integer, min 0, max 999, format plain, label @chapterNumberLabel
+    status: Status, default Idea, label @chapterStatusLabel
+    summary: text, label @chapterSummaryLabel
+    words: integer, label @chapterWordsLabel
+    goal: integer, default 3000, min 0, label @chapterGoalLabel
+    layers: text(200), label @chapterLayersLabel
+    timeAndPlace: text, label @chapterTimeLabel
+    characters: text, label @chapterCharactersLabel
+    content: text, label @chapterContentLabel
+    transitions: text, label @chapterTransitionsLabel
+    style: text, label @chapterStyleLabel
+    factAndFiction: text, label @chapterFactLabel
+    openQuestions: text, label @chapterQuestionsLabel
+
+// The written text of a chapter, typed up from the notebook.
+entity Manuscript
+    chapter: ref Chapter, required, cascade, label @manuscriptChapterLabel
+    text: text, label @manuscriptTextLabel
+    words: integer, label @manuscriptWordsLabel
+
+// An earlier version of a manuscript.
+entity Version
+    moment: datetime, label @versionMomentLabel
+    words: integer, label @versionWordsLabel
+    manuscript: ref Manuscript, required, cascade, label @versionManuscriptLabel
+    text: text, label @versionTextLabel
+
+// What was cut from a chapter, to bring it back.
+entity Cutting
+    text: text, label @cuttingTextLabel
+    moment: datetime, label @cuttingMomentLabel
+    chapter: ref Chapter, required, cascade, label @cuttingChapterLabel
+
+// What was written on a book in a day, in words added.
+entity Session
+    day: date, label @sessionDayLabel
+    words: integer, label @sessionWordsLabel
+    book: ref Book, required, cascade, label @sessionBookLabel
+
+// A fragment: an image, a fact, a phrase or a question, for one or more chapters.
+entity Fragment
+    book: ref Book, required, cascade, label @fragmentBookLabel
+    text: text, required, search, label @fragmentTextLabel
+    layer: ref Layer, label @fragmentLayerLabel
+    motifs: list<text>, search, label @fragmentMotifsLabel
+    kind: FragmentKind, default Invented, label @fragmentKindLabel
+    contributor: Contributor, default Author, label @fragmentFromLabel
+    heading: text(120), search, label @fragmentHeadingLabel
+    link: url, label @fragmentLinkLabel
+    used: bool, default false, label @fragmentUsedLabel
+    cut: bool, default false, label @fragmentCutLabel
+    position: integer, label @fragmentPlaceLabel
+
+// Where a fragment belongs: in which chapter. A fragment can belong to several.
+entity FragmentPlace
+    fragment: ref Fragment, required, label @placeFragmentLabel
+    chapter: ref Chapter, required, cascade, label @placeChapterLabel
+
+// A trial balloon: an attempt at dialogue, as a screenplay or a chat.
+entity TrialBalloon
+    title: text(120), required, label @balloonTitleLabel
+    book: ref Book, required, cascade, label @balloonBookLabel
+    note: text, label @balloonNoteLabel
+
+// In which chapter a trial balloon is used.
+entity BalloonPlace
+    balloon: ref TrialBalloon, required, label @placeBalloonLabel
+    chapter: ref Chapter, required, cascade, label @placeChapterLabel
+
+// Who takes part in a trial balloon.
+entity Participation
+    balloon: ref TrialBalloon, required, cascade, label @participationBalloonLabel
+    character: ref Character, required, label @participationCharacterLabel
+
+// A line of a trial balloon: who speaks and what. Without a speaker it is a
+// direction, as in a screenplay.
+entity Line
+    character: ref Character, label @lineSpeakerLabel
+    text: text, label @lineTextLabel
+    balloon: ref TrialBalloon, required, cascade, label @lineBalloonLabel
+    position: integer, label @linePositionLabel
+
+// A character of a book.
+entity Character
+    name: text(80), required, label @characterNameLabel
+    book: ref Book, required, cascade, label @characterBookLabel
+    layer: ref Layer, label @characterLayerLabel
+    role: text(120), label @characterRoleLabel
+    description: text, label @characterDescriptionLabel
+
+// Who appears in a chapter, and what they do there.
+entity Appearance
+    character: ref Character, required, label @appearanceCharacterLabel
+    what: text(200), label @appearanceWhatLabel
+    chapter: ref Chapter, required, cascade, label @appearanceChapterLabel
+
+// Research for a book: a note with its source.
+entity Research
+    title: text(200), required, search, label @researchTitleLabel
+    book: ref Book, required, cascade, label @researchBookLabel
+    link: url, label @researchLinkLabel
+    text: text, search, label @researchTextLabel
+
+// In which chapter a piece of research is used.
+entity ResearchPlace
+    research: ref Research, required, label @placeResearchLabel
+    chapter: ref Chapter, required, cascade, label @placeChapterLabel
+
+// A document of a book: research, the outline, style, notes, in Markdown.
+entity Document
+    title: text(200), required, search, label @documentTitleLabel
+    book: ref Book, required, cascade, label @documentBookLabel
+    kind: DocumentKind, default Note, label @documentKindLabel
+    text: text, search, label @documentTextLabel
+
+// An event on the timeline of a book, fact or invented.
+entity Event
+    moment: text(60), label @eventWhenLabel
+    book: ref Book, required, cascade, label @eventBookLabel
+    position: integer, label @eventPositionLabel
+    what: text, label @eventWhatLabel
+    origin: text(80), label @eventOriginLabel
+    layer: ref Layer, label @eventLayerLabel
+    chapters: list<integer>, label @eventChaptersLabel
+
+// The manuscript of a book, in the folder export/<title>: a Markdown file per
+// chapter and the whole book in Markdown, and for a screenplay also in
+// Fountain, with the trial balloons as dialogue.
+action exportManuscript(book: Book)
+    effects files.write
+    let whole = "# {book.title}\n\n"
+    let fountain = "Title: {book.title}\nAuthor: {book.author}\n\n"
+    for c in find c in Chapter where c.book == book order by c.position
+        let written = ""
+        for m in find m in Manuscript where m.chapter == c
+            written = m.text
+        let part = "## {c.title}\n\n" + written + "\n\n"
+        write part to export "{book.title}/chapters/{c.number}.md"
+        whole = whole + part
+        fountain = fountain + ".{c.title}\n\n" + written + "\n\n"
+        for bp in find bp in BalloonPlace where bp.chapter == c order by bp.balloon.title
+            for l in find l in Line where l.balloon == bp.balloon order by l.position
+                if l.character == none
+                    fountain = fountain + "!" + l.text + "\n\n"
+                else
+                    fountain = fountain + "@" + l.character.name + "\n" + l.text + "\n\n"
+    write whole to export "{book.title}/{book.title}.md"
+    if book.form == Screenplay
+        write fountain to export "{book.title}/{book.title}.fountain"

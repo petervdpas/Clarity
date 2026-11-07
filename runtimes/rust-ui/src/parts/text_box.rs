@@ -430,8 +430,8 @@ impl Part for TextBoxPart {
         &self.base
     }
 
-    /// A memo of code shows a document, as a markdown part does, so it takes the height the window has left.
+    /// A memo is a writing area, as a markdown part is a document: it takes the height the window has left, as a table does.
     fn grows(&self) -> bool {
-        self.base.spec.text("code").is_some()
+        self.base.spec.kind == "memo" || self.base.spec.text("code").is_some()
     }
 }

@@ -214,3 +214,33 @@ fn a_codec_library_the_project_adds_is_carried_and_added() {
     assert!(errors.iter().any(|e| e.contains("codec vp9: there is no library at")), "{errors:?}");
     let _ = std::fs::remove_dir_all(&folder);
 }
+
+const NOTES: &str = "module notes
+
+entity Note
+    title: text(80)
+
+page Main: window
+    data notes: list<Note>
+    data first: Note
+    table name noteTable at 1,1 span 8 rows 6 bind notes columns title
+    button \"Load\" name loadButton at 1,7 span 2 on click: loadClicked
+
+code Main
+    handler loadClicked
+        notes = find n in Note order by n.id
+        notes = find n in Note order by n.id desc
+";
+
+/// Records in the order they were stored: `order by n.id`, on every stack.
+#[test]
+fn records_order_by_their_id_on_every_stack() {
+    let project = clarity_spec::load_sources([("notes.clarity", NOTES)]);
+    assert!(!project.has_errors(), "{:?}", project.diagnostics);
+    for stack in ["rust desktop", "csharp desktop", "go desktop", "c desktop", "cpp desktop"] {
+        let text = format!("project Notes\n    stack {stack}\n    datasource main sqlite \"data/notes.db\"\n");
+        let code = all_code(&clarity_gen::generate(&project, &clarity_project::parse(&text).unwrap()).unwrap_or_else(|e| panic!("{stack}: {e:?}")));
+        let orders: Vec<&str> = code.lines().filter(|l| l.to_lowercase().contains("order") && l.contains("\"id\"")).collect();
+        assert!(!orders.is_empty(), "{stack} orders by no id");
+    }
+}

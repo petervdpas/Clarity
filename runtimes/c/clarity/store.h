@@ -58,6 +58,10 @@ bool clarity_location(const char* text, const char** out);
 /// setting (`setting:`) is as it says, and so is SQLite's own `:memory:`.
 /// The same as the Rust and C# runtimes.
 const char* clarity_data_folder_sqlite(const char* location, const char* (*env)(const char* name));
+/* clarity_data_folder_sqlite on system `os` ("windows", "macos" or another): a
+ * data:<program>/<file> location opens in CLARITY_DATA's folder, else in the
+ * person's folder for application data (conformance/data-folder.json). */
+const char* clarity_data_folder_sqlite_on(const char* os, const char* location, const char* (*env)(const char* name));
 
 /// Why the databases did not open, as the person reads it (DESIGN 5.27,
 /// conformance/unconnected.json): in Clarity's own words, which the project

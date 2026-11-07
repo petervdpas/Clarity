@@ -148,6 +148,11 @@ pub struct DataSource {
     /// Records are read, never saved or deleted.
     #[serde(default)]
     pub readonly: bool,
+    /// `beside`: a built program keeps this SQLite database in the project's
+    /// folder, where Clarity runs it, instead of the person's folder for
+    /// application data: for an app that lives in its own folder.
+    #[serde(default)]
+    pub beside: bool,
     /// A web API's OpenAPI description, a file in the project's `apis`
     /// folder, which Clarity writes the API's module from (DESIGN 5.23).
     #[serde(default)]
@@ -363,6 +368,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
             auth: None,
             external: false,
             readonly: false,
+            beside: false,
             openapi: None,
             picks: Vec::new(),
             pick_schemas: Vec::new(),
@@ -787,10 +793,35 @@ pub fn sources_of(dir: &Path) -> Vec<clarity_spec::SourceRef> {
     load(&file).settings.as_ref().map(source_refs).unwrap_or_default()
 }
 
+/// Fails, saying what the folder must be called, when the module folder
+/// `dir` is not there: a folder of the same name in another case is named,
+/// as a project file `Writer.clarity` beside a folder `writer` has.
+fn module_folder_there(dir: &Path) -> std::io::Result<()> {
+    if dir.is_dir() {
+        return Ok(());
+    }
+    let name = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let parent = dir.parent().unwrap_or(Path::new("."));
+    let other = std::fs::read_dir(parent).ok().and_then(|entries| {
+        entries.filter_map(Result::ok).filter(|e| e.path().is_dir()).map(|e| e.file_name().to_string_lossy().into_owned()).find(|n| n.eq_ignore_ascii_case(&name))
+    });
+    let found = other.map(|o| format!("; there is a folder {o}, named otherwise: rename it to {name}, or the project file to {o}.clarity")).unwrap_or_default();
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!("the project file {name}.clarity keeps its modules in a folder named {name} beside it, which is not there{found}"),
+    ))
+}
+
+/// The language the project file next to `dir` names; none when it names none or cannot be read.
+fn language_of(dir: &Path) -> Option<String> {
+    load(&dir.with_extension(clarity_spec::SPEC_EXTENSION)).settings.and_then(|s| s.language)
+}
+
 /// Loads the modules in `dir` with their migration steps, checked against
 /// the project's data sources and the tables of its external databases.
 pub fn load_modules(dir: &Path) -> std::io::Result<clarity_spec::Project> {
-    let mut project = clarity_spec::load_dir_in(dir, &sources_of(dir))?;
+    module_folder_there(dir)?;
+    let mut project = clarity_spec::load_dir_for(dir, &[], &sources_of(dir), language_of(dir).as_deref())?;
     check_external(dir, &mut project);
     hand_over(dir, &mut project);
     Ok(project)
@@ -800,14 +831,14 @@ pub fn load_modules(dir: &Path) -> std::io::Result<clarity_spec::Project> {
 /// Like `load_modules_with`, with several files in place of what the folder
 /// holds: a module and the language files an edit writes beside it.
 pub fn load_modules_with_files(dir: &Path, replaced: &[(&Path, &str)]) -> std::io::Result<clarity_spec::Project> {
-    let mut project = clarity_spec::load_dir_with_files_in(dir, replaced, &sources_of(dir))?;
+    let mut project = clarity_spec::load_dir_for(dir, replaced, &sources_of(dir), language_of(dir).as_deref())?;
     check_external(dir, &mut project);
     hand_over(dir, &mut project);
     Ok(project)
 }
 
 pub fn load_modules_with(dir: &Path, path: &Path, text: &str) -> std::io::Result<clarity_spec::Project> {
-    let mut project = clarity_spec::load_dir_with_in(dir, Some((path, text)), &sources_of(dir))?;
+    let mut project = clarity_spec::load_dir_for(dir, &[(path, text)], &sources_of(dir), language_of(dir).as_deref())?;
     check_external(dir, &mut project);
     hand_over(dir, &mut project);
     Ok(project)
@@ -819,6 +850,25 @@ pub fn sqlite_path(dir: &Path, source: &DataSource) -> PathBuf {
     let path = Path::new(&source.url);
     let joined = if path.is_absolute() { path.to_path_buf() } else { dir.join(path) };
     std::path::absolute(&joined).unwrap_or(joined)
+}
+
+/// The file name of an SQLite database the project keeps beside it: one it
+/// owns, written as a path relative to the project; none for an external one,
+/// an absolute path, or one from the environment or a secret setting.
+fn kept_beside(source: &DataSource) -> Option<String> {
+    let url = source.url.as_str();
+    if source.external || source.beside || source.kind != SourceKind::Sqlite || url.contains(':') || Path::new(url).is_absolute() {
+        return None;
+    }
+    Path::new(url).file_name().map(|n| n.to_string_lossy().into_owned())
+}
+
+/// The folder Clarity's Run names in CLARITY_DATA for the project in `dir`:
+/// where it keeps its first own SQLite database, so a run in Clarity works on
+/// the project's data; none when it keeps none beside it.
+pub fn data_folder(dir: &Path, settings: &Settings) -> Option<PathBuf> {
+    let source = settings.datasources.iter().find(|s| kept_beside(s).is_some())?;
+    sqlite_path(dir, source).parent().map(Path::to_path_buf)
 }
 
 /// The SQLite database Clarity backs up for data source `source` of the
@@ -1055,8 +1105,15 @@ fn check_external(dir: &Path, project: &mut clarity_spec::Project) {
 /// the application runs in.
 pub fn build_settings(dir: &Path, settings: &Settings) -> Settings {
     let mut built = settings.clone();
+    let program = clarity_spec::model::snake_case(&settings.name);
     for source in built.datasources.iter_mut().filter(|s| s.kind == SourceKind::Sqlite) {
-        source.url = slashed(&sqlite_path(dir, source));
+        source.url = match kept_beside(source) {
+            // A database the project keeps beside it opens in the person's folder for application
+            // data, or where CLARITY_DATA says (Clarity's Run: the project's data folder);
+            // conformance/data-folder.json.
+            Some(file) => format!("data:{program}/{file}"),
+            None => slashed(&sqlite_path(dir, source)),
+        };
     }
     // A folder setting is found while the application runs, in the person's settings.
     for store in built.filestores.iter_mut().filter(|s| !s.location.starts_with("env:") && !s.location.starts_with("setting:")) {

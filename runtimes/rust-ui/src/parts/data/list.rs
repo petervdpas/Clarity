@@ -235,6 +235,27 @@ impl ListPart {
 impl Element for ListPart {
     part_element!();
 
+    /// A row of another part let go on it: the row under the point is chosen and the handler for that part runs.
+    fn take_drop(&mut self, from: &str, _x: f64, y: f64, cx: &mut Cx) -> bool {
+        let Some(handler) = super::rows::drop_handler(&self.base, from) else { return false };
+        if let Some((place, _)) = self.row_at(y) {
+            self.choose(place, cx);
+        }
+        self.base.host.run(self.base.name(), &crate::markup::HandlerCall::new("drop", &handler, Vec::new()));
+        cx.invalidate();
+        true
+    }
+
+    /// A row that opens something (`on open`) shows the hand.
+    fn cursor_at(&self, _x: f64, y: f64) -> Option<crate::input::Cursor> {
+        (super::rows::rows_open(&self.base) && self.row_at(y).is_some()).then_some(crate::input::Cursor::Hand)
+    }
+
+    /// And says so when the pointer rests on it.
+    fn tooltip_at(&self, _x: f64, y: f64) -> Option<String> {
+        (super::rows::rows_open(&self.base) && self.row_at(y).is_some()).then(super::rows::open_word)
+    }
+
     fn focusable(&self) -> bool {
         self.base.enabled()
     }
@@ -337,6 +358,14 @@ impl Element for ListPart {
             return;
         }
         let was = self.pressed.take();
+        // A row let go outside the list goes to the part there: the row is chosen, the drop asked for.
+        if let (Some(press), Some(name)) = (was.filter(|_| !self.base.node.bounds.contains(at.screen_x, at.screen_y)), self.base.name().map(str::to_string)) {
+            self.rows.cancel();
+            self.choose(press, cx);
+            cx.drop_at(&name, at.screen_x, at.screen_y);
+            cx.invalidate();
+            return;
+        }
         let (dragged, mv) = self.rows.drop_row();
         if dragged {
             if let Some(mv) = mv {

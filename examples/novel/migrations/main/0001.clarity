@@ -1,0 +1,113 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Step 1"
+    add entity Book
+        title: text(200), unique
+        subtitle: text(200)
+        form: Form, default Novel
+        author: text(120)
+        languageCode: text(10), default "en"
+        note: text
+        goal: integer, default 80000
+        dailyGoal: integer, default 500
+        last: integer
+    add entity Layer
+        name: text(80)
+        book: ref Book
+        year: integer
+        dream: bool, default false
+    add entity Chapter
+        title: text(120)
+        book: ref Book
+        position: integer
+        number: integer
+        status: Status, default Idea
+        summary: text
+        words: integer
+        goal: integer, default 3000
+        layers: text(200)
+        timeAndPlace: text
+        characters: text
+        content: text
+        transitions: text
+        style: text
+        factAndFiction: text
+        openQuestions: text
+    add entity Manuscript
+        chapter: ref Chapter
+        text: text
+        words: integer
+    add entity Version
+        moment: datetime
+        words: integer
+        manuscript: ref Manuscript
+        text: text
+    add entity Cutting
+        text: text
+        moment: datetime
+        chapter: ref Chapter
+    add entity Session
+        day: date
+        words: integer
+        book: ref Book
+    add entity Fragment
+        book: ref Book
+        text: text, search
+        layer: ref Layer
+        motifs: list<text>, search
+        kind: FragmentKind, default Invented
+        contributor: Contributor, default Author
+        heading: text(120), search
+        link: url
+        used: bool, default false
+        cut: bool, default false
+        position: integer
+    add entity FragmentPlace
+        fragment: ref Fragment
+        chapter: ref Chapter
+    add entity TrialBalloon
+        title: text(120)
+        book: ref Book
+        note: text
+    add entity BalloonPlace
+        balloon: ref TrialBalloon
+        chapter: ref Chapter
+    add entity Participation
+        balloon: ref TrialBalloon
+        character: ref Character
+    add entity Line
+        character: ref Character
+        text: text
+        balloon: ref TrialBalloon
+        position: integer
+    add entity Character
+        name: text(80)
+        book: ref Book
+        layer: ref Layer
+        role: text(120)
+        description: text
+    add entity Appearance
+        character: ref Character
+        what: text(200)
+        chapter: ref Chapter
+    add entity Research
+        title: text(200), search
+        book: ref Book
+        link: url
+        text: text, search
+    add entity ResearchPlace
+        research: ref Research
+        chapter: ref Chapter
+    add entity Document
+        title: text(200), search
+        book: ref Book
+        kind: DocumentKind, default Note
+        text: text, search
+    add entity Event
+        moment: text(60)
+        book: ref Book
+        position: integer
+        what: text
+        origin: text(80)
+        layer: ref Layer
+        chapters: list<integer>

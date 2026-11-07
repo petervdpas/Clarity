@@ -457,9 +457,10 @@ fn a_read_only_memo_of_code_looks_as_the_theme_s_code_part_not_as_an_input() {
 }
 
 #[test]
-fn a_memo_of_code_takes_the_height_the_window_has_left_and_a_plain_one_keeps_its_rows() {
+fn a_memo_takes_the_height_the_window_has_left_and_a_textbox_keeps_its_row() {
     use clarity_ui::parts::Part;
-    let screen = window(r#"<Memo name="code" at="1,1" span="6" rows="3" code="csharp" /><Memo name="plain" at="7,1" span="6" rows="3" />"#, TestHost::new());
+    let screen = window(r#"<Memo name="code" at="1,1" span="6" rows="3" code="csharp" /><Memo name="plain" at="7,1" span="6" rows="3" /><Textbox name="line" at="1,4" span="6" />"#, TestHost::new());
     assert!(text_box(&screen, "code").grows(), "a code memo shows a document, as a markdown part does");
-    assert!(!text_box(&screen, "plain").grows());
+    assert!(text_box(&screen, "plain").grows(), "a memo is a writing area that fills the height");
+    assert!(!text_box(&screen, "line").grows());
 }

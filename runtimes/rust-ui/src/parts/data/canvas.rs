@@ -31,6 +31,10 @@
 pub mod engine;
 pub mod drawing;
 mod modes;
+pub mod raster;
+pub mod adjust;
+pub mod layers;
+pub mod toolbox;
 
 pub use modes::{box_of, first_place, painted_with, shape_of, tool_word, with_object_moved, PAINT_TOOLS, VECTOR_TOOLS};
 
@@ -982,6 +986,11 @@ impl CanvasPart {
         (edge(ux, uw), edge(uy, uh))
     }
 
+    /// A toolbox's zoom tool: closer or farther, about the middle.
+    pub(super) fn zoom_step(&mut self, closer: bool, cx: &mut Cx) {
+        self.zoom_by(if closer { 1.25 } else { 1.0 / 1.25 }, None, cx);
+    }
+
     fn zoom_by(&mut self, factor: f64, at: Option<(f64, f64)>, cx: &mut Cx) {
         let (uw, uh) = self.units();
         let b = self.base.node.bounds;
@@ -1540,6 +1549,21 @@ impl Element for CanvasPart {
         self.base.node.bounds = area;
         self.heard();
         self.place_typing(cx);
+        self.follow_toolbox(cx);
+    }
+
+    /// Leaving the screen, its toolbox goes with it.
+    fn on_detached(&mut self, cx: &mut Cx) {
+        self.modes.toolbox.close(cx);
+    }
+
+    /// A picture the toolbox asked to import, chosen by the person, comes back here.
+    fn on_later(&mut self, done: crate::later::Done, cx: &mut Cx) {
+        if let Ok(imported) = done.downcast::<modes::Imported>() {
+            if let Some(bytes) = imported.0 {
+                self.import(&bytes, cx);
+            }
+        }
     }
 
     fn on_wheel(&mut self, dx: f64, dy: f64, held: Modifiers, cx: &mut Cx) -> bool {

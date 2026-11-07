@@ -147,7 +147,7 @@
         <span>Or on click, open</span>
         <select
           value={p.onClick ?? ""}
-          onchange={(e) => update(p, { onClick: textOf(e), handler: textOf(e) ? null : p.handler, newWindow: textOf(e) ? p.newWindow : false })}
+          onchange={(e) => update(p, { onClick: textOf(e), handler: textOf(e) ? null : p.handler, newWindow: textOf(e) ? p.newWindow : false, openWith: textOf(e) ? p.openWith : [] })}
         >
           <option value="">(nothing)</option>
           {#each targets as target (target)}
@@ -159,6 +159,10 @@
         <label class="inline" title="Opens in a desktop window of its own. Without it, the window opens in place, on top of this one.">
           <input type="checkbox" checked={p.newWindow} onchange={(e) => update(p, { newWindow: e.currentTarget.checked })} /> In a new window
         </label>
+          <label class="prop" title="Data of this window the opened window is filled with, each by its name there: book, chapter">
+            <span>With data</span>
+            <input class="mono" value={p.openWith.join(", ")} placeholder="(none)" onchange={(e) => update(p, { openWith: e.currentTarget.value.split(",").map((n) => n.trim()).filter((n) => n) })} />
+          </label>
       {/if}
     {:else}
       <p class="hint">Opens its submenu.</p>

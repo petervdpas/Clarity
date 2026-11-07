@@ -1,0 +1,375 @@
+{
+  "about": "The picture functions (docs/IMAGE-PLAN.md) as every stack gives them, through Clarity.Image. A picture is `width`, `height` and `pixels`: each pixel as eight hex digits, red, green, blue and alpha, rows from the top, left to right. A case calls `function` on `picture` (and `over` for blend) with `args` after the picture, and gives `result`. Crop, flip, quarter turns and blend are exact; resize, other angles and adjust are as the reference (runtimes/rust-image) gives them, which `CLARITY_WRITE_PICTURES=1 cargo test -p clarity-image` fills in where a case has no result yet.",
+  "cases": [
+    {
+      "args": [
+        1,
+        0,
+        1,
+        2
+      ],
+      "function": "crop",
+      "name": "crop the middle column",
+      "picture": {
+        "height": 2,
+        "pixels": "ff0000ff00ff00ff0000ffffffffffff000000ffff0000ff",
+        "width": 3
+      },
+      "result": {
+        "height": 2,
+        "pixels": "00ff00ff000000ff",
+        "width": 1
+      }
+    },
+    {
+      "args": [
+        2,
+        1,
+        5,
+        5
+      ],
+      "function": "crop",
+      "name": "crop clamped to the picture",
+      "picture": {
+        "height": 2,
+        "pixels": "ff0000ff00ff00ff0000ffffffffffff000000ffff0000ff",
+        "width": 3
+      },
+      "result": {
+        "height": 1,
+        "pixels": "ff0000ff",
+        "width": 1
+      }
+    },
+    {
+      "args": [
+        9,
+        9,
+        2,
+        2
+      ],
+      "function": "crop",
+      "name": "crop outside gives 1 by 1 transparent",
+      "picture": {
+        "height": 2,
+        "pixels": "ff0000ff00ff00ff0000ffffffffffff000000ffff0000ff",
+        "width": 3
+      },
+      "result": {
+        "height": 1,
+        "pixels": "00000000",
+        "width": 1
+      }
+    },
+    {
+      "args": [
+        true
+      ],
+      "function": "flip",
+      "name": "flip left to right",
+      "picture": {
+        "height": 2,
+        "pixels": "ff0000ff00ff00ff0000ffffffffffff000000ffff0000ff",
+        "width": 3
+      },
+      "result": {
+        "height": 2,
+        "pixels": "0000ffff00ff00ffff0000ffff0000ff000000ffffffffff",
+        "width": 3
+      }
+    },
+    {
+      "args": [
+        false
+      ],
+      "function": "flip",
+      "name": "flip top to bottom",
+      "picture": {
+        "height": 2,
+        "pixels": "ff0000ff00ff00ff0000ffffffffffff000000ffff0000ff",
+        "width": 3
+      },
+      "result": {
+        "height": 2,
+        "pixels": "ffffffff000000ffff0000ffff0000ff00ff00ff0000ffff",
+        "width": 3
+      }
+    },
+    {
+      "args": [
+        90
+      ],
+      "function": "rotate",
+      "name": "rotate a quarter turn clockwise",
+      "picture": {
+        "height": 2,
+        "pixels": "ff0000ff00ff00ff0000ffffffffffff000000ffff0000ff",
+        "width": 3
+      },
+      "result": {
+        "height": 3,
+        "pixels": "ffffffffff0000ff000000ff00ff00ffff0000ff0000ffff",
+        "width": 2
+      }
+    },
+    {
+      "args": [
+        180
+      ],
+      "function": "rotate",
+      "name": "rotate half a turn",
+      "picture": {
+        "height": 2,
+        "pixels": "ff0000ff00ff00ff0000ffffffffffff000000ffff0000ff",
+        "width": 3
+      },
+      "result": {
+        "height": 2,
+        "pixels": "ff0000ff000000ffffffffff0000ffff00ff00ffff0000ff",
+        "width": 3
+      }
+    },
+    {
+      "args": [
+        -90
+      ],
+      "function": "rotate",
+      "name": "rotate -90 is 270",
+      "picture": {
+        "height": 2,
+        "pixels": "ff0000ff00ff00ff0000ffffffffffff000000ffff0000ff",
+        "width": 3
+      },
+      "result": {
+        "height": 3,
+        "pixels": "0000ffffff0000ff00ff00ff000000ffff0000ffffffffff",
+        "width": 2
+      }
+    },
+    {
+      "args": [
+        45
+      ],
+      "function": "rotate",
+      "name": "rotate 45 degrees",
+      "picture": {
+        "height": 2,
+        "pixels": "ff0000ff00ff00ff0000ffffffffffff000000ffff0000ff",
+        "width": 3
+      },
+      "result": {
+        "height": 4,
+        "pixels": "00000000ff0000ff0000000000000000ffffffffffffffff00ff00ff0000000000000000000000ffff0000ff0000ffff0000000000000000ff0000ff00000000",
+        "width": 4
+      }
+    },
+    {
+      "args": [
+        1,
+        0,
+        50
+      ],
+      "function": "blend",
+      "name": "blend half over at a place",
+      "over": {
+        "height": 1,
+        "pixels": "000000ff",
+        "width": 1
+      },
+      "picture": {
+        "height": 1,
+        "pixels": "ffffffffffffffff",
+        "width": 2
+      },
+      "result": {
+        "height": 1,
+        "pixels": "ffffffff808080ff",
+        "width": 2
+      }
+    },
+    {
+      "args": [
+        5,
+        0,
+        100
+      ],
+      "function": "blend",
+      "name": "blend outside changes nothing",
+      "over": {
+        "height": 1,
+        "pixels": "000000ff",
+        "width": 1
+      },
+      "picture": {
+        "height": 1,
+        "pixels": "ffffffffffffffff",
+        "width": 2
+      },
+      "result": {
+        "height": 1,
+        "pixels": "ffffffffffffffff",
+        "width": 2
+      }
+    },
+    {
+      "args": [
+        0,
+        0,
+        100
+      ],
+      "function": "blend",
+      "name": "blend over transparent keeps the top",
+      "over": {
+        "height": 1,
+        "pixels": "ff0000ff",
+        "width": 1
+      },
+      "picture": {
+        "height": 1,
+        "pixels": "00000000",
+        "width": 1
+      },
+      "result": {
+        "height": 1,
+        "pixels": "ff0000ff",
+        "width": 1
+      }
+    },
+    {
+      "args": [
+        2,
+        1
+      ],
+      "function": "resize",
+      "name": "resize down smoothly",
+      "picture": {
+        "height": 2,
+        "pixels": "ff0000ff00ff00ff0000ffffffffffff000000ffff0000ff",
+        "width": 3
+      },
+      "result": {
+        "height": 1,
+        "pixels": "9f8050ff503050ff",
+        "width": 2
+      }
+    },
+    {
+      "args": [
+        2,
+        2
+      ],
+      "function": "resize",
+      "name": "resize up",
+      "picture": {
+        "height": 1,
+        "pixels": "ff0000ff",
+        "width": 1
+      },
+      "result": {
+        "height": 2,
+        "pixels": "ff0000ffff0000ffff0000ffff0000ff",
+        "width": 2
+      }
+    },
+    {
+      "args": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "function": "adjust",
+      "name": "adjust nothing",
+      "picture": {
+        "height": 2,
+        "pixels": "ff0000ff00ff00ff0000ffffffffffff000000ffff0000ff",
+        "width": 3
+      },
+      "result": {
+        "height": 2,
+        "pixels": "ff0000ff00ff00ff0000ffffffffffff000000ffff0000ff",
+        "width": 3
+      }
+    },
+    {
+      "args": [
+        0,
+        0,
+        100,
+        0
+      ],
+      "function": "adjust",
+      "name": "brightness full",
+      "picture": {
+        "height": 1,
+        "pixels": "404040ff",
+        "width": 1
+      },
+      "result": {
+        "height": 1,
+        "pixels": "ffffffff",
+        "width": 1
+      }
+    },
+    {
+      "args": [
+        0,
+        -100,
+        0,
+        0
+      ],
+      "function": "adjust",
+      "name": "saturation gone gives grey",
+      "picture": {
+        "height": 1,
+        "pixels": "ff0000ff",
+        "width": 1
+      },
+      "result": {
+        "height": 1,
+        "pixels": "4c4c4cff",
+        "width": 1
+      }
+    },
+    {
+      "args": [
+        120,
+        0,
+        0,
+        0
+      ],
+      "function": "adjust",
+      "name": "hue turned",
+      "picture": {
+        "height": 1,
+        "pixels": "ff0000ff",
+        "width": 1
+      },
+      "result": {
+        "height": 1,
+        "pixels": "007100ff",
+        "width": 1
+      }
+    },
+    {
+      "args": [
+        0,
+        0,
+        0,
+        50
+      ],
+      "function": "adjust",
+      "name": "contrast up",
+      "picture": {
+        "height": 1,
+        "pixels": "a0a0a0ff",
+        "width": 1
+      },
+      "result": {
+        "height": 1,
+        "pixels": "d1d1d1ff",
+        "width": 1
+      }
+    }
+  ]
+}

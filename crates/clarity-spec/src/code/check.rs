@@ -961,6 +961,14 @@ fn collect_widgets<'a>(widgets: &'a [Widget], owner: &mut Owner<'a>) {
         for handler in &widget.props.handlers {
             owner.wired.push(Wired { handler: &handler.handler, args: &handler.args, event: handler.event.keyword(), own_event: false, tell_of: None, span: widget.span });
         }
+        // A row dragged onto it runs its handler, with no values: the rows are the parts' `selected`.
+        for d in &widget.props.drops {
+            owner.wired.push(Wired { handler: &d.handler, args: &[], event: "drop", own_event: false, tell_of: None, span: widget.span });
+        }
+        // A link column's click runs its handler, with no values: the row is the table's `selected`.
+        for link in &widget.props.links {
+            owner.wired.push(Wired { handler: &link.handler, args: &[], event: "click", own_event: false, tell_of: None, span: widget.span });
+        }
         for tell in &widget.props.tells {
             owner.wired.push(Wired { handler: &tell.handler, args: &[], event: &tell.tell, own_event: false, tell_of: match (&widget.props.runs, &widget.props.part) {
                 (Some(engine), _) => Some(TellOf::Engine(engine)),
@@ -1775,6 +1783,39 @@ pub const SNAPPED: &str = "snapped";
 pub const LENGTH: &str = "length";
 /// The service a long engine call says how far it is with (DESIGN 5.12).
 pub const PROGRESS: &str = "progress";
+
+/// What a text function takes and gives (conformance/texts.json).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextValue {
+    Text,
+    Integer,
+    Bool,
+    Texts,
+    Bytes,
+}
+
+/// The built-in text functions of code (conformance/texts.json): each one's
+/// name, the values it takes and what it gives. Characters are counted once
+/// however many bytes they take, positions from 1 as lists count.
+pub const TEXT_FUNCTIONS: [(&str, &[TextValue], TextValue); 11] = [
+    ("words", &[TextValue::Text], TextValue::Texts),
+    ("split", &[TextValue::Text, TextValue::Text], TextValue::Texts),
+    ("trim", &[TextValue::Text], TextValue::Text),
+    ("lower", &[TextValue::Text], TextValue::Text),
+    ("upper", &[TextValue::Text], TextValue::Text),
+    ("replace", &[TextValue::Text, TextValue::Text, TextValue::Text], TextValue::Text),
+    ("startsWith", &[TextValue::Text, TextValue::Text], TextValue::Bool),
+    ("endsWith", &[TextValue::Text, TextValue::Text], TextValue::Bool),
+    ("slice", &[TextValue::Text, TextValue::Integer, TextValue::Integer], TextValue::Text),
+    ("indexOf", &[TextValue::Text, TextValue::Text], TextValue::Integer),
+    // `zip(paths, texts)`: a zip archive of one file per path holding the text of the same place (conformance/zip.json).
+    ("zip", &[TextValue::Texts, TextValue::Texts], TextValue::Bytes),
+];
+
+/// The text function `name`, when it is one.
+pub fn text_function(name: &str) -> Option<(&'static [TextValue], TextValue)> {
+    TEXT_FUNCTIONS.iter().find(|(n, _, _)| *n == name).map(|(_, takes, gives)| (*takes, *gives))
+}
 
 /// The built-in calls of the clock: the date, and the date and time, where
 /// the application runs.
@@ -3657,7 +3698,9 @@ impl<'a> BodyChecker<'_, 'a> {
             return Some(self.expr(expr, None));
         };
         // Only functions and actions take values by name.
-        let built_in = ["count", JOIN, SNAPPED, LENGTH, SIN, COS, ROUND, TODAY, NOW].contains(&function.name.as_str()) || (function.name == RANDOM && self.env.function(RANDOM).is_none());
+        let built_in = ["count", JOIN, SNAPPED, LENGTH, SIN, COS, ROUND, TODAY, NOW].contains(&function.name.as_str())
+            || (function.name == RANDOM && self.env.function(RANDOM).is_none())
+            || (text_function(&function.name).is_some() && self.env.function(&function.name).is_none());
         let handler = self.decl.is_none() && self.handlers.iter().any(|h| h.name.name == function.name);
         if !named.is_empty() && (built_in || handler) {
             for n in named {
@@ -3681,6 +3724,37 @@ impl<'a> BodyChecker<'_, 'a> {
                 self.error("'join' takes a list of texts and the text between them, as in join(names, \", \")", expr.span);
             }
             return Some(Ty::Text);
+        }
+        // A text function (conformance/texts.json), unless the project has a function of that name.
+        if let Some((takes, gives)) = text_function(&function.name)
+            && self.env.function(&function.name).is_none()
+        {
+            let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();
+            let fits = tys.len() == takes.len()
+                && tys.iter().zip(takes).all(|(ty, want)| match want {
+                    TextValue::Text => matches!(ty, Ty::Text | Ty::Unknown),
+                    TextValue::Integer => matches!(ty, Ty::Integer | Ty::Unknown),
+                    TextValue::Bool => matches!(ty, Ty::Bool | Ty::Unknown),
+                    TextValue::Texts => matches!(ty, Ty::Values(Item::Text) | Ty::Unknown),
+                    TextValue::Bytes => matches!(ty, Ty::Bytes | Ty::Unknown),
+                });
+            if !fits {
+                let words: Vec<&str> = takes.iter().map(|t| match t {
+                    TextValue::Text => "a text",
+                    TextValue::Integer => "a whole number",
+                    TextValue::Bool => "a yes or no",
+                    TextValue::Texts => "a list of texts",
+                    TextValue::Bytes => "bytes",
+                }).collect();
+                self.error(format!("'{}' takes {}", function.name, words.join(", ")), expr.span);
+            }
+            return Some(match gives {
+                TextValue::Text => Ty::Text,
+                TextValue::Integer => Ty::Integer,
+                TextValue::Bool => Ty::Bool,
+                TextValue::Texts => Ty::Values(Item::Text),
+                TextValue::Bytes => Ty::Bytes,
+            });
         }
         if function.name == LENGTH && self.env.function(LENGTH).is_none() {
             let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();
@@ -3977,6 +4051,8 @@ impl<'a> BodyChecker<'_, 'a> {
                 }
             };
             match target.field(&key.field.name) {
+                // Every record has an id, in the order the records were stored.
+                None if key.field.name == RECORD_ID => {}
                 None => self.error(
                     format!("{} has no field '{}'", target.name.name, key.field.name),
                     key.field.span,

@@ -357,7 +357,7 @@ impl<'a> Window<'a> {
             if let Some(Literal::Str(text)) = default
                 && let Some(key) = self.texts.key(text)
             {
-                let _ = writeln!(said, "        ShowText(nameof({prop}), Text.Of({}), shown => {prop} = shown);", string(&key));
+                let _ = writeln!(said, "        ShowText(nameof({prop}), Clarity.Runtime.Text.Of({}), shown => {prop} = shown);", string(&key));
             }
             let _ = write!(properties, "    public {ty_name} {prop} {{ get => {field}; set => SetProperty(ref {field}, value); }}\n    {ty_name} {field} = {start};\n\n");
         }
@@ -683,12 +683,16 @@ impl<'a> Window<'a> {
         let mut close = false;
         let mut keys = false;
         let mut undo = false;
+        // What each opened window is filled with: the data its routes name that this window has.
+        let mut filled: std::collections::BTreeMap<String, BTreeSet<String>> = std::collections::BTreeMap::new();
         let targets = self
             .parts
             .iter()
-            .filter_map(|w| w.props.on_click.as_deref().map(|t| (t, w.props.new_window)))
-            .chain(self.commands.iter().filter_map(|c| c.props.on_click.as_deref().map(|t| (t, c.props.new_window))));
-        for (target, new_window) in targets {
+            .filter_map(|w| w.props.on_click.as_deref().map(|t| (t, w.props.new_window, &w.props.open_with)))
+            .chain(self.commands.iter().filter_map(|c| c.props.on_click.as_deref().map(|t| (t, c.props.new_window, &c.props.open_with))));
+        for (target, new_window, with) in targets {
+            let names = filled.entry(target.to_string()).or_default();
+            names.extend(with.iter().filter(|n| self.page.data.iter().any(|d| d.name.name == **n)).cloned());
             match target {
                 QUIT => quit = true,
                 CLOSE => close = true,
@@ -702,13 +706,15 @@ impl<'a> Window<'a> {
         }
         let mut clicks = String::new();
         for (target, new_window) in &opens {
+            let init: Vec<String> = filled.get(target).into_iter().flatten().map(|n| format!("{0} = {0}", super::names::pascal(n))).collect();
+            let init = if init.is_empty() { String::new() } else { format!(" {{ {} }}", init.join(", ")) };
             if *new_window {
                 let _ = write!(
                     clicks,
-                    "    [RelayCommand]\n    void OpenNew_{target}() => Handle(() => Open(new {target}ViewModel(Db), newWindow: true));\n\n"
+                    "    [RelayCommand]\n    void OpenNew_{target}() => Handle(() => Open(new {target}ViewModel(Db){init}, newWindow: true));\n\n"
                 );
             } else {
-                let _ = write!(clicks, "    [RelayCommand]\n    void Open_{target}() => Handle(() => Open(new {target}ViewModel(Db)));\n\n");
+                let _ = write!(clicks, "    [RelayCommand]\n    void Open_{target}() => Handle(() => Open(new {target}ViewModel(Db){init}));\n\n");
             }
         }
         // What each custom part tells, run by the handler wired to it with the tell's values.

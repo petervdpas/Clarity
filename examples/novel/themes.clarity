@@ -1,0 +1,49 @@
+module themes
+
+// Light and warm, like paper.
+theme Paper
+    title @themePaper
+    mode light
+    color background "#f6f1e7"
+    color panel "#fbf8f2"
+    color raised "#efe8da"
+    color input "#fffdf8"
+    color accent "#8a5a2b"
+    color accent_soft "#efe0cc"
+    font heading "Georgia, serif"
+    radius 4
+
+// Dark, for the evening and the night.
+theme Night
+    title @themeNight
+    mode dark
+    color accent "#7aa2f7"
+    radius 4
+
+// Brown and soft, like an old notebook.
+theme Sepia
+    title @themeSepia
+    mode light
+    color background "#eadfc8"
+    color panel "#f1e7d3"
+    color raised "#e2d4b8"
+    color input "#f7efdf"
+    color text "#3b2f22"
+    color muted "#6e5d48"
+    color accent "#6b4423"
+    color accent_soft "#dcc7a6"
+    font "Georgia, serif"
+    font heading "Georgia, serif"
+    radius 2
+
+// Deep blue, like ink.
+theme Ink
+    title @themeInk
+    mode dark
+    color background "#0f1626"
+    color panel "#141d31"
+    color raised "#1b263f"
+    color input "#111a2c"
+    color accent "#5fb3d9"
+    color accent_soft "#1d3a52"
+    radius 6

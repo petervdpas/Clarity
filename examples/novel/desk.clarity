@@ -1,0 +1,493 @@
+module desk
+
+use books
+
+app Novel
+    title @novelTitle
+    main Bookcase
+    menu name mainMenu
+        item @languageMenu name languageMenu
+            item @englishItem name englishItem on click: toEnglish
+            item @dutchItem name dutchItem on click: toDutch
+            item @germanItem name germanItem on click: toGerman
+        item @goMenu name goMenu
+            item @backItem name backItem key "Alt+Left" on click -> back
+            item @forwardItem name forwardItem key "Alt+Right" on click -> forward
+        item @themeMenu name themeMenu
+            item @themePaper name paperItem on click: toPaper
+            item @themeNight name nightItem on click: toNight
+            item @themeSepia name sepiaItem on click: toSepia
+            item @themeInk name inkItem on click: toInk
+    footer
+        status @novelStatus
+
+// Each person's language and theme, kept on their machine.
+settings
+    language
+    theme
+
+// The books: the list at the left, the chosen book at the right. Opening one
+// goes to its writing desk.
+page Bookcase: window
+    title @novelTitle
+    size 1400 x 860
+    data books: list<Book>
+    data book: Book
+    on open: caseOpened
+    on return: caseReturned
+
+    splitter name caseSplitter at 1,1 span 12 rows 15 horizontal
+        pane span 5
+            table name bookTable at 1,1 span 5 rows 15 bind books columns title, form 110, author sortable add remove confirm on add: addBook on remove: removeBook on select: bookChosen on open: openBook
+        pane
+            label @bookTitleLabel name bookTitleLabel at 1,1 span 2 for bookTitleBox
+            textbox name bookTitleBox at 3,1 span 5 bind book.title placeholder @bookTitlePlaceholder
+            label @bookSubtitleLabel name bookSubtitleLabel at 1,2 span 2 for bookSubtitleBox
+            textbox name bookSubtitleBox at 3,2 span 5 bind book.subtitle
+            label @bookAuthorLabel name bookAuthorLabel at 1,3 span 2 for bookAuthorBox
+            textbox name bookAuthorBox at 3,3 span 5 bind book.author
+            label @bookLanguageLabel name bookLanguageLabel at 1,4 span 2 for bookLanguageBox
+            textbox name bookLanguageBox at 3,4 span 2 bind book.languageCode
+            label @bookFormLabel name bookFormLabel at 5,4 span 1 for bookFormBox
+            dropdown name bookFormBox at 6,4 span 2 bind book.form
+            label @bookNoteLabel name bookNoteLabel at 1,5 span 2 for bookNoteBox
+            memo name bookNoteBox at 3,5 span 5 rows 10 bind book.note placeholder @bookNotePlaceholder
+            button @exportCaption name exportButton at 1,15 span 2 icon "file-down" on click: exportBook
+            button @coverCaption name coverButton at 3,15 span 1 icon "palette" on click: openCover
+            button @saveCaption name saveBookButton at 4,15 span 2 icon "save" on click: saveBook
+            button @openCaption name openBookButton at 6,15 span 2 icon "book-open" default on click: openBook
+
+// A book's cover, painted with the tools of a paint program's toolbox.
+page CoverDesk: window
+    title @coverTitle
+    size 1100 x 860
+    data book: Book
+
+    heading @coverTitle name coverHeading at 1,1 span 10 bind book.title
+    button @backCaption name coverBackButton at 11,1 span 2 icon "arrow-left" cancel on click -> close
+    canvas name coverCanvas at 1,2 span 12 rows 15 bind book.cover units 600 x 900 zoom mode paint toolbox CoverTools brush 8 ink "#8a5a2b" on change: coverPainted
+
+// The cover's tools, designed as a toolbox: what a book cover needs.
+page CoverTools: toolbox
+    grid 4 columns
+    toolgroup name selectGroup at 1,1
+        tool name selectTool does select
+        tool name ellipseSelectTool does ellipseSelect
+        tool name lassoTool does lasso
+    toolgroup name drawGroup at 2,1
+        tool name penTool does pen
+        tool name pencilTool does pencil
+        tool name sprayTool does spray
+    tool name eraserTool at 3,1 does eraser
+    tool name fillTool at 4,1 does fill
+    tool name pickerTool at 1,2 does picker
+    toolgroup name shapeGroup at 2,2
+        tool name lineTool does line
+        tool name rectTool does rect
+        tool name ellipseTool does ellipse
+    tool name zoomInTool at 3,2 does zoomIn
+    tool name zoomOutTool at 4,2 does zoomOut
+    tool name rotateTool at 1,3 does rotate
+    tool name flipAcrossTool at 2,3 does flipAcross
+    tool name flipDownTool at 3,3 does flipDown
+    tool name cropTool at 4,3 does crop
+    toolsize name sizeOption at 1,4 span 4
+    toolopacity name opacityOption at 1,5 span 4
+    toolcolors name colorOption at 1,6 span 2
+    tool name importTool at 3,6 does import
+    tool name exportTool at 4,6 does export
+
+// A book on the desk: an accordion of the parts of the book, Chapters and
+// Research.
+page Desk: window
+    title @deskTitle
+    size 1400 x 860
+    data book: Book
+    data chapter: Chapter
+    on open: deskOpened
+
+    label @deskTitle name deskHeading at 1,1 span 10
+    button @backCaption name backButton at 11,1 span 2 icon "arrow-left" cancel on click -> close
+    accordion name parts at 1,2 span 12 rows 15 horizontal
+        section @chaptersSection view ChaptersPart on chosen: chapterChosen on toResearch: toResearch
+        section @researchSection view ResearchPart on jumpTo: jumpTo
+
+// The chapters: the list at the left, with the chosen chapter's properties in
+// a slide-out against its right edge, and its text beside it. Chapter 0 is a
+// prologue.
+page ChaptersPart: view
+    tells chosen
+    tells toResearch(title: text)
+    data forBook: Book
+    data chapters: list<Chapter>
+    data chosen: Chapter
+    data manuscript: Manuscript
+    data chapterResearch: list<Research>
+    data researchPool: list<Research>
+
+    splitter name chapterSplitter at 1,1 span 12 rows 15 horizontal
+        pane span 3
+            list name chapterList at 1,1 span 3 rows 13 bind chapters show number, title reorder by position from 0 on select: chapterClicked on reorder: chaptersMoved
+            button @newChapterCaption name newChapterButton at 1,14 span 3 icon "plus" on click: addChapter
+            button @removeChapterCaption name removeChapterButton at 1,15 span 3 icon "trash" on click: removeChapter
+            slideout @propertiesCaption name properties side right beside chapterList width 380 resizable min 300 max 640 pinnable span 6 rows 12
+                textbox name titleBox at 1,1 span 6 bind chosen.title placeholder @chapterTitlePlaceholder
+                textbox name layersBox at 1,2 span 6 bind chosen.layers placeholder @layersPlaceholder
+                dropdown name statusBox at 1,3 span 6 bind chosen.status
+                memo name summaryBox at 1,4 span 6 rows 3 bind chosen.summary placeholder @summaryPlaceholder
+                label @chapterResearchLabel name chapterResearchLabel at 1,7 span 6
+                table name researchTable at 1,8 span 6 rows 4 bind chapterResearch columns title add remove confirm on add: linkResearch on remove: unlinkResearch on open: openResearch
+                button @toResearchCaption name toResearchButton at 1,12 span 6 icon "square-arrow-out-up-right" tooltip @toResearchTip on click: openResearch
+        pane
+            label @deskTitle name chapterHeading at 1,1 span 9
+            memo name manuscriptBox at 1,2 span 9 rows 13 bind manuscript.text placeholder @manuscriptPlaceholder
+            label @deskTitle name wordsLabel at 1,15 span 6
+            button @saveCaption name saveChapterButton at 7,15 span 3 icon "save" default on click: saveChapter
+
+// All research of the book: the list at the left, the text at the right and
+// where it is used.
+page ResearchPart: view
+    tells jumpTo(position: integer)
+    data researchBook: Book
+    data researches: list<Research>
+    data research: Research
+    data researchPlaces: list<ResearchPlace>
+    data researchChoice: list<Chapter>
+    data researchCurrent: Chapter
+
+    splitter name researchSplitter at 1,1 span 12 rows 15 horizontal
+        pane span 3
+            textbox name researchSearchBox at 1,1 span 3 placeholder @researchSearchPlaceholder on change: filterResearch
+            list name researchList at 1,2 span 3 rows 12 bind researches show title on select: researchChosen
+            button @newResearch name newResearchButton at 1,14 span 3 icon "plus" on click: addResearch
+            button @removeResearchCaption name removeResearchButton at 1,15 span 3 icon "trash" on click: removeResearch
+        pane
+            textbox name researchTitleBox at 1,1 span 6 bind research.title placeholder @researchTitlePlaceholder
+            textbox name researchLinkBox at 1,2 span 6 bind research.link placeholder @linkPlaceholder
+            memo name researchTextBox at 1,3 span 6 rows 13 bind research.text placeholder @researchPlaceholder
+            button @saveCaption name saveResearchButton at 7,1 span 3 icon "save" default on click: saveResearch
+            label @usedInLabel name usedInLabel at 7,2 span 3
+            table name researchPlaceTable at 7,3 span 3 rows 11 bind researchPlaces columns chapter link chapter: researchToChapter add remove confirm on add: addResearchPlace on remove: removeResearchPlace on open: researchToChapter
+            button @toChapterCaption name toChapterButton at 7,14 span 3 icon "square-arrow-out-up-right" tooltip @toChapterTip on click: researchToChapter
+            button @inChapterCaption name inChapterButton at 7,15 span 3 icon "link" tooltip @inChapterTip on click: researchInChapter
+
+// The menu: each language by its own name, and each theme.
+code Novel
+    handler toEnglish
+        settings.language = "en"
+
+    handler toDutch
+        settings.language = "nl"
+
+    handler toGerman
+        settings.language = "de"
+
+    handler toPaper
+        settings.theme = "Paper"
+
+    handler toNight
+        settings.theme = "Night"
+
+    handler toSepia
+        settings.theme = "Sepia"
+
+    handler toInk
+        settings.theme = "Ink"
+
+code Bookcase
+    handler caseOpened
+        loadBooks()
+        book = new Book
+
+    handler caseReturned
+        loadBooks()
+
+    handler loadBooks
+        books = find b in Book order by b.title
+
+    handler bookChosen
+        book = bookTable.selected
+
+    // A new book gets a title that does not exist yet: New book, New book 2, ...
+    handler addBook
+        book = new Book
+        book.title = @newBook
+        let number = count(books) + 1
+        if count(books) > 0
+            book.title = @newBookNumbered(number = number)
+        for b in find b in Book where b.title == book.title
+            number = number + 1
+            book.title = @newBookNumbered(number = number)
+        save book
+        loadBooks()
+
+    // A book goes with everything that belongs to it.
+    handler removeBook
+        delete bookTable.selected
+        book = new Book
+        loadBooks()
+
+    handler saveBook
+        save book
+        loadBooks()
+
+    handler openBook
+        if book.id == 0
+            return
+        open Desk with book = book
+
+    // The cover of the chosen book; a book not saved yet has none to keep.
+    handler openCover
+        if book.id == 0
+            return
+        open CoverDesk with book = book
+
+    handler exportBook
+        if book.id == 0
+            return
+        exportManuscript(book)
+        message @exported(title = book.title)
+
+code CoverDesk
+    handler coverPainted
+        save book
+
+code Desk
+    handler deskOpened
+        parts.open = 1
+        forBook = book
+        researchBook = book
+        loadChapters()
+        researches = find r in Research where r.book == book order by r.title
+        research = new Research
+        chapter = new Chapter
+        for c in chapters
+            if c.position == book.last
+                chapter = c
+                chapterList.selected = c
+        showChapter()
+
+    handler loadChapters
+        chapters = find c in Chapter where c.book == book order by c.position
+        researchChoice = chapters
+
+    // The chosen chapter: its properties, its text and its research.
+    handler showChapter
+        let kept = chapter.id != 0
+        chosen = chapter
+        manuscript = new Manuscript
+        manuscript.chapter = chapter
+        for m in find m in Manuscript where m.chapter == chapter
+            manuscript = m
+        manuscriptBox.enabled = kept
+        saveChapterButton.enabled = kept
+        wordsLabel.caption = @wordCount(count = manuscript.words)
+        chapterHeading.caption = @noChapter
+        researchCurrent = chapter
+        researchPool = find r in Research where r.book == book order by r.title
+        let linked: list<Research> = []
+        for p in find p in ResearchPlace where p.chapter == chapter order by p.research.title
+            linked = linked + [p.research]
+        chapterResearch = linked
+        researchTable.enabled = kept
+        inChapterButton.enabled = kept
+        deskHeading.caption = @deskHeadingBook(book = book.title)
+        if kept
+            deskHeading.caption = @deskHeadingChapter(book = book.title, number = chapter.number, title = chapter.title)
+            chapterHeading.caption = @chapterHeading(number = chapter.number, title = chapter.title)
+            inChapterButton.caption = @inChapter(number = chapter.number, title = chapter.title)
+
+    // Chapters chose, made, saved or removed a chapter.
+    handler chapterChosen
+        chapter = new Chapter
+        if chapterList.selected.id != 0
+            chapter = chapterList.selected
+            book.last = chapter.position
+            save book
+        loadChapters()
+        chapterList.selected = chapter
+        showChapter()
+
+    // Research jumped to a chapter: choose it in Chapters.
+    handler jumpTo(position: integer)
+        for c in chapters
+            if c.position == position
+                chapter = c
+                chapterList.selected = c
+        book.last = position
+        save book
+        showChapter()
+        parts.open = 1
+        message @jumpedTo(number = chapter.number, title = chapter.title)
+
+    // Chapters jumped to a piece of research: choose it in Research.
+    handler toResearch(title: text)
+        researches = find r in Research where r.book == book order by r.title
+        for r in researches
+            if r.title == title
+                research = r
+                researchList.selected = r
+        researchPlaces = find p in ResearchPlace where p.research == research order by p.chapter.position
+        parts.open = 2
+        message @jumpedToResearch(title = title)
+
+code ChaptersPart
+    handler loadList
+        chapters = find c in Chapter where c.book == forBook order by c.position
+
+    handler loadResearch
+        let linked: list<Research> = []
+        for p in find p in ResearchPlace where p.chapter == chosen order by p.research.title
+            linked = linked + [p.research]
+        chapterResearch = linked
+
+    handler chapterClicked
+        tell chosen()
+
+    handler addChapter
+        let c = new Chapter
+        c.book = forBook
+        c.position = count(chapters)
+        c.number = count(chapters)
+        c.title = @newChapter
+        save c
+        loadList()
+        chapterList.selected = c
+        tell chosen()
+
+    handler removeChapter
+        if chapterList.selected.id == 0
+            return
+        ask @removeChapterAsk(title = chapterList.selected.title) yes @removeRow no @keepRow then chapterRemoved
+
+    handler chapterRemoved
+        delete chapterList.selected
+        loadList()
+        tell chosen()
+
+    // After a drag every number follows from its place, the first being 0.
+    handler chaptersMoved
+        for c in chapters
+            c.number = c.position
+            save c
+        tell chosen()
+
+    // Saves the properties and the text, and counts the words.
+    handler saveChapter
+        if chosen.id == 0
+            return
+        manuscript.chapter = chosen
+        manuscript.words = count(words(manuscript.text))
+        save manuscript
+        chosen.words = manuscript.words
+        save chosen
+        wordsLabel.caption = @wordCount(count = manuscript.words)
+        loadList()
+        chapterList.selected = chosen
+        tell chosen()
+
+    handler linkResearch
+        if chosen.id == 0
+            return
+        ask @whichResearch for Research from researchPool then researchPicked
+
+    handler researchPicked(r: Research)
+        for p in find p in ResearchPlace where p.research == r and p.chapter == chosen
+            return
+        let p = new ResearchPlace
+        p.research = r
+        p.chapter = chosen
+        save p
+        loadResearch()
+
+    // Takes the research out of this chapter; the research itself stays.
+    handler unlinkResearch
+        let gone = researchTable.selected
+        for p in find p in ResearchPlace where p.research == gone and p.chapter == chosen
+            delete p
+        loadResearch()
+
+    // To the chosen research, in the Research section.
+    handler openResearch
+        if researchTable.selected.id == 0
+            if count(chapterResearch) == 0
+                return
+            researchTable.selected = chapterResearch[1]
+        tell toResearch(researchTable.selected.title)
+
+code ResearchPart
+    handler filterResearch
+        researches = find r in Research where r.book == researchBook and r matches researchSearchBox.text order by r.title
+
+    handler researchChosen
+        research = researchList.selected
+        loadResearchPlaces()
+
+    handler addResearch
+        let r = new Research
+        r.book = researchBook
+        r.title = @newResearch
+        save r
+        filterResearch()
+        research = r
+        researchList.selected = r
+        loadResearchPlaces()
+
+    handler saveResearch
+        if research.id == 0
+            return
+        save research
+        filterResearch()
+
+    handler loadResearchPlaces
+        researchPlaces = find p in ResearchPlace where p.research == research order by p.chapter.position
+
+    handler addResearchPlace
+        if research.id == 0
+            return
+        ask @whichChapter for Chapter from researchChoice then researchPlacePicked
+
+    handler researchPlacePicked(c: Chapter)
+        for p in find p in ResearchPlace where p.research == research and p.chapter == c
+            return
+        let p = new ResearchPlace
+        p.research = research
+        p.chapter = c
+        save p
+        loadResearchPlaces()
+
+    handler researchInChapter
+        if research.id == 0 or researchCurrent.id == 0
+            return
+        researchPlacePicked(researchCurrent)
+        message @linked(number = researchCurrent.number, title = researchCurrent.title)
+
+    handler removeResearchPlace
+        delete researchPlaceTable.selected
+        loadResearchPlaces()
+
+    // To the chosen chapter of Used in, or the first when none is chosen.
+    handler researchToChapter
+        if count(researchPlaces) == 0
+            message @usedNowhere
+            return
+        let p = researchPlaces[1]
+        if researchPlaceTable.selected.id != 0
+            p = researchPlaceTable.selected
+        tell jumpTo(p.chapter.position)
+
+    // Research used in a chapter goes only once its links are gone.
+    handler removeResearch
+        if research.id == 0
+            return
+        let used = find p in ResearchPlace where p.research == research
+        if count(used) > 0
+            message warning @stillUsed(count = count(used))
+            return
+        ask @removeResearchAsk yes @removeRow no @keepRow then researchRemoved
+
+    handler researchRemoved
+        delete research
+        research = new Research
+        filterResearch()
+        loadResearchPlaces()

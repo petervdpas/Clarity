@@ -59,6 +59,19 @@ fn distance(a: &str, b: &str) -> usize {
     row[b.len()]
 }
 
+/// The icons a painting canvas's toolbox shows (docs/IMAGE-PLAN.md): one per
+/// paint tool, in the order of `CanvasMode::Paint`'s tools, then its own buttons.
+pub const TOOLBOX_ICONS: [&str; 33] = [
+    "paintbrush", "pencil", "spray-can", "eraser", "paint-bucket", "pipette",
+    // The picture's selections and transforms.
+    "square-dashed", "circle-dashed", "lasso", "rotate-cw", "move-horizontal", "move-vertical", "crop",
+    // The vector tools: select, line, rectangle, ellipse, path, text.
+    "mouse-pointer-2", "slash", "square", "circle", "spline", "type",
+    "arrow-left-right", "chevron-down", "chevron-up", "image-up", "image-down", "zoom-in", "zoom-out", "sliders-horizontal",
+    // The layers tool.
+    "eye", "eye-off", "plus", "trash", "arrow-up", "arrow-down",
+];
+
 /// The icons the project shows, with their drawings, for the renderer.
 pub fn used(project: &Project) -> BTreeMap<String, String> {
     let mut found = BTreeMap::new();
@@ -86,6 +99,12 @@ pub fn used(project: &Project) -> BTreeMap<String, String> {
             }
             if w.props.remove {
                 add("trash");
+            }
+            // A painting canvas's toolbox shows its tools' icons.
+            if w.props.toolbox.is_some() {
+                for icon in TOOLBOX_ICONS {
+                    add(icon);
+                }
             }
             if let Some(menu) = &w.menu {
                 commands(&menu.items, add);

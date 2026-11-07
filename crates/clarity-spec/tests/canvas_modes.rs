@@ -110,8 +110,8 @@ fn paint_binds_a_picture_and_vector_a_text_kept_as_svg() {
     assert!(vector_on_picture.iter().any(|e| e.contains("vector") && e.contains("text")), "{vector_on_picture:#?}");
     let bound_drawn = errors(&APP.replace(" mode paint tools pen, eraser brush 4 ink accent", ""));
     assert!(bound_drawn.iter().any(|e| e.contains("mode")), "{bound_drawn:#?}");
-    let wrong_tool = errors(&APP.replace("tools pen, eraser", "tools pen, rect"));
-    assert!(wrong_tool.iter().any(|e| e.contains("rect") && e.contains("paint")), "{wrong_tool:#?}");
+    let wrong_tool = errors(&APP.replace("tools pen, eraser", "tools pen, path"));
+    assert!(wrong_tool.iter().any(|e| e.contains("path") && e.contains("paint")), "{wrong_tool:#?}");
     let wide = errors(&APP.replace("brush 4", "brush 500"));
     assert!(wide.iter().any(|e| e.contains("brush")), "{wide:#?}");
 }

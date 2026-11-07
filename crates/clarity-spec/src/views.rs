@@ -78,18 +78,20 @@ pub fn shown_in<'a>(files: &'a [SpecFile], page: &'a Page) -> Vec<&'a Page> {
 /// view's page and code block go, being the windows' now; the designer
 /// draws a view on its own from the project as written.
 pub fn placed(project: &Project) -> Project {
-    if !project.files.iter().flat_map(|f| &f.pages).any(|p| p.kind == PageKind::View) {
+    // A toolbox (`page X: toolbox`) is placed as a view is: its parts in the canvas that names it, its code the window's.
+    let placeable = |kind: PageKind| matches!(kind, PageKind::View | PageKind::Toolbox);
+    if !project.files.iter().flat_map(|f| &f.pages).any(|p| placeable(p.kind)) {
         return project.clone();
     }
     let mut placed = project.clone();
     let views: Vec<(Page, Option<CodeBlock>)> = project
         .files
         .iter()
-        .flat_map(|f| f.pages.iter().filter(|p| p.kind == PageKind::View).map(move |p| (p.clone(), f.code.iter().find(|c| c.name.name == p.name.name).cloned())))
+        .flat_map(|f| f.pages.iter().filter(|p| placeable(p.kind)).map(move |p| (p.clone(), f.code.iter().find(|c| c.name.name == p.name.name).cloned())))
         .collect();
     for file in &mut placed.files {
         let mut added: Vec<(String, CodeBlock)> = Vec::new();
-        for page in file.pages.iter_mut().filter(|p| p.kind != PageKind::View) {
+        for page in file.pages.iter_mut().filter(|p| !placeable(p.kind)) {
             let mut shown: Vec<(&(Page, Option<CodeBlock>), Vec<TellHandler>)> = Vec::new();
             fill(&mut page.widgets, &views, &mut shown);
             for ((view, code), heard) in shown {
@@ -107,7 +109,7 @@ pub fn placed(project: &Project) -> Project {
         }
         // A view is the windows' that show it, its parts and its code: never a window or code of its own in a program.
         file.code.retain(|c| !views.iter().any(|(v, _)| v.name.name == c.name.name));
-        file.pages.retain(|p| p.kind != PageKind::View);
+        file.pages.retain(|p| !placeable(p.kind));
         for (window, code) in added {
             match file.code.iter_mut().find(|c| c.name.name == window) {
                 Some(own) => {
@@ -123,6 +125,16 @@ pub fn placed(project: &Project) -> Project {
         }
     }
     placed
+}
+
+/// The toolbox's parts work on the canvas that shows the toolbox: their `for` names it.
+fn for_canvas(parts: &mut [Widget], canvas: &str) {
+    for part in parts {
+        if matches!(part.props.kind, WidgetKind::Tool | WidgetKind::ToolGroup | WidgetKind::ToolSize | WidgetKind::ToolOpacity | WidgetKind::ToolColors | WidgetKind::ToolLayers) {
+            part.props.for_part = Some(canvas.to_string());
+        }
+        for_canvas(&mut part.children, canvas);
+    }
 }
 
 /// Each `tell` in `body` as a call of the window's handler that hears it (`heard`); an unheard one goes.
@@ -154,6 +166,17 @@ fn heard_as_calls(body: &mut Vec<Stmt>, heard: &[TellHandler]) {
 fn fill<'v>(widgets: &mut [Widget], views: &'v [(Page, Option<CodeBlock>)], shown: &mut Vec<(&'v (Page, Option<CodeBlock>), Vec<TellHandler>)>) {
     let find = |name: &str| views.iter().find(|(v, _)| v.name.name == name);
     for widget in widgets.iter_mut() {
+        // A canvas's toolbox: the toolbox's parts are the canvas's, each tool for that canvas.
+        if let Some(found) = widget.props.toolbox_page.as_deref().and_then(find).filter(|f| f.0.kind == PageKind::Toolbox) {
+            let mut parts = found.0.widgets.clone();
+            if let Some(canvas) = widget.props.name.clone() {
+                for_canvas(&mut parts, &canvas);
+            }
+            widget.children = parts;
+            widget.props.toolbox_columns = Some(found.0.columns);
+            shown.push((found, Vec::new()));
+            continue;
+        }
         if let Some(found) = widget.props.view.as_deref().and_then(find) {
             widget.children = found.0.widgets.clone();
             // What it hears becomes calls in the view's code, so no stack sees it as an event of the part.
@@ -162,6 +185,8 @@ fn fill<'v>(widgets: &mut [Widget], views: &'v [(Page, Option<CodeBlock>)], show
         for page in widget.pages.iter_mut() {
             if let Some(found) = page.view.as_deref().and_then(find) {
                 page.children = found.0.widgets.clone();
+                // The view keeps its own grid: its parts are placed on its columns, not the container's span.
+                page.columns.get_or_insert(found.0.columns);
                 shown.push((found, std::mem::take(&mut page.tells)));
             }
         }

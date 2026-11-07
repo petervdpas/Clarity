@@ -47,7 +47,7 @@ pub const FOLDER_KEYS: [(&str, &str); 2] = [("chooseFolder", "Choose a folder"),
 pub const ZOOM_KEYS: [(&str, &str); 3] = [("zoomOut", "Zoom out"), ("zoomWhole", "Show it whole"), ("zoomIn", "Zoom in")];
 /// The toolbar of a canvas the person paints or draws on (DESIGN 5.31), and
 /// what it asks when the text tool places a text.
-pub const CANVAS_TOOL_KEYS: [(&str, &str); 9] = [
+pub const CANVAS_TOOL_KEYS: [(&str, &str); 15] = [
     ("toolSelect", "Select"),
     ("toolLine", "Line"),
     ("toolRect", "Rectangle"),
@@ -56,7 +56,43 @@ pub const CANVAS_TOOL_KEYS: [(&str, &str); 9] = [
     ("toolText", "Text"),
     ("toolPen", "Pen"),
     ("toolEraser", "Eraser"),
+    ("toolPencil", "Pencil"),
+    ("toolFill", "Fill"),
+    ("toolPicker", "Pick a colour"),
+    ("toolEllipseSelect", "Ellipse select"),
+    ("toolLasso", "Lasso"),
+    ("toolSpray", "Spray can"),
     ("canvasText", "The text"),
+];
+
+/// The toolbox of a painting canvas (`toolbox`, docs/IMAGE-PLAN.md): its title,
+/// its options and its colours. A canvas with a toolbox has them.
+pub const TOOLBOX_KEYS: [(&str, &str); 25] = [
+    ("toolboxTitle", "Tools"),
+    ("toolboxFold", "Fold the toolbox"),
+    ("toolSize", "Size"),
+    ("toolOpacity", "Opacity"),
+    ("foregroundColor", "Foreground colour"),
+    ("backgroundColor", "Background colour"),
+    ("swapColors", "Swap the colours"),
+    ("importPicture", "Import a picture"),
+    ("exportPicture", "Export the picture"),
+    ("toolboxHold", "hold for more"),
+    ("rotatePicture", "Turn a quarter clockwise"),
+    ("flipAcross", "Mirror left to right"),
+    ("flipDown", "Mirror top to bottom"),
+    ("cropPicture", "Crop to the selection"),
+    ("adjustColors", "Colours"),
+    ("adjustHue", "Hue"),
+    ("adjustSaturation", "Saturation"),
+    ("adjustBrightness", "Brightness"),
+    ("adjustContrast", "Contrast"),
+    ("layerName", "Layer {number}"),
+    ("addLayer", "Add a layer"),
+    ("removeLayer", "Remove the layer"),
+    ("layerUp", "Move the layer up"),
+    ("layerDown", "Move the layer down"),
+    ("showLayer", "Show or hide the layer"),
 ];
 pub const LANGUAGE_PICKER_KEYS: [(&str, &str); 1] = [("languagePicker", "Language")];
 pub const THEME_PICKER_KEYS: [(&str, &str); 1] = [("themePicker", "Theme")];
@@ -197,6 +233,10 @@ pub const SLIDEOUT_KEYS: [(&str, &str); 3] = [("slideoutClose", "Close"), ("slid
 /// `remove confirm` asks, with its buttons.
 pub const TABLE_ROW_KEYS: [(&str, &str); 4] = [("addRow", "Add"), ("removeRow", "Remove"), ("removeRowAsk", "Remove {row}?"), ("keepRow", "Keep")];
 
+/// Clarity's word of a row that opens something (a list, table or tree with
+/// `on open`): the tooltip over its rows, so people see they open.
+pub const OPEN_ROW_KEYS: [(&str, &str); 1] = [("openRow", "Double-click or press Enter to open")];
+
 /// What a window says when code fails at a value or a record: an item
 /// outside its list, a record that is not there or still used. The
 /// runtimes fill the slots; every application with windows has them.
@@ -226,6 +266,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&FOLDER_KEYS)
         .chain(&ZOOM_KEYS)
         .chain(&CANVAS_TOOL_KEYS)
+        .chain(&TOOLBOX_KEYS)
         .chain(&PROGRESS_KEYS)
         .chain(&TAGS_KEYS)
         .chain(&PAGE_KEYS)
@@ -242,6 +283,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&SIDEBAR_KEYS)
         .chain(&SLIDEOUT_KEYS)
         .chain(&TABLE_ROW_KEYS)
+        .chain(&OPEN_ROW_KEYS)
         .chain(&RUNTIME_ERROR_KEYS)
         .chain(&ENGINE_ERROR_KEYS)
         .chain(&DESKTOP_KEYS)
@@ -635,7 +677,9 @@ fn shown(project: &Project) -> Shown {
     let required = project.entities().any(|e| !e.settings && e.fields.iter().any(|f| f.modifiers.required));
     let sidebars = project.files.iter().flat_map(|f| f.pages.iter().map(|p| &p.frame).chain(f.apps.iter().map(|a| &a.frame))).any(|frame| frame.sidebars.iter().any(|s| s.props.collapsible || s.props.maximizable));
     let slideouts = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Slideout));
+    let toolboxes = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.toolbox.is_some()));
     let table_rows = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.add || w.props.remove));
+    let open_rows = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.handlers.iter().any(|h| h.event == crate::widgets::Event::Open)));
     let engines = project.files.iter().any(|f| !f.engines.is_empty());
     // A date input, or a table cell of a date field, opens the calendar.
     let dates = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Date))
@@ -651,6 +695,7 @@ fn shown(project: &Project) -> Shown {
         .chain(if folders { FOLDER_KEYS.as_slice() } else { &[] })
         .chain(if zooms { ZOOM_KEYS.as_slice() } else { &[] })
         .chain(if paints { CANVAS_TOOL_KEYS.as_slice() } else { &[] })
+        .chain(if toolboxes { TOOLBOX_KEYS.as_slice() } else { &[] })
         .chain(if progress { PROGRESS_KEYS.as_slice() } else { &[] })
         .chain(if bound_tags { TAGS_KEYS.as_slice() } else { &[] })
         .chain(if paged { PAGE_KEYS.as_slice() } else { &[] })
@@ -666,6 +711,7 @@ fn shown(project: &Project) -> Shown {
         .chain(if sidebars { SIDEBAR_KEYS.as_slice() } else { &[] })
         .chain(if slideouts { SLIDEOUT_KEYS.as_slice() } else { &[] })
         .chain(if table_rows { TABLE_ROW_KEYS.as_slice() } else { &[] })
+        .chain(if open_rows { OPEN_ROW_KEYS.as_slice() } else { &[] })
         .chain(if windows { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
         .chain(if engines { ENGINE_ERROR_KEYS.as_slice() } else { &[] });
     // The runtimes fill the slots of Clarity's own words, the ones its English has.

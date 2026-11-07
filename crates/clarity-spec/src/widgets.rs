@@ -20,6 +20,18 @@ pub enum WidgetKind {
     Icon,
     /// A line between parts, level or `vertical`.
     Separator,
+    /// A toolbox's button with an icon: a built-in action on its canvas (`does pencil`) or a handler (`on click`).
+    Tool,
+    /// A toolbox's group of tools: one button showing the tool last used, the others on holding it.
+    ToolGroup,
+    /// A toolbox's brush size, made smaller and larger.
+    ToolSize,
+    /// A toolbox's opacity, less and more.
+    ToolOpacity,
+    /// A toolbox's foreground and background colours, picked and swapped.
+    ToolColors,
+    /// A painting toolbox's layers: shown or hidden, taken in hand, added, removed, moved.
+    ToolLayers,
     /// Text that opens an address (`to`), the address it binds, or runs a handler.
     Link,
     /// A short text or number in a pill.
@@ -114,6 +126,8 @@ pub enum Category {
     Media,
     /// Timers: parts that keep time, not seen.
     Time,
+    /// The parts of a toolbox (`page X: toolbox`): tools, groups of them, size, opacity and colours.
+    Tools,
 }
 
 /// Something that happens to a part, which a handler in the code behind
@@ -320,6 +334,8 @@ pub enum ContainerKind {
 pub enum WidgetProperty {
     Columns,
     Edit,
+    /// `link chapter: toChapter`: a table column whose cells are links that run a handler.
+    Link,
     Show,
     Orientation,
     Surface,
@@ -411,6 +427,12 @@ pub enum WidgetProperty {
     Every,
     /// `side left`, `side top`, `side bottom`: the edge a slide-out comes in from.
     Side,
+    /// `toolbox popup` or `toolbox slideout`: a painting canvas's tools in a toolbox.
+    Toolbox,
+    /// `beside chapterTable`: a slide-out lies against that part, not at the window's edge.
+    Beside,
+    /// `does pencil`: the built-in action a toolbox's tool does on its canvas.
+    Does,
     /// `width 420`: how wide a slide-out at the left or right is, in pixels.
     SlideWidth,
     /// `height 300`: how high a slide-out at the top or bottom is, in pixels.
@@ -560,7 +582,7 @@ const fn input(
 const ENTRIES: &[Entry] = &[
     text_part(WidgetKind::Label, "label", "Label", (3, 1), Some("Label"), BindTarget::Nothing, &[WidgetProperty::For]),
     text_part(WidgetKind::Help, "help", "Help text", (4, 1), None, BindTarget::Nothing, &[WidgetProperty::For]),
-    text_part(WidgetKind::Heading, "heading", "Heading", (6, 1), Some("Heading"), BindTarget::Nothing, &[]),
+    text_part(WidgetKind::Heading, "heading", "Heading", (6, 1), Some("Heading"), BindTarget::Field, &[]),
     // An icon of its own; what it shows is its first word: `icon "triangle-alert"`.
     text_part(WidgetKind::Icon, "icon", "Icon", (1, 1), None, BindTarget::Nothing, &[]),
     // A short text or number in a pill: written, or what it binds.
@@ -787,6 +809,97 @@ const ENTRIES: &[Entry] = &[
         events: &[],
         properties: &[],
     },
+    // The parts of a toolbox: their look and kind given, what a tool does built in or coded.
+    Entry {
+        kind: WidgetKind::Tool,
+        keyword: "tool",
+        name: "Tool",
+        category: Category::Tools,
+        size: (1, 1),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[Event::Click],
+        properties: &[WidgetProperty::Icon, WidgetProperty::Does],
+    },
+    Entry {
+        kind: WidgetKind::ToolGroup,
+        keyword: "toolgroup",
+        name: "Tool group",
+        category: Category::Tools,
+        size: (1, 1),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: Some(ContainerKind::Plain),
+        clickable: false,
+        events: &[],
+        properties: &[],
+    },
+    Entry {
+        kind: WidgetKind::ToolSize,
+        keyword: "toolsize",
+        name: "Brush size",
+        category: Category::Tools,
+        size: (4, 1),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[],
+        properties: &[],
+    },
+    Entry {
+        kind: WidgetKind::ToolOpacity,
+        keyword: "toolopacity",
+        name: "Opacity",
+        category: Category::Tools,
+        size: (4, 1),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[],
+        properties: &[],
+    },
+    Entry {
+        kind: WidgetKind::ToolColors,
+        keyword: "toolcolors",
+        name: "Colours",
+        category: Category::Tools,
+        size: (2, 1),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[],
+        properties: &[],
+    },
+    Entry {
+        kind: WidgetKind::ToolLayers,
+        keyword: "toollayers",
+        name: "Layers",
+        category: Category::Tools,
+        size: (4, 4),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[],
+        properties: &[],
+    },
     // A line between parts.
     Entry {
         kind: WidgetKind::Separator,
@@ -846,7 +959,7 @@ const ENTRIES: &[Entry] = &[
         container: Some(ContainerKind::Plain),
         clickable: false,
         events: &[Event::Open, Event::Close],
-        properties: &[WidgetProperty::Side, WidgetProperty::SlideWidth, WidgetProperty::SlideHeight, WidgetProperty::Resizable, WidgetProperty::Min, WidgetProperty::Max, WidgetProperty::Pinnable, WidgetProperty::View],
+        properties: &[WidgetProperty::Side, WidgetProperty::Beside, WidgetProperty::SlideWidth, WidgetProperty::SlideHeight, WidgetProperty::Resizable, WidgetProperty::Min, WidgetProperty::Max, WidgetProperty::Pinnable, WidgetProperty::View],
     },
     Entry {
         kind: WidgetKind::Splitter,
@@ -876,7 +989,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Change, Event::Reorder, Event::Add, Event::Remove],
-        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::NoUndo, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::Add, WidgetProperty::Remove, WidgetProperty::Striped, WidgetProperty::OrderBy, WidgetProperty::Reorder, WidgetProperty::Page, WidgetProperty::Frame],
+        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::Link, WidgetProperty::NoUndo, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::Add, WidgetProperty::Remove, WidgetProperty::Striped, WidgetProperty::OrderBy, WidgetProperty::Reorder, WidgetProperty::Page, WidgetProperty::Frame],
     },
     // A list the window holds as a tree, arranged by `children` (U1c).
     Entry {
@@ -1052,6 +1165,7 @@ const ENTRIES: &[Entry] = &[
             WidgetProperty::Surface,
             WidgetProperty::Mode,
             WidgetProperty::Tools,
+            WidgetProperty::Toolbox,
             WidgetProperty::Brush,
             WidgetProperty::Ink,
         ],
@@ -1391,13 +1505,17 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         bind: None,
         on_click: None,
         new_window: false,
+        open_with: Vec::new(),
         handlers: Vec::new(),
         columns: Vec::new(),
         edit: Vec::new(),
+        links: Vec::new(),
+        drops: Vec::new(),
         switches: Vec::new(),
         widths: Default::default(),
         resizable: false,
         side: None,
+        beside: None,
         slide_width: None,
         slide_height: None,
         pinnable: false,
@@ -1410,9 +1528,14 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         confirm: false,
         striped: false,
         reorder: None,
+        reorder_from: None,
         mode: None,
         objects: None,
         tools: Vec::new(),
+        toolbox: None,
+        toolbox_page: None,
+        toolbox_columns: None,
+        does: None,
         brush: None,
         ink: None,
         order: None,
@@ -1566,6 +1689,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
         if let Some(side) = props.side.filter(|s| *s != crate::model::SlideSide::Right) {
             parts.push(format!("side {}", side.keyword()));
         }
+        if let Some(part) = &props.beside {
+            parts.push(format!("beside {part}"));
+        }
         if let Some(width) = props.slide_width {
             parts.push(format!("width {width}"));
         }
@@ -1683,6 +1809,10 @@ pub fn widget_line(props: &WidgetProps) -> String {
             .collect();
         parts.push(format!("edit {}", edited.join(", ")));
     }
+    if !props.links.is_empty() {
+        let links: Vec<String> = props.links.iter().map(|l| format!("{}: {}", l.column, l.handler)).collect();
+        parts.push(format!("link {}", links.join(", ")));
+    }
     if props.resizable {
         parts.push("resizable".to_string());
     }
@@ -1699,7 +1829,10 @@ pub fn widget_line(props: &WidgetProps) -> String {
         parts.push(if order.desc { format!("order by {} desc", order.field) } else { format!("order by {}", order.field) });
     }
     if let Some(field) = &props.reorder {
-        parts.push(format!("reorder by {field}"));
+        parts.push(match props.reorder_from {
+            Some(from) if from != 1 => format!("reorder by {field} from {from}"),
+            _ => format!("reorder by {field}"),
+        });
     }
     match (props.mode, &props.objects) {
         (Some(crate::model::CanvasMode::Objects), Some(o)) => parts.push(format!("mode objects {} at {}, {}", o.list, o.x, o.y)),
@@ -1708,6 +1841,13 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if !props.tools.is_empty() {
         parts.push(format!("tools {}", props.tools.join(", ")));
+    }
+    if let Some(toolbox) = props.toolbox {
+        let page = props.toolbox_page.as_deref().map(|p| format!(" {p}")).unwrap_or_default();
+        parts.push(if toolbox == crate::model::ToolboxKind::Popup { format!("toolbox{page}") } else { format!("toolbox{page} {}", toolbox.keyword()) });
+    }
+    if let Some(does) = &props.does {
+        parts.push(format!("does {does}"));
     }
     if let Some(brush) = props.brush {
         parts.push(format!("brush {brush}"));
@@ -1796,8 +1936,14 @@ pub fn widget_line(props: &WidgetProps) -> String {
     for t in &props.tells {
         parts.push(format!("on {}: {}", t.tell, t.handler));
     }
+    for d in &props.drops {
+        parts.push(format!("on drop from {}: {}", d.from, d.handler));
+    }
     if let Some(target) = &props.on_click {
         parts.push(format!("on click -> {target}"));
+        if !props.open_with.is_empty() {
+            parts.push(format!("with {}", props.open_with.join(", ")));
+        }
         if props.new_window {
             parts.push("in new window".to_string());
         }
@@ -1927,6 +2073,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
             "columns",
         ),
         (WidgetProperty::Edit, !props.edit.is_empty(), "edit"),
+        (WidgetProperty::Link, !props.links.is_empty(), "link"),
         (WidgetProperty::Show, !props.show.is_empty(), "show"),
         (
             WidgetProperty::Orientation,
@@ -1987,6 +2134,9 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::By, props.by.is_some(), "by"),
         (WidgetProperty::Measure, props.measure.is_some(), "count"),
         (WidgetProperty::Side, props.side.is_some(), "side"),
+        (WidgetProperty::Beside, props.beside.is_some(), "beside"),
+        (WidgetProperty::Toolbox, props.toolbox.is_some(), "toolbox"),
+        (WidgetProperty::Does, props.does.is_some(), "does"),
         (WidgetProperty::SlideWidth, props.slide_width.is_some(), "width"),
         (WidgetProperty::SlideHeight, props.slide_height.is_some(), "height"),
         (WidgetProperty::Pinnable, props.pinnable, "pinnable"),
@@ -2120,6 +2270,7 @@ fn grows(kind: WidgetKind) -> bool {
             | WidgetKind::Image
             | WidgetKind::Canvas
             | WidgetKind::Markdown
+            | WidgetKind::Memo
     )
 }
 

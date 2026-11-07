@@ -17,6 +17,7 @@ pub mod video;
 pub mod text_box;
 pub mod text_editor;
 pub mod timer;
+pub mod tools;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -335,7 +336,7 @@ impl PartBase {
         }
         if event == "click" {
             if let Some(target) = self.spec.text("onClick").filter(|t| !t.is_empty()) {
-                ran &= self.host.run(self.spec.name(), &HandlerCall::new(route_event(self.spec.flag("newWindow")), target, Vec::new()));
+                ran &= self.host.run(self.spec.name(), &HandlerCall::new(route_event(self.spec.flag("newWindow")), target, self.spec.names("openWith")));
             }
         }
         ran
@@ -355,13 +356,15 @@ pub fn change_state(host: &dyn PartHost, name: &str, change: impl FnOnce(&mut Pa
     host.set_state(name, state);
 }
 
-/// A menu's item picked: its handler runs, or the window its `opens` names opens.
+/// A menu's item picked: its handler runs, or the window its `opens` names
+/// opens, with the data its `openWith` names (a route's values are the names
+/// of data the window showing fills the opened one with).
 pub fn pick(host: &dyn PartHost, part: Option<&str>, item: &CommandSpec) {
     if let Some(handler) = item.text("handler").filter(|h| !h.is_empty()) {
         host.run(part, &crate::markup::handler_of("click", handler));
     }
     if let Some(target) = item.text("onClick").filter(|t| !t.is_empty()) {
-        host.run(part, &HandlerCall::new(route_event(item.flag("newWindow")), target, Vec::new()));
+        host.run(part, &HandlerCall::new(route_event(item.flag("newWindow")), target, item.names("openWith")));
     }
 }
 
@@ -546,7 +549,7 @@ macro_rules! part_element {
 pub type MakePart = fn(PartSpec, Rc<dyn PartHost>) -> Box<dyn Part>;
 
 /// The kinds Clarity.UI draws, each with the module that makes it.
-const DRAWN: [(&str, MakePart); 12] = [
+const DRAWN: [(&str, MakePart); 18] = [
     ("label", label::make),
     ("heading", heading::make),
     ("button", button::make),
@@ -559,6 +562,13 @@ const DRAWN: [(&str, MakePart); 12] = [
     ("sound", sound::make),
     ("video", video::make),
     ("timer", timer::make),
+    // The parts of a toolbox (`page Painting: toolbox`).
+    ("tool", tools::make_tool),
+    ("toolGroup", tools::make_group),
+    ("toolSize", tools::make_size),
+    ("toolOpacity", tools::make_opacity),
+    ("toolColors", tools::make_colors),
+    ("toolLayers", tools::make_layers),
 ];
 
 thread_local! {

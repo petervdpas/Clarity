@@ -208,3 +208,13 @@ fn a_badge_shows_its_caption_or_its_value_in_the_accent_pill() {
     assert_eq!(look.color("background"), shot.pixel(b.right() as i32 - 2, (b.y + b.height / 2.0) as i32));
     keep(&mut shot, "badge.png");
 }
+
+/// A heading that binds a field shows its value in the heading size, as a text part does in the text size.
+#[test]
+fn a_heading_that_binds_a_field_shows_its_value() {
+    let h = host();
+    h.inner.set("chapter.title", serde_json::json!("Arrival"));
+    let screen = window(r#"<Heading name="title" at="1,1" span="6" caption="Chapter" bind="chapter.title" /><Heading name="plain" at="1,2" span="6" caption="Chapters" />"#, h);
+    assert_eq!("Arrival", part::<HeadingPart>(&screen, "title").text());
+    assert_eq!("Chapters", part::<HeadingPart>(&screen, "plain").text());
+}

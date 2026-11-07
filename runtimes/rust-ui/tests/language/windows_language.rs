@@ -162,3 +162,23 @@ fn a_value_kept_under_a_key_comes_back_and_can_be_forgotten() {
     clarity_ui::choices::choose_language("en");
     let _ = std::fs::remove_dir_all(folder);
 }
+
+/// A handler that sets `settings.language` (a menu item of the app's code)
+/// switches the language shown, as the picker does, on every stack: Clarity.UI
+/// follows the kept setting, whatever program set it.
+#[test]
+fn a_handler_that_sets_the_language_setting_shows_it() {
+    let _alone = super::one_at_a_time();
+    clarity_ui::choices::start(&GREET_FILES, None);
+    clarity_ui::choices::choose_language("en");
+    let fake = Arc::new(Fake::default());
+    let program: Arc<dyn Program> = fake.clone();
+    let mut data = serde_json::Map::new();
+    data.insert("settings".into(), serde_json::json!({ "id": 0, "language": "en" }));
+    let host = clarity_ui::window::ProgramHost::new(program, GREET_FILES, clarity_runtime::ui::WindowState::new("Main", data.clone()), &[]);
+    let mut dutch = clarity_runtime::ui::WindowState::new("Main", data);
+    dutch.data.insert("settings".into(), serde_json::json!({ "id": 0, "language": "nl" }));
+    assert!(host.answered(Ok(reply(dutch))));
+    assert_eq!("nl", clarity_ui::choices::language());
+    clarity_ui::choices::choose_language("en");
+}

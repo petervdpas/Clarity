@@ -737,9 +737,19 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, Sql, St
     };
     let mut app_dispatch = String::new();
     for a in &apps {
+        let settings = crate::app_carries_settings(project, &a.name);
+        let (read, give, data) = if settings {
+            (
+                "\t\tif kept, ok := state.Data[\"settings\"]; ok {\n\t\t\tif raw, err := json.Marshal(kept); err == nil {\n\t\t\t\t_ = json.Unmarshal(raw, &app.Settings)\n\t\t\t}\n\t\t}\n",
+                "\t\tdata := map[string]any{}\n\t\tfor k, v := range state.Data {\n\t\t\tdata[k] = v\n\t\t}\n\t\tdata[\"settings\"] = app.Settings\n",
+                "data",
+            )
+        } else {
+            ("", "", "state.Data")
+        };
         for (handler, method) in &a.handlers {
             app_dispatch.push_str(&format!(
-                "\tcase {}:\n\t\tapp, err := load{}(db)\n\t\tif err != nil {{\n\t\t\treturn clarity.Reply{{}}, err\n\t\t}}\n\t\tif err := app.{method}(db, ui); err != nil {{\n\t\t\treturn clarity.Reply{{}}, err\n\t\t}}\n\t\treturn ui.Reply(state.Window, state.Data)\n",
+                "\tcase {}:\n\t\tapp, err := load{}(db)\n\t\tif err != nil {{\n\t\t\treturn clarity.Reply{{}}, err\n\t\t}}\n{read}\t\tif err := app.{method}(db, ui); err != nil {{\n\t\t\treturn clarity.Reply{{}}, err\n\t\t}}\n{give}\t\treturn ui.Reply(state.Window, {data})\n",
                 string(handler),
                 a.struct_name
             ));

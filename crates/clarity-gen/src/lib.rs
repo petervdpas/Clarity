@@ -1145,6 +1145,51 @@ pub(crate) fn codec_libraries(project: &Project, settings: &Settings) -> Result<
     if errors.is_empty() { Ok(found) } else { Err(errors) }
 }
 
+/// The migration steps of data source `source` for SQLite, as the program
+/// applies them when it starts: each step's title and statements.
+pub fn sqlite_steps(project: &Project, source: &str) -> Result<Vec<(String, Vec<String>)>, Vec<String>> {
+    schema::steps(project, source, Sql::Sqlite)
+}
+
+/// Whether the app's handlers carry the settings: the app has the project's
+/// settings as its data, so a handler of the app (a menu item's) starts from
+/// the settings of the window it runs from and hands them back in the reply,
+/// as a window's own handler does. Every stack's dispatch follows this.
+pub(crate) fn app_carries_settings(project: &Project, app: &str) -> bool {
+    project.apps().any(|a| a.name.name == app && a.data.iter().any(|d| d.name.name == clarity_spec::parser::SETTINGS_DATA))
+}
+
+/// A built-in function of code (conformance/texts.json, conformance/zip.json)
+/// by the name each runtime gives it, written out so every name is in source.
+pub(crate) struct BuiltIn {
+    pub name: &'static str,
+    pub rust: &'static str,
+    pub go: &'static str,
+    pub csharp: &'static str,
+    pub c: &'static str,
+    pub cpp: &'static str,
+}
+
+pub(crate) const BUILT_INS: [BuiltIn; 11] = [
+    BuiltIn { name: "words", rust: "clarity_runtime::texts::words", go: "clarity.TextWords", csharp: "Clarity.Runtime.Texts.Words", c: "clarity_text_words", cpp: "clarity::words" },
+    BuiltIn { name: "split", rust: "clarity_runtime::texts::split", go: "clarity.TextSplit", csharp: "Clarity.Runtime.Texts.Split", c: "clarity_text_split", cpp: "clarity::split" },
+    BuiltIn { name: "trim", rust: "clarity_runtime::texts::trim", go: "clarity.TextTrim", csharp: "Clarity.Runtime.Texts.Trim", c: "clarity_text_trim", cpp: "clarity::trim" },
+    BuiltIn { name: "lower", rust: "clarity_runtime::texts::lower", go: "clarity.TextLower", csharp: "Clarity.Runtime.Texts.Lower", c: "clarity_text_lower", cpp: "clarity::lower" },
+    BuiltIn { name: "upper", rust: "clarity_runtime::texts::upper", go: "clarity.TextUpper", csharp: "Clarity.Runtime.Texts.Upper", c: "clarity_text_upper", cpp: "clarity::upper" },
+    BuiltIn { name: "replace", rust: "clarity_runtime::texts::replace", go: "clarity.TextReplace", csharp: "Clarity.Runtime.Texts.Replace", c: "clarity_text_replace", cpp: "clarity::replace" },
+    BuiltIn { name: "startsWith", rust: "clarity_runtime::texts::starts_with", go: "clarity.TextStartsWith", csharp: "Clarity.Runtime.Texts.StartsWith", c: "clarity_text_starts_with", cpp: "clarity::starts_with" },
+    BuiltIn { name: "endsWith", rust: "clarity_runtime::texts::ends_with", go: "clarity.TextEndsWith", csharp: "Clarity.Runtime.Texts.EndsWith", c: "clarity_text_ends_with", cpp: "clarity::ends_with" },
+    BuiltIn { name: "slice", rust: "clarity_runtime::texts::slice", go: "clarity.TextSlice", csharp: "Clarity.Runtime.Texts.Slice", c: "clarity_text_slice", cpp: "clarity::slice" },
+    BuiltIn { name: "indexOf", rust: "clarity_runtime::texts::index_of", go: "clarity.TextIndexOf", csharp: "Clarity.Runtime.Texts.IndexOf", c: "clarity_text_index_of", cpp: "clarity::index_of" },
+    BuiltIn { name: "zip", rust: "clarity_runtime::zip::stored", go: "clarity.Zip", csharp: "Clarity.Runtime.Zip.Of", c: "clarity_zip", cpp: "clarity::zip" },
+];
+
+/// The built-in function `name`, unless the project has a function of that name.
+pub(crate) fn built_in(project: &Project, name: &str) -> Option<&'static BuiltIn> {
+    BUILT_INS.iter().find(|b| b.name == name).filter(|_| project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name))
+}
+
+
 /// Puts `added` after the first `marker` of the file `path`; nothing when either is missing.
 fn insert_after(files: &mut [OutFile], path: &str, marker: &str, added: &str) {
     if let Some(file) = files.iter_mut().find(|f| f.path == path)

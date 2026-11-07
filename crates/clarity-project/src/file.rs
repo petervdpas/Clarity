@@ -439,14 +439,15 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                 };
                 let kind = pick(line, "data source kind", "kinds", &SOURCE_KINDS, source_word, kind)?;
                 let url = string(line, a.get(2), "where the data source is")?;
-                let (mut external, mut readonly) = (false, false);
+                let (mut external, mut readonly, mut beside) = (false, false, false);
                 for flag in &a[3.min(a.len())..] {
                     let slot = match word(flag) {
                         Some("external") => &mut external,
                         Some("readonly") => &mut readonly,
+                        Some("beside") => &mut beside,
                         _ => {
                             return Err(format!(
-                                "line {line}: unexpected '{}'; a data source can be external or readonly",
+                                "line {line}: unexpected '{}'; a data source can be external, readonly or beside",
                                 flag.text
                             ));
                         }
@@ -463,6 +464,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     auth: None,
                     external,
                     readonly,
+                    beside,
                     openapi: None,
                     picks: Vec::new(),
                     pick_schemas: Vec::new(),
@@ -640,12 +642,13 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
             format!("datasource {}", source.name),
             1,
             format!(
-                "datasource {} {} {}{}{}",
+                "datasource {} {} {}{}{}{}",
                 source.name,
                 source_word(source.kind),
                 quote(&source.url),
                 if source.external { " external" } else { "" },
-                if source.readonly { " readonly" } else { "" }
+                if source.readonly { " readonly" } else { "" },
+                if source.beside { " beside" } else { "" }
             ),
         ));
         if let Some(auth) = &source.auth {

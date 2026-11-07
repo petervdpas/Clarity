@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.35
+
+- Colors the toolbox words (`toolbox`, `tool`, `toolgroup`, `toolsize`, `toolopacity`, `toolcolors`, `toollayers`, `does`) and the other new ones of this round.
+
 ## 0.1.34
 
 - Colors `video`, the part that plays a video.

@@ -285,4 +285,48 @@ public static class Texts
         foreach (var _ in text.EnumerateRunes()) count++;
         return count;
     }
+
+    // The text functions of code (conformance/texts.json): characters counted
+    // once however many UTF-16 units they take, positions from 1.
+
+    /// <summary><c>words(text)</c>: the words of a text, apart by white space.</summary>
+    public static List<string> Words(string text) => [.. text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+
+    /// <summary><c>split(text, separator)</c>: the pieces between each separator, empty ones kept; an empty separator gives the characters.</summary>
+    public static List<string> Split(string text, string separator) =>
+        separator.Length == 0 ? [.. text.EnumerateRunes().Select(r => r.ToString())] : [.. text.Split(separator)];
+
+    /// <summary><c>trim(text)</c>: the text without white space at its ends.</summary>
+    public static string Trim(string text) => text.Trim();
+
+    /// <summary><c>lower(text)</c>: the text in lower case, whatever the person's language.</summary>
+    public static string Lower(string text) => text.ToLowerInvariant();
+
+    /// <summary><c>upper(text)</c>: the text in upper case, whatever the person's language.</summary>
+    public static string Upper(string text) => text.ToUpperInvariant();
+
+    /// <summary><c>replace(text, find, with)</c>: every find replaced; an empty find changes nothing.</summary>
+    public static string Replace(string text, string find, string with) => find.Length == 0 ? text : text.Replace(find, with, StringComparison.Ordinal);
+
+    /// <summary><c>startsWith(text, prefix)</c>.</summary>
+    public static bool StartsWith(string text, string prefix) => text.StartsWith(prefix, StringComparison.Ordinal);
+
+    /// <summary><c>endsWith(text, suffix)</c>.</summary>
+    public static bool EndsWith(string text, string suffix) => text.EndsWith(suffix, StringComparison.Ordinal);
+
+    /// <summary><c>slice(text, from, count)</c>: count characters from position from (from 1), clamped to the text.</summary>
+    public static string Slice(string text, long from, long count)
+    {
+        var runes = text.EnumerateRunes().ToArray();
+        var start = Math.Max(from, 1);
+        var end = Math.Min(from + Math.Max(count, 0), runes.Length + 1);
+        return end <= start ? "" : string.Concat(runes[(int)(start - 1)..(int)(end - 1)].Select(r => r.ToString()));
+    }
+
+    /// <summary><c>indexOf(text, find)</c>: the position of find's first character (from 1), 0 when it is not there.</summary>
+    public static long IndexOf(string text, string find)
+    {
+        var at = text.IndexOf(find, StringComparison.Ordinal);
+        return at < 0 ? 0 : Length(text[..at]) + 1;
+    }
 }

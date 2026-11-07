@@ -87,6 +87,8 @@ struct Pending {
 pub struct ProgramHost {
     program: Arc<dyn Program>,
     files: AppFiles,
+    /// Where the person went, for Back and Forward (window/history.rs).
+    history: RefCell<super::history::History>,
     state: RefCell<WindowState>,
     specs: BTreeMap<String, PartSpec>,
     changes: Cell<u64>,
@@ -133,7 +135,7 @@ impl ProgramHost {
         let mut specs = BTreeMap::new();
         named(parts, &mut specs);
         let facts = ModelFacts::of(files.model);
-        ProgramHost { program, files, state: RefCell::new(state), specs, changes: Cell::new(0), effects: RefCell::new(Vec::new()), pending: RefCell::new(None), focused_scope: RefCell::new(None), facts, hears: RefCell::new(Vec::new()), running: RefCell::new(None), result: RefCell::new(None), shown: RefCell::new(BTreeMap::new()), engines: crate::engines::Engines::new(), program_facts: std::cell::OnceCell::new() }
+        ProgramHost { program, files, history: RefCell::new(super::history::History::default()), state: RefCell::new(state), specs, changes: Cell::new(0), effects: RefCell::new(Vec::new()), pending: RefCell::new(None), focused_scope: RefCell::new(None), facts, hears: RefCell::new(Vec::new()), running: RefCell::new(None), result: RefCell::new(None), shown: RefCell::new(BTreeMap::new()), engines: crate::engines::Engines::new(), program_facts: std::cell::OnceCell::new() }
     }
 
     /// The host shares what the program's windows share: the person's keys, and whether a long call runs.
@@ -300,6 +302,69 @@ impl ProgramHost {
         }
     }
 
+    /// Where the window is now: the chosen row of its lists, tables and trees, and the open section, tab or step of its containers.
+    pub fn place_now(&self) -> super::history::Place {
+        let state = self.state.borrow();
+        let mut place = super::history::Place::default();
+        for (name, spec) in &self.specs {
+            match spec.kind.as_str() {
+                "list" | "table" | "tree" | "treeTable" => {
+                    if let Some(row) = state.selected.get(name) {
+                        place.selected.insert(name.clone(), *row);
+                    }
+                }
+                "accordion" | "tabs" | "steps" => {
+                    if let Some(open) = state.parts.get(name).and_then(|p| p.open.or(p.tab)) {
+                        place.opened.insert(name.clone(), open);
+                    }
+                }
+                _ => {}
+            }
+        }
+        place
+    }
+
+    /// An event of the person is done: the window's place is a step of its history.
+    pub fn note_place(&self) {
+        let place = self.place_now();
+        self.history.borrow_mut().note(place);
+    }
+
+    /// Goes Back (or Forward) to the place before (or after): rows are chosen and containers opened as they were, and their handlers run as when the person did it.
+    pub fn go(&self, back: bool) {
+        let to = if back { self.history.borrow_mut().back() } else { self.history.borrow_mut().forward() };
+        let Some(to) = to else { return };
+        let now = self.place_now();
+        let names: std::collections::BTreeSet<String> = to.selected.keys().chain(now.selected.keys()).cloned().collect();
+        for name in names {
+            let row = to.selected.get(&name).copied();
+            if now.selected.get(&name).copied() != row {
+                crate::parts::PartHost::select(self, &name, row);
+                let calls: Vec<HandlerCall> = self.specs.get(&name).map(|s| s.on("select").cloned().collect()).unwrap_or_default();
+                for call in calls {
+                    self.run(Some(&name), &call);
+                }
+            }
+        }
+        for (name, open) in &to.opened {
+            if now.opened.get(name) != Some(open) {
+                let kind = self.specs.get(name).map(|s| s.kind.clone()).unwrap_or_default();
+                crate::parts::change_state(self, name, |s| if kind == "tabs" { s.tab = Some(*open) } else { s.open = Some(*open) });
+                let calls: Vec<HandlerCall> = self.specs.get(name).map(|s| s.on("change").cloned().collect()).unwrap_or_default();
+                for call in calls {
+                    self.run(Some(name), &call);
+                }
+            }
+        }
+        self.changed();
+    }
+
+    /// Whether Back (or Forward) has a place to go to.
+    pub fn can_go(&self, back: bool) -> bool {
+        let history = self.history.borrow();
+        if back { history.can_go_back() } else { history.can_go_forward() }
+    }
+
     /// The window's settings record without its own number; none when it has none.
     fn settings_record(&self) -> Option<Map<String, Value>> {
         let Some(Value::Object(mut now)) = self.state.borrow().data.get("settings").cloned() else { return None };
@@ -314,6 +379,13 @@ impl ProgramHost {
         let mut now = now;
         // The settings record's own number is no setting.
         now.remove("id");
+        // Clarity's own settings show at once, however they changed (a handler, a bound dropdown): the language and the theme.
+        if let Some(language) = now.get("language").and_then(Value::as_str).filter(|l| !l.is_empty() && *l != crate::choices::language()) {
+            crate::choices::choose_language(language);
+        }
+        if let Some(theme) = now.get("theme").and_then(Value::as_str).filter(|t| !t.is_empty() && Some(*t) != crate::choices::theme().as_deref()) {
+            crate::choices::choose_theme(theme);
+        }
         let mut kept = self.program.read_settings();
         kept.extend(now);
         if let Err(text) = self.program.keep_settings(kept) {
@@ -430,6 +502,17 @@ impl PartHost for ProgramHost {
                 "close" => Some(Effect::Close),
                 _ => None,
             };
+            // Back and Forward go to the places the person was in this window.
+            let went = match call.handler.as_str() {
+                "back" => Some(true),
+                "forward" => Some(false),
+                _ => None,
+            };
+            if let Some(back) = went.filter(|_| self.files.window(&call.handler).is_none()) {
+                self.flush();
+                self.go(back);
+                return true;
+            }
             let undo = match call.handler.as_str() {
                 "undo" => Some(true),
                 "redo" => Some(false),
@@ -455,10 +538,14 @@ impl PartHost for ProgramHost {
             crate::parts::change_state(self, &call.handler, |s| s.visible = Some(true));
             return true;
         }
-        // A click that names a window opens it.
-        if call.args.is_empty() && self.files.window(&call.handler).is_some() {
+        // A click that names a window opens it, filled with this window's data its route names (`with book`).
+        if matches!(call.event.as_str(), "click" | crate::parts::NEW_WINDOW_CLICK) && self.files.window(&call.handler).is_some() {
             self.flush();
-            let open = if call.event == crate::parts::NEW_WINDOW_CLICK { Effect::OpenNew(call.handler.clone(), Map::new()) } else { Effect::Open(call.handler.clone(), Map::new()) };
+            let with: Map<String, Value> = {
+                let state = self.state.borrow();
+                call.args.iter().filter_map(|name| state.data.get(name).map(|v| (name.clone(), v.clone()))).collect()
+            };
+            let open = if call.event == crate::parts::NEW_WINDOW_CLICK { Effect::OpenNew(call.handler.clone(), with) } else { Effect::Open(call.handler.clone(), with) };
             self.effects.borrow_mut().push(open);
             self.changed();
             return true;

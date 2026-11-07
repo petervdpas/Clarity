@@ -30,17 +30,49 @@ bool clarity_location(const char* text, const char** out) {
 
 static const char* process_env(const char* name) { return getenv(name); }
 
+/* The system this runtime was built for, as conformance/data-folder.json names it. */
+static const char* this_system(void) {
+#if defined(_WIN32)
+    return "windows";
+#elif defined(__APPLE__)
+    return "macos";
+#else
+    return "linux";
+#endif
+}
+
 const char* clarity_data_folder_sqlite(const char* location, const char* (*env)(const char* name)) {
+    return clarity_data_folder_sqlite_on(this_system(), location, env);
+}
+
+const char* clarity_data_folder_sqlite_on(const char* os, const char* location, const char* (*env)(const char* name)) {
     if (strncmp(location, "env:", 4) == 0 || strncmp(location, "setting:", 8) == 0 || strcmp(location, ":memory:") == 0) return location;
-    const char* folder = (env ? env : process_env)(CLARITY_DATA_VARIABLE);
-    if (!folder || !*folder) return location;
-    const char* name = location;
-    for (const char* c = location; *c; ++c)
+    const char* (*get)(const char*) = env ? env : process_env;
+    // A database the project keeps beside it: data:<program>/<file>.
+    const char* kept = strncmp(location, "data:", 5) == 0 ? location + 5 : NULL;
+    const char* name = kept ? kept : location;
+    for (const char* c = name; *c; ++c)
         if (*c == '/' || *c == '\\') name = c + 1;
-    if (!*name || strcmp(name, ".") == 0 || strcmp(name, "..") == 0) return location;
-    size_t length = strlen(folder);
-    bool slashed = folder[length - 1] == '/' || folder[length - 1] == '\\';
-    return clarity_format("%s%s%s", folder, slashed ? "" : "/", name);
+    const char* folder = get(CLARITY_DATA_VARIABLE);
+    if (folder && *folder && *name && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
+        size_t length = strlen(folder);
+        bool slashed = folder[length - 1] == '/' || folder[length - 1] == '\\';
+        return clarity_format("%s%s%s", folder, slashed ? "" : "/", name);
+    }
+    if (!kept) return location;
+    /* The person's folder for application data, under the program's name. */
+    const char* home = get("HOME");
+    const char* data = NULL;
+    if (strcmp(os, "windows") == 0) {
+        data = get("APPDATA");
+    } else if (strcmp(os, "macos") == 0) {
+        if (home && *home) data = clarity_format("%s/Library/Application Support", home);
+    } else {
+        data = get("XDG_DATA_HOME");
+        if ((!data || !*data) && home && *home) data = clarity_format("%s/.local/share", home);
+    }
+    if (!data || !*data) return clarity_copy(name);
+    return clarity_format("%s/%s", data, kept);
 }
 
 bool clarity_open_driver(ClarityDialect dialect, const char* at, ClarityDriver** out) {

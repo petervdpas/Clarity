@@ -137,7 +137,7 @@ impl WindowView {
             self.node.children_mut().insert(at, region);
             at += 1;
         }
-        let slides: Vec<_> = self.grid().node().children().iter().filter_map(|c| c.as_any().downcast_ref::<SlideoutPart>()).map(|s| s.slide().clone()).filter(|s| s.has_handle()).collect();
+        let slides: Vec<_> = self.grid().node().children().iter().filter_map(|c| c.as_any().downcast_ref::<SlideoutPart>()).map(|s| s.slide().clone()).filter(|s| s.has_handle() && s.beside().is_none()).collect();
         for slide in slides {
             self.node.children_mut().insert(at, Box::new(SlideoutHandle::new(slide)));
             at += 1;
@@ -542,6 +542,10 @@ impl WindowView {
         for child in grid.node_mut().children_mut() {
             let Some(slideout) = child.as_any().downcast_ref::<SlideoutPart>() else { continue };
             let slide = slideout.slide();
+            // One beside a part is laid against it by its grid.
+            if slide.beside().is_some() {
+                continue;
+            }
             let side = slide.side();
             let deep = slide.size().min(if side.across() { room.height } else { room.width }).max(0.0);
             // Docked ones line up from the edge in; one that floats lies at the edge of what is left.

@@ -7,5 +7,6 @@
   "large": false,
   "onClick": null,
   "newWindow": false,
+  "openWith": [],
   "handler": null
 }

@@ -58,6 +58,11 @@ fn opened(markup: &str) -> (Screen, std::rc::Rc<FrameHost>, Instant) {
     (screen, host, start)
 }
 
+/// The handle of a slide-out beside a part: it lies in an overlay of its own.
+fn handle_beside(screen: &Screen) -> Rect {
+    screen.overlays().iter().find_map(|o| o.content.as_any().downcast_ref::<SlideoutHandle>()).expect("its handle").node().bounds
+}
+
 fn id_of(screen: &Screen, name: &str) -> ElementId {
     let top = screen.overlays().iter().find(|o| o.content.as_any().is::<SlideoutFrame>()).map(|o| o.content.as_ref());
     let roots: Vec<&dyn Element> = top.into_iter().chain([screen.root()]).collect();
@@ -440,4 +445,90 @@ fn a_press_on_a_canvas_in_it_gives_the_canvas_the_focus_so_ctrl_z_takes_back_its
     screen.pointer_pressed(b.x + b.width / 2.0, b.y + b.height / 2.0, PointerButton::Left, 1);
     screen.pointer_released(b.x + b.width / 2.0, b.y + b.height / 2.0, PointerButton::Left);
     assert_eq!(Some(board), screen.focused(), "the canvas pressed has the focus, not the first part of the slide-out");
+}
+
+/// `beside chapters`: in a panel, against the list's right edge, with its
+/// handle there and not at the window's; it slides out over what lies beside
+/// the list, as high as the list, and a click on its handle opens it.
+#[test]
+fn beside_a_part_it_lies_against_that_part_in_any_container() {
+    let markup = r#"
+    <Panel name="desk" at="1,1" span="12" rows="6">
+        <List name="chapters" at="1,1" span="4" rows="6" />
+        <Textbox name="text" at="5,1" span="8" />
+        <Slideout name="details" caption="Chapter" side="right" beside="chapters" slideWidth="300" pinnable="true" span="6" rows="4">
+            <Textbox name="titleBox" at="1,1" span="6" />
+        </Slideout>
+    </Panel>"#;
+    let (mut screen, host, _) = opened(markup);
+    // No strip of handles at the window's edge: its handle is on the list.
+    assert_eq!(WIDTH, view(&screen).body_place().width);
+    let list = screen.root().node().bounds;
+    let list = clarity_ui::element::in_order(screen.root()).into_iter().find(|e| part_name(*e) == Some("chapters")).map(|e| e.node().bounds).unwrap_or(list);
+    let handle = handle_beside(&screen);
+    assert_eq!((handle.x, handle.y, handle.width), (list.right(), list.y, HANDLE_WIDTH));
+    let band = frame(&screen).node().bounds;
+    assert_eq!((band.x, band.width), (list.right() + HANDLE_WIDTH, 300.0));
+    // As high as the panel's grid the list stands in, not only the list.
+    let panel = clarity_ui::element::in_order(screen.root()).into_iter().find(|e| part_name(*e) == Some("desk")).map(|e| e.node().bounds).expect("the panel");
+    assert!(band.y <= list.y && band.bottom() >= list.bottom() && band.bottom() <= panel.bottom() + 0.5, "{band:?} in {panel:?}");
+    // Its handle closes it and opens it again.
+    click(&mut screen, handle);
+    draw(&mut screen);
+    assert_eq!(Some(false), visible(&host));
+    click(&mut screen, handle);
+    draw(&mut screen);
+    assert_eq!(Some(true), visible(&host));
+}
+
+/// Beside a list in a narrow splitter pane, it lies over the pane beside it, not over the list.
+#[test]
+fn beside_a_part_in_a_narrow_pane_it_lies_over_the_next_pane() {
+    let markup = r#"
+    <Splitter name="split" at="1,1" span="12" rows="6" horizontal="true">
+        <Pane span="3">
+            <List name="chapters" at="1,1" span="3" rows="6" />
+            <Slideout name="details" caption="Chapter" side="right" beside="chapters" slideWidth="300" span="6" rows="4">
+                <Textbox name="titleBox" at="1,1" span="6" />
+            </Slideout>
+        </Pane>
+        <Pane>
+            <Textbox name="text" at="1,1" span="9" />
+        </Pane>
+    </Splitter>"#;
+    let (screen, _, _) = opened(markup);
+    let list = clarity_ui::element::in_order(screen.root()).into_iter().find(|e| part_name(*e) == Some("chapters")).map(|e| e.node().bounds).expect("the list");
+    // Its handle lies over everything, so the narrow pane does not cut it off: just outside the list's edge.
+    let handle = handle_beside(&screen);
+    assert_eq!((handle.x, handle.y), (list.right(), list.y));
+    let band = frame(&screen).node().bounds;
+    assert_eq!((band.x, band.width), (list.right() + HANDLE_WIDTH, 300.0));
+}
+
+/// In a folded accordion section its part is not laid out: its handle and its panel go with it.
+#[test]
+fn beside_a_part_in_a_folded_section_it_is_not_there() {
+    let markup = r#"
+    <Accordion name="parts" at="1,1" span="12" rows="6">
+        <Section caption="Chapters">
+            <List name="chapters" at="1,1" span="4" rows="6" />
+            <Slideout name="details" caption="Chapter" side="right" beside="chapters" slideWidth="300" span="6" rows="4">
+                <Textbox name="titleBox" at="1,1" span="6" />
+            </Slideout>
+        </Section>
+        <Section caption="Research">
+            <Textbox name="other" at="1,1" span="6" />
+        </Section>
+    </Accordion>"#;
+    let (mut screen, host, _) = opened(markup);
+    assert!(handle_shown(&screen));
+    host.set_state("parts", |s| s.open = Some(2));
+    draw(&mut screen);
+    draw(&mut screen);
+    assert!(!handle_shown(&screen), "the handle went with its folded section");
+    assert!(!frame(&screen).is_shown(), "and so did its panel");
+}
+
+fn handle_shown(screen: &Screen) -> bool {
+    screen.overlays().iter().find_map(|o| o.content.as_any().downcast_ref::<SlideoutHandle>()).is_some_and(|h| h.is_shown())
 }

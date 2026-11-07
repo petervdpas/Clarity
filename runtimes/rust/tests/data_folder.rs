@@ -45,3 +45,14 @@ fn a_database_opens_in_the_folder_clarity_data_names() {
     assert!(!elsewhere.exists());
     std::fs::remove_dir_all(&folder).unwrap();
 }
+
+/// Every runtime places an SQLite database alike (conformance/data-folder.json).
+#[test]
+fn a_database_opens_where_every_runtime_opens_it() {
+    let cases: serde_json::Value = serde_json::from_str(include_str!("../../../conformance/data-folder.json")).unwrap();
+    for case in cases["cases"].as_array().unwrap() {
+        let env = case["env"].as_object().unwrap().clone();
+        let got = clarity_runtime::data_folder::sqlite_in(case["os"].as_str().unwrap(), case["location"].as_str().unwrap(), |name| env.get(name).and_then(|v| v.as_str()).map(str::to_string));
+        assert_eq!(case["file"].as_str().unwrap(), got.replace('\\', "/"), "{case}");
+    }
+}

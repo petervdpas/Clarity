@@ -11,6 +11,8 @@ path = "src/main.rs"
 
 [dependencies]
 clarity-spec.workspace = true
+# `clarity data migrate` applies the steps with the runtime the programs use.
+clarity-runtime = { path = "../../runtimes/rust" }
 clarity-project.workspace = true
 clarity-db.workspace = true
 clarity-gen = { path = "../clarity-gen" }

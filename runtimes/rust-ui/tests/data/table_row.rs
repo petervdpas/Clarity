@@ -176,3 +176,44 @@ fn an_edited_color_cell_offers_the_palette_of_the_color_part() {
     assert_eq!(1, screen.overlays().len());
     assert!(palette(&screen).is_some());
 }
+
+/// `reorder by position from 0`: a book with a prologue numbers its chapters from 0.
+#[test]
+fn rows_moved_are_numbered_from_the_start_the_part_names() {
+    let (mut screen, host) = made(r#"<Table at="1,1" span="12" rows="6" name="folders" bind="folders" columns="name" reorder="position" reorderFrom="0" />"#, folders(3));
+    host.choose("folders", Some(1));
+    laid(&mut screen, 800, 400);
+    let id = part_named(&screen, "folders");
+    screen.focus(Some(id));
+    screen.key_pressed(KeyInput::new(Key::Up, Modifiers::ALT));
+    let now: Vec<String> = host.get("folders").as_array().unwrap().iter().map(|f| format!("{}:{}", f["name"].as_str().unwrap(), f["position"])).collect();
+    assert_eq!(vec!["Folder 2:0", "Folder 1:1", "Folder 3:2"], now);
+}
+
+/// A table whose rows open something (`on open`) shows the hand over them and says how to open them.
+#[test]
+fn table_rows_that_open_show_the_hand_and_say_how() {
+    use clarity_ui::Element;
+    let (mut screen, _) = made(r#"<Table at="1,1" span="12" rows="6" name="folders" bind="folders" columns="name" onopen="opened" />"#, folders(3));
+    laid(&mut screen, 800, 400);
+    let r = table(&screen).row_box(0).expect("a row");
+    assert_eq!(Some(clarity_ui::input::Cursor::Hand), table(&screen).cursor_at(r.x + 4.0, r.y + 4.0));
+    assert_eq!(Some("Double-click or press Enter to open".to_string()), table(&screen).tooltip_at(r.x + 4.0, r.y + 4.0));
+}
+
+/// `link name: toFolder`: the column's cells are links; the hand shows over
+/// them, and a click chooses the row and runs the link's handler.
+#[test]
+fn a_link_column_chooses_its_row_and_runs_its_handler() {
+    use clarity_ui::Element;
+    let markup = r#"<Table at="1,1" span="12" rows="6" name="folders" bind="folders" columns="name, position" links='[{"column":"name","handler":"toFolder"}]' />"#;
+    let (mut screen, host) = made(markup, folders(3));
+    laid(&mut screen, 800, 400);
+    let name = table(&screen).cell_box(1, "name").expect("a name cell");
+    let position = table(&screen).cell_box(1, "position").expect("a position cell");
+    assert_eq!(Some(clarity_ui::input::Cursor::Hand), table(&screen).cursor_at(name.x + 12.0, name.y + name.height / 2.0));
+    assert_eq!(None, table(&screen).cursor_at(position.x + 12.0, position.y + position.height / 2.0));
+    click(&mut screen, clarity_ui::geometry::Rect::new(name.x + 8.0, name.y + 2.0, 8.0, name.height - 4.0));
+    assert_eq!(Some(1), table(&screen).chosen());
+    assert!(host.logged().iter().any(|e| e.contains("click toFolder")), "{:?}", host.logged());
+}

@@ -350,8 +350,10 @@ fn page_element(kind: WidgetKind, page: &WidgetPage, depth: usize, out: &mut Str
     if let Some(title) = &page.title {
         attributes.push_str(&attribute("title", &Value::String(title.clone())));
     }
+    // A splitter's pane starts as wide as its span; a tab, step or section showing a view keeps the view's columns.
     if let Some(columns) = page.columns {
-        attributes.push_str(&attribute("span", &Value::from(columns)));
+        let name = if kind == WidgetKind::Splitter { "span" } else { "columns" };
+        attributes.push_str(&attribute(name, &Value::from(columns)));
     }
     attributes.push_str(&design_item(&page.span));
     if page.children.is_empty() {

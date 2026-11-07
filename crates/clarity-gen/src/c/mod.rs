@@ -755,6 +755,28 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
         );
     }
     let mut dispatch = String::new();
+    // The app's handlers first: a menu item of the app runs its handler whatever window shows, and a window's own handlers throw on a name they do not have.
+    for a in &apps {
+        let settings = crate::app_carries_settings(project, &a.name);
+        let (read, give, data) = if settings {
+            (
+                "        const cJSON* kept = cJSON_GetObjectItem(state->data, \"settings\");\n        if (kept && !settings_from_json(kept, &app.settings)) return false;\n",
+                "        cJSON* data = cJSON_Duplicate(state->data, true);\n        cJSON_DeleteItemFromObject(data, \"settings\");\n        cJSON_AddItemToObject(data, \"settings\", settings_json(&app.settings));\n",
+                "data",
+            )
+        } else {
+            ("", "", "state->data")
+        };
+        for (handler, function) in &a.handlers {
+            let _ = write!(
+                dispatch,
+                "    // The app's handlers run from any window, on the app's own data and the window's settings.\n    if (strcmp(handler, {}) == 0) {{\n        {} app = {{0}};\n        if (!{}_load(db, &app)) return false;\n{read}        if (!{function}(db, ui, &app)) return false;\n{give}        *out = clarity_ui_reply(ui, state->window, {data});\n        return true;\n    }}\n",
+                string(handler),
+                a.struct_name,
+                a.prefix
+            );
+        }
+    }
     for w in windows.iter().filter(|w| !w.handlers.is_empty() || !w.calls.is_empty()) {
         let _ = write!(
             dispatch,
@@ -776,17 +798,6 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
             "        else return clarity_fail(CLARITY_INVALID, \"%s has no handler %s\", state->window, handler);\n        if (!ok) return false;\n        *out = clarity_ui_reply(ui, state->window, {}_json(&w));\n        return true;\n    }}\n",
             w.prefix
         );
-    }
-    for a in &apps {
-        for (handler, function) in &a.handlers {
-            let _ = write!(
-                dispatch,
-                "    // The app's handlers run from any window, on the app's own data.\n    if (strcmp(handler, {}) == 0) {{\n        {} app = {{0}};\n        if (!{}_load(db, &app) || !{function}(db, ui, &app)) return false;\n        *out = clarity_ui_reply(ui, state->window, state->data);\n        return true;\n    }}\n",
-                string(handler),
-                a.struct_name,
-                a.prefix
-            );
-        }
     }
     // The handlers an answer runs, with the values written for them and the answer (DESIGN 5.14).
     let mut answers = String::new();

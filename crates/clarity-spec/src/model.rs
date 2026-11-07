@@ -375,6 +375,8 @@ pub enum PageKind {
     View,
     /// The splash screen the app shows itself while it starts (`splash Welcome` in the app).
     Splash,
+    /// A toolbox (docs/IMAGE-PLAN.md): designed as a view, its parts the tools a canvas that names it shows (`toolbox Painting`).
+    Toolbox,
 }
 
 impl PageKind {
@@ -385,6 +387,7 @@ impl PageKind {
             PageKind::Dialog => "dialog",
             PageKind::View => "view",
             PageKind::Splash => "splash",
+            PageKind::Toolbox => "toolbox",
         }
     }
 }
@@ -555,8 +558,35 @@ impl CanvasMode {
     pub fn tools(self) -> &'static [&'static str] {
         match self {
             CanvasMode::Objects => &[],
-            CanvasMode::Paint => &["pen", "eraser"],
+            CanvasMode::Paint => &["pen", "pencil", "spray", "eraser", "fill", "picker", "select", "ellipseSelect", "lasso", "line", "rect", "ellipse"],
             CanvasMode::Vector => &["select", "line", "rect", "ellipse", "path", "text"],
+        }
+    }
+}
+
+/// What a toolbox's tool may do built in (`does pencil`): the canvas tools of
+/// paint and vector, which it takes in hand, and actions done at once.
+pub const TOOL_ACTIONS: [&str; 23] = [
+    "pen", "pencil", "spray", "eraser", "fill", "picker", "select", "ellipseSelect", "lasso", "line", "rect", "ellipse", "path", "text",
+    "rotate", "flipAcross", "flipDown", "crop", "import", "export", "zoomIn", "zoomOut", "adjust",
+];
+
+/// How a painting canvas's toolbox shows (docs/IMAGE-PLAN.md).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ToolboxKind {
+    /// Floats over the app, dragged anywhere and folded, as GIMP's.
+    Popup,
+    /// A slide-out against the canvas's edge, with its handle and pin.
+    Slideout,
+}
+
+impl ToolboxKind {
+    pub fn keyword(self) -> &'static str {
+        match self {
+            ToolboxKind::Popup => "popup",
+            ToolboxKind::Slideout => "slideout",
         }
     }
 }
@@ -604,12 +634,22 @@ pub struct WidgetProps {
     /// otherwise it opens in place, on top of this one.
     #[serde(default)]
     pub new_window: bool,
+    /// The data the opened window is filled with, each from the data of the
+    /// same name of the window the click is in: `on click -> ChapterForm with book`.
+    #[serde(default)]
+    pub open_with: Vec<String>,
     /// Handlers in the code behind, per event.
     pub handlers: Vec<Handler>,
     pub columns: Vec<String>,
     /// The columns of a table whose cells are inputs: `edit done`.
     #[serde(default)]
     pub edit: Vec<String>,
+    /// The columns of a table whose cells are links: `link chapter: toChapter`.
+    #[serde(default)]
+    pub links: Vec<ColumnLink>,
+    /// Rows of other parts it takes when dragged onto it: `on drop from fragmentList: linkFragment`.
+    #[serde(default)]
+    pub drops: Vec<DropFrom>,
     /// The edited bool columns shown as a switch instead of a checkbox:
     /// `edit done as switch`.
     #[serde(default)]
@@ -625,6 +665,10 @@ pub struct WidgetProps {
     /// `side left`, `side top`, `side bottom`: the edge a slide-out comes in from; the right without it.
     #[serde(default)]
     pub side: Option<SlideSide>,
+    /// `beside chapterTable`: a slide-out lies against that part, at its `side`
+    /// of it, instead of at the window's edge; the part stands in the same container.
+    #[serde(default)]
+    pub beside: Option<String>,
     /// `width 420`: how wide a slide-out at the left or right is, in pixels; `SLIDEOUT_WIDTH` without it.
     #[serde(default)]
     pub slide_width: Option<u32>,
@@ -673,6 +717,10 @@ pub struct WidgetProps {
     /// (DESIGN 5.30). Without it the rows stay where the data has them.
     #[serde(default)]
     pub reorder: Option<String>,
+    /// `reorder by chapter from 0`: the number the first row at each level gets; 1 without it.
+    #[serde(default)]
+    #[ts(type = "number | null")]
+    pub reorder_from: Option<i64>,
     /// `mode objects types at x, y`, `mode paint`, `mode vector`: what the
     /// person does on a canvas (DESIGN 5.31); none: its draw handler draws it.
     #[serde(default)]
@@ -683,6 +731,19 @@ pub struct WidgetProps {
     /// `tools pen, eraser`: the tools of the canvas's mode the person may use; all without it.
     #[serde(default)]
     pub tools: Vec<String>,
+    /// `toolbox popup` or `toolbox slideout`: a painting canvas's tools in a
+    /// toolbox (docs/IMAGE-PLAN.md) instead of the strip on the canvas.
+    #[serde(default)]
+    pub toolbox: Option<ToolboxKind>,
+    /// `toolbox Painting`: the toolbox page whose parts the toolbox shows; none: the built-in one of the canvas's mode.
+    #[serde(default)]
+    pub toolbox_page: Option<String>,
+    /// The columns of the toolbox page's grid, which its parts are placed on (set where it is placed).
+    #[serde(default)]
+    pub toolbox_columns: Option<u32>,
+    /// `does pencil`: the built-in action of a toolbox's tool (TOOL_ACTIONS).
+    #[serde(default)]
+    pub does: Option<String>,
     /// `brush 4`: how wide a canvas paints or draws, in pixels.
     #[serde(default)]
     pub brush: Option<u32>,
@@ -853,6 +914,25 @@ pub struct WidgetProps {
     /// `grows` is; it is never written back.
     #[serde(default)]
     pub description: Option<String>,
+}
+
+/// `link chapter: toChapter`: a table column whose cells are links; a click
+/// on one chooses the row and runs the handler, which finds it as the table's `selected`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ColumnLink {
+    pub column: String,
+    pub handler: String,
+}
+
+/// `on drop from fragmentList: linkFragment`: a row of that list, table or tree
+/// dragged onto this one runs the handler, with the dragged row chosen in its
+/// part and the row it landed on chosen in this one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DropFrom {
+    pub from: String,
+    pub handler: String,
 }
 
 /// `on scored: arenaScored`: the handler a custom part's tell runs, given its values.
@@ -1131,6 +1211,10 @@ pub struct CommandProps {
     /// otherwise it opens in place, on top of this one.
     #[serde(default)]
     pub new_window: bool,
+    /// The data the opened window is filled with, each from the data of the
+    /// same name of the window the click is in: `on click -> ChapterForm with book`.
+    #[serde(default)]
+    pub open_with: Vec<String>,
     /// Handler in the code behind that runs on click.
     pub handler: Option<String>,
 }

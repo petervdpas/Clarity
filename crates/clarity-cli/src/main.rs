@@ -102,6 +102,15 @@ enum DataCommand {
         #[arg(long)]
         source: Option<String>,
     },
+    /// Create the database or bring it up to date, as the program does when it
+    /// starts (a database that changes is backed up first), without opening a window.
+    Migrate {
+        /// The project file, like shop.clarity.
+        project: PathBuf,
+        /// The data source; the first SQLite one the project owns by default.
+        #[arg(long)]
+        source: Option<String>,
+    },
     /// Put a backup in place of the database, after backing up what is there now.
     Restore {
         /// The project file, like shop.clarity.
@@ -595,9 +604,61 @@ fn own(project_file: &std::path::Path, source: &str) -> ExitCode {
 }
 
 /// Backups of a project's databases: take one, list them, restore one.
+/// `clarity data migrate`: the project's SQLite database created or brought up to date, as its program does when it starts.
+fn migrate_data(project_file: &std::path::Path, source: Option<&str>) -> ExitCode {
+    let dir = clarity_project::module_dir(project_file);
+    let (name, database) = match clarity_project::database_to_back_up(&dir, source) {
+        Ok(found) => found,
+        Err(err) => {
+            eprintln!("clarity: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let project = match clarity_project::load_modules(&dir) {
+        Ok(project) if !project.has_errors() => project,
+        Ok(project) => {
+            for d in project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error) {
+                eprintln!("{}", d.message);
+            }
+            eprintln!("clarity: the project has errors; fix them before migrating");
+            return ExitCode::FAILURE;
+        }
+        Err(err) => {
+            eprintln!("clarity: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let migrated = clarity_gen::sqlite_steps(&project, &name).and_then(|steps| {
+        let statements: Vec<Vec<&str>> = steps.iter().map(|(_, sql)| sql.iter().map(String::as_str).collect()).collect();
+        let steps: Vec<&[&str]> = statements.iter().map(Vec::as_slice).collect();
+        let mut db = clarity_runtime::Db::open(&database).map_err(|e| vec![e.to_string()])?;
+        db.migrate(&steps).map_err(|e| vec![e.to_string()])
+    });
+    match migrated {
+        Ok(0) => {
+            eprintln!("{name} is up to date: {}", database.display());
+            ExitCode::SUCCESS
+        }
+        Ok(applied) => {
+            eprintln!("Migrated {name} by {applied} step{}: {}", if applied == 1 { "" } else { "s" }, database.display());
+            ExitCode::SUCCESS
+        }
+        Err(errors) => {
+            for e in errors {
+                eprintln!("clarity: {e}");
+            }
+            ExitCode::FAILURE
+        }
+    }
+}
+
 fn data(command: DataCommand) -> ExitCode {
+    if let DataCommand::Migrate { project, source } = &command {
+        return migrate_data(project, source.as_deref());
+    }
     let (project, source) = match &command {
         DataCommand::Backup { project, source } | DataCommand::Backups { project, source } | DataCommand::Restore { project, source, .. } => (project, source.as_deref()),
+        DataCommand::Migrate { .. } => unreachable!("migrated above"),
     };
     let dir = clarity_project::module_dir(project);
     let (name, database) = match clarity_project::database_to_back_up(&dir, source) {
@@ -619,6 +680,7 @@ fn data(command: DataCommand) -> ExitCode {
             }
             Ok(())
         }
+        DataCommand::Migrate { .. } => Ok(()),
         DataCommand::Restore { backup, .. } => clarity_db::backup::restore(&database, &backup).map(|before| {
             eprintln!("Restored {name} from {}.", backup.display());
             if before.path != backup {

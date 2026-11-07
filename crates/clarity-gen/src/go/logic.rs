@@ -1754,6 +1754,11 @@ impl<'a> Emitter<'a> {
             let values: Vec<String> = args.iter().map(|a| call_arg(self.value(a, pre))).collect();
             return format!("clarity.Round({})", values.join(", "));
         }
+        // A built-in function (conformance/texts.json, conformance/zip.json), by the runtime's name for it.
+        if let Some(built) = crate::built_in(self.project, name) {
+            let values: Vec<String> = args.iter().map(|a| bare(self.value(a, pre))).collect();
+            return format!("{}({})", built.go, values.join(", "));
+        }
         if name == clarity_spec::code::check::LENGTH && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
             let text = args.first().map(|a| bare(self.value(a, pre))).unwrap_or_default();
             return format!("int64(len([]rune({text})))");

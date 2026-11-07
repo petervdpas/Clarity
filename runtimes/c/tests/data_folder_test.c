@@ -59,3 +59,22 @@ void a_database_opens_in_the_folder_clarity_data_names(void) {
     CHECK(!clarity_exists(elsewhere));
     remove_tree(folder);
 }
+
+static const cJSON* case_env;
+
+static const char* case_env_get(const char* name) {
+    const cJSON* value = cJSON_GetObjectItem(case_env, name);
+    return cJSON_IsString(value) ? value->valuestring : NULL;
+}
+
+// Every runtime places an SQLite database alike (conformance/data-folder.json).
+void a_database_opens_where_every_runtime_opens_it(void) {
+    cJSON* cases = conformance("data-folder.json");
+    REQUIRE(cases);
+    const cJSON* item;
+    cJSON_ArrayForEach(item, cJSON_GetObjectItem(cases, "cases")) {
+        case_env = cJSON_GetObjectItem(item, "env");
+        CHECK_TEXT(clarity_data_folder_sqlite_on(cJSON_GetObjectItem(item, "os")->valuestring, cJSON_GetObjectItem(item, "location")->valuestring, case_env_get),
+                   cJSON_GetObjectItem(item, "file")->valuestring);
+    }
+}

@@ -29,12 +29,40 @@ std::string location(const std::string& text) {
 }
 
 std::string data_folder_sqlite(const std::string& location, const std::function<const char*(const char*)>& env) {
+#if defined(_WIN32)
+    return data_folder_sqlite_on("windows", location, env);
+#elif defined(__APPLE__)
+    return data_folder_sqlite_on("macos", location, env);
+#else
+    return data_folder_sqlite_on("linux", location, env);
+#endif
+}
+
+std::string data_folder_sqlite_on(const std::string& os, const std::string& location, const std::function<const char*(const char*)>& env) {
     if (location.rfind("env:", 0) == 0 || location.rfind("setting:", 0) == 0 || location == ":memory:") return location;
-    const char* folder = env ? env(data_variable) : std::getenv(data_variable);
-    if (!folder || !*folder) return location;
-    std::filesystem::path name = std::filesystem::path(location).filename();
-    if (name.empty() || name == "." || name == "..") return location;
-    return (std::filesystem::path(folder) / name).string();
+    auto get = [&](const char* name) -> std::string {
+        const char* value = env ? env(name) : std::getenv(name);
+        return value ? value : "";
+    };
+    // A database the project keeps beside it: data:<program>/<file>.
+    bool kept = location.rfind("data:", 0) == 0;
+    std::string rest = kept ? location.substr(5) : location;
+    std::string name = rest.substr(rest.find_last_of("/\\") == std::string::npos ? 0 : rest.find_last_of("/\\") + 1);
+    std::string folder = get(data_variable);
+    if (!folder.empty() && !name.empty() && name != "." && name != "..") return (std::filesystem::path(folder) / name).string();
+    if (!kept) return location;
+    // The person's folder for application data, under the program's name.
+    std::string home = get("HOME");
+    std::string data;
+    if (os == "windows") {
+        data = get("APPDATA");
+    } else if (os == "macos") {
+        if (!home.empty()) data = home + "/Library/Application Support";
+    } else {
+        data = get("XDG_DATA_HOME");
+        if (data.empty() && !home.empty()) data = home + "/.local/share";
+    }
+    return data.empty() ? name : data + "/" + rest;
 }
 
 std::unique_ptr<Driver> open_driver(Dialect dialect, const std::string& at) {

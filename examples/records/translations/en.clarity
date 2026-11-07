@@ -200,3 +200,4 @@ translation en
     slideoutClose "Close"
     slideoutPin "Pin it open"
     slideoutUnpin "Let it slide away"
+    openRow "Double-click or press Enter to open"

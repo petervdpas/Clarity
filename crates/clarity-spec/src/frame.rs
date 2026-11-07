@@ -184,11 +184,11 @@ pub fn new_sidebar(side: Side, name: Option<String>) -> crate::model::SidebarPro
 }
 
 /// Click targets that are not windows.
-pub const BUILT_IN_COMMANDS: &[&str] = &["quit", "close", "language", "theme", "keys", "undo", "redo"];
+pub const BUILT_IN_COMMANDS: &[&str] = &["quit", "close", "language", "theme", "keys", "undo", "redo", "back", "forward"];
 
 /// The built-in click targets a button in a window can have too; picking
 /// the language or theme is for menus and toolbars.
-pub const BUTTON_COMMANDS: &[&str] = &["quit", "close", "keys", "undo", "redo"];
+pub const BUTTON_COMMANDS: &[&str] = &["quit", "close", "keys", "undo", "redo", "back", "forward"];
 
 pub fn command_keyword(kind: CommandKind) -> &'static str {
     match kind {
@@ -217,6 +217,7 @@ pub fn new_command(kind: CommandKind, caption: Option<String>) -> CommandProps {
         large: false,
         on_click: None,
         new_window: false,
+        open_with: Vec::new(),
         handler: None,
     }
 }
@@ -244,6 +245,9 @@ pub fn command_line(props: &CommandProps) -> String {
     }
     if let Some(target) = &props.on_click {
         parts.push(format!("on click -> {target}"));
+        if !props.open_with.is_empty() {
+            parts.push(format!("with {}", props.open_with.join(", ")));
+        }
         if props.new_window {
             parts.push("in new window".to_string());
         }

@@ -124,6 +124,8 @@ pub enum Request {
     Animate(ElementId, bool),
     Later(ElementId, crate::later::Work),
     Ask(ElementId, crate::later::Asked),
+    /// A row of the part named first was dragged out of it and let go at a point: the part there takes it (`on drop from`).
+    Drop(String, f64, f64),
 }
 
 /// What an element's handlers reach of the screen: its look, fonts,
@@ -158,6 +160,11 @@ impl Cx {
     pub(crate) fn with_places(mut self, places: Rc<RefCell<std::collections::HashMap<String, (ElementId, Rect)>>>) -> Cx {
         self.places = places;
         self
+    }
+
+    /// A row of the part `from` was dragged out of it and let go at a point on the screen: the part there takes it, when it does.
+    pub fn drop_at(&mut self, from: &str, x: f64, y: f64) {
+        self.requests.push(Request::Drop(from.to_string(), x, y));
     }
 
     /// The id and place of the shown part named `name` in the window, as the
@@ -343,6 +350,20 @@ pub trait Element: Any {
     fn around(&self) -> f64 {
         0.0
     }
+
+    /// A row of the part `from` was let go on it at a point (`on drop from fragmentList: linkFragment`): true when it took it.
+    fn take_drop(&mut self, from: &str, x: f64, y: f64, cx: &mut Cx) -> bool {
+        let _ = (from, x, y, cx);
+        false
+    }
+
+    /// The part of its grid it lies against instead of a place of its own (a slide-out `beside chapterTable`).
+    fn beside(&self) -> Option<&str> {
+        None
+    }
+
+    /// Its grid laid out (in `grid`), it lies against `part`, inside the `window`.
+    fn lay_beside(&mut self, _part: Rect, _grid: Rect, _window: Rect, _cx: &mut Cx) {}
 
     /// Whether a point on the screen is its own; a part may say a point within its place is not.
     fn hit(&self, x: f64, y: f64) -> bool {
@@ -904,8 +925,10 @@ impl GridPanel {
     }
 
     pub fn add(&mut self, part: Box<dyn Element>, place: GridItem) {
-        self.node.add(part);
-        self.places.push(place);
+        // What lies beside a part comes after every part with a place: drawn over them and found first under the pointer.
+        let at = if part.beside().is_some() { self.places.len() } else { self.node.children().iter().position(|c| c.beside().is_some()).unwrap_or(self.places.len()) };
+        self.node.children_mut().insert(at, part);
+        self.places.insert(at, place);
     }
 
     /// Where its children are, by the order they were added.
@@ -939,6 +962,21 @@ impl Element for GridPanel {
         self.rows = placed.rows;
         for (child, place) in self.node.children_mut().iter_mut().zip(placed.boxes) {
             arrange_safely(child.as_mut(), place.offset(area.x, area.y), cx);
+        }
+        // What lies beside a part of the grid goes against that part, now that it has its place.
+        let named: Vec<(String, Rect, bool)> = self
+            .node
+            .children()
+            .iter()
+            .filter_map(|c| c.as_part().and_then(|p| p.base().name()).map(|n| (n.to_string(), c.node().bounds, c.is_shown())))
+            .collect();
+        for child in self.node.children_mut() {
+            let Some(part) = child.beside().map(str::to_string) else { continue };
+            // A part not shown has nothing to lie against: what lies beside it goes too.
+            let found = named.iter().find(|(n, _, shown)| *n == part && *shown).map(|(_, b, _)| *b).unwrap_or_default();
+            // It lies over whatever is beside the part (another pane too), up to the window's edge.
+            let window = cx.whole();
+            child.lay_beside(found, area, window, cx);
         }
     }
 

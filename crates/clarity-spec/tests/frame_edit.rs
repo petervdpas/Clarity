@@ -158,6 +158,7 @@ fn rewrites_a_command_and_keeps_its_comment() {
         large: false,
         on_click: Some("Card".into()),
         new_window: false,
+        open_with: Vec::new(),
         handler: None,
     };
     let text = edit(

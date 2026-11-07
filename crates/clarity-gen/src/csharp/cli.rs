@@ -18,7 +18,7 @@ const MVVM: (&str, &str) = ("CommunityToolkit.Mvvm", "8.4.2");
 
 fn said(text: &Option<Said>) -> String {
     match text {
-        Some(Said::Key(key)) => format!("CliLanguage.Show(Text.Of({}))", string(key)),
+        Some(Said::Key(key)) => format!("CliLanguage.Show(Clarity.Runtime.Text.Of({}))", string(key)),
         Some(Said::Plain(text)) => string(text),
         None => "null".to_string(),
     }

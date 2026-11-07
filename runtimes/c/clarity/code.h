@@ -87,6 +87,24 @@ const char* clarity_joined(ClarityTexts texts, const char* separator);
 /* `length(text)`: how many characters a text has, each counted once however many bytes it takes in UTF-8. */
 int64_t clarity_length(const char* text);
 
+/* The text functions of code (conformance/texts.json): characters counted once
+ * however many bytes they take, positions from 1; results in the scratch arena. */
+ClarityTexts clarity_text_words(const char* text);
+ClarityTexts clarity_text_split(const char* text, const char* separator);
+const char* clarity_text_trim(const char* text);
+const char* clarity_text_lower(const char* text);
+const char* clarity_text_upper(const char* text);
+const char* clarity_text_replace(const char* text, const char* find, const char* with);
+bool clarity_text_starts_with(const char* text, const char* prefix);
+bool clarity_text_ends_with(const char* text, const char* suffix);
+const char* clarity_text_slice(const char* text, int64_t from, int64_t count);
+int64_t clarity_text_index_of(const char* text, const char* find);
+
+/// `zip(paths, texts)` (conformance/zip.json): a zip archive of one file per
+/// path holding the text of the same place, stored as it is, in order; the
+/// lists pair up. The same files give the same bytes.
+ClarityBytes clarity_zip(ClarityTexts paths, ClarityTexts texts);
+
 /// `xs + ys` in code (DESIGN 5.26): a new list of the items of both, in order.
 ClarityIntegers clarity_integers_join(ClarityIntegers a, ClarityIntegers b);
 ClarityDecimals clarity_decimals_join(ClarityDecimals a, ClarityDecimals b);

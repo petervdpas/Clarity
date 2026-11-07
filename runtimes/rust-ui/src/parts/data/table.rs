@@ -70,6 +70,8 @@ pub struct TableColumn {
     pub integer: bool,
     /// How its numbers, days and moments show and are read, in the person's formats.
     pub format: Option<FieldFormat>,
+    /// The handler a click on one of its cells runs (`link chapter: toChapter`): its cells are links.
+    pub link: Option<String>,
 }
 
 /// The buttons of a table's page bar.
@@ -444,7 +446,21 @@ impl TablePart {
             _ => None,
         };
         let integer = integer || format.as_ref().is_some_and(|f| f.kind == FormatKind::Integer);
-        TableColumn { field: field.to_string(), label, kind, edit, switch, width, choices, integer, format }
+        let link = match base.spec.props.get("links") {
+            Some(Value::Array(links)) => links.iter().find(|l| l.get("column").and_then(Value::as_str) == Some(field)).and_then(|l| l.get("handler")).and_then(Value::as_str).map(str::to_string),
+            _ => None,
+        };
+        TableColumn { field: field.to_string(), label, kind, edit, switch, width, choices, integer, format, link }
+    }
+
+    /// The link a point is on: the row and the handler of a link column's cell, where its text is.
+    fn link_at(&self, x: f64, y: f64) -> Option<(usize, String)> {
+        let (place, c, _) = self.cell_at(x, y)?;
+        let column = self.columns.get(c)?;
+        if column.edit {
+            return None;
+        }
+        column.link.clone().map(|handler| (place, handler))
     }
 
     /// Reads the records again when the window's values changed; what was typed into other records is gone.
@@ -1315,7 +1331,18 @@ impl TablePart {
             let align = if column.kind == CellKind::Number { TextAlign::Right } else { TextAlign::Left };
             let lead = self.draw_swatch(p, place, column);
             let area = Rect { x: cell.x + pad + lead, width: (cell.width - 2.0 * pad - lead).max(0.0), ..cell };
-            p.text(&self.shown(place, &column.field), area, text, size, "text", false, align);
+            let shown = self.shown(place, &column.field);
+            // A link column: its text in the accent color, underlined, as a link reads.
+            if column.link.is_some() && !shown.is_empty() {
+                let ink = if inert { text } else { look.color("accent") };
+                p.text(&shown, area, ink, size, "text", false, align);
+                let wide = p.fonts.measure(&shown, "text", size, false).min(area.width);
+                let base_line = area.y + area.height / 2.0 + size * 0.6;
+                let from = if align == TextAlign::Right { area.right() - wide } else { area.x };
+                p.line((from, base_line), (from + wide, base_line), ink, 1.0);
+                return;
+            }
+            p.text(&shown, area, text, size, "text", false, align);
             return;
         }
         match column.kind {
@@ -1533,6 +1560,16 @@ impl Element for TablePart {
         self.editing.is_some() || self.focused_cell.is_some() || self.choices.is_some()
     }
 
+    /// A row of another part let go on it: the row under the point is chosen and the handler for that part runs.
+    fn take_drop(&mut self, from: &str, _x: f64, y: f64, cx: &mut Cx) -> bool {
+        let Some(handler) = rows::drop_handler(&self.base, from) else { return false };
+        if let Some((place, _)) = self.row_at(y) {
+            self.choose(place, cx);
+        }
+        self.base.host.run(self.base.name(), &crate::markup::HandlerCall::new("drop", &handler, Vec::new()));
+        true
+    }
+
     /// The page bar's buttons and a tree row's toggle say what a press does, in Clarity's words.
     fn tooltip_at(&self, x: f64, y: f64) -> Option<String> {
         self.tip_at(x, y)
@@ -1728,6 +1765,13 @@ impl Element for TablePart {
                 }
             }
         }
+        // A click on a link chooses the row and runs the link's handler.
+        if let Some((_, handler)) = self.link_at(x, y).filter(|_| !self.locked() && at.clicks == 1) {
+            self.choose(place, cx);
+            self.base.host.run(self.base.name(), &crate::parts::HandlerCall::new("click", &handler, Vec::new()));
+            cx.invalidate();
+            return;
+        }
         self.press = Some(Press::Row(place));
         self.rows.press_row(&self.base, place, at);
         if at.clicks == 2 {
@@ -1774,6 +1818,16 @@ impl Element for TablePart {
     fn on_pointer_released(&mut self, at: PointerInput, cx: &mut Cx) {
         let was = self.press.take();
         cx.invalidate();
+        // A row let go outside the table goes to the part there: the row is chosen, the drop asked for.
+        if let (Some(Press::Row(place)), Some(name)) = (&was, self.base.name().map(str::to_string)) {
+            if !self.base.node.bounds.contains(at.screen_x, at.screen_y) {
+                let place = *place;
+                self.rows.cancel();
+                self.choose(place, cx);
+                cx.drop_at(&name, at.screen_x, at.screen_y);
+                return;
+            }
+        }
         match was {
             Some(Press::Row(place)) => {
                 let (dragged, mv) = self.rows.drop_row();

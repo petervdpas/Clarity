@@ -88,22 +88,41 @@ internal static class Store
 }
 
 /// <summary>
-/// Where a program's SQLite databases are: as the project put them, or, when
-/// the environment variable CLARITY_DATA names a folder, in that folder under
-/// their own file names, so a run in the IDE or by hand chooses its data
-/// without editing the generated program.
+/// Where a program's SQLite databases open (conformance/data-folder.json): a
+/// database the project keeps beside it is written data:&lt;program&gt;/&lt;file&gt;,
+/// and opens in the folder CLARITY_DATA names (Clarity's Run names the
+/// project's data folder), else in the person's folder for application data
+/// under the program's name. CLARITY_DATA moves any SQLite file there under
+/// its own file name. The same in every runtime.
 /// </summary>
 public static class DataFolder
 {
     /// <summary>The environment variable that names the folder.</summary>
     public const string Variable = "CLARITY_DATA";
 
-    /// <summary>The file of an SQLite database at <paramref name="location"/> (SQLite's own :memory: stays); <paramref name="env"/> reads the environment (the process's when none).</summary>
-    public static string Sqlite(string location, Func<string, string?>? env = null)
+    /// <summary>The file of an SQLite database at <paramref name="location"/> on this system; <paramref name="env"/> reads the environment (the process's when none).</summary>
+    public static string Sqlite(string location, Func<string, string?>? env = null) =>
+        SqliteOn(OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsMacOS() ? "macos" : "linux", location, env);
+
+    /// <summary>The file of an SQLite database at <paramref name="location"/> on system <paramref name="os"/> (windows, macos or another); env:, setting: and :memory: stay as they are.</summary>
+    public static string SqliteOn(string os, string location, Func<string, string?>? env = null)
     {
         if (location.StartsWith("env:", StringComparison.Ordinal) || location.StartsWith("setting:", StringComparison.Ordinal) || location == ":memory:")
             return location;
-        var folder = (env ?? Environment.GetEnvironmentVariable)(Variable);
-        return string.IsNullOrEmpty(folder) ? location : Path.Combine(folder, Path.GetFileName(location));
+        env ??= Environment.GetEnvironmentVariable;
+        string? Set(string name) => env(name) is { Length: > 0 } value ? value : null;
+        var kept = location.StartsWith("data:", StringComparison.Ordinal) ? location["data:".Length..] : null;
+        var name = kept is null ? location : kept[(kept.LastIndexOf('/') + 1)..];
+        if (Set(Variable) is { } moved && Path.GetFileName(name) is { Length: > 0 } file)
+            return Path.Combine(moved, file);
+        if (kept is null) return location;
+        // The person's folder for application data, under the program's name.
+        var folder = os switch
+        {
+            "windows" => Set("APPDATA"),
+            "macos" => Set("HOME") is { } home ? home + "/Library/Application Support" : null,
+            _ => Set("XDG_DATA_HOME") ?? (Set("HOME") is { } home ? home + "/.local/share" : null),
+        };
+        return folder is null ? name : folder + "/" + kept;
     }
 }

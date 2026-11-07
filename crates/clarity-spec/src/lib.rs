@@ -574,6 +574,13 @@ pub fn load_dir_with_in(dir: &Path, replaced: Option<(&Path, &str)>, sources: &[
 /// written yet) in place of what the folder holds. Used to check an edit
 /// that writes several files against the whole project first.
 pub fn load_dir_with_files_in(dir: &Path, replaced: &[(&Path, &str)], sources: &[SourceRef]) -> std::io::Result<Project> {
+    load_dir_for(dir, replaced, sources, None)
+}
+
+/// Like `load_dir_with_files_in`, for a project whose project file names
+/// `language`: the default language the translations are checked against
+/// (English when it names none).
+pub fn load_dir_for(dir: &Path, replaced: &[(&Path, &str)], sources: &[SourceRef], language: Option<&str>) -> std::io::Result<Project> {
     let mut files = Vec::new();
     for p in spec_files(dir)? {
         let content = match replaced.iter().find(|(path, _)| *path == p) {
@@ -589,6 +596,9 @@ pub fn load_dir_with_files_in(dir: &Path, replaced: &[(&Path, &str)], sources: &
         sources,
     );
     let translations = translation_sources(dir, replaced)?;
+    if let Some(language) = language {
+        project.locale.language = Some(language.to_string());
+    }
     translations::attach(&mut project, translations.iter().map(|(p, t)| (p.as_str(), t.as_str())));
     // A folder without resources has none: what a window shows of them is checked all the same.
     resources::attach(&mut project, resources::resource_files(dir)?.unwrap_or_default());

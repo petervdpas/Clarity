@@ -2067,6 +2067,11 @@ impl<'a> Emitter<'a> {
             let places = args.get(1).map(|a| bare(self.value(a, pre))).unwrap_or_default();
             return format!("clarity_decimal_round({value}, (int){places})");
         }
+        // A built-in function (conformance/texts.json, conformance/zip.json), by the runtime's name for it.
+        if let Some(built) = crate::built_in(self.project, name).filter(|_| self.callee(name).is_none()) {
+            let values: Vec<String> = args.iter().map(|a| bare(self.value(a, pre))).collect();
+            return format!("{}({})", built.c, values.join(", "));
+        }
         if name == clarity_spec::code::check::LENGTH && self.callee(name).is_none() {
             let text = args.first().map(|a| bare(self.value(a, pre))).unwrap_or_default();
             return format!("clarity_length({text})");

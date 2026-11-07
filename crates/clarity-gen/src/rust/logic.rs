@@ -1360,6 +1360,16 @@ impl<'a> Emitter<'a> {
             let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
             return format!("round({})", values.join(", "));
         }
+        // A built-in function (conformance/texts.json, conformance/zip.json), by the runtime's name for it.
+        if let Some(built) = crate::built_in(self.project, name)
+            && let Some((takes, _)) = clarity_spec::code::check::text_function(name)
+        {
+            let values: Vec<String> = args.iter().zip(takes).map(|(a, t)| match t {
+                clarity_spec::code::check::TextValue::Text | clarity_spec::code::check::TextValue::Texts => format!("&({})", self.value(a)),
+                _ => self.value(a),
+            }).collect();
+            return format!("{}({})", built.rust, values.join(", "));
+        }
         if name == clarity_spec::code::check::LENGTH && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
             let text = args.first().map(|a| self.value(a)).unwrap_or_default();
             return format!("(({text}).chars().count() as i64)");

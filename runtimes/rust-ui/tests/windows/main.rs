@@ -13,6 +13,7 @@ mod core_windows_fake;
 mod dialogs_fake;
 
 mod access;
+mod history;
 mod core_choices;
 mod core_dialogs;
 mod core_frame;

@@ -55,7 +55,9 @@
               ? { kind: "view" }
               : kind === "splash"
                 ? { kind: "splash" }
-                : { kind: "blank" };
+                : kind === "toolbox"
+                  ? { kind: "toolbox" }
+                  : { kind: "blank" };
     onsubmit(target, name.trim(), template);
   }
 
@@ -77,6 +79,7 @@
         <option value="blank">Blank window</option>
         <option value="view">Blank view (shown in a slide-out)</option>
         <option value="splash">Splash screen (shows while the app starts)</option>
+        <option value="toolbox">Toolbox (the tools a canvas shows, designed as a view)</option>
         {#if hasSettings}<option value="settings">Settings window</option>{/if}
         {#each entities as entity (entity)}
           <option value="form:{entity}">Form for {entity}</option>

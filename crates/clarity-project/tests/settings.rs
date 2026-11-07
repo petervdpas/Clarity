@@ -25,6 +25,7 @@ fn source(name: &str, kind: SourceKind, url: &str) -> DataSource {
         auth: None,
         external: false,
         readonly: false,
+        beside: false,
         openapi: None,
         picks: Vec::new(),
         pick_schemas: Vec::new(),
@@ -499,7 +500,7 @@ fn a_data_source_can_be_external_and_read_only() {
     let twice = text.replace("external readonly", "external external");
     assert!(parse(&twice).unwrap_err().contains("'external' is written twice"));
     let unknown = text.replace("external readonly", "shared");
-    assert!(parse(&unknown).unwrap_err().contains("unexpected 'shared'; a data source can be external or readonly"));
+    assert!(parse(&unknown).unwrap_err().contains("unexpected 'shared'; a data source can be external, readonly or beside"));
 
     // A web API is never Clarity's own.
     let mut web = settings.clone();
@@ -873,4 +874,65 @@ fn a_codec_library_is_a_line_of_the_project_file() {
     assert!(written.contains("    codec vp9 from \"codecs/libvp9\"\n"), "{written}");
     assert!(clarity_project::parse("project Films\n    stack go desktop\n    codec vp9 \"codecs/libvp9\"\n").unwrap_err().contains("codec vp9 from"));
     assert!(clarity_project::parse("project Films\n    stack go desktop\n    codec vp9 from \"a\"\n    codec vp9 from \"b\"\n").unwrap_err().contains("named twice"));
+}
+
+/// A project in another language than English carries only its own
+/// translation file: the project file's language is the default language
+/// the translations are checked against (a gap Writer, a Dutch project, met).
+#[test]
+fn a_project_s_language_is_its_default_language_for_the_translations() {
+    let root = std::env::temp_dir().join(format!("clarity-dutch-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let dir = root.join("boek");
+    std::fs::create_dir_all(dir.join("translations")).unwrap();
+    std::fs::write(root.join("boek.clarity"), "project Boek\n    stack go desktop\n    language \"nl\"\n").unwrap();
+    std::fs::write(dir.join("boek.clarity"), "module boek\n\npage Main: window\n    title @mainTitle\n    label @hello name helloLabel at 1,1 span 4\n").unwrap();
+    std::fs::write(dir.join("translations/nl.clarity"), "translation nl\n    mainTitle \"Boek\"\n    hello \"Hallo\"\n").unwrap();
+    let project = clarity_project::load_modules(&dir).unwrap();
+    let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
+    assert!(errors.is_empty(), "{errors:?}");
+    assert_eq!(Some("nl"), project.locale.language.as_deref());
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A built program keeps the database the project keeps beside it in the
+/// person's folder for application data (data:<program>/<file>), not at the
+/// project's absolute path; Clarity's Run names the project's data folder in
+/// CLARITY_DATA. An absolute or external database stays where it is.
+#[test]
+fn a_built_program_keeps_its_own_database_in_the_person_s_data_folder() {
+    let text = "project WriterApp\n    stack cpp desktop\n    datasource main sqlite \"data/writer.db\"\n    datasource shared sqlite \"/srv/shared.db\" external\n";
+    let settings = clarity_project::parse(text).unwrap();
+    let dir = std::path::Path::new("/home/ann/Writer/writer");
+    let built = clarity_project::build_settings(dir, &settings);
+    assert_eq!("data:writer_app/writer.db", built.datasources[0].url);
+    assert_eq!("/srv/shared.db", built.datasources[1].url);
+    assert_eq!(Some(std::path::PathBuf::from("/home/ann/Writer/writer/data")), clarity_project::data_folder(dir, &settings));
+}
+
+/// A project whose module folder is not named as its project file says what
+/// the folder must be called, and names the folder of another case it found.
+#[test]
+fn a_module_folder_named_otherwise_says_what_it_must_be_called() {
+    let root = std::env::temp_dir().join(format!("clarity-case-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("writer")).unwrap();
+    std::fs::write(root.join("Writer.clarity"), "project Writer\n    stack go desktop\n").unwrap();
+    let why = clarity_project::load_modules(&root.join("Writer")).unwrap_err().to_string();
+    assert!(why.contains("Writer.clarity") && why.contains("folder named Writer") && why.contains("writer"), "{why}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// `beside` keeps a built program's database in the project's folder, where
+/// Clarity runs it: for an app that lives in its own folder (Writer).
+#[test]
+fn a_database_beside_the_project_stays_there() {
+    let text = "project Writer\n    stack cpp desktop\n    datasource main sqlite \"data/writer.db\" beside\n";
+    let settings = clarity_project::parse(text).unwrap();
+    assert!(settings.datasources[0].beside);
+    assert!(clarity_project::write(None, &settings).unwrap().contains("datasource main sqlite \"data/writer.db\" beside\n"));
+    let dir = std::path::absolute("/home/ann/Writer/writer").unwrap();
+    let built = clarity_project::build_settings(&dir, &settings);
+    assert_eq!(std::path::Path::new(&built.datasources[0].url), dir.join("data/writer.db"));
+    assert_eq!(None, clarity_project::data_folder(&dir, &settings));
 }

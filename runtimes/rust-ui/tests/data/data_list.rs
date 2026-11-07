@@ -226,3 +226,42 @@ fn a_money_value_keeps_its_decimals_as_it_reaches_a_list() {
     assert!(shown[0].ends_with("12.00"), "{shown:?}");
     assert!(shown[1].ends_with("3.50"), "{shown:?}");
 }
+
+/// Rows that open something (`on open`) show the hand and say how to open
+/// them; a list without `on open` leaves the pointer and says nothing.
+#[test]
+fn rows_that_open_show_the_hand_and_say_how() {
+    use clarity_ui::Element;
+    let (screen, _) = made("", 3);
+    let r = row(&screen, 0);
+    assert_eq!(Some(clarity_ui::input::Cursor::Hand), list(&screen).cursor_at(r.x + 4.0, r.y + 4.0));
+    assert_eq!(Some("Double-click or press Enter to open".to_string()), list(&screen).tooltip_at(r.x + 4.0, r.y + 4.0));
+    let host = DataHost::new();
+    host.set("folders", folders(3));
+    let mut plain = window_of(r#"<List at="1,1" span="6" rows="5" name="folders" bind="folders" show="name" />"#, host);
+    laid(&mut plain, 800, 400);
+    let r = list(&plain).row_box(0).expect("a row");
+    assert_eq!(None, list(&plain).cursor_at(r.x + 4.0, r.y + 4.0));
+    assert_eq!(None, list(&plain).tooltip_at(r.x + 4.0, r.y + 4.0));
+}
+
+/// `on drop from folders: filed`: a row dragged from one list and let go on a
+/// row of another chooses both rows and runs that list's handler for it.
+#[test]
+fn a_row_dragged_onto_another_list_runs_its_drop_handler() {
+    let host = DataHost::new();
+    host.set("folders", folders(3));
+    host.set("shelves", folders(2));
+    let markup = r#"<List at="1,1" span="6" rows="5" name="folders" bind="folders" show="name" /><List at="7,1" span="6" rows="5" name="shelves" bind="shelves" show="name" drops='[{"from":"folders","handler":"filed"}]' />"#;
+    let mut screen = window_of(markup, host.clone());
+    laid(&mut screen, 800, 400);
+    let lists: Vec<&ListPart> = clarity_ui::element::in_order(screen.root()).into_iter().filter_map(|e| e.as_any().downcast_ref::<ListPart>()).collect();
+    let (from, onto) = (lists[0].row_box(2).expect("a folder"), lists[1].row_box(1).expect("a shelf"));
+    screen.pointer_pressed(from.x + 10.0, from.y + from.height / 2.0, PointerButton::Left, 1);
+    screen.pointer_moved(from.x + 60.0, from.y + from.height / 2.0);
+    screen.pointer_moved(onto.x + 10.0, onto.y + onto.height / 2.0);
+    screen.pointer_released(onto.x + 10.0, onto.y + onto.height / 2.0, PointerButton::Left);
+    assert!(host.logged().iter().any(|e| e.contains("run shelves drop filed")), "{:?}", host.logged());
+    assert_eq!(Some(2), clarity_ui::PartHost::selected(&*host, "folders"), "the dragged row is chosen in its list");
+    assert_eq!(Some(1), clarity_ui::PartHost::selected(&*host, "shelves"), "the row it landed on is chosen");
+}

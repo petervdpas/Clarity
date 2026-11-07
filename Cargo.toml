@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/clarity-spec", "crates/clarity-project", "crates/clarity-db", "crates/clarity-vault", "crates/clarity-agent", "runtimes/rust", "runtimes/rust-engine", "runtimes/rust-ui", "runtimes/rust-ui-ffi", "runtimes/rust-ui-browser", "runtimes/rust-audio", "runtimes/rust-audio-ffi", "runtimes/rust-video", "runtimes/rust-video-ffi", "crates/clarity-gen", "crates/clarity-cli", "crates/clarity-wasm", "app/src-tauri"]
+members = ["crates/clarity-spec", "crates/clarity-project", "crates/clarity-db", "crates/clarity-vault", "crates/clarity-agent", "runtimes/rust", "runtimes/rust-engine", "runtimes/rust-ui", "runtimes/rust-ui-ffi", "runtimes/rust-ui-browser", "runtimes/rust-audio", "runtimes/rust-audio-ffi", "runtimes/rust-video", "runtimes/rust-video-ffi", "runtimes/rust-image", "runtimes/rust-image-ffi", "crates/clarity-gen", "crates/clarity-cli", "crates/clarity-wasm", "app/src-tauri"]
 # The examples' crates (custom parts, libraries, generated programs) are projects of their own.
 exclude = ["examples"]
 

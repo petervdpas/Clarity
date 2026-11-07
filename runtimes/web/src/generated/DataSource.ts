@@ -19,6 +19,12 @@ external: boolean,
  */
 readonly: boolean, 
 /**
+ * `beside`: a built program keeps this SQLite database in the project's
+ * folder, where Clarity runs it, instead of the person's folder for
+ * application data: for an app that lives in its own folder.
+ */
+beside: boolean, 
+/**
  * A web API's OpenAPI description, a file in the project's `apis`
  * folder, which Clarity writes the API's module from (DESIGN 5.23).
  */

@@ -221,6 +221,8 @@ pub fn stack_tools() -> Vec<StackTools> {
 /// build was made from.
 pub struct Generated {
     pub out: PathBuf,
+    /// The project's data folder, which Run names in CLARITY_DATA so the program works on the project's data.
+    pub data: Option<PathBuf>,
     pub toolchain: clarity_gen::Toolchain,
     pub stack: clarity_project::Stack,
     /// The mark of its generated files, which a build records.
@@ -305,7 +307,8 @@ pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, 
         .and_then(|release| toolchain_of(release).map(|t| (t, release)))
         .filter(|(t, _)| out.join(&t.program).exists());
     let library = !cli && clarity_gen::uses_clarity_ui(&settings.stack);
-    Ok(Generated { out, toolchain, stack: settings.stack, fingerprint, release, built, library })
+    let data = clarity_project::data_folder(&clarity_project::module_dir(file), &settings);
+    Ok(Generated { out, data, toolchain, stack: settings.stack, fingerprint, release, built, library })
 }
 
 /// Why the generated project in `out` cannot be built on this machine: the
@@ -519,7 +522,7 @@ fn build(app: &AppHandle, generated: &Generated, toolchain: &clarity_gen::Toolch
     }
     let binary = out.join(&toolchain.program);
     if run && let Some(line) = command_line {
-        return run_command_line(app, out, &binary, line);
+        return run_command_line(app, out, &binary, line, generated.data.as_deref());
     }
     if run {
         stop(app);
@@ -534,6 +537,10 @@ fn build(app: &AppHandle, generated: &Generated, toolchain: &clarity_gen::Toolch
         send_line(app, format!("{} (in {})", binary.display(), out.display()));
         let mut command = Command::new(&binary);
         command.current_dir(out);
+        // The program works on the project's data, not the person's (conformance/data-folder.json).
+        if let Some(data) = &generated.data {
+            command.env("CLARITY_DATA", data);
+        }
         if let Some(address) = &address {
             command.args(["--address", address]);
         }
@@ -593,12 +600,15 @@ fn build_with(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain) -
 /// what it writes goes to the Output panel line by line, and what the panel
 /// sends with `type_line` is its input, as a terminal's (`CLARITY_TERMINAL`).
 /// Returns when it ends, with its exit code.
-fn run_command_line(app: &AppHandle, out: &Path, binary: &Path, line: &str) -> BuildDone {
+fn run_command_line(app: &AppHandle, out: &Path, binary: &Path, line: &str, data: Option<&Path>) -> BuildDone {
     stop(app);
     let words = clarity_gen::command_words(line);
     send_line(app, format!("{} {}", binary.file_name().unwrap_or_default().to_string_lossy(), line.trim()));
     let mut command = Command::new(binary);
     command.args(&words).current_dir(out).env("CLARITY_TERMINAL", "1").stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    if let Some(data) = data {
+        command.env("CLARITY_DATA", data);
+    }
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(err) => return BuildDone { ok: false, message: format!("cannot start {}: {err}", binary.display()), binary: None },

@@ -249,3 +249,27 @@ fn placed_a_tell_runs_the_windows_handler_and_an_unheard_one_does_nothing() {
     assert!(errors(&unheard).is_empty(), "{:#?}", errors(&unheard));
     assert!(calls(&unheard, "saveClicked").is_empty());
 }
+
+/// A view keeps its own grid where it shows: a tab, step or section that
+/// shows it lays its parts out on the view's columns, not the container's
+/// span, so a part in the view's last columns stays inside (a gap Writer met:
+/// a view on 12 columns in tabs of span 9 lost its columns 10 to 12).
+#[test]
+fn a_view_shown_in_a_tab_keeps_its_own_columns() {
+    let text = "module model
+
+page Desk: window
+    tabs name parts at 1,1 span 9 rows 8
+        tab \"Edit\" view Editor
+        tab \"Notes\"
+            label \"Notes\" name notesLabel at 1,1 span 3
+
+page Editor: view
+    button \"Save\" name saveButton at 11,1 span 2
+";
+    assert!(errors(text).is_empty(), "{:#?}", errors(text));
+    let placed = clarity_spec::views::placed(&project(text));
+    let tabs = &placed.files[0].pages[0].widgets[0];
+    assert_eq!(Some(12), tabs.pages[0].columns, "the view's tab");
+    assert_eq!(None, tabs.pages[1].columns, "a tab of its own keeps the container's");
+}

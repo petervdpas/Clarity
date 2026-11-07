@@ -196,14 +196,14 @@ fn handlers_are_viewmodel_methods() {
     {
         if (!Logic.WithinCredit(Db, Order))
         {
-            Say(Level.Warning, Text.Of(\"orderNumberIsTooLarge\").With(\"number\", Slot.OfText(Order.Number)));
+            Say(Level.Warning, Clarity.Runtime.Text.Of(\"orderNumberIsTooLarge\").With(\"number\", Slot.OfText(Order.Number)));
             ApproveButton.IsEnabled = false;
             return;
         }
         Order.Status = OrderStatus.Approved;
         Db.Save(Order);
-        NumberInput.ErrorText = Text.Plain(\"\");
-        Say(Level.Info, Text.Of(\"approved\"));
+        NumberInput.ErrorText = Clarity.Runtime.Text.Plain(\"\");
+        Say(Level.Info, Clarity.Runtime.Text.Of(\"approved\"));
         OnFilterChanged();
     }",
     );
@@ -452,8 +452,8 @@ fn a_window_holds_plain_values() {
     // again when the language changes (its default too, a key).
     // A text that code only keeps or returns is no key: the checker asks one
     // only for a text shown as written (a message, a caption).
-    has(vm, "        ShowText(nameof(Word), Text.Plain(\"x\"), shown => Word = shown);\n");
-    has(vm, "        ShowText(nameof(Word), Text.Of(\"calcWord\"), shown => Word = shown);\n");
+    has(vm, "        ShowText(nameof(Word), Clarity.Runtime.Text.Plain(\"x\"), shown => Word = shown);\n");
+    has(vm, "        ShowText(nameof(Word), Clarity.Runtime.Text.Of(\"calcWord\"), shown => Word = shown);\n");
     // A slot is still filled in.
     let code: String = files.iter().filter(|f| f.path.ends_with(".cs")).map(|f| f.text.as_str()).collect();
     has(&code, "return \"Draw\";");
@@ -584,8 +584,8 @@ fn a_said_text_follows_the_language() {
     let settings = clarity_project::load(&file).settings.expect("the example has a project file");
     let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let vm = file_of(&files, "GameViewModel.cs");
-    has(vm, "        ShowText(nameof(Status), Text.Of(Engines.Board.CallIn<string>(Instance, \"play\", square)), shown => Status = shown);\n");
-    has(vm, "        ShowText(nameof(Status), Text.Of(\"gameStatus\"), shown => Status = shown);\n");
+    has(vm, "        ShowText(nameof(Status), Clarity.Runtime.Text.Of(Engines.Board.CallIn<string>(Instance, \"play\", square)), shown => Status = shown);\n");
+    has(vm, "        ShowText(nameof(Status), Clarity.Runtime.Text.Of(\"gameStatus\"), shown => Status = shown);\n");
 }
 
 fn file_of<'a>(files: &'a [OutFile], name: &str) -> &'a str {
@@ -616,4 +616,20 @@ fn a_handler_named_as_a_part_or_a_view_model_member_still_builds() {
     has(vm, "    [RelayCommand]\n    void Opened_() => Handle(OnOpened);\n");
     has(vm, "OnRedInk();");
     has(vm, "    void Keys_() => ShowKeys();\n");
+}
+
+/// `-> OrderForm with order`: the opened window is filled with this window's data of that name.
+#[test]
+fn a_route_opens_its_window_with_the_data_it_names() {
+    let source = SHOP.replace(
+        "    button \"New\" name button1 at 11,10 span 2 on click -> OrderForm\n",
+        "    button \"New\" name button1 at 11,10 span 2 on click -> OrderForm with order\n",
+    );
+    assert_ne!(source, SHOP);
+    let project = load_keyed([("shop.clarity", source.as_str())], &[], "en");
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let vm = file(&files, "Windows/OrderFormViewModel.cs");
+    has(vm, "    void Open_OrderForm() => Handle(() => Open(new OrderFormViewModel(Db) { Order = Order }));");
+    has(vm, "    void OpenNew_OrderForm() => Handle(() => Open(new OrderFormViewModel(Db) { Order = Order }, newWindow: true));");
 }

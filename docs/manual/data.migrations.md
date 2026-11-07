@@ -64,3 +64,7 @@ This writes the pending changes of every SQL data source as its next step, title
 The generated application, and Run in Clarity, apply the steps its database does not have yet, in order. The database keeps the number of steps it has in a table called `clarity_schema`. Each step runs in a transaction where the database allows it: SQLite, PostgreSQL and SQL Server undo a failed step as a whole, while MySQL keeps what ran before the failure. On SQLite, the references between records are checked before a step is kept.
 
 A step that ran never changes. To undo it, write a new step. Clarity never writes steps for an external source; see [Data sources](data.sources.md).
+
+## Creating the database from the command line
+
+`clarity data migrate shop.clarity` creates the project's SQLite database, or brings it up to date, with the same steps the program applies when it starts, without opening a window; a database that changes is backed up first. `--source` names another data source than the first SQLite one the project owns. Handy before seeding data, or on a machine with no display.

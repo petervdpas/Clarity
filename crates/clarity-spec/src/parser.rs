@@ -819,9 +819,10 @@ fn parse_page(
         "dialog" => PageKind::Dialog,
         "view" => PageKind::View,
         "splash" => PageKind::Splash,
+        "toolbox" => PageKind::Toolbox,
         other => {
             return Err(Diagnostic::error(
-                format!("unknown page kind '{other}', expected 'window', 'dialog', 'view' or 'splash'"),
+                format!("unknown page kind '{other}', expected 'window', 'dialog', 'view', 'splash' or 'toolbox'"),
                 kind_ident.span,
             ));
         }
@@ -1438,6 +1439,15 @@ fn parse_command(
                 }
                 cursor.expect(TokenKind::Arrow, "'->' and a target")?;
                 props.on_click = Some(cursor.expect_ident("a page, screen or command")?.name);
+                // `with book, chapter`: the opened window's data, from the data of the same name here.
+                if cursor.eat_keyword("with") {
+                    loop {
+                        props.open_with.push(cursor.expect_ident("the name of data to open the window with")?.name);
+                        if !cursor.eat(TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                }
                 if cursor.eat_keyword("in") {
                     if !(cursor.eat_keyword("new") && cursor.eat_keyword("window")) {
                         return Err(cursor.error_here("expected 'in new window'".to_string()));
@@ -1630,13 +1640,17 @@ fn parse_widget_props(
         bind: None,
         on_click: None,
         new_window: false,
+        open_with: Vec::new(),
         handlers: Vec::new(),
         columns: Vec::new(),
         edit: Vec::new(),
+        links: Vec::new(),
+        drops: Vec::new(),
         switches: Vec::new(),
         widths: Default::default(),
         resizable: false,
         side: None,
+        beside: None,
         slide_width: None,
         slide_height: None,
         pinnable: false,
@@ -1649,9 +1663,14 @@ fn parse_widget_props(
         confirm: false,
         striped: false,
         reorder: None,
+        reorder_from: None,
         mode: None,
         objects: None,
         tools: Vec::new(),
+        toolbox: None,
+        toolbox_page: None,
+        toolbox_columns: None,
+        does: None,
         brush: None,
         ink: None,
         order: None,
@@ -1814,6 +1833,14 @@ fn parse_widget_props(
                     other => return Err(Diagnostic::error(format!("a slide-out comes in from the left, the right, the top or the bottom, not '{other}': write side left, side right, side top or side bottom"), word.span)),
                 });
             }
+            "does" => {
+                applies(WidgetProperty::Does)?;
+                props.does = Some(cursor.expect_ident("what the tool does, as in does pencil")?.name);
+            }
+            "beside" => {
+                applies(WidgetProperty::Beside)?;
+                props.beside = Some(cursor.expect_ident("the part it lies against, as in beside chapterTable")?.name);
+            }
             "width" => {
                 applies(WidgetProperty::SlideWidth)?;
                 props.slide_width = Some(cursor.expect_number("a width in pixels, as in width 420")?);
@@ -1878,6 +1905,17 @@ fn parse_widget_props(
                         event_ident.span,
                     ));
                 };
+                // `on drop from fragmentList: linkFragment`: a row of that part dragged onto this one.
+                if event == Event::Drop && cursor.eat_keyword("from") {
+                    if !matches!(kind, WidgetKind::List | WidgetKind::Table | WidgetKind::Tree | WidgetKind::TreeTable) {
+                        return Err(Diagnostic::error(format!("a {name} takes no rows dragged onto it; a list, table or tree does"), event_ident.span));
+                    }
+                    let from = cursor.expect_ident("the part whose rows are dragged here, as in on drop from fragmentList: linkFragment")?.name;
+                    cursor.expect(TokenKind::Colon, "':' and the handler the drop runs")?;
+                    let handler = cursor.expect_ident("the handler the drop runs")?.name;
+                    props.drops.push(crate::model::DropFrom { from, handler });
+                    continue;
+                }
                 // `on change: name_changed` wires a handler in the code behind.
                 if cursor.eat(TokenKind::Colon) {
                     if !widgets::has_event(kind, event) {
@@ -1916,6 +1954,15 @@ fn parse_widget_props(
                 }
                 cursor.expect(TokenKind::Arrow, "'->' and a target")?;
                 props.on_click = Some(cursor.expect_ident("a window")?.name);
+                // `with book, chapter`: the opened window's data, from the data of the same name here.
+                if cursor.eat_keyword("with") {
+                    loop {
+                        props.open_with.push(cursor.expect_ident("the name of data to open the window with")?.name);
+                        if !cursor.eat(TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                }
                 if cursor.eat_keyword("in") {
                     if !(cursor.eat_keyword("new") && cursor.eat_keyword("window")) {
                         return Err(cursor.error_here("expected 'in new window'".to_string()));
@@ -1999,6 +2046,19 @@ fn parse_widget_props(
                     other => return Err(Diagnostic::error(format!("a canvas's mode is objects, paint or vector, not '{other}'"), word.span)),
                 });
             }
+            "toolbox" => {
+                applies(WidgetProperty::Toolbox)?;
+                // `toolbox` alone floats; `toolbox slideout` lies against the canvas's edge; `toolbox Painting` shows that toolbox page.
+                if cursor.peek().is_some_and(|t| t.kind == TokenKind::Ident && t.text.chars().next().is_some_and(char::is_uppercase)) {
+                    props.toolbox_page = Some(cursor.expect_ident("a toolbox")?.name);
+                }
+                props.toolbox = Some(if cursor.eat_keyword("slideout") {
+                    crate::model::ToolboxKind::Slideout
+                } else {
+                    cursor.eat_keyword("popup");
+                    crate::model::ToolboxKind::Popup
+                });
+            }
             "tools" => {
                 applies(WidgetProperty::Tools)?;
                 loop {
@@ -2030,6 +2090,23 @@ fn parse_widget_props(
                     return Err(cursor.error_here("expected 'by', as in 'reorder by position'".to_string()));
                 }
                 props.reorder = Some(cursor.expect_ident("the integer field that keeps the order")?.name);
+                // `from 0`: the first row's number, for lists that count from 0.
+                if cursor.eat_keyword("from") {
+                    props.reorder_from = Some(i64::from(cursor.expect_number("the number the first row gets, as in 'from 0'")?));
+                }
+            }
+            "link" => {
+                applies(WidgetProperty::Link)?;
+                // `link chapter: toChapter, layer: toLayer`: columns whose cells are links.
+                loop {
+                    let column = cursor.expect_ident("a column, as in link chapter: toChapter")?.name;
+                    cursor.expect(TokenKind::Colon, "':' and the handler a click on the link runs")?;
+                    let handler = cursor.expect_ident("the handler a click on the link runs")?.name;
+                    props.links.push(crate::model::ColumnLink { column, handler });
+                    if !cursor.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
             }
             "edit" => {
                 applies(WidgetProperty::Edit)?;
@@ -2324,6 +2401,12 @@ fn parse_widget_props(
     // A popover stands outside the window's grid, on a grid of its own; a
     // sound has no place at all.
     if widgets::off_grid(kind) {
+        props.col = 1;
+        props.row = 1;
+        placed = true;
+    }
+    // A tool in a tool group lies in its flyout, not on a grid: it needs no place.
+    if kind == WidgetKind::Tool && !placed {
         props.col = 1;
         props.row = 1;
         placed = true;

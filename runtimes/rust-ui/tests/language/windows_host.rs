@@ -410,3 +410,35 @@ fn data_now(host: &ProgramHost) -> Map<String, Value> {
     }
     data
 }
+
+/// `on click -> Users with order`: the opened window gets this window's data of
+/// that name; a name this window does not have is left out (Users starts it new).
+#[test]
+fn a_route_opens_its_window_with_the_data_it_names() {
+    let _alone = super::one_at_a_time();
+    let (host, _) = made("");
+    let call = HandlerCall::new("click", "Users", vec!["order".to_string(), "missing".to_string()]);
+    assert!(host.run(Some("usersButton"), &call));
+    let mut with = Map::new();
+    with.insert("order".into(), data()["order"].clone());
+    assert_eq!(vec![Effect::Open("Users".into(), with)], host.take_effects());
+}
+
+/// Back goes to the row the person chose before, as a choice of theirs: its `select` handler runs; Forward comes back.
+#[test]
+fn back_and_forward_choose_the_rows_chosen_before_and_run_their_handlers() {
+    let _alone = super::one_at_a_time();
+    let (host, fake) = made(r#"<List name="orders" at="1,1" span="6" rows="5" bind="orders" show="note" onselect="orderPicked" />"#);
+    clarity_ui::PartHost::select(&*host, "orders", Some(0));
+    host.note_place();
+    clarity_ui::PartHost::select(&*host, "orders", Some(1));
+    host.note_place();
+    fake.calls();
+    assert!(host.can_go(true));
+    assert!(host.run(Some("backButton"), &click("back")));
+    assert_eq!(Some(0), clarity_ui::PartHost::selected(&*host, "orders"));
+    assert!(fake.calls().iter().any(|c| c.contains("orderPicked")), "the row's select handler runs");
+    host.note_place();
+    host.go(false);
+    assert_eq!(Some(1), clarity_ui::PartHost::selected(&*host, "orders"));
+}

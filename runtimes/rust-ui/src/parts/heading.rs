@@ -1,4 +1,5 @@
-//! A heading: its caption in the theme's heading font and size.
+//! A heading: its caption, or the value it binds (`bind chapter.title`), in
+//! the theme's heading font and size.
 
 use std::rc::Rc;
 
@@ -17,9 +18,12 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
 }
 
 impl HeadingPart {
-    /// What it says.
+    /// What it says: its bound value as the person reads it, else its caption.
     pub fn text(&self) -> String {
-        self.base.caption().unwrap_or_default()
+        match self.base.bound() {
+            Some(path) => crate::parts::containers::small::shown_value(self.base.host.as_ref(), path, self.base.host.read(path).as_ref()),
+            None => self.base.caption().unwrap_or_default(),
+        }
     }
 }
 

@@ -1366,6 +1366,11 @@ impl<'a> Emitter<'a> {
             let list = args.first().map(|a| self.value(a)).unwrap_or_default();
             return format!("int64_t({list}.size())");
         }
+        // A built-in function (conformance/texts.json, conformance/zip.json), by the runtime's name for it.
+        if let Some(built) = crate::built_in(self.project, name) {
+            let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
+            return format!("{}({})", built.cpp, values.join(", "));
+        }
         if name == clarity_spec::code::check::LENGTH && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
             let text = args.first().map(|a| self.value(a)).unwrap_or_default();
             return format!("clarity::length({text})");

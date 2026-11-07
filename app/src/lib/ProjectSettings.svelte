@@ -177,7 +177,7 @@
     e.preventDefault();
     const name = newName.trim();
     if (!name || !project.settings) return;
-    const source: DataSource = { name, kind: newKind, url: sourceInfo(newKind)?.urlExample ?? "", auth: null, external: false, readonly: false, openapi: null, picks: [], pick_schemas: [], paging: null };
+    const source: DataSource = { name, kind: newKind, url: sourceInfo(newKind)?.urlExample ?? "", auth: null, external: false, readonly: false, beside: false, openapi: null, picks: [], pick_schemas: [], paging: null };
     save({ datasources: [...project.settings.datasources, source] });
     newName = "";
   }
@@ -448,6 +448,12 @@
                             <input type="checkbox" checked={source.readonly} onchange={(e) => saveSource(i, { readonly: e.currentTarget.checked })} />
                             Read-only
                           </label>
+                          {#if source.kind === "sqlite" && !source.external}
+                            <label title="The built program keeps this database in the project's folder, not in the person's folder for application data">
+                              <input type="checkbox" checked={source.beside} onchange={(e) => saveSource(i, { beside: e.currentTarget.checked })} />
+                              Beside the project
+                            </label>
+                          {/if}
                         </div>
                       {/if}
                     </td>

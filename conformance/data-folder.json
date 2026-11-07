@@ -1,0 +1,16 @@
+{
+  "about": "Where a program's SQLite database opens (data-folder): a database the project keeps beside it is written data:<program>/<file> by the generator; it opens in the folder CLARITY_DATA names (Clarity's Run names the project's data folder), else in the person's folder for application data (Linux $XDG_DATA_HOME or ~/.local/share, macOS ~/Library/Application Support, Windows %APPDATA%) under the program's name, else under its own name where the program runs. CLARITY_DATA moves any SQLite file under its own name. env:, setting: and :memory: are as they say.",
+  "cases": [
+    { "os": "linux", "env": { "HOME": "/home/ann" }, "location": "data:shop/shop.db", "file": "/home/ann/.local/share/shop/shop.db" },
+    { "os": "linux", "env": { "HOME": "/home/ann", "XDG_DATA_HOME": "/data" }, "location": "data:shop/shop.db", "file": "/data/shop/shop.db" },
+    { "os": "macos", "env": { "HOME": "/Users/ann" }, "location": "data:shop/shop.db", "file": "/Users/ann/Library/Application Support/shop/shop.db" },
+    { "os": "windows", "env": { "APPDATA": "C:/Users/ann/AppData/Roaming" }, "location": "data:shop/shop.db", "file": "C:/Users/ann/AppData/Roaming/shop/shop.db" },
+    { "os": "linux", "env": { "HOME": "/home/ann", "CLARITY_DATA": "/copy" }, "location": "data:shop/shop.db", "file": "/copy/shop.db" },
+    { "os": "linux", "env": {}, "location": "data:shop/shop.db", "file": "shop.db" },
+    { "os": "linux", "env": { "CLARITY_DATA": "/copy" }, "location": "/srv/shop.db", "file": "/copy/shop.db" },
+    { "os": "linux", "env": {}, "location": "/srv/shop.db", "file": "/srv/shop.db" },
+    { "os": "linux", "env": { "CLARITY_DATA": "/copy" }, "location": "env:SHOP_DB", "file": "env:SHOP_DB" },
+    { "os": "linux", "env": { "CLARITY_DATA": "/copy" }, "location": "setting:shop/database", "file": "setting:shop/database" },
+    { "os": "linux", "env": { "CLARITY_DATA": "/copy" }, "location": ":memory:", "file": ":memory:" }
+  ]
+}

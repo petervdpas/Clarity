@@ -115,6 +115,7 @@ fn every_sqlite_file_is_found_from_the_project_folder() {
     // separator between them is the system's own.
     let dir = std::path::absolute("/work/shop").unwrap();
     let built = clarity_project::build_settings(&dir, &settings);
-    assert_eq!(std::path::Path::new(&built.datasources[0].url), dir.join("data/shop.db"));
+    // The project's own database goes to the person's data folder; an external one stays where it is.
+    assert_eq!("data:shop/shop.db", built.datasources[0].url);
     assert_eq!(std::path::Path::new(&built.datasources[1].url), dir.join("legacy/erp.db"));
 }

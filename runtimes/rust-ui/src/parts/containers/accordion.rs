@@ -89,7 +89,7 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         base.node.add(Box::new(header));
     }
     for page in &spec.pages {
-        base.node.add(Box::new(Page::new(Box::new(container::grid_of(&page.children, columns, GAP, &host).owned(page.item.as_deref())))));
+        base.node.add(Box::new(Page::new(Box::new(container::grid_of(&page.children, page.grid.unwrap_or(columns).max(1), GAP, &host).owned(page.item.as_deref())))));
     }
     Box::new(AccordionPart { base, shared, horizontal, look: Cell::new(LookNow::default()) })
 }

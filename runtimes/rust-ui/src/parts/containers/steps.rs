@@ -88,7 +88,7 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
     let wizard = Rc::new(Wizard { spec: spec.clone(), host: host.clone(), count: spec.pages.len(), step_here: Cell::new(crate::markup::design_shown(&spec)) });
     let mut base = PartBase::new(spec, host.clone());
     for page in &base.spec.pages.clone() {
-        base.node.add(Box::new(Page::new(Box::new(container::grid_of(&page.children, columns, crate::grid::GAP, &host).owned(page.item.as_deref())))));
+        base.node.add(Box::new(Page::new(Box::new(container::grid_of(&page.children, page.grid.unwrap_or(columns).max(1), crate::grid::GAP, &host).owned(page.item.as_deref())))));
     }
     let (w, usable) = (wizard.clone(), wizard.clone());
     let back = ContainerButton::new(|| locale::translate("back", "Back"), move |_| w.go_back()).shows({

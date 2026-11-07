@@ -133,6 +133,18 @@ pub fn readme(settings: &Settings, project: &clarity_spec::Project) -> String {
                 kind_label(kind),
                 example(kind)
             )),
+            (SourceKind::Sqlite, None) if source.url.starts_with("data:") => {
+                // A database the project keeps beside it: in the person's folder for application data
+                // (conformance/data-folder.json); Clarity's Run names the project's data folder.
+                let kept = &source.url["data:".len()..];
+                let written = project.sources.iter().find(|s| s.name == source.name).map(|s| s.address.as_str()).filter(|a| !a.is_empty()).unwrap_or(kept);
+                out.push_str(&format!(
+                    "- `{}`: an SQLite file, {owner}, kept in the person's folder for application data: `~/.local/share/{kept}` on Linux (`$XDG_DATA_HOME` when set), `~/Library/Application Support/{kept}` on macOS, `%APPDATA%\\{}` on Windows. Run in Clarity, it is the project's `{written}`.",
+                    source.name,
+                    kept.replace('/', "\\")
+                ));
+                out.push_str(" Set the environment variable `CLARITY_DATA` to a folder to open it there instead, under its own file name.\n");
+            }
             (SourceKind::Sqlite, None) => {
                 // The path as the project file gives it. A relative one is in the project's folder, where the
                 // program opens it whatever folder it starts in (clarity_project::build_settings made it whole);

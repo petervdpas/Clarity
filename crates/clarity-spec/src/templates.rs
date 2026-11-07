@@ -22,6 +22,8 @@ pub enum PageTemplate {
     View,
     /// The app's splash screen: its name and a status code sets while the app starts.
     Splash,
+    /// A toolbox (docs/IMAGE-PLAN.md): a painting canvas's tools to start from, on a grid of 4.
+    Toolbox,
     /// A label and an input for every field of the entity, and Save and
     /// Close buttons.
     Form { entity: String },
@@ -49,6 +51,9 @@ pub fn page_from_template(
         PageTemplate::Blank => Ok(format!("page {name}: window\n    title {}", quote(&title))),
         PageTemplate::View => Ok(format!("page {name}: view")),
         PageTemplate::Splash => Ok(format!("page {name}: splash")),
+        PageTemplate::Toolbox => Ok(format!(
+            "page {name}: toolbox\n    grid 4 columns\n    toolgroup name selectGroup at 1,1\n        tool name selectTool does select\n        tool name ellipseSelectTool does ellipseSelect\n        tool name lassoTool does lasso\n    toolgroup name drawGroup at 2,1\n        tool name penTool does pen\n        tool name pencilTool does pencil\n        tool name sprayTool does spray\n    tool name eraserTool at 3,1 does eraser\n    tool name fillTool at 4,1 does fill\n    toolsize name sizeOption at 1,2 span 4\n    toolopacity name opacityOption at 1,3 span 4\n    toolcolors name colorOption at 1,4 span 2"
+        )),
         PageTemplate::Form { entity } => {
             let entity = find_entity(project, entity)?;
             Ok(form_page(name, &title, entity))

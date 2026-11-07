@@ -514,6 +514,16 @@ impl Screen {
                     }
                     Request::Later(id, work) => self.later.start(id, work),
                     Request::Ask(id, asked) => self.later.ask(id, asked),
+                    // A row dragged out of a part goes to the part under the point that takes it, the deepest first.
+                    Request::Drop(from, x, y) => {
+                        if let Some(at) = self.at(x, y) {
+                            for id in self.upward(at) {
+                                if self.element_mut(id).is_some_and(|e| e.take_drop(&from, x, y, &mut cx)) {
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

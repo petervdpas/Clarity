@@ -7,10 +7,12 @@
 #include <filesystem>
 
 #include "check.hpp"
+#include "conformance.hpp"
 #include "clarity/db.hpp"
 #include "clarity/store.hpp"
 
 using namespace clarity;
+using nlohmann::json;
 namespace fs = std::filesystem;
 
 namespace {
@@ -63,4 +65,22 @@ TEST(a_database_opens_in_the_folder_clarity_data_names) {
     CHECK(fs::exists(folder / "shop.db"));
     CHECK(!fs::exists(elsewhere));
     fs::remove_all(folder);
+}
+
+// Every runtime places an SQLite database alike (conformance/data-folder.json).
+TEST(a_database_opens_where_every_runtime_opens_it) {
+    const json& cases = conformance("data-folder.json");
+    for (const auto& item : cases["cases"]) {
+        json vars = item["env"];
+        std::string kept;
+        auto env = [&](const char* name) -> const char* {
+            if (!vars.contains(name)) return nullptr;
+            kept = vars[name].get<std::string>();
+            return kept.c_str();
+        };
+        std::string got = data_folder_sqlite_on(item["os"].get<std::string>(), item["location"].get<std::string>(), env);
+        for (auto& c : got)
+            if (c == '\\') c = '/';
+        CHECK_EQ(got, item["file"].get<std::string>());
+    }
 }

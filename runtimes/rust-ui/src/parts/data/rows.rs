@@ -584,6 +584,8 @@ impl Rows {
     /// named by its `key` field (`id`, or a tree's key), which a parent holds.
     pub fn apply(&mut self, base: &PartBase, mv: Move, key: &str, parent: Option<&str>) -> Option<usize> {
         let by = Self::reorder_by(base)?;
+        // `reorder by chapter from 0`: the first row at each level gets this number.
+        let from = base.spec.number("reorderFrom").map_or(1, |n| n as i64);
         let bound = base.bound()?.to_string();
         let given: Vec<Row> = self
             .records
@@ -595,7 +597,7 @@ impl Rows {
         for (i, place) in moved.order.iter().enumerate() {
             let mut record = self.records[*place].clone();
             if let Some(fields) = record.as_object_mut() {
-                fields.insert(by.clone(), Value::from(moved.numbers[i]));
+                fields.insert(by.clone(), Value::from(moved.numbers[i] - 1 + from));
                 if let Some(p) = parent {
                     fields.insert(p.to_string(), moved.parents[i].clone());
                 }
@@ -684,4 +686,25 @@ impl Default for Measures {
     fn default() -> Self {
         Measures::of(&crate::theme::ThemeLook::clarity(false))
     }
+}
+
+/// The handler a part runs for a row dragged onto it from the part `from` (`on drop from fragmentList: linkFragment`).
+pub fn drop_handler(base: &crate::parts::PartBase, from: &str) -> Option<String> {
+    if !base.enabled() {
+        return None;
+    }
+    match base.spec.props.get("drops") {
+        Some(Value::Array(drops)) => drops.iter().find(|d| d.get("from").and_then(Value::as_str) == Some(from)).and_then(|d| d.get("handler")).and_then(Value::as_str).map(str::to_string),
+        _ => None,
+    }
+}
+
+/// The tooltip over the rows of a part with `on open`, in Clarity's words.
+pub fn open_word() -> String {
+    crate::locale::translate("openRow", "Double-click or press Enter to open")
+}
+
+/// Whether the rows of a part open something: it has `on open`.
+pub fn rows_open(base: &crate::parts::PartBase) -> bool {
+    base.enabled() && base.spec.on("open").next().is_some()
 }

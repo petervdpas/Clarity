@@ -270,6 +270,7 @@
   const enums = $derived(preview.project.files.flatMap((f) => f.enums).map((e) => e.name.name));
   /** The project's views, which a slide-out, tab, step or section can show. */
   const views = $derived(preview.project.files.flatMap((f) => f.pages).filter((page) => page.kind === "view").map((page) => page.name.name));
+  const toolboxPages = $derived(preview.project.files.flatMap((f) => f.pages).filter((page) => page.kind === "toolbox").map((page) => page.name.name));
   const splashPages = $derived(preview.project.files.flatMap((f) => f.pages).filter((page) => page.kind === "splash").map((page) => page.name.name));
   /** Only records come as a list. */
   const listable = $derived(entities.some((e) => e.name.name === dataOf));
@@ -575,17 +576,21 @@
                 update(
                   e.currentTarget.checked
                     ? { reorder: (numbers.find((f) => ["position", "order", "rank"].includes(f.name.name)) ?? numbers[0]).name.name, sortable: false, order: null }
-                    : { reorder: null },
+                    : { reorder: null, reorderFrom: null },
                 )}
             />
             Reorder by the person
           </label>
           {#if p.reorder !== null}
-            <label class="order" title="The integer field the rows are numbered in, from 1 at each level">
+            <label class="order" title="The integer field the rows are numbered in, from the first number at each level">
               <span>Kept in</span>
               <select value={p.reorder} onchange={(e) => update({ reorder: e.currentTarget.value })}>
                 {#each numbers as field (field.name.name)}<option value={field.name.name}>{field.label}</option>{/each}
               </select>
+            </label>
+            <label class="order" title="The number the first row at each level gets: 1, or 0 for a list that starts at 0">
+              <span>From</span>
+              <input type="number" min="0" value={p.reorderFrom ?? 1} onchange={(e) => update({ reorderFrom: e.currentTarget.valueAsNumber === 1 || Number.isNaN(e.currentTarget.valueAsNumber) ? null : e.currentTarget.valueAsNumber })} />
             </label>
           {/if}
         {:else}
@@ -650,7 +655,7 @@
     {#if info.clickable}
       <label class="prop">
         <span>On click, open</span>
-        <select value={p.onClick ?? ""} onchange={(e) => update({ onClick: textOf(e), newWindow: textOf(e) ? p.newWindow : false })}>
+        <select value={p.onClick ?? ""} onchange={(e) => update({ onClick: textOf(e), newWindow: textOf(e) ? p.newWindow : false, openWith: textOf(e) ? p.openWith : [] })}>
           <option value="">(nothing)</option>
           {#each targets as target (target)}
             <option value={target}>{target}</option>
@@ -660,6 +665,10 @@
       {#if p.onClick}
         <label class="inline" title="Opens in a desktop window of its own. Without it, the window opens in place, on top of this one.">
           <input type="checkbox" checked={p.newWindow} onchange={(e) => update({ newWindow: e.currentTarget.checked })} /> In a new window
+        </label>
+        <label class="prop" title="Data of this window the opened window is filled with, each by its name there: book, chapter">
+          <span>With data</span>
+          <input class="mono" value={p.openWith.join(", ")} placeholder="(none)" onchange={(e) => update({ openWith: e.currentTarget.value.split(",").map((n) => n.trim()).filter((n) => n) })} />
         </label>
       {/if}
     {/if}
@@ -737,6 +746,42 @@
           <option value="left">Left</option>
           <option value="top">Top</option>
           <option value="bottom">Bottom</option>
+        </select>
+      </label>
+    {/if}
+    {#if info.properties.includes("toolbox")}
+      <label class="prop" title="The canvas's tools in a toolbox: Clarity's own for its mode, or a toolbox page (page X: toolbox) designed for it">
+        <span>Toolbox</span>
+        <select
+          value={p.toolbox === null ? "" : (p.toolboxPage ?? "*")}
+          onchange={(e) => {
+            const v = e.currentTarget.value;
+            update(v === "" ? { toolbox: null, toolboxPage: null } : { toolbox: p.toolbox ?? "popup", toolboxPage: v === "*" ? null : v });
+          }}
+        >
+          <option value="">(tools on the canvas)</option>
+          <option value="*">Clarity's own</option>
+          {#each toolboxPages as name (name)}<option value={name}>{name}</option>{/each}
+        </select>
+      </label>
+      {#if p.toolbox !== null}
+        <label class="prop" title="Floating over the window, or a slide-out against the canvas's edge">
+          <span>Shows as</span>
+          <select value={p.toolbox} onchange={(e) => update({ toolbox: e.currentTarget.value as "popup" | "slideout" })}>
+            <option value="popup">Floating</option>
+            <option value="slideout">Slide-out</option>
+          </select>
+        </label>
+      {/if}
+    {/if}
+    {#if info.properties.includes("beside")}
+      <label class="prop" title="The part it lies against, at its side of that part, instead of the window's edge; a part of the same container">
+        <span>Beside</span>
+        <select value={p.beside ?? ""} onchange={(e) => update({ beside: textOf(e) })}>
+          <option value="">(the window's edge)</option>
+          {#each partNames.filter((n) => n !== p.name) as name (name)}
+            <option value={name}>{name}</option>
+          {/each}
         </select>
       </label>
     {/if}

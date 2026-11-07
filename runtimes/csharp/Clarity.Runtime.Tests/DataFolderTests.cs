@@ -52,3 +52,20 @@ public class DataFolderTests
         }
     }
 }
+
+/// <summary>Every runtime places an SQLite database alike (conformance/data-folder.json).</summary>
+public class DataFolderConformanceTests
+{
+    [Fact]
+    public void ADatabaseOpensWhereEveryRuntimeOpensIt()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "../../../../../../conformance/data-folder.json");
+        using var cases = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        foreach (var c in cases.RootElement.GetProperty("cases").EnumerateArray())
+        {
+            var env = c.GetProperty("env").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString());
+            var got = DataFolder.SqliteOn(c.GetProperty("os").GetString()!, c.GetProperty("location").GetString()!, name => env.GetValueOrDefault(name));
+            Assert.Equal(c.GetProperty("file").GetString(), got.Replace('\\', '/'));
+        }
+    }
+}

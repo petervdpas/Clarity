@@ -134,6 +134,9 @@
     X(a_secret_connection_not_kept_says_so) \
     X(any_other_failure_says_the_runtimes_message) \
     X(clarity_data_moves_an_sqlite_file_into_its_folder) \
+    X(a_database_opens_where_every_runtime_opens_it) \
+    X(text_functions_read_as_every_runtime_reads_them) \
+    X(a_zip_is_written_as_every_runtime_writes_it) \
     X(a_database_opens_in_the_folder_clarity_data_names) \
     X(a_reply_says_quit_and_keys_only_when_code_asks) \
     X(an_open_says_new_window_only_when_asked) \

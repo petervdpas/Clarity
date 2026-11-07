@@ -201,3 +201,4 @@ translation nl
     slideoutClose "Sluiten"
     slideoutPin "Vastzetten"
     slideoutUnpin "Laten wegschuiven"
+    openRow "Dubbelklik of druk op Enter om te openen"

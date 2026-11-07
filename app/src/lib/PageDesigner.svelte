@@ -75,7 +75,20 @@
     { key: "graphics", name: "Graphics" },
     { key: "media", name: "Media" },
     { key: "time", name: "Time" },
+    { key: "tools", name: "Toolbox" },
   ];
+
+  // A toolbox (`page X: toolbox`) holds its tools, buttons, labels, headings and lines; a window or a view holds no tools.
+  function designingToolbox(): boolean {
+    return page.kind === "toolbox";
+  }
+  const TOOLBOX_ALSO = ["button", "label", "heading", "separator"];
+  function paletteHolds(category: Category): boolean {
+    return designingToolbox() ? category === "tools" || category === "text" || category === "containers" || category === "basicInput" : category !== "tools";
+  }
+  function paletteOffers(kind: string): boolean {
+    return !designingToolbox() || TOOLBOX_ALSO.includes(kind) || preview.catalog.some((w) => w.kind === kind && w.category === "tools");
+  }
 
   let canvas: HTMLElement | undefined = $state();
 
@@ -442,10 +455,10 @@
       {/each}
     </div>
   {/if}
-  {#each CATEGORIES as c (c.key)}
+  {#each CATEGORIES.filter((c) => paletteHolds(c.key)) as c (c.key)}
     <h4>{c.name}</h4>
     <div class="tiles">
-      {#each preview.catalog.filter((w) => w.category === c.key && w.kind !== "custom") as info (info.kind)}
+      {#each preview.catalog.filter((w) => w.category === c.key && w.kind !== "custom" && paletteOffers(w.kind)) as info (info.kind)}
         <PartTile kind={info.kind} name={info.name} onpointerdown={(e) => pressPalette(e, info)} />
       {/each}
     </div>

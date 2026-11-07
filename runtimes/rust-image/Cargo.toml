@@ -1,0 +1,20 @@
+[package]
+name = "clarity-image"
+description = "Clarity.Image: the picture functions of the programs Clarity generates (resize, crop, rotate, flip, blend, adjust), alike on every stack"
+# Released on its own (tag runtimes/rust-image/vX.Y.Z).
+version = "0.1.0"
+edition.workspace = true
+license = "MIT"
+repository = "https://github.com/petervdpas/Clarity"
+homepage = "https://github.com/petervdpas/Clarity"
+readme = "README.md"
+keywords = ["clarity", "image", "picture", "resize"]
+categories = ["multimedia::images"]
+include = ["src/**", "README.md", "LICENSE"]
+
+[dependencies]
+# PNG, JPEG and WebP in, PNG out, resizing; pure Rust, no system libraries (user's choice, 2026-11-07).
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+
+[dev-dependencies]
+serde_json.workspace = true

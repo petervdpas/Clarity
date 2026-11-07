@@ -46,6 +46,10 @@ inline constexpr const char* data_variable = "CLARITY_DATA";
 /// a secret setting (`setting:`) is as it says, and so is SQLite's own
 /// `:memory:`. The same as the Rust and C# runtimes.
 std::string data_folder_sqlite(const std::string& location, const std::function<const char*(const char*)>& env = {});
+// data_folder_sqlite on system `os` ("windows", "macos" or another): a
+// data:<program>/<file> location opens in CLARITY_DATA's folder, else in the
+// person's folder for application data (conformance/data-folder.json).
+std::string data_folder_sqlite_on(const std::string& os, const std::string& location, const std::function<const char*(const char*)>& env = {});
 /// Connects to the database of a data source.
 std::unique_ptr<Driver> open_driver(Dialect dialect, const std::string& at);
 std::unique_ptr<Driver> open_sqlite(const std::string& path);

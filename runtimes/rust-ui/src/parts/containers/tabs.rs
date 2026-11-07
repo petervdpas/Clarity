@@ -82,7 +82,8 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         base.node.add(Box::new(tab));
     }
     for page in &spec.pages {
-        let grid = container::grid_of(&page.children, columns, GAP, &host).owned(page.item.as_deref());
+        // A page with columns of its own (a view keeps its grid) lays its parts out on them.
+        let grid = container::grid_of(&page.children, page.grid.unwrap_or(columns).max(1), GAP, &host).owned(page.item.as_deref());
         base.node.add(Box::new(Page::new(Box::new(ScrollView::new(Box::new(grid)).keeping_bar_room()))));
     }
     Box::new(TabsPart { base, shared, count: spec.pages.len(), look: Cell::new(LookNow::default()) })

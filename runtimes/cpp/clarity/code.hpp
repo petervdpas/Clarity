@@ -9,6 +9,8 @@
 #include <initializer_list>
 #include <optional>
 #include <string>
+
+#include "clarity/texts.hpp"
 #include <vector>
 
 #include "clarity/db.hpp"

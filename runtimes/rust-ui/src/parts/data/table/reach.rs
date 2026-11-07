@@ -285,7 +285,14 @@ impl TablePart {
         if self.edge_column_at(x, y).is_some() {
             return Some(Cursor::ResizeLeftRight);
         }
-        self.toggle_at(x, y).map(|_| Cursor::Hand)
+        if let Some(toggle) = self.toggle_at(x, y).map(|_| Cursor::Hand) {
+            return Some(toggle);
+        }
+        if self.link_at(x, y).is_some() && !self.locked() {
+            return Some(Cursor::Hand);
+        }
+        // A row that opens something shows it with the hand.
+        (crate::parts::data::rows::rows_open(&self.base) && self.row_at(y).is_some()).then_some(Cursor::Hand)
     }
 
     /// What the page bar's buttons and a tree row's toggle say at a point, in Clarity's words.
@@ -296,6 +303,9 @@ impl TablePart {
         if let Some(remove) = self.own_button_at(x, y) {
             return Some(if remove { super::remove_word() } else { super::add_word() });
         }
-        self.toggle_at(x, y).map(|place| self.toggle_word(place))
+        if let Some(word) = self.toggle_at(x, y).map(|place| self.toggle_word(place)) {
+            return Some(word);
+        }
+        (crate::parts::data::rows::rows_open(&self.base) && self.row_at(y).is_some()).then(crate::parts::data::rows::open_word)
     }
 }

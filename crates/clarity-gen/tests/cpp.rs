@@ -512,3 +512,17 @@ fn a_canvas_keeps_its_tool_brush_and_ink_and_says_what_is_selected() {
     // The moved object is the record of the list at the chosen place.
     has(all, "db.save(clarity::lvalue(ui.selected(\"diagram\", types)));");
 }
+
+/// A menu item of the app runs the app's handler whatever window shows: the
+/// app's handlers come before the windows', whose own throw on a name they lack.
+#[test]
+fn the_app_s_menu_handlers_run_from_any_window() {
+    let source = "module m\n\napp Shop\n    main Desk\n    menu name mainMenu\n        item \"Dutch\" name dutchItem on click: toDutch\n\nsettings\n    language\n\npage Desk: window\n    data note: text\n    button \"Go\" name goButton at 1,1 span 2 on click: go\n\ncode Shop\n    handler toDutch\n        settings.language = \"nl\"\n\ncode Desk\n    handler go\n        note = \"went\"\n";
+    let project = load_sources([("m.clarity", source)]);
+    assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let main = file(&files, "src/main.cpp");
+    let app = main.find("if (handler == \"toDutch\") {").expect("the app's handler is dispatched");
+    let window = main.find("if (state.window == \"Desk\") {").expect("the window's handlers are dispatched");
+    assert!(app < window, "the app's handlers come first");
+}

@@ -1,0 +1,44 @@
+{
+  "about": "zip(paths, texts) as every runtime writes it: a zip archive of one file per path, holding the text of the same place as UTF-8, in order, each stored as it is (no compression, as an EPUB's mimetype must be), named in UTF-8 (flag 0x0800), dated 1980-01-01 00:00 so the same files give the same bytes, with no extra fields or comments. Paths and texts pair up; what the longer list has more is left out. `hex` is the archive's bytes.",
+  "cases": [
+    {
+      "name": "no files",
+      "paths": [],
+      "texts": [],
+      "hex": "504b0506000000000000000000000000000000000000"
+    },
+    {
+      "name": "an EPUB's mimetype first, then a chapter",
+      "paths": [
+        "mimetype",
+        "OEBPS/ch1.xhtml"
+      ],
+      "texts": [
+        "application/epub+zip",
+        "<p>Één hoofdstuk</p>\n"
+      ],
+      "hex": "504b0304140000080000000021006f61ab2c1400000014000000080000006d696d65747970656170706c69636174696f6e2f657075622b7a6970504b030414000008000000002100a892804217000000170000000f0000004f454250532f6368312e7868746d6c3c703ec389c3a96e20686f6f66647374756b3c2f703e0a504b01021400140000080000000021006f61ab2c14000000140000000800000000000000000000000000000000006d696d6574797065504b0102140014000008000000002100a892804217000000170000000f000000000000000000000000003a0000004f454250532f6368312e7868746d6c504b05060000000002000200730000007e0000000000"
+    },
+    {
+      "name": "an empty file",
+      "paths": [
+        "empty.txt"
+      ],
+      "texts": [
+        ""
+      ],
+      "hex": "504b03041400000800000000210000000000000000000000000009000000656d7074792e747874504b0102140014000008000000002100000000000000000000000000090000000000000000000000000000000000656d7074792e747874504b0506000000000100010037000000270000000000"
+    },
+    {
+      "name": "more paths than texts: they pair up",
+      "paths": [
+        "a.txt",
+        "b.txt"
+      ],
+      "texts": [
+        "a"
+      ],
+      "hex": "504b03041400000800000000210043beb7e8010000000100000005000000612e74787461504b010214001400000800000000210043beb7e80100000001000000050000000000000000000000000000000000612e747874504b0506000000000100010033000000240000000000"
+    }
+  ]
+}

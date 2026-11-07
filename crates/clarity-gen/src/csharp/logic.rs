@@ -492,7 +492,7 @@ impl<'a> Emitter<'a> {
                         (ShapeValue::Number, Err(default)) => default.to_string(),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Ok(arg)) => self.value(arg),
                         // A text left out is an empty one (a link's label).
-                        (ShapeValue::Text, Err(default)) => format!("Text.Plain({})", string(default)),
+                        (ShapeValue::Text, Err(default)) => format!("Clarity.Runtime.Text.Plain({})", string(default)),
                         (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Err(default)) => string(default),
                         // An object sends its record's id (DESIGN 5.31).
                         (ShapeValue::Record, Ok(arg)) => self.value(&clarity_spec::code::check::object_id(arg)),
@@ -546,7 +546,7 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{pad}Ask(new {}ViewModel({db}){init}, answer => {method}({}));\n", window.name, values.join(", ")));
                     return;
                 }
-                let question = question.as_ref().map_or("Text.Plain(\"\")".to_string(), |q| self.shown(q));
+                let question = question.as_ref().map_or("Clarity.Runtime.Text.Plain(\"\")".to_string(), |q| self.shown(q));
                 let (form, answered) = match form.as_ref() {
                     AskForm::Confirm { yes, no } => {
                         let yes = yes.as_ref().map_or("null".to_string(), |t| self.shown(t));
@@ -637,8 +637,8 @@ impl<'a> Emitter<'a> {
             let found = decl.field(&column.name);
             let label = found.and_then(|f| f.modifiers.label.clone()).unwrap_or_else(|| clarity_spec::model::default_label(&column.name));
             headings.push(match clarity_spec::translations::key_of(&label) {
-                Some(key) => format!("Text.Of({})", string(key)),
-                None => format!("Text.Plain({})", string(&label)),
+                Some(key) => format!("Clarity.Runtime.Text.Of({})", string(key)),
+                None => format!("Clarity.Runtime.Text.Plain({})", string(&label)),
             });
             let ty = found.map(|f| &f.ty);
             right.push(matches!(ty, Some(FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money | FieldType::Duration) | None).to_string());
@@ -706,10 +706,10 @@ impl<'a> Emitter<'a> {
     /// slots in the person's format.
     fn shown(&mut self, expr: &Expr) -> String {
         match &expr.kind {
-            ExprKind::Str { value } => format!("Text.Plain({})", string(value)),
+            ExprKind::Str { value } => format!("Clarity.Runtime.Text.Plain({})", string(value)),
             // A key, whose value the language shown gives, with its slots by name.
             ExprKind::Key { key, args } => {
-                let mut code = format!("Text.Of({})", string(&key.name));
+                let mut code = format!("Clarity.Runtime.Text.Of({})", string(&key.name));
                 for arg in args {
                     let slot = self.slot(&arg.value);
                     code.push_str(&format!(".With({}, {slot})", string(&arg.name.name)));
@@ -730,11 +730,11 @@ impl<'a> Emitter<'a> {
             ExprKind::EngineCall { engine, .. } if crate::libraries::library(self.project, &engine.name).is_none() && self.types.type_of(expr) == TypeInfo::Text => {
                 let value = self.value(expr);
                 let called = value.strip_prefix("Locale.Translate(").and_then(|v| v.strip_suffix(')')).unwrap_or(&value);
-                format!("Text.Of({called})")
+                format!("Clarity.Runtime.Text.Of({called})")
             }
             _ => {
                 let value = self.value(expr);
-                format!("Text.Plain({})", self.show(value, &self.types.type_of(expr)))
+                format!("Clarity.Runtime.Text.Plain({})", self.show(value, &self.types.type_of(expr)))
             }
         }
     }
@@ -1161,6 +1161,11 @@ impl<'a> Emitter<'a> {
         if name == clarity_spec::code::check::ROUND {
             let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
             return format!("Numbers.Round({})", values.join(", "));
+        }
+        // A built-in function (conformance/texts.json, conformance/zip.json), by the runtime's name for it.
+        if let Some(built) = crate::built_in(self.project, name) {
+            let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
+            return format!("{}({})", built.csharp, values.join(", "));
         }
         if name == clarity_spec::code::check::LENGTH && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
             let text = args.first().map(|a| self.value(a)).unwrap_or_default();

@@ -113,6 +113,8 @@ pub struct PageSpec {
     pub kind: String,
     pub title: Option<String>,
     pub columns: Option<i64>,
+    /// The columns of its own grid (`columns`): a tab, step or section showing a view keeps the view's.
+    pub grid: Option<i64>,
     pub children: Vec<PartSpec>,
     /// What it is in the design (`designItem`, see `DESIGN_ITEM`); none in a program's own markup.
     pub item: Option<String>,
@@ -132,6 +134,14 @@ impl CommandSpec {
 
     pub fn flag(&self, field: &str) -> bool {
         self.props.get(field).and_then(Value::as_bool).unwrap_or(false)
+    }
+
+    /// The names of a list field, as `openWith`.
+    pub fn names(&self, field: &str) -> Vec<String> {
+        match self.props.get(field) {
+            Some(Value::Array(items)) => items.iter().filter_map(Value::as_str).map(str::to_string).collect(),
+            _ => Vec::new(),
+        }
     }
 }
 
@@ -390,6 +400,7 @@ pub fn part_of(element: &XmlElement) -> Result<PartSpec, MarkupError> {
                 kind: page.to_string(),
                 title: child.attribute("title").map(str::to_string),
                 columns: child.attribute("span").and_then(|s| s.trim().parse().ok()),
+                grid: child.attribute("columns").and_then(|s| s.trim().parse().ok()),
                 children: child.children.iter().map(part_of).collect::<Result<_, _>>()?,
                 item: child.attribute(DESIGN_ITEM).map(str::to_string),
             });

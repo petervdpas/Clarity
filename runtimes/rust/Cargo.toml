@@ -34,6 +34,10 @@ pictures = ["dep:clarity-image"]
 # (conformance/secret-store.json); the Keychain and the Secret Service over
 # D-Bus through keyring.
 secrets = ["dep:keyring", "dep:windows-sys", "windows-sys?/Win32_Security_Credentials"]
+# The desktop through Clarity.UI's ready-made library (its C interface), as
+# Go, C and C++ use it: no Skia to build. The program links the library from
+# the folder CLARITY_UI names (DESIGN 7.9).
+native-ui = []
 
 [dependencies]
 rust_decimal = { version = "1", features = ["serde-with-str"] }

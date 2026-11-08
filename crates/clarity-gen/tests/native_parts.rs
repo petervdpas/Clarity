@@ -458,7 +458,8 @@ fn a_program_served_to_a_browser_alone_has_no_native_parts() {
         assert_eq!(web.stack.targets, [Target::Web]);
         let refused = clarity_gen::generate(&project, &web).expect_err("a part in a browser");
         assert_eq!(refused, ["part Arena draws in a window of the desktop, which a program served to a browser has not; add the desktop target, or leave the part out"]);
-        let both = clarity_project::parse(&format!("project Game\n    stack {desktop}\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
+        let ui_crate = if backend == Backend::Rust { "    ui crate\n" } else { "" };
+        let both = clarity_project::parse(&format!("project Game\n    stack {desktop}\n{ui_crate}    datasource main sqlite \"data/game.db\"\n")).unwrap();
         assert!(clarity_gen::generate(&project, &both).is_ok(), "{desktop} with a desktop window");
     }
     // A .NET part too: Clarity.UI runs alone in the browser, for every language (DESIGN 7.9, B2).
@@ -495,8 +496,10 @@ fn game_with_part(line: &str, own: &[(&str, &str)]) -> clarity_spec::Project {
     p
 }
 
+/// A part written in Rust draws on Clarity.UI's crate: a Rust program builds it (`ui crate`).
 fn stack(name: &str) -> clarity_project::Settings {
-    clarity_project::parse(&format!("project Game\n    stack {name} desktop\n    datasource main sqlite \"data/game.db\"\n")).unwrap()
+    let ui_crate = if name == "rust" { "    ui crate\n" } else { "" };
+    clarity_project::parse(&format!("project Game\n    stack {name} desktop\n{ui_crate}    datasource main sqlite \"data/game.db\"\n")).unwrap()
 }
 
 fn refused(project: &clarity_spec::Project, name: &str) -> String {

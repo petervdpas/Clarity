@@ -257,5 +257,5 @@ fn every_stack_keeps_under_the_one_program_name() {
 #[test]
 fn a_driven_rust_program_keeps_its_secrets_in_memory() {
     let text = generated(Backend::Rust, Ui::Clarity, "data/shop.db");
-    assert!(text.contains("    if std::env::var_os(clarity_ui::headless::VARIABLE).is_some_and(|v| !v.is_empty()) {\n        clarity_runtime::secrets::use_memory();\n    }\n"), "{text}");
+    assert!(text.contains("    if std::env::var_os(\"CLARITY_HEADLESS\").is_some_and(|v| !v.is_empty()) {\n        clarity_runtime::secrets::use_memory();\n    }\n"), "{text}");
 }

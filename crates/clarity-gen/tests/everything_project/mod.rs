@@ -42,7 +42,9 @@ pub fn prepare(name: &str, stack: &str) -> (PathBuf, clarity_spec::Project, clar
     let _ = std::fs::remove_dir_all(&root);
     copy(&fixtures.join("everything"), &root.join("everything"));
     let file = root.join("everything.clarity");
-    let project_text = std::fs::read_to_string(fixtures.join("everything.clarity")).unwrap().replace("stack csharp desktop cli", &format!("stack {stack}"));
+    // Its Rust custom part draws on Clarity.UI's crate: a Rust program builds the crate (`ui crate`).
+    let ui_crate = if stack.starts_with("rust") { "\n    ui crate" } else { "" };
+    let project_text = std::fs::read_to_string(fixtures.join("everything.clarity")).unwrap().replace("stack csharp desktop cli", &format!("stack {stack}{ui_crate}"));
     std::fs::write(&file, &project_text).unwrap();
     let settings = clarity_project::parse(&project_text).unwrap_or_else(|e| panic!("{stack}: {e:?}"));
     let module = root.join("everything/everything.clarity");

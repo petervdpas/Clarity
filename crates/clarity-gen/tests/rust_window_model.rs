@@ -172,5 +172,14 @@ page Pad: window
     button \"Go\" name goButton at 1,1 span 2
 ",
     );
-    has(file(&files, "Cargo.toml"), "[profile.dev.package.\"*\"]\nopt-level = 3\n");
+    // On the ready-made library Clarity.UI is built optimized already: the program's debug build stays plain.
+    assert!(!file(&files, "Cargo.toml").contains("[profile.dev.package"), "{}", file(&files, "Cargo.toml"));
+    // Built on the crate, Clarity.UI (which lays out and draws every frame) builds optimized in a debug build too.
+    let project = clarity_spec::load_sources([("pad.clarity", "module pad\n\npage Pad: window\n    button \"Go\" name goButton at 1,1 span 2\n")]);
+    let mut settings: Settings = starter("Shop", "shop");
+    settings.stack.backend = Backend::Rust;
+    settings.stack.ui = Ui::Clarity;
+    settings.ui_crate = true;
+    let crate_files = generate(&project, &settings).unwrap();
+    has(file(&crate_files, "Cargo.toml"), "[profile.dev.package.\"*\"]\nopt-level = 3\n");
 }

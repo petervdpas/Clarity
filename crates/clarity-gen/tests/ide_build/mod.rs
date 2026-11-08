@@ -105,7 +105,7 @@ fn local_runtime(dir: &Path, backend: Backend, command: &mut Command) {
 /// library as the IDE gives it: the folder CLARITY_UI names, else the one
 /// this repository built (`cargo build --release -p clarity-ui-ffi`).
 fn with_library(toolchain: clarity_gen::Toolchain, settings: &clarity_project::Settings, target: clarity_project::Target) -> clarity_gen::Toolchain {
-    if target != clarity_project::Target::Desktop || !clarity_gen::uses_clarity_ui(&settings.stack) {
+    if target != clarity_project::Target::Desktop || !clarity_gen::uses_clarity_ui(&settings) {
         return toolchain;
     }
     let folder = match std::env::var_os("CLARITY_UI") {

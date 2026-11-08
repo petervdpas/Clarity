@@ -572,7 +572,7 @@ clarity_carry({program}{browser})
 
 /// The CMake line that links Clarity.Audio when the desktop program plays songs (docs/AUDIO-PLAN.md); C's and C++'s.
 pub(crate) fn audio_cmake_lines(project: &Project, settings: &Settings, program: &str) -> String {
-    if !crate::uses_clarity_ui(&settings.stack) {
+    if !crate::uses_clarity_ui(settings) {
         return String::new();
     }
     let mut lines = String::new();
@@ -705,7 +705,7 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
         ("#include \"secrets/secrets.h\"\n\n".to_string(), "    clarity_secrets_use();\n".to_string())
     };
     // Songs play through Clarity.Audio, whose library lies beside Clarity.UI's (docs/AUDIO-PLAN.md).
-    let (secrets_include, use_secrets) = if crate::uses_clarity_ui(&settings.stack) && clarity_spec::resources::carries_audio(project) {
+    let (secrets_include, use_secrets) = if crate::uses_clarity_ui(settings) && clarity_spec::resources::carries_audio(project) {
         (
             format!("{secrets_include}#include \"clarity_audio.h\"\n#include \"clarity_ui.h\"\n\n"),
             format!("{use_secrets}    // The sound parts' songs (mp3, flac, ogg) play through Clarity.Audio.\n    if (clarity_ui_use_audio(clarity_audio_api()) != CLARITY_OK) fputs(\"Clarity.Audio was not taken by Clarity.UI\\n\", stderr);\n"),
@@ -714,7 +714,7 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
         (secrets_include, use_secrets)
     };
     // Videos play through Clarity.Video, whose library lies beside Clarity.UI's (docs/VIDEO-PLAN.md).
-    let (secrets_include, use_secrets) = if crate::uses_clarity_ui(&settings.stack) && clarity_spec::resources::plays_videos(project) {
+    let (secrets_include, use_secrets) = if crate::uses_clarity_ui(settings) && clarity_spec::resources::plays_videos(project) {
         (
             format!("{secrets_include}#include \"clarity_video.h\"\n"),
             format!("{use_secrets}    // The video parts play through Clarity.Video.\n    if (clarity_ui_use_video(clarity_video_api()) != CLARITY_OK) fputs(\"Clarity.Video was not taken by Clarity.UI\\n\", stderr);\n"),

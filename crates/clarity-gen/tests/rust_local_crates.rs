@@ -79,7 +79,13 @@ fn generating_with_clarity_runtime_set_writes_the_patch() {
     unsafe { std::env::remove_var("CLARITY_RUNTIME") };
     let patched = patched.unwrap();
     let config = patched.iter().find(|f| f.path == ".cargo/config.toml").expect("the patch is written");
-    assert_eq!(config.text, rust_local_patch(&runtime(), true).unwrap());
+    // On the ready-made library only the runtime is patched; built on the crate, Clarity.UI's crate too.
+    assert_eq!(config.text, rust_local_patch(&runtime(), false).unwrap());
+    unsafe { std::env::set_var("CLARITY_RUNTIME", runtime()) };
+    let on_crate = generate(&project, &clarity_project::Settings { ui_crate: true, ..settings.clone() });
+    unsafe { std::env::remove_var("CLARITY_RUNTIME") };
+    let on_crate = on_crate.unwrap();
+    assert_eq!(on_crate.iter().find(|f| f.path == ".cargo/config.toml").unwrap().text, rust_local_patch(&runtime(), true).unwrap());
     // The README says how.
     let readme = &patched.iter().find(|f| f.path == "README.md").unwrap().text;
     assert!(readme.contains("set the environment variable `CLARITY_RUNTIME` to `<Clarity>/runtimes/rust`"), "{readme}");

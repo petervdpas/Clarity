@@ -306,7 +306,7 @@ pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, 
     let built = clarity_gen::last_build(&out, &fingerprint)
         .and_then(|release| toolchain_of(release).map(|t| (t, release)))
         .filter(|(t, _)| out.join(&t.program).exists());
-    let library = !cli && clarity_gen::uses_clarity_ui(&settings.stack);
+    let library = !cli && clarity_gen::uses_clarity_ui(&settings);
     let data = clarity_project::data_folder(&clarity_project::module_dir(file), &settings);
     Ok(Generated { out, data, toolchain, stack: settings.stack, fingerprint, release, built, library })
 }

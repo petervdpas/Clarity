@@ -1269,9 +1269,18 @@ fn with_codecs(files: &mut Vec<OutFile>, codecs: Vec<(String, OutFile)>, backend
     let quoted = |name: &str| serde_json::Value::String(name.to_string()).to_string();
     match backend {
         Backend::Rust => {
-            let lines: String = names.iter().map(|n| format!("    if let Err(why) = clarity_ui::clarity_video::library::add({}) {{\n        eprintln!(\"{{why}}\");\n    }}\n", quoted(n))).collect();
+            // Built on the crate, Clarity.Video's own crate adds it; on the ready-made library, its table.
+            let native = files.iter().any(|f| f.path == "src/main.rs" && f.text.contains("    clarity_runtime::native_ui::run(app, FILES)"));
+            let lines: String = names
+                .iter()
+                .map(|n| {
+                    let add = if native { format!("clarity_runtime::native_ui::add_codec(unsafe {{ clarity_video_api() }}, {})", quoted(n)) } else { format!("clarity_ui::clarity_video::library::add({})", quoted(n)) };
+                    format!("    if let Err(why) = {add} {{\n        eprintln!(\"{{why}}\");\n    }}\n")
+                })
+                .collect();
+            let run = if native { "    clarity_runtime::native_ui::run(app, FILES)" } else { "    clarity_ui::desktop::run(app, FILES)" };
             if let Some(main) = files.iter_mut().find(|f| f.path == "src/main.rs")
-                && let Some(at) = main.text.find("    clarity_ui::desktop::run(app, FILES)")
+                && let Some(at) = main.text.find(run)
             {
                 main.text.insert_str(at, &format!("    // The codec libraries the project adds (docs/VIDEO-PLAN.md).\n{lines}"));
             }
@@ -1305,11 +1314,53 @@ fn with_codecs(files: &mut Vec<OutFile>, codecs: Vec<(String, OutFile)>, backend
     }
 }
 
-/// Whether the windowed build of `stack` (not its command-line program)
-/// links Clarity.UI's library from the folder CLARITY_UI names: a Go, C or
-/// C++ desktop program (DESIGN 7.9). Rust and C# bring it as a package.
-pub fn uses_clarity_ui(stack: &clarity_project::Stack) -> bool {
-    matches!(stack.backend, Backend::Go | Backend::C | Backend::Cpp) && stack.has(clarity_project::Target::Desktop)
+/// Whether a Rust desktop program links Clarity.UI's ready-made library
+/// (DESIGN 7.9) rather than building the clarity-ui crate: the project
+/// decides, the library unless its project file says `ui crate`. A change of
+/// Clarity.UI itself is tried by rebuilding the base libraries
+/// (`rebuild_base_libraries`), which every project then links.
+pub fn rust_links_library(settings: &clarity_project::Settings) -> bool {
+    !settings.ui_crate
+}
+
+/// The crates of the base libraries every Go, C, C++ and Rust desktop program
+/// links: Clarity.UI and Clarity.Audio, Clarity.Video and Clarity.Image beside it.
+pub const BASE_LIBRARIES: [&str; 4] = ["clarity-ui-ffi", "clarity-audio-ffi", "clarity-video-ffi", "clarity-image-ffi"];
+
+/// Clarity's repository holding `from` or a folder above it; none outside one.
+pub fn repository_of(from: &std::path::Path) -> Option<std::path::PathBuf> {
+    from.ancestors().find(|d| d.join("runtimes/rust-ui-ffi/Cargo.toml").is_file()).map(std::path::Path::to_path_buf)
+}
+
+/// Rebuilds the base libraries from the source in Clarity's repository
+/// `repo` (release builds into its target/release), so the programs Clarity
+/// builds link this source's Clarity.UI: how a change of Clarity.UI is tried.
+/// The folder they are in, as CLARITY_UI names it.
+pub fn rebuild_base_libraries(repo: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let mut command = std::process::Command::new("cargo");
+    command.current_dir(repo).args(["build", "--release"]);
+    for library in BASE_LIBRARIES {
+        command.args(["-p", library]);
+    }
+    let status = command.status().map_err(|e| format!("cannot run cargo: {e}"))?;
+    if !status.success() {
+        return Err("cargo could not build the base libraries; it says why above".to_string());
+    }
+    clarity_ui::repository_library(repo, std::env::consts::OS).ok_or_else(|| format!("the base libraries are not in {} after the build", repo.join("target/release").display()))
+}
+
+/// Whether the windowed build (not the command-line program) links
+/// Clarity.UI's library from the folder CLARITY_UI names: a Go, C or C++
+/// desktop program, and a Rust one unless it builds the crate (DESIGN 7.9).
+/// C# brings the library in its package.
+pub fn uses_clarity_ui(settings: &clarity_project::Settings) -> bool {
+    let stack = &settings.stack;
+    let links = match stack.backend {
+        Backend::Go | Backend::C | Backend::Cpp => true,
+        Backend::Rust => rust_links_library(settings),
+        _ => false,
+    };
+    links && stack.has(clarity_project::Target::Desktop)
 }
 
 /// `toolchain` building with Clarity.UI's library in `folder` (the one
@@ -1318,7 +1369,7 @@ pub fn uses_clarity_ui(stack: &clarity_project::Stack) -> bool {
 pub fn with_clarity_ui(mut toolchain: Toolchain, backend: Backend, folder: &std::path::Path) -> Toolchain {
     let env = match backend {
         Backend::Go => go_cgo_env(Some(folder), std::env::consts::OS),
-        Backend::C | Backend::Cpp => vec![("CLARITY_UI", folder.display().to_string())],
+        Backend::C | Backend::Cpp | Backend::Rust => vec![("CLARITY_UI", folder.display().to_string())],
         _ => Vec::new(),
     };
     toolchain.env.retain(|(name, _)| !env.iter().any(|(n, _)| n == name));

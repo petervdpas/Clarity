@@ -107,6 +107,8 @@ fn writes_a_complete_cargo_project() {
         [
             "Cargo.toml",
             "README.md",
+            // It links Clarity.UI's ready-made library (DESIGN 7.9).
+            "build.rs",
             "src/facts.rs",
             "src/main.rs",
             "src/model.json",
@@ -117,12 +119,12 @@ fn writes_a_complete_cargo_project() {
         ]
     );
     let cargo = file(&files, "Cargo.toml");
-    // Clarity.UI draws the desktop program (DESIGN 7.9): nothing of a webview.
-    assert!(cargo.contains("clarity-ui = ") && !cargo.contains("tauri"), "{cargo}");
+    // Clarity.UI draws the desktop program (DESIGN 7.9), from its ready-made library: no crate of it, nothing of a webview.
+    assert!(!cargo.contains("clarity-ui = ") && !cargo.contains("tauri"), "{cargo}");
     assert!(cargo.contains("name = \"shop\""), "{cargo}");
     // The runtime crate from crates.io, at the version this generator is made
-    // with, with the features of the project's databases only.
-    let dependency = format!("clarity-runtime = {{ version = \"{}\", default-features = false, features = [\"sqlite\"] }}", runtime_version());
+    // with, with the features of the project's databases and the library's desktop only.
+    let dependency = format!("clarity-runtime = {{ version = \"{}\", default-features = false, features = [\"native-ui\", \"sqlite\"] }}", runtime_version());
     assert!(cargo.contains(&dependency), "{cargo}");
     // A project of its own, not in a workspace around it.
     assert!(cargo.contains("\n[workspace]\n"), "{cargo}");
@@ -863,7 +865,7 @@ fn the_web_target_serves_the_browser_files_and_the_wire() {
     let has = |text: &str, expected: &str| assert!(text.contains(expected), "expected\n{expected}\nin\n{text}");
     let desktop = main_of(vec![Target::Desktop]);
     assert!(!desktop.contains("clarity_runtime::serve::serve("), "a desktop program serves nothing");
-    has(&desktop, "    let app = App(Mutex::new(db));\n    clarity_ui::desktop::run(app, FILES)\n");
+    has(&desktop, "    let app = App(Mutex::new(db));\n    clarity_runtime::native_ui::run(app, FILES)\n");
     let web = main_of(vec![Target::Web]);
     has(&web, "clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args, \"127.0.0.1:8080\"), &files, &|command, args| clarity_runtime::wire::answer(&app, command, args))");
     // Nor does it link Clarity.UI: the browser files are in the program.
@@ -881,10 +883,11 @@ fn the_web_target_serves_the_browser_files_and_the_wire() {
     // Both: the desktop program, which serves with --serve.
     let both = main_of(vec![Target::Desktop, Target::Web]);
     has(&both, "    if std::env::args().any(|arg| arg == \"--serve\") {\n        let files = |path: &str|");
-    has(&both, "        return std::process::ExitCode::SUCCESS;\n    }\n    clarity_ui::desktop::run(app, FILES)\n");
+    has(&both, "        return std::process::ExitCode::SUCCESS;\n    }\n    clarity_runtime::native_ui::run(app, FILES)\n");
     settings.stack.targets = vec![Target::Desktop, Target::Web];
     let files = generate(&project, &settings).unwrap();
-    assert!(file(&files, "Cargo.toml").contains("clarity-ui"));
+    // The desktop links Clarity.UI's ready-made library; the browser files are in the program.
+    assert!(file(&files, "Cargo.toml").contains("\"native-ui\"") && files.iter().any(|f| f.path == "build.rs"));
     assert!(files.iter().any(|f| f.path == "browser/index.html") && files.iter().any(|f| f.path == "windows/OrderForm.cxaml"));
 }
 

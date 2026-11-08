@@ -89,6 +89,8 @@ enum Command {
     },
     /// Look for the build tools of every stack, and say what to install.
     Tools,
+    /// Rebuild the base libraries (Clarity.UI, Clarity.Audio, Clarity.Video, Clarity.Image) from the source in Clarity's repository, run inside it: every Go, C, C++ and Rust desktop program Clarity builds then links them, so a change of Clarity.UI is tried in any project.
+    Libraries,
 }
 
 #[derive(Subcommand)]
@@ -211,6 +213,23 @@ fn main() -> ExitCode {
         } => import(&project, &source, module, tables, list),
         Command::Own { project, source } => own(&project, &source),
         Command::Data { command } => data(command),
+        Command::Libraries => {
+            let here = std::env::current_dir().unwrap_or_default();
+            let Some(repo) = clarity_gen::repository_of(&here) else {
+                eprintln!("clarity: {} is not inside Clarity's repository: run `clarity libraries` there", here.display());
+                return ExitCode::FAILURE;
+            };
+            match clarity_gen::rebuild_base_libraries(&repo) {
+                Ok(folder) => {
+                    println!("The base libraries are rebuilt from {}: the programs Clarity builds link them from {}.", repo.display(), folder.display());
+                    ExitCode::SUCCESS
+                }
+                Err(why) => {
+                    eprintln!("clarity: {why}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Command::Tools => {
             print!("{}", clarity_gen::tools::report(&clarity_gen::tools::check_all(&clarity_gen::tools::System)));
             ExitCode::SUCCESS

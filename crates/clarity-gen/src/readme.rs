@@ -50,8 +50,11 @@ pub fn readme(settings: &Settings, project: &clarity_spec::Project) -> String {
     );
 
     out.push_str("\n## What you need\n\n");
-    // Rust's desktop program takes the crate clarity-ui; its web program serves the library's browser files.
-    let clarity_ui = backend == Backend::Rust && settings.stack.has(clarity_project::Target::Desktop);
+    // Rust's desktop program links Clarity.UI's ready-made library, or with `ui crate` takes the crate
+    // clarity-ui; its web program serves the library's browser files.
+    let rust_desktop = backend == Backend::Rust && settings.stack.has(clarity_project::Target::Desktop);
+    let clarity_ui = rust_desktop && !crate::rust_links_library(settings);
+    let rust_library = rust_desktop && crate::rust_links_library(settings);
     for need in tools::requirements(backend) {
         out.push_str(&format!("- {need}\n"));
     }
@@ -70,6 +73,10 @@ pub fn readme(settings: &Settings, project: &clarity_spec::Project) -> String {
     if backend == Backend::Cpp && settings.stack.has(clarity_project::Target::Desktop) {
         // The desktop program links Clarity.UI's library (DESIGN 7.9), from the folder CLARITY_UI names.
         out.push_str(&format!("\nThe desktop program draws with Clarity.UI, one library with a C interface. CMake finds it in the folder the environment variable `CLARITY_UI` names (or `cmake -DCLARITY_UI=<folder>`): `include/clarity_ui.h` and, in `lib/`, the library for the system (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` with its import library on Windows). {} In Clarity's repository the library is built with `cargo build --release -p clarity-ui-ffi` (into `target/release`, the header in `runtimes/rust-ui-ffi/include`). Each build copies the library next to the program, where the program finds it when it runs; copy it along with the program.\n", cmake_fetches()));
+    }
+    if rust_library {
+        // As Go, C and C++ link it (DESIGN 7.9): build.rs takes it from the folder CLARITY_UI names.
+        out.push_str(&format!("\nThe desktop program draws with Clarity.UI's ready-made library, which it links through its C interface as Go, C and C++ programs do, so the build compiles no Skia. `build.rs` takes it from the folder the environment variable `CLARITY_UI` names: `include/clarity_ui.h` and, in `lib/`, the library for the system (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` with `clarity_ui.dll.lib` on Windows), with Clarity.Audio and Clarity.Video beside it when the program plays songs or videos. Clarity's build names the folder; to build without Clarity take the archive for the system, {}, from the release {} (`<system>` is one of {}), check it against the release's `SHA256SUMS`, unpack it and set `CLARITY_UI` to the folder it holds. Each build copies the libraries next to the program, where it finds them (else in that folder): ship them along with it. In Clarity's repository `clarity libraries` rebuilds them from the source. Writing `ui crate` in the project file builds Clarity.UI from source instead, as a Rust custom part needs.\n", archive(), release_page(), SYSTEMS));
     }
     if clarity_ui {
         out.push_str(&format!(

@@ -34,10 +34,12 @@ code Game
         message \"Reached\"
 ";
 
+/// A Rust custom part draws on Clarity.UI's crate: the program builds it (`ui crate`).
 fn settings() -> Settings {
     let mut settings = starter("Game", "game");
     settings.stack.backend = Backend::Rust;
     settings.stack.ui = Ui::Clarity;
+    settings.ui_crate = true;
     settings
 }
 

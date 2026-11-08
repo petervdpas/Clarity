@@ -313,10 +313,12 @@ fn clarity_ui_goes_to_the_build() {
         assert_eq!(cmake.env, [("CLARITY_UI", folder.display().to_string())]);
     }
     for backend in [Backend::Go, Backend::C, Backend::Cpp] {
-        assert!(clarity_gen::uses_clarity_ui(&shop(backend, Ui::Clarity).stack));
+        assert!(clarity_gen::uses_clarity_ui(&shop(backend, Ui::Clarity)));
     }
-    assert!(!clarity_gen::uses_clarity_ui(&shop(Backend::Rust, Ui::Clarity).stack));
-    assert!(!clarity_gen::uses_clarity_ui(&shop(Backend::Csharp, Ui::Clarity).stack));
+    // Rust links the ready-made library too, unless its project file says `ui crate`.
+    assert!(clarity_gen::uses_clarity_ui(&shop(Backend::Rust, Ui::Clarity)));
+    assert!(!clarity_gen::uses_clarity_ui(&clarity_project::Settings { ui_crate: true, ..shop(Backend::Rust, Ui::Clarity) }));
+    assert!(!clarity_gen::uses_clarity_ui(&shop(Backend::Csharp, Ui::Clarity)));
 }
 
 /// The C and C++ runtimes fetch the library the same way, with the version

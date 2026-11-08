@@ -128,6 +128,20 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     // with both, `--serve` serves.
     let clarity = settings.stack.has(clarity_project::Target::Desktop);
     let web = settings.stack.has(clarity_project::Target::Web);
+    // The desktop links Clarity.UI's ready-made library through the runtime (as Go, C and C++ do),
+    // unless the project file says `ui crate`: then it builds the clarity-ui crate from source.
+    let native = clarity && crate::rust_links_library(settings);
+    if native {
+        if let Some(part) = rust_parts.first() {
+            return Err(vec![format!(
+                "custom part {} is a Rust crate that draws on Clarity.UI's crate: write `ui crate` in the project file, so the program builds Clarity.UI from source with it",
+                part.name.name
+            )]);
+        }
+        features.push("native-ui");
+    }
+    let songs = clarity && clarity_spec::resources::plays_songs(project);
+    let videos = clarity && clarity_spec::resources::plays_videos(project);
     // The engines beside the screen run in the program, on the runtime's engines (DESIGN 5.12).
     let screen_engines = !crate::screen_engines(project).is_empty();
     if screen_engines {
@@ -161,9 +175,9 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             "Cargo.toml",
             cargo_toml(
                 &crate_name,
-                clarity,
-                clarity && clarity_spec::resources::plays_songs(project),
-                clarity && clarity_spec::resources::plays_videos(project),
+                clarity && !native,
+                songs,
+                videos,
                 &features,
                 &rust_parts.iter().map(|p| (parts::package_of(project, &p.name.name), p.name.name.clone())).collect::<Vec<_>>(),
                 &crate::libraries::libraries(project).iter().map(|l| (crate::libraries::rust_package(project, &l.name.name), l.name.name.clone())).collect::<Vec<_>>(),
@@ -243,7 +257,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         served.extend(crate::clarity_ui::BROWSER_FILES.iter().map(|f| f.to_string()));
         served.sort();
     }
-    let clarity_run = clarity.then(|| clarity_run(project, settings, &files, &main_window, !rust_parts.is_empty()));
+    let clarity_run = clarity.then(|| clarity_run(project, settings, &files, &main_window, !rust_parts.is_empty(), native, songs, videos));
     let main_text = main_rs(project, settings, &owners, &databases, &main_window, &served, clarity_run.as_deref());
     // What Clarity.UI's parts read beside the values: the facts of the fields and types (DESIGN 7.9).
     files.push(text("src/facts.rs", facts_rs(project)));
@@ -252,11 +266,15 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         .replacen("impl Program for App {\n", &format!("{}impl Program for App {{\n    fn facts_json(&self) -> Value {{\n        facts::FACTS.to_json()\n    }}\n\n{}", screen_engines_static(project), screen_engine_fn(project)), 1);
     files.push(text("src/main.rs", main_text));
     // Built on the crates in Clarity's repository when CLARITY_RUNTIME names them.
-    files.extend(local_patch_file(clarity)?);
-    // The program file's icon and version on Windows, linked by build.rs (docs/APP-ICON-SPLASH-PLAN.md, docs/VERSION-PLAN.md).
+    files.extend(local_patch_file(clarity && !native)?);
+    // The program file's icon and version on Windows, linked by build.rs (docs/APP-ICON-SPLASH-PLAN.md, docs/VERSION-PLAN.md);
+    // with the ready-made library, build.rs links it too.
     let icons = crate::windows_resources::object_files(project, &clarity_project::title(settings), &crate_name, crate::windows_resources::object_path);
-    if !icons.is_empty() {
-        files.extend(icons);
+    let has_icons = !icons.is_empty();
+    files.extend(icons);
+    if native {
+        files.push(text("build.rs", native_build_rs(songs, videos, has_icons)));
+    } else if has_icons {
         files.push(text("build.rs", crate::windows_resources::RUST_BUILD.to_string()));
     }
     Ok(files)
@@ -527,9 +545,89 @@ pub(crate) fn clarity_files(project: &Project) -> Vec<OutFile> {
     files
 }
 
+/// The build script of a Rust desktop program on Clarity.UI's ready-made
+/// library (DESIGN 7.9), as cgo and CMake link it for Go, C and C++: from the
+/// folder CLARITY_UI names (include/ and lib/), with Clarity.Audio and
+/// Clarity.Video beside it when the program plays songs or videos. The
+/// program finds the libraries beside itself (they are copied next to it),
+/// else in that folder. With `icons`, it also links the Windows icon.
+fn native_build_rs(songs: bool, videos: bool, icons: bool) -> String {
+    let mut libraries = vec!["clarity_ui"];
+    if songs || videos {
+        libraries.push("clarity_audio");
+    }
+    if videos {
+        libraries.push("clarity_video");
+    }
+    let names = libraries.iter().map(|l| format!("{l:?}")).collect::<Vec<_>>().join(", ");
+    let icon = if icons {
+        "\n    // The program file's icon and version on Windows (windows/resources-<processor>.obj).\n    println!(\"cargo:rerun-if-changed=windows\");\n    if os == \"windows\" {\n        let arch = match std::env::var(\"CARGO_CFG_TARGET_ARCH\").as_deref() {\n            Ok(\"x86_64\") => \"amd64\",\n            Ok(\"aarch64\") => \"arm64\",\n            Ok(\"x86\") => \"386\",\n            _ => \"\",\n        };\n        if !arch.is_empty() {\n            let dir = std::env::var(\"CARGO_MANIFEST_DIR\").unwrap_or_default();\n            println!(\"cargo:rustc-link-arg-bins={dir}/windows/resources-{arch}.obj\");\n        }\n    }\n"
+    } else {
+        ""
+    };
+    format!(
+        r#"// Generated by Clarity. Do not edit: change the project in Clarity instead.
+// Links Clarity.UI's ready-made library from the folder CLARITY_UI names
+// (include/ and lib/), as Go, C and C++ programs do; Clarity's build names it.
+// The program finds the libraries beside itself, else in that folder.
+use std::path::{{Path, PathBuf}};
+
+const LIBRARIES: &[&str] = &[{names}];
+
+fn main() {{
+    println!("cargo:rerun-if-env-changed=CLARITY_UI");
+    let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let folder = std::env::var("CLARITY_UI").unwrap_or_default();
+    if folder.is_empty() || !Path::new(&folder).join("include/clarity_ui.h").exists() {{
+        panic!("Clarity.UI's library is not found: set CLARITY_UI to its folder, which holds include/clarity_ui.h and lib/ (now '{{folder}}'), or write `ui crate` in the project file to build Clarity.UI from source");
+    }}
+    let lib = Path::new(&folder).join("lib");
+    println!("cargo:rustc-link-search=native={{}}", lib.display());
+    for name in LIBRARIES {{
+        if os == "windows" {{
+            // The import library beside clarity_ui.dll is clarity_ui.dll.lib.
+            println!("cargo:rustc-link-lib=dylib:+verbatim={{name}}.dll.lib");
+        }} else {{
+            println!("cargo:rustc-link-lib=dylib={{name}}");
+        }}
+    }}
+    match os.as_str() {{
+        "linux" | "freebsd" => {{
+            println!("cargo:rustc-link-arg-bins=-Wl,-rpath,$ORIGIN");
+            println!("cargo:rustc-link-arg-bins=-Wl,-rpath,{{}}", lib.display());
+        }}
+        "macos" => {{
+            println!("cargo:rustc-link-arg-bins=-Wl,-rpath,@loader_path");
+            println!("cargo:rustc-link-arg-bins=-Wl,-rpath,{{}}", lib.display());
+        }}
+        _ => {{}}
+    }}
+    // Beside the program in target/<profile>, so it runs from there and its folder carries them.
+    if let Some(beside) = profile_folder() {{
+        for entry in std::fs::read_dir(&lib).into_iter().flatten().flatten() {{
+            let name = entry.file_name().to_string_lossy().to_string();
+            let wanted = LIBRARIES.iter().any(|l| name.starts_with(&format!("lib{{l}}.")) || name.starts_with(&format!("{{l}}."))) || name.contains("openh264");
+            let shared = name.ends_with(".so") || name.ends_with(".dylib") || name.ends_with(".dll") || name.contains(".so.");
+            if wanted && shared {{
+                let _ = std::fs::copy(entry.path(), beside.join(&name));
+            }}
+        }}
+    }}
+{icon}}}
+
+/// target/<profile>: three folders above the build script's OUT_DIR.
+fn profile_folder() -> Option<PathBuf> {{
+    let out = PathBuf::from(std::env::var("OUT_DIR").ok()?);
+    out.ancestors().nth(3).map(Path::to_path_buf)
+}}
+"#
+    )
+}
+
 /// The lines that start Clarity.UI: the program's files, embedded, and main's
 /// last line, which opens the main window and runs until the last one closes.
-fn clarity_run(project: &Project, settings: &Settings, files: &[OutFile], main_window: &str, parts: bool) -> String {
+#[allow(clippy::too_many_arguments)]
+fn clarity_run(project: &Project, settings: &Settings, files: &[OutFile], main_window: &str, parts: bool, native: bool, songs: bool, videos: bool) -> String {
     let embedded = |folder: &str, extension: &str| -> String {
         let found: Vec<String> = files
             .iter()
@@ -554,10 +652,28 @@ fn clarity_run(project: &Project, settings: &Settings, files: &[OutFile], main_w
     let register = if project.secret_settings().is_empty() {
         register.to_string()
     } else {
-        format!("    if std::env::var_os(clarity_ui::headless::VARIABLE).is_some_and(|v| !v.is_empty()) {{\n        clarity_runtime::secrets::use_memory();\n    }}\n{register}")
+        format!("    if std::env::var_os(\"CLARITY_HEADLESS\").is_some_and(|v| !v.is_empty()) {{\n        clarity_runtime::secrets::use_memory();\n    }}\n{register}")
+    };
+    // Through the ready-made library: the runtime runs it, the program hands over Clarity.Audio and Clarity.Video it links.
+    let (run, files_type, media) = if native {
+        let mut media = String::new();
+        if songs || videos {
+            media.push_str("    clarity_runtime::native_ui::use_audio(unsafe { clarity_audio_api() });\n");
+        }
+        if videos {
+            media.push_str("    clarity_runtime::native_ui::use_video(unsafe { clarity_video_api() });\n");
+        }
+        ("clarity_runtime::native_ui::run", "clarity_runtime::native_ui::AppFiles", media)
+    } else {
+        ("clarity_ui::desktop::run", "clarity_ui::AppFiles", String::new())
+    };
+    let externs = match (native, songs || videos, videos) {
+        (true, true, true) => "\n/// Clarity.Audio's and Clarity.Video's tables, from their libraries beside Clarity.UI's (build.rs links them).\nunsafe extern \"C\" {\n    fn clarity_audio_api() -> *const std::ffi::c_void;\n    fn clarity_video_api() -> *const std::ffi::c_void;\n}\n",
+        (true, true, false) => "\n/// Clarity.Audio's table, from its library beside Clarity.UI's (build.rs links it).\nunsafe extern \"C\" {\n    fn clarity_audio_api() -> *const std::ffi::c_void;\n}\n",
+        _ => "",
     };
     format!(
-        "{register}    clarity_ui::desktop::run(app, FILES)\n//~files\n\n/// The windows, app frames, themes, model and resources Clarity.UI draws from, in the program, and the main window's title and size.\nconst FILES: clarity_ui::AppFiles = clarity_ui::AppFiles {{\n    windows: &[{windows}],\n    apps: &[{apps}],\n    themes: &[{themes}],\n    model: MODEL,\n    resources: &[{resources}],\n    title: {title:?},\n    width: {width}.0,\n    height: {height}.0,\n}};\n",
+        "{register}{media}    {run}(app, FILES)\n//~files\n{externs}\n/// The windows, app frames, themes, model and resources Clarity.UI draws from, in the program, and the main window's title and size.\nconst FILES: {files_type} = {files_type} {{\n    windows: &[{windows}],\n    apps: &[{apps}],\n    themes: &[{themes}],\n    model: MODEL,\n    resources: &[{resources}],\n    title: {title:?},\n    width: {width}.0,\n    height: {height}.0,\n}};\n",
         title = clarity_project::title(settings),
         windows = embedded("windows", ".cxaml"),
         apps = embedded("apps", ".cxaml"),

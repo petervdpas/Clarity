@@ -25,6 +25,8 @@ pub mod json;
 pub mod keys;
 pub mod list_fields;
 pub mod markdown;
+#[cfg(feature = "native-ui")]
+pub mod native_ui;
 pub mod picture;
 #[cfg(feature = "pictures")]
 pub mod picture_functions;

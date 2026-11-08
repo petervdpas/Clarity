@@ -36,10 +36,13 @@ const NL: &str = "translations nl
     \"Customers\" \"Klanten\"
 ";
 
+/// Built on Clarity.UI's crate (`ui crate`), what these tests read; the
+/// ready-made library, the default, is rust_ui_library.rs's.
 fn settings(ui: Ui) -> Settings {
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = Backend::Rust;
     settings.stack.ui = ui;
+    settings.ui_crate = true;
     settings
 }
 

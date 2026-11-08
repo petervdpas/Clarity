@@ -49,6 +49,9 @@ pub enum Edit {
     /// Set the view a tab, step or section shows (`section "Class" view
     /// ClassEditor`), or none, so it holds parts of its own.
     SetPageView { target: u32, view: Option<String> },
+    /// Set the color of an accordion section's header (`section "Chapters"
+    /// color "#2e86de"`), or none, so it takes the theme's look.
+    SetPageColor { target: u32, color: Option<String> },
     /// Place a new widget on a page, panel, tab or pane.
     PlaceWidget { container: u32, props: WidgetProps },
     /// Place a new widget with the catalog defaults for its kind, optionally
@@ -848,20 +851,23 @@ impl Doc {
             }
             Edit::SetPageView { target, view } => {
                 let (path, _) = self.find(*target, "a tab, step or section", |k| k == Kind::WidgetTab)?;
-                let node = self.node(&path);
-                // Its keyword and title stay as written (a key or a text).
-                let head: Vec<&str> = node.tokens.iter().take(2).map(|t| &node.text[t.span.start as usize..t.span.end as usize]).collect();
-                let head = head.join(" ");
-                // What it hears of the view (`on saved: recipeSaved`) stays.
-                let heard = node.tokens.iter().position(|t| t.text == "on").map(|at| node.text[node.tokens[at].span.start as usize..node.tokens.last().map_or(0, |t| t.span.end as usize)].to_string());
-                let mut line = match view.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
-                    Some(view) => format!("{head} view {view}"),
-                    None => head,
-                };
-                if let Some(heard) = heard {
-                    line = format!("{line} {heard}");
+                let mut line = PageLine::of(self.node(&path));
+                line.view = view.as_deref().map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
+                set_line_keeping_comment(self.node_mut(&path), line.written());
+                Ok(Some(*target))
+            }
+            Edit::SetPageColor { target, color } => {
+                let (path, _) = self.find(*target, "a section", |k| k == Kind::WidgetTab)?;
+                let mut line = PageLine::of(self.node(&path));
+                if !line.head.starts_with("section ") {
+                    return fail("only an accordion's section has a color");
                 }
-                set_line_keeping_comment(self.node_mut(&path), line);
+                line.color = match color.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
+                    Some(c) if c.starts_with('#') => Some(text_token(c)),
+                    Some(c) => Some(c.to_string()),
+                    None => None,
+                };
+                set_line_keeping_comment(self.node_mut(&path), line.written());
                 Ok(Some(*target))
             }
             Edit::PlaceWidget { container, props } => self.place_widget(*container, props),
@@ -1045,6 +1051,40 @@ impl Doc {
         Ok(Some(target))
     }
 
+}
+
+/// The line of a tab, step or section, in its pieces: its keyword and
+/// title as written (a key or a text), its color as written, the view it
+/// shows and what it hears of the view (`on saved: recipeSaved`).
+struct PageLine {
+    head: String,
+    color: Option<String>,
+    view: Option<String>,
+    heard: Option<String>,
+}
+
+impl PageLine {
+    fn of(node: &LNode) -> PageLine {
+        let text = |i: usize| node.tokens.get(i).map(|t| node.text[t.span.start as usize..t.span.end as usize].to_string());
+        let head: Vec<String> = (0..2).filter_map(text).collect();
+        let after = |word: &str| node.tokens.iter().position(|t| t.text == word).and_then(|at| text(at + 1));
+        let heard = node.tokens.iter().position(|t| t.text == "on").map(|at| node.text[node.tokens[at].span.start as usize..node.tokens.last().map_or(0, |t| t.span.end as usize)].to_string());
+        PageLine { head: head.join(" "), color: after("color"), view: after("view"), heard }
+    }
+
+    fn written(&self) -> String {
+        let mut line = self.head.clone();
+        if let Some(color) = &self.color {
+            line = format!("{line} color {color}");
+        }
+        if let Some(view) = &self.view {
+            line = format!("{line} view {view}");
+        }
+        if let Some(heard) = &self.heard {
+            line = format!("{line} {heard}");
+        }
+        line
+    }
 }
 
 impl Doc {

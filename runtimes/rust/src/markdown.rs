@@ -1,8 +1,7 @@
-//! Markdown read into blocks (headings, paragraphs, list items, code) and
+//! Markdown read into blocks (headings, paragraphs, list items, quotes, scene breaks, code) and
 //! their spans of text, the way every renderer reads it:
-//! conformance/markdown.json says what each case gives. It reads as C#'s
-//! Clarity.Runtime MarkdownBlocks and the web's markdownBlocks.ts do; the
-//! markdown part of Clarity.UI shows what it reads.
+//! conformance/markdown.json says what each case gives. It reads as the
+//! IDE's markdownBlocks.ts does; the markdown part of Clarity.UI shows what it reads.
 
 /// A piece of a block's text with one look.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -33,6 +32,10 @@ pub enum BlockKind {
     Heading,
     Paragraph,
     Item,
+    /// A quote (`> `), with its depth.
+    Quote,
+    /// A scene break (`***`, `---`, `___`).
+    Rule,
     Code,
 }
 
@@ -44,7 +47,7 @@ pub struct Block {
     pub spans: Vec<Span>,
     /// A heading's level, 1 to 6.
     pub level: usize,
-    /// A list item's depth, 0 to 3.
+    /// A list item's depth, 0 to 3; a quote's, 1 to 3.
     pub depth: usize,
     /// A numbered list item's number; none for a bullet.
     pub number: Option<u64>,
@@ -72,9 +75,9 @@ struct Look {
     link: Option<String>,
 }
 
-/// Addresses a link may open; with any other, only the link's text shows.
+/// Addresses a link may open (a `clarity:` one is a place in the application, followed by `on link`); with any other, only the link's text shows.
 fn opens(address: &str) -> bool {
-    address.starts_with("http://") || address.starts_with("https://") || address.starts_with("mailto:")
+    address.starts_with("http://") || address.starts_with("https://") || address.starts_with("mailto:") || address.starts_with("clarity:")
 }
 
 fn at(s: &[char], i: isize) -> char {
@@ -129,6 +132,7 @@ fn inline(s: &[char], look: &Look, output: &mut Vec<Span>) {
     while i < s.len() {
         let c = s[i];
         let two_marks = i + 1 < s.len() && s[i + 1] == c && (c == '*' || c == '_');
+        let three_marks = two_marks && i + 2 < s.len() && s[i + 2] == c;
         let after_word = c == '_' && word_char(s, i as isize - 1);
         if c == '\\' && i + 1 < s.len() && PUNCTUATION.contains(s[i + 1]) {
             text.push(s[i + 1]);
@@ -145,6 +149,12 @@ fn inline(s: &[char], look: &Look, output: &mut Vec<Span>) {
                     i = end + 1;
                 }
             }
+        } else if three_marks && i + 3 < s.len() && s[i + 3] != ' ' && !after_word && index_of(s, &s[i..i + 3], i + 3).is_some() {
+            // Bold and italic at once.
+            let end = index_of(s, &s[i..i + 3], i + 3).unwrap_or(s.len());
+            flush(&mut text, output);
+            inline(&s[i + 3..end], &Look { bold: true, italic: true, ..look.clone() }, output);
+            i = end + 3;
         } else if two_marks && i + 2 < s.len() && s[i + 2] != ' ' && !after_word {
             match index_of(s, &s[i..i + 2], i + 2) {
                 None => {
@@ -242,19 +252,58 @@ fn item(line: &str) -> Option<(usize, Option<u64>, &str)> {
     Some((leading, number, after.trim()))
 }
 
+/// A scene break: three or more of one of `*`, `-` and `_`, alone on the line (spaces between allowed).
+fn rule(trimmed: &str) -> bool {
+    let marks: Vec<char> = trimmed.chars().filter(|c| *c != ' ').collect();
+    marks.len() >= 3 && matches!(marks[0], '*' | '-' | '_') && marks.iter().all(|c| *c == marks[0])
+}
+
+/// A quote line: its depth (`>` marks, spaces between allowed, at most 3) and its text after one space; none for another line.
+fn quote(trimmed: &str) -> Option<(usize, &str)> {
+    if !trimmed.starts_with('>') {
+        return None;
+    }
+    let mut depth = 0;
+    let mut rest = trimmed;
+    while let Some(after) = rest.strip_prefix('>') {
+        depth += 1;
+        rest = after.strip_prefix(' ').filter(|a| a.starts_with('>')).unwrap_or(after);
+    }
+    Some((depth.min(3), rest.strip_prefix(' ').unwrap_or(rest).trim_end()))
+}
+
+/// Whether a line ends in a hard line break: two spaces, or a backslash.
+fn breaks(line: &str) -> bool {
+    line.ends_with("  ") || line.trim_end().ends_with('\\')
+}
+
 /// The blocks of a text in Markdown.
 pub fn read(markdown: &str) -> Vec<Block> {
     let text = markdown.replace("\r\n", "\n");
     let lines: Vec<&str> = text.split('\n').collect();
     let mut blocks: Vec<Block> = Vec::new();
-    // The paragraph or item that following lines join: where it is, and its text so far.
+    // The paragraph, item or quote that following lines join: where it is, and its text so far.
     let mut open: Option<usize> = None;
     let mut open_text = String::new();
+    // Whether the last line joined ended in a hard line break.
+    let mut broken = false;
     let close = |blocks: &mut Vec<Block>, open: &mut Option<usize>, open_text: &mut String| {
         if let Some(at) = open.take() {
             blocks[at].spans = spans(open_text);
         }
         open_text.clear();
+    };
+    // Joins `more` to the open block: with a line break after a line that asked for one, else a space.
+    let join = |open_text: &mut String, more: &str, broken: bool| {
+        if broken {
+            if open_text.ends_with('\\') {
+                open_text.pop();
+            }
+            open_text.push('\n');
+        } else {
+            open_text.push(' ');
+        }
+        open_text.push_str(more);
     };
     let mut i = 0;
     while i < lines.len() {
@@ -273,6 +322,7 @@ pub fn read(markdown: &str) -> Vec<Block> {
             continue;
         }
         i += 1;
+        let was_broken = std::mem::replace(&mut broken, breaks(line));
         if trimmed.is_empty() {
             close(&mut blocks, &mut open, &mut open_text);
             continue;
@@ -280,6 +330,26 @@ pub fn read(markdown: &str) -> Vec<Block> {
         if let Some((level, text)) = heading(trimmed) {
             close(&mut blocks, &mut open, &mut open_text);
             blocks.push(Block { spans: spans(text), level, ..Block::new(BlockKind::Heading) });
+            continue;
+        }
+        if rule(trimmed) {
+            close(&mut blocks, &mut open, &mut open_text);
+            blocks.push(Block::new(BlockKind::Rule));
+            continue;
+        }
+        if let Some((depth, text)) = quote(trimmed) {
+            let same = open.is_some_and(|at| blocks[at].kind == BlockKind::Quote && blocks[at].depth == depth);
+            if text.is_empty() {
+                // A `>` alone ends the quote's paragraph.
+                close(&mut blocks, &mut open, &mut open_text);
+            } else if same {
+                join(&mut open_text, text, was_broken);
+            } else {
+                close(&mut blocks, &mut open, &mut open_text);
+                blocks.push(Block { depth, ..Block::new(BlockKind::Quote) });
+                open = Some(blocks.len() - 1);
+                open_text.push_str(text);
+            }
             continue;
         }
         if let Some((leading, number, text)) = item(line) {
@@ -290,8 +360,7 @@ pub fn read(markdown: &str) -> Vec<Block> {
             continue;
         }
         if open.is_some() {
-            open_text.push(' ');
-            open_text.push_str(trimmed);
+            join(&mut open_text, trimmed, was_broken);
         } else {
             blocks.push(Block::new(BlockKind::Paragraph));
             open = Some(blocks.len() - 1);

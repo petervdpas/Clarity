@@ -42,12 +42,10 @@ func TestAHandlerRepliesAsTheRustRuntimeDoes(t *testing.T) {
 	equal(t, ui.Visible("save"), true)
 	equal(t, ui.Readonly("name", true), true)
 	equal(t, ui.Caption("save", "Save"), "Save")
-	picked, err := Selected(ui, "grid", w.Orders)
-	must(t, err)
-	equal(t, picked.Number, "B")
-	if _, err := Selected(ui, "other", w.Orders); err == nil {
-		t.Fatal("a table without a selected row gave one")
-	}
+	empty := func() order { return order{} }
+	equal(t, Selected(ui, "grid", w.Orders, empty).Number, "B")
+	// With no row chosen, code gets an empty record to ask about.
+	equal(t, Selected(ui, "other", w.Orders, empty).ID, int64(0))
 
 	ui.SetEnabled("save", false)
 	ui.SetError("name", PlainText("Name is required"))
@@ -111,9 +109,8 @@ func TestRowsReadAgainHaveNoSelectedRow(t *testing.T) {
 	ui := NewUi(WindowState{Window: "Orders", Selected: map[string]int{"grid": 1, "other": 0}})
 	rows := []string{"a", "b"}
 	ui.Deselect("grid")
-	if _, err := Selected(ui, "grid", rows); err == nil {
-		t.Fatal("a table read again kept its selected row")
-	}
+	none := func() string { return "" }
+	equal(t, *Selected(ui, "grid", rows, none), "")
 	reply, err := ui.Reply("Orders", map[string]any{})
 	must(t, err)
 	if _, ok := reply.State.Selected["grid"]; ok {

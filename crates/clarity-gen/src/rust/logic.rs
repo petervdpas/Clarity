@@ -793,6 +793,17 @@ impl<'a> Emitter<'a> {
         }
     }
 
+    /// A picture given to a picture function, borrowed: a record's picture is
+    /// read first (its bytes from the database or its file store).
+    fn picture_in_hand(&mut self, expr: &Expr) -> String {
+        let Some(read) = crate::read_picture(self.project, |e| self.types.type_of(e), expr) else {
+            return format!("&{}", self.object(expr));
+        };
+        let object = self.object(read.object);
+        let from = read.from.map_or("None".to_string(), |s| format!("Some({s:?})"));
+        format!("&{{ let other = &{object}; db.copied_picture::<{}>(&other.{}, other.id, {:?}, {from}, None)? }}", read.entity, ident(&read.field), read.column)
+    }
+
     /// An expression as an owned value.
     fn value(&mut self, expr: &Expr) -> String {
         // `app.version`: the project's version, written as the literal text it is.
@@ -1360,15 +1371,20 @@ impl<'a> Emitter<'a> {
             let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
             return format!("round({})", values.join(", "));
         }
-        // A built-in function (conformance/texts.json, conformance/zip.json), by the runtime's name for it.
+        // A built-in function (conformance/texts.json, conformance/zip.json,
+        // conformance/picture-functions.json), by the runtime's name for it.
         if let Some(built) = crate::built_in(self.project, name)
-            && let Some((takes, _)) = clarity_spec::code::check::text_function(name)
+            && let Some((takes, _)) = clarity_spec::code::check::built_in_function(name)
         {
+            use clarity_spec::code::check::BuiltInValue;
             let values: Vec<String> = args.iter().zip(takes).map(|(a, t)| match t {
-                clarity_spec::code::check::TextValue::Text | clarity_spec::code::check::TextValue::Texts => format!("&({})", self.value(a)),
+                BuiltInValue::Text | BuiltInValue::Texts | BuiltInValue::Number => format!("&({})", self.value(a)),
+                BuiltInValue::Picture => self.picture_in_hand(a),
                 _ => self.value(a),
             }).collect();
-            return format!("{}({})", built.rust, values.join(", "));
+            // A picture function can refuse: no picture, or a size it cannot make.
+            let fails = if clarity_spec::code::check::picture_function(name).is_some() { "?" } else { "" };
+            return format!("{}({}){fails}", built.rust, values.join(", "));
         }
         if name == clarity_spec::code::check::LENGTH && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
             let text = args.first().map(|a| self.value(a)).unwrap_or_default();

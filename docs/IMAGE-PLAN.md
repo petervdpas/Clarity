@@ -27,6 +27,9 @@ Loading and saving go through what is there: `read bytes of f` reads a file as a
 
 All stacks give the same pixels for the same call: `conformance/picture-functions.json` holds small pictures and each result's pixels.
 
+- **A record's picture** given to a function is read first, as copying it to another record reads it (`album.cover = other.cover`): the database's or the file store's bytes. Any other picture is the one in hand; a picture that is not there (an empty field) is refused with a message, as a wrong picture file is.
+- **Only when used.** A program carries Clarity.Image only when its code calls a picture function: Rust turns on clarity-runtime's `pictures` feature (which brings the `clarity-image` crate), Go, C and C++ link `clarity_image` beside Clarity.UI's library (a generated `pictures.go`, the C runtime's `pictures.c`, the C++ runtime's `pictures.cpp`), C# takes the NuGet `Clarity.Image`.
+
 ## Clarity.Image
 
 - `runtimes/rust-image`: the functions on decoded RGBA pictures, and PNG out. Clarity.UI's painting canvas uses the crate directly.
@@ -77,7 +80,9 @@ toolbox Painting
 ## Later steps (user's wishes, 2026-11-07)
 
 - **Stamps:** ready-made shapes (stars, arrows, speech balloons, a project's own pictures) laid on the picture at a place, size and angle.
-- **Scripts on the toolbox's subject (generic, user's direction):** no image-only hook. A toolbox is connected to a subject (the canvas's picture now; later a diagram, a markdown text, a record), and a tool can open a script editor whose script works on that subject: it gets the subject, changes it or hands it to a program (ImageMagick, a command the project declares), and the result goes back as one edit. Coded tools (`on click: handler`) are the plain form of it; running anything outside asks the person first, as everything that executes does.
+- **Scripts on the toolbox's subject (generic, user's direction; decided 2026-11-08: commands first, Clarity code later):** no image-only hook. A toolbox is connected to a subject (the canvas's picture now; later a diagram, a markdown text, a record), and a tool can open a script editor whose script works on that subject: it gets the subject, changes it or hands it to a program (ImageMagick, a command the project declares), and the result goes back as one edit. Coded tools (`on click: handler`) are the plain form of it; running anything outside asks the person first, as everything that executes does.
+  1. **Commands:** a script is a command line run on the subject, as `magick {in} -blur 0x4 {out}`: Clarity.UI writes the subject to `{in}`, runs the program after asking, and takes `{out}` back as one edit. The same works for a video's frame or a text later.
+  2. **Clarity code:** a script written in Clarity, `subject = resize(subject, 400, 300)`, run inside Clarity.UI by Clarity's interpreter with the picture functions, so alike on every stack; it waits until the parser and interpreter can ship inside Clarity.UI.
 
 ## Order
 

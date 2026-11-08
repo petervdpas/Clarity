@@ -1050,6 +1050,18 @@ fn collect_frame<'a>(frame: &'a Frame, owner: &mut Owner<'a>) {
 
 fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
     let mut owners = Vec::new();
+    // The toolbox pages a part names (`toolbox WritingTools`), wherever it stands.
+    fn toolboxes<'w>(widgets: &'w [crate::model::Widget], out: &mut Vec<&'w str>) {
+        for w in widgets {
+            if let Some(name) = w.props.toolbox_page.as_deref() {
+                out.push(name);
+            }
+            toolboxes(&w.children, out);
+            for page in &w.pages {
+                toolboxes(&page.children, out);
+            }
+        }
+    }
     for page in &file.pages {
         let mut owner = Owner {
             name: &page.name.name,
@@ -1063,6 +1075,19 @@ fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
         owner.wired.extend(page.handlers.iter().map(|h| Wired { handler: &h.handler, args: &h.args, event: h.event.keyword(), own_event: true, tell_of: None, span: page.span }));
         collect_widgets(&page.widgets, &mut owner);
         collect_frame(&page.frame, &mut owner);
+        // The parts of a toolbox it shows are its own, and so are the handlers its tools run.
+        let mut named = Vec::new();
+        toolboxes(&page.widgets, &mut named);
+        for name in named {
+            if let Some(toolbox) = visible.iter().flat_map(|f| &f.pages).find(|p| p.name.name == name && p.kind == crate::model::PageKind::Toolbox) {
+                let mut theirs = Owner { name: &toolbox.name.name, is_app: false, data: &toolbox.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new(), tells: None };
+                collect_widgets(&toolbox.widgets, &mut theirs);
+                owner.parts.extend(theirs.parts);
+                // Its tools' handlers are this page's unless the toolbox's own code has them.
+                let own = visible.iter().flat_map(|f| &f.code).find(|b| b.name.name == toolbox.name.name);
+                owner.wired.extend(theirs.wired.into_iter().filter(|w| !own.is_some_and(|b| b.handlers.iter().any(|h| h.name.name == w.handler))));
+            }
+        }
         // The parts and data of the views it shows are the window's too; their handlers are the view's own.
         for view in crate::views::places(&page.widgets).into_iter().filter_map(|place| crate::views::find(visible.iter().copied(), place.view)) {
             let mut theirs = Owner { name: &view.name.name, is_app: false, data: &view.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new(), tells: None };
@@ -1128,8 +1153,10 @@ fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
             ));
         }
     }
-    // Wired handlers that are not written yet, window by window.
-    for owner in &owners {
+    // Wired handlers that are not written yet, window by window; a toolbox's
+    // tools may run handlers of the window or view that shows it.
+    let toolbox = |name: &str| file.pages.iter().any(|p| p.name.name == name && p.kind == crate::model::PageKind::Toolbox);
+    for owner in owners.iter().filter(|o| !toolbox(o.name)) {
         let block = file.code.iter().find(|b| b.name.name == owner.name);
         let mut reported: Vec<&str> = Vec::new();
         for wired in &owner.wired {
@@ -1784,36 +1811,65 @@ pub const LENGTH: &str = "length";
 /// The service a long engine call says how far it is with (DESIGN 5.12).
 pub const PROGRESS: &str = "progress";
 
-/// What a text function takes and gives (conformance/texts.json).
+/// What a built-in function takes and gives: a text function
+/// (conformance/texts.json) or a picture function (conformance/picture-functions.json).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TextValue {
+pub enum BuiltInValue {
     Text,
     Integer,
     Bool,
     Texts,
     Bytes,
+    /// A picture: what an `image` field holds; bytes read from a file are taken too.
+    Picture,
+    /// A whole or decimal number, such as degrees.
+    Number,
+}
+
+/// The built-in picture functions of code (docs/IMAGE-PLAN.md): each gives a
+/// new picture, as PNG, and leaves its arguments as they were. Every stack
+/// runs them through Clarity.Image, giving the same pixels.
+pub const PICTURE_FUNCTIONS: [(&str, &[BuiltInValue], BuiltInValue); 8] = [
+    ("resize", &[BuiltInValue::Picture, BuiltInValue::Integer, BuiltInValue::Integer], BuiltInValue::Picture),
+    ("crop", &[BuiltInValue::Picture, BuiltInValue::Integer, BuiltInValue::Integer, BuiltInValue::Integer, BuiltInValue::Integer], BuiltInValue::Picture),
+    ("rotate", &[BuiltInValue::Picture, BuiltInValue::Number], BuiltInValue::Picture),
+    ("flip", &[BuiltInValue::Picture, BuiltInValue::Bool], BuiltInValue::Picture),
+    ("blend", &[BuiltInValue::Picture, BuiltInValue::Picture, BuiltInValue::Integer, BuiltInValue::Integer, BuiltInValue::Integer], BuiltInValue::Picture),
+    ("adjust", &[BuiltInValue::Picture, BuiltInValue::Number, BuiltInValue::Number, BuiltInValue::Number, BuiltInValue::Number], BuiltInValue::Picture),
+    ("pictureWidth", &[BuiltInValue::Picture], BuiltInValue::Integer),
+    ("pictureHeight", &[BuiltInValue::Picture], BuiltInValue::Integer),
+];
+
+/// The picture function `name`: what it takes and gives.
+pub fn picture_function(name: &str) -> Option<(&'static [BuiltInValue], BuiltInValue)> {
+    PICTURE_FUNCTIONS.iter().find(|(n, _, _)| *n == name).map(|(_, takes, gives)| (*takes, *gives))
+}
+
+/// The built-in function `name`, a text or a picture function: what it takes and gives.
+pub fn built_in_function(name: &str) -> Option<(&'static [BuiltInValue], BuiltInValue)> {
+    text_function(name).or_else(|| picture_function(name))
 }
 
 /// The built-in text functions of code (conformance/texts.json): each one's
 /// name, the values it takes and what it gives. Characters are counted once
 /// however many bytes they take, positions from 1 as lists count.
-pub const TEXT_FUNCTIONS: [(&str, &[TextValue], TextValue); 11] = [
-    ("words", &[TextValue::Text], TextValue::Texts),
-    ("split", &[TextValue::Text, TextValue::Text], TextValue::Texts),
-    ("trim", &[TextValue::Text], TextValue::Text),
-    ("lower", &[TextValue::Text], TextValue::Text),
-    ("upper", &[TextValue::Text], TextValue::Text),
-    ("replace", &[TextValue::Text, TextValue::Text, TextValue::Text], TextValue::Text),
-    ("startsWith", &[TextValue::Text, TextValue::Text], TextValue::Bool),
-    ("endsWith", &[TextValue::Text, TextValue::Text], TextValue::Bool),
-    ("slice", &[TextValue::Text, TextValue::Integer, TextValue::Integer], TextValue::Text),
-    ("indexOf", &[TextValue::Text, TextValue::Text], TextValue::Integer),
+pub const TEXT_FUNCTIONS: [(&str, &[BuiltInValue], BuiltInValue); 11] = [
+    ("words", &[BuiltInValue::Text], BuiltInValue::Texts),
+    ("split", &[BuiltInValue::Text, BuiltInValue::Text], BuiltInValue::Texts),
+    ("trim", &[BuiltInValue::Text], BuiltInValue::Text),
+    ("lower", &[BuiltInValue::Text], BuiltInValue::Text),
+    ("upper", &[BuiltInValue::Text], BuiltInValue::Text),
+    ("replace", &[BuiltInValue::Text, BuiltInValue::Text, BuiltInValue::Text], BuiltInValue::Text),
+    ("startsWith", &[BuiltInValue::Text, BuiltInValue::Text], BuiltInValue::Bool),
+    ("endsWith", &[BuiltInValue::Text, BuiltInValue::Text], BuiltInValue::Bool),
+    ("slice", &[BuiltInValue::Text, BuiltInValue::Integer, BuiltInValue::Integer], BuiltInValue::Text),
+    ("indexOf", &[BuiltInValue::Text, BuiltInValue::Text], BuiltInValue::Integer),
     // `zip(paths, texts)`: a zip archive of one file per path holding the text of the same place (conformance/zip.json).
-    ("zip", &[TextValue::Texts, TextValue::Texts], TextValue::Bytes),
+    ("zip", &[BuiltInValue::Texts, BuiltInValue::Texts], BuiltInValue::Bytes),
 ];
 
 /// The text function `name`, when it is one.
-pub fn text_function(name: &str) -> Option<(&'static [TextValue], TextValue)> {
+pub fn text_function(name: &str) -> Option<(&'static [BuiltInValue], BuiltInValue)> {
     TEXT_FUNCTIONS.iter().find(|(n, _, _)| *n == name).map(|(_, takes, gives)| (*takes, *gives))
 }
 
@@ -2154,6 +2210,12 @@ impl<'a> BodyChecker<'_, 'a> {
             && p.kind == crate::widgets::WidgetKind::Sound
         {
             return self.sound_hear(part, hear, args);
+        }
+        if let Some((_, Part::Widget(p))) = self.part(&part.name)
+            && matches!(p.kind, crate::widgets::WidgetKind::Textbox | crate::widgets::WidgetKind::Memo)
+        {
+            let least = crate::typing::hear(&hear.name).map_or(0, <[_]>::len);
+            return self.media_hear(part, hear, args, crate::typing::hear(&hear.name), least, "a text box or memo hears insert");
         }
         if let Some((_, Part::Widget(p))) = self.part(&part.name)
             && p.kind == crate::widgets::WidgetKind::Video
@@ -3275,6 +3337,12 @@ impl<'a> BodyChecker<'_, 'a> {
                 };
                 Some(Place::Value { ty, writable: Err(format!("{name}.{property} is read, not set: it is what the sound plays")) })
             }
+            // Where the person types (Writer gap 21): the caret, set too, and the selected text, read.
+            _ if matches!(part, Part::Widget(p) if matches!(p.kind, WidgetKind::Textbox | WidgetKind::Memo) || (p.kind == WidgetKind::Markdown && property == "link")) && crate::typing::read(property).is_some() => {
+                let ty = if crate::typing::read(property) == Some(TypeInfo::Integer) { Ty::Integer } else { Ty::Text };
+                let writable = if crate::typing::settable(property) { Ok(()) } else { Err(format!("{name}.{property} is read, not set: it is what the person chose")) };
+                Some(Place::Value { ty, writable })
+            }
             // A pinnable slide-out pinned open beside the window's parts.
             "pinned" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Slideout && p.pinnable) => value(Ty::Bool),
             // A canvas's grid, in its units (0 for none), and whether code snaps to it: as its line says, until code sets them.
@@ -3700,7 +3768,7 @@ impl<'a> BodyChecker<'_, 'a> {
         // Only functions and actions take values by name.
         let built_in = ["count", JOIN, SNAPPED, LENGTH, SIN, COS, ROUND, TODAY, NOW].contains(&function.name.as_str())
             || (function.name == RANDOM && self.env.function(RANDOM).is_none())
-            || (text_function(&function.name).is_some() && self.env.function(&function.name).is_none());
+            || (built_in_function(&function.name).is_some() && self.env.function(&function.name).is_none());
         let handler = self.decl.is_none() && self.handlers.iter().any(|h| h.name.name == function.name);
         if !named.is_empty() && (built_in || handler) {
             for n in named {
@@ -3725,35 +3793,45 @@ impl<'a> BodyChecker<'_, 'a> {
             }
             return Some(Ty::Text);
         }
-        // A text function (conformance/texts.json), unless the project has a function of that name.
-        if let Some((takes, gives)) = text_function(&function.name)
+        // A text or picture function, unless the project has a function of that name.
+        if let Some((takes, gives)) = built_in_function(&function.name)
             && self.env.function(&function.name).is_none()
         {
+            // An engine runs as WebAssembly, without Clarity.Image.
+            if self.engine.is_some() && picture_function(&function.name).is_some() {
+                self.error(format!("'{}' is a picture function, which runs in the program, not in an engine", function.name), expr.span);
+            }
             let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();
             let fits = tys.len() == takes.len()
                 && tys.iter().zip(takes).all(|(ty, want)| match want {
-                    TextValue::Text => matches!(ty, Ty::Text | Ty::Unknown),
-                    TextValue::Integer => matches!(ty, Ty::Integer | Ty::Unknown),
-                    TextValue::Bool => matches!(ty, Ty::Bool | Ty::Unknown),
-                    TextValue::Texts => matches!(ty, Ty::Values(Item::Text) | Ty::Unknown),
-                    TextValue::Bytes => matches!(ty, Ty::Bytes | Ty::Unknown),
+                    BuiltInValue::Text => matches!(ty, Ty::Text | Ty::Unknown),
+                    BuiltInValue::Integer => matches!(ty, Ty::Integer | Ty::Unknown),
+                    BuiltInValue::Bool => matches!(ty, Ty::Bool | Ty::Unknown),
+                    BuiltInValue::Texts => matches!(ty, Ty::Values(Item::Text) | Ty::Unknown),
+                    BuiltInValue::Bytes => matches!(ty, Ty::Bytes | Ty::Unknown),
+                    BuiltInValue::Picture => matches!(ty, Ty::Image | Ty::Bytes | Ty::Unknown),
+                    BuiltInValue::Number => matches!(ty, Ty::Integer | Ty::Decimal | Ty::Unknown),
                 });
             if !fits {
                 let words: Vec<&str> = takes.iter().map(|t| match t {
-                    TextValue::Text => "a text",
-                    TextValue::Integer => "a whole number",
-                    TextValue::Bool => "a yes or no",
-                    TextValue::Texts => "a list of texts",
-                    TextValue::Bytes => "bytes",
+                    BuiltInValue::Text => "a text",
+                    BuiltInValue::Integer => "a whole number",
+                    BuiltInValue::Bool => "a yes or no",
+                    BuiltInValue::Texts => "a list of texts",
+                    BuiltInValue::Bytes => "bytes",
+                    BuiltInValue::Picture => "a picture",
+                    BuiltInValue::Number => "a number",
                 }).collect();
                 self.error(format!("'{}' takes {}", function.name, words.join(", ")), expr.span);
             }
             return Some(match gives {
-                TextValue::Text => Ty::Text,
-                TextValue::Integer => Ty::Integer,
-                TextValue::Bool => Ty::Bool,
-                TextValue::Texts => Ty::Values(Item::Text),
-                TextValue::Bytes => Ty::Bytes,
+                BuiltInValue::Text => Ty::Text,
+                BuiltInValue::Integer => Ty::Integer,
+                BuiltInValue::Bool => Ty::Bool,
+                BuiltInValue::Texts => Ty::Values(Item::Text),
+                BuiltInValue::Bytes => Ty::Bytes,
+                BuiltInValue::Picture => Ty::Image,
+                BuiltInValue::Number => Ty::Decimal,
             });
         }
         if function.name == LENGTH && self.env.function(LENGTH).is_none() {

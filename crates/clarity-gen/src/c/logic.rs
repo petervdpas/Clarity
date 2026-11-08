@@ -641,6 +641,27 @@ impl<'a> Emitter<'a> {
         format!("v{}", self.temps)
     }
 
+    /// A picture given to a picture function: a record's picture read first
+    /// (its bytes from the database or its file store), read bytes made a picture.
+    fn picture_in_hand(&mut self, expr: &Expr, pre: &mut String) -> String {
+        if self.types.type_of(expr) == TypeInfo::Bytes {
+            return format!("clarity_picture_new({})", bare(self.value(expr, pre)));
+        }
+        let Some(read) = crate::read_picture(self.project, |e| self.types.type_of(e), expr) else {
+            return bare(self.value(expr, pre));
+        };
+        let object = self.place(read.object, pre);
+        let from = read.from.map_or_else(|| "NULL".to_string(), |s| string(&s));
+        let call = format!(
+            "clarity_copied_picture(db, &{}_entity, {}, {}, {}, {from}, NULL, {{out}})",
+            prefix(&read.entity),
+            arrow(&object, &ident(&read.field)),
+            arrow(&object, "id"),
+            string(&read.column)
+        );
+        self.lift("ClarityPicture*", &call, pre)
+    }
+
     /// The lines that lift a call that can fail, its value going out through
     /// `&vN` at `{out}` in `call`; gives the name of the value.
     fn lift(&mut self, ty: &str, call: &str, pre: &mut String) -> String {
@@ -1608,9 +1629,10 @@ impl<'a> Emitter<'a> {
                         let rows = format!("w->{}", ident(&bind));
                         self.loops += 1;
                         let index = format!("i{}", self.loops);
-                        let _ = writeln!(pre, "size_t {index} = 0;\nif (!clarity_ui_selected(ui, {quoted}, {rows}.count, &{index})) return false;");
+                        // With no row chosen, an empty record (id 0), as `new` makes, so code can ask first.
+                        let _ = writeln!(pre, "size_t {index} = 0;\nbool {index}_chosen = clarity_ui_selected(ui, {quoted}, {rows}.count, &{index});");
                         let row = self.temp();
-                        let _ = writeln!(pre, "{entity} {row} = {rows}.items[{index}];");
+                        let _ = writeln!(pre, "{entity} {row} = {index}_chosen ? {rows}.items[{index}] : {}_new();", prefix(&entity));
                         format!("&{row}")
                     }
                     _ => {
@@ -2066,6 +2088,21 @@ impl<'a> Emitter<'a> {
             let value = args.first().map(|a| bare(self.decimal(a, pre))).unwrap_or_default();
             let places = args.get(1).map(|a| bare(self.value(a, pre))).unwrap_or_default();
             return format!("clarity_decimal_round({value}, (int){places})");
+        }
+        // A picture function (docs/IMAGE-PLAN.md): a record's picture read first, the call able to refuse.
+        if let Some(built) = crate::built_in(self.project, name).filter(|_| self.callee(name).is_none())
+            && let Some((takes, gives)) = clarity_spec::code::check::picture_function(name)
+        {
+            use clarity_spec::code::check::BuiltInValue;
+            let mut values: Vec<String> = args.iter().zip(takes).map(|(a, t)| match t {
+                BuiltInValue::Picture => self.picture_in_hand(a, pre),
+                BuiltInValue::Number if matches!(self.types.type_of(a), TypeInfo::Decimal | TypeInfo::Money) => format!("clarity_units({})", bare(self.decimal(a, pre))),
+                BuiltInValue::Number => format!("(double)({})", bare(self.value(a, pre))),
+                _ => bare(self.value(a, pre)),
+            }).collect();
+            values.push("{out}".to_string());
+            let ty = if gives == BuiltInValue::Integer { "int64_t" } else { "ClarityPicture*" };
+            return self.lift(ty, &format!("{}({})", built.c, values.join(", ")), pre);
         }
         // A built-in function (conformance/texts.json, conformance/zip.json), by the runtime's name for it.
         if let Some(built) = crate::built_in(self.project, name).filter(|_| self.callee(name).is_none()) {

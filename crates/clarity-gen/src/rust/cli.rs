@@ -83,6 +83,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !project.secret_settings().is_empty() {
         features.push("secrets");
     }
+    // The picture functions of code (docs/IMAGE-PLAN.md): Clarity.Image.
+    if crate::uses_picture_functions(project) {
+        features.push("pictures");
+    }
     features.sort();
     features.dedup();
     let types = check::types(&project.files);

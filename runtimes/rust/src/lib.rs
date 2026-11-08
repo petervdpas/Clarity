@@ -26,6 +26,8 @@ pub mod keys;
 pub mod list_fields;
 pub mod markdown;
 pub mod picture;
+#[cfg(feature = "pictures")]
+pub mod picture_functions;
 pub mod program;
 pub mod query;
 pub mod ranges;

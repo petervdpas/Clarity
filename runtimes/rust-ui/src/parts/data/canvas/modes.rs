@@ -407,7 +407,8 @@ impl CanvasPart {
             Some(super::toolbox::Ask::Zoom(closer)) => self.zoom_step(closer, cx),
             Some(super::toolbox::Ask::Adjust) => self.open_adjust(cx),
             Some(super::toolbox::Ask::Layer(ask)) => self.layer_ask(ask, cx),
-            None => {}
+            // A memo's; a canvas's toolbox has no Cut, Copy and Paste row.
+            Some(super::toolbox::Ask::Text(_)) | None => {}
         }
     }
 

@@ -3,4 +3,4 @@
 /**
  * How a painting canvas's toolbox shows (docs/IMAGE-PLAN.md).
  */
-export type ToolboxKind = "popup" | "slideout";
+export type ToolboxKind = "popup" | "slideout" | "caret";

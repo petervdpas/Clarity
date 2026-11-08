@@ -1275,8 +1275,8 @@ impl<'a> Checker<'a> {
                 self.error(file, "'add' shows an Add button above the table: write 'on add: handler' that adds the row", widget.span);
             }
             self.check_toolbox_of(file, widget);
-            // A toolbox holds a painting canvas's tools.
-            if p.toolbox.is_some() && !matches!(p.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)) {
+            // A toolbox holds a painting canvas's tools, or a memo's coded ones.
+            if p.toolbox.is_some() && p.kind != WidgetKind::Memo && !matches!(p.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)) {
                 self.error(file, "a toolbox holds the tools of a canvas in mode paint or mode vector", widget.span);
             }
             // A link column is one of the table's columns.
@@ -2011,6 +2011,23 @@ impl<'a> Checker<'a> {
         };
         if page.kind != PageKind::Toolbox {
             self.error(file, format!("{name} is no toolbox; a toolbox is written 'page {name}: toolbox'"), widget.span);
+            return;
+        }
+        // A memo's toolbox works on its text: coded tools, buttons and labels, no canvas tools.
+        if widget.props.kind == WidgetKind::Memo {
+            fn canvas_only<'w>(widgets: &'w [Widget], out: &mut Vec<&'w Widget>) {
+                for w in widgets {
+                    if w.props.does.is_some() || matches!(w.props.kind, WidgetKind::ToolSize | WidgetKind::ToolOpacity | WidgetKind::ToolColors | WidgetKind::ToolLayers) {
+                        out.push(w);
+                    }
+                    canvas_only(&w.children, out);
+                }
+            }
+            let mut found = Vec::new();
+            canvas_only(&page.widgets, &mut found);
+            if !found.is_empty() {
+                self.error(file, format!("{name} works on a canvas's picture; a memo's toolbox holds tools with 'on click', buttons and labels"), widget.span);
+            }
             return;
         }
         let Some(mode) = widget.props.mode else { return };

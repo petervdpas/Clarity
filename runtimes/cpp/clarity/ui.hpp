@@ -290,12 +290,12 @@ public:
         }
     }
 
-    /// The selected record of a table or list showing `rows`, as a copy to work on.
+    /// The selected record of a table or list showing `rows`, as a copy to work
+    /// on; with no row chosen, an empty record (id 0), as `new` makes, so code can ask first.
     template <typename R>
     R selected(const std::string& part, const std::vector<R>& rows) const {
         auto found = selected_.find(part);
-        if (found == selected_.end() || found->second < 0 || size_t(found->second) >= rows.size())
-            throw InvalidError("no row of " + part + " is selected");
+        if (found == selected_.end() || found->second < 0 || size_t(found->second) >= rows.size()) return R{};
         return rows[size_t(found->second)];
     }
 

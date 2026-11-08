@@ -213,6 +213,22 @@ impl Element for Page {
     }
 }
 
+/// `color` a little darker: a tinted button hovered or pressed.
+fn shade(color: skia_safe::Color, by: f32) -> skia_safe::Color {
+    let darker = |c: u8| (c as f32 * by).round() as u8;
+    skia_safe::Color::from_argb(color.a(), darker(color.r()), darker(color.g()), darker(color.b()))
+}
+
+/// Black or white, whichever reads better on `background`.
+pub fn readable_on(background: skia_safe::Color) -> skia_safe::Color {
+    let channel = |c: u8| {
+        let c = c as f64 / 255.0;
+        if c <= 0.03928 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+    };
+    let luminance = 0.2126 * channel(background.r()) + 0.7152 * channel(background.g()) + 0.0722 * channel(background.b());
+    if luminance > 0.179 { skia_safe::Color::from_rgb(0x1b, 0x1f, 0x24) } else { skia_safe::Color::WHITE }
+}
+
 /// A button a container draws in Clarity's own words or a page's title: a
 /// wizard's Back, Next and Finish, an accordion's section header, a tab. It
 /// looks as the theme's button does (hover, pressed), the accent one in the
@@ -228,13 +244,15 @@ pub struct ContainerButton {
     pub chevron: Option<bool>,
     /// Standing up, as a horizontal accordion's header: the chevron at its top and its text turned, read downwards.
     pub turned: bool,
+    /// A color of its own (a section's `color`): written out, or a color of the theme by name; its text then black or white, whichever reads.
+    pub tint: Option<String>,
     shows: Option<Box<dyn Fn() -> bool>>,
     usable: Option<Box<dyn Fn() -> bool>>,
 }
 
 impl ContainerButton {
     pub fn new(text: impl Fn() -> String + 'static, pressed: impl Fn(&mut Cx) + 'static) -> ContainerButton {
-        ContainerButton { node: Node::new(), text: Box::new(text), pressed: Box::new(pressed), accent: false, chevron: None, turned: false, shows: None, usable: None }
+        ContainerButton { node: Node::new(), text: Box::new(text), pressed: Box::new(pressed), accent: false, chevron: None, turned: false, tint: None, shows: None, usable: None }
     }
 
     /// Shown only while `shows` says so: a wizard shows only the buttons its step has.
@@ -309,13 +327,24 @@ impl Element for ContainerButton {
         let state = if self.node.pressed { Some("pressed") } else if self.node.hovered { Some("hover") } else { None };
         let values = look.part("button", state);
         let radius = values.radius.map(|r| r as f64).unwrap_or_else(|| look.radius("button"));
-        let background = if self.accent { look.color("accent") } else { values.background.unwrap_or_else(|| look.color("raised")) };
-        let mut color = if self.accent { look.color("on_accent") } else { values.text.unwrap_or_else(|| look.color("text")) };
+        let tint = self.tint.as_deref().map(|t| crate::parts::data::canvas::color_of(look, t));
+        let background = match tint {
+            Some(tint) if self.node.pressed => shade(tint, 0.85),
+            Some(tint) if self.node.hovered => shade(tint, 0.93),
+            Some(tint) => tint,
+            None if self.accent => look.color("accent"),
+            None => values.background.unwrap_or_else(|| look.color("raised")),
+        };
+        let mut color = match tint {
+            Some(tint) => readable_on(tint),
+            None if self.accent => look.color("on_accent"),
+            None => values.text.unwrap_or_else(|| look.color("text")),
+        };
         if !self.is_usable() {
             color = look.color("muted");
         }
         p.fill(bounds, background, radius);
-        let line = if self.accent { background } else { values.border.unwrap_or_else(|| look.color("strong_border")) };
+        let line = if self.accent || tint.is_some() { background } else { values.border.unwrap_or_else(|| look.color("strong_border")) };
         p.stroke(bounds, line, look.border(), radius);
         if self.node.focused {
             p.stroke(bounds.inset(-2.0), look.color("focus"), 2.0, radius + 2.0);

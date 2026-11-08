@@ -930,6 +930,17 @@ impl<'a> Emitter<'a> {
         format!("[{}]", items.join(", "))
     }
 
+    /// A value given to a built-in function; a record's picture is read first
+    /// (its bytes from the database or its file store), as a copy is.
+    fn picture_in_hand(&mut self, expr: &Expr) -> String {
+        let Some(read) = crate::read_picture(self.project, |e| self.types.type_of(e), expr) else {
+            return self.value(expr);
+        };
+        let object = self.value(read.object);
+        let from = read.from.map_or("null".to_string(), |s| string(&s));
+        format!("{}.CopiedPicture<{}>({object}.{}, {object}.Id, {}, {from}, null)", self.db, read.entity, property(&read.entity, &read.field), string(&read.column))
+    }
+
     fn value(&mut self, expr: &Expr) -> String {
         // `app.version`: the project's version, written as the literal text it is.
         if clarity_spec::code::reads_app_version(expr) {
@@ -1162,9 +1173,10 @@ impl<'a> Emitter<'a> {
             let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
             return format!("Numbers.Round({})", values.join(", "));
         }
-        // A built-in function (conformance/texts.json, conformance/zip.json), by the runtime's name for it.
+        // A built-in function (conformance/texts.json, conformance/zip.json,
+        // conformance/picture-functions.json), by the runtime's name for it.
         if let Some(built) = crate::built_in(self.project, name) {
-            let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
+            let values: Vec<String> = args.iter().map(|a| self.picture_in_hand(a)).collect();
             return format!("{}({})", built.csharp, values.join(", "));
         }
         if name == clarity_spec::code::check::LENGTH && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {

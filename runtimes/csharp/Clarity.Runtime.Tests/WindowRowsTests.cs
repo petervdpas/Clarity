@@ -19,7 +19,7 @@ sealed class Node
 sealed class PickingViewModel(Db? db) : WindowViewModel(db)
 {
     public PartState Grid { get; } = new("grid");
-    public string Picked() => Selected<string>(Grid);
+    public Node Picked() => Selected<Node>(Grid);
     public Node? Same(List<Node> rows, Node? wanted) => SameRow(rows, wanted);
     public void Quit() => Handle(QuitApplication);
     public void Keys() => Handle(ShowKeys);
@@ -32,9 +32,11 @@ public class WindowRowsTests
     public void ASelectedRowIsReadFromItsPart()
     {
         var window = new PickingViewModel(null);
-        Assert.Equal("no row of grid is selected", Assert.Throws<InvalidValueException>(window.Picked).Message.Replace("invalid value: ", ""));
-        window.Grid.SelectedItem = "b";
-        Assert.Equal("b", window.Picked());
+        // With no row chosen, code gets an empty record to ask about.
+        Assert.Equal("", window.Picked().Key);
+        var b = new Node { Key = "b" };
+        window.Grid.SelectedItem = b;
+        Assert.Same(b, window.Picked());
     }
 
     [Fact]

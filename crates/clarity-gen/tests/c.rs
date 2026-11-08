@@ -157,7 +157,7 @@ fn handlers_are_functions_of_their_window() {
     has(app, "bool order_form_window_approve_clicked(ClarityDb* db, ClarityUi* ui, OrderFormWindow* w);");
     let sales = file(&files, "src/modules/sales.c");
     has(sales, "bool order_form_window_approve_clicked(ClarityDb* db, ClarityUi* ui, OrderFormWindow* w) {\n    if (!approve(db, &w->order)) return false;\n    clarity_ui_message(ui, CLARITY_INFO, clarity_text_with(clarity_text_with(clarity_text(\"Approved {order.number} of {order.total}\"), \"order.number\", clarity_slot_text(w->order.number)), \"order.total\", clarity_slot_money(w->order.total, NULL)));\n    clarity_ui_set_enabled(ui, \"approveButton\", false);\n    return true;\n}");
-    has(sales, "    size_t i1 = 0;\n    if (!clarity_ui_selected(ui, \"grid\", w->orders.count, &i1)) return false;\n    Order v1 = w->orders.items[i1];\n    clarity_ui_open(ui, \"OrderForm\", clarity_json_object(1, \"order\", order_json(&v1)));");
+    has(sales, "    size_t i1 = 0;\n    bool i1_chosen = clarity_ui_selected(ui, \"grid\", w->orders.count, &i1);\n    Order v1 = i1_chosen ? w->orders.items[i1] : order_new();\n    clarity_ui_open(ui, \"OrderForm\", clarity_json_object(1, \"order\", order_json(&v1)));");
     let main = file(&files, "src/main.c");
     has(main, "    if (strcmp(state->window, \"OrderForm\") == 0) {\n        OrderFormWindow w = {0};\n        if (!order_form_window_from_json(state->data, &w)) return false;\n        bool ok = false;\n        if (strcmp(handler, \"approveClicked\") == 0) ok = order_form_window_approve_clicked(db, ui, &w);");
     has(main, "        for (size_t i = 0; i < all.count; i++) clarity_add_option(*out, all.items[i].id, all.items[i].name);");

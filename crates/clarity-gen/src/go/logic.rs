@@ -621,6 +621,32 @@ impl<'a> Emitter<'a> {
         name
     }
 
+    /// The entity or record of the rows of the window's list data `list`, whose
+    /// New function makes the empty record a table with no row chosen gives.
+    fn row_entity(&self, list: &str) -> String {
+        self.window.and_then(|w| w.data.iter().find(|(n, _, _)| n == list)).map(|(_, entity, _)| entity.clone()).unwrap_or_default()
+    }
+
+    /// A picture given to a picture function: a record's picture read first
+    /// (its bytes from the database or its file store), read bytes made a picture.
+    fn picture_in_hand(&mut self, expr: &Expr, pre: &mut String) -> String {
+        if self.types.type_of(expr) == TypeInfo::Bytes {
+            return format!("&clarity.Picture{{Bytes: {}}}", bare(self.value(expr, pre)));
+        }
+        let Some(read) = crate::read_picture(self.project, |e| self.types.type_of(e), expr) else {
+            return bare(self.value(expr, pre));
+        };
+        let object = self.place(read.object, pre);
+        let call = format!(
+            "clarity.CopiedPicture[{}](db, {object}.{}, {object}.ID, {}, {}, \"\")",
+            read.entity,
+            field(&read.field),
+            string(&read.column),
+            string(&read.from.unwrap_or_default())
+        );
+        self.lift(call, pre)
+    }
+
     fn lift(&mut self, call: String, pre: &mut String) -> String {
         self.temps += 1;
         let name = format!("v{}", self.temps);
@@ -1384,7 +1410,7 @@ impl<'a> Emitter<'a> {
             "selected" if info.mode == Some(clarity_spec::model::CanvasMode::Vector) => format!("ui.ShapeChosen({quoted})"),
             "selected" if info.objects.is_some() => {
                 let list = info.objects.clone().unwrap_or_default();
-                self.lift(format!("clarity.Selected(ui, {quoted}, w.{})", pascal(&list)), pre)
+                format!("clarity.Selected(ui, {quoted}, w.{}, New{})", pascal(&list), self.row_entity(&list))
             }
             "maximized" => format!("ui.Maximized({quoted})"),
             "pinned" => format!("ui.Pinned({quoted})"),
@@ -1400,7 +1426,7 @@ impl<'a> Emitter<'a> {
             "via" => format!("ui.Via({quoted})"),
             "fromY" => format!("ui.FromY({quoted})"),
             "selected" => match info.bind {
-                Some(bind) => self.lift(format!("clarity.Selected(ui, {quoted}, w.{})", pascal(&bind)), pre),
+                Some(bind) => format!("clarity.Selected(ui, {quoted}, w.{}, New{})", pascal(&bind), self.row_entity(&bind)),
                 None => {
                     self.errors.push(format!("'{part}' is not bound to a list"));
                     String::new()
@@ -1753,6 +1779,20 @@ impl<'a> Emitter<'a> {
         if name == clarity_spec::code::check::ROUND {
             let values: Vec<String> = args.iter().map(|a| call_arg(self.value(a, pre))).collect();
             return format!("clarity.Round({})", values.join(", "));
+        }
+        // A picture function (docs/IMAGE-PLAN.md), in the program's pictures.go: a
+        // record's picture read first, the call able to refuse.
+        if let Some(built) = crate::built_in(self.project, name)
+            && let Some((takes, _)) = clarity_spec::code::check::picture_function(name)
+        {
+            use clarity_spec::code::check::BuiltInValue;
+            let values: Vec<String> = args.iter().zip(takes).map(|(a, t)| match t {
+                BuiltInValue::Picture => self.picture_in_hand(a, pre),
+                BuiltInValue::Number if matches!(self.types.type_of(a), TypeInfo::Decimal | TypeInfo::Money) => format!("{}.InexactFloat64()", bare(self.value(a, pre))),
+                BuiltInValue::Number => format!("float64({})", bare(self.value(a, pre))),
+                _ => bare(self.value(a, pre)),
+            }).collect();
+            return self.lift(format!("{}({})", built.go, values.join(", ")), pre);
         }
         // A built-in function (conformance/texts.json, conformance/zip.json), by the runtime's name for it.
         if let Some(built) = crate::built_in(self.project, name) {

@@ -133,6 +133,13 @@ pub(crate) const SECRET_FILES: [(&str, &str); 2] = [
     ("secrets/secrets.hpp", include_str!("../../../../runtimes/cpp/secrets/secrets.hpp")),
 ];
 
+/// The picture functions on Clarity.Image's library (docs/IMAGE-PLAN.md),
+/// carried only when the code calls one (clarity_use_image links them).
+pub(crate) const PICTURE_FILES: [(&str, &str); 2] = [
+    ("pictures/pictures.cpp", include_str!("../../../../runtimes/cpp/pictures/pictures.cpp")),
+    ("pictures/pictures.hpp", include_str!("../../../../runtimes/cpp/pictures/pictures.hpp")),
+];
+
 pub(crate) const HTTP_FILES: [(&str, &str); 2] = [
     ("http/http.cpp", include_str!("../../../../runtimes/cpp/http/http.cpp")),
     ("http/http.hpp", include_str!("../../../../runtimes/cpp/http/http.hpp")),
@@ -203,9 +210,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     let engine_files = ENGINE_FILES.iter().chain(&crate::c::WASM3_FILES).filter(|_| engines || screen_engines);
     let http_files = HTTP_FILES.iter().filter(|_| project.calls_out());
+    let picture_files = PICTURE_FILES.iter().filter(|_| crate::uses_picture_functions(project));
     let secret_files = SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
     let desktop_files = DESKTOP_FILES.iter().filter(|_| desktop);
-    for (path, body) in RUNTIME_FILES.iter().chain(&SERVICE_FILES).chain(desktop_files).chain(engine_files).chain(http_files).chain(secret_files) {
+    for (path, body) in RUNTIME_FILES.iter().chain(&SERVICE_FILES).chain(desktop_files).chain(engine_files).chain(http_files).chain(picture_files).chain(secret_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
 
@@ -214,7 +222,9 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let library_includes: String = crate::libraries::libraries(project).iter().map(|l| format!("#include \"clarity/{}.hpp\"\n", l.name.name)).collect();
     // The HTTP client, for code that calls out (DESIGN 5.23).
     let http_include = if project.calls_out() { "#include \"http/http.hpp\"\n" } else { "" };
-    files.push(text("src/records.hpp", namespaced(&program, &format!("#pragma once\n\n#include <optional>\n#include <string>\n#include <vector>\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/db.hpp\"\n#include \"clarity/sql.hpp\"\n#include \"clarity/json_read.hpp\"\n{http_include}{library_includes}"), &records_h)));
+    // The picture functions, for code that calls one (docs/IMAGE-PLAN.md).
+    let pictures_include = if crate::uses_picture_functions(project) { "#include \"pictures/pictures.hpp\"\n" } else { "" };
+    files.push(text("src/records.hpp", namespaced(&program, &format!("#pragma once\n\n#include <optional>\n#include <string>\n#include <vector>\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/db.hpp\"\n#include \"clarity/sql.hpp\"\n#include \"clarity/json_read.hpp\"\n{http_include}{pictures_include}{library_includes}"), &records_h)));
     for library in crate::libraries::libraries(project) {
         let n = &library.name.name;
         let own = crate::libraries::own_file(library, true);

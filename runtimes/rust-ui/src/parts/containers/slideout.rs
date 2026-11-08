@@ -508,6 +508,10 @@ impl Element for SlideoutPart {
         self.slide.band.set(band);
         self.slide.handle_place.set(handle);
         self.slide.laid.set(true);
+        // Beyond the part's edge the handle lies over what is beside it, which makes room for it.
+        if outside && self.slide.has_handle() {
+            cx.handle_strip(handle);
+        }
         if self.slide.has_handle() && self.handle_open.get().is_none() {
             let mut overlay = Overlay::new(Box::new(SlideoutHandle::floating(self.slide.clone())), Rect::default());
             // It is always there: a press beside it goes on to what is under, and nothing closes it but its part leaving.

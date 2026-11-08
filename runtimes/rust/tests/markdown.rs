@@ -13,6 +13,8 @@ fn written(block: &Block) -> Value {
             Some(number) => json!({ "kind": "item", "depth": block.depth, "ordered": true, "number": number, "spans": spans }),
             None => json!({ "kind": "item", "depth": block.depth, "ordered": false, "spans": spans }),
         },
+        BlockKind::Quote => json!({ "kind": "quote", "depth": block.depth, "spans": spans }),
+        BlockKind::Rule => json!({ "kind": "rule" }),
         BlockKind::Code => json!({ "kind": "code", "text": block.text }),
     }
 }

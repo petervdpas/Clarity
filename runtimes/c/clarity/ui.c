@@ -397,7 +397,7 @@ bool clarity_ui_selected(const ClarityUi* ui, const char* part, size_t count, si
             return true;
         }
     }
-    return clarity_fail(CLARITY_INVALID, "no row of %s is selected", part);
+    return false;
 }
 
 int64_t clarity_ui_selected_shape(const ClarityUi* ui, const char* part) {

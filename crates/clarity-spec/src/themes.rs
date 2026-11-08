@@ -356,7 +356,7 @@ fn listed_str_or(words: &[&str]) -> String {
 }
 
 /// Whether `text` is a color written out: `#rgb` or `#rrggbb`.
-fn is_hex(text: &str) -> bool {
+pub fn is_hex(text: &str) -> bool {
     text.strip_prefix('#')
         .is_some_and(|hex| matches!(hex.len(), 3 | 6) && hex.chars().all(|c| c.is_ascii_hexdigit()))
 }

@@ -115,6 +115,31 @@ fn shift_selects_and_typing_replaces_the_selection() {
     assert_eq!("one three", ed(&screen, id).text());
 }
 
+/// In a markdown memo Ctrl+B and Ctrl+I make the selection bold and italic,
+/// one step Ctrl+Z takes back; with nothing chosen the caret lands between the marks.
+#[test]
+fn in_markdown_ctrl_b_and_ctrl_i_mark_the_selection() {
+    let (mut screen, id) = shown(true, "one two", 300.0, 3);
+    ed_mut(&mut screen, id).markdown = true;
+    ed_mut(&mut screen, id).select(4, 7);
+    screen.key_pressed(km(Key::B, Modifiers::CONTROL));
+    assert_eq!("one **two**", ed(&screen, id).text());
+    assert_eq!("two", ed(&screen, id).selected_text());
+    screen.key_pressed(km(Key::I, Modifiers::CONTROL));
+    assert_eq!("one ***two***", ed(&screen, id).text());
+    screen.key_pressed(km(Key::Z, Modifiers::CONTROL));
+    assert_eq!("one **two**", ed(&screen, id).text());
+    ed_mut(&mut screen, id).select(0, 0);
+    screen.key_pressed(km(Key::I, Modifiers::CONTROL));
+    assert_eq!("**one **two**", ed(&screen, id).text());
+    assert_eq!((1, 1), ed(&screen, id).selection());
+    // A plain memo takes Ctrl+B as nothing.
+    let (mut screen, id) = shown(true, "one", 300.0, 3);
+    ed_mut(&mut screen, id).select_all();
+    screen.key_pressed(km(Key::B, Modifiers::CONTROL));
+    assert_eq!("one", ed(&screen, id).text());
+}
+
 #[test]
 fn copy_cut_and_paste_go_through_the_screens_clipboard() {
     let (mut screen, id) = one("hello world");

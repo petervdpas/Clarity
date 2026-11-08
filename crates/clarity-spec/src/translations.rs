@@ -237,6 +237,9 @@ pub const TABLE_ROW_KEYS: [(&str, &str); 4] = [("addRow", "Add"), ("removeRow", 
 /// `on open`): the tooltip over its rows, so people see they open.
 pub const OPEN_ROW_KEYS: [(&str, &str); 1] = [("openRow", "Double-click or press Enter to open")];
 
+/// What a markdown memo's switch says: writing its text, or reading it as it shows.
+pub const MARKDOWN_MEMO_KEYS: [(&str, &str); 2] = [("markdownWrite", "Write"), ("markdownPreview", "Preview")];
+
 /// What a window says when code fails at a value or a record: an item
 /// outside its list, a record that is not there or still used. The
 /// runtimes fill the slots; every application with windows has them.
@@ -284,6 +287,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&SLIDEOUT_KEYS)
         .chain(&TABLE_ROW_KEYS)
         .chain(&OPEN_ROW_KEYS)
+        .chain(&MARKDOWN_MEMO_KEYS)
         .chain(&RUNTIME_ERROR_KEYS)
         .chain(&ENGINE_ERROR_KEYS)
         .chain(&DESKTOP_KEYS)
@@ -680,6 +684,7 @@ fn shown(project: &Project) -> Shown {
     let toolboxes = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.toolbox.is_some()));
     let table_rows = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.add || w.props.remove));
     let open_rows = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.handlers.iter().any(|h| h.event == crate::widgets::Event::Open)));
+    let markdown_memos = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.markdown));
     let engines = project.files.iter().any(|f| !f.engines.is_empty());
     // A date input, or a table cell of a date field, opens the calendar.
     let dates = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Date))
@@ -712,6 +717,7 @@ fn shown(project: &Project) -> Shown {
         .chain(if slideouts { SLIDEOUT_KEYS.as_slice() } else { &[] })
         .chain(if table_rows { TABLE_ROW_KEYS.as_slice() } else { &[] })
         .chain(if open_rows { OPEN_ROW_KEYS.as_slice() } else { &[] })
+        .chain(if markdown_memos { MARKDOWN_MEMO_KEYS.as_slice() } else { &[] })
         .chain(if windows { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
         .chain(if engines { ENGINE_ERROR_KEYS.as_slice() } else { &[] });
     // The runtimes fill the slots of Clarity's own words, the ones its English has.

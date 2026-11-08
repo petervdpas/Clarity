@@ -529,6 +529,11 @@ pub struct WidgetPage {
     /// The tells of the view it shows wired to the window's handlers: `on saved: recipeSaved`.
     #[serde(default)]
     pub tells: Vec<TellHandler>,
+    /// `section "Chapters" color "#2e86de"`: an accordion section's header in
+    /// a color of its own (written out, or a color of the theme by name); none
+    /// keeps the theme's look.
+    #[serde(default)]
+    pub color: Option<String>,
     pub children: Vec<Widget>,
     pub span: Span,
 }
@@ -580,6 +585,9 @@ pub enum ToolboxKind {
     Popup,
     /// A slide-out against the canvas's edge, with its handle and pin.
     Slideout,
+    /// A memo's: called up at the caret (Ctrl+Space, or a right-click
+    /// there), its action done on the text where the person is, then gone.
+    Caret,
 }
 
 impl ToolboxKind {
@@ -587,6 +595,7 @@ impl ToolboxKind {
         match self {
             ToolboxKind::Popup => "popup",
             ToolboxKind::Slideout => "slideout",
+            ToolboxKind::Caret => "caret",
         }
     }
 }
@@ -687,6 +696,11 @@ pub struct WidgetProps {
     /// text on the clipboard, read only too.
     #[serde(default)]
     pub copy: bool,
+    /// `markdown`: a memo of Markdown, an editor with a preview: Write and
+    /// Preview on its top, the text colored as Markdown while it is written,
+    /// Ctrl+B and Ctrl+I making the selection bold and italic.
+    #[serde(default)]
+    pub markdown: bool,
     /// `view ClassEditor`: a slide-out shows that view, its parts, data and
     /// handlers joining the window's (`crate::views`); it holds none of its own.
     #[serde(default)]
@@ -1408,9 +1422,19 @@ impl Project {
     /// Whether any code of the project calls a web API (DESIGN 5.23): a
     /// stack then brings its HTTP client along.
     pub fn calls_out(&self) -> bool {
+        self.any_expr(&|e| matches!(e.kind, crate::code::ExprKind::Http { .. }))
+    }
+
+    /// Whether the code calls a function `wanted` says yes to, such as a picture function.
+    pub fn calls_any(&self, wanted: &dyn Fn(&str) -> bool) -> bool {
+        self.any_expr(&|e| matches!(&e.kind, crate::code::ExprKind::Call { function, .. } if wanted(&function.name)))
+    }
+
+    /// Whether an expression of the handlers, events, functions or commands is one `wanted` says yes to.
+    pub fn any_expr(&self, wanted: &dyn Fn(&crate::code::Expr) -> bool) -> bool {
         let mut found = false;
         let mut look = |body: &[crate::code::Stmt]| {
-            crate::code::each_expr_in(body, &mut |e| found |= matches!(e.kind, crate::code::ExprKind::Http { .. }));
+            crate::code::each_expr_in(body, &mut |e| found |= wanted(e));
         };
         for file in &self.files {
             for block in &file.code {

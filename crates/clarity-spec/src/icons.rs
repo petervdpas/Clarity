@@ -72,6 +72,9 @@ pub const TOOLBOX_ICONS: [&str; 33] = [
     "eye", "eye-off", "plus", "trash", "arrow-up", "arrow-down",
 ];
 
+/// A memo's toolbox at the caret: its Cut, Copy and Paste row.
+pub const MEMO_TOOLBOX_ICONS: [&str; 3] = ["scissors", "copy", "clipboard-paste"];
+
 /// The icons the project shows, with their drawings, for the renderer.
 pub fn used(project: &Project) -> BTreeMap<String, String> {
     let mut found = BTreeMap::new();
@@ -101,7 +104,11 @@ pub fn used(project: &Project) -> BTreeMap<String, String> {
                 add("trash");
             }
             // A painting canvas's toolbox shows its tools' icons.
-            if w.props.toolbox.is_some() {
+            if w.props.toolbox == Some(crate::model::ToolboxKind::Caret) {
+                for icon in MEMO_TOOLBOX_ICONS {
+                    add(icon);
+                }
+            } else if w.props.toolbox.is_some() && w.props.kind != crate::widgets::WidgetKind::Memo {
                 for icon in TOOLBOX_ICONS {
                     add(icon);
                 }

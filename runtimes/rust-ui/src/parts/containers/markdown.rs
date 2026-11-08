@@ -1,7 +1,8 @@
 //! The markdown part: Markdown read into blocks the same way on every stack
-//! (`blocks`, conformance/markdown.json), shown as headings, paragraphs,
-//! list items and code, wrapped to its width and scrolling when longer than
-//! its place. Its text is a Markdown file of the application's resources
+//! (`blocks`, conformance/markdown.json), shown as a page: headings by their
+//! level in the theme's heading font, paragraphs, list items, quotes set in
+//! with a bar, centred scene breaks and code, in a column of a reading width
+//! from its left with room around it, scrolling when longer than its place. Its text is a Markdown file of the application's resources
 //! (its `source`, by name, as the host gives the file), the text a key gives
 //! in the language shown (its `caption`), or the text it binds. A link opens
 //! through the host, in the person's browser or mail program.
@@ -9,7 +10,8 @@
 //! It keeps its own scroll offset, turned by the wheel, with a thin bar at
 //! its right while it is longer than its place.
 
-pub mod blocks;
+/// The Markdown read into blocks, as every renderer reads it: the runtime's reader (conformance/markdown.json).
+pub use clarity_runtime::markdown as blocks;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -31,8 +33,17 @@ use blocks::{BlockKind, Span};
 /// The room at the right kept for the scroll bar, as C#'s ScrollView keeps it.
 pub const BAR_ROOM: f64 = 8.0;
 
-/// Space between blocks.
-const GAP: f64 = 6.0;
+/// Space between blocks, in the text's size.
+const GAP: f64 = 0.6;
+
+/// The room around the page.
+pub const PAD: f64 = 12.0;
+
+/// The widest the column of text gets, in the text's size: a reading width.
+const READING: f64 = 38.0;
+
+/// How far a quote is set in per depth, in the text's size.
+const QUOTE_IN: f64 = 1.2;
 
 /// The padding of a code block across, then down.
 const CODE_ACROSS: f64 = 8.0;
@@ -58,6 +69,11 @@ pub struct MarkdownRun {
 pub struct MarkdownLayout {
     pub runs: Vec<MarkdownRun>,
     pub code_boxes: Vec<Rect>,
+    /// The bars beside the quotes, and the scene breaks.
+    pub quote_bars: Vec<Rect>,
+    pub rules: Vec<Rect>,
+    /// The column of text: where it starts and how wide it is.
+    pub column: (f64, f64),
     pub height: f64,
 }
 
@@ -65,12 +81,14 @@ fn line_height(size: f64) -> f64 {
     (size * 1.45).ceil()
 }
 
-fn heading_scale(level: usize) -> f64 {
+/// A heading's size by its level: the first two from the theme's heading size, the third a little over the text's.
+fn heading_size(level: usize, text: f64, heading: f64) -> f64 {
+    let heading = heading.max(text * 1.2);
     match level {
-        1 => 1.4,
-        2 => 1.2,
-        3 => 1.05,
-        _ => 1.0,
+        1 => heading * 1.35,
+        2 => heading * 1.1,
+        3 => text * 1.15,
+        _ => text,
     }
 }
 
@@ -198,6 +216,11 @@ impl Flow<'_> {
                 if text.ends_with(char::is_whitespace) {
                     self.place(runs, &mut word, &mut x, &mut y);
                 }
+                // A hard line break: what follows starts a new line.
+                if text.contains('\n') {
+                    x = self.left;
+                    y += line_height(self.size);
+                }
             }
         }
         self.place(runs, &mut word, &mut x, &mut y);
@@ -219,20 +242,33 @@ impl MarkdownLayout {
     pub fn of(markdown: &str, width: f64, fonts: &Fonts, look: &ThemeLook) -> MarkdownLayout {
         let mut runs = Vec::new();
         let mut code_boxes = Vec::new();
+        let mut quote_bars = Vec::new();
+        let mut rules = Vec::new();
         let size = look.size("text");
-        let mut y = 0.0;
+        let heading = look.size("heading");
+        // The column of text: a reading width at most, from the left, with room around it.
+        let room = (width - 2.0 * PAD).max(0.0);
+        let column = room.min(size * READING);
+        let left = PAD;
+        let right = left + column;
+        let mut y = PAD;
         let flow = |size: f64, left: f64, right: f64, code_block: bool| Flow { fonts, size, left, right, code_block };
         for (index, block) in blocks::read(markdown).iter().enumerate() {
             if index > 0 {
-                y += GAP;
+                y += GAP * size;
             }
             match block.kind {
                 BlockKind::Heading => {
-                    let heading = size * heading_scale(block.level);
-                    y = flow(heading, 0.0, width, false).spans(&mut runs, &block.spans, y, "text", true);
+                    // Space above a heading, more above the larger ones, and a little below.
+                    if index > 0 {
+                        y += if block.level <= 2 { size * 0.9 } else { size * 0.4 };
+                    }
+                    let shown = heading_size(block.level, size, heading);
+                    y = flow(shown, left, right, false).spans(&mut runs, &block.spans, y, "heading", true);
+                    y += size * 0.2;
                 }
                 BlockKind::Item => {
-                    let indent = block.depth as f64 * 1.25 * size;
+                    let indent = left + block.depth as f64 * 1.25 * size;
                     let marker = match block.number {
                         Some(n) => format!("{n}."),
                         None => "\u{2022}".to_string(),
@@ -249,24 +285,35 @@ impl MarkdownLayout {
                         code: false,
                         link: None,
                     });
-                    y = flow(size, indent + room + size * 0.5, width, false).spans(&mut runs, &block.spans, y, "text", false);
+                    y = flow(size, indent + room + size * 0.5, right, false).spans(&mut runs, &block.spans, y, "text", false);
+                }
+                BlockKind::Quote => {
+                    let inset = block.depth as f64 * QUOTE_IN * size;
+                    let top = y;
+                    y = flow(size, left + inset, right, false).spans(&mut runs, &block.spans, y, "text", false);
+                    quote_bars.push(Rect::new(left + inset - QUOTE_IN * size + size * 0.2, top, 3.0, y - top));
+                }
+                BlockKind::Rule => {
+                    let line = line_height(size);
+                    rules.push(Rect::new(left + column * 3.0 / 8.0, (y + line / 2.0).round(), column / 4.0, 1.0));
+                    y += line;
                 }
                 BlockKind::Code => {
                     let top = y;
                     y += CODE_DOWN;
                     for line in block.text.split('\n') {
                         let span = Span { code: true, ..Span::plain(line) };
-                        y = flow(size, CODE_ACROSS, width - CODE_ACROSS, true).spans(&mut runs, std::slice::from_ref(&span), y, "mono", false);
+                        y = flow(size, left + CODE_ACROSS, right - CODE_ACROSS, true).spans(&mut runs, std::slice::from_ref(&span), y, "mono", false);
                     }
                     y += CODE_DOWN;
-                    code_boxes.push(Rect::new(0.0, top, width, y - top));
+                    code_boxes.push(Rect::new(left, top, column, y - top));
                 }
                 BlockKind::Paragraph => {
-                    y = flow(size, 0.0, width, false).spans(&mut runs, &block.spans, y, "text", false);
+                    y = flow(size, left, right, false).spans(&mut runs, &block.spans, y, "text", false);
                 }
             }
         }
-        MarkdownLayout { runs, code_boxes, height: y.ceil() }
+        MarkdownLayout { runs, code_boxes, quote_bars, rules, column: (left, column), height: (y + PAD).ceil() }
     }
 
     /// The address of the link at a point of the page, from its top left; none off a link.
@@ -337,6 +384,21 @@ impl MarkdownPart {
         self.laid.runs.clone()
     }
 
+    /// The bars beside its quotes in its page, as last laid out.
+    pub fn quote_bars(&self) -> Vec<Rect> {
+        self.laid.quote_bars.clone()
+    }
+
+    /// Its scene breaks in its page, as last laid out.
+    pub fn rules(&self) -> Vec<Rect> {
+        self.laid.rules.clone()
+    }
+
+    /// How wide its column of text is, as last laid out.
+    pub fn column_width(&self) -> f64 {
+        self.laid.column.1
+    }
+
     /// The places of its code blocks in its page, as last laid out.
     pub fn code_boxes(&self) -> Vec<Rect> {
         self.laid.code_boxes.clone()
@@ -369,12 +431,28 @@ impl MarkdownPart {
         }
     }
 
+    /// A link into the application (`clarity:fragment/412`): its address in
+    /// the part's values as `link`, then its `on link` handler runs and finds it there.
+    fn follow(&self, link: &str) {
+        let Some(name) = self.base.name() else { return };
+        let mut state = self.base.host.state(Some(name)).unwrap_or_default();
+        state.values.get_or_insert_with(serde_json::Map::new).insert("link".into(), serde_json::Value::String(link.to_string()));
+        self.base.host.set_state(name, state);
+        self.base.fire("link");
+    }
+
     fn draw_runs(&self, p: &Painter, page: Rect) {
         let look = p.look;
         let shade = look.color("muted").with_a(31);
         let radius = look.radius("input");
         for code in &self.laid.code_boxes {
             p.fill(code.offset(page.x, page.y), shade, radius);
+        }
+        for bar in &self.laid.quote_bars {
+            p.fill(bar.offset(page.x, page.y), look.color("strong_border"), 1.5);
+        }
+        for rule in &self.laid.rules {
+            p.fill(rule.offset(page.x, page.y), look.color("muted"), 0.0);
         }
         for run in &self.laid.runs {
             let place = run.place.offset(page.x, page.y);
@@ -452,7 +530,11 @@ impl Element for MarkdownPart {
     fn on_pointer_released(&mut self, at: PointerInput, _cx: &mut Cx) {
         let Some(link) = self.pressed_link.take() else { return };
         if self.base.enabled() && self.laid.link_at(at.x, at.y + self.scroll_y) == Some(link.as_str()) {
-            self.base.host.open_address(&link);
+            if link.starts_with("clarity:") {
+                self.follow(&link);
+            } else {
+                self.base.host.open_address(&link);
+            }
         }
     }
 }

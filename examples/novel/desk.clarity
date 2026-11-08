@@ -97,6 +97,12 @@ page CoverTools: toolbox
     tool name importTool at 3,6 does import
     tool name exportTool at 4,6 does export
 
+// What the chapter text's toolbox does where the writer is: Ctrl+Space or a
+// right-click in the text calls it up at the caret.
+page ManuscriptTools: toolbox
+    grid 4 columns
+    tool name insertResearchTool at 1,1 icon "book-open" tooltip @insertResearchTip on click: insertResearch
+
 // A book on the desk: an accordion of the parts of the book, Chapters and
 // Research.
 page Desk: window
@@ -109,8 +115,8 @@ page Desk: window
     label @deskTitle name deskHeading at 1,1 span 10
     button @backCaption name backButton at 11,1 span 2 icon "arrow-left" cancel on click -> close
     accordion name parts at 1,2 span 12 rows 15 horizontal
-        section @chaptersSection view ChaptersPart on chosen: chapterChosen on toResearch: toResearch
-        section @researchSection view ResearchPart on jumpTo: jumpTo
+        section @chaptersSection color "#3b6ea8" view ChaptersPart on chosen: chapterChosen on toResearch: toResearch
+        section @researchSection color "#4f7d5b" view ResearchPart on jumpTo: jumpTo
 
 // The chapters: the list at the left, with the chosen chapter's properties in
 // a slide-out against its right edge, and its text beside it. Chapter 0 is a
@@ -140,7 +146,7 @@ page ChaptersPart: view
                 button @toResearchCaption name toResearchButton at 1,12 span 6 icon "square-arrow-out-up-right" tooltip @toResearchTip on click: openResearch
         pane
             label @deskTitle name chapterHeading at 1,1 span 9
-            memo name manuscriptBox at 1,2 span 9 rows 13 bind manuscript.text placeholder @manuscriptPlaceholder
+            memo name manuscriptBox at 1,2 span 9 rows 13 bind manuscript.text placeholder @manuscriptPlaceholder markdown toolbox ManuscriptTools on change: manuscriptChanged on link: researchLinkFollowed
             label @deskTitle name wordsLabel at 1,15 span 6
             button @saveCaption name saveChapterButton at 7,15 span 3 icon "save" default on click: saveChapter
 
@@ -260,6 +266,8 @@ code Desk
         loadChapters()
         researches = find r in Research where r.book == book order by r.title
         research = new Research
+        // Where the new research item is used: nowhere yet, so the table starts empty.
+        researchPlaces = find p in ResearchPlace where p.research == research order by p.chapter.position
         chapter = new Chapter
         for c in chapters
             if c.position == book.last
@@ -406,6 +414,21 @@ code ChaptersPart
         for p in find p in ResearchPlace where p.research == gone and p.chapter == chosen
             delete p
         loadResearch()
+
+    // The words counted as the text changes, not only when it is saved.
+    handler manuscriptChanged
+        wordsLabel.caption = @wordCount(count = count(words(manuscript.text)))
+
+    // A research item put in the text at the caret, as a link back to it.
+    handler insertResearch
+        ask @insertWhichResearch for Research from researchPool then researchInserted
+
+    handler researchInserted(r: Research)
+        manuscriptBox.insert("[" + r.title + "](clarity:research/" + r.title + ")")
+
+    // A research link in the preview clicked: to that research.
+    handler researchLinkFollowed
+        tell toResearch(replace(manuscriptBox.link, "clarity:research/", ""))
 
     // To the chosen research, in the Research section.
     handler openResearch

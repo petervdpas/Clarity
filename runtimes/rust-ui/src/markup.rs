@@ -32,8 +32,8 @@ const PAGE_KINDS: [(&str, &str); 4] = [("Tab", "tab"), ("Step", "step"), ("Secti
 const REGIONS: [&str; 5] = ["Menu", "Toolbar", "Ribbon", "Sidebar", "Footer"];
 
 /// The events a part's `on...` attribute may name.
-const EVENTS: [&str; 27] = [
-    "click", "change", "enter", "leave", "select", "open", "pointer", "key", "close", "return", "start", "submit", "draw", "drag", "drop", "bend", "connect", "resize", "next", "finish", "reorder", "add", "remove", "tick", "end", "fail", "unconnected",
+const EVENTS: [&str; 28] = [
+    "click", "change", "enter", "leave", "select", "open", "pointer", "key", "close", "return", "start", "submit", "draw", "drag", "drop", "bend", "connect", "resize", "next", "finish", "reorder", "add", "remove", "tick", "end", "fail", "unconnected", "link",
 ];
 
 fn catalog(cell: &'static OnceLock<Map<String, Value>>, text: &str) -> &'static Map<String, Value> {
@@ -115,6 +115,8 @@ pub struct PageSpec {
     pub columns: Option<i64>,
     /// The columns of its own grid (`columns`): a tab, step or section showing a view keeps the view's.
     pub grid: Option<i64>,
+    /// A section's header in a color of its own (`color`): written out, or a color of the theme by name.
+    pub color: Option<String>,
     pub children: Vec<PartSpec>,
     /// What it is in the design (`designItem`, see `DESIGN_ITEM`); none in a program's own markup.
     pub item: Option<String>,
@@ -401,6 +403,7 @@ pub fn part_of(element: &XmlElement) -> Result<PartSpec, MarkupError> {
                 title: child.attribute("title").map(str::to_string),
                 columns: child.attribute("span").and_then(|s| s.trim().parse().ok()),
                 grid: child.attribute("columns").and_then(|s| s.trim().parse().ok()),
+                color: child.attribute("color").map(str::to_string).filter(|c| !c.is_empty()),
                 children: child.children.iter().map(part_of).collect::<Result<_, _>>()?,
                 item: child.attribute(DESIGN_ITEM).map(str::to_string),
             });

@@ -116,6 +116,12 @@ code: string | null,
  */
 copy: boolean, 
 /**
+ * `markdown`: a memo of Markdown, an editor with a preview: Write and
+ * Preview on its top, the text colored as Markdown while it is written,
+ * Ctrl+B and Ctrl+I making the selection bold and italic.
+ */
+markdown: boolean, 
+/**
  * `view ClassEditor`: a slide-out shows that view, its parts, data and
  * handlers joining the window's (`crate::views`); it holds none of its own.
  */

@@ -12,6 +12,7 @@ pub mod check_box;
 pub mod code_colors;
 pub mod heading;
 pub mod label;
+pub mod markdown_memo;
 pub mod sound;
 pub mod video;
 pub mod text_box;
@@ -517,6 +518,11 @@ pub fn style_named(name: &str, bounds: crate::geometry::Rect, radius: f64, p: &P
     Some(crate::painter::StyledLook { look: Some(look), bold, align })
 }
 
+/// A memo: a memo of Markdown has Write and Preview (`markdown_memo`), any other is a text box of several lines.
+fn memo(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
+    if spec.flag("markdown") { markdown_memo::make(spec, host) } else { text_box::make(spec, host) }
+}
+
 /// Writes the methods every part's element has the same way, for a struct with a field `base`: its node, and that code may hide it.
 #[macro_export]
 macro_rules! part_element {
@@ -554,7 +560,7 @@ const DRAWN: [(&str, MakePart); 18] = [
     ("heading", heading::make),
     ("button", button::make),
     ("textbox", text_box::make),
-    ("memo", text_box::make),
+    ("memo", memo),
     ("password", text_box::make),
     ("checkbox", check_box::make),
     ("switch", check_box::make),

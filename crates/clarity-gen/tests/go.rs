@@ -430,8 +430,8 @@ fn handlers_are_methods_of_their_window() {
     has(shop, "\t\tui.Message(clarity.Warning, clarity.NewText(\"Order {order.number} is too large\").With(\"order.number\", clarity.SlotText(w.Order.Number)))\n\t\tui.SetEnabled(\"approveButton\", false)\n\t\treturn nil\n");
     has(shop, "\tui.SetError(\"numberInput\", clarity.PlainText(\"\"))\n\tui.Message(clarity.Info, clarity.PlainText(\"Approved\"))\n\tif err := w.filterChanged(db, ui); err != nil {\n\t\treturn err\n\t}\n");
     has(shop, "\tv1, err := clarity.Find[Order](db, clarity.Query{}.Filter(clarity.Contains(\"number\", ui.Text(\"numberFilter\"))).Order(\"number\", false))\n\tif err != nil {\n\t\treturn err\n\t}\n\tw.Orders = v1\n");
-    has(shop, "\tv1, err := clarity.Selected(ui, \"grid\", w.Orders)\n\tif err != nil {\n\t\treturn err\n\t}\n\tw.Order = v1\n");
-    has(shop, "\tui.Open(\"OrderForm\", map[string]any{\"order\": v1})\n\tui.Close()\n");
+    has(shop, "\tw.Order = clarity.Selected(ui, \"grid\", w.Orders, NewOrder)\n");
+    has(shop, "\tui.Open(\"OrderForm\", map[string]any{\"order\": clarity.Selected(ui, \"grid\", w.Orders, NewOrder)})\n\tui.Close()\n");
     has(shop, "\tw.Orders = v1\n\tui.Deselect(\"grid\")\n\tif w.Order.ID != 0 {\n\t\tv2, err := clarity.Get[Order](db, w.Order.ID)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tw.Order = &v2\n\t}\n");
     has(shop, "\tui.SetReadonly(\"numberInput\", w.Order.Paid)\n");
 }

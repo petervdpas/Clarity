@@ -673,9 +673,10 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// <summary>A picture or a file of the database, fetched by <paramref name="here"/>.</summary>
     protected Task<byte[]?> Fetched(string fetcher, Func<byte[]?> here, params object?[] args) => Task.FromResult(here());
 
-    /// <summary>The row selected in a table or list.</summary>
-    protected static R Selected<R>(PartState part) where R : class =>
-        part.SelectedItem as R ?? throw new InvalidValueException($"no row of {part.Name} is selected");
+    /// <summary>The row selected in a table or list; with no row chosen, an
+    /// empty record (id 0), as <c>new</c> makes, so code can ask first.</summary>
+    protected static R Selected<R>(PartState part) where R : class, new() =>
+        part.SelectedItem as R ?? new R();
 
     /// <summary>The row of <paramref name="rows"/> that code selects with a record
     /// (DESIGN 5.12): the same one, else the first holding the same values; null for none.</summary>

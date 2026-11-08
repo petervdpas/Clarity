@@ -149,17 +149,27 @@ pub struct Cx {
     pub(crate) focused_part: Option<FocusedPart>,
     pub(crate) requests: Vec<Request>,
     pub(crate) redraw: bool,
+    /// The strips the handles beside parts took in the last layout, which the
+    /// parts under them make room for (`room_for_handles`); and those laid now.
+    pub(crate) strips: Vec<Rect>,
+    pub(crate) laid_strips: Vec<Rect>,
 }
 
 impl Cx {
     pub(crate) fn new(look: Arc<ThemeLook>, fonts: Rc<Fonts>, clipboard: Rc<RefCell<Box<dyn Clipboard>>>, now: Instant, whole: Rect, focused: Option<ElementId>) -> Cx {
-        Cx { look, fonts, clipboard, now, whole, focused, places: Rc::default(), focused_part: None, requests: Vec::new(), redraw: false }
+        Cx { look, fonts, clipboard, now, whole, focused, places: Rc::default(), focused_part: None, requests: Vec::new(), redraw: false, strips: Vec::new(), laid_strips: Vec::new() }
     }
 
     /// The places of the window's named parts as the screen last laid them out.
     pub(crate) fn with_places(mut self, places: Rc<RefCell<std::collections::HashMap<String, (ElementId, Rect)>>>) -> Cx {
         self.places = places;
         self
+    }
+
+    /// A handle beside a part lies over `strip`, beyond the part's edge: what
+    /// lies there makes room for it in the next layout.
+    pub fn handle_strip(&mut self, strip: Rect) {
+        self.laid_strips.push(strip);
     }
 
     /// A row of the part `from` was dragged out of it and let go at a point on the screen: the part there takes it, when it does.
@@ -952,6 +962,32 @@ impl GridPanel {
     }
 }
 
+/// `place` with room made for the handles beside parts whose `strips` cover
+/// one of its edges, as the window's parts make room for the handles at its
+/// edge: the edge moves to the far side of the strip. A place the strip lies
+/// within, or only touches, keeps its size.
+pub fn room_for_handles(place: Rect, strips: &[Rect]) -> Rect {
+    let mut p = place;
+    for s in strips {
+        let across = s.y < p.bottom() - 0.5 && s.bottom() > p.y + 0.5;
+        let along = s.x < p.right() - 0.5 && s.right() > p.x + 0.5;
+        if across && p.x >= s.x - 0.5 && p.x < s.right() - 0.5 {
+            let d = s.right() - p.x;
+            p.x += d;
+            p.width = (p.width - d).max(0.0);
+        } else if across && p.right() > s.x + 0.5 && p.right() <= s.right() + 0.5 {
+            p.width = (s.x - p.x).max(0.0);
+        } else if along && p.y >= s.y - 0.5 && p.y < s.bottom() - 0.5 {
+            let d = s.bottom() - p.y;
+            p.y += d;
+            p.height = (p.height - d).max(0.0);
+        } else if along && p.bottom() > s.y + 0.5 && p.bottom() <= s.bottom() + 0.5 {
+            p.height = (s.y - p.y).max(0.0);
+        }
+    }
+    p
+}
+
 impl Element for GridPanel {
     element_node!();
 
@@ -960,8 +996,12 @@ impl Element for GridPanel {
         let placed = grid::place(&self.asked(), self.columns, area.width, area.height, self.gap);
         self.content = placed.content;
         self.rows = placed.rows;
+        let strips = cx.strips.clone();
         for (child, place) in self.node.children_mut().iter_mut().zip(placed.boxes) {
-            arrange_safely(child.as_mut(), place.offset(area.x, area.y), cx);
+            let place = place.offset(area.x, area.y);
+            // A handle beside a part lies over the edge of what is beside that part: it makes room.
+            let place = if child.beside().is_some() { place } else { room_for_handles(place, &strips) };
+            arrange_safely(child.as_mut(), place, cx);
         }
         // What lies beside a part of the grid goes against that part, now that it has its place.
         let named: Vec<(String, Rect, bool)> = self

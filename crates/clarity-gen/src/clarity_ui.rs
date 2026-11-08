@@ -375,6 +375,15 @@ pub fn repository_library(repo: &Path, os: &str) -> Option<PathBuf> {
     if audio.iter().all(|(from, _)| from.is_file()) {
         files.extend(audio);
     }
+    let image_header = repo.join("runtimes").join("rust-image-ffi").join("include").join("clarity_image.h");
+    let image_file = library_file(os).replace("clarity_ui", "clarity_image");
+    let mut image = vec![(image_header, PathBuf::from("include").join("clarity_image.h")), (release.join(&image_file), PathBuf::from("lib").join(&image_file))];
+    if os == "windows" {
+        image.push((release.join("clarity_image.dll.lib"), PathBuf::from("lib").join("clarity_image.dll.lib")));
+    }
+    if image.iter().all(|(from, _)| from.is_file()) {
+        files.extend(image);
+    }
     let video_header = repo.join("runtimes").join("rust-video-ffi").join("include").join("clarity_video.h");
     let video_file = library_file(os).replace("clarity_ui", "clarity_video");
     let mut video = vec![(video_header, PathBuf::from("include").join("clarity_video.h")), (release.join(&video_file), PathBuf::from("lib").join(&video_file))];

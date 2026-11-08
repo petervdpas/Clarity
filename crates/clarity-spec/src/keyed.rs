@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
-use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, SLIDEOUT_KEYS, TABLE_ROW_KEYS, OPEN_ROW_KEYS, TOOLBOX_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
+use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, SLIDEOUT_KEYS, TABLE_ROW_KEYS, OPEN_ROW_KEYS, MARKDOWN_MEMO_KEYS, TOOLBOX_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -112,6 +112,7 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| (l.trim_start().starts_with("table ") || l.trim_start().starts_with("treetable ")) && l.split_whitespace().any(|w| w == "add" || w == "remove"))) { TABLE_ROW_KEYS.as_slice() } else { &[] })
         // Rows that open something say so (`on open`), and a canvas's toolbox has its words.
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| ["table ", "treetable ", "list ", "tree "].iter().any(|k| l.trim_start().starts_with(k)) && l.contains("on open:"))) { OPEN_ROW_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("memo ") && l.split_whitespace().any(|w| w == "markdown"))) { MARKDOWN_MEMO_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && l.split_whitespace().any(|w| w == "toolbox"))) { TOOLBOX_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("page "))) { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("engine "))) { ENGINE_ERROR_KEYS.as_slice() } else { &[] });

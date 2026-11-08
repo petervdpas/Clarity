@@ -33,7 +33,8 @@ fn a_markdown_part_shows_a_text() {
     assert_eq!((info.width, info.height), (6, 4));
     assert_eq!(info.bind, BindTarget::Field);
     assert_eq!(info.field_types, ["text"]);
-    assert!(info.grows && !info.input && info.events.is_empty());
+    // A link into the application (`clarity:fragment/412`) runs `on link`.
+    assert!(info.grows && !info.input && info.events == [clarity_spec::widgets::Event::Link]);
 }
 
 #[test]

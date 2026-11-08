@@ -714,6 +714,9 @@
         </select>
       </label>
     {/if}
+    {#if info.properties.includes("markdown")}
+      <label title="An editor with a preview: Write and Preview on its top, its Markdown colored while written, Ctrl+B and Ctrl+I for bold and italic"><input type="checkbox" checked={p.markdown} disabled={!!p.code} onchange={(e) => update({ markdown: e.currentTarget.checked })} /> Markdown</label>
+    {/if}
     {#if info.properties.includes("copy")}
       <label title="A button in its corner puts its text on the clipboard, read only too"><input type="checkbox" checked={p.copy} onchange={(e) => update({ copy: e.currentTarget.checked })} /> Copy button</label>
     {/if}
@@ -750,24 +753,26 @@
       </label>
     {/if}
     {#if info.properties.includes("toolbox")}
-      <label class="prop" title="The canvas's tools in a toolbox: Clarity's own for its mode, or a toolbox page (page X: toolbox) designed for it">
+      {@const memo = p.kind === "memo"}
+      <label class="prop" title={memo ? "Tools that work on the memo's text where the person is: a toolbox page (page X: toolbox) of coded tools" : "The canvas's tools in a toolbox: Clarity's own for its mode, or a toolbox page (page X: toolbox) designed for it"}>
         <span>Toolbox</span>
         <select
           value={p.toolbox === null ? "" : (p.toolboxPage ?? "*")}
           onchange={(e) => {
             const v = e.currentTarget.value;
-            update(v === "" ? { toolbox: null, toolboxPage: null } : { toolbox: p.toolbox ?? "popup", toolboxPage: v === "*" ? null : v });
+            update(v === "" ? { toolbox: null, toolboxPage: null } : { toolbox: p.toolbox ?? (memo ? "caret" : "popup"), toolboxPage: v === "*" ? null : v });
           }}
         >
-          <option value="">(tools on the canvas)</option>
-          <option value="*">Clarity's own</option>
+          <option value="">{memo ? "(none)" : "(tools on the canvas)"}</option>
+          {#if !memo}<option value="*">Clarity's own</option>{/if}
           {#each toolboxPages as name (name)}<option value={name}>{name}</option>{/each}
         </select>
       </label>
       {#if p.toolbox !== null}
-        <label class="prop" title="Floating over the window, or a slide-out against the canvas's edge">
+        <label class="prop" title="Floating over the window, or a slide-out against the part's edge">
           <span>Shows as</span>
-          <select value={p.toolbox} onchange={(e) => update({ toolbox: e.currentTarget.value as "popup" | "slideout" })}>
+          <select value={p.toolbox} onchange={(e) => update({ toolbox: e.currentTarget.value as "popup" | "slideout" | "caret" })}>
+            {#if memo}<option value="caret">At the caret (Ctrl+Space, right-click)</option>{/if}
             <option value="popup">Floating</option>
             <option value="slideout">Slide-out</option>
           </select>
@@ -1120,6 +1125,20 @@
         <span>Title</span>
         <TextField {preview} {onapplied} text={tab.title} onwrite={(text) => onedit({ op: "setTitle", target: tab.span.start, title: text ?? "" })} />
       </label>
+      {#if section}
+        <label class="prop" title="Its header in a color of its own, its text black or white as reads; without one it takes the theme's look">
+          <span>Color</span>
+          <span class="color-pick">
+            <input type="color" value={tab.color?.startsWith("#") ? tab.color : "#2e86de"} onchange={(e) => onedit({ op: "setPageColor", target: tab.span.start, color: e.currentTarget.value })} />
+            {#if tab.color}
+              <span class="color-name">{tab.color}</span>
+              <button type="button" onclick={() => onedit({ op: "setPageColor", target: tab.span.start, color: null })}>Theme's</button>
+            {:else}
+              <span class="color-name">the theme's</span>
+            {/if}
+          </span>
+        </label>
+      {/if}
       <label class="prop" title="A view it shows: its parts, data and handlers join this window's, so this window's code sets what it shows">
         <span>Shows view</span>
         <select
@@ -1490,5 +1509,14 @@
     margin-left: auto;
     font-size: 11px;
     padding: 0 2px;
+  }
+  .color-pick {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .color-name {
+    color: var(--text-muted);
   }
 </style>

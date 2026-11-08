@@ -12,7 +12,8 @@ use clarity_runtime::ui::PartState;
 use clarity_ui::input::{Modifiers, PointerButton};
 use clarity_ui::markup::HandlerCall;
 use clarity_ui::parts::containers::markdown::blocks::{self, Block, BlockKind, Span};
-use clarity_ui::parts::containers::markdown::{MarkdownPart, MarkdownRun};
+use clarity_ui::parts::containers::markdown::{MarkdownPart, MarkdownRun, BAR_ROOM};
+use clarity_ui::parts::markdown_memo::{MarkdownMemoPart, SWITCH_HEIGHT};
 use clarity_ui::parts::PartHost;
 use clarity_ui::testing::{part_named, window_of, Shot, TestHost};
 use clarity_ui::{Element, Screen};
@@ -89,6 +90,8 @@ fn written(block: &Block) -> Value {
             Some(number) => json!({ "kind": "item", "depth": block.depth, "ordered": true, "number": number, "spans": spans }),
             None => json!({ "kind": "item", "depth": block.depth, "ordered": false, "spans": spans }),
         },
+        BlockKind::Quote => json!({ "kind": "quote", "depth": block.depth, "spans": spans }),
+        BlockKind::Rule => json!({ "kind": "rule" }),
         BlockKind::Code => json!({ "kind": "code", "text": block.text }),
     }
 }
@@ -167,6 +170,43 @@ fn it_shows_headings_paragraphs_items_and_code() {
     keep(&mut shot, "markdown.png");
 }
 
+/// A book's text reads like a page: room around it, headings by their
+/// level with space around them, quotes set in with a bar, a scene break
+/// centred, line breaks kept, and lines no longer than a reading width.
+#[test]
+fn it_reads_like_a_page() {
+    let text = "# One\n\n## Two\n\n### Three\n\nA line,  \nand the next.\n\n> Quoted words.\n\n***\n\nAfter.";
+    let (mut screen, _) = markdown(r#"bind="notes""#, |h| h.inner.set("notes", json!(text)), 800, 600);
+    let runs = part(&screen).runs();
+    let find = |start: &str| -> MarkdownRun { runs.iter().find(|r| r.text.starts_with(start)).cloned().unwrap_or_else(|| panic!("no run {start}")) };
+    let (one, two, three, plain) = (find("One"), find("Two"), find("Three"), find("A "));
+    assert!(one.size > two.size && two.size > three.size && three.size > plain.size, "{} {} {} {}", one.size, two.size, three.size, plain.size);
+    assert_eq!("heading", one.font, "headings take the theme's heading font");
+    assert!(plain.place.x >= 8.0 && one.place.y >= 8.0, "room around the text: {:?}", plain.place);
+    assert!(two.place.y - one.place.bottom() > 6.0, "space between headings");
+    assert!(find("and").place.y > plain.place.y, "a hard line break starts a new line");
+    let quoted = find("Quoted");
+    assert!(quoted.place.x > plain.place.x, "a quote is set in");
+    assert_eq!(1, part(&screen).quote_bars().len());
+    let rules = part(&screen).rules();
+    assert_eq!(1, rules.len());
+    let page = part(&screen).node().bounds.width;
+    let centre = rules[0].x + rules[0].width / 2.0;
+    assert!(rules[0].width < page / 2.0 && (centre - plain.place.x - (part(&screen).column_width()) / 2.0).abs() < 2.0, "a scene break is centred: {:?}", rules[0]);
+    let mut shot = Shot::of(&mut screen, 800, 600, 1.0);
+    keep(&mut shot, "markdown-page.png");
+    // Wide, the lines keep a reading width, from the left.
+    let words = vec!["squares"; 300].join(" ");
+    let (screen, _) = markdown(r#"bind="notes""#, |h| h.inner.set("notes", json!(words)), 2400, 600);
+    let runs = part(&screen).runs();
+    let left = runs.iter().map(|r| r.place.x).fold(f64::MAX, f64::min);
+    let right = runs.iter().map(|r| r.place.right()).fold(0.0, f64::max);
+    let width = part(&screen).node().bounds.width;
+    assert!(right - left < width * 0.7, "a reading width: {left}..{right} of {width}");
+    assert!(left < 20.0, "from the left: {left}..{right} of {width}");
+    let _ = BAR_ROOM;
+}
+
 #[test]
 fn a_long_paragraph_wraps_to_the_width_and_a_long_text_scrolls() {
     let words = vec!["squares"; 200].join(" ");
@@ -223,4 +263,56 @@ fn a_link_is_drawn_in_the_accent() {
     }
     assert!(found);
     keep(&mut shot, "markdown-link.png");
+}
+
+// -- A memo of Markdown ------------------------------------------------------------
+
+/// `memo ... markdown`: Write and Preview on its top; what is written shows
+/// in the preview as a page, and Write brings the editor back.
+#[test]
+fn a_memo_of_markdown_writes_and_previews() {
+    let host = Rc::new(Host::default());
+    host.inner.set("notes", json!("# Start"));
+    let mut screen = window_of(r#"<Memo name="manuscript" at="1,1" span="6" rows="6" bind="notes" markdown="true" />"#, host.clone());
+    Shot::of(&mut screen, 800, 400, 1.0);
+    let id = part_named(&screen, "manuscript");
+    let get = |screen: &Screen| screen.element(id).and_then(|e| e.as_any().downcast_ref::<MarkdownMemoPart>()).map(|m| (m.previewing(), m.editor().editor().text(), m.editor().editor().markdown, m.page().runs().iter().map(|r| r.text.trim().to_string()).collect::<Vec<_>>())).expect("a markdown memo");
+    let (previewing, text, marks, _) = get(&screen);
+    assert!(!previewing && marks);
+    assert_eq!("# Start", text);
+    // Typed at its end, then Preview: the page shows what was typed.
+    let b = screen.element(id).unwrap().node().bounds;
+    screen.pointer_pressed(b.x + 200.0, b.y + SWITCH_HEIGHT + 10.0, PointerButton::Left, 1);
+    screen.pointer_released(b.x + 200.0, b.y + SWITCH_HEIGHT + 10.0, PointerButton::Left);
+    screen.key_pressed(clarity_ui::KeyInput::plain(clarity_ui::Key::End));
+    screen.text_typed(" here");
+    let (preview_x, write_x) = (b.x + 90.0, b.x + 20.0);
+    screen.pointer_pressed(preview_x, b.y + SWITCH_HEIGHT / 2.0, PointerButton::Left, 1);
+    screen.pointer_released(preview_x, b.y + SWITCH_HEIGHT / 2.0, PointerButton::Left);
+    Shot::of(&mut screen, 800, 400, 1.0);
+    let (previewing, _, _, runs) = get(&screen);
+    assert!(previewing, "Preview shows the page");
+    assert_eq!(vec!["Start".to_string(), "here".to_string()], runs);
+    let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
+    keep(&mut shot, "markdown-memo-preview.png");
+    screen.pointer_pressed(write_x, b.y + SWITCH_HEIGHT / 2.0, PointerButton::Left, 1);
+    screen.pointer_released(write_x, b.y + SWITCH_HEIGHT / 2.0, PointerButton::Left);
+    assert!(!get(&screen).0, "Write brings the editor back");
+}
+
+/// A link into the application (`clarity:fragment/412`) opens no browser: its
+/// address goes in the part's values as `link`, and `on link` runs.
+#[test]
+fn a_link_into_the_application_runs_on_link() {
+    let (mut screen, host) = markdown(r#"bind="notes" onlink="linkFollowed""#, |h| h.inner.set("notes", json!("As [the stable said](clarity:fragment/412), it rained.")), 800, 400);
+    let runs = part(&screen).runs();
+    let run = runs.iter().find(|r| r.link.as_deref() == Some("clarity:fragment/412")).cloned().expect("the link shows as a link");
+    let page = part(&screen).page();
+    let (x, y) = (page.x + run.place.x + 2.0, page.y + run.place.y + run.place.height / 2.0);
+    screen.pointer_pressed(x, y, PointerButton::Left, 1);
+    screen.pointer_released(x, y, PointerButton::Left);
+    assert!(host.inner.opened.borrow().is_empty(), "no browser opens");
+    let link = host.inner.state(Some("rules")).and_then(|s| s.values).and_then(|v| v.get("link").cloned());
+    assert_eq!(Some(json!("clarity:fragment/412")), link);
+    assert!(host.inner.logged().iter().any(|l| l.contains("link linkFollowed")), "{:?}", host.inner.logged());
 }

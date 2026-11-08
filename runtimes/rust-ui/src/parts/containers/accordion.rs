@@ -86,6 +86,7 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         .usable(move || usable_of.part.enabled());
         header.chevron = Some(false);
         header.turned = horizontal;
+        header.tint = page.color.clone();
         base.node.add(Box::new(header));
     }
     for page in &spec.pages {

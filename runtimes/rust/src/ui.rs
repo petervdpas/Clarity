@@ -839,13 +839,10 @@ impl Ui {
         }
     }
 
-    /// The selected record of a table or list showing `rows`.
-    pub fn selected<R: Clone>(&self, part: &str, rows: &[R]) -> Result<R> {
-        self.selected
-            .get(part)
-            .and_then(|i| rows.get(*i))
-            .cloned()
-            .ok_or_else(|| Error::Invalid(format!("no row of {part} is selected")))
+    /// The selected record of a table or list showing `rows`; with no row
+    /// chosen, an empty record (id 0), as `new` makes, so code can ask first.
+    pub fn selected<R: Clone + Default>(&self, part: &str, rows: &[R]) -> Result<R> {
+        Ok(self.selected.get(part).and_then(|i| rows.get(*i)).cloned().unwrap_or_default())
     }
 
     /// The shape a vector canvas's person touched last, its place in the
@@ -1164,7 +1161,8 @@ mod tests {
         let mut ui = Ui::from_state(&state);
         assert_eq!(ui.selected("grid", &["a", "b"]).unwrap(), "b");
         ui.deselect("grid");
-        assert!(ui.selected("grid", &["a", "b"]).is_err());
+        // With no row chosen, code gets an empty record to ask about.
+        assert_eq!(ui.selected("grid", &["a", "b"]).unwrap(), "");
         let reply = ui.reply("Orders", Map::new());
         assert!(!reply.state.selected.contains_key("grid"));
         assert_eq!(reply.state.selected.get("other"), Some(&0));

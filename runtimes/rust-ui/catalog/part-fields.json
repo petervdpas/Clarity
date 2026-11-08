@@ -39,6 +39,7 @@
   "labels": "number",
   "links": "json",
   "made": "bool",
+  "markdown": "bool",
   "max": "text",
   "measure": "json",
   "min": "text",

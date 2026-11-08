@@ -113,6 +113,32 @@ function(clarity_use_audio target)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_audio> $<TARGET_FILE_DIR:${target}>)
 endfunction()
 
+# Clarity.Image (docs/IMAGE-PLAN.md) for a program whose code calls a
+# picture function: its library lies beside Clarity.UI's in the folder
+# CLARITY_UI names (include/clarity_image.h and lib/), and the runtime's
+# pictures/pictures.c calls it. Linked to `target` and put beside it.
+function(clarity_use_image target)
+  if(NOT TARGET clarity_image)
+    if(NOT EXISTS "${CLARITY_UI}/include/clarity_image.h")
+      message(FATAL_ERROR "The program's code calls picture functions, but Clarity.Image's library is not in '${CLARITY_UI}': use a Clarity.UI folder with include/clarity_image.h and its library in lib/")
+    endif()
+    add_library(clarity_image SHARED IMPORTED GLOBAL)
+    set_target_properties(clarity_image PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${CLARITY_UI}/include")
+    if(WIN32)
+      find_library(CLARITY_IMAGE_IMPORT NAMES clarity_image.dll.lib libclarity_image.dll.a clarity_image.lib PATHS "${CLARITY_UI}/lib" NO_DEFAULT_PATH REQUIRED)
+      set_target_properties(clarity_image PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/clarity_image.dll" IMPORTED_IMPLIB "${CLARITY_IMAGE_IMPORT}")
+    elseif(APPLE)
+      set_target_properties(clarity_image PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/libclarity_image.dylib")
+    else()
+      set_target_properties(clarity_image PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/libclarity_image.so" IMPORTED_NO_SONAME TRUE)
+    endif()
+  endif()
+  target_sources(${target} PRIVATE ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/pictures/pictures.c)
+  target_link_libraries(${target} PRIVATE clarity_image)
+  add_custom_command(TARGET ${target} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_image> $<TARGET_FILE_DIR:${target}>)
+endfunction()
+
 # Clarity.Video (docs/VIDEO-PLAN.md) for a program with video parts: its
 # library and Cisco's openh264 lie beside Clarity.UI's in the folder CLARITY_UI
 # names. Linked to `target` and put beside it, openh264 too, so videos play

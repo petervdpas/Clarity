@@ -1587,6 +1587,23 @@ fn parse_widget_page(
     } else {
         None
     };
+    // `section "Chapters" color "#2e86de"`: a section's header in a color of its own.
+    let color = if keyword == "section" && cursor.eat_keyword("color") {
+        let color = match cursor.peek().map(|t| t.kind) {
+            Some(TokenKind::Str) => {
+                let span = cursor.peek().map(|t| t.span).unwrap_or(node.span());
+                let written = cursor.expect_string("a color, as in color \"#2e86de\"")?;
+                if !crate::themes::is_hex(&written) {
+                    return Err(Diagnostic::error(format!("'{written}' is not a color; write it as \"#rrggbb\" or \"#rgb\", or name a color of the theme"), span));
+                }
+                written
+            }
+            _ => cursor.expect_ident("a color, as in color \"#2e86de\" or color accent")?.name,
+        };
+        Some(color)
+    } else {
+        None
+    };
     // `section "Class" view ClassEditor`: what it holds is the view's, and
     // `on saved: recipeSaved` hears what the view tells.
     let view = if keyword != "pane" && cursor.eat_keyword("view") { Some(cursor.expect_ident("the name of the view it shows")?.name) } else { None };
@@ -1609,17 +1626,18 @@ fn parse_widget_page(
         columns,
         view,
         tells,
+        color,
         children: parse_widgets(&node.children, diagnostics),
         span: node.span(),
     })
 }
 
 /// The words of a part's line, which every editor colors as Clarity's own (the VS Code grammar too).
-pub const LINE_WORDS: [&str; 80] = [
+pub const LINE_WORDS: [&str; 82] = [
     "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "striped", "order", "reorder", "mode", "tools", "brush", "ink", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
     "children", "page", "typed", "cards", "frame", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
-    "foldable", "folded", "taborder", "key", "parent", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window", "side", "width", "top", "pinnable", "view", "add", "remove", "confirm", "code", "copy",
+    "foldable", "folded", "taborder", "key", "parent", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window", "side", "width", "top", "pinnable", "view", "add", "remove", "confirm", "code", "copy", "markdown", "color",
 ];
 
 fn parse_widget_props(
@@ -1656,6 +1674,7 @@ fn parse_widget_props(
         pinnable: false,
         code: None,
         copy: false,
+        markdown: false,
         view: None,
         sortable: false,
         add: false,
@@ -1860,11 +1879,22 @@ fn parse_widget_props(
                 if !widgets::CODE_LANGUAGES.contains(&language.name.as_str()) {
                     return Err(Diagnostic::error(format!("a memo colors code of {}, not '{}'", widgets::CODE_LANGUAGES.join(", "), language.name), language.span));
                 }
+                if props.markdown {
+                    return Err(Diagnostic::error("a markdown memo colors its Markdown itself; leave out 'code'", language.span));
+                }
                 props.code = Some(language.name);
             }
             "copy" => {
                 applies(WidgetProperty::Copy)?;
                 props.copy = true;
+            }
+            // `markdown`: a memo of Markdown, with Write and Preview.
+            "markdown" => {
+                applies(WidgetProperty::Markdown)?;
+                if props.code.is_some() {
+                    return Err(Diagnostic::error("a markdown memo colors its Markdown itself; leave out 'code'", clause.span));
+                }
+                props.markdown = true;
             }
             "view" => {
                 applies(WidgetProperty::View)?;
@@ -1907,8 +1937,9 @@ fn parse_widget_props(
                 };
                 // `on drop from fragmentList: linkFragment`: a row of that part dragged onto this one.
                 if event == Event::Drop && cursor.eat_keyword("from") {
-                    if !matches!(kind, WidgetKind::List | WidgetKind::Table | WidgetKind::Tree | WidgetKind::TreeTable) {
-                        return Err(Diagnostic::error(format!("a {name} takes no rows dragged onto it; a list, table or tree does"), event_ident.span));
+                    // A memo takes them too: dropped at a place in its text, the caret goes there first.
+                    if !matches!(kind, WidgetKind::List | WidgetKind::Table | WidgetKind::Tree | WidgetKind::TreeTable | WidgetKind::Memo) {
+                        return Err(Diagnostic::error(format!("a {name} takes no rows dragged onto it; a list, table, tree or memo does"), event_ident.span));
                     }
                     let from = cursor.expect_ident("the part whose rows are dragged here, as in on drop from fragmentList: linkFragment")?.name;
                     cursor.expect(TokenKind::Colon, "':' and the handler the drop runs")?;
@@ -2051,12 +2082,17 @@ fn parse_widget_props(
                 // `toolbox` alone floats; `toolbox slideout` lies against the canvas's edge; `toolbox Painting` shows that toolbox page.
                 if cursor.peek().is_some_and(|t| t.kind == TokenKind::Ident && t.text.chars().next().is_some_and(char::is_uppercase)) {
                     props.toolbox_page = Some(cursor.expect_ident("a toolbox")?.name);
+                } else if kind == WidgetKind::Memo {
+                    // A memo has no built-in tools: its toolbox is a page of its own, with coded tools.
+                    return Err(Diagnostic::error("a memo's toolbox is a page of its own: toolbox WritingTools, written 'page WritingTools: toolbox'", clause.span));
                 }
+                // A memo's comes at the caret unless it is written to float.
                 props.toolbox = Some(if cursor.eat_keyword("slideout") {
                     crate::model::ToolboxKind::Slideout
-                } else {
-                    cursor.eat_keyword("popup");
+                } else if cursor.eat_keyword("popup") || kind != WidgetKind::Memo {
                     crate::model::ToolboxKind::Popup
+                } else {
+                    crate::model::ToolboxKind::Caret
                 });
             }
             "tools" => {

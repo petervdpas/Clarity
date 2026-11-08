@@ -11,6 +11,7 @@ name: Release Clarity.UI library
 #   lib/libclarity_ui.so | libclarity_ui.dylib | clarity_ui.dll and clarity_ui.dll.lib
 #   lib/libclarity_audio.so | libclarity_audio.dylib | clarity_audio.dll and clarity_audio.dll.lib
 #   lib/ the same of clarity_video, include/clarity_video.h (Clarity.Video)
+#   lib/ the same of clarity_image, include/clarity_image.h (Clarity.Image)
 # Clarity.Audio (docs/AUDIO-PLAN.md) rides along: a program links it only
 # when its sound parts play songs. So does Cisco's openh264 for the system
 # (lib/libopenh264-2.6.0-linux64.8.so and the like, docs/VIDEO-PLAN.md),
@@ -104,7 +105,7 @@ jobs:
 
       - name: Build the library
         shell: bash
-        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi --target ${{ matrix.target }}
+        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi --target ${{ matrix.target }}
 
       - name: Pack the archive
         shell: bash
@@ -113,11 +114,12 @@ jobs:
           version="${GITHUB_REF_NAME#runtimes/rust-ui-ffi/v}"
           name="clarity-ui-$version-${{ matrix.rid }}"
           mkdir -p "out/$name/include" "out/$name/lib"
-          cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h "out/$name/include/"
+          cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h runtimes/rust-image-ffi/include/clarity_image.h "out/$name/include/"
           for f in ${{ matrix.files }}; do
             cp "target/${{ matrix.target }}/release/$f" "out/$name/lib/"
             cp "target/${{ matrix.target }}/release/${f/clarity_ui/clarity_audio}" "out/$name/lib/"
             cp "target/${{ matrix.target }}/release/${f/clarity_ui/clarity_video}" "out/$name/lib/"
+            cp "target/${{ matrix.target }}/release/${f/clarity_ui/clarity_image}" "out/$name/lib/"
           done
           python3 .github/scripts/fetch_openh264.py ${{ matrix.rid }} "out/$name/lib"
           cp LICENSE "out/$name/"

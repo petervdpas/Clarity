@@ -54,6 +54,9 @@ pub fn icon_of(tool: &str, paints: bool) -> &'static str {
         "zoomIn" => "zoom-in",
         "zoomOut" => "zoom-out",
         "adjust" => "sliders-horizontal",
+        "cut" => "scissors",
+        "copy" => "copy",
+        "paste" => "clipboard-paste",
         _ => "paintbrush",
     }
 }
@@ -117,6 +120,16 @@ pub fn built_in(paints: bool, tools: &[&str]) -> Vec<PartSpec> {
 pub enum Shows {
     Popup,
     Slideout,
+    /// A memo's, at the caret: called up there, gone after its action.
+    AtCaret,
+}
+
+/// What a memo's toolbox asks of its text: its Cut, Copy and Paste row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextAsk {
+    Cut,
+    Copy,
+    Paste,
 }
 
 /// What a tool asks of its canvas, which holds the picture.
@@ -134,6 +147,8 @@ pub enum Ask {
     Adjust,
     /// A change of the layers.
     Layer(super::layers::LayerAsk),
+    /// A memo's text cut, copied or pasted.
+    Text(TextAsk),
 }
 
 /// What the canvas and its toolbox's parts share.
@@ -161,6 +176,10 @@ pub struct Toolbox {
     last: RefCell<std::collections::HashMap<String, String>>,
     /// The canvas's layers as the layers tool shows them, top first: name, shown, in hand.
     layer_rows: RefCell<Vec<(String, bool, bool)>>,
+    /// Where a toolbox at the caret shows, on the screen.
+    point: Cell<(f64, f64)>,
+    /// Whether a tool was used since asked: a toolbox at the caret goes then.
+    acted: Cell<bool>,
 }
 
 impl Default for Toolbox {
@@ -180,6 +199,8 @@ impl Default for Toolbox {
             paints: Cell::new(true),
             last: RefCell::new(std::collections::HashMap::new()),
             layer_rows: RefCell::new(Vec::new()),
+            point: Cell::new((0.0, 0.0)),
+            acted: Cell::new(false),
         }
     }
 }
@@ -254,6 +275,36 @@ impl Toolbox {
         }
     }
 
+    /// A memo's toolbox called up at `at` on the screen (its caret, or where it
+    /// was right-clicked), with these parts; it goes on a press beside it, on
+    /// Escape, or after one of its tools did its action.
+    pub fn open_at(self: &Rc<Self>, at: (f64, f64), part: Rect, parts: &[PartSpec], columns: i64, link: (Rc<dyn PartHost>, String), cx: &mut Cx) {
+        self.close(cx);
+        self.canvas.set(part);
+        self.paints.set(false);
+        self.shows.set(Shows::AtCaret);
+        self.point.set(at);
+        self.acted.set(false);
+        let host = link.0.clone();
+        *self.link.borrow_mut() = Some(link);
+        let panel = ToolboxPanel::new(self.clone(), parts, columns, &host);
+        let mut overlay = Overlay::new(Box::new(panel), Rect::default());
+        overlay.through = true;
+        let me = self.clone();
+        overlay.closed = Some(Box::new(move || me.opened.set(None)));
+        self.opened.set(Some(cx.open(overlay)));
+    }
+
+    /// A tool did its action: a toolbox at the caret goes.
+    pub fn acted(&self) {
+        self.acted.set(true);
+    }
+
+    /// Whether a tool did its action since last asked, taken once.
+    pub fn take_acted(&self) -> bool {
+        self.acted.take()
+    }
+
     /// The canvas left the screen or may no longer be used: the toolbox goes.
     pub fn close(&self, cx: &mut Cx) {
         if let Some(open) = self.opened.take() {
@@ -290,6 +341,9 @@ impl Toolbox {
             "zoomIn" => Some(Ask::Zoom(true)),
             "zoomOut" => Some(Ask::Zoom(false)),
             "adjust" => Some(Ask::Adjust),
+            "cut" => Some(Ask::Text(TextAsk::Cut)),
+            "copy" => Some(Ask::Text(TextAsk::Copy)),
+            "paste" => Some(Ask::Text(TextAsk::Paste)),
             _ => None,
         };
         match asked {
@@ -397,6 +451,12 @@ impl ToolboxPanel {
                 let x = if canvas.right() + width <= whole.right() { canvas.right() } else { (canvas.right() - width).max(whole.x) };
                 let tall = if self.toolbox.folded() { HEADER } else { height.max(canvas.height) };
                 Rect::new(x, canvas.y, width, tall)
+            }
+            Shows::AtCaret => {
+                // Just under the caret, kept inside the window.
+                let (x, y) = self.toolbox.point.get();
+                let y = if y + height > whole.bottom() { (y - height - ROW).max(whole.y) } else { y };
+                Rect::new(x.clamp(whole.x, (whole.right() - width).max(whole.x)), y, width, height)
             }
             Shows::Popup => {
                 let (x, y) = self.toolbox.place.get().unwrap_or((canvas.right() - width - PAD, canvas.y + PAD));

@@ -1,5 +1,5 @@
 {
-  "about": "The markdown part's Markdown, as every renderer reads it, into blocks and their spans. Blocks: a line `#` to `######` and a space is a `heading` of that `level`; a line `-`, `*` or `+` and a space, or a number with `.` or `)` and a space, is an `item` (`ordered` with its `number` for a number), whose `depth` is its leading spaces halved, at most 3; a fence of three backticks starts a `code` block, its lines as written up to the closing fence; other lines are a `paragraph`. Lines that follow a paragraph or an item without a blank line join it, with one space. A blank line ends a paragraph or an item. Spans: the text of a block split where its look changes, merged where it does not; a span lists only what holds for it (`bold`, `italic`, `code`, `link`). Inline: a backslash takes the next punctuation as written; `code` between backticks is as written; `**` or `__` around text is bold, `*` or `_` around text is italic (a `_` inside a word is a letter); a delimiter followed by a space, or never closed, is a letter. `[text](address)` is a link when the address starts with `http://`, `https://` or `mailto:`; with another address only its text shows. HTML is text.",
+  "about": "The markdown part's Markdown, as every renderer reads it, into blocks and their spans. Blocks: a line `#` to `######` and a space is a `heading` of that `level`; a line `-`, `*` or `+` and a space, or a number with `.` or `)` and a space, is an `item` (`ordered` with its `number` for a number), whose `depth` is its leading spaces halved, at most 3; a fence of three backticks starts a `code` block, its lines as written up to the closing fence; a line `>` is a `quote` of that `depth` (`>>` or `> >` is 2, at most 3), its text after the marks and one space, a line `>` alone ending it; three or more `*`, `-` or `_` alone on a line (spaces between allowed) is a `rule`, a scene break (no underlined headings: `---` under a line is a rule); other lines are a `paragraph`. Lines that follow a paragraph, an item or a quote without a blank line join it, with one space (a quote's following lines with the same depth, or with no `>` at all); a line that ends in two spaces or a backslash joins the next with a line break instead (`\\n` in the span's text). A blank line ends a paragraph or an item. Spans: the text of a block split where its look changes, merged where it does not; a span lists only what holds for it (`bold`, `italic`, `code`, `link`). Inline: a backslash takes the next punctuation as written; `code` between backticks is as written; `***` or `___` around text is bold and italic, `**` or `__` around text is bold, `*` or `_` around text is italic (a `_` inside a word is a letter); a delimiter followed by a space, or never closed, is a letter. `[text](address)` is a link when the address starts with `http://`, `https://`, `mailto:` or `clarity:` (a place in the application, such as `clarity:fragment/412`, which the part's `on link` handler follows); with another address only its text shows. HTML is text.",
   "cases": [
     {
       "name": "a paragraph",
@@ -154,6 +154,59 @@
       "name": "nothing",
       "markdown": "\n\n   \n",
       "blocks": []
+    },
+    {
+      "name": "a quote, its paragraphs, and lines that join it",
+      "markdown": "> Before the birth\n> of the child.\n>\n> Second part,\nlazy line.\n\nAfter.",
+      "blocks": [
+        { "kind": "quote", "depth": 1, "spans": [{ "text": "Before the birth of the child." }] },
+        { "kind": "quote", "depth": 1, "spans": [{ "text": "Second part, lazy line." }] },
+        { "kind": "paragraph", "spans": [{ "text": "After." }] }
+      ]
+    },
+    {
+      "name": "a quote inside a quote",
+      "markdown": "> outer\n>> inner\n> > *also* inner\n>>>> deep",
+      "blocks": [
+        { "kind": "quote", "depth": 1, "spans": [{ "text": "outer" }] },
+        { "kind": "quote", "depth": 2, "spans": [{ "text": "inner " }, { "text": "also", "italic": true }, { "text": " inner" }] },
+        { "kind": "quote", "depth": 3, "spans": [{ "text": "deep" }] }
+      ]
+    },
+    {
+      "name": "scene breaks",
+      "markdown": "One.\n\n***\n\nTwo.\n---\n- - -\n___\nThree.\n--",
+      "blocks": [
+        { "kind": "paragraph", "spans": [{ "text": "One." }] },
+        { "kind": "rule" },
+        { "kind": "paragraph", "spans": [{ "text": "Two." }] },
+        { "kind": "rule" },
+        { "kind": "rule" },
+        { "kind": "rule" },
+        { "kind": "paragraph", "spans": [{ "text": "Three. --" }] }
+      ]
+    },
+    {
+      "name": "hard line breaks",
+      "markdown": "Roses are red,  \nviolets are blue,\\\nsugar is sweet.\n- an item  \nwith two lines",
+      "blocks": [
+        { "kind": "paragraph", "spans": [{ "text": "Roses are red,\nviolets are blue,\nsugar is sweet." }] },
+        { "kind": "item", "depth": 0, "ordered": false, "spans": [{ "text": "an item\nwith two lines" }] }
+      ]
+    },
+    {
+      "name": "bold and italic at once",
+      "markdown": "***both*** and ___also___, not *** here",
+      "blocks": [
+        { "kind": "paragraph", "spans": [{ "text": "both", "bold": true, "italic": true }, { "text": " and " }, { "text": "also", "bold": true, "italic": true }, { "text": ", not *** here" }] }
+      ]
+    },
+    {
+      "name": "a link into the application",
+      "markdown": "As [the stable said](clarity:fragment/412), it rained.",
+      "blocks": [
+        { "kind": "paragraph", "spans": [{ "text": "As " }, { "text": "the stable said", "link": "clarity:fragment/412" }, { "text": ", it rained." }] }
+      ]
     }
   ]
 }

@@ -124,6 +124,11 @@ pub struct TextBoxPart {
     pointer: Option<(f64, f64)>,
     /// The button a press began on.
     pressing: Option<Side>,
+    /// The caret and selected text it last put in its values for code to read
+    /// (Writer gap 21); a caret there that differs is one code set.
+    published: Option<(usize, String)>,
+    /// A memo's toolbox (`toolbox WritingTools`): its page's coded tools, over the window while it may be written in.
+    toolbox: Rc<crate::parts::data::canvas::toolbox::Toolbox>,
 }
 
 pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
@@ -153,6 +158,11 @@ impl TextBoxPart {
             editor.language = Some(language);
             editor.font_role = "mono";
         }
+        // A memo of Markdown keeps the text font, its Markdown colored, Ctrl+B and Ctrl+I marking it.
+        if base.spec.flag("markdown") {
+            editor.language = crate::parts::code_colors::language("markdown");
+            editor.markdown = true;
+        }
         let (eye, copy) = if password {
             editor.right_inset = 2.0 * BUTTON_WIDTH + 2.0;
             let mut copy = InputSideButton::new(InputIcon::Copy);
@@ -167,7 +177,7 @@ impl TextBoxPart {
         } else {
             (None, None)
         };
-        let mut part = TextBoxPart { base, editor, own: String::new(), shown: None, eye, copy, pointer: None, pressing: None };
+        let mut part = TextBoxPart { base, editor, own: String::new(), shown: None, eye, copy, pointer: None, pressing: None, published: None, toolbox: Rc::default() };
         part.named();
         part.refresh();
         part.sync();
@@ -261,6 +271,126 @@ impl TextBoxPart {
         self.base.fire("change");
     }
 
+    /// What code told it since it last heard: text put in at the caret.
+    fn hear_all(&mut self, cx: &mut Cx) {
+        let Some(name) = self.base.name().map(str::to_string) else { return };
+        let mut put = false;
+        for hear in self.base.host.hears(&name) {
+            if hear.hear == "insert"
+                && let Some(Value::String(text)) = hear.values.first()
+            {
+                self.editor.put(text, cx);
+                put = true;
+            }
+        }
+        if put {
+            self.commit();
+        }
+    }
+
+    /// What is typed goes to its field, as `take` does, but without `change`: code put it there.
+    fn commit(&mut self) {
+        let typed = self.editor.text();
+        if self.shown.as_deref() == Some(typed.as_str()) {
+            return;
+        }
+        self.shown = Some(typed.clone());
+        let name = self.base.name().map(str::to_string);
+        if let Some(path) = self.base.bound().map(str::to_string) {
+            self.base.host.write(name.as_deref().unwrap_or(""), &path, Value::String(typed));
+        } else if let Some(name) = name {
+            crate::parts::change_state(&*self.base.host, &name, |s| s.text = Some(typed.clone()));
+        } else {
+            self.own = typed;
+        }
+    }
+
+    /// A caret code set (`manuscriptBox.caret = 12`) moves there, selecting nothing.
+    fn follow_code(&mut self, cx: &mut Cx) {
+        let Some(name) = self.base.name() else { return };
+        let Some((caret, _)) = &self.published else { return };
+        let set = self.base.host.state(Some(name)).and_then(|s| s.values).and_then(|v| v.get("caret").and_then(Value::as_u64));
+        if let Some(set) = set.map(|c| c as usize)
+            && set != *caret
+        {
+            let place = set.min(self.editor.text().chars().count());
+            self.editor.select(place, place);
+            cx.invalidate();
+        }
+    }
+
+    /// Its caret and selected text, in its values for code to read: set when they changed.
+    fn publish(&mut self) {
+        let Some(name) = self.base.name().map(str::to_string) else { return };
+        let now = (self.editor.caret(), self.editor.selected_text());
+        if self.published.as_ref() == Some(&now) {
+            return;
+        }
+        let mut state = self.base.host.state(Some(&name)).unwrap_or_default();
+        let values = state.values.get_or_insert_with(serde_json::Map::new);
+        values.insert("caret".into(), Value::from(now.0 as u64));
+        values.insert("selectedText".into(), Value::String(now.1.clone()));
+        self.base.host.set_state(&name, state);
+        self.published = Some(now);
+    }
+
+    /// Whether its toolbox comes at the caret (`toolbox WritingTools`, a memo's unless written to float).
+    fn toolbox_at_caret(&self) -> bool {
+        !self.base.spec.children.is_empty() && self.base.spec.text("toolbox") == Some("caret")
+    }
+
+    /// Its toolbox at the caret's place on the screen, or at a point: the page's
+    /// parts with a row of Cut, Copy and Paste under them.
+    pub fn open_toolbox_at(&mut self, at: (f64, f64), cx: &mut Cx) {
+        let Some(name) = self.base.name().map(str::to_string) else { return };
+        let mut parts = self.base.spec.children.clone();
+        let below = parts.iter().map(|p| p.place(false)).map(|g| i64::from(g.row) + i64::from(g.height)).max().unwrap_or(1);
+        let row = format!(r#"<Window name="Edit"><Tool does="cut" at="1,{below}" /><Tool does="copy" at="2,{below}" /><Tool does="paste" at="3,{below}" /></Window>"#);
+        parts.extend(crate::markup::read(&row).map(|w| w.parts).unwrap_or_default());
+        let columns = self.base.spec.number("toolboxColumns").map_or(4, |c| c as i64).max(3);
+        self.toolbox.open_at(at, self.base.node.bounds, &parts, columns, (self.base.host.clone(), name), cx);
+    }
+
+    /// Whether its toolbox at the caret shows now.
+    pub fn toolbox_open(&self) -> bool {
+        self.toolbox.opened().is_some()
+    }
+
+    /// A memo with a toolbox page: a floating one shows while the memo may be
+    /// written in; one at the caret goes once a tool did its action, and with the memo.
+    fn follow_toolbox(&mut self, cx: &mut Cx) {
+        use crate::parts::data::canvas::toolbox::{Ask, Following, Shows};
+        if self.base.spec.children.is_empty() {
+            return;
+        }
+        let Some(name) = self.base.name().map(str::to_string) else { return };
+        let writes = self.base.enabled() && !self.base.read_only() && self.base.node.bounds.width > 0.0;
+        if self.toolbox_at_caret() {
+            if let Some(Ask::Text(ask)) = self.toolbox.take_ask() {
+                self.editor.clipboard_action(ask, cx);
+                self.commit();
+            }
+            if self.toolbox.take_acted() || !writes {
+                self.toolbox.close(cx);
+            }
+            return;
+        }
+        let shows = match self.base.spec.text("toolbox") {
+            Some("slideout") => Shows::Slideout,
+            _ => Shows::Popup,
+        };
+        let following = Following {
+            shows: writes.then_some(shows),
+            paints: false,
+            canvas: self.base.node.bounds,
+            link: (self.base.host.clone(), name),
+            parts: self.base.spec.children.clone(),
+            columns: self.base.spec.number("toolboxColumns").map_or(4, |c| c as i64),
+            written: (2.0, "text".to_string()),
+        };
+        self.toolbox.follow(following, cx);
+    }
+
     /// The button of a password at a point on the screen.
     fn side_at(&self, x: f64, y: f64) -> Option<Side> {
         if self.eye.as_ref().is_some_and(|b| b.bounds.contains(x, y)) {
@@ -299,11 +429,54 @@ impl Element for TextBoxPart {
         true
     }
 
+    /// Leaving the screen, its toolbox goes with it.
+    fn on_detached(&mut self, cx: &mut Cx) {
+        self.toolbox.close(cx);
+    }
+
+    /// With a toolbox at the caret it takes the right button itself, so a right-click calls up the toolbox.
+    fn right_drags(&self, _x: f64, _y: f64) -> bool {
+        self.toolbox_at_caret() && self.base.enabled() && !self.base.read_only()
+    }
+
+    /// A right-click with a toolbox at the caret: the caret goes there and the toolbox comes, in place of the menu.
+    fn on_right_released(&mut self, at: PointerInput, cx: &mut Cx) -> bool {
+        if !self.toolbox_at_caret() || !self.base.enabled() || self.base.read_only() {
+            return false;
+        }
+        let b = crate::element::Element::node(&self.editor).bounds;
+        self.editor.caret_to(at.screen_x - b.x, at.screen_y - b.y, cx);
+        self.publish();
+        self.open_toolbox_at((at.screen_x, at.screen_y + 2.0), cx);
+        true
+    }
+
+    /// A row dragged from a part it takes rows from (`on drop from fragmentList`):
+    /// the caret goes where it was let go, then the handler runs and finds it there.
+    fn take_drop(&mut self, from: &str, x: f64, y: f64, cx: &mut Cx) -> bool {
+        let Some(handler) = crate::parts::data::rows::drop_handler(&self.base, from) else { return false };
+        self.take();
+        // The point comes on the screen; the editor places from its own top left.
+        let b = crate::element::Element::node(&self.editor).bounds;
+        self.editor.caret_to(x - b.x, y - b.y, cx);
+        self.publish();
+        self.base.host.run(self.base.name(), &crate::markup::HandlerCall::new("drop", &handler, Vec::new()));
+        cx.invalidate();
+        true
+    }
+
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
         self.base.node.bounds = area;
         self.ready();
         self.sync();
         self.editor.place(area, cx);
+        // Where the person types, for code (Writer gap 21): what code told and set, then where it is now.
+        if !self.editor.password() {
+            self.hear_all(cx);
+            self.follow_code(cx);
+            self.publish();
+        }
+        self.follow_toolbox(cx);
         let height = (area.height - 4.0).max(0.0);
         if let Some(eye) = self.eye.as_mut() {
             eye.bounds = Rect::new(area.right() - 2.0 - 2.0 * BUTTON_WIDTH, area.y + 2.0, BUTTON_WIDTH, height);
@@ -336,6 +509,10 @@ impl Element for TextBoxPart {
     }
 
     fn on_pointer_pressed(&mut self, at: PointerInput, cx: &mut Cx) {
+        // The right button calls up its toolbox when it is let go.
+        if at.button == crate::input::PointerButton::Right {
+            return;
+        }
         self.ready();
         self.pressing = self.side_at(at.screen_x, at.screen_y);
         if self.pressing.is_some() {
@@ -386,6 +563,12 @@ impl Element for TextBoxPart {
 
     fn on_key(&mut self, key: KeyInput, cx: &mut Cx) -> bool {
         self.ready();
+        // Ctrl+Space calls up its toolbox at the caret.
+        if key.key == Key::Space && key.control() && self.toolbox_at_caret() && self.base.enabled() && !self.base.read_only() {
+            let caret = self.editor.caret_area().unwrap_or(self.base.node.bounds);
+            self.open_toolbox_at((caret.x, caret.bottom() + 2.0), cx);
+            return true;
+        }
         // Enter in one line takes the text; the form it is in, or the window's default button, does the rest.
         if key.key == Key::Enter && !self.editor.is_multiline() && key.modifiers.is_empty() {
             self.take();

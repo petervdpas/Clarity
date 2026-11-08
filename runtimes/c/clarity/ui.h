@@ -280,7 +280,7 @@ bool clarity_ui_checked(const ClarityUi* ui, const char* part);
 void clarity_ui_set_checked(ClarityUi* ui, const char* part, bool value);
 
 /// The index of the selected row of a table or list showing `count` rows;
-/// an invalid-value error when none is.
+/// false when none is, and code takes an empty record (id 0) instead.
 bool clarity_ui_selected(const ClarityUi* ui, const char* part, size_t count, size_t* index);
 
 /// Forgets the selected row of a table or list, whose rows were read again

@@ -69,6 +69,8 @@ pub struct Screen {
     tip_point: (f64, f64),
     later: crate::later::Queue,
     places: Rc<RefCell<HashMap<String, (ElementId, Rect)>>>,
+    /// The strips the handles beside parts took in the last layout, which the parts under them make room for.
+    strips: Vec<Rect>,
     looks: Option<LooksFor>,
     dark: bool,
     choices_seen: u64,
@@ -110,6 +112,7 @@ impl Screen {
             tip_point: (0.0, 0.0),
             later: crate::later::Queue::new(),
             places: Rc::default(),
+            strips: Vec::new(),
             looks: None,
             dark: false,
             choices_seen: crate::choices::changes(),
@@ -282,11 +285,25 @@ impl Screen {
         for overlay in self.overlays.iter_mut().filter(|o| o.covers) {
             overlay.place = whole;
         }
-        let mut cx = self.cx();
-        element::arrange_safely(self.root.as_mut(), whole, &mut cx);
-        self.settle(cx);
+        self.arrange_root(whole);
         self.keep_places();
         self.redraw = true;
+    }
+
+    /// Lays out the window's parts in `whole`; when the handles beside parts
+    /// took other strips than the parts made room for, once more with those.
+    fn arrange_root(&mut self, whole: Rect) {
+        let mut cx = self.cx();
+        element::arrange_safely(self.root.as_mut(), whole, &mut cx);
+        let laid = std::mem::take(&mut cx.laid_strips);
+        self.settle(cx);
+        if laid != self.strips {
+            self.strips = laid;
+            let mut cx = self.cx();
+            element::arrange_safely(self.root.as_mut(), whole, &mut cx);
+            cx.laid_strips.clear();
+            self.settle(cx);
+        }
     }
 
     /// Another theme: the light or dark of the system changed, or the person chose one.
@@ -390,11 +407,11 @@ impl Screen {
         let whole = self.whole();
         // Parts lay out by the enabled state of what they are in (a text box in a disabled panel), as it is now.
         self.mark();
-        let mut cx = self.cx();
-        element::arrange_safely(self.root.as_mut(), whole, &mut cx);
-        self.settle(cx);
+        self.arrange_root(whole);
         self.keep_places();
         let mut cx = self.cx();
+        // What lies over the window (a dialog, a popover) makes no room for the window's handles.
+        cx.strips.clear();
         for overlay in self.overlays.iter_mut() {
             element::arrange_safely(overlay.content.as_mut(), overlay.place, &mut cx);
         }
@@ -433,6 +450,7 @@ impl Screen {
     fn cx(&self) -> Cx {
         let mut cx = Cx::new(self.look.clone(), self.fonts.clone(), self.clipboard.clone(), (self.now)(), self.whole(), self.focused).with_places(self.places.clone());
         cx.focused_part = self.focused_part();
+        cx.strips = self.strips.clone();
         cx
     }
 

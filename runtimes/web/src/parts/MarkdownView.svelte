@@ -36,6 +36,10 @@
         <span class="marker">{block.ordered ? `${block.number}.` : "•"}</span>
         <span>{@render spans(block.spans)}</span>
       </div>
+    {:else if block.kind === "quote"}
+      <blockquote style:margin-left="{(block.depth - 1) * 1.2}em">{@render spans(block.spans)}</blockquote>
+    {:else if block.kind === "rule"}
+      <hr />
     {:else}
       <pre>{block.text}</pre>
     {/if}
@@ -59,6 +63,24 @@
   pre,
   .heading {
     margin: 0;
+  }
+
+  p,
+  blockquote {
+    white-space: pre-line;
+  }
+
+  blockquote {
+    margin: 0;
+    padding-left: 0.9em;
+    border-left: 3px solid var(--border-strong, #888);
+  }
+
+  hr {
+    width: 25%;
+    margin: 0.6em auto;
+    border: none;
+    border-top: 1px solid var(--text-muted, #999);
   }
 
   .heading {

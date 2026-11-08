@@ -464,3 +464,105 @@ fn a_memo_takes_the_height_the_window_has_left_and_a_textbox_keeps_its_row() {
     assert!(text_box(&screen, "plain").grows(), "a memo is a writing area that fills the height");
     assert!(!text_box(&screen, "line").grows());
 }
+
+// -- Where the person types, for code (Writer gap 21) ---------------------------
+
+fn said(host: &TestHost, name: &str, key: &str) -> Option<Value> {
+    host.state(Some(name)).and_then(|s| s.values).and_then(|v| v.get(key).cloned())
+}
+
+/// A memo keeps its caret and selected text in its values for code to read;
+/// a caret code sets moves there; `insert` puts text in at the caret as one
+/// step; a row dropped onto it puts the caret where it was let go, then runs its handler.
+#[test]
+fn code_reads_and_moves_the_caret_inserts_and_takes_a_drop() {
+    let host = TestHost::new();
+    host.set("notes", json!(""));
+    let markup = r#"<Memo name="manuscript" at="1,1" span="6" rows="5" bind="notes" drops='[{"from":"fragments","handler":"dropped"}]' />"#;
+    let mut screen = window(markup, host.clone());
+    type_in(&mut screen, "manuscript", "one two");
+    screen.resize(800.0, 400.0, 1.0);
+    assert_eq!(Some(json!(7)), said(&host, "manuscript", "caret"));
+    text_box_mut(&mut screen, "manuscript").editor_mut().select(4, 7);
+    screen.resize(800.0, 400.0, 1.0);
+    assert_eq!(Some(json!("two")), said(&host, "manuscript", "selectedText"));
+    // Code moves the caret, then puts text in there.
+    host.set_state("manuscript", |s| {
+        s.values.get_or_insert_with(Default::default).insert("caret".into(), json!(3));
+    });
+    screen.resize(800.0, 400.0, 1.0);
+    assert_eq!((3, 3), text_box(&screen, "manuscript").editor().selection());
+    host.hears.borrow_mut().push(clarity_runtime::ui::Hear { part: "manuscript".into(), hear: "insert".into(), values: vec![json!(",")] });
+    screen.resize(800.0, 400.0, 1.0);
+    assert_eq!("one, two", text_box(&screen, "manuscript").editor().text());
+    assert_eq!(Some(json!("one, two")), host.read("notes"), "what code put in goes to the field");
+    assert_eq!(Some(json!(4)), said(&host, "manuscript", "caret"));
+    // A row let go at the text's start: the caret goes there and the handler runs.
+    let id = part_named(&screen, "manuscript");
+    let b = text_box(&screen, "manuscript").node().bounds;
+    let taken = screen.act(id, |e, cx| e.take_drop("fragments", b.x + 4.0, b.y + 8.0, cx)).unwrap_or(false);
+    assert!(taken);
+    assert_eq!(Some(json!(0)), said(&host, "manuscript", "caret"));
+    assert!(host.logged().iter().any(|e| e.contains("run manuscript drop dropped")), "{:?}", host.logged());
+    // From a part it does not take rows from, nothing.
+    assert!(!screen.act(id, |e, cx| e.take_drop("others", b.x + 4.0, b.y + 8.0, cx)).unwrap_or(false));
+}
+
+/// A memo's toolbox page (Writer gap 21): it floats over the window while the
+/// memo may be written in, and its coded tool runs its handler, which works
+/// on the memo where the person is.
+#[test]
+fn a_memo_toolbox_floats_and_runs_its_coded_tools() {
+    let host = TestHost::new();
+    host.set("notes", json!("one"));
+    let markup = r#"<Memo name="manuscript" at="1,1" span="6" rows="5" bind="notes" toolbox="popup" toolboxColumns="4"><Tool name="quoteTool" at="1,1" icon="quote" onclick="quoteClicked" for="manuscript" /></Memo>"#;
+    let mut screen = window(markup, host.clone());
+    screen.resize(800.0, 400.0, 1.0);
+    let panel = || screen.overlays().iter().find_map(|o| o.content.as_any().downcast_ref::<clarity_ui::parts::data::canvas::toolbox::ToolboxPanel>());
+    let tool = panel().map(|p| clarity_ui::element::in_order(p).into_iter().find(|e| clarity_ui::testing::part_name(*e) == Some("quoteTool")).map(|e| e.node().bounds).expect("the coded tool"));
+    let tool = tool.expect("the toolbox shows");
+    click(&mut screen, tool.x + 10.0, tool.y + 10.0);
+    assert!(host.logged().iter().any(|l| l.contains("quoteClicked")), "{:?}", host.logged());
+    // Read only, it may not be written in: its toolbox goes.
+    host.set_state("manuscript", |s| s.readonly = Some(true));
+    screen.resize(800.0, 400.0, 1.0);
+    let gone = screen.overlays().iter().all(|o| o.content.as_any().downcast_ref::<clarity_ui::parts::data::canvas::toolbox::ToolboxPanel>().is_none());
+    assert!(gone, "a read-only memo shows no toolbox");
+}
+
+/// A memo's toolbox at the caret (Writer gap 21): Ctrl+Space calls it up just
+/// under the caret, with Cut, Copy and Paste; a coded tool runs on the text
+/// there and the toolbox goes; a right-click moves the caret and calls it up there.
+#[test]
+fn a_memo_toolbox_comes_at_the_caret_and_goes_after_its_action() {
+    let host = TestHost::new();
+    host.set("notes", json!("one two"));
+    let markup = r#"<Memo name="manuscript" at="1,1" span="6" rows="5" bind="notes" toolbox="caret"><Tool name="quoteTool" at="1,1" icon="quote" onclick="quoteClicked" for="manuscript" /></Memo>"#;
+    let mut screen = window(markup, host.clone());
+    screen.resize(800.0, 400.0, 1.0);
+    let panel_place = |screen: &Screen| screen.overlays().iter().find_map(|o| o.content.as_any().downcast_ref::<clarity_ui::parts::data::canvas::toolbox::ToolboxPanel>()).map(|p| p.node().bounds);
+    assert!(panel_place(&screen).is_none(), "it does not float while nothing called it up");
+    let id = part_named(&screen, "manuscript");
+    screen.focus(Some(id));
+    text_box_mut(&mut screen, "manuscript").editor_mut().select(3, 3);
+    Shot::of(&mut screen, 800, 400, 1.0);
+    let caret = text_box(&screen, "manuscript").editor().caret_area().expect("the caret shows");
+    screen.key_pressed(KeyInput::new(Key::Space, clarity_ui::input::Modifiers::CONTROL));
+    screen.resize(800.0, 400.0, 1.0);
+    let place = panel_place(&screen).expect("Ctrl+Space calls it up");
+    assert!(place.y >= caret.bottom() - 0.5 && (place.x - caret.x).abs() < 1.0, "just under the caret: {place:?} {caret:?}");
+    let panel = screen.overlays().iter().find_map(|o| o.content.as_any().downcast_ref::<clarity_ui::parts::data::canvas::toolbox::ToolboxPanel>()).unwrap();
+    assert!(panel.tool_place("cut").is_some() && panel.tool_place("paste").is_some(), "with Cut, Copy and Paste");
+    let tool = clarity_ui::element::in_order(panel).into_iter().find(|e| clarity_ui::testing::part_name(*e) == Some("quoteTool")).map(|e| e.node().bounds).unwrap();
+    click(&mut screen, tool.x + 10.0, tool.y + 10.0);
+    screen.resize(800.0, 400.0, 1.0);
+    assert!(host.logged().iter().any(|l| l.contains("quoteClicked")), "{:?}", host.logged());
+    assert!(panel_place(&screen).is_none(), "it goes after its action");
+    // A right-click at the text's start: the caret goes there and the toolbox comes.
+    let b = text_box(&screen, "manuscript").node().bounds;
+    screen.pointer_pressed(b.x + 4.0, b.y + 8.0, PointerButton::Right, 1);
+    screen.pointer_released(b.x + 4.0, b.y + 8.0, PointerButton::Right);
+    screen.resize(800.0, 400.0, 1.0);
+    assert_eq!((0, 0), text_box(&screen, "manuscript").editor().selection());
+    assert!(panel_place(&screen).is_some(), "a right-click calls it up");
+}

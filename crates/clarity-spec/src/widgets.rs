@@ -189,11 +189,14 @@ pub enum Event {
     /// The app's databases did not open, as when a connection kept as a
     /// secret setting is not kept yet (DESIGN 5.27).
     Unconnected,
+    /// A link into the application (`clarity:fragment/412`) of a markdown
+    /// part or memo was clicked; its `link` says where.
+    Link,
 }
 
 /// The events a window has, in the order the designer lists them.
 /// Every event, in the order the language lists them.
-pub const ALL_EVENTS: [Event; 27] = [
+pub const ALL_EVENTS: [Event; 28] = [
     Event::Click,
     Event::Change,
     Event::Enter,
@@ -221,6 +224,7 @@ pub const ALL_EVENTS: [Event; 27] = [
     Event::End,
     Event::Fail,
     Event::Unconnected,
+    Event::Link,
 ];
 
 pub const WINDOW_EVENTS: [Event; 3] = [Event::Open, Event::Close, Event::Return];
@@ -258,6 +262,7 @@ impl Event {
             Event::End => "end",
             Event::Fail => "fail",
             Event::Unconnected => "unconnected",
+            Event::Link => "link",
         }
     }
 
@@ -290,6 +295,7 @@ impl Event {
             "end" => Some(Event::End),
             "fail" => Some(Event::Fail),
             "unconnected" => Some(Event::Unconnected),
+            "link" => Some(Event::Link),
             _ => None,
         }
     }
@@ -443,6 +449,8 @@ pub enum WidgetProperty {
     Code,
     /// `copy`: a button that puts the text on the clipboard.
     Copy,
+    /// `markdown`: a memo of Markdown, with Write and Preview.
+    Markdown,
     /// `view ClassEditor`: the view a slide-out shows.
     View,
 }
@@ -507,6 +515,9 @@ struct Entry {
 }
 
 const INPUT_EVENTS: &[Event] = &[Event::Change, Event::Enter, Event::Leave];
+
+/// A memo's events: an input's, and a link into the application clicked in its preview.
+const MEMO_EVENTS: &[Event] = &[Event::Change, Event::Enter, Event::Leave, Event::Link];
 /// An input that shows a placeholder while it is empty: typed in, or a day, a color or tags.
 const TYPED: &[WidgetProperty] = &[
     WidgetProperty::Placeholder,
@@ -516,7 +527,7 @@ const TYPED: &[WidgetProperty] = &[
 /// A text box: typed in, and with `copy` a button that copies its text.
 const TEXT_BOX: &[WidgetProperty] = &[WidgetProperty::Placeholder, WidgetProperty::Copy, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];
 /// A memo: a text box of lines, which can color its text as code.
-const MEMO: &[WidgetProperty] = &[WidgetProperty::Placeholder, WidgetProperty::Code, WidgetProperty::Copy, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];
+const MEMO: &[WidgetProperty] = &[WidgetProperty::Placeholder, WidgetProperty::Code, WidgetProperty::Markdown, WidgetProperty::Toolbox, WidgetProperty::Copy, WidgetProperty::Readonly, WidgetProperty::NoUndo, WidgetProperty::TabOrder];
 
 /// The languages a memo colors as code (`code csharp`), as conformance/code-languages.json lists them for every renderer.
 pub const CODE_LANGUAGES: [&str; 19] = [
@@ -622,10 +633,11 @@ const ENTRIES: &[Entry] = &[
     // (`source "rules.md"`, one per language) or a text it binds.
     Entry {
         field_types: &["text"],
+        events: &[Event::Link],
         ..text_part(WidgetKind::Markdown, "markdown", "Markdown", (6, 4), None, BindTarget::Field, &[WidgetProperty::Source])
     },
     input(WidgetKind::Textbox, "textbox", "Text box", (4, 1), &["text", "email", "url"], INPUT_EVENTS, TEXT_BOX),
-    input(WidgetKind::Memo, "memo", "Memo", (6, 3), &["text"], INPUT_EVENTS, MEMO),
+    input(WidgetKind::Memo, "memo", "Memo", (6, 3), &["text"], MEMO_EVENTS, MEMO),
     input(WidgetKind::Password, "password", "Password", (4, 1), &["text", "secret"], INPUT_EVENTS, TYPED),
     input(WidgetKind::Number, "number", "Number", (3, 1), &["integer", "decimal", "money", "id", "duration"], INPUT_EVENTS, TYPED),
     Entry {
@@ -1521,6 +1533,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         pinnable: false,
         code: None,
         copy: false,
+        markdown: false,
         view: None,
         sortable: false,
         add: false,
@@ -1844,7 +1857,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(toolbox) = props.toolbox {
         let page = props.toolbox_page.as_deref().map(|p| format!(" {p}")).unwrap_or_default();
-        parts.push(if toolbox == crate::model::ToolboxKind::Popup { format!("toolbox{page}") } else { format!("toolbox{page} {}", toolbox.keyword()) });
+        // Unwritten, a canvas's floats and a memo's comes at the caret.
+        let plain = if props.kind == WidgetKind::Memo { crate::model::ToolboxKind::Caret } else { crate::model::ToolboxKind::Popup };
+        parts.push(if toolbox == plain { format!("toolbox{page}") } else { format!("toolbox{page} {}", toolbox.keyword()) });
     }
     if let Some(does) = &props.does {
         parts.push(format!("does {does}"));
@@ -1902,6 +1917,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(language) = &props.code {
         parts.push(format!("code {language}"));
+    }
+    if props.markdown {
+        parts.push("markdown".to_string());
     }
     if props.copy {
         parts.push("copy".to_string());
@@ -2142,6 +2160,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Pinnable, props.pinnable, "pinnable"),
         (WidgetProperty::Code, props.code.is_some(), "code"),
         (WidgetProperty::Copy, props.copy, "copy"),
+        (WidgetProperty::Markdown, props.markdown, "markdown"),
         (WidgetProperty::View, props.view.is_some(), "view"),
     ];
     for (property, present, what) in checks {

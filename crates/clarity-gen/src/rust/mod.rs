@@ -137,6 +137,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if project.calls_out() {
         features.push("http");
     }
+    // The picture functions of code (docs/IMAGE-PLAN.md): Clarity.Image.
+    if crate::uses_picture_functions(project) {
+        features.push("pictures");
+    }
     // Secret settings (DESIGN 5.27): the system's protected store.
     if !project.secret_settings().is_empty() {
         features.push("secrets");

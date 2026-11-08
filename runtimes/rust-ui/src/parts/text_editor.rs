@@ -111,6 +111,8 @@ pub struct TextEditor {
     pub font_role: &'static str,
     /// The language whose words it colors (`code csharp`); none for plain text.
     pub language: Option<&'static crate::parts::code_colors::Language>,
+    /// A memo of Markdown: Ctrl+B and Ctrl+I make the selection bold and italic.
+    pub markdown: bool,
     /// The colored stretches of the text, for the version they were found in.
     inked: RefCell<Option<(u64, Vec<(usize, usize, crate::parts::code_colors::Ink)>)>>,
     undo: Vec<Typed>,
@@ -168,6 +170,7 @@ impl TextEditor {
             undoes: true,
             font_role: "text",
             language: None,
+            markdown: false,
             inked: RefCell::new(None),
             undo: Vec::new(),
             redo: Vec::new(),
@@ -350,6 +353,31 @@ impl TextEditor {
         true
     }
 
+    /// Puts `text` where the selection is (at the caret with none), as one step Ctrl+Z takes back: what code inserts.
+    pub fn put(&mut self, text: &str, cx: &mut Cx) {
+        if self.editable() {
+            self.insert(text, cx);
+        }
+    }
+
+    /// Moves the caret to a point from its top left, selecting nothing: where a row dropped on it goes in.
+    pub fn caret_to(&mut self, x: f64, y: f64, cx: &mut Cx) {
+        let place = self.place_at(x, y, cx.fonts(), cx.look());
+        self.select(place, place);
+        self.moved(cx);
+    }
+
+    /// Puts Markdown's `mark` on both sides of the selection, as one step,
+    /// and keeps the text inside selected (the caret between them with none).
+    fn mark(&mut self, mark: &str, cx: &mut Cx) {
+        let (start, _) = self.selection();
+        let inner = self.selected_text();
+        self.insert(&format!("{mark}{inner}{mark}"), cx);
+        let from = start + mark.chars().count();
+        self.select(from, from + inner.chars().count());
+        self.moved(cx);
+    }
+
     /// Puts `typed` where the selection is.
     fn insert(&mut self, typed: &str, cx: &mut Cx) {
         self.insert_typed(typed, false, cx);
@@ -520,6 +548,8 @@ impl TextEditor {
                 self.select_all();
                 self.moved(cx);
             }
+            Key::B if command && self.markdown && self.editable() => self.mark("**", cx),
+            Key::I if command && self.markdown && self.editable() => self.mark("*", cx),
             Key::C if command => self.copy(cx),
             Key::X if command => self.cut(cx),
             Key::V if command => self.paste(cx),
@@ -540,6 +570,16 @@ impl TextEditor {
         let printable: String = typed.chars().filter(|c| !c.is_control() || *c == '\t' || (self.multiline && *c == '\n')).collect();
         if !printable.is_empty() {
             self.insert_typed(&printable, true, cx);
+        }
+    }
+
+    /// What a memo's toolbox asked: cut, copy or paste, as its keys do.
+    pub fn clipboard_action(&mut self, ask: crate::parts::data::canvas::toolbox::TextAsk, cx: &mut Cx) {
+        use crate::parts::data::canvas::toolbox::TextAsk;
+        match ask {
+            TextAsk::Cut => self.cut(cx),
+            TextAsk::Copy => self.copy(cx),
+            TextAsk::Paste => self.paste(cx),
         }
     }
 

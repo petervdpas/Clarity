@@ -185,6 +185,32 @@ pub(crate) struct Copied<'e> {
     pub file: bool,
 }
 
+/// A record's picture given to a picture function (`resize(book.cover, ...)`):
+/// read first, as a copy into the database is, so the function has its bytes.
+pub(crate) fn read_picture<'e>(
+    project: &Project,
+    type_of: impl Fn(&clarity_spec::code::Expr) -> clarity_spec::code::check::TypeInfo,
+    value: &'e clarity_spec::code::Expr,
+) -> Option<Copied<'e>> {
+    use clarity_spec::code::ExprKind;
+    use clarity_spec::code::check::TypeInfo;
+    if type_of(value) != TypeInfo::Image {
+        return None;
+    }
+    let ExprKind::Member { object, member } = &value.kind else { return None };
+    let TypeInfo::Record(entity) = type_of(object) else { return None };
+    let field = member.name.clone();
+    let declared = project.entity(&entity);
+    let from = declared.and_then(|e| e.field(&field)).and_then(|f| f.modifiers.store.clone());
+    let column = declared.map_or_else(|| field.clone(), |e| e.column_of(&field).to_string());
+    Some(Copied { object: object.as_ref(), entity, field, column, from, to: None, file: false })
+}
+
+/// Whether the project's code calls a picture function, so the program carries Clarity.Image.
+pub(crate) fn uses_picture_functions(project: &Project) -> bool {
+    project.calls_any(&|name| clarity_spec::code::check::picture_function(name).is_some() && built_in(project, name).is_some())
+}
+
 pub(crate) fn copied<'e>(
     project: &Project,
     type_of: impl Fn(&clarity_spec::code::Expr) -> clarity_spec::code::check::TypeInfo,
@@ -780,6 +806,9 @@ pub struct Program {
 /// folder: its desktop program cannot serve a browser.
 pub fn programs(project: &Project, settings: &Settings) -> Result<Vec<Program>, Vec<String>> {
     use clarity_project::Target;
+    if let Some(why) = pictures_without_library(project, settings) {
+        return Err(vec![why]);
+    }
     let mut programs = Vec::new();
     if settings.stack.backend == Backend::Csharp && settings.stack.has(Target::Desktop) && settings.stack.has(Target::Web) {
         for target in [Target::Desktop, Target::Web] {
@@ -795,6 +824,18 @@ pub fn programs(project: &Project, settings: &Settings) -> Result<Vec<Program>, 
         programs.push(Program { target: Target::Cli, files: generate_cli(project, settings)? });
     }
     Ok(programs)
+}
+
+/// Why the project's picture functions cannot run in a program of its stack:
+/// Go, C and C++ link Clarity.Image beside Clarity.UI's library, which only
+/// their desktop program has (a desktop program also serves a browser).
+pub(crate) fn pictures_without_library(project: &Project, settings: &Settings) -> Option<String> {
+    use clarity_project::Target;
+    let linked = matches!(settings.stack.backend, Backend::Go | Backend::C | Backend::Cpp);
+    let alone = (settings.stack.has(Target::Web) && !settings.stack.has(Target::Desktop)) || settings.stack.has(Target::Cli);
+    (linked && alone && uses_picture_functions(project)).then(|| {
+        "the code calls picture functions, which a Go, C or C++ program runs on Clarity.Image beside Clarity.UI's library: only in a desktop program for now (stack ... desktop, which can also serve a browser)".to_string()
+    })
 }
 
 /// The target of the program with windows, and its folder of `out/`: the
@@ -1170,7 +1211,7 @@ pub(crate) struct BuiltIn {
     pub cpp: &'static str,
 }
 
-pub(crate) const BUILT_INS: [BuiltIn; 11] = [
+pub(crate) const BUILT_INS: [BuiltIn; 19] = [
     BuiltIn { name: "words", rust: "clarity_runtime::texts::words", go: "clarity.TextWords", csharp: "Clarity.Runtime.Texts.Words", c: "clarity_text_words", cpp: "clarity::words" },
     BuiltIn { name: "split", rust: "clarity_runtime::texts::split", go: "clarity.TextSplit", csharp: "Clarity.Runtime.Texts.Split", c: "clarity_text_split", cpp: "clarity::split" },
     BuiltIn { name: "trim", rust: "clarity_runtime::texts::trim", go: "clarity.TextTrim", csharp: "Clarity.Runtime.Texts.Trim", c: "clarity_text_trim", cpp: "clarity::trim" },
@@ -1182,6 +1223,15 @@ pub(crate) const BUILT_INS: [BuiltIn; 11] = [
     BuiltIn { name: "slice", rust: "clarity_runtime::texts::slice", go: "clarity.TextSlice", csharp: "Clarity.Runtime.Texts.Slice", c: "clarity_text_slice", cpp: "clarity::slice" },
     BuiltIn { name: "indexOf", rust: "clarity_runtime::texts::index_of", go: "clarity.TextIndexOf", csharp: "Clarity.Runtime.Texts.IndexOf", c: "clarity_text_index_of", cpp: "clarity::index_of" },
     BuiltIn { name: "zip", rust: "clarity_runtime::zip::stored", go: "clarity.Zip", csharp: "Clarity.Runtime.Zip.Of", c: "clarity_zip", cpp: "clarity::zip" },
+    // The picture functions (docs/IMAGE-PLAN.md), through Clarity.Image; Go's are in the program's pictures.go.
+    BuiltIn { name: "resize", rust: "clarity_runtime::picture_functions::resize", go: "pictureResize", csharp: "Clarity.Image.PictureFunctions.Resize", c: "clarity_picture_resize", cpp: "clarity::picture_resize" },
+    BuiltIn { name: "crop", rust: "clarity_runtime::picture_functions::crop", go: "pictureCrop", csharp: "Clarity.Image.PictureFunctions.Crop", c: "clarity_picture_crop", cpp: "clarity::picture_crop" },
+    BuiltIn { name: "rotate", rust: "clarity_runtime::picture_functions::rotate", go: "pictureRotate", csharp: "Clarity.Image.PictureFunctions.Rotate", c: "clarity_picture_rotate", cpp: "clarity::picture_rotate" },
+    BuiltIn { name: "flip", rust: "clarity_runtime::picture_functions::flip", go: "pictureFlip", csharp: "Clarity.Image.PictureFunctions.Flip", c: "clarity_picture_flip", cpp: "clarity::picture_flip" },
+    BuiltIn { name: "blend", rust: "clarity_runtime::picture_functions::blend", go: "pictureBlend", csharp: "Clarity.Image.PictureFunctions.Blend", c: "clarity_picture_blend", cpp: "clarity::picture_blend" },
+    BuiltIn { name: "adjust", rust: "clarity_runtime::picture_functions::adjust", go: "pictureAdjust", csharp: "Clarity.Image.PictureFunctions.Adjust", c: "clarity_picture_adjust", cpp: "clarity::picture_adjust" },
+    BuiltIn { name: "pictureWidth", rust: "clarity_runtime::picture_functions::width", go: "pictureWidth", csharp: "Clarity.Image.PictureFunctions.Width", c: "clarity_picture_width", cpp: "clarity::picture_width" },
+    BuiltIn { name: "pictureHeight", rust: "clarity_runtime::picture_functions::height", go: "pictureHeight", csharp: "Clarity.Image.PictureFunctions.Height", c: "clarity_picture_height", cpp: "clarity::picture_height" },
 ];
 
 /// The built-in function `name`, unless the project has a function of that name.

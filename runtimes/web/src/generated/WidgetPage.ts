@@ -21,4 +21,10 @@ view: string | null,
 /**
  * The tells of the view it shows wired to the window's handlers: `on saved: recipeSaved`.
  */
-tells: Array<TellHandler>, children: Array<Widget>, span: Span, };
+tells: Array<TellHandler>, 
+/**
+ * `section "Chapters" color "#2e86de"`: an accordion section's header in
+ * a color of its own (written out, or a color of the theme by name); none
+ * keeps the theme's look.
+ */
+color: string | null, children: Array<Widget>, span: Span, };

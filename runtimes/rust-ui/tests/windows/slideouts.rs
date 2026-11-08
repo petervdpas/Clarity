@@ -505,6 +505,44 @@ fn beside_a_part_in_a_narrow_pane_it_lies_over_the_next_pane() {
     assert_eq!((band.x, band.width), (list.right() + HANDLE_WIDTH, 300.0));
 }
 
+/// What lies beside the part makes room for its handle, as the window's parts
+/// make room for the handles at its edge: in the same grid, and in the next pane.
+#[test]
+fn what_lies_beside_the_part_makes_room_for_its_handle() {
+    let part_at = |screen: &Screen, name: &str| clarity_ui::element::in_order(screen.root()).into_iter().find(|e| part_name(*e) == Some(name)).map(|e| e.node().bounds).expect(name);
+    let same_grid = r#"
+    <Panel name="desk" at="1,1" span="12" rows="6">
+        <List name="chapters" at="1,1" span="4" rows="6" />
+        <Textbox name="text" at="5,1" span="8" />
+        <Slideout name="details" caption="Chapter" side="right" beside="chapters" slideWidth="300" span="6" rows="4">
+            <Textbox name="titleBox" at="1,1" span="6" />
+        </Slideout>
+    </Panel>"#;
+    let (mut screen, _, _) = opened(same_grid);
+    draw(&mut screen);
+    let handle = handle_beside(&screen);
+    let text = part_at(&screen, "text");
+    assert!(text.x >= handle.right() - 0.5, "the text box {text:?} starts after the handle {handle:?}");
+    assert!(part_at(&screen, "chapters").right() <= handle.x + 0.5, "the list keeps its place");
+    let next_pane = r#"
+    <Splitter name="split" at="1,1" span="12" rows="6" horizontal="true">
+        <Pane span="3">
+            <List name="chapters" at="1,1" span="3" rows="6" />
+            <Slideout name="details" caption="Chapter" side="right" beside="chapters" slideWidth="300" span="6" rows="4">
+                <Textbox name="titleBox" at="1,1" span="6" />
+            </Slideout>
+        </Pane>
+        <Pane>
+            <Textbox name="text" at="1,1" span="9" rows="4" />
+        </Pane>
+    </Splitter>"#;
+    let (mut screen, _, _) = opened(next_pane);
+    draw(&mut screen);
+    let handle = handle_beside(&screen);
+    let text = part_at(&screen, "text");
+    assert!(text.x >= handle.right() - 0.5, "the text box {text:?} in the next pane starts after the handle {handle:?}");
+}
+
 /// In a folded accordion section its part is not laid out: its handle and its panel go with it.
 #[test]
 fn beside_a_part_in_a_folded_section_it_is_not_there() {

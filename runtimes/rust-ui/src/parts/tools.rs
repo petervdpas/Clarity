@@ -68,6 +68,10 @@ fn use_tool(spec: &PartSpec, host: &dyn PartHost, toolbox: Option<&Rc<Toolbox>>)
             }
         }
     }
+    // A memo's toolbox at the caret goes once a tool did its action.
+    if let Some(toolbox) = toolbox {
+        toolbox.acted();
+    }
 }
 
 /// `tool name pencilTool icon "pencil" does pencil`, or `on click: handler`.

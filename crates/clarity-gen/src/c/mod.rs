@@ -109,6 +109,13 @@ const RUNTIME_FILES: [(&str, &str); 74] = [
     ("third_party/cjson/README.md", include_str!("../../../../runtimes/c/third_party/cjson/README.md")),
 ];
 
+/// The picture functions on Clarity.Image's library (docs/IMAGE-PLAN.md),
+/// carried only when the code calls one (clarity_use_image links them).
+pub(crate) const PICTURE_FILES: [(&str, &str); 2] = [
+    ("pictures/pictures.h", include_str!("../../../../runtimes/c/pictures/pictures.h")),
+    ("pictures/pictures.c", include_str!("../../../../runtimes/c/pictures/pictures.c")),
+];
+
 /// Engines (DESIGN 5.11): the host, copied with wasm3 only into an
 /// application that declares an engine.
 /// HTTP calls (DESIGN 5.23): the client on libcurl, copied only into an
@@ -246,9 +253,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     let engine_files = ENGINE_FILES.iter().chain(&WASM3_FILES).filter(|_| engines || screen_engines).chain(SCREEN_FILES.iter().filter(|_| screen_engines));
     let http_files = HTTP_FILES.iter().filter(|_| project.calls_out());
+    let picture_files = PICTURE_FILES.iter().filter(|_| crate::uses_picture_functions(project));
     let secret_files = SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
     let desktop_files = DESKTOP_FILES.iter().filter(|_| desktop);
-    for (path, body) in RUNTIME_FILES.iter().chain(&SERVICE_FILES).chain(desktop_files).chain(engine_files).chain(http_files).chain(secret_files) {
+    for (path, body) in RUNTIME_FILES.iter().chain(&SERVICE_FILES).chain(desktop_files).chain(engine_files).chain(http_files).chain(picture_files).chain(secret_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
 
@@ -257,7 +265,9 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let library_includes: String = crate::libraries::libraries(project).iter().map(|l| format!("#include \"clarity/{}.h\"\n", l.name.name)).collect();
     // The HTTP client, for code that calls out (DESIGN 5.23).
     let http_include = if project.calls_out() { "#include \"http/http.h\"\n" } else { "" };
-    files.push(text("src/records.h", format!("{HEADER}\n#pragma once\n\n#include <stddef.h>\n\n#include \"clarity/code.h\"\n#include \"clarity/list_fields.h\"\n{http_include}{library_includes}\n{}", records_h.trim_end().to_string() + "\n")));
+    // The picture functions, for code that calls one (docs/IMAGE-PLAN.md).
+    let pictures_include = if crate::uses_picture_functions(project) { "#include \"pictures/pictures.h\"\n" } else { "" };
+    files.push(text("src/records.h", format!("{HEADER}\n#pragma once\n\n#include <stddef.h>\n\n#include \"clarity/code.h\"\n#include \"clarity/list_fields.h\"\n{http_include}{pictures_include}{library_includes}\n{}", records_h.trim_end().to_string() + "\n")));
     for library in crate::libraries::libraries(project) {
         let n = &library.name.name;
         let own = crate::libraries::own_file(library, false);
@@ -571,6 +581,9 @@ pub(crate) fn audio_cmake_lines(project: &Project, settings: &Settings, program:
     }
     if clarity_spec::resources::plays_videos(project) {
         lines.push_str(&format!("\n# The video parts play through Clarity.Video, with Cisco's openh264 carried beside the program.\nclarity_use_video({program})\n"));
+    }
+    if crate::uses_picture_functions(project) {
+        lines.push_str(&format!("\n# The code's picture functions run on Clarity.Image, whose library lies beside Clarity.UI's.\nclarity_use_image({program})\n"));
     }
     lines
 }

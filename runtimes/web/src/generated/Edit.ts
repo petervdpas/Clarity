@@ -11,7 +11,7 @@ import type { SidebarProps } from "./SidebarProps";
 import type { WidgetKind } from "./WidgetKind";
 import type { WidgetProps } from "./WidgetProps";
 
-export type Edit = { "op": "remove", item: number, } | { "op": "setTitle", target: number, title: string, } | { "op": "setPaneSpan", target: number, columns: number | null, } | { "op": "setPageView", target: number, view: string | null, } | { "op": "placeWidget", container: number, props: WidgetProps, } | { "op": "createWidget", container: number, kind: WidgetKind, col: number, row: number, 
+export type Edit = { "op": "remove", item: number, } | { "op": "setTitle", target: number, title: string, } | { "op": "setPaneSpan", target: number, columns: number | null, } | { "op": "setPageView", target: number, view: string | null, } | { "op": "setPageColor", target: number, color: string | null, } | { "op": "placeWidget", container: number, props: WidgetProps, } | { "op": "createWidget", container: number, kind: WidgetKind, col: number, row: number, 
 /**
  * Overrides the catalog width, for containers narrower than it.
  */

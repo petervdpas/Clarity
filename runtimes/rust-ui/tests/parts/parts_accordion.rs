@@ -135,3 +135,29 @@ fn a_horizontal_accordion_stands_its_headers_side_by_side_with_the_open_section_
     let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
     keep(&mut shot, "containers-accordion-horizontal.png");
 }
+
+/// A section's `color` tints its header, its text black or white as reads;
+/// one without keeps the theme's look.
+#[test]
+fn a_section_header_takes_its_own_color() {
+    let host = TestHost::new();
+    let markup = r##"<Accordion name="faq" at="1,1" span="6" rows="8"><Section title="Blue" color="#2e86de"><Label at="1,1" span="3" caption="In" /></Section><Section title="Plain"><Label at="1,1" span="3" caption="In" /></Section><Section title="Pale" color="#f6e58d" /></Accordion>"##;
+    let mut screen = window(markup, host, 800.0);
+    let mut shot = Shot::of(&mut screen, 800, 400, 1.0);
+    let part = first::<AccordionPart>(&screen);
+    let headers = part.headers();
+    assert_eq!(Some("#2e86de"), headers[0].tint.as_deref());
+    assert_eq!(None, headers[1].tint);
+    let at = |h: &clarity_ui::parts::containers::container::ContainerButton| clarity_ui::Element::node(h).bounds;
+    let (blue, plain) = (at(headers[0]), at(headers[1]));
+    let inside = |shot: &mut Shot, b: Rect| shot.pixel((b.right() - 6.0) as i32, (b.y + b.height / 2.0) as i32);
+    let c = inside(&mut shot, blue);
+    assert_eq!((0x2e, 0x86, 0xde), (c.r(), c.g(), c.b()), "the header is drawn in its color");
+    let p = inside(&mut shot, plain);
+    assert_ne!((0x2e, 0x86, 0xde), (p.r(), p.g(), p.b()), "a header without keeps the theme's look");
+    let white = clarity_ui::parts::containers::container::readable_on(skia_safe::Color::from_rgb(0x1e, 0x3a, 0x8a));
+    let dark = clarity_ui::parts::containers::container::readable_on(skia_safe::Color::from_rgb(0xf6, 0xe5, 0x8d));
+    assert_eq!(skia_safe::Color::WHITE, white);
+    assert_ne!(skia_safe::Color::WHITE, dark, "dark text on a pale header");
+    keep(&mut shot, "accordion-colors.png");
+}

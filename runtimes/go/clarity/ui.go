@@ -602,14 +602,17 @@ func (u *Ui) SetChecked(part string, value bool) {
 	u.part(part, func(p *PartState) { p.Checked = &value })
 }
 
-// Selected is the selected record of a table or list showing rows, as a copy to work on.
-func Selected[T any](u *Ui, part string, rows []T) (*T, error) {
+// Selected is the selected record of a table or list showing rows, as a copy
+// to work on; with no row chosen, an empty record (ID 0) that empty makes, as
+// `new` does, so code can ask first.
+func Selected[T any](u *Ui, part string, rows []T, empty func() T) *T {
 	i, ok := u.selected[part]
 	if !ok || i < 0 || i >= len(rows) {
-		return nil, &InvalidError{fmt.Sprintf("no row of %s is selected", part)}
+		row := empty()
+		return &row
 	}
 	row := rows[i]
-	return &row, nil
+	return &row
 }
 
 // Select selects the row at place of a table, list or tree, or none at -1:

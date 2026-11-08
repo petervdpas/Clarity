@@ -301,6 +301,11 @@ pub struct PartState {
     pub dot_size: Option<i64>,
     #[serde(default, rename = "dotColor", skip_serializing_if = "Option::is_none")]
     pub dot_color: Option<String>,
+    /// A spin box's range, as a handler set it; none is as its line writes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<i64>,
     /// A painting or vector canvas's tool, brush and ink, as a handler or the
     /// person set them (DESIGN 5.31).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -711,6 +716,24 @@ impl Ui {
 
     pub fn set_dot_size(&mut self, part: &str, value: i64) {
         self.parts.entry(part.to_string()).or_default().dot_size = Some(value);
+    }
+
+    /// The lowest value of a spin box: `spinbox.min`, as its line writes it until code sets it.
+    pub fn spin_min(&self, part: &str, design: i64) -> i64 {
+        self.parts.get(part).and_then(|p| p.min).unwrap_or(design)
+    }
+
+    pub fn set_spin_min(&mut self, part: &str, value: i64) {
+        self.parts.entry(part.to_string()).or_default().min = Some(value);
+    }
+
+    /// The highest value of a spin box: `spinbox.max`.
+    pub fn spin_max(&self, part: &str, design: i64) -> i64 {
+        self.parts.get(part).and_then(|p| p.max).unwrap_or(design)
+    }
+
+    pub fn set_spin_max(&mut self, part: &str, value: i64) {
+        self.parts.entry(part.to_string()).or_default().max = Some(value);
     }
 
     /// The color of a canvas's grid dots: `canvas.dotColor`.

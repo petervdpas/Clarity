@@ -36,7 +36,8 @@ TEST(a_handler_replies_as_the_other_runtimes_do) {
     CHECK(ui.readonly("name", true));
     CHECK_EQ(ui.caption("save", "Save"), "Save");
     CHECK_EQ(ui.selected("grid", orders).number, "B");
-    CHECK_THROWS(InvalidError, ui.selected("other", orders));
+    // No row chosen: an empty record (id 0), as `new` makes.
+    CHECK_EQ(ui.selected("other", orders).id, int64_t{0});
 
     ui.set_enabled("save", false);
     ui.set_error("name", Text::plain("Name is required"));
@@ -90,7 +91,8 @@ TEST(rows_read_again_have_no_selected_row) {
     Ui ui(state);
     std::vector<Order> orders{{1, "A"}, {2, "B"}};
     ui.deselect("grid");
-    CHECK_THROWS(InvalidError, ui.selected("grid", orders));
+    // No row chosen: an empty record (id 0), as `new` makes.
+    CHECK_EQ(ui.selected("grid", orders).id, int64_t{0});
     CHECK_EQ(ui.selected("other", orders).number, "A");
     CHECK_EQ(json(ui.reply("Orders", json::object()).state.selected), json::parse(R"({"other":0})"));
 }
@@ -102,7 +104,8 @@ TEST(code_selects_a_row_and_none) {
     ui.select("nav", 1);
     ui.select("names", -1);
     CHECK_EQ(ui.selected("nav", orders).number, "B");
-    CHECK_THROWS(InvalidError, ui.selected("names", orders));
+    // No row chosen: an empty record (id 0), as `new` makes.
+    CHECK_EQ(ui.selected("names", orders).id, int64_t{0});
     CHECK_EQ(json(ui.reply("Outline", json::object()).state.selected), json::parse(R"({"nav":1})"));
 }
 
@@ -293,6 +296,12 @@ TEST(a_canvas_keeps_the_grid_and_snap_code_sets) {
     ui.set_dot_color("sheet", "muted");
     CHECK_EQ(ui.dot_size("sheet", 2), int64_t{3});
     CHECK_EQ(ui.dot_color("sheet", ""), std::string("muted"));
+    // A spin box's range: as its line writes it, until code sets it.
+    CHECK_EQ(ui.spin_max("level", 99), int64_t{99});
+    ui.set_spin_min("level", 2);
+    ui.set_spin_max("level", 3);
+    CHECK_EQ(ui.spin_min("level", 1), int64_t{2});
+    CHECK_EQ(ui.spin_max("level", 99), int64_t{3});
     // A line tool: false until code sets canvas.connecting.
     CHECK(!ui.connecting("sheet"));
     ui.set_connecting("sheet", true);

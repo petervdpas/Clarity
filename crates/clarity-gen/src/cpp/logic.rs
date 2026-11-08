@@ -169,6 +169,8 @@ pub struct PartInfo {
     pub background: String,
     /// A canvas's grid dots as its line says: pixels across (2 without it) and color (empty is the theme's border).
     pub dot_size: u32,
+    /// A spin box's range as its line writes it.
+    pub spin: (i64, i64),
     pub dot_color: String,
     /// A canvas's mode (DESIGN 5.31), the list of its objects, and its tool, brush and ink as its line says.
     pub mode: Option<clarity_spec::model::CanvasMode>,
@@ -197,7 +199,7 @@ impl WindowCtx {
         for widget in widgets {
             if let Some(name) = &widget.props.name {
                 let custom = crate::parts::kept_of(&widget.props);
-                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, closed: matches!(widget.props.kind, clarity_spec::widgets::WidgetKind::Popover | clarity_spec::widgets::WidgetKind::Slideout), grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
+                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, closed: matches!(widget.props.kind, clarity_spec::widgets::WidgetKind::Popover | clarity_spec::widgets::WidgetKind::Slideout), grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), spin: crate::spin_range(&widget.props), mode: widget.props.mode, objects: widget.props.objects.as_ref().map(|o| o.list.clone()), tool: crate::canvas_tool(&widget.props), brush: widget.props.brush.unwrap_or(2), ink: widget.props.ink.clone().unwrap_or_else(|| "text".to_string()), custom };
                 self.parts.insert(name.clone(), info);
             }
             self.widgets(&widget.children);
@@ -521,6 +523,8 @@ impl<'a> Emitter<'a> {
                     let method = match property.as_str() {
                         "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "pinned" | "tab" | "step" | "grid" | "snap" | "connecting" | "resizable" | "background" => format!("set_{property}"),
                         "dotSize" => "set_dot_size".to_string(),
+                        "min" => "set_spin_min".to_string(),
+                        "max" => "set_spin_max".to_string(),
                         "dotColor" => "set_dot_color".to_string(),
                         "tool" | "brush" | "ink" => format!("set_{property}"),
                         "open" => "set_open_section".to_string(),
@@ -1052,6 +1056,8 @@ impl<'a> Emitter<'a> {
             "resizable" => format!("ui.resizable({quoted})"),
             "background" => format!("ui.background({quoted}, {})", string(&info.background)),
             "dotSize" => format!("ui.dot_size({quoted}, {})", info.dot_size),
+            "min" => format!("ui.spin_min({quoted}, {})", info.spin.0),
+            "max" => format!("ui.spin_max({quoted}, {})", info.spin.1),
             "dotColor" => format!("ui.dot_color({quoted}, {})", string(&info.dot_color)),
             "tool" => format!("ui.tool({quoted}, {})", string(&info.tool)),
             "brush" => format!("ui.brush({quoted}, {})", info.brush),
@@ -1281,6 +1287,11 @@ impl<'a> Emitter<'a> {
     }
 
     fn binary(&mut self, op: BinaryOp, left: &Expr, right: &Expr, result: &TypeInfo) -> String {
+        // Whole numbers divided, a division by zero a ValueError.
+        if matches!(op, BinaryOp::WholeDiv | BinaryOp::Mod) {
+            let name = if op == BinaryOp::WholeDiv { "whole_div" } else { "whole_mod" };
+            return format!("clarity::{name}({}, {})", self.value(left), self.value(right));
+        }
         if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
             let other = match (&left.kind, &right.kind) {
                 (_, ExprKind::Empty) => Some(left),

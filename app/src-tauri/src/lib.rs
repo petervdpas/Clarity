@@ -136,6 +136,7 @@ fn changes_project(event: &notify::Event, file: &Path, dir: &Path) -> bool {
         let diagrams = dir.join(clarity_spec::diagrams::DIAGRAMS_DIR);
         let apis = dir.join(clarity_spec::APIS_DIR);
         p == file
+            || *p == dir.join(clarity_spec::README_FILE)
             || (is_spec_file(p) && (folder == Some(dir) || folder == Some(&dir.join(clarity_spec::MIGRATIONS_DIR))))
             // A web API's description and the module Clarity writes from it (DESIGN 5.23).
             || *p == apis
@@ -980,6 +981,7 @@ pub fn run() {
             resources::add_resource,
             resources::replace_resource_file,
             resources::save_markdown,
+            resources::save_readme,
             diagrams::diagram_kinds,
             diagrams::check_diagram,
             diagrams::read_erd,

@@ -258,6 +258,20 @@ fn a_canvas_keeps_the_grid_and_snap_code_sets() {
     assert_eq!((ui.dot_size("sheet", 2), ui.dot_color("sheet", "")), (3, "muted".to_string()));
 }
 
+/// A spin box's range reads as its line wrote it until code sets it, and goes to the screen in its state.
+#[test]
+fn a_spin_box_s_range_is_set_from_code() {
+    use clarity_runtime::ui::{Ui, WindowState};
+    let mut ui = Ui::from_state(&WindowState::default());
+    assert_eq!((ui.spin_min("levelBox", 1), ui.spin_max("levelBox", 99)), (1, 99));
+    ui.set_spin_max("levelBox", 3);
+    ui.set_spin_min("levelBox", 2);
+    assert_eq!((ui.spin_min("levelBox", 1), ui.spin_max("levelBox", 99)), (2, 3));
+    let part = clarity_runtime::ui::PartState { min: Some(2), max: Some(3), ..Default::default() };
+    let state = serde_json::to_value(&part).unwrap();
+    assert_eq!((state["min"].as_i64(), state["max"].as_i64()), (Some(2), Some(3)));
+}
+
 /// A canvas with `on connect` draws a new line from any press on a box while code set `connecting`; false until then.
 #[test]
 fn a_canvas_keeps_the_connecting_code_sets() {
@@ -296,4 +310,16 @@ fn a_handler_copies_the_last_text_it_copies() {
     // A reply without a copy says nothing of the clipboard.
     let quiet = serde_json::to_value(Ui::from_state(&WindowState::default()).reply("Main", serde_json::Map::new())).unwrap();
     assert!(quiet.get("copy").is_none());
+}
+
+/// `a div b` and `a mod b`: rounded toward zero, the sign of a; a division by zero is an error in Clarity's own words.
+#[test]
+fn whole_numbers_divide_toward_zero() {
+    use clarity_runtime::{whole_div, whole_mod};
+    assert_eq!((whole_div(7, 2).unwrap(), whole_div(-7, 2).unwrap(), whole_mod(7, 3).unwrap(), whole_mod(-7, 3).unwrap()), (3, -3, 1, -1));
+    assert_eq!(whole_div(i64::MIN, -1).unwrap(), i64::MIN, "wraps, as every runtime does");
+    let failed = whole_div(1, 0).unwrap_err();
+    assert_eq!("division by zero", failed.to_string());
+    assert_eq!(Some("divisionByZero"), clarity_runtime::program::said(&failed).key.as_deref());
+    assert!(whole_mod(1, 0).is_err());
 }

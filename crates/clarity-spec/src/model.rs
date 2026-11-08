@@ -562,7 +562,8 @@ impl CanvasMode {
     /// The tools of the mode, in the order its toolbar shows them.
     pub fn tools(self) -> &'static [&'static str] {
         match self {
-            CanvasMode::Objects => &[],
+            // A diagram's: drag its objects, or draw a new line from one to another (`on connect`).
+            CanvasMode::Objects => &["select", "connect"],
             CanvasMode::Paint => &["pen", "pencil", "spray", "eraser", "fill", "picker", "select", "ellipseSelect", "lasso", "line", "rect", "ellipse"],
             CanvasMode::Vector => &["select", "line", "rect", "ellipse", "path", "text"],
         }
@@ -571,8 +572,8 @@ impl CanvasMode {
 
 /// What a toolbox's tool may do built in (`does pencil`): the canvas tools of
 /// paint and vector, which it takes in hand, and actions done at once.
-pub const TOOL_ACTIONS: [&str; 23] = [
-    "pen", "pencil", "spray", "eraser", "fill", "picker", "select", "ellipseSelect", "lasso", "line", "rect", "ellipse", "path", "text",
+pub const TOOL_ACTIONS: [&str; 24] = [
+    "pen", "pencil", "spray", "eraser", "fill", "picker", "select", "ellipseSelect", "lasso", "line", "rect", "ellipse", "path", "text", "connect",
     "rotate", "flipAcross", "flipDown", "crop", "import", "export", "zoomIn", "zoomOut", "adjust",
 ];
 
@@ -1289,6 +1290,10 @@ pub struct Project {
     /// The written diagrams of the project's `diagrams` folder (DESIGN
     /// 5.13), by name; empty when there are none or the folder was not read.
     pub diagrams: Vec<crate::diagrams::DiagramFile>,
+    /// The project's README.md (its design goal and guide for whoever works
+    /// on it next), from its folder; None when it has none or the folder was
+    /// not read.
+    pub readme: Option<String>,
     /// The files of the project's `engines` folder, by name. None when the
     /// project was loaded without its folder.
     #[serde(skip)]

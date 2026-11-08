@@ -7,6 +7,7 @@
     X(decimals_add_multiply_divide_and_compare_by_value)          \
     X(every_rounding_case_rounds_as_every_runtime_does)          \
     X(an_item_is_read_by_its_position_from_1)                    \
+    X(whole_numbers_divide_toward_zero)                           \
     X(ranges_and_joins_are_as_every_runtime_gives_them)          \
     X(an_item_is_set_by_its_position_from_1)                     \
     X(sin_and_cos_take_degrees_as_every_runtime_does)            \

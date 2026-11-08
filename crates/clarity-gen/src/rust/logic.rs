@@ -608,6 +608,8 @@ impl<'a> Emitter<'a> {
             "background" => "background",
             "dotSize" => "dot_size",
             "dotColor" => "dot_color",
+            "min" => "spin_min",
+            "max" => "spin_max",
             "tool" => "tool",
             "brush" => "brush",
             "ink" => "ink",
@@ -651,6 +653,8 @@ impl<'a> Emitter<'a> {
             ("snap", Some(info)) => format!("ui.snap({part:?}, {})", info.snap),
             ("background", Some(info)) => format!("ui.background({part:?}, {:?})", info.background),
             ("dot_size", Some(info)) => format!("ui.dot_size({part:?}, {})", info.dot_size),
+            ("spin_min", Some(info)) => format!("ui.spin_min({part:?}, {})", info.spin.0),
+            ("spin_max", Some(info)) => format!("ui.spin_max({part:?}, {})", info.spin.1),
             ("dot_color", Some(info)) => format!("ui.dot_color({part:?}, {:?})", info.dot_color),
             ("tool", Some(info)) => format!("ui.tool({part:?}, {:?})", info.tool),
             ("brush", Some(info)) => format!("ui.brush({part:?}, {})", info.brush),
@@ -1303,6 +1307,11 @@ impl<'a> Emitter<'a> {
     }
 
     fn binary(&mut self, op: BinaryOp, left: &Expr, right: &Expr, result: &TypeInfo) -> String {
+        // Whole numbers divided, a division by zero an error (Error::DividedByZero).
+        if matches!(op, BinaryOp::WholeDiv | BinaryOp::Mod) {
+            let name = if op == BinaryOp::WholeDiv { "whole_div" } else { "whole_mod" };
+            return format!("clarity_runtime::{name}({}, {})?", self.value(left), self.value(right));
+        }
         if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
             let other = match (&left.kind, &right.kind) {
                 (_, ExprKind::Empty) => Some(left),
@@ -1450,6 +1459,8 @@ pub struct PartInfo {
     /// A canvas's grid dots as its line says: pixels across (2 without it) and color (empty is the theme's border).
     pub dot_size: u32,
     pub dot_color: String,
+    /// A spin box's range as its line writes it.
+    pub spin: (i64, i64),
     /// A canvas's mode (DESIGN 5.31), and in mode objects the list of its objects.
     pub mode: Option<CanvasMode>,
     pub objects: Option<String>,
@@ -1494,6 +1505,7 @@ impl WindowCtx {
                         background: widget.props.background.clone().unwrap_or_default(),
                         dot_size: widget.props.dot_size.unwrap_or(2),
                         dot_color: widget.props.dot_color.clone().unwrap_or_default(),
+                        spin: crate::spin_range(&widget.props),
                         mode: widget.props.mode,
                         objects: widget.props.objects.as_ref().map(|o| o.list.clone()),
                         tool: crate::canvas_tool(&widget.props),
@@ -1527,6 +1539,7 @@ impl WindowCtx {
                         background: String::new(),
                         dot_size: 2,
                         dot_color: String::new(),
+                        spin: (0, 2_147_483_647),
                         mode: None,
                         objects: None,
                         tool: String::new(),

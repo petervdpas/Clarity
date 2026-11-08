@@ -140,9 +140,12 @@ impl NumberPart {
         }
         let facts = self.base.bound().and_then(|path| self.base.host.field(path));
         let written = |name: &str| self.base.spec.text(name).filter(|t| !t.is_empty()).map(str::to_string);
+        // What code set (`levelBox.max = 3`) goes before what the line writes.
+        let state = self.base.state();
+        let set = |pick: fn(&clarity_runtime::ui::PartState) -> Option<i64>| state.as_deref().and_then(pick).map(|n| n.to_string());
         Some(Range {
-            min: written("min").or_else(|| facts.as_ref().and_then(|f| f.min.clone())),
-            max: written("max").or_else(|| facts.as_ref().and_then(|f| f.max.clone())),
+            min: set(|s| s.min).or_else(|| written("min")).or_else(|| facts.as_ref().and_then(|f| f.min.clone())),
+            max: set(|s| s.max).or_else(|| written("max")).or_else(|| facts.as_ref().and_then(|f| f.max.clone())),
             step: written("step").unwrap_or_else(|| "1".to_string()),
         })
     }

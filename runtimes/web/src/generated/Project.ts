@@ -61,4 +61,10 @@ resources: Resources | null,
  * The written diagrams of the project's `diagrams` folder (DESIGN
  * 5.13), by name; empty when there are none or the folder was not read.
  */
-diagrams: Array<DiagramFile>, };
+diagrams: Array<DiagramFile>, 
+/**
+ * The project's README.md (its design goal and guide for whoever works
+ * on it next), from its folder; None when it has none or the folder was
+ * not read.
+ */
+readme: string | null, };

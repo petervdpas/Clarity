@@ -46,6 +46,9 @@ struct PartState {
     // A canvas's grid dots, as a handler set them: pixels across, and color (empty is the theme's border).
     std::optional<int64_t> dot_size;
     std::optional<std::string> dot_color;
+    // A spin box's range, as a handler set it; empty keeps what its line writes.
+    std::optional<int64_t> min;
+    std::optional<int64_t> max;
     // A painting or vector canvas's tool in hand, how wide it paints and its color, as a handler set them (DESIGN 5.31).
     std::optional<std::string> tool;
     std::optional<int64_t> brush;
@@ -241,6 +244,11 @@ public:
     /// A canvas's grid dots (`canvas.dotSize`, `canvas.dotColor`), as its line says until a handler sets them.
     int64_t dot_size(const std::string& part, int64_t design) const;
     void set_dot_size(const std::string& part, int64_t value) { parts_[part].dot_size = value; }
+    /// A spin box's range (`spinbox.min`, `spinbox.max`), as its line writes it until a handler sets it.
+    int64_t spin_min(const std::string& part, int64_t design) const;
+    void set_spin_min(const std::string& part, int64_t value) { parts_[part].min = value; }
+    int64_t spin_max(const std::string& part, int64_t design) const;
+    void set_spin_max(const std::string& part, int64_t value) { parts_[part].max = value; }
     std::string dot_color(const std::string& part, const std::string& design) const;
     void set_dot_color(const std::string& part, const std::string& value) { parts_[part].dot_color = value; }
     std::string tool(const std::string& part, const std::string& design) const;

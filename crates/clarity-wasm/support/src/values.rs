@@ -215,6 +215,16 @@ pub fn push(list: &Value, item: Value) -> Value {
     Value::List(items)
 }
 
+/// `a div b` in code: the quotient rounded toward zero; dividing by zero fails.
+pub fn whole_div(a: i64, b: i64) -> Result<i64, String> {
+    if b == 0 { Err("division by zero".to_string()) } else { Ok(a.wrapping_div(b)) }
+}
+
+/// `a mod b` in code: what is left, with the sign of `a`.
+pub fn whole_mod(a: i64, b: i64) -> Result<i64, String> {
+    if b == 0 { Err("division by zero".to_string()) } else { Ok(a.wrapping_rem(b)) }
+}
+
 pub fn count(list: &Value) -> i64 {
     if let Value::List(items) = list { items.len() as i64 } else { 0 }
 }

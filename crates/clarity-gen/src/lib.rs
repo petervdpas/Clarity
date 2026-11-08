@@ -401,6 +401,12 @@ pub(crate) fn canvas_draws(page: &clarity_spec::model::Page) -> Vec<(String, Str
 /// left out (conformance/drawing.json).
 /// The tool a painting or vector canvas starts with (DESIGN 5.31): the
 /// first of its `tools`, else the first of its mode's; empty for none.
+/// A spin box's range as its line writes it, whole numbers: 0 and 2147483647 where it writes none.
+pub(crate) fn spin_range(props: &clarity_spec::model::WidgetProps) -> (i64, i64) {
+    let whole = |t: &Option<String>| t.as_deref().and_then(|t| t.trim().parse::<i64>().ok());
+    (whole(&props.min).unwrap_or(0), whole(&props.max).unwrap_or(2_147_483_647))
+}
+
 pub(crate) fn canvas_tool(props: &clarity_spec::model::WidgetProps) -> String {
     let first = props.tools.first().map(String::as_str).or_else(|| props.mode.and_then(|m| m.tools().first().copied()));
     first.unwrap_or_default().to_string()

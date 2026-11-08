@@ -36,6 +36,9 @@ typedef struct {
     bool has_dot_size;
     int64_t dot_size;
     const char* dot_color;
+    /// A spin box's range, as a handler set it; without `has_min` and `has_max` it is as its line writes it.
+    bool has_min, has_max;
+    int64_t min, max;
     /// A painting or vector canvas's tool in hand, brush and ink, as a handler set them (DESIGN 5.31); NULL keeps the design.
     const char* tool;
     bool has_brush;
@@ -239,6 +242,11 @@ void clarity_ui_set_background(ClarityUi* ui, const char* part, const char* valu
 /// A canvas's grid dots (`canvas.dotSize`, `canvas.dotColor`), as its line says until a handler sets them.
 int64_t clarity_ui_dot_size(const ClarityUi* ui, const char* part, int64_t design);
 void clarity_ui_set_dot_size(ClarityUi* ui, const char* part, int64_t value);
+/// A spin box's range (`spinbox.min`, `spinbox.max`), as its line writes it until a handler sets it.
+int64_t clarity_ui_spin_min(const ClarityUi* ui, const char* part, int64_t design);
+void clarity_ui_set_spin_min(ClarityUi* ui, const char* part, int64_t value);
+int64_t clarity_ui_spin_max(const ClarityUi* ui, const char* part, int64_t design);
+void clarity_ui_set_spin_max(ClarityUi* ui, const char* part, int64_t value);
 const char* clarity_ui_dot_color(const ClarityUi* ui, const char* part, const char* design);
 void clarity_ui_set_dot_color(ClarityUi* ui, const char* part, const char* value);
 /// A painting or vector canvas's tool in hand (`canvas.tool`), how wide it

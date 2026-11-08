@@ -164,6 +164,16 @@ fn heard_as_calls(body: &mut Vec<Stmt>, heard: &[TellHandler]) {
 
 /// Puts each view's parts in the places among `widgets` that show it, and notes the views shown with what each place hears of it.
 fn fill<'v>(widgets: &mut [Widget], views: &'v [(Page, Option<CodeBlock>)], shown: &mut Vec<(&'v (Page, Option<CodeBlock>), Vec<TellHandler>)>) {
+    fill_at(widgets, views, shown, 0);
+}
+
+/// How deep views may be placed inside views: a view that places itself stops here.
+const VIEW_DEPTH: usize = 8;
+
+fn fill_at<'v>(widgets: &mut [Widget], views: &'v [(Page, Option<CodeBlock>)], shown: &mut Vec<(&'v (Page, Option<CodeBlock>), Vec<TellHandler>)>, depth: usize) {
+    if depth > VIEW_DEPTH {
+        return;
+    }
     let find = |name: &str| views.iter().find(|(v, _)| v.name.name == name);
     for widget in widgets.iter_mut() {
         // A canvas's toolbox: the toolbox's parts are the canvas's, each tool for that canvas.
@@ -190,11 +200,12 @@ fn fill<'v>(widgets: &mut [Widget], views: &'v [(Page, Option<CodeBlock>)], show
                 shown.push((found, std::mem::take(&mut page.tells)));
             }
         }
-        if widget.props.view.is_none() {
-            fill(&mut widget.children, views, shown);
-        }
-        for page in widget.pages.iter_mut().filter(|p| p.view.is_none()) {
-            fill(&mut page.children, views, shown);
+        // A view's own parts are placed in turn: a toolbox on its canvas, a view inside it.
+        let deeper = if widget.props.view.is_some() { depth + 1 } else { depth };
+        fill_at(&mut widget.children, views, shown, deeper);
+        for page in widget.pages.iter_mut() {
+            let deeper = if page.view.is_some() { depth + 1 } else { depth };
+            fill_at(&mut page.children, views, shown, deeper);
         }
     }
 }

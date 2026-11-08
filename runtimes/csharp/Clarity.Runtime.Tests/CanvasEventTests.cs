@@ -209,6 +209,12 @@ public class CanvasEventTests
         sheet.DotSize = 3;
         sheet.DotColor = "muted";
         Assert.Equal((3L, "muted"), (sheet.DotSize, sheet.DotColor));
+        // A spin box's range: as its line writes it (the window sets it), then as code sets it, on the wire once set.
+        var level = new PartState("level") { SpinMin = 1, SpinMax = 99 };
+        level.SpinMax = 3;
+        Assert.Equal((1L, 3L), (level.SpinMin, level.SpinMax));
+        Assert.Equal(3L, (long?)WireJson.Part(level, null)["max"]);
+        Assert.False(WireJson.Part(new PartState("free"), null).ContainsKey("max"));
         // A line tool: false until code sets canvas.connecting.
         Assert.False(sheet.Connecting);
         sheet.Connecting = true;

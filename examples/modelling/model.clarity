@@ -42,6 +42,33 @@ entity ObjectVersion
     // Why someone should look at it (the import changed a public name); empty when nothing asks for it.
     review: text(400), label @reviewLabel
 
+// A table the adapter keeps a data object in. A data object can have
+// several: the adapter makes a new entity (Models.V2) when it needs other
+// columns, and keeps the old table while older API versions read it. A
+// table of the adapter's own (DeletedEntities) has no data object.
+entity AdapterTable
+    // The data object kept in it; none for a table of the adapter's own.
+    owner: ref DataObject, cascade, label @tableOwnerLabel
+    name: text(120), required, label @tableNameLabel
+    // The adapter entity's class, as Cursus or DeletedEntity.
+    entityName: text(120), label @tableEntityNameLabel
+    // The adapter entity kept in it: 1 for Models, N for Models.VN.
+    entityVersion: integer, min 1, default 1, label @tableEntityVersionLabel
+    // Its columns and primary key as the adapter's model class has them (`Bk: string`).
+    columns: list<text>, label @tableColumnsLabel
+    keys: list<text>, label @tableKeysLabel
+    // Where a table of the adapter's own stands on the ERD; 0, 0 until it is moved.
+    x: integer, label @objectXLabel
+    y: integer, label @objectYLabel
+
+// An event that fills an adapter table, as the adapter's data-intake
+// handler takes it: it writes a row, or a deleted event deletes one (and
+// adds one to DeletedEntities). Tables are filled from events only.
+entity TableIntake
+    table: ref AdapterTable, required, cascade, label @intakeTableLabel
+    event: ref EventType, required, cascade, label @intakeEventLabel
+    deletes: bool, default false, label @intakeDeletesLabel
+
 // What a property holds: a value, one of the domain's enums, a data object
 // held inside, a list of those, or the business key of another data object.
 enum PropertyKind
@@ -81,6 +108,9 @@ entity EnumType
     domain: ref Domain, required, cascade, label @enumDomainLabel
     name: text(80), required, label @enumNameLabel
     summary: text, label @enumSummaryLabel
+    // Where its box is on the class diagram, in the canvas's units; 0, 0 until it is moved.
+    x: integer, label @objectXLabel
+    y: integer, label @objectYLabel
 
 // A value of an enum, with the number it is kept as.
 entity EnumValue

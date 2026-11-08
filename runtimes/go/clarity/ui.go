@@ -45,6 +45,10 @@ type PartState struct {
 	// pixels across, and color (empty is the theme's border).
 	DotSize  *int64  `json:"dotSize,omitempty"`
 	DotColor *string `json:"dotColor,omitempty"`
+	// Min and Max are a spin box's range, as a handler set it; nil keeps
+	// what its line writes.
+	Min *int64 `json:"min,omitempty"`
+	Max *int64 `json:"max,omitempty"`
 	// Tool, Brush and Ink are the tool in hand of a painting or vector
 	// canvas, how wide it paints and its color, as a handler set them
 	// (DESIGN 5.31); nil keeps the design.
@@ -424,6 +428,31 @@ func (u *Ui) DotSize(part string, design int64) int64 {
 
 func (u *Ui) SetDotSize(part string, value int64) {
 	u.part(part, func(p *PartState) { p.DotSize = &value })
+}
+
+// SpinMin is the lowest value of a spin box: spinbox.min, as its line
+// writes it until a handler sets it.
+func (u *Ui) SpinMin(part string, design int64) int64 {
+	if m := u.parts[part].Min; m != nil {
+		return *m
+	}
+	return design
+}
+
+func (u *Ui) SetSpinMin(part string, value int64) {
+	u.part(part, func(p *PartState) { p.Min = &value })
+}
+
+// SpinMax is the highest value of a spin box: spinbox.max.
+func (u *Ui) SpinMax(part string, design int64) int64 {
+	if m := u.parts[part].Max; m != nil {
+		return *m
+	}
+	return design
+}
+
+func (u *Ui) SetSpinMax(part string, value int64) {
+	u.part(part, func(p *PartState) { p.Max = &value })
 }
 
 // DotColor is the color of a canvas's grid dots: canvas.dotColor.

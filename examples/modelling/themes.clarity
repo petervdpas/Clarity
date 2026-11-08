@@ -1,6 +1,6 @@
 module themes
 
-// The two looks the modelling app offers; the toolbar's Theme button
+// The two looks the modelling app offers; Theme in the View menu
 // switches them. Each colors code its own way, as the class editor's C#
 // tab shows.
 theme Studio
@@ -17,6 +17,8 @@ theme Studio
     color code_number "#c2410c"
     color code_comment "#8b8478"
     part code background code_background, text "#2b2a26", border "#e4dccb"
+    // A label that stands right against the input after it.
+    style trailing align right
 
 theme Midnight
     title @midnightTheme
@@ -37,3 +39,4 @@ theme Midnight
     color code_number "#f78c6c"
     color code_comment "#697098"
     part code background code_background, text "#d6deeb", border "#232b45"
+    style trailing align right

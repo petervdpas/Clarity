@@ -1,0 +1,248 @@
+name: Checks
+
+# The checks a release waits for (memory: build and check before naming a
+# release), run on GitHub instead of a laptop: every test suite of the
+# workspace, the Go, C, C++ and C# runtimes, the IDE's renderer, and every
+# example built on its own stack, side by side. Runs on each push to main and
+# by hand (Actions, Run workflow). Linux only: the release workflows build
+# and test the other systems when a tag is pushed.
+#
+# Left out: the dice example (its Bevy game engine takes longer to build than
+# all the others together), and the Go module test that needs the Go
+# runtime's published sums, which are recorded after the Go tag is pushed
+# (writes_a_go_module_on_the_runtime_module).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+  NODE_VERSION: "22"
+  DOTNET_VERSION: "10.0.x"
+  EMSCRIPTEN_VERSION: "6.0.9"
+  # Skia's text needs fontconfig and freetype, the sound part ALSA, the windows xkbcommon and Wayland.
+  LINUX_LIBRARIES: pkg-config libfontconfig1-dev libfreetype-dev libasound2-dev libxkbcommon-dev libwayland-dev
+
+jobs:
+  # Clarity.UI's library for Go, C, C++ and C#, as the release packs it: the folder CLARITY_UI names.
+  library:
+    name: Clarity.UI library
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install system libraries
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends $LINUX_LIBRARIES
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: library
+      - name: Build the libraries
+        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi
+      - name: Pack the folder
+        run: |
+          set -euo pipefail
+          mkdir -p clarity-ui/include clarity-ui/lib
+          cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h runtimes/rust-image-ffi/include/clarity_image.h clarity-ui/include/
+          cp target/release/libclarity_ui.so target/release/libclarity_audio.so target/release/libclarity_video.so target/release/libclarity_image.so clarity-ui/lib/
+          python3 .github/scripts/fetch_openh264.py linux-x64 clarity-ui/lib
+          ls -lR clarity-ui
+      - uses: actions/upload-artifact@v7
+        with:
+          name: clarity-ui-linux-x64
+          path: clarity-ui
+          if-no-files-found: error
+
+  # Clarity.UI's browser files, which the web examples serve.
+  browser:
+    name: Clarity.UI browser files
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-emscripten
+      - name: Setup Emscripten
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "$EMSCRIPTEN_VERSION"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "$EMSCRIPTEN_VERSION"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm32-unknown-emscripten
+      - name: Build the browser files
+        run: EMSDK="$RUNNER_TEMP/emsdk" runtimes/rust-ui-browser/build.sh out/clarity-ui-browser
+      - uses: actions/upload-artifact@v7
+        with:
+          name: clarity-ui-browser
+          path: out/clarity-ui-browser
+          if-no-files-found: error
+
+  # Every crate's tests, and the IDE's renderer: checked, tested and built (the IDE's crate embeds it).
+  workspace:
+    name: Workspace and renderer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends $LINUX_LIBRARIES \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: workspace
+      - name: Install the renderer's packages
+        working-directory: app
+        run: npm ci
+      - name: Check the renderer
+        working-directory: app
+        run: npm run check
+      - name: Test the renderer
+        working-directory: app
+        run: npm test
+      - name: Build the renderer
+        working-directory: app
+        run: npm run build
+      - name: Test the workspace
+        run: |
+          # The C header's test links the library itself, which cargo test does not build.
+          cargo build -p clarity-ui-ffi
+          cargo test --workspace --no-fail-fast -- --skip writes_a_go_module_on_the_runtime_module
+
+  go:
+    name: Go runtime
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: runtimes/go/go.mod
+          cache-dependency-path: runtimes/go/go.sum
+      - name: Test the runtime
+        working-directory: runtimes/go
+        run: go test ./clarity
+
+  c-cpp:
+    name: C and C++ runtimes
+    needs: [library]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the build tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake ninja-build $LINUX_LIBRARIES
+      - uses: actions/download-artifact@v8
+        with:
+          name: clarity-ui-linux-x64
+          path: clarity-ui
+      - name: Test the C runtime
+        run: |
+          set -euo pipefail
+          export CLARITY_UI="$PWD/clarity-ui"
+          cmake -S runtimes/c -B build-c -G Ninja
+          cmake --build build-c
+          ctest --test-dir build-c --output-on-failure
+      - name: Test the C++ runtime
+        run: |
+          set -euo pipefail
+          export CLARITY_UI="$PWD/clarity-ui"
+          cmake -S runtimes/cpp -B build-cpp -G Ninja
+          cmake --build build-cpp
+          ctest --test-dir build-cpp --output-on-failure
+
+  csharp:
+    name: C# runtime
+    needs: [library]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: clarity-ui-linux-x64
+          path: clarity-ui
+      # Each library goes where its project packs it from, as release-csharp-runtime.yml places them.
+      - name: Place the native libraries
+        run: |
+          set -euo pipefail
+          for part in ui audio video image; do
+            Part="$(echo ${part:0:1} | tr a-z A-Z)${part:1}"
+            dest="runtimes/csharp/Clarity.$Part/runtimes/linux-x64/native"
+            mkdir -p "$dest"
+            cp clarity-ui/lib/libclarity_$part.so "$dest/"
+          done
+          cp clarity-ui/lib/*openh264* runtimes/csharp/Clarity.Video/runtimes/linux-x64/native/ || true
+      - name: Build the solution
+        run: dotnet build runtimes/csharp/Clarity.slnx -c Release -p:UseSharedCompilation=false -nodeReuse:false
+      - name: Install a virtual display
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb fonts-droid-fallback
+      - name: Test the solution
+        run: xvfb-run -a dotnet test runtimes/csharp/Clarity.slnx -c Release --no-build
+
+  # Each example built on its own stack as the IDE builds it, without a warning (crates/clarity-gen/tests/examples_build.rs).
+  examples:
+    name: Example ${{ matrix.example }}
+    needs: [library, browser]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [calculator, dial, invaders, kitchen, ledger, modelling, mp3player, noughts, novel, orbs, pills, records, shop, stock, todo, videoplayer, walker, waves]
+    env:
+      # Debug builds only, as on the laptop's routine checks.
+      CLARITY_EXAMPLES_QUICK: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the build tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake ninja-build ccache $LINUX_LIBRARIES
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: example-${{ matrix.example }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: runtimes/go/go.mod
+          cache-dependency-path: runtimes/go/go.sum
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: clarity-ui-linux-x64
+          path: clarity-ui
+      - uses: actions/download-artifact@v8
+        with:
+          name: clarity-ui-browser
+          path: clarity-ui-browser
+      - name: Place the native libraries for C#
+        run: |
+          set -euo pipefail
+          for part in ui audio video image; do
+            Part="$(echo ${part:0:1} | tr a-z A-Z)${part:1}"
+            dest="runtimes/csharp/Clarity.$Part/runtimes/linux-x64/native"
+            mkdir -p "$dest"
+            cp clarity-ui/lib/libclarity_$part.so "$dest/"
+          done
+          cp clarity-ui/lib/*openh264* runtimes/csharp/Clarity.Video/runtimes/linux-x64/native/ || true
+      - name: Build the example
+        run: |
+          set -euo pipefail
+          export CLARITY_UI="$PWD/clarity-ui" CLARITY_UI_BROWSER="$PWD/clarity-ui-browser"
+          cargo test -p clarity-gen --test examples_build -- --ignored --exact the_${{ matrix.example }}_example_builds_without_warnings

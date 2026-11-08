@@ -134,6 +134,18 @@ pub fn save_markdown(name: String, text: String, state: State<WatchState>, histo
     load(&dir)
 }
 
+/// Writes the project's README.md: its design goal and guide, in its folder beside the modules.
+#[tauri::command]
+pub fn save_readme(text: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
+    let (_, dir) = open_project_of(&state)?;
+    let file = dir.join(clarity_spec::README_FILE);
+    let before = std::fs::read_to_string(&file).ok();
+    if before.as_deref() != Some(text.as_str()) {
+        write(vec![FileChange { file, before, after: Some(text) }], &history)?;
+    }
+    load(&dir)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

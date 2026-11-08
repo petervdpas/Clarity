@@ -193,6 +193,10 @@ internal static class WireJson
             state["background"] = part.Background;
         if (part.DotSize != 2)
             state["dotSize"] = part.DotSize;
+        if (part.SpinMinSet)
+            state["min"] = part.SpinMin;
+        if (part.SpinMaxSet)
+            state["max"] = part.SpinMax;
         if (part.DotColor.Length > 0)
             state["dotColor"] = part.DotColor;
         if (part.Tool.Length > 0)

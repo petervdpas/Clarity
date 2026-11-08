@@ -1275,9 +1275,9 @@ impl<'a> Checker<'a> {
                 self.error(file, "'add' shows an Add button above the table: write 'on add: handler' that adds the row", widget.span);
             }
             self.check_toolbox_of(file, widget);
-            // A toolbox holds a painting canvas's tools, or a memo's coded ones.
-            if p.toolbox.is_some() && p.kind != WidgetKind::Memo && !matches!(p.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)) {
-                self.error(file, "a toolbox holds the tools of a canvas in mode paint or mode vector", widget.span);
+            // A toolbox holds the tools of a canvas with a mode (a diagram's, a painting's, a drawing's), or a memo's coded ones.
+            if p.toolbox.is_some() && p.kind != WidgetKind::Memo && p.mode.is_none() {
+                self.error(file, "a toolbox holds the tools of a canvas in mode objects, paint or vector", widget.span);
             }
             // A link column is one of the table's columns.
             for link in &p.links {
@@ -1890,6 +1890,14 @@ impl<'a> Checker<'a> {
                         Some(_) => {}
                     }
                 }
+                // The canvas follows a dragged object by its id: a stored entity has one, a record gives one.
+                if entity.record && entity.field("id").is_none_or(|f| f.ty != FieldType::Integer) {
+                    self.error(
+                        file,
+                        format!("{at}: {} is a record, which has no 'id' of its own; give it `id: integer`, different for each object, which the canvas follows a dragged object by", entity.name.name),
+                        widget.span,
+                    );
+                }
             }
             CanvasMode::Paint | CanvasMode::Vector => {
                 let what = if mode == CanvasMode::Paint { "an image field, which holds the picture" } else { "a text field, which holds the drawing as SVG" };
@@ -2050,7 +2058,7 @@ impl<'a> Checker<'a> {
             self.error(file, format!("{name}'s layers are a picture's; a canvas in mode {} has none", mode.keyword()), widget.span);
         }
         // The canvas tools of the other mode are not this canvas's; the actions done at once are every painting canvas's.
-        let all_tools: Vec<&str> = crate::model::CanvasMode::Paint.tools().iter().chain(crate::model::CanvasMode::Vector.tools()).copied().collect();
+        let all_tools: Vec<&str> = [crate::model::CanvasMode::Objects, crate::model::CanvasMode::Paint, crate::model::CanvasMode::Vector].iter().flat_map(|m| m.tools().iter().copied()).collect();
         for d in done {
             let picture_only = matches!(d, "rotate" | "flipAcross" | "flipDown" | "crop" | "import" | "export" | "adjust");
             if (all_tools.contains(&d) && !tools.contains(&d)) || (picture_only && mode != crate::model::CanvasMode::Paint) {

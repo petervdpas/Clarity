@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
-use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, SLIDEOUT_KEYS, TABLE_ROW_KEYS, OPEN_ROW_KEYS, MARKDOWN_MEMO_KEYS, TOOLBOX_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
+use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, SLIDEOUT_KEYS, TABLE_ROW_KEYS, OPEN_ROW_KEYS, MARKDOWN_MEMO_KEYS, DIVISION_KEYS, TOOLBOX_KEYS, PAINT_TOOLBOX_KEYS, DIAGRAM_TOOL_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -114,8 +114,17 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| ["table ", "treetable ", "list ", "tree "].iter().any(|k| l.trim_start().starts_with(k)) && l.contains("on open:"))) { OPEN_ROW_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("memo ") && l.split_whitespace().any(|w| w == "markdown"))) { MARKDOWN_MEMO_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && l.split_whitespace().any(|w| w == "toolbox"))) { TOOLBOX_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && l.split_whitespace().any(|w| w == "toolbox") && l.split_whitespace().collect::<Vec<_>>().windows(2).any(|w| w[0] == "mode" && matches!(w[1], "paint" | "vector")))) { PAINT_TOOLBOX_KEYS.as_slice() } else { &[] })
+        .chain({
+            let canvas = |test: &dyn Fn(&str) -> bool| modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && test(l)));
+            let diagrams = canvas(&|l| l.contains("mode objects") && l.contains("on connect:"));
+            let paints = canvas(&|l| l.contains("mode paint") || l.contains("mode vector"));
+            if diagrams && paints { &DIAGRAM_TOOL_KEYS[..1] } else if diagrams { DIAGRAM_TOOL_KEYS.as_slice() } else { &[] }
+        })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("page "))) { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("engine "))) { ENGINE_ERROR_KEYS.as_slice() } else { &[] });
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("engine "))) { ENGINE_ERROR_KEYS.as_slice() } else { &[] })
+        // Code that divides whole numbers can say a division by zero failed.
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| !l.trim_start().starts_with("//") && (l.contains(" div ") || l.contains(" mod ")))) { DIVISION_KEYS.as_slice() } else { &[] });
     for (key, value) in own {
         maker.add_exact(key, value);
     }

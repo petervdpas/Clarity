@@ -1131,19 +1131,20 @@ impl CanvasPart {
 
     // -- New lines between boxes -----------------------------------------------------
 
-    /// Whether the person draws new lines on it: it has `on connect`, draws by code (no mode), may be used and changed.
+    /// Whether the person draws new lines on it: it has `on connect`, draws by code (no mode) or holds objects, may be used and changed.
     fn connects(&self) -> bool {
-        self.handles("connect") && self.mode().is_empty() && self.base.enabled() && !self.base.read_only()
+        self.handles("connect") && matches!(self.mode().as_str(), "" | "objects") && self.base.enabled() && !self.base.read_only()
     }
 
-    /// Whether a press anywhere on a box draws a new line, as code set `connecting`; only with `on connect`.
+    /// Whether a press anywhere on a box draws a new line: code set `connecting`, or a diagram's connect tool is in hand; only with `on connect`.
     pub fn connecting(&self) -> bool {
-        self.connects() && self.base.state().and_then(|s| s.connecting).unwrap_or(false)
+        self.connects() && (self.base.state().and_then(|s| s.connecting).unwrap_or(false) || (self.mode() == "objects" && self.tool_in_hand() == "connect"))
     }
 
     /// The box whose handles show: the one under the pointer, or the one with a handle beside it.
     fn hovered_box(&self, px: f64, py: f64) -> Option<UnitBox> {
-        if !self.connects() {
+        // A diagram shows a box's handles only while its connect tool is in hand: else a press drags the box.
+        if !self.connects() || (self.mode() == "objects" && !self.connecting()) {
             return None;
         }
         if let Some(found) = self.box_at(self.unit_at(px, py)) {

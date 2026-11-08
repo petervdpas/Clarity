@@ -254,6 +254,28 @@ void clarity_ui_set_dot_size(ClarityUi* ui, const char* part, int64_t value) {
     p->dot_size = value;
 }
 
+int64_t clarity_ui_spin_min(const ClarityUi* ui, const char* part, int64_t design) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->has_min ? p->min : design;
+}
+
+void clarity_ui_set_spin_min(ClarityUi* ui, const char* part, int64_t value) {
+    ClarityPart* p = part_of(ui, part);
+    p->has_min = true;
+    p->min = value;
+}
+
+int64_t clarity_ui_spin_max(const ClarityUi* ui, const char* part, int64_t design) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->has_max ? p->max : design;
+}
+
+void clarity_ui_set_spin_max(ClarityUi* ui, const char* part, int64_t value) {
+    ClarityPart* p = part_of(ui, part);
+    p->has_max = true;
+    p->max = value;
+}
+
 const char* clarity_ui_dot_color(const ClarityUi* ui, const char* part, const char* design) {
     const ClarityPart* p = found(ui, part);
     return p && p->dot_color ? p->dot_color : design;
@@ -551,6 +573,8 @@ static cJSON* part_json(const ClarityPart* p) {
     if (p->has_resizable) cJSON_AddBoolToObject(out, "resizable", p->resizable);
     if (p->background) cJSON_AddStringToObject(out, "background", p->background);
     if (p->has_dot_size) cJSON_AddNumberToObject(out, "dotSize", (double)p->dot_size);
+    if (p->has_min) cJSON_AddNumberToObject(out, "min", (double)p->min);
+    if (p->has_max) cJSON_AddNumberToObject(out, "max", (double)p->max);
     if (p->dot_color) cJSON_AddStringToObject(out, "dotColor", p->dot_color);
     if (p->tool) cJSON_AddStringToObject(out, "tool", p->tool);
     if (p->has_brush) cJSON_AddNumberToObject(out, "brush", (double)p->brush);
@@ -582,6 +606,8 @@ static bool part_from_json(const cJSON* in, ClarityPart* p) {
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "resizable"))) p->has_resizable = true, p->resizable = cJSON_IsTrue(v);
     if (cJSON_IsString(v = cJSON_GetObjectItemCaseSensitive(in, "background"))) p->background = clarity_copy(v->valuestring);
     if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "dotSize"))) p->has_dot_size = true, p->dot_size = (int64_t)v->valuedouble;
+    if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "min"))) p->has_min = true, p->min = (int64_t)v->valuedouble;
+    if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "max"))) p->has_max = true, p->max = (int64_t)v->valuedouble;
     if (cJSON_IsString(v = cJSON_GetObjectItemCaseSensitive(in, "dotColor"))) p->dot_color = clarity_copy(v->valuestring);
     if (cJSON_IsString(v = cJSON_GetObjectItemCaseSensitive(in, "tool"))) p->tool = clarity_copy(v->valuestring);
     if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "brush"))) p->has_brush = true, p->brush = (int64_t)v->valuedouble;

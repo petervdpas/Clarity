@@ -227,6 +227,8 @@ impl Machine<'_> {
                     IntOp::Add => a.wrapping_add(b),
                     IntOp::Sub => a.wrapping_sub(b),
                     IntOp::Mul => a.wrapping_mul(b),
+                    IntOp::Div => return failed(values::whole_div(a, b).map(Value::Int)),
+                    IntOp::Rem => return failed(values::whole_mod(a, b).map(Value::Int)),
                 })
             }
             E::IntCmp(cmp, a, b) => {

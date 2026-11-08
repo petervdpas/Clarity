@@ -55,6 +55,19 @@ bool clarity_outside(int64_t position, size_t count) {
     return clarity_fail(CLARITY_VALUE, "there is no item %lld in a list of %zu", (long long)position, count);
 }
 
+bool clarity_whole_div(int64_t a, int64_t b, int64_t* out) {
+    if (b == 0) return clarity_fail(CLARITY_VALUE, "division by zero");
+    // The lowest number divided by -1 has no whole quotient in 64 bits: it wraps, as the other runtimes do.
+    *out = b == -1 ? (int64_t)(0 - (uint64_t)a) : a / b;
+    return true;
+}
+
+bool clarity_whole_mod(int64_t a, int64_t b, int64_t* out) {
+    if (b == 0) return clarity_fail(CLARITY_VALUE, "division by zero");
+    *out = b == -1 ? 0 : a % b;
+    return true;
+}
+
 // The lists of each kind of value alike: made, read, set and kept.
 #define CLARITY_VALUES(List, Item, name)                                                  \
     List clarity_##name(size_t count, const Item* items) {                                \

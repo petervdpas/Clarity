@@ -140,6 +140,27 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     }
     long dotSize = 2;
 
+    /// <summary>The lowest value of a spin box: <c>spinbox.min</c>, as its line writes it until code sets it; 0 where it writes none.</summary>
+    public long SpinMin
+    {
+        get => spinMin ?? 0;
+        set => SetProperty(ref spinMin, (long?)value);
+    }
+    long? spinMin;
+
+    /// <summary>The highest value of a spin box: <c>spinbox.max</c>; 2147483647 where its line writes none.</summary>
+    public long SpinMax
+    {
+        get => spinMax ?? 2147483647;
+        set => SetProperty(ref spinMax, (long?)value);
+    }
+    long? spinMax;
+
+    /// <summary>Whether code or the window's line set the spin box's range, so the screen takes it.</summary>
+    public bool SpinMinSet => spinMin.HasValue;
+
+    public bool SpinMaxSet => spinMax.HasValue;
+
     /// <summary>The color of a canvas's grid dots: <c>canvas.dotColor</c>; empty is the theme's border.</summary>
     public string DotColor
     {

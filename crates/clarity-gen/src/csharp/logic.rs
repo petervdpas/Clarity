@@ -198,6 +198,8 @@ fn part_property(property: &str) -> Option<&'static str> {
         "background" => "Background",
         "dotSize" => "DotSize",
         "dotColor" => "DotColor",
+        "min" => "SpinMin",
+        "max" => "SpinMax",
         "tool" => "Tool",
         "brush" => "Brush",
         "ink" => "Ink",
@@ -1111,6 +1113,11 @@ impl<'a> Emitter<'a> {
     }
 
     fn binary(&mut self, op: BinaryOp, left: &Expr, right: &Expr, result: &TypeInfo) -> String {
+        // Whole numbers divided, a division by zero a ValueException.
+        if matches!(op, BinaryOp::WholeDiv | BinaryOp::Mod) {
+            let name = if op == BinaryOp::WholeDiv { "WholeDiv" } else { "WholeMod" };
+            return format!("Lists.{name}({}, {})", self.value(left), self.value(right));
+        }
         if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
             let other = match (&left.kind, &right.kind) {
                 (_, ExprKind::Empty) => Some(left),

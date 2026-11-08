@@ -1580,6 +1580,28 @@ Asked 2026-11-05 with the kitchen example: a new recipe's boxes say what goes in
 - **Copy.** `copy` on a text box or memo gives it the password box's copy button, in a memo's top right corner, named by `copyText`; it works read only too.
 - **The IDE.** The inspector shows Placeholder, Code (the languages from `WidgetInfo::code_languages`) and Copy button where the part takes them.
 
+### 5.35 A project's README: its design goal (2026-11-08, built)
+
+Asked 2026-11-08 with the modelling example: a project carries a description in Markdown that works as a handover and a guide to what it is for.
+
+- **The file.** `README.md` in the project's folder, beside the modules (`examples/modelling/README.md`), where a developer looks first. `clarity_spec::README_FILE`; `Project::readme` holds its text when the project is read from its folder, none without the file or the folder.
+- **What goes in it.** The design goal, the scope (what the application does and where it stops), the data and where it comes from, the order of work and the rules that hold for the project. Plain Markdown; nothing in it is checked or generated.
+- **The IDE.** README stands at the top of the project tree, under the app; it opens in the editor with the Markdown on the left and how it reads on the right, saved with Save or Ctrl+S (`save_readme`, undone like any other write). A project without one shows **+ Write README**, which starts from the headings Goal, Scope and Order of work. A change on disk reloads it, as a module's does.
+- **The agent.** `project_overview` shows the README first, or says the project has none and asks the agent to offer one. The agent reads and writes it as the path `README.md`, and its instructions say to work toward the goal and keep the file current when the goal, the scope or the order of work changes.
+- **Open.** The generated program's README does not carry it yet.
+
+### 5.36 A spin box's range from code (2026-11-08, built)
+
+Asked with the modelling app, whose version dial must stop at a domain's newest version. `levelBox.min` and `levelBox.max` are whole numbers code reads and sets (`code/check.rs`), as the line writes them until a handler sets them. Each runtime keeps them in the part's state, sent as `min` and `max` (Rust `Ui::spin_min`/`set_spin_min`, Go `SpinMin`/`SetSpinMin`, C `clarity_ui_spin_min`, C++ `Ui::spin_min`, C# `PartState.SpinMin` and `SpinMax`, started from the line by the generated window); Clarity.UI's spin box takes them before the written range. Tests: clarity-spec `spin_range`, clarity-gen `spin_range` (all five stacks), each runtime's part state, Clarity.UI `a_range_code_set_goes_before_the_written_one`. Needs the next runtime releases.
+
+### 5.37 A diagram's tools (2026-11-08, built)
+
+Asked with the modelling app: its diagrams get a toolbox for select, connect (draw a line), zoom and coded tools, set per diagram type by code. A canvas in mode objects with `on connect` has the tools `select` (a press drags an object, as before) and `connect` (a press on an object draws a line to another, `on connect` runs with `fromX`, `fromY`, `x`, `y`, nothing moves); `canvas.tool` is read and set on every canvas with a mode; a toolbox (`toolbox`, or a page `toolbox DiagramTools`) serves it, the built-in one with select, connect, zoom in and out; `does connect` is a tool action. The checker allows `on connect` in mode objects (not paint or vector). Clarity.UI: `OBJECT_TOOLS`, `connecting()` true while connect is in hand, a box's handles only then. Tests: clarity-spec `a_canvas_of_objects_selects_connects_and_takes_a_toolbox`, Clarity.UI `a_diagram_s_connect_tool_draws_a_line_between_objects_and_select_drags`.
+
+### 5.38 Whole-number division and names across views (2026-11-08, built)
+
+Found with the modelling app. **`a div b` and `a mod b`:** `/` gives a decimal, so code could not halve a width. `div` (the quotient of two integers rounded toward zero) and `mod` (what is left, with the sign of `a`) bind as `*` does and are operators only after a value, so existing names `div` and `mod` stay names (`BinaryOp::WholeDiv`, `Mod`). Each runtime has the helper that fails on zero: Rust `whole_div`/`whole_mod` (`Error::DividedByZero`, said by the key `divisionByZero`), Go `WholeDiv`/`WholeMod`, C `clarity_whole_div`/`clarity_whole_mod`, C++ `clarity::whole_div`/`whole_mod`, C# `Lists.WholeDiv`/`WholeMod` (keyed too); the lowest number divided by -1 wraps on all of them. Engines written in Clarity: `IntOp::Div`, `Rem`, compiled to calls of the support module's `rt_whole_div`/`rt_whole_mod` (not wasm's division, which traps), and run by the interpreter alike; conformance/clarity-engines.json `half` and `left`. The word `divisionByZero` is asked of projects whose code divides whole numbers. **Names across views:** a view's code joins the window that shows it, with the data and parts of that window's other views; a local named like one of those meant that data on every stack. The checker now refuses such a local (`neighbours_of`), as it refuses one named like its own page's data. Tests: clarity-spec `whole_division`, `view_names`; clarity-gen `whole_division`; each runtime's own.
+
 ## 6. Generation
 
 ### 6.1 Shape and behavior

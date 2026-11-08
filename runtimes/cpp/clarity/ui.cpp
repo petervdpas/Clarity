@@ -38,6 +38,8 @@ bool Ui::connecting(const std::string& part) const { return part_or(parts_, part
 bool Ui::resizable(const std::string& part) const { return part_or(parts_, part, &PartState::resizable, true); }
 std::string Ui::background(const std::string& part, const std::string& design) const { return part_or(parts_, part, &PartState::background, design); }
 int64_t Ui::dot_size(const std::string& part, int64_t design) const { return part_or(parts_, part, &PartState::dot_size, design); }
+int64_t Ui::spin_min(const std::string& part, int64_t design) const { return part_or(parts_, part, &PartState::min, design); }
+int64_t Ui::spin_max(const std::string& part, int64_t design) const { return part_or(parts_, part, &PartState::max, design); }
 std::string Ui::dot_color(const std::string& part, const std::string& design) const { return part_or(parts_, part, &PartState::dot_color, design); }
 std::string Ui::tool(const std::string& part, const std::string& design) const { return part_or(parts_, part, &PartState::tool, design); }
 int64_t Ui::brush(const std::string& part, int64_t design) const { return part_or(parts_, part, &PartState::brush, design); }
@@ -150,6 +152,8 @@ void to_json(nlohmann::json& out, const PartState& p) {
     if (p.resizable) out["resizable"] = *p.resizable;
     if (p.background) out["background"] = *p.background;
     if (p.dot_size) out["dotSize"] = *p.dot_size;
+    if (p.min) out["min"] = *p.min;
+    if (p.max) out["max"] = *p.max;
     if (p.dot_color) out["dotColor"] = *p.dot_color;
     if (p.tool) out["tool"] = *p.tool;
     if (p.brush) out["brush"] = *p.brush;
@@ -183,6 +187,8 @@ void from_json(const nlohmann::json& in, PartState& p) {
     take("resizable", p.resizable);
     take("background", p.background);
     take("dotSize", p.dot_size);
+    take("min", p.min);
+    take("max", p.max);
     take("dotColor", p.dot_color);
     take("tool", p.tool);
     take("brush", p.brush);

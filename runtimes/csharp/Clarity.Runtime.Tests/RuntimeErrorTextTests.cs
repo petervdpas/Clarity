@@ -21,6 +21,16 @@ public class RuntimeErrorTextTests
     }
 
     [Fact]
+    public void Whole_numbers_divide_toward_zero_and_by_zero_is_said_by_its_key()
+    {
+        Assert.Equal((-3L, -1L, long.MinValue), (Lists.WholeDiv(-7, 2), Lists.WholeMod(-7, 3), Lists.WholeDiv(long.MinValue, -1)));
+        var failed = Assert.Throws<ValueException>(() => Lists.WholeDiv(1, 0));
+        Assert.Equal("division by zero", failed.Message);
+        Assert.Equal("divisionByZero", failed.Said.Key);
+        Assert.Throws<ValueException>(() => Lists.WholeMod(1, 0));
+    }
+
+    [Fact]
     public void A_record_not_there_or_in_use_is_said_by_its_key()
     {
         Assert.Equal("recordNotThere", new NotFoundException("Customer", 3).Said.Key);

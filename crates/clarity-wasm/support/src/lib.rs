@@ -411,6 +411,24 @@ pub extern "C" fn rt_count(list: i32) -> i64 {
     with(|s| values::count(&get(s, list)))
 }
 
+/// `a div b` of compiled code: dividing by zero fails the call, the answer 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_whole_div(a: i64, b: i64) -> i64 {
+    with(|s| values::whole_div(a, b).unwrap_or_else(|why| {
+        fail(s, why);
+        0
+    }))
+}
+
+/// `a mod b` of compiled code.
+#[unsafe(no_mangle)]
+pub extern "C" fn rt_whole_mod(a: i64, b: i64) -> i64 {
+    with(|s| values::whole_mod(a, b).unwrap_or_else(|why| {
+        fail(s, why);
+        0
+    }))
+}
+
 fn item(list: i32, at: i64) -> Value {
     with(|s| {
         let value = values::item(&get(s, list), at);

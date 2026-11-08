@@ -420,6 +420,15 @@ func TestACanvasKeepsTheGridAndSnapCodeSets(t *testing.T) {
 	if ui.DotSize("sheet", 2) != 3 || ui.DotColor("sheet", "") != "muted" {
 		t.Fatal("the dots code set")
 	}
+	// A spin box's range: as its line writes it, until code sets it.
+	if ui.SpinMin("level", 1) != 1 || ui.SpinMax("level", 99) != 99 {
+		t.Fatal("the range the line writes")
+	}
+	ui.SetSpinMin("level", 2)
+	ui.SetSpinMax("level", 3)
+	if ui.SpinMin("level", 1) != 2 || ui.SpinMax("level", 99) != 3 {
+		t.Fatal("the range code set")
+	}
 	// A line tool: false until code sets canvas.connecting.
 	if ui.Connecting("sheet") {
 		t.Fatal("not connecting before code sets it")

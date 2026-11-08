@@ -516,6 +516,17 @@ impl<'a> Window<'a> {
                     set.push(format!("Ink = {}", string(ink)));
                 }
                 if set.is_empty() { starts } else { format!(" {{ {} }}", set.join(", ")) }
+            } else if widget.props.kind == WidgetKind::Spinbox && starts.is_empty() {
+                // A spin box's range as its line writes it, which code reads and sets (spinbox.min, spinbox.max).
+                let whole = |t: &Option<String>| t.as_deref().and_then(|t| t.trim().parse::<i64>().ok());
+                let mut set = Vec::new();
+                if let Some(min) = whole(&widget.props.min) {
+                    set.push(format!("SpinMin = {min}"));
+                }
+                if let Some(max) = whole(&widget.props.max) {
+                    set.push(format!("SpinMax = {max}"));
+                }
+                if set.is_empty() { starts } else { format!(" {{ {} }}", set.join(", ")) }
             } else {
                 starts
             };

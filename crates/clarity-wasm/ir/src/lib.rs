@@ -101,6 +101,10 @@ pub enum IntOp {
     Add,
     Sub,
     Mul,
+    /// `a div b`: rounded toward zero; dividing by zero fails the call.
+    Div,
+    /// `a mod b`: with the sign of `a`.
+    Rem,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

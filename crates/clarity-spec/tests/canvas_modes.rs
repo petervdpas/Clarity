@@ -102,6 +102,17 @@ fn objects_are_records_of_a_list_with_integer_places() {
     assert!(!drawn.is_empty(), "object() and on change on a canvas drawn by code: {drawn:#?}");
 }
 
+/// The canvas follows a dragged object by its id. A stored entity has one;
+/// a record (built in code, as boxes of several kinds) must give one.
+#[test]
+fn objects_that_are_records_carry_an_id() {
+    let record = APP.replace("entity ClassType\n    name: text, label \"Name\"", "record ClassType\n    name: text");
+    let missing = errors(&record.replace("    handler typeMoved\n        save diagram.selected\n", "    handler typeMoved\n        let t = diagram.selected\n"));
+    assert!(missing.iter().any(|e| e.contains("ClassType") && e.contains("'id'")), "{missing:#?}");
+    let with_id = errors(&record.replace("record ClassType\n    name: text", "record ClassType\n    id: integer\n    name: text").replace("    handler typeMoved\n        save diagram.selected\n", "    handler typeMoved\n        let t = diagram.selected\n"));
+    assert!(!with_id.iter().any(|e| e.contains("'id'")), "{with_id:#?}");
+}
+
 #[test]
 fn paint_binds_a_picture_and_vector_a_text_kept_as_svg() {
     let unbound = errors(&APP.replace(" bind note.picture mode paint", " mode paint"));
@@ -122,4 +133,54 @@ fn the_canvas_words_are_words_of_the_language() {
     for word in ["mode", "objects", "paint", "vector", "tools", "brush", "ink"] {
         assert!(words.iter().any(|w| w == word), "{word}");
     }
+}
+
+/// A diagram's canvas (mode objects) has tools too: `select` drags its
+/// objects, `connect` draws a new line from one to another, which runs
+/// `on connect`. Code reads and sets `canvas.tool`, and a toolbox page
+/// serves it with those tools, zoom and coded ones.
+#[test]
+fn a_canvas_of_objects_selects_connects_and_takes_a_toolbox() {
+    let diagram = "module m
+
+record Box
+    id: integer
+    x: integer
+    y: integer
+
+page Diagram: window
+    data boxes: list<Box>
+    canvas name sheet at 1,1 span 12 rows 10 units 4000 x 3000 zoom mode objects boxes at x, y tools select, connect toolbox DiagramTools on draw: drawBoxes on change: moved on connect: connected
+
+code Diagram
+    handler drawBoxes
+        sheet.clear()
+
+    handler moved
+        let b = sheet.selected
+
+    handler connected
+        sheet.tool = \"select\"
+        if sheet.tool == \"connect\"
+            sheet.connecting = false
+
+page DiagramTools: toolbox
+    grid 2 columns
+    tool name selectTool at 1,1 icon \"mouse-pointer\" does select
+    tool name connectTool at 2,1 icon \"spline\" does connect
+    tool name zoomInTool at 1,2 icon \"zoom-in\" does zoomIn
+    tool name arrangeTool at 2,2 icon \"layout-grid\" on click: arrangeClicked
+
+code DiagramTools
+    handler arrangeClicked
+        connectTool.visible = false
+";
+    let found = errors(diagram);
+    assert!(found.is_empty(), "{found:#?}");
+    // A painting tool is no diagram's.
+    let pen = errors(&diagram.replace("does connect", "does pen"));
+    assert!(pen.iter().any(|e| e.contains("'pen'") && e.contains("objects")), "{pen:#?}");
+    // Connecting is a diagram's or a drawn canvas's: a vector drawing has its own lines.
+    let vector = errors("module m\n\nentity Note\n    drawing: text\n\npage Main: window\n    data note: Note\n    canvas name sheet at 1,1 span 6 rows 8 bind note.drawing mode vector on change: saved on connect: connected\n\ncode Main\n    handler saved\n        save note\n\n    handler connected\n        save note\n");
+    assert!(vector.iter().any(|e| e.contains("'on connect'")), "{vector:#?}");
 }

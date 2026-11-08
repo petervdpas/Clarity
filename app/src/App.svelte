@@ -17,6 +17,7 @@
   import { chosenOf } from "./lib/clarityWindow";
   import ProjectTree from "./lib/ProjectTree.svelte";
   import ResourceView from "./lib/ResourceView.svelte";
+  import ReadmeView from "./lib/ReadmeView.svelte";
   import NewResourceDialog from "./lib/NewResourceDialog.svelte";
   import DiagramView from "./lib/DiagramView.svelte";
   import NewDiagramDialog from "./lib/NewDiagramDialog.svelte";
@@ -461,6 +462,8 @@
         return p.project.diagrams.some((d) => d.name === o.name);
       case "settings":
       case "api":
+      // The README view stays open while it is written, also before the file exists.
+      case "readme":
         return true;
     }
   }
@@ -1591,6 +1594,8 @@
             />
           {:else if current?.kind === "resource"}
             <ResourceView {preview} name={current.name} onapplied={applyPreview} />
+          {:else if current?.kind === "readme"}
+            <ReadmeView {preview} onapplied={applyPreview} />
           {:else if current?.kind === "language"}
             <TranslationsPanel
               {preview}

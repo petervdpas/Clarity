@@ -330,6 +330,7 @@ pub fn said(err: &Error) -> Text {
             Text::keyed("recordNotThere", "There is no {table} with id {id}").with("table", Slot::text(*table)).with("id", Slot::integer(*id, None))
         }
         Error::InUse { table, .. } => Text::keyed("recordStillUsed", "This {table} is still used by other records").with("table", Slot::text(*table)),
+        Error::DividedByZero => Text::keyed("divisionByZero", "Division by zero"),
         other => Text::plain(other.to_string()),
     }
 }

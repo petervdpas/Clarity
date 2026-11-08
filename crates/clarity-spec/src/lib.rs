@@ -86,6 +86,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         themes: Vec::new(),
         resources: None,
         diagrams: Vec::new(),
+        readme: None,
         resource_keys: Default::default(),
         keys_editable: false,
         row_height: layout::ROW_HEIGHT,
@@ -538,6 +539,10 @@ pub fn load_in<'a>(
 /// The folder of migration steps in a project's folder.
 pub const MIGRATIONS_DIR: &str = "migrations";
 
+/// The project's description in its folder: the design goal and a guide
+/// for whoever works on it next, in Markdown.
+pub const README_FILE: &str = "README.md";
+
 /// The step files of the project in `dir`, as (path, text): per data
 /// source a folder, `migrations/main/0001.clarity`, in order.
 pub fn migration_sources(dir: &Path) -> std::io::Result<Vec<(String, String)>> {
@@ -609,6 +614,7 @@ pub fn load_dir_for(dir: &Path, replaced: &[(&Path, &str)], sources: &[SourceRef
     let part_files = native::native_files(dir, &project)?;
     native::attach(&mut project, part_files);
     project.diagrams = diagrams::diagram_files(dir)?;
+    project.readme = std::fs::read_to_string(dir.join(README_FILE)).ok();
     Ok(project)
 }
 

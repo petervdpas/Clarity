@@ -553,6 +553,10 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+    /// `a div b`: the quotient of two whole numbers, rounded toward zero.
+    WholeDiv,
+    /// `a mod b`: what is left of `a div b`, with the sign of `a`.
+    Mod,
     /// `text contains part`, ignoring case; or whether a list of values holds an item.
     Contains,
     /// `a matches x` in a find: the record holds every word of `x`, each as
@@ -575,6 +579,8 @@ impl BinaryOp {
             Self::Sub => "-",
             Self::Mul => "*",
             Self::Div => "/",
+            Self::WholeDiv => "div",
+            Self::Mod => "mod",
             Self::Contains => "contains",
             Self::Matches => "matches",
         }

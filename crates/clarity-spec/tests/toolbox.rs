@@ -32,7 +32,7 @@ fn a_painting_canvas_has_a_toolbox_as_a_popup_or_a_slideout() {
     assert_eq!(Some(clarity_spec::model::ToolboxKind::Slideout), pad.props.toolbox);
     assert!(clarity_spec::widgets::widget_line(&pad.props).contains("toolbox slideout"));
     let e = errors(&SKETCH.replace("mode paint toolbox", "toolbox"));
-    assert!(e.iter().any(|m| m.contains("a toolbox holds the tools of a canvas in mode paint or mode vector")), "{e:?}");
+    assert!(e.iter().any(|m| m.contains("a toolbox holds the tools of a canvas in mode objects, paint or vector")), "{e:?}");
     // The new paint tools are known.
     assert!(errors(&SKETCH.replace("mode paint toolbox", "mode paint toolbox tools pen, fill, picker")).is_empty());
 }
@@ -116,4 +116,89 @@ fn layers_belong_to_a_painting_canvas() {
     let e = errors(&vector);
     assert!(e.iter().any(|m| m.contains("layers are a picture's")), "{e:?}");
     assert!(e.iter().any(|m| m.contains("'adjust' is no tool of a canvas in mode vector")), "{e:?}");
+}
+
+/// A toolbox on a canvas of a view (a diagram in a slide-out) is placed too:
+/// its parts are the canvas's in the window that shows the view, and its
+/// tools are parts that code reaches.
+#[test]
+fn a_toolbox_inside_a_view_is_placed_in_the_window() {
+    let source = "module m
+
+record Box
+    id: integer
+    x: integer
+    y: integer
+
+page Main: window
+    slideout name diagramPanel side bottom view Diagram height 300 span 12 rows 6
+
+page Diagram: view
+    data boxes: list<Box>
+    canvas name sheet at 1,1 span 12 rows 5 units 4000 x 3000 mode objects boxes at x, y toolbox DiagramTools on change: moved on connect: connected
+
+code Diagram
+    handler moved
+        let b = sheet.selected
+
+    handler connected
+        hideTool.visible = false
+
+page DiagramTools: toolbox
+    grid 2 columns
+    tool name selectTool at 1,1 icon \"mouse-pointer-2\" does select
+    tool name hideTool at 2,1 icon \"plus\" on click: connected
+";
+    let project = load_sources([("m.clarity", source)]);
+    let found: Vec<String> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.clone()).collect();
+    assert!(found.is_empty(), "{found:#?}");
+    let placed = clarity_spec::views::placed(&project);
+    let main = placed.files[0].pages.iter().find(|p| p.name.name == "Main").unwrap();
+    let panel = &main.widgets[0];
+    let sheet = panel.children.iter().find(|w| w.props.name.as_deref() == Some("sheet")).expect("the view's canvas is the window's");
+    let tools: Vec<&str> = sheet.children.iter().filter_map(|w| w.props.name.as_deref()).collect();
+    assert_eq!(tools, ["selectTool", "hideTool"], "the toolbox's parts are the canvas's");
+}
+
+/// A memo's toolbox inside a view that an accordion section shows (as
+/// Writer's chapters do): its tools are the memo's in the window.
+#[test]
+fn a_memo_toolbox_inside_a_view_of_an_accordion_section_is_placed() {
+    let source = "module m
+
+entity Chapter
+    text: text
+
+page Main: window
+    accordion name parts at 1,1 span 12 rows 8
+        section \"Chapters\" view ChaptersPart
+
+page ChaptersPart: view
+    data chapter: Chapter
+    memo name manuscriptBox at 1,1 span 12 rows 6 bind chapter.text markdown toolbox ManuscriptTools
+
+page ManuscriptTools: toolbox
+    grid 2 columns
+    tool name boldTool at 1,1 icon \"bold\" on click: bolded
+
+code ChaptersPart
+    handler bolded
+        manuscriptBox.insert(\"**\")
+";
+    let project = load_sources([("m.clarity", source)]);
+    let found: Vec<String> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.clone()).collect();
+    assert!(found.is_empty(), "{found:#?}");
+    let placed = clarity_spec::views::placed(&project);
+    fn find<'w>(widgets: &'w [clarity_spec::model::Widget], name: &str) -> Option<&'w clarity_spec::model::Widget> {
+        widgets.iter().find_map(|w| {
+            if w.props.name.as_deref() == Some(name) {
+                return Some(w);
+            }
+            find(&w.children, name).or_else(|| w.pages.iter().find_map(|p| find(&p.children, name)))
+        })
+    }
+    let main = placed.files[0].pages.iter().find(|p| p.name.name == "Main").unwrap();
+    let memo = find(&main.widgets, "manuscriptBox").expect("the view's memo is the window's");
+    let tools: Vec<&str> = memo.children.iter().filter_map(|w| w.props.name.as_deref()).collect();
+    assert_eq!(tools, ["boldTool"], "the toolbox's tools are the memo's");
 }

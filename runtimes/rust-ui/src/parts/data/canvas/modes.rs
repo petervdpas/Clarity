@@ -57,6 +57,8 @@ pub(super) struct Exported;
 /// The tools of each mode, in the order its toolbar shows them.
 pub const PAINT_TOOLS: [&str; 12] = ["pen", "pencil", "spray", "eraser", "fill", "picker", "select", "ellipseSelect", "lasso", "line", "rect", "ellipse"];
 pub const VECTOR_TOOLS: [&str; 6] = ["select", "line", "rect", "ellipse", "path", "text"];
+/// A diagram's (mode objects): drag its objects, or draw a new line from one to another.
+pub const OBJECT_TOOLS: [&str; 2] = ["select", "connect"];
 
 const TOOL_HEIGHT: f64 = 24.0;
 /// How near a colour is to the one pressed for the fill bucket to take it, 0 to 100.
@@ -66,6 +68,7 @@ const FILL_TOLERANCE: f64 = 12.0;
 pub fn tool_word(tool: &str) -> String {
     match tool {
         "select" => locale::translate("toolSelect", "Select"),
+        "connect" => locale::translate("toolConnect", "Connect"),
         "line" => locale::translate("toolLine", "Line"),
         "rect" => locale::translate("toolRect", "Rectangle"),
         "ellipse" => locale::translate("toolEllipse", "Ellipse"),
@@ -295,6 +298,8 @@ impl CanvasPart {
         let all: &[&'static str] = match self.mode().as_str() {
             "paint" => &PAINT_TOOLS,
             "vector" => &VECTOR_TOOLS,
+            // A diagram has tools only where it draws lines (`on connect`); else a press drags, as before.
+            "objects" if self.handles("connect") => &OBJECT_TOOLS,
             _ => return Vec::new(),
         };
         let named = self.base.spec.names("tools");
@@ -352,9 +357,9 @@ impl CanvasPart {
 
     // -- The toolbar -------------------------------------------------------------
 
-    /// How its toolbox shows (`toolbox popup` or `toolbox slideout`): none without one, or when it is no painting canvas.
+    /// How its toolbox shows (`toolbox popup` or `toolbox slideout`): none without one, or on a canvas without a mode.
     pub fn toolbox_shows(&self) -> Option<super::toolbox::Shows> {
-        if !matches!(self.mode().as_str(), "paint" | "vector") {
+        if !matches!(self.mode().as_str(), "paint" | "vector" | "objects") {
             return None;
         }
         match self.base.spec.text("toolbox") {
@@ -378,7 +383,7 @@ impl CanvasPart {
         let paints = self.mode() == "paint";
         // The toolbox page's parts, placed in the canvas; without one, the built-in toolbox of its mode.
         let (parts, columns) = if self.base.spec.children.is_empty() {
-            (super::toolbox::built_in(paints, &tools), 4)
+            (super::toolbox::built_in(&self.mode(), &tools), 4)
         } else {
             (self.base.spec.children.clone(), self.base.spec.number("toolboxColumns").map_or(4, |c| c as i64))
         };

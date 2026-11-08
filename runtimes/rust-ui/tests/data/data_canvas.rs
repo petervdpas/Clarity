@@ -390,6 +390,55 @@ fn an_object_is_dragged_by_its_box_and_its_drop_is_sent() {
     assert_eq!(json!({"move": {"id": 7, "x": 20, "y": 15}}), actions[0].1);
 }
 
+/// A diagram (mode objects with `on connect`): with select in hand a press
+/// drags an object; with connect in hand it draws a line from one object to
+/// another, which runs `on connect` and moves nothing.
+#[test]
+fn a_diagram_s_connect_tool_draws_a_line_between_objects_and_select_drags() {
+    let objects = || {
+        vec![
+            json!({"op": "object", "record": 1, "x": 10, "y": 40, "width": 20, "height": 20}),
+            rect(10.0, 40.0, 20.0, 20.0, "raised"),
+            json!({"op": "object", "record": 2, "x": 60, "y": 40, "width": 20, "height": 20}),
+            rect(60.0, 40.0, 20.0, 20.0, "raised"),
+        ]
+    };
+    let (host, mut screen) = canvas_screen(&format!(r#"{UNITS} mode="objects" onconnect="linked""#));
+    host.draw("pad", objects());
+    assert_eq!(vec!["select", "connect"], the_canvas(&screen).tools_shown());
+    assert_eq!("select", the_canvas(&screen).tool_in_hand());
+    // Select: a press drags the object; no handles show over it.
+    screen.pointer_moved(280.0, 200.0);
+    assert!(the_canvas(&screen).connect_handles().is_empty(), "select shows no handles");
+    press(&mut screen, 280.0, 200.0);
+    screen.pointer_moved(300.0, 200.0);
+    screen.pointer_moved(320.0, 200.0);
+    release(&mut screen, 320.0, 200.0);
+    assert_eq!(json!({"move": {"id": 1, "x": 20, "y": 40}}), host.actions.borrow()[0].1);
+    assert!(host.points.borrow().is_empty());
+    // Connect: the same press draws a line to the other object.
+    let (host, mut screen) = canvas_screen(&format!(r#"{UNITS} mode="objects" onconnect="linked""#));
+    host.draw("pad", objects());
+    host.inner.set_state("pad", |s| s.tool = Some("connect".into()));
+    assert!(the_canvas(&screen).connecting());
+    screen.pointer_moved(280.0, 200.0);
+    press(&mut screen, 280.0, 200.0);
+    screen.pointer_moved(380.0, 200.0);
+    screen.pointer_moved(480.0, 200.0);
+    release(&mut screen, 480.0, 200.0);
+    assert!(host.actions.borrow().is_empty(), "nothing moved: {:?}", host.actions.borrow());
+    let points = host.points.borrow();
+    assert_eq!(vec!["connect"], points.iter().map(|p| p.1.clone()).collect::<Vec<_>>());
+    assert_eq!(json!({"x": 70, "y": 50, "fromX": 20, "fromY": 50}), Value::Object(points[0].2.clone()));
+}
+
+/// A diagram without `on connect` keeps its press for dragging and shows no toolbar.
+#[test]
+fn a_diagram_without_on_connect_has_no_tools() {
+    let (_, screen) = canvas_screen(&format!(r#"{UNITS} mode="objects""#));
+    assert!(the_canvas(&screen).tools_shown().is_empty());
+}
+
 #[test]
 fn a_vector_canvas_draws_moves_and_deletes_with_its_tools() {
     let (host, mut screen) = canvas_screen(&format!(r#"{UNITS} mode="vector" bind="drawing""#));

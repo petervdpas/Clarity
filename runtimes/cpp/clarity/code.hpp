@@ -110,6 +110,18 @@ inline std::string joined(const std::vector<std::string>& texts, const std::stri
     return out;
 }
 
+/// `a div b` in code: the quotient of two whole numbers, rounded toward zero; dividing by zero throws.
+inline int64_t whole_div(int64_t a, int64_t b) {
+    if (b == 0) throw ValueError("division by zero");
+    return b == -1 ? int64_t(0 - uint64_t(a)) : a / b;
+}
+
+/// `a mod b` in code: what is left of `a div b`, with the sign of a.
+inline int64_t whole_mod(int64_t a, int64_t b) {
+    if (b == 0) throw ValueError("division by zero");
+    return b == -1 ? 0 : a % b;
+}
+
 template <typename T>
 const T& at(const std::vector<T>& list, int64_t position) {
     if (position < 1 || position > int64_t(list.size()))

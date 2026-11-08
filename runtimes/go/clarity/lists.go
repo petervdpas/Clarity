@@ -26,6 +26,29 @@ func SetAt[T any](list []T, position int64, value T) error {
 	return nil
 }
 
+// WholeDiv is `a div b` in code: the quotient of two whole numbers,
+// rounded toward zero; dividing by zero is an error.
+func WholeDiv(a, b int64) (int64, error) {
+	if b == 0 {
+		return 0, &ValueError{What: "division by zero"}
+	}
+	if b == -1 {
+		return -a, nil
+	}
+	return a / b, nil
+}
+
+// WholeMod is `a mod b` in code: what is left of `a div b`, with the sign of a.
+func WholeMod(a, b int64) (int64, error) {
+	if b == 0 {
+		return 0, &ValueError{What: "division by zero"}
+	}
+	if b == -1 {
+		return 0, nil
+	}
+	return a % b, nil
+}
+
 func outside(position int64, count int) error {
 	return &ValueError{What: fmt.Sprintf("there is no item %d in a list of %d", position, count)}
 }

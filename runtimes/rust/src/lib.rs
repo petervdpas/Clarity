@@ -102,6 +102,16 @@ pub fn round(value: Decimal, places: i64) -> Decimal {
 
 /// `snapped(value, step)`: the multiple of `step` nearest to `value`, a half
 /// rounding up; a step of 0 gives the value (conformance/drawing.json, grids).
+/// `a div b` in code: the quotient of two whole numbers, rounded toward zero.
+pub fn whole_div(a: i64, b: i64) -> Result<i64> {
+    if b == 0 { Err(Error::DividedByZero) } else { Ok(a.wrapping_div(b)) }
+}
+
+/// `a mod b` in code: what is left of `a div b`, with the sign of `a`.
+pub fn whole_mod(a: i64, b: i64) -> Result<i64> {
+    if b == 0 { Err(Error::DividedByZero) } else { Ok(a.wrapping_rem(b)) }
+}
+
 pub fn snapped(value: i64, step: i64) -> i64 {
     if step > 0 { (2 * value + step).div_euclid(2 * step) * step } else { value }
 }
@@ -175,6 +185,8 @@ pub enum Error {
     Value(String),
     /// `xs[i]` with no item `position` in a list of `count` (conformance/lists.json).
     Outside { position: i64, count: usize },
+    /// `a div 0` or `a mod 0` in code.
+    DividedByZero,
     /// A save refused a record whose required field is empty: the record's
     /// table and id, the field's column, and why in Clarity's own words. A
     /// window shows it at the input bound to that field (crate::required).
@@ -239,6 +251,7 @@ impl fmt::Display for Error {
             Error::Refused(what) | Error::Required { text: what, .. } => f.write_str(&what.show()),
             Error::Engine(what) | Error::Value(what) => f.write_str(what),
             Error::Outside { position, count } => write!(f, "there is no item {position} in a list of {count}"),
+            Error::DividedByZero => f.write_str("division by zero"),
         }
     }
 }

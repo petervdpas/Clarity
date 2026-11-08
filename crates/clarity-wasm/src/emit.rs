@@ -486,11 +486,14 @@ impl<'w, 'a> Body<'w, 'a> {
             E::Int2(op, a, b) => {
                 self.expr(a);
                 self.expr(b);
-                self.code.push(match op {
-                    IntOp::Add => I::I64Add,
-                    IntOp::Sub => I::I64Sub,
-                    IntOp::Mul => I::I64Mul,
-                });
+                match op {
+                    IntOp::Add => self.code.push(I::I64Add),
+                    IntOp::Sub => self.code.push(I::I64Sub),
+                    IntOp::Mul => self.code.push(I::I64Mul),
+                    // Not wasm's own division, which traps on zero: the support module fails the call with why.
+                    IntOp::Div => self.rt("rt_whole_div"),
+                    IntOp::Rem => self.rt("rt_whole_mod"),
+                }
             }
             E::IntCmp(cmp, a, b) => {
                 self.expr(a);

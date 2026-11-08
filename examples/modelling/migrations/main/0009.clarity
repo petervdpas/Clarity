@@ -1,0 +1,15 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Enum boxes, table events"
+    add field AdapterTable.entityName: text(120)
+    add field AdapterTable.columns: list<text>
+    add field AdapterTable.keys: list<text>
+    add field AdapterTable.x: integer
+    add field AdapterTable.y: integer
+    remove field AdapterTable.filledFrom
+    add entity TableIntake
+        table: ref AdapterTable
+        event: ref EventType
+        deletes: bool, default false
+    add field EnumType.x: integer
+    add field EnumType.y: integer

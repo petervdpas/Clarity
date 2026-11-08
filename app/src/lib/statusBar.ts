@@ -19,6 +19,7 @@ const KIND_NAMES: Record<Selected["kind"], string> = {
   module: "Module",
   settings: "Project settings",
   api: "Web API",
+  readme: "README",
 };
 
 /** What is open, like `Window Main`. */

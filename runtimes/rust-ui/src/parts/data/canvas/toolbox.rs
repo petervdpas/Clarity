@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use skia_safe::Color;
 
-use super::modes::{PAINT_TOOLS, VECTOR_TOOLS};
+use super::modes::{OBJECT_TOOLS, PAINT_TOOLS, VECTOR_TOOLS};
 use crate::element::{Cx, Element, ElementId, GridPanel, Node};
 use crate::geometry::Rect;
 use crate::input::{Cursor, PointerInput};
@@ -40,6 +40,7 @@ pub fn icon_of(tool: &str, paints: bool) -> &'static str {
         "ellipseSelect" => "circle-dashed",
         "lasso" => "lasso",
         "select" => "mouse-pointer-2",
+        "connect" => "spline",
         "line" => "slash",
         "rect" => "square",
         "ellipse" => "circle",
@@ -98,11 +99,23 @@ const VECTOR_TOOLBOX: &str = r#"<Window name="Toolbox">
   <ToolColors at="1,4" span="2" />
 </Window>"#;
 
+/// A diagram's: select and connect, and its zoom.
+const OBJECT_TOOLBOX: &str = r#"<Window name="Toolbox">
+  <Tool does="select" at="1,1" />
+  <Tool does="connect" at="2,1" />
+  <Tool does="zoomIn" at="3,1" />
+  <Tool does="zoomOut" at="4,1" />
+</Window>"#;
+
 /// The built-in toolbox of a mode, without the canvas tools it does not have (`tools pen, eraser`).
-pub fn built_in(paints: bool, tools: &[&str]) -> Vec<PartSpec> {
-    let markup = if paints { PAINT_TOOLBOX } else { VECTOR_TOOLBOX };
+pub fn built_in(mode: &str, tools: &[&str]) -> Vec<PartSpec> {
+    let markup = match mode {
+        "paint" => PAINT_TOOLBOX,
+        "objects" => OBJECT_TOOLBOX,
+        _ => VECTOR_TOOLBOX,
+    };
     let parts = crate::markup::read(markup).map(|w| w.parts).unwrap_or_default();
-    let canvas_tool = |spec: &PartSpec| spec.text("does").is_some_and(|d| PAINT_TOOLS.contains(&d) || VECTOR_TOOLS.contains(&d));
+    let canvas_tool = |spec: &PartSpec| spec.text("does").is_some_and(|d| PAINT_TOOLS.contains(&d) || VECTOR_TOOLS.contains(&d) || OBJECT_TOOLS.contains(&d));
     let kept = |spec: &PartSpec| !canvas_tool(spec) || spec.text("does").is_some_and(|d| tools.contains(&d));
     parts
         .into_iter()

@@ -351,6 +351,20 @@ void a_draw_starts_an_empty_drawing_that_travels_with_the_part(void) {
                "{\"window\":\"Main\",\"instance\":0,\"data\":{},\"parts\":{\"dial\":{\"drawing\":[]}},\"selected\":{}}");
 }
 
+/// `a div b` and `a mod b`: rounded toward zero, the sign of a; a division by zero fails.
+void whole_numbers_divide_toward_zero(void) {
+    int64_t q = 0, r = 0;
+    CHECK_OK(clarity_whole_div(-7, 2, &q));
+    CHECK_OK(clarity_whole_mod(-7, 3, &r));
+    CHECK_INT(q, -3);
+    CHECK_INT(r, -1);
+    CHECK_OK(clarity_whole_div(INT64_MIN, -1, &q));
+    CHECK(q == INT64_MIN);
+    CHECK_FAILS(CLARITY_VALUE, clarity_whole_div(1, 0, &q));
+    CHECK_TEXT(clarity_error()->message, "division by zero");
+    CHECK_FAILS(CLARITY_VALUE, clarity_whole_mod(1, 0, &r));
+}
+
 void an_item_is_read_by_its_position_from_1(void) {
     cJSON* file = conformance("lists.json");
     const cJSON* c;
@@ -481,6 +495,12 @@ void a_canvas_keeps_the_grid_and_snap_code_sets(void) {
     clarity_ui_set_dot_color(ui, "sheet", "muted");
     CHECK_INT(clarity_ui_dot_size(ui, "sheet", 2), 3);
     CHECK_TEXT(clarity_ui_dot_color(ui, "sheet", ""), "muted");
+    // A spin box's range: as its line writes it, until code sets it.
+    CHECK_INT(clarity_ui_spin_max(ui, "level", 99), 99);
+    clarity_ui_set_spin_min(ui, "level", 2);
+    clarity_ui_set_spin_max(ui, "level", 3);
+    CHECK_INT(clarity_ui_spin_min(ui, "level", 1), 2);
+    CHECK_INT(clarity_ui_spin_max(ui, "level", 99), 3);
     // A line tool: false until code sets canvas.connecting.
     CHECK(!clarity_ui_connecting(ui, "sheet"));
     clarity_ui_set_connecting(ui, "sheet", true);

@@ -2013,7 +2013,7 @@ pub fn pane_columns(widget: &crate::model::Widget) -> Vec<u32> {
 }
 
 /// Why `on connect` is refused on a canvas with a mode or an engine: lines are drawn between the boxes its code draws.
-pub const CANVAS_CONNECT_PROBLEM: &str = "'on connect' draws lines between the boxes a canvas's code draws; a canvas with a mode or an engine has none";
+pub const CANVAS_CONNECT_PROBLEM: &str = "'on connect' draws lines between the boxes a canvas's code draws or its objects; a painting, a vector drawing or a canvas an engine draws has none";
 
 /// Why `on resize` is refused on a canvas with a mode or an engine: people size the boxes its code draws.
 pub const CANVAS_RESIZE_PROBLEM: &str = "'on resize' sizes the boxes a canvas's code draws; a canvas with a mode or an engine has none";
@@ -2029,7 +2029,8 @@ pub fn canvas_options(props: &WidgetProps) -> Result<(), String> {
     if props.snap && props.grid.is_none() {
         return Err("'snap' snaps to the grid; give the canvas one, as in grid 20".to_string());
     }
-    if props.handlers.iter().any(|h| h.event == Event::Connect) && (props.mode.is_some() || props.runs.is_some()) {
+    // A diagram's objects connect too; a painting or a vector drawing has its own lines.
+    if props.handlers.iter().any(|h| h.event == Event::Connect) && (matches!(props.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)) || props.runs.is_some()) {
         return Err(CANVAS_CONNECT_PROBLEM.to_string());
     }
     if props.handlers.iter().any(|h| h.event == Event::Resize) && (props.mode.is_some() || props.runs.is_some()) {

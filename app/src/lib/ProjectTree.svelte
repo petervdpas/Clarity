@@ -135,6 +135,15 @@
   {:else if onnewapp}
     <button class="row add" onclick={onnewapp}>+ New app</button>
   {/if}
+  <!-- The project's README.md: its design goal and guide, which the agent reads first. -->
+  {#if preview.project.readme != null}
+    <button class="row top" class:current={selected?.kind === "readme"} onclick={() => onselect({ kind: "readme", name: "" })} title="README.md: the project's design goal and guide">
+      <span class="badge">md</span>
+      README
+    </button>
+  {:else if full}
+    <button class="row add" class:current={selected?.kind === "readme"} onclick={() => onselect({ kind: "readme", name: "" })} title="Write the project's design goal and guide in README.md">+ Write README</button>
+  {/if}
 
   <details open>
     <summary>Windows <span class="count">{windows.length}</span></summary>

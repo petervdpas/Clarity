@@ -929,6 +929,10 @@ struct Owner<'a> {
     wired: Vec<Wired<'a>>,
     /// What a view tells the window it shows in; none for a window, a dialog or the app.
     tells: Option<&'a [crate::code::PartMessage]>,
+    /// For a view: the data and parts that the windows showing it, and their
+    /// other views, bring into the same window, as (name, page, window). Its
+    /// code joins theirs there, so a local of one of those names would mean them.
+    neighbours: Vec<(&'a str, &'a str, &'a str)>,
 }
 
 /// A handler wired to an event: `on click: digit(7)`.
@@ -1048,6 +1052,66 @@ fn collect_frame<'a>(frame: &'a Frame, owner: &mut Owner<'a>) {
     }
 }
 
+/// The data and parts that share a window with `view`: those of each window
+/// that shows it (directly, through another view or as a toolbox), and of the
+/// other views and toolboxes those windows show; as (name, page, window).
+fn neighbours_of<'a>(view: &'a crate::model::Page, visible: &[&'a SpecFile]) -> Vec<(&'a str, &'a str, &'a str)> {
+    use crate::model::{Page, PageKind, Widget};
+    let pages: Vec<&'a Page> = visible.iter().flat_map(|f| &f.pages).collect();
+    let find = |name: &str| pages.iter().copied().find(|p| p.name.name == name && matches!(p.kind, PageKind::View | PageKind::Toolbox));
+    // The pages a page shows, itself first, through views and toolboxes, however deep.
+    fn shown<'a>(page: &'a Page, find: &dyn Fn(&str) -> Option<&'a Page>, out: &mut Vec<&'a Page>) {
+        if out.iter().any(|p| std::ptr::eq(*p, page)) || out.len() > 64 {
+            return;
+        }
+        out.push(page);
+        fn named<'w>(widgets: &'w [Widget], into: &mut Vec<&'w str>) {
+            for w in widgets {
+                into.extend(w.props.view.as_deref());
+                into.extend(w.props.toolbox_page.as_deref());
+                into.extend(w.pages.iter().filter_map(|p| p.view.as_deref()));
+                named(&w.children, into);
+                for p in &w.pages {
+                    named(&p.children, into);
+                }
+            }
+        }
+        let mut names = Vec::new();
+        named(&page.widgets, &mut names);
+        for name in names {
+            if let Some(next) = find(name) {
+                shown(next, find, out);
+            }
+        }
+    }
+    fn names_of<'a>(widgets: &'a [Widget], into: &mut Vec<&'a str>) {
+        for w in widgets {
+            into.extend(w.props.name.as_deref());
+            names_of(&w.children, into);
+            for p in &w.pages {
+                names_of(&p.children, into);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for window in pages.iter().copied().filter(|p| !matches!(p.kind, PageKind::View | PageKind::Toolbox)) {
+        let mut together = Vec::new();
+        shown(window, &find, &mut together);
+        if !together.iter().any(|p| std::ptr::eq(*p, view)) {
+            continue;
+        }
+        for other in together.into_iter().filter(|p| !std::ptr::eq(*p, view)) {
+            for d in &other.data {
+                out.push((d.name.name.as_str(), other.name.name.as_str(), window.name.name.as_str()));
+            }
+            let mut parts = Vec::new();
+            names_of(&other.widgets, &mut parts);
+            out.extend(parts.into_iter().map(|n| (n, other.name.name.as_str(), window.name.name.as_str())));
+        }
+    }
+    out
+}
+
 fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
     let mut owners = Vec::new();
     // The toolbox pages a part names (`toolbox WritingTools`), wherever it stands.
@@ -1071,6 +1135,7 @@ fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
             parts: HashMap::new(),
             wired: Vec::new(),
             tells: (page.kind == crate::model::PageKind::View).then_some(page.tells.as_slice()),
+            neighbours: if matches!(page.kind, crate::model::PageKind::View | crate::model::PageKind::Toolbox) { neighbours_of(page, visible) } else { Vec::new() },
         };
         owner.wired.extend(page.handlers.iter().map(|h| Wired { handler: &h.handler, args: &h.args, event: h.event.keyword(), own_event: true, tell_of: None, span: page.span }));
         collect_widgets(&page.widgets, &mut owner);
@@ -1080,7 +1145,7 @@ fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
         toolboxes(&page.widgets, &mut named);
         for name in named {
             if let Some(toolbox) = visible.iter().flat_map(|f| &f.pages).find(|p| p.name.name == name && p.kind == crate::model::PageKind::Toolbox) {
-                let mut theirs = Owner { name: &toolbox.name.name, is_app: false, data: &toolbox.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new(), tells: None };
+                let mut theirs = Owner { name: &toolbox.name.name, is_app: false, data: &toolbox.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new(), tells: None, neighbours: Vec::new() };
                 collect_widgets(&toolbox.widgets, &mut theirs);
                 owner.parts.extend(theirs.parts);
                 // Its tools' handlers are this page's unless the toolbox's own code has them.
@@ -1090,7 +1155,7 @@ fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
         }
         // The parts and data of the views it shows are the window's too; their handlers are the view's own.
         for view in crate::views::places(&page.widgets).into_iter().filter_map(|place| crate::views::find(visible.iter().copied(), place.view)) {
-            let mut theirs = Owner { name: &view.name.name, is_app: false, data: &view.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new(), tells: None };
+            let mut theirs = Owner { name: &view.name.name, is_app: false, data: &view.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new(), tells: None, neighbours: Vec::new() };
             collect_widgets(&view.widgets, &mut theirs);
             owner.parts.extend(theirs.parts);
             owner.shown.extend(view.data.iter());
@@ -1106,6 +1171,7 @@ fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
             parts: HashMap::new(),
             wired: Vec::new(),
             tells: None,
+            neighbours: Vec::new(),
         };
         owner.wired.extend(app.handlers.iter().map(|h| Wired { handler: &h.handler, args: &h.args, event: h.event.keyword(), own_event: true, tell_of: None, span: app.span }));
         collect_frame(&app.frame, &mut owner);
@@ -2441,6 +2507,10 @@ impl<'a> BodyChecker<'_, 'a> {
             self.error(format!("'{n}' is already defined"), name.span);
         } else if self.part(n).is_some() || self.data(n).is_some() {
             self.error(format!("'{n}' is already a name in this window"), name.span);
+        } else if let Some((_, page, window)) = self.owner.and_then(|o| o.neighbours.iter().find(|(m, _, _)| *m == n)) {
+            // A view's code joins the window's, with the data and parts of the window's other views.
+            let whose = if page == window { format!("window {window}") } else { format!("{page}, which window {window} shows beside this view") };
+            self.error(format!("'{n}' is a name of {whose}; this view's code joins that window's, so give the local another name"), name.span);
         } else if let Some(scope) = self.scopes.last_mut() {
             scope.insert(n.to_string(), ty);
         }
@@ -3343,6 +3413,8 @@ impl<'a> BodyChecker<'_, 'a> {
                 let writable = if crate::typing::settable(property) { Ok(()) } else { Err(format!("{name}.{property} is read, not set: it is what the person chose")) };
                 Some(Place::Value { ty, writable })
             }
+            // A spin box's range, whole numbers: as its line writes it, until code sets it.
+            "min" | "max" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Spinbox) => value(Ty::Integer),
             // A pinnable slide-out pinned open beside the window's parts.
             "pinned" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Slideout && p.pinnable) => value(Ty::Bool),
             // A canvas's grid, in its units (0 for none), and whether code snaps to it: as its line says, until code sets them.
@@ -3398,7 +3470,9 @@ impl<'a> BodyChecker<'_, 'a> {
                 Some(Place::Value { ty, writable: Err(format!("'selected' of canvas '{name}' can only be read")) })
             }
             // A painting or vector canvas's tool, brush and ink, which a palette of buttons sets.
-            "tool" | "ink" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && matches!(p.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector))) => value(Ty::Text),
+            // The tool in hand of any canvas with a mode (a diagram's select or connect too); ink is a painting's or a drawing's.
+            "tool" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && p.mode.is_some()) => value(Ty::Text),
+            "ink" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && matches!(p.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector))) => value(Ty::Text),
             "brush" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && matches!(p.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector))) => value(Ty::Integer),
             "selected" => {
                 let Part::Widget(props) = part else { return None };
@@ -4408,6 +4482,19 @@ impl<'a> BodyChecker<'_, 'a> {
                     self.error(format!("cannot compare {} with {}", l.name(), r.name()), join(left.span, right.span));
                 }
                 Ty::Bool
+            }
+            // Whole numbers divided: `width div 2`, `index mod 5`.
+            BinaryOp::WholeDiv | BinaryOp::Mod => {
+                let l = self.expr(left, None);
+                let r = self.expr(right, None);
+                if l.is_unknown() || r.is_unknown() {
+                    return Ty::Unknown;
+                }
+                if !matches!((l, r), (Ty::Integer, Ty::Integer)) {
+                    self.error(format!("'{symbol}' divides whole numbers, not {} and {}; '/' divides decimals", l.name(), r.name()), join(left.span, right.span));
+                    return Ty::Unknown;
+                }
+                Ty::Integer
             }
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
                 let l = self.expr(left, None);

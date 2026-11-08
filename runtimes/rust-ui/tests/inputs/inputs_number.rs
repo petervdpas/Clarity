@@ -260,6 +260,21 @@ fn without_its_own_range_it_takes_the_fields() {
     assert_eq!(Some(json!(99)), host.read("level"));
 }
 
+/// A range code set (`levelBox.max = 3`) goes before the one the line writes.
+#[test]
+fn a_range_code_set_goes_before_the_written_one() {
+    let host = InputsHost::new();
+    host.set("level", json!(3));
+    host.types.borrow_mut().insert("level".into(), "integer".into());
+    host.set_state("level", |s| s.max = Some(3));
+    let mut screen = window(r#"<Spinbox at="1,1" span="3" name="level" bind="level" min="1" max="99" onchange="changed" />"#, host.clone());
+    let id = part_named(&screen, "level");
+    screen.act(id, |e, _| e.as_any_mut().downcast_mut::<NumberPart>().unwrap().spin(RangeKey::Up));
+    assert_eq!(Some(json!(3)), host.read("level"));
+    type_in(&mut screen, "level", "7");
+    assert_eq!(Some(json!(3)), host.read("level"));
+}
+
 #[test]
 fn only_a_value_that_differs_is_a_change_and_the_arrows_spin() {
     let host = InputsHost::new();

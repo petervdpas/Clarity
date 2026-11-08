@@ -67,9 +67,12 @@ pub const CANVAS_TOOL_KEYS: [(&str, &str); 15] = [
 
 /// The toolbox of a painting canvas (`toolbox`, docs/IMAGE-PLAN.md): its title,
 /// its options and its colours. A canvas with a toolbox has them.
-pub const TOOLBOX_KEYS: [(&str, &str); 25] = [
-    ("toolboxTitle", "Tools"),
-    ("toolboxFold", "Fold the toolbox"),
+/// Every toolbox's own words: its title, its fold arrow, and what a group of tools says.
+pub const TOOLBOX_KEYS: [(&str, &str); 3] = [("toolboxTitle", "Tools"), ("toolboxFold", "Fold the toolbox"), ("toolboxHold", "hold for more")];
+/// A diagram's tools (mode objects with `on connect`): connect, and select where no painting or drawing names it already.
+pub const DIAGRAM_TOOL_KEYS: [(&str, &str); 2] = [("toolConnect", "Connect"), ("toolSelect", "Select")];
+/// The words of a painting's or a drawing's toolbox: its brush, colours, picture actions and layers.
+pub const PAINT_TOOLBOX_KEYS: [(&str, &str); 22] = [
     ("toolSize", "Size"),
     ("toolOpacity", "Opacity"),
     ("foregroundColor", "Foreground colour"),
@@ -77,7 +80,6 @@ pub const TOOLBOX_KEYS: [(&str, &str); 25] = [
     ("swapColors", "Swap the colours"),
     ("importPicture", "Import a picture"),
     ("exportPicture", "Export the picture"),
-    ("toolboxHold", "hold for more"),
     ("rotatePicture", "Turn a quarter clockwise"),
     ("flipAcross", "Mirror left to right"),
     ("flipDown", "Mirror top to bottom"),
@@ -249,6 +251,9 @@ pub const RUNTIME_ERROR_KEYS: [(&str, &str); 3] = [
     ("recordStillUsed", "This {table} is still used by other records"),
 ];
 
+/// Why `a div b` or `a mod b` failed: Clarity's own words, in projects whose code divides whole numbers.
+pub const DIVISION_KEYS: [(&str, &str); 1] = [("divisionByZero", "Division by zero")];
+
 /// Why a call of an engine failed (DESIGN 5.11, 5.12), in place of the
 /// host's own message: it ran too long, the person stopped it, or it broke.
 pub const ENGINE_ERROR_KEYS: [(&str, &str); 3] = [
@@ -270,6 +275,8 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&ZOOM_KEYS)
         .chain(&CANVAS_TOOL_KEYS)
         .chain(&TOOLBOX_KEYS)
+        .chain(&PAINT_TOOLBOX_KEYS)
+        .chain(&DIAGRAM_TOOL_KEYS[..1])
         .chain(&PROGRESS_KEYS)
         .chain(&TAGS_KEYS)
         .chain(&PAGE_KEYS)
@@ -289,6 +296,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&OPEN_ROW_KEYS)
         .chain(&MARKDOWN_MEMO_KEYS)
         .chain(&RUNTIME_ERROR_KEYS)
+        .chain(&DIVISION_KEYS)
         .chain(&ENGINE_ERROR_KEYS)
         .chain(&DESKTOP_KEYS)
         .chain(&PREVIEW_KEYS)
@@ -664,6 +672,13 @@ fn shown(project: &Project) -> Shown {
     let paints = project.files.iter().flat_map(|f| &f.pages).any(|p| {
         any_widget(&p.widgets, &|w| matches!(w.props.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)))
     });
+    // A diagram whose tools draw lines; a painting or a drawing with a toolbox, whose words are its brush's and colours'.
+    let diagrams = project.files.iter().flat_map(|f| &f.pages).any(|p| {
+        any_widget(&p.widgets, &|w| w.props.mode == Some(crate::model::CanvasMode::Objects) && w.props.handlers.iter().any(|h| h.event == crate::widgets::Event::Connect))
+    });
+    let paint_toolboxes = project.files.iter().flat_map(|f| &f.pages).any(|p| {
+        any_widget(&p.widgets, &|w| w.props.toolbox.is_some() && matches!(w.props.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)))
+    });
     let trees = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| matches!(w.props.kind, crate::widgets::WidgetKind::Tree | crate::widgets::WidgetKind::TreeTable)));
     let bound_tags = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
         w.props.kind == crate::widgets::WidgetKind::Tags && w.props.bind.is_some()
@@ -686,6 +701,25 @@ fn shown(project: &Project) -> Shown {
     let open_rows = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.handlers.iter().any(|h| h.event == crate::widgets::Event::Open)));
     let markdown_memos = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.markdown));
     let engines = project.files.iter().any(|f| !f.engines.is_empty());
+    // Code that divides whole numbers (`a div b`, `a mod b`) can say a division by zero failed.
+    let divides = {
+        let mut found = false;
+        let mut look = |body: &[crate::code::Stmt]| crate::code::each_expr_in(body, &mut |e| found |= matches!(&e.kind, crate::code::ExprKind::Binary { op: crate::code::BinaryOp::WholeDiv | crate::code::BinaryOp::Mod, .. }));
+        for file in &project.files {
+            for block in &file.code {
+                for handler in &block.handlers {
+                    look(&handler.body);
+                }
+            }
+            for function in &file.functions {
+                look(&function.body);
+            }
+            for command in &file.commands {
+                look(&command.body);
+            }
+        }
+        found
+    };
     // A date input, or a table cell of a date field, opens the calendar.
     let dates = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Date))
         || project.entities().any(|e| e.fields.iter().any(|f| matches!(f.ty, FieldType::Date | FieldType::DateTime)));
@@ -701,6 +735,8 @@ fn shown(project: &Project) -> Shown {
         .chain(if zooms { ZOOM_KEYS.as_slice() } else { &[] })
         .chain(if paints { CANVAS_TOOL_KEYS.as_slice() } else { &[] })
         .chain(if toolboxes { TOOLBOX_KEYS.as_slice() } else { &[] })
+        .chain(if paint_toolboxes { PAINT_TOOLBOX_KEYS.as_slice() } else { &[] })
+        .chain(if diagrams && paints { &DIAGRAM_TOOL_KEYS[..1] } else if diagrams { DIAGRAM_TOOL_KEYS.as_slice() } else { &[] })
         .chain(if progress { PROGRESS_KEYS.as_slice() } else { &[] })
         .chain(if bound_tags { TAGS_KEYS.as_slice() } else { &[] })
         .chain(if paged { PAGE_KEYS.as_slice() } else { &[] })
@@ -719,7 +755,8 @@ fn shown(project: &Project) -> Shown {
         .chain(if open_rows { OPEN_ROW_KEYS.as_slice() } else { &[] })
         .chain(if markdown_memos { MARKDOWN_MEMO_KEYS.as_slice() } else { &[] })
         .chain(if windows { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
-        .chain(if engines { ENGINE_ERROR_KEYS.as_slice() } else { &[] });
+        .chain(if engines { ENGINE_ERROR_KEYS.as_slice() } else { &[] })
+        .chain(if divides { DIVISION_KEYS.as_slice() } else { &[] });
     // The runtimes fill the slots of Clarity's own words, the ones its English has.
     for (key, english) in own {
         shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: Some(slots(english)) });

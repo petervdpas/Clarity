@@ -1237,6 +1237,9 @@ fn continue_multiplicative(cursor: &mut Cursor, mut left: Expr) -> ParseResult<E
         let op = match cursor.peek_kind() {
             Some(TokenKind::Star) => BinaryOp::Mul,
             Some(TokenKind::Slash) => BinaryOp::Div,
+            // `div` and `mod` after a value are whole-number division; elsewhere they are plain names.
+            Some(TokenKind::Ident) if cursor.peek().is_some_and(|t| t.text == "div") => BinaryOp::WholeDiv,
+            Some(TokenKind::Ident) if cursor.peek().is_some_and(|t| t.text == "mod") => BinaryOp::Mod,
             _ => return Ok(left),
         };
         cursor.next();

@@ -10,13 +10,16 @@ settings
     fcdmFolder: folder, label @fcdmFolderLabel
     // The folder the app writes its C# into: a copy of the repository, or the repository itself when chosen so.
     outputFolder: folder, label @outputFolderLabel
+    // The folder of the adapter-fcdmapi repository, whose DbContext and mappers name the tables.
+    adapterFolder: folder, label @adapterFolderLabel
 
 app Modelling
     title @modellingTitle
     main Workspace
-    toolbar name mainToolbar
-        button @languageCaption name languageButton icon "languages" on click -> language
-        button @themeCaption name themeButton icon "palette" on click -> theme
+    menu name mainMenu
+        item @viewMenu name viewMenu
+            item @languageCaption name languageItem on click -> language
+            item @themeCaption name themeItem on click -> theme
 
 // Writes the C# of the data objects and enums as the fcdm repository has
 // it; its source is in engines/fcdm.
@@ -28,6 +31,9 @@ engine Fcdm from "fcdm.wasm"
     function diffText(path: text, onDisk: text, written: text) -> text
     function fileBytes(text: text) -> bytes
     function eventCode(spec: EventSpec, fields: list<EventFieldSpec>) -> text
+    function readTables(files: list<SourceFile>) -> list<TableRow>
+    function arrangeBoxes(boxes: list<LayoutBox>, links: list<LayoutLink>, grid: integer, width: integer) -> list<LayoutBox>
+    function routeLinks(boxes: list<LayoutBox>, links: list<LayoutLink>, grid: integer, width: integer) -> list<LayoutLink>
 
 // A file the app writes, compared with the one on disk: the same, differs, or new.
 record CompareRow
@@ -78,6 +84,56 @@ record ReadRow
 record VersionPick
     object: ref DataObject
     number: integer
+
+// A table the engine read from the adapter: the entity kept in it, its
+// version, and the fcdm version its mapper fills it from (none: 0); or a
+// note for the report.
+record TableRow
+    kind: text
+    path: text
+    name: text
+    entity: integer
+    table: text
+    domain: text
+    note: text
+    columns: list<text>
+    keys: list<text>
+    event: text
+    namespaces: list<text>
+    deletes: bool
+
+// An event that fills the adapter table picked, as the Tables tab lists it.
+record IntakeRow
+    event: text
+    version: integer
+    action: text
+
+// A box the engine arranges: its id, its size, and where it puts it.
+record LayoutBox
+    id: integer
+    width: integer
+    height: integer
+    x: integer
+    y: integer
+
+// A line between two boxes the engine arranges, by their ids: its
+// property (key), and the bend points the engine routes it through.
+record LayoutLink
+    from: integer
+    to: integer
+    key: integer
+    via: list<integer>
+
+// A box on the diagrams: a data object's or an enum's, where it stands.
+record DiagramBox
+    // Different for each box: a data object's id, an enum's from 1000000, an adapter table's from 2000000.
+    id: integer
+    key: text
+    x: integer
+    y: integer
+    dataObject: ref DataObject
+    enumType: ref EnumType
+    adapterTable: ref AdapterTable
 
 // An event, as the engine writes it.
 record EventSpec
@@ -184,7 +240,7 @@ page Workspace: window
     slideout @objectSlideout name objectPanel view ObjectEditor width 720 resizable min 480 max 1200 pinnable span 8 rows 14 on saved: objectSaved
     slideout @enumSlideout name enumPanel view EnumEditor width 520 resizable min 380 max 900 pinnable span 6 rows 12 on saved: enumSaved
     slideout @eventSlideout name eventPanel view EventEditor width 720 resizable min 480 max 1200 pinnable span 8 rows 14 on saved: eventSaved
-    slideout @diagramSlideout name diagramPanel side bottom view DiagramCanvas height 400 resizable min 220 max 900 pinnable span 12 rows 9
+    slideout @diagramSlideout name diagramPanel side bottom view DiagramCanvas height 400 resizable min 220 max 900 pinnable span 12 rows 9 on levelChanged: loadDiagram on arranged: loadDiagram on added: objectSaved
 
     sidebar left name explorer width 320 grid 6 columns
         button @newDomainCaption name newDomainButton at 1,1 span 3 icon "plus" on click: newDomainClicked
@@ -211,7 +267,10 @@ page ImportDialog: dialog
     label @fcdmFolderLabel name folderLabel at 1,1 span 2 for folderBox
     folder name folderBox at 3,1 span 4 bind settings.fcdmFolder
     button @importNowCaption name importNowButton at 5,2 span 2 default on click: importClicked
-    memo name reportBox at 1,3 span 6 rows 9 bind report readonly copy placeholder @reportPlaceholder
+    label @adapterFolderLabel name adapterFolderLabel at 1,3 span 2 for adapterFolderBox
+    folder name adapterFolderBox at 3,3 span 4 bind settings.adapterFolder
+    button @readTablesCaption name readTablesButton at 5,4 span 2 icon "table" on click: readTablesClicked
+    memo name reportBox at 1,5 span 6 rows 7 bind report readonly copy placeholder @reportPlaceholder
     button @closeCaption name closeButton at 5,12 span 2 cancel on click -> close
 
 // What the app would write next to what the fcdm folder holds: every class,
@@ -246,6 +305,8 @@ page ObjectEditor: view
     data picked: Property
     data classText: text
     data interfaceText: text
+    data tables: list<AdapterTable>
+    data intakeRows: list<IntakeRow>
 
     tabs name objectTabs at 1,1 span 8 rows 14
         tab @objectTab
@@ -272,6 +333,10 @@ page ObjectEditor: view
             memo name classBox at 1,1 span 8 rows 13 bind classText readonly code csharp copy
         tab @interfaceTab
             memo name interfaceBox at 1,1 span 8 rows 13 bind interfaceText readonly code csharp copy
+        tab @tablesTab
+            table name adapterTableGrid at 1,1 span 8 rows 10 bind tables columns name 320, entityVersion 140 edit name, entityVersion add remove confirm on add: addTableClicked on remove: removeTableClicked on change: tableChanged on select: tablePicked
+            label @tableEventsCaption name tableEventsLabel at 1,11 span 8
+            table name intakeGrid at 1,12 span 8 rows 3 bind intakeRows columns event 320, version 90, action 140 striped
 
 // An enum of a domain: its values with their numbers, and its C#.
 page EnumEditor: view
@@ -337,16 +402,43 @@ page EventEditor: view
 // are in that version, with their properties and lines, or the tables the
 // adapter keeps them in, with their keys.
 page DiagramCanvas: view
+    // The version picked: the window loads the data objects as they are in it.
+    tells levelChanged
+    // The boxes arranged and kept: the window loads them where they stand now.
+    tells arranged
+    // A data object or a property added on the diagram: the window shows it in the tree too.
+    tells added
     data kind: DiagramKind
+    // The domain shown, which a new data object joins.
+    data currentDomain: Domain
+    // Whether the next click on the paper places a new data object (its tool was pressed).
+    data adding: bool
     data level: integer, default 1
     data shown: list<ObjectVersion>
-    data boxes: list<DataObject>
+    data boxes: list<DiagramBox>
+    data enumValues: list<EnumValue>
     data members: list<Property>
+    data adapterTables: list<AdapterTable>
+    data tableIntakes: list<TableIntake>
 
-    radio name diagramKindRadio at 1,1 span 5 bind kind horizontal
-    label @levelCaption name levelLabel at 7,1 span 2 for levelBox
-    spinbox name levelBox at 9,1 span 2 bind level min 1 max 99
-    canvas name diagramCanvas at 1,2 span 12 rows 8 units 2400 x 1200 zoom grid 20 snap background panel mode objects boxes at x, y on draw: drawDiagram on change: boxMoved on bend: lineBent
+    radio name diagramKindRadio at 1,1 span 5 bind kind horizontal on change: kindPicked
+    label @levelCaption name levelLabel at 9,1 span 2 for levelBox style trailing
+    spinbox name levelBox at 11,1 span 2 bind level min 1 max 99 on change: levelPicked
+    canvas name diagramCanvas at 1,2 span 12 rows 8 units 4000 x 3000 zoom grid 20 snap background panel mode objects boxes at x, y tools select, connect toolbox DiagramTools on draw: drawDiagram on change: boxMoved on bend: lineBent on connect: linesDrawn on click: paperClicked
+
+// The diagram's tools: select and drag, draw a line (on the class diagram a
+// held object or an enum choice, on the ERD a business key), zoom, place a
+// new data object, and arrange the boxes. Which show is set by the diagram's
+// kind (kindPicked).
+page DiagramTools: toolbox
+    grid 2 columns
+    tool name selectTool at 1,1 icon "mouse-pointer-2" tooltip @selectToolTip does select
+    tool name connectTool at 2,1 icon "spline" tooltip @connectToolTip does connect
+    tool name zoomInTool at 1,2 icon "zoom-in" does zoomIn
+    tool name zoomOutTool at 2,2 icon "zoom-out" does zoomOut
+    tool name newObjectTool at 1,3 icon "plus" tooltip @newObjectToolTip on click: newObjectToolClicked
+    tool name arrangeTool at 2,3 icon "layout-grid" tooltip @arrangeCaption on click: arrangeClicked
+
 
 code Workspace
     handler workspaceOpened
@@ -417,6 +509,8 @@ code Workspace
         picked = new Property
         classText = classText(editedObject, editedVersion, properties)
         interfaceText = interfaceText(editedObject, editedVersion, properties)
+        tables = find x in AdapterTable where x.owner == owner order by x.entityVersion
+        intakeRows = []
         objectPanel.visible = true
 
     handler openEnum(e: EnumType)
@@ -448,9 +542,23 @@ code Workspace
     handler loadDiagram
         let versions = find v in ObjectVersion order by v.number
         let objects = find o in DataObject where o.domain == domain order by o.name
+        // The dial goes up to the domain's newest version, and no further.
+        let top = 1
+        for v in versions
+            for o in objects
+                if v.owner.id == o.id and v.number > top
+                    top = v.number
+        levelBox.max = top
+        if level > top
+            level = top
         shown = asIn(objects, versions, level)
-        boxes = objects
+        boxes = diagramBoxes(objects, find e in EnumType where e.domain == domain order by e.name)
+        enumValues = find x in EnumValue order by x.position
         members = find p in Property order by p.position
+        adapterTables = find t in AdapterTable order by t.entityVersion
+        currentDomain = domain
+        tableIntakes = find i in TableIntake
+        boxes = boxes + ownTableBoxes(adapterTables, tableIntakes, domain)
 
     handler newDomainClicked
         let d = new Domain
@@ -643,6 +751,38 @@ code ObjectEditor
         showCode()
         tell saved()
 
+    // The adapter's tables of the data object, whatever version is open.
+    handler reloadTables
+        tables = find x in AdapterTable where x.owner == editedObject order by x.entityVersion
+        intakeRows = []
+
+    // A new table, as the adapter's next entity; the import tells which events fill it.
+    handler addTableClicked
+        if editedObject.id == 0
+            return
+        let t = new AdapterTable
+        t.owner = editedObject
+        t.name = @newTableName
+        t.entityName = editedObject.name
+        t.entityVersion = count(tables) + 1
+        save t
+        reloadTables()
+        tell saved()
+
+    handler removeTableClicked
+        delete adapterTableGrid.selected
+        reloadTables()
+        tell saved()
+
+    handler tableChanged
+        save adapterTableGrid.selected
+        tell saved()
+
+    // The table picked shows the events that fill it.
+    handler tablePicked
+        let t = adapterTableGrid.selected
+        intakeRows = intakeRowsOf(t)
+
 code EnumEditor
     handler reloadValues
         values = find x in EnumValue where x.owner == editedEnum order by x.position
@@ -765,6 +905,127 @@ code EventEditor
         tell saved()
 
 code DiagramCanvas
+    handler levelPicked
+        tell levelChanged()
+
+    // The next click on the paper places a new data object there.
+    handler newObjectToolClicked
+        adding = true
+        diagramCanvas.tool = "select"
+
+    // The tools a kind of diagram has: the ERD shows the adapter's tables, so no new data object is placed there.
+    handler kindPicked
+        newObjectTool.visible = kind != DiagramKind.Erd
+        adding = false
+
+    // A line drawn from one box to another: on the class diagram the data
+    // object it starts at holds the other (or takes the enum it ends at),
+    // on the ERD it names the other's business key. It is a new property of
+    // the version shown, at the end of its properties.
+    handler linesDrawn
+        let laid = laidOutBoxes(boxes, shown, members, enumValues, adapterTables, tableIntakes, kind == DiagramKind.Erd)
+        let fromId = boxAt(laid, diagramCanvas.fromX, diagramCanvas.fromY)
+        let toId = boxAt(laid, diagramCanvas.x, diagramCanvas.y)
+        if fromId == 0 or toId == 0 or fromId == toId
+            return
+        for v in shown
+            if v.owner.id == fromId
+                let p = new Property
+                p.owner = v
+                let last = 0
+                for m in members
+                    if m.owner.id == v.id and m.position > last
+                        last = m.position
+                p.position = last + 1
+                if toId >= 1000000 and toId < 2000000 and kind != DiagramKind.Erd
+                    for b in boxes
+                        if b.id == toId
+                            let e = b.enumType
+                            p.kind = EnumChoice
+                            p.choice = e
+                            p.name = e.name
+                            save p
+                if toId < 1000000
+                    for b in boxes
+                        if b.id == toId
+                            let target = b.dataObject
+                            p.target = target
+                            if kind == DiagramKind.Erd
+                                p.kind = BusinessKey
+                                p.name = "{target.name}Bk"
+                            else
+                                p.kind = HeldObject
+                                p.name = target.name
+                            save p
+        tell added()
+
+    // With the new data object tool pressed, a click on the paper places one there, with its first version.
+    handler paperClicked
+        if not adding or currentDomain.id == 0
+            return
+        adding = false
+        let existing = find o in DataObject where o.domain == currentDomain order by o.name
+        let next = count(existing) + 1
+        let base = @newObjectName
+        let o = new DataObject
+        o.domain = currentDomain
+        o.name = "{base}{next}"
+        o.x = snapped(diagramCanvas.x, 20)
+        o.y = snapped(diagramCanvas.y, 20)
+        save o
+        let v = new ObjectVersion
+        v.owner = o
+        v.number = 1
+        save v
+        tell added()
+
+    // Places the boxes of the diagram shown by their links (the engine
+    // arranges them in rows, a box above what it links to), keeps where
+    // they stand, and has the window load them there.
+    handler arrangeClicked
+        let erd = kind == DiagramKind.Erd
+        let wanted = laidOutBoxes(boxes, shown, members, enumValues, adapterTables, tableIntakes, erd)
+        let links: list<LayoutLink> = []
+        for v in shown
+            for p in members
+                if p.owner.id == v.id and p.target != none and (not erd or p.kind == BusinessKey)
+                    let link = new LayoutLink
+                    link.from = v.owner.id
+                    link.to = p.target.id
+                    link.key = p.id
+                    links = links + [link]
+                if p.owner.id == v.id and p.kind == EnumChoice and p.choice != none and not erd
+                    let link = new LayoutLink
+                    link.from = v.owner.id
+                    link.to = 1000000 + p.choice.id
+                    link.key = p.id
+                    links = links + [link]
+        // Each line keeps the bend points it is routed through, around the boxes between.
+        for routed in Fcdm.routeLinks(wanted, links, 20, 4000)
+            for p in members
+                if p.id == routed.key
+                    p.via = routed.via
+                    save p
+        for spot in Fcdm.arrangeBoxes(wanted, links, 20, 4000)
+            for b in boxes
+                if b.id == spot.id
+                    if b.dataObject != none
+                        let o = b.dataObject
+                        o.x = spot.x
+                        o.y = spot.y
+                        save o
+                    if b.enumType != none
+                        let e = b.enumType
+                        e.x = spot.x
+                        e.y = spot.y
+                        save e
+                    if b.adapterTable != none
+                        let t = b.adapterTable
+                        t.x = spot.x
+                        t.y = spot.y
+                        save t
+        tell arranged()
+
     handler drawDiagram
         diagramCanvas.clear()
         if kind == DiagramKind.Erd
@@ -776,43 +1037,71 @@ code DiagramCanvas
     // each object it holds, a dashed one to each it names by business key.
     handler drawClasses
         for v in shown
+            let o = v.owner
+            let ownLines = classLines(v, members)
+            let ow = boxWidth(versionTitle(o.name, v.number), ownLines)
+            let oh = 40 + 22 * count(ownLines)
             for p in members
                 if p.owner.id == v.id and p.target != none
                     for target in shown
                         if p.target.id == target.owner.id
-                            let o = v.owner
                             let t = target.owner
-                            // From the middle of one box's header to the middle of the other's.
-                            let from = o.x + boxWidth(versionTitle(o.name, v.number), classLines(v, members)) / 2
-                            let to = t.x + boxWidth(versionTitle(t.name, target.number), classLines(target, members)) / 2
+                            let theirLines = classLines(target, members)
+                            let tw = boxWidth(versionTitle(t.name, target.number), theirLines)
+                            let th = 40 + 22 * count(theirLines)
+                            // From the edge of one box that faces the other to the other's facing edge.
+                            let e = lineEnds(o.x, o.y, ow, oh, t.x, t.y, tw, th)
                             if p.kind == BusinessKey
-                                diagramCanvas.link("p{p.id}", from, o.y + 20, to, t.y + 20, p.via, "muted", 2, "", "arrow", "", "dashed")
+                                diagramCanvas.link("p{p.id}", e[1], e[2], e[3], e[4], p.via, "muted", 2, "", "arrow", "", "dashed")
                             else if p.kind == HeldObjects
-                                diagramCanvas.link("p{p.id}", from, o.y + 20, to, t.y + 20, p.via, "muted", 2, "filledDiamond", "many")
+                                diagramCanvas.link("p{p.id}", e[1], e[2], e[3], e[4], p.via, "muted", 2, "filledDiamond", "many")
                             else if p.kind == HeldObject
-                                diagramCanvas.link("p{p.id}", from, o.y + 20, to, t.y + 20, p.via, "muted", 2, "filledDiamond", "one")
+                                diagramCanvas.link("p{p.id}", e[1], e[2], e[3], e[4], p.via, "muted", 2, "filledDiamond", "one")
+                // A dashed line to the enum it takes, as the class holds it.
+                if p.owner.id == v.id and p.kind == EnumChoice and p.choice != none
+                    for b in boxes
+                        if b.enumType != none and b.enumType.id == p.choice.id
+                            let en = b.enumType
+                            let valueLines = enumLines(en, enumValues)
+                            let e = lineEnds(o.x, o.y, ow, oh, b.x, b.y, boxWidth(en.name, valueLines), 40 + 22 * count(valueLines))
+                            diagramCanvas.link("p{p.id}", e[1], e[2], e[3], e[4], p.via, "muted", 2, "", "arrow", "", "dashed")
         for v in shown
-            drawBox(v.owner, versionTitle(v.owner.name, v.number), classLines(v, members), "accent")
+            drawBox(boxFor(boxes, v.owner), versionTitle(v.owner.name, v.number), classLines(v, members), "accent")
+        for b in boxes
+            if b.enumType != none
+                let e = b.enumType
+                drawBox(b, e.name, enumLines(e, enumValues), "warning")
 
     // The ERD: a table per data object as the adapter keeps it, its business
     // key first, its values, and its two moments; a line to each table a
     // business key points at.
     handler drawErd
         for v in shown
+            let fromTable = tableTitle(v, adapterTables, tableIntakes)
+            let ownLines = erdLines(v, members)
+            let o = v.owner
             for p in members
-                if p.owner.id == v.id and p.kind == BusinessKey and p.target != none
+                if p.owner.id == v.id and p.kind == BusinessKey and p.target != none and fromTable != ""
                     for target in shown
-                        if p.target.id == target.owner.id
-                            let o = v.owner
+                        let toTable = tableTitle(target, adapterTables, tableIntakes)
+                        // Only between tables the adapter has.
+                        if p.target.id == target.owner.id and toTable != ""
                             let t = target.owner
-                            let from = o.x + boxWidth(tableName(o.name, v.number), erdLines(v, members)) / 2
-                            let to = t.x + boxWidth(tableName(t.name, target.number), erdLines(target, members)) / 2
-                            diagramCanvas.link("p{p.id}", from, o.y + 20, to, t.y + 20, p.via, "muted", 2, "many", "one")
+                            let theirLines = erdLines(target, members)
+                            let e = lineEnds(o.x, o.y, boxWidth(fromTable, ownLines), 40 + 22 * count(ownLines), t.x, t.y, boxWidth(toTable, theirLines), 40 + 22 * count(theirLines))
+                            diagramCanvas.link("p{p.id}", e[1], e[2], e[3], e[4], p.via, "muted", 2, "many", "one")
+        // A data object the adapter keeps in no table is not on the ERD.
         for v in shown
-            drawBox(v.owner, tableName(v.owner.name, v.number), erdLines(v, members), "success")
+            let title = tableTitle(v, adapterTables, tableIntakes)
+            if title != ""
+                drawBox(boxFor(boxes, v.owner), title, erdLines(v, members), "success")
+        for b in boxes
+            if b.adapterTable != none
+                let t = b.adapterTable
+                drawBox(b, t.name, ownTableLines(t), "muted")
 
     // A box as wide as its title and its longest line ask.
-    handler drawBox(o: DataObject, title: text, lines: list<text>, edge: text)
+    handler drawBox(o: DiagramBox, title: text, lines: list<text>, edge: text)
         let w = boxWidth(title, lines)
         let h = 40 + 22 * count(lines)
         diagramCanvas.object(o, o.x, o.y, w, h)
@@ -830,8 +1119,24 @@ code DiagramCanvas
             row = row + 22
             striped = not striped
 
+    // A box moved: its data object or enum keeps where it stands.
     handler boxMoved
-        save diagramCanvas.selected
+        let b = diagramCanvas.selected
+        if b.dataObject != none
+            let o = b.dataObject
+            o.x = b.x
+            o.y = b.y
+            save o
+        if b.enumType != none
+            let e = b.enumType
+            e.x = b.x
+            e.y = b.y
+            save e
+        if b.adapterTable != none
+            let t = b.adapterTable
+            t.x = b.x
+            t.y = b.y
+            save t
 
     // A line bent: its property keeps the points.
     handler lineBent
@@ -936,6 +1241,25 @@ code ImportDialog
                 sources = sources + [s]
         let rows = Fcdm.readFiles(sources)
         report = importRows(rows)
+        // The domains read again lost their tables with their data objects: the adapter's are read again too.
+        if settings.adapterFolder != ""
+            report = report + "\n\n" + importTables(Fcdm.readTables(adapterSources()))
+
+    // The adapter's DbContext and mappers, read by the engine: its tables, each on its data object.
+    handler readTablesClicked
+        report = importTables(Fcdm.readTables(adapterSources()))
+
+// The C# files of the adapter folder the engine reads its tables from: not its build output or migrations.
+action adapterSources() -> list<SourceFile>
+    effects files.read
+    let sources: list<SourceFile> = []
+    for f in files f in adapter where f.extension == "cs"
+        if not (f.path contains "/obj/" or f.path contains "/bin/" or f.path contains "/Migrations/")
+            let s = new SourceFile
+            s.path = f.path
+            s.text = read text of f
+            sources = sources + [s]
+    return sources
 
 // Where a version's class stands in the fcdm folder: its domain's project, in vN from version 2.
 function classPath(domain: text, name: text, number: integer) -> text
@@ -976,6 +1300,58 @@ action writtenFor(r: CompareRow) -> text
     if r.kind == "interface"
         return interfaceText(o, v, properties)
     return classText(o, v, properties)
+
+// Stores the adapter's tables the engine read, replacing those there were:
+// each on the data object of its entity's name (in the domain its mapper
+// reads, when it has one), with the version it is filled from. Gives the
+// report.
+action importTables(rows: list<TableRow>) -> text
+    effects db.read, db.write
+    for old in find x in AdapterTable
+        delete old
+    let lines: list<text> = []
+    let tables = 0
+    let placed = 0
+    let filled = 0
+    for r in rows
+        if r.kind == "note"
+            lines = lines + [r.note]
+        if r.kind == "table"
+            tables = tables + 1
+            let owners = find o in DataObject where o.name == r.name order by o.id
+            if r.domain != ""
+                for d in find x in Domain where x.name == r.domain
+                    let inDomain = find o in DataObject where o.domain == d and o.name == r.name
+                    if count(inDomain) > 0
+                        owners = inDomain
+            let t = new AdapterTable
+            t.name = r.table
+            t.entityName = r.name
+            t.entityVersion = r.entity
+            t.columns = r.columns
+            t.keys = r.keys
+            if count(owners) == 0
+                // A table of the adapter's own, as DeletedEntities: kept with its columns, on every ERD.
+                lines = lines + [@tableNoObject(table = r.table, name = r.name)]
+            else
+                t.owner = owners[1]
+                placed = placed + 1
+            save t
+        // The events that fill a table: in the namespace its handler names or opens, as the import keeps them.
+        if r.kind == "intake"
+            let found = find x in AdapterTable where x.name == r.table
+            let e = intakeEvent(r.event, r.namespaces)
+            if count(found) > 0 and e.id != 0
+                let i = new TableIntake
+                i.table = found[1]
+                i.event = e
+                i.deletes = r.deletes
+                save i
+                filled = filled + 1
+            else
+                lines = lines + [@intakeNoEvent(event = r.event, table = r.table)]
+    let summary = @tablesRead(tables = tables, placed = placed, filled = filled)
+    return join([summary, ""] + lines, "\n")
 
 // Stores what the engine read: the domains it names replace those there
 // were, then their enums and data objects with their versions, then the
@@ -1584,11 +1960,32 @@ function versionTitle(name: text, number: integer) -> text
         return "{name} v{number}"
     return name
 
-// The adapter's table of a version: its name, with V and the number from version 2.
-function tableName(name: text, number: integer) -> text
-    if number > 1
-        return "{name}V{number}"
-    return name
+// The adapter's table of a version on the ERD: the one an event carrying
+// this version writes, else one an event carrying an older version writes,
+// else one any event writes (the newest entity first), else its newest
+// table; empty when the adapter keeps it in none, so it is no table.
+function tableTitle(v: ObjectVersion, tables: list<AdapterTable>, intakes: list<TableIntake>) -> text
+    let best = ""
+    let bestRank = 0
+    for t in tables
+        if t.owner != none and t.owner.id == v.owner.id
+            let rank = t.entityVersion
+            for i in intakes
+                if i.table.id == t.id and not i.deletes
+                    let e = i.event
+                    let written = 1000
+                    if e.carries != none
+                        let carried = e.carries
+                        if carried.id == v.id
+                            written = 100000
+                        else if carried.number < v.number
+                            written = 1000 + 100 * carried.number
+                    if rank < written + t.entityVersion
+                        rank = written + t.entityVersion
+            if rank > bestRank
+                best = t.name
+                bestRank = rank
+    return best
 
 // What a kind of property is written as on the diagrams.
 function kindWord(kind: PropertyKind) -> text
@@ -1628,6 +2025,8 @@ function classLines(v: ObjectVersion, all: list<Property>) -> list<text>
     for p in all
         if p.owner.id == v.id
             let kindText = kindWord(p.kind)
+            if p.kind == EnumChoice and p.choice != none
+                kindText = p.choice.name
             lines = lines + [propertyLine(p.name, kindText, p.nullable)]
     return lines
 
@@ -1637,7 +2036,11 @@ function erdLines(v: ObjectVersion, all: list<Property>) -> list<text>
     let lines: list<text> = ["PK  Bk"]
     for p in all
         if p.owner.id == v.id and p.kind != HeldObjects and p.kind != HeldObject and p.computed == ""
-            lines = lines + [columnLine(p.name, p.kind)]
+            if p.kind == EnumChoice and p.choice != none
+                // The adapter keeps an enum as its number: an int column, no table.
+                lines = lines + ["    {p.name}: int ({p.choice.name})"]
+            else
+                lines = lines + [columnLine(p.name, p.kind)]
     return lines + ["    LastModified", "    LastProcessed"]
 
 // How wide a box is, in the canvas's units: room for its bold title (13) and
@@ -1672,6 +2075,175 @@ function freeDomainName(word: text, domains: list<Domain>) -> text
         n = n + 1
         name = "{word}{n}"
     return name
+
+// The boxes of a domain's diagrams: its data objects, then its enums; an
+// enum not yet moved stands in rows below the data objects.
+function diagramBoxes(objects: list<DataObject>, enums: list<EnumType>) -> list<DiagramBox>
+    let found: list<DiagramBox> = []
+    let below = 0
+    for o in objects
+        let b = new DiagramBox
+        b.id = o.id
+        b.key = "o{o.id}"
+        b.x = o.x
+        b.y = o.y
+        b.dataObject = o
+        found = found + [b]
+        if o.y + 300 > below
+            below = o.y + 300
+    let placed = 0
+    for e in enums
+        let b = new DiagramBox
+        b.id = 1000000 + e.id
+        b.key = "e{e.id}"
+        b.x = e.x
+        b.y = e.y
+        if e.x == 0 and e.y == 0
+            b.x = 40 + 320 * columnOf(placed)
+            b.y = below + 260 * rowOf(placed)
+            placed = placed + 1
+        b.enumType = e
+        found = found + [b]
+    return found
+
+// The boxes of the adapter's own tables on a domain's ERD, as Roostercodes:
+// only those the domain's events fill (DeletedEntities on each domain whose
+// deleted events write it), in a row at the top right until moved.
+function ownTableBoxes(tables: list<AdapterTable>, intakes: list<TableIntake>, d: Domain) -> list<DiagramBox>
+    let found: list<DiagramBox> = []
+    let placed = 0
+    for t in tables
+        let filled = false
+        for i in intakes
+            if i.table.id == t.id
+                let e = i.event
+                if e.domain.id == d.id
+                    filled = true
+        if t.owner == none and filled
+            let b = new DiagramBox
+            b.id = 2000000 + t.id
+            b.key = "t{t.id}"
+            b.x = t.x
+            b.y = t.y
+            if t.x == 0 and t.y == 0
+                b.x = 1640 + 320 * placed
+                b.y = 40
+                placed = placed + 1
+            b.adapterTable = t
+            found = found + [b]
+    return found
+
+// The lines of a table of the adapter's own: its columns as its model class has them, its key marked.
+function ownTableLines(t: AdapterTable) -> list<text>
+    let lines: list<text> = []
+    for c in t.columns
+        let marked = "    "
+        for k in t.keys
+            if c contains "{k}: "
+                marked = "PK  "
+        lines = lines + ["{marked}{c}"]
+    return lines
+
+// The box of a data object among the boxes.
+function boxFor(all: list<DiagramBox>, o: DataObject) -> DiagramBox
+    for b in all
+        if b.dataObject != none and b.dataObject.id == o.id
+            return b
+    let alone = new DiagramBox
+    alone.x = o.x
+    alone.y = o.y
+    alone.dataObject = o
+    return alone
+
+// The event an intake names: of that name, in the first of its namespaces the import has it in.
+action intakeEvent(name: text, namespaces: list<text>) -> EventType
+    effects db.read
+    for ns in namespaces
+        let found = find x in EventType where x.name == name and x.namespace == ns
+        if count(found) > 0
+            return found[1]
+    return new EventType
+
+// The events that fill a table, for the Tables tab: each with its version and what it does.
+action intakeRowsOf(t: AdapterTable) -> list<IntakeRow>
+    effects db.read
+    let rows: list<IntakeRow> = []
+    if t.id == 0
+        return rows
+    for i in find x in TableIntake where x.table == t
+        let e = i.event
+        let r = new IntakeRow
+        r.event = e.name
+        r.version = e.number
+        r.action = @intakeWrites
+        if i.deletes
+            r.action = @intakeDeletes
+        rows = rows + [r]
+    return rows
+
+// The boxes of the diagram shown, each as large as it is drawn: a data
+// object's (on the ERD only when the adapter keeps it in a table), an enum's
+// on the class diagram, a table of the adapter's own on the ERD.
+function laidOutBoxes(boxes: list<DiagramBox>, shown: list<ObjectVersion>, members: list<Property>, enumValues: list<EnumValue>, tables: list<AdapterTable>, intakes: list<TableIntake>, erd: bool) -> list<LayoutBox>
+    let wanted: list<LayoutBox> = []
+    for b in boxes
+        let box = new LayoutBox
+        box.id = b.id
+        box.x = b.x
+        box.y = b.y
+        let lines: list<text> = []
+        let title = ""
+        if b.dataObject != none
+            for v in shown
+                if v.owner.id == b.dataObject.id
+                    if erd
+                        title = tableTitle(v, tables, intakes)
+                        lines = erdLines(v, members)
+                    else
+                        title = versionTitle(v.owner.name, v.number)
+                        lines = classLines(v, members)
+        if b.enumType != none and not erd
+            let e = b.enumType
+            title = e.name
+            lines = enumLines(e, enumValues)
+        if b.adapterTable != none and erd
+            let t = b.adapterTable
+            title = t.name
+            lines = ownTableLines(t)
+        if title != ""
+            box.width = boxWidth(title, lines)
+            box.height = 40 + 22 * count(lines)
+            wanted = wanted + [box]
+    return wanted
+
+// Where a line between two boxes starts and ends: from the bottom of the
+// upper box to the top of the lower one, or between the sides that face
+// each other when they stand beside each other; x1, y1, x2, y2.
+function lineEnds(ax: integer, ay: integer, aw: integer, ah: integer, bx: integer, by: integer, bw: integer, bh: integer) -> list<integer>
+    if by >= ay + ah
+        return [ax + aw div 2, ay + ah, bx + bw div 2, by]
+    if ay >= by + bh
+        return [ax + aw div 2, ay, bx + bw div 2, by + bh]
+    if bx >= ax + aw
+        return [ax + aw, ay + 20, bx, by + 20]
+    if ax >= bx + bw
+        return [ax, ay + 20, bx + bw, by + 20]
+    return [ax + aw div 2, ay + 20, bx + bw div 2, by + 20]
+
+// The id of the box at a point of the canvas; 0 on the paper.
+function boxAt(laid: list<LayoutBox>, x: integer, y: integer) -> integer
+    for b in laid
+        if x >= b.x and x <= b.x + b.width and y >= b.y and y <= b.y + b.height
+            return b.id
+    return 0
+
+// The lines of an enum's box: its values with the numbers they are kept as.
+function enumLines(e: EnumType, all: list<EnumValue>) -> list<text>
+    let lines: list<text> = []
+    for v in all
+        if v.owner.id == e.id
+            lines = lines + ["{v.name} = {v.number}"]
+    return lines
 
 // Where the n-th box of a domain goes, from 0: five to a row.
 function columnOf(n: integer) -> integer

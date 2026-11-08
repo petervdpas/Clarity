@@ -97,6 +97,7 @@ changes.
 
 How you work:
 - Start a task by looking at the project (project_overview), and read a file before you change it.
+- README.md holds the project's goal: work toward it; update it when the goal or plan changes.
 - Take a request for an application, or a feature of one, in this order. Read the manual topics it touches. Find \
 what Clarity does itself: the parts tool lists every built-in part with its properties and events, and the \
 manual says what code can do and tells each part (design.sound, for one); use those. Reach for a library or a custom part only for what nothing built in does, \
@@ -258,6 +259,10 @@ impl ProjectTools {
         if path == "project" {
             return Ok(file.clone());
         }
+        // The project's description: its design goal and guide.
+        if path == clarity_spec::README_FILE {
+            return Ok(dir.join(clarity_spec::README_FILE));
+        }
         // A Markdown file of the resources: `resources/rules-en.md`, a plain name.
         if let Some(name) = path.strip_prefix("resources/") {
             let plain = !name.is_empty() && !name.starts_with('.') && !name.contains(['/', '\\']);
@@ -340,7 +345,11 @@ impl ProjectTools {
 
     fn overview(&self) -> Result<String, String> {
         let (file, dir) = self.open()?;
-        let mut out = format!("Project file ({}):\n{}\n\nModules in {}:\n", file.display(), std::fs::read_to_string(file).unwrap_or_default(), dir.display());
+        let mut out = match std::fs::read_to_string(dir.join(clarity_spec::README_FILE)) {
+            Ok(readme) => format!("README.md (the project's design goal and guide; work toward it, update it when the goal changes):\n{readme}\n\n"),
+            Err(_) => "README.md: none yet. The project has no written design goal; offer to write one (path README.md) once the goal is clear.\n\n".to_string(),
+        };
+        out.push_str(&format!("Project file ({}):\n{}\n\nModules in {}:\n", file.display(), std::fs::read_to_string(file).unwrap_or_default(), dir.display()));
         let mut modules: Vec<PathBuf> = Vec::new();
         collect(dir, dir, &mut modules);
         modules.sort();
@@ -1521,6 +1530,23 @@ mod tests {
         assert!(refused.is_error && refused.text.contains("settings"), "{}", refused.text);
         assert_eq!(person.borrow().built, [true]);
         assert_eq!(serde_json::from_value::<Runs>(json!("ask")).unwrap(), Runs::Ask);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The project's README.md is its design goal: the overview shows it
+    /// first, and the agent reads and writes it.
+    #[test]
+    fn the_agent_reads_the_readme_first_and_keeps_it() {
+        let (root, file, dir) = project("readme");
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        assert!(tools.call("project_overview", &json!({})).text.starts_with("README.md: none yet"));
+        let wrote = tools.call("write_file", &json!({"path": "README.md", "text": "# Goal\n\nTrack tasks."}));
+        assert!(!wrote.is_error, "{}", wrote.text);
+        assert_eq!(std::fs::read_to_string(dir.join("README.md")).unwrap(), "# Goal\n\nTrack tasks.\n");
+        let overview = tools.call("project_overview", &json!({})).text;
+        assert!(overview.starts_with("README.md (the project's design goal"), "{overview}");
+        assert!(overview.contains("Track tasks."), "{overview}");
+        assert!(instructions().contains("README.md"), "the instructions say nothing of the README");
         std::fs::remove_dir_all(&root).unwrap();
     }
 

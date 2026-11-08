@@ -377,6 +377,11 @@ impl<'l, 'a> Scope<'l, 'a> {
                 let (l, r) = both(self.expr_as(left, Kind::Int)?, self.expr_as(right, Kind::Int)?);
                 ir::Expr::Int2(int, l, r)
             }
+            BinaryOp::WholeDiv | BinaryOp::Mod => {
+                let int = if op == BinaryOp::WholeDiv { IntOp::Div } else { IntOp::Rem };
+                let (l, r) = both(self.expr_as(left, Kind::Int)?, self.expr_as(right, Kind::Int)?);
+                ir::Expr::Int2(int, l, r)
+            }
             BinaryOp::Eq | BinaryOp::NotEq => {
                 let (l, r) = both(self.expr(left)?, self.expr(right)?);
                 let eq = ir::Expr::Eq(l, r);

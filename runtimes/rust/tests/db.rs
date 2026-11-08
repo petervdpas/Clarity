@@ -182,7 +182,8 @@ fn a_reply_carries_the_state_messages_and_windows() {
     ui.set_enabled("save", false);
     assert_eq!(ui.caption("save", "Save"), "Save");
     assert_eq!(ui.selected("grid", &form.rows).unwrap(), "y");
-    assert!(ui.selected("other", &form.rows).is_err());
+    // With no row chosen, code gets an empty record to ask about.
+    assert_eq!(ui.selected("other", &form.rows).unwrap(), "");
     form.name = "b".into();
     ui.message(Level::Warning, "careful".into());
     ui.open("Other", vec![("record", to_value(&form.rows[0]).unwrap())]);

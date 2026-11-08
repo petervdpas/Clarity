@@ -85,9 +85,9 @@ pub fn package_of(project: &Project, part: &str) -> String {
         .unwrap_or_else(|| snake(part))
 }
 
-/// The crates of Clarity's that a part may name, with the version the program is built on.
-fn clarity_crates() -> [(&'static str, &'static str); 2] {
-    [("clarity-ui", super::ui_version()), ("clarity-runtime", super::runtime_version())]
+/// The crate of Clarity's that a part may name, with the version the program is built on.
+fn clarity_crates() -> [(&'static str, &'static str); 1] {
+    [("clarity-runtime", super::runtime_version())]
 }
 
 /// The version requirement of `krate` in a Cargo.toml line, if the line names it with one.
@@ -101,10 +101,10 @@ fn requirement<'a>(line: &'a str, krate: &str) -> Option<&'a str> {
     if value.starts_with('{') { value.split("version").nth(1)?.split('"').nth(1) } else { Some(value.trim_matches('"')) }
 }
 
-/// `manifest` with its lines of Clarity's own crates (clarity-ui,
-/// clarity-runtime) naming the versions the program is built on, where a line
-/// names one Cargo would not share with it; none when nothing needs a change.
-pub fn with_ui_version(manifest: &str) -> Option<String> {
+/// `manifest` with its line of Clarity's runtime naming the version the
+/// program is built on, where the line names one Cargo would not share with
+/// it; none when nothing needs a change.
+pub fn with_runtime_version(manifest: &str) -> Option<String> {
     let mut changed = false;
     let lines: Vec<String> = manifest
         .lines()
@@ -139,12 +139,10 @@ pub fn ui_accepts(wanted: &str, version: &str) -> bool {
     w.iter().zip(&v).take(significant + 1).all(|(a, b)| a == b) && v >= w
 }
 
-/// The parts whose Cargo.toml names a crate of Clarity's (clarity-ui,
-/// clarity-runtime) or Skia (skia-safe) at a version the program cannot share:
-/// Cargo would build two of them, and the part would not be the program's kind
-/// of part (or two Skias would link into one program).
+/// The parts whose Cargo.toml names clarity-runtime at a version the program
+/// cannot share (Cargo would build two), or Clarity.UI's crate or Skia, which
+/// a part no longer takes: it draws on the canvas of its `src/clarity.rs`.
 pub fn ui_mismatches(project: &Project) -> Vec<String> {
-    let skia = super::ui_skia_version();
     let mut found = Vec::new();
     for p in crate_parts(project) {
         let n = &p.name.name;
@@ -156,8 +154,10 @@ pub fn ui_mismatches(project: &Project) -> Vec<String> {
                     found.push(format!("custom part {n} names {krate} {wanted} in its Cargo.toml, but the program is built on {krate} {version}: write {krate} = \"{version}\" there"));
                 }
             }
-            if let Some(wanted) = requirement(line, "skia-safe").filter(|w| !ui_accepts(w, skia)) {
-                found.push(format!("custom part {n} names skia-safe {wanted} in its Cargo.toml, but Clarity.UI draws with skia-safe {skia}: use clarity_ui::skia_safe instead, or write skia-safe = \"{skia}\""));
+            for krate in ["clarity-ui", "skia-safe"] {
+                if line.split_once('=').is_some_and(|(key, _)| key.trim() == krate) {
+                    found.push(format!("custom part {n} names {krate} in its Cargo.toml, which a part no longer takes: it draws on the Canvas of src/clarity.rs, through Clarity.UI's library; remove the line"));
+                }
             }
         }
     }
@@ -244,6 +244,12 @@ pub fn code_mismatches(project: &Project) -> Vec<String> {
                 found.push(format!("custom part {n}: {} uses {name}, which Clarity no longer has: {instead}", code[k].at(at)));
             }
         }
+        // Clarity.UI's crate is not the part's: it draws through the library.
+        for source in &code {
+            if let Some(at) = find_word(&source.code, "clarity_ui").into_iter().find(|&at| after(&source.code, at + "clarity_ui".len()).starts_with("::")) {
+                found.push(format!("custom part {n}: {} uses clarity_ui, which a part no longer takes: draw on the Canvas and act through the Cx of src/clarity.rs", source.at(at)));
+            }
+        }
         // The runtime's part host of native windows is gone.
         for source in &code {
             if let Some(at) = find_word(&source.code, "clarity_runtime").into_iter().find(|&at| after(&source.code, at + "clarity_runtime".len()).strip_prefix("::").is_some_and(|r| first_word(r.trim_start()) == "parts")) {
@@ -256,10 +262,12 @@ pub fn code_mismatches(project: &Project) -> Vec<String> {
 
 // -- On Clarity.UI (DESIGN 7.9) ---------------------------------------------
 //
-// A part of a program on Clarity.UI is a control drawn on Clarity.UI's own
-// surface, not a native window: its crate's type implements the typed trait
-// written into its `src/clarity.rs`, which wraps it as a `CustomPart` of
-// clarity-ui; the program registers it by its name.
+// A part is a control drawn on Clarity.UI's surface, as Go, C and C++ parts
+// are: its crate's type implements the typed trait of its `src/clarity.rs`,
+// which declares the canvas it draws on and what it does through Clarity.UI
+// as plain Rust traits, so the crate needs nothing of Clarity's. The
+// program's glue (`src/parts.rs`) makes those of the runtime's
+// `native_ui` and registers each part with the library by its name.
 
 /// How a value of `ty` is read from what the window holds.
 fn ui_reader(ty: &TypeRef) -> &'static str {
@@ -302,25 +310,76 @@ fn ui_params(list: &[Param], given: bool) -> String {
     list.iter().map(|p| format!(", {}: {}", snake(&p.name.name), if given { given_type(&p.ty) } else { rust_type(&p.ty) })).collect()
 }
 
-/// `parts/Gauge/src/clarity.rs` of a part on Clarity.UI: the typed trait the
-/// crate's `Gauge` implements, the part's words to its window, and the
-/// wrapper that makes it a control of clarity-ui.
+/// The canvas and the context of `src/clarity.rs`, the same for every part:
+/// `(trait, [(method line, call on the runtime's own)])`, which the
+/// interface declares and the program's glue forwards.
+const CANVAS: &[(&str, &str, &str)] = &[
+    ("", "fn fill(&mut self, x: f64, y: f64, width: f64, height: f64, color: u32, radius: f64)", "fill(x, y, width, height, color, radius)"),
+    ("", "fn stroke(&mut self, x: f64, y: f64, width: f64, height: f64, color: u32, line_width: f64, radius: f64)", "stroke(x, y, width, height, color, line_width, radius)"),
+    ("", "fn line(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, color: u32, line_width: f64)", "line(x1, y1, x2, y2, color, line_width)"),
+    ("", "fn oval(&mut self, x: f64, y: f64, width: f64, height: f64, color: u32, filled: bool, line_width: f64)", "oval(x, y, width, height, color, filled, line_width)"),
+    ("An SVG path's data (\"M0 0 L10 10 Z\"), filled or stroked.", "fn path(&mut self, svg: &str, color: u32, filled: bool, line_width: f64)", "path(svg, color, filled, line_width)"),
+    ("Text in a box: align 0 left, 1 center, 2 right; size 0 is the look's text size.", "fn text(&mut self, text: &str, x: f64, y: f64, width: f64, height: f64, color: u32, size: f64, bold: bool, align: i32)", "text(text, x, y, width, height, color, size, bold, align)"),
+    ("How wide text is at a size (0: the look's text size).", "fn measure(&mut self, text: &str, size: f64, bold: bool) -> f64", "measure(text, size, bold)"),
+    ("RGBA pixels (unpremultiplied, rows of `stride` bytes) drawn into a box.", "fn pixels(&mut self, rgba: &[u8], width: u32, height: u32, stride: usize, x: f64, y: f64, box_width: f64, box_height: f64)", "pixels(rgba, width, height, stride, x, y, box_width, box_height)"),
+    ("Clips what follows to a box until `restore`.", "fn clip(&mut self, x: f64, y: f64, width: f64, height: f64)", "clip(x, y, width, height)"),
+    ("", "fn restore(&mut self)", "restore()"),
+    ("A color of the look by its role (\"accent\", \"text\", \"border\", \"error\").", "fn look_color(&mut self, role: &str) -> u32", "look_color(role)"),
+];
+
+const CX: &[(&str, &str, &str)] = &[
+    ("Its place in the window: x, y, width and height.", "fn bounds(&self) -> (f64, f64, f64, f64)", "bounds()"),
+    ("", "fn enabled(&self) -> bool", "enabled()"),
+    ("Has it drawn again.", "fn invalidate(&mut self)", "invalidate()"),
+    ("Has its `wake` called once after `ms` milliseconds.", "fn wake_in(&mut self, ms: f64)", "wake_in(ms)"),
+    ("Has it drawn every frame while on.", "fn animate(&mut self, on: bool)", "animate(on)"),
+    ("", "fn focus(&mut self)", "focus()"),
+    ("The person changed the value it binds (see `changed` of its tells).", "fn change(&mut self, value: Value)", "change(&value)"),
+    ("It tells `tell` with its values (see its tells).", "fn tell(&mut self, tell: &str, values: Vec<Value>)", "tell(tell, &values)"),
+    ("A text of the program's translations by its key, in the language shown; `english` when there is none.", "fn translate(&self, key: &str, english: &str) -> String", "translate(key, english)"),
+];
+
+/// The methods every part may write, beside drawing and its window's words:
+/// (what it is for, line, body of the default, call in the wrapper).
+const INPUT: &[(&str, &str, &str, &str)] = &[
+    ("Whether it takes the focus: pressed, or reached with Tab.", "fn focusable(&self) -> bool", "false", "focusable()"),
+    ("The main button went down on it.", "fn pointer_pressed(&mut self, at: Pointer, cx: &mut dyn Cx)", "let _ = (at, cx);", "pointer_pressed(at, cx)"),
+    ("The pointer moved over it, or anywhere while it holds the pointer.", "fn pointer_moved(&mut self, at: Pointer, cx: &mut dyn Cx)", "let _ = (at, cx);", "pointer_moved(at, cx)"),
+    ("The main button went up after it was pressed on it.", "fn pointer_released(&mut self, at: Pointer, cx: &mut dyn Cx)", "let _ = (at, cx);", "pointer_released(at, cx)"),
+    ("Pressed and released with the main button.", "fn click(&mut self, cx: &mut dyn Cx)", "let _ = cx;", "click(cx)"),
+    ("The wheel turned over it with keys held (`SHIFT` and the others): true when it took the turn.", "fn wheel(&mut self, dx: f64, dy: f64, modifiers: u32, cx: &mut dyn Cx) -> bool", "let _ = (dx, dy, modifiers, cx);\n        false", "wheel(dx, dy, modifiers, cx)"),
+    ("A key by its name (\"Enter\", \"Space\", \"Left\", \"A\", \"+\") while it has the focus: true when it took the key.", "fn key(&mut self, name: &str, modifiers: u32, cx: &mut dyn Cx) -> bool", "let _ = (name, modifiers, cx);\n        false", "key(name, modifiers, cx)"),
+    ("Text typed while it has the focus.", "fn text(&mut self, text: &str, cx: &mut dyn Cx)", "let _ = (text, cx);", "text(text, cx)"),
+    ("It got or lost the focus.", "fn focus_changed(&mut self, focused: bool, cx: &mut dyn Cx)", "let _ = (focused, cx);", "focus_changed(focused, cx)"),
+    ("The time it asked for came (`cx.wake_in(ms)`).", "fn wake(&mut self, cx: &mut dyn Cx)", "let _ = cx;", "wake(cx)"),
+    ("Its window opened: called once, after the values of its line, what\n    /// code set and what it binds; it may start a timer or an animation here.", "fn start(&mut self, cx: &mut dyn Cx)", "let _ = cx;", "start(cx)"),
+    ("Its window left the screen: it stops what it started.", "fn stop(&mut self)", "", "stop()"),
+    ("What it says about the place at a point when the pointer rests there.", "fn tooltip_at(&self, x: f64, y: f64) -> Option<String>", "let _ = (x, y);\n        None", "tooltip_at(x, y)"),
+];
+
+fn doc(what: &str) -> String {
+    if what.is_empty() { String::new() } else { format!("    /// {what}\n") }
+}
+
+/// `parts/Gauge/src/clarity.rs` of a part: the canvas it draws on, what it
+/// does through Clarity.UI, the typed trait the crate's `Gauge` implements,
+/// its words to its window, and what the program's glue holds of it.
 pub fn ui_interface(part: &PartDecl) -> String {
     let n = &part.name.name;
     let mut shows = String::new();
     let mut sets = String::new();
     if let Some(binds) = &part.binds {
-        let _ = write!(shows, "\n    /// The value it shows, from what it binds; given when its window starts and when it changed.\n    fn show_value(&mut self, value: {}, cx: &mut CustomCx);\n", rust_type(binds));
+        let _ = write!(shows, "\n    /// The value it shows, from what it binds; given when its window starts and when it changed.\n    fn show_value(&mut self, value: {}, cx: &mut dyn Cx);\n", rust_type(binds));
         let _ = writeln!(sets, "            \"value\" => self.0.show_value({}(value), cx),", ui_reader(binds));
     }
     for property in &part.properties {
         let p = snake(&property.name.name);
-        let _ = write!(shows, "\n    /// Property {}, as the window or code sets it.\n    fn show_{p}(&mut self, {p}: {}, cx: &mut CustomCx);\n", property.name.name, rust_type(&property.ty));
+        let _ = write!(shows, "\n    /// Property {}, as the window or code sets it.\n    fn show_{p}(&mut self, {p}: {}, cx: &mut dyn Cx);\n", property.name.name, rust_type(&property.ty));
         let _ = writeln!(sets, "            {:?} => self.0.show_{p}({}(value), cx),", property.name.name, ui_reader(&property.ty));
     }
     let mut hears = String::new();
     for hear in &part.hears {
-        let _ = write!(shows, "\n    /// What code tells it: {}.\n    fn on_{}(&mut self{}, cx: &mut CustomCx);\n", hear.name.name, snake(&hear.name.name), ui_params(&hear.params, false));
+        let _ = write!(shows, "\n    /// What code tells it: {}.\n    fn on_{}(&mut self{}, cx: &mut dyn Cx);\n", hear.name.name, snake(&hear.name.name), ui_params(&hear.params, false));
         let args: Vec<String> = hear.params.iter().enumerate().map(|(i, p)| format!("{}(values.get({i}).unwrap_or(&Value::Null))", ui_reader(&p.ty))).collect();
         let args = args.iter().map(|a| format!("{a}, ")).collect::<String>();
         let _ = writeln!(hears, "            {:?} => self.0.on_{}({args}cx),", hear.name.name, snake(&hear.name.name));
@@ -344,106 +403,75 @@ pub fn ui_interface(part: &PartDecl) -> String {
     let tells = if tells_trait.is_empty() {
         String::new()
     } else {
-        format!("\n/// What part {n} says to its window, from any of its methods: `cx.changed(..)` and one per tell.\npub trait {n}Tells {{\n{tells_trait}}}\n\nimpl {n}Tells for CustomCx<'_> {{\n{tells_impl}}}\n")
+        format!("\n/// What part {n} says to its window, from any of its methods: `cx.changed(..)` and one per tell.\npub trait {n}Tells {{\n{tells_trait}}}\n\nimpl<C: Cx + ?Sized> {n}Tells for C {{\n{tells_impl}}}\n")
     };
     let switch = |on: &str, unused: &str, cases: &str| if cases.is_empty() { format!("        let _ = ({unused}, cx);\n") } else { format!("        match {on} {{\n{cases}            _ => {{}}\n        }}\n") };
+    let declare = |list: &[(&str, &str, &str)]| list.iter().map(|(what, line, _)| format!("{}    {line};\n", doc(what))).collect::<Vec<_>>().join("\n");
+    let mut input = String::new();
+    let mut custom = String::new();
+    let mut forwards = String::new();
+    for (what, line, body, call) in INPUT {
+        let body = if body.is_empty() { "{}".to_string() } else { format!("{{\n        {body}\n    }}") };
+        let _ = write!(input, "\n{}    {line} {body}\n", doc(what));
+        let _ = writeln!(custom, "    {line};");
+        let _ = write!(forwards, "\n    {line} {{\n        self.0.{call}\n    }}\n");
+    }
     format!(
-        "//! Custom part {n} (DESIGN 5.19, 7.9): a control of Clarity.UI. The trait
-//! the crate's `{n}` implements, what it says to its window, and the wrapper
-//! that makes it a part of clarity-ui. Written by Clarity from the part's
-//! declaration, and written again when the declaration changes; the rest of
-//! the crate is yours.
+        "//! Custom part {n} (DESIGN 5.19, 7.9): a control of Clarity.UI. The canvas
+//! it draws on, what it does through Clarity.UI, the trait the crate's `{n}`
+//! implements and what it says to its window, in plain Rust: the crate needs
+//! nothing of Clarity's. Written by Clarity from the part's declaration, and
+//! written again when the declaration changes; the rest of the crate is yours.
 //!
 //! Every method is called on the screen's thread, one at a time; the part
 //! is made when its window opens and lives as long as its window.
 
 #![allow(dead_code)]
 
-pub use clarity_ui::parts::custom::{{CustomCx, CustomPart}};
-pub use clarity_ui::{{KeyInput, Modifiers, Painter, PointerInput, Rect}};
-/// Skia, for drawing on the whole canvas (`painter.canvas`), at the version Clarity.UI is built on.
-pub use clarity_ui::skia_safe;
-use serde_json::Value;
+pub use serde_json::Value;
+
+/// What `draw` draws on, in the screen's units. Colors are 0xAARRGGBB.
+pub trait Canvas {{
+{canvas}}}
+
+/// What the part does through Clarity.UI, valid during the call it is given to.
+pub trait Cx {{
+{cx}}}
+
+/// Keys held, as bits of `modifiers`.
+pub const SHIFT: u32 = 1;
+pub const CONTROL: u32 = 2;
+pub const ALT: u32 = 4;
+pub const META: u32 = 8;
+
+/// Where the pointer is, in the screen's units, with the keys held and the clicks counted.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Pointer {{
+    pub x: f64,
+    pub y: f64,
+    pub modifiers: u32,
+    pub clicks: u32,
+}}
 
 /// What part {n} does: it draws itself in its place and shows what the
 /// window gives it; the input methods it does not write do nothing.
 pub trait {n}Part: Default + 'static {{
-    /// Draws itself in `area`, its place in the window, with the theme's look (`painter.look`).
-    fn draw(&self, painter: &Painter, area: Rect);
-{shows}
-    /// Whether it takes the focus: pressed, or reached with Tab.
-    fn focusable(&self) -> bool {{
-        false
-    }}
-
-    /// The main button went down on it.
-    fn pointer_pressed(&mut self, at: PointerInput, cx: &mut CustomCx) {{
-        let _ = (at, cx);
-    }}
-
-    /// The pointer moved over it, or anywhere while it holds the pointer.
-    fn pointer_moved(&mut self, at: PointerInput, cx: &mut CustomCx) {{
-        let _ = (at, cx);
-    }}
-
-    /// The main button went up after it was pressed on it.
-    fn pointer_released(&mut self, at: PointerInput, cx: &mut CustomCx) {{
-        let _ = (at, cx);
-    }}
-
-    /// Pressed and released with the main button.
-    fn click(&mut self, cx: &mut CustomCx) {{
-        let _ = cx;
-    }}
-
-    /// The wheel turned over it with keys `held`: true when it took the turn.
-    fn wheel(&mut self, dx: f64, dy: f64, held: Modifiers, cx: &mut CustomCx) -> bool {{
-        let _ = (dx, dy, held, cx);
-        false
-    }}
-
-    /// A key while it has the focus: true when it took the key.
-    fn key(&mut self, key: KeyInput, cx: &mut CustomCx) -> bool {{
-        let _ = (key, cx);
-        false
-    }}
-
-    /// Text typed while it has the focus.
-    fn text(&mut self, text: &str, cx: &mut CustomCx) {{
-        let _ = (text, cx);
-    }}
-
-    /// It got or lost the focus.
-    fn focus_changed(&mut self, focused: bool, cx: &mut CustomCx) {{
-        let _ = (focused, cx);
-    }}
-
-    /// The time it asked for came (`cx.wake(at)`).
-    fn wake(&mut self, cx: &mut CustomCx) {{
-        let _ = cx;
-    }}
-
-    /// Its window opened: called once, after the values of its line, what
-    /// code set and what it binds; it may start a timer or an animation here.
-    fn start(&mut self, cx: &mut CustomCx) {{
-        let _ = cx;
-    }}
-
-    /// Its window left the screen: it stops what it started.
-    fn stop(&mut self) {{}}
-
-    /// What it says about the place at a point when the pointer rests there.
-    fn tooltip_at(&self, x: f64, y: f64) -> Option<String> {{
-        let _ = (x, y);
-        None
-    }}
-}}
+    /// Draws itself in its place, with the look's colors (`canvas.look_color`).
+    fn draw(&self, canvas: &mut dyn Canvas, x: f64, y: f64, width: f64, height: f64);
+{shows}{input}}}
 {tells}
-/// Part {n} as Clarity.UI holds it: the window's words in, typed.
+/// A part as the program's glue holds it, whatever its kind.
+pub trait Custom {{
+    fn set(&mut self, name: &str, value: &Value, cx: &mut dyn Cx);
+    fn hear(&mut self, hear: &str, values: &[Value], cx: &mut dyn Cx);
+    fn draw(&self, canvas: &mut dyn Canvas, x: f64, y: f64, width: f64, height: f64);
+{custom}}}
+
+/// Part {n} as the glue holds it: the window's words in, typed.
 struct Held<P>(P);
 
-impl<P: {n}Part> CustomPart for Held<P> {{
-    fn set(&mut self, name: &str, value: &Value, cx: &mut CustomCx) {{
+impl<P: {n}Part> Custom for Held<P> {{
+    fn set(&mut self, name: &str, value: &Value, cx: &mut dyn Cx) {{
         if name == \"enabled\" {{
             // The window draws it again; `cx.enabled()` says which it is.
             cx.invalidate();
@@ -451,87 +479,36 @@ impl<P: {n}Part> CustomPart for Held<P> {{
         }}
 {set_switch}    }}
 
-    fn hear(&mut self, hear: &str, values: &[Value], cx: &mut CustomCx) {{
+    fn hear(&mut self, hear: &str, values: &[Value], cx: &mut dyn Cx) {{
         // What it hears may take no values.
         let _ = values;
 {hear_switch}    }}
 
-    fn draw(&self, painter: &Painter, area: Rect) {{
-        self.0.draw(painter, area);
+    fn draw(&self, canvas: &mut dyn Canvas, x: f64, y: f64, width: f64, height: f64) {{
+        self.0.draw(canvas, x, y, width, height);
     }}
-
-    fn focusable(&self) -> bool {{
-        self.0.focusable()
-    }}
-
-    fn pointer_pressed(&mut self, at: PointerInput, cx: &mut CustomCx) {{
-        self.0.pointer_pressed(at, cx);
-    }}
-
-    fn pointer_moved(&mut self, at: PointerInput, cx: &mut CustomCx) {{
-        self.0.pointer_moved(at, cx);
-    }}
-
-    fn pointer_released(&mut self, at: PointerInput, cx: &mut CustomCx) {{
-        self.0.pointer_released(at, cx);
-    }}
-
-    fn click(&mut self, cx: &mut CustomCx) {{
-        self.0.click(cx);
-    }}
-
-    fn wheel(&mut self, dx: f64, dy: f64, held: Modifiers, cx: &mut CustomCx) -> bool {{
-        self.0.wheel(dx, dy, held, cx)
-    }}
-
-    fn key(&mut self, key: KeyInput, cx: &mut CustomCx) -> bool {{
-        self.0.key(key, cx)
-    }}
-
-    fn text(&mut self, text: &str, cx: &mut CustomCx) {{
-        self.0.text(text, cx);
-    }}
-
-    fn focus_changed(&mut self, focused: bool, cx: &mut CustomCx) {{
-        self.0.focus_changed(focused, cx);
-    }}
-
-    fn wake(&mut self, cx: &mut CustomCx) {{
-        self.0.wake(cx);
-    }}
-
-    fn start(&mut self, cx: &mut CustomCx) {{
-        self.0.start(cx);
-    }}
-
-    fn stop(&mut self) {{
-        self.0.stop();
-    }}
-
-    fn tooltip_at(&self, x: f64, y: f64) -> Option<String> {{
-        self.0.tooltip_at(x, y)
-    }}
-}}
+{forwards}}}
 
 /// A new part {n}, as the program registers it with Clarity.UI.
-pub fn make() -> Box<dyn CustomPart> {{
+pub fn make() -> Box<dyn Custom> {{
     Box::new(Held(crate::{n}::default()))
 }}
 
 {readers}",
+        canvas = declare(CANVAS),
+        cx = declare(CX),
         set_switch = switch("name", "value", &sets),
         hear_switch = switch("hear", "hear, values", &hears),
         readers = ui_readers(part),
     )
 }
 
-/// What declaring a Rust part writes into its folder on Clarity.UI: a crate
-/// on clarity-ui whose type draws its value in a frame until it draws the
-/// library's work.
+/// What declaring a Rust part writes into its folder: a crate whose type
+/// draws its value in a frame until it draws the library's work.
 pub fn ui_starter(part: &PartDecl) -> Vec<(String, String)> {
     let n = &part.name.name;
     let package = snake(n);
-    let mut deps = format!("clarity-ui = \"{}\"\nserde_json = \"1\"\n", super::ui_version());
+    let mut deps = String::from("serde_json = \"1\"\n");
     if uses_decimal(part) {
         deps.push_str("rust_decimal = \"1\"\n");
     }
@@ -557,24 +534,24 @@ pub struct {n} {{
 }}
 
 impl {n}Part for {n} {{
-    fn draw(&self, painter: &Painter, area: Rect) {{
-        let look = painter.look;
-        painter.stroke(area, look.color(\"border\"), look.border(), look.radius(\"input\"));
-        painter.text(&self.shown, area.inset(8.0), look.color(\"text\"), look.size(\"text\"), \"text\", false, clarity_ui::TextAlign::Left);
+    fn draw(&self, canvas: &mut dyn Canvas, x: f64, y: f64, width: f64, height: f64) {{
+        let (border, text) = (canvas.look_color(\"border\"), canvas.look_color(\"text\"));
+        canvas.stroke(x, y, width, height, border, 1.0, 4.0);
+        canvas.text(&self.shown, x + 8.0, y + 8.0, width - 16.0, height - 16.0, text, 0.0, false, 0);
     }}
 "
     );
     if let Some(binds) = &part.binds {
-        let _ = write!(lib, "\n    fn show_value(&mut self, value: {}, cx: &mut CustomCx) {{\n        self.shown = {};\n        cx.invalidate();\n    }}\n", rust_type(binds), shown(binds));
+        let _ = write!(lib, "\n    fn show_value(&mut self, value: {}, cx: &mut dyn Cx) {{\n        self.shown = {};\n        cx.invalidate();\n    }}\n", rust_type(binds), shown(binds));
     }
     for property in &part.properties {
         let p = snake(&property.name.name);
-        let _ = write!(lib, "\n    fn show_{p}(&mut self, {p}: {}, cx: &mut CustomCx) {{\n        let _ = ({p}, cx);\n    }}\n", rust_type(&property.ty));
+        let _ = write!(lib, "\n    fn show_{p}(&mut self, {p}: {}, cx: &mut dyn Cx) {{\n        let _ = ({p}, cx);\n    }}\n", rust_type(&property.ty));
     }
     for hear in &part.hears {
         let mut names: Vec<String> = hear.params.iter().map(|p| snake(&p.name.name)).collect();
         names.push("cx".into());
-        let _ = write!(lib, "\n    fn on_{}(&mut self{}, cx: &mut CustomCx) {{\n        let _ = ({});\n    }}\n", snake(&hear.name.name), ui_params(&hear.params, false), names.join(", "));
+        let _ = write!(lib, "\n    fn on_{}(&mut self{}, cx: &mut dyn Cx) {{\n        let _ = ({});\n    }}\n", snake(&hear.name.name), ui_params(&hear.params, false), names.join(", "));
     }
     lib.push_str("}\n");
     vec![("Cargo.toml".into(), cargo), ("src/lib.rs".into(), lib), ("src/clarity.rs".into(), ui_interface(part))]
@@ -588,36 +565,111 @@ fn shown(ty: &TypeRef) -> &'static str {
     }
 }
 
-/// `src/parts.rs` of a program on Clarity.UI: each part registered with
-/// clarity-ui by its declaration's name.
+/// The glue's method forwarding `line` of a part's trait to the runtime's
+/// own: the line with the runtime's types, and the call.
+fn forward(line: &str, call: &str) -> String {
+    format!("            {line} {{\n                self.0.{call}\n            }}\n")
+}
+
+/// `src/parts.rs` of a program: each part's crate made a custom part of the
+/// runtime's `native_ui` and registered with Clarity.UI by its declaration's
+/// name. `glue!` is the same for every part: its canvas and context are the
+/// runtime's, forwarded.
 pub fn ui_glue(project: &Project) -> String {
+    let canvas: String = CANVAS.iter().map(|(_, line, call)| forward(line, call)).collect::<Vec<_>>().join("\n");
+    let cx: String = CX.iter().map(|(_, line, call)| forward(line, call)).collect::<Vec<_>>().join("\n");
+    let mut input = String::new();
+    for (_, line, _, call) in INPUT {
+        let line = line.replace("cx: &mut dyn Cx", "cx: &mut ui::Cx").replace("at: Pointer", "at: ui::Pointer");
+        let call = call.replace("(at,", "(pointer(at),");
+        let call = call.strip_suffix("cx)").map_or(call.clone(), |head| format!("{head}&mut Cx(cx))"));
+        let _ = write!(input, "\n{}", forward(&line, &call));
+    }
+    let mut modules = String::new();
     let mut registers = String::new();
     for part in crate_parts(project) {
         let n = &part.name.name;
         let package = package_of(project, n).replace('-', "_");
-        let _ = writeln!(registers, "    clarity_ui::parts::custom::register({n:?}, {package}::make);");
+        let module = format!("part_{}", snake(n));
+        let _ = write!(modules, "\nmod {module} {{\n    glue!({package});\n}}\n");
+        let _ = writeln!(registers, "        ({n:?}, {module}::make),");
     }
-    format!("// The program's custom parts written in Rust, controls of Clarity.UI (DESIGN 7.9).\n// Generated by Clarity.\n\n/// Tells Clarity.UI about every kind of part the program has, by its name.\npub fn register() {{\n{registers}}}\n")
+    format!(
+        "// The program's custom parts written in Rust, controls of Clarity.UI (DESIGN 7.9).
+// Generated by Clarity.
+
+use clarity_runtime::native_ui as ui;
+
+/// A part's crate as a custom part of the runtime: its canvas and context
+/// are the runtime's, and what the library says reaches the part.
+macro_rules! glue {{
+    ($krate:ident) => {{
+        use super::ui;
+        use serde_json::Value;
+
+        struct Canvas<'a>(&'a mut ui::Canvas);
+
+        impl $krate::Canvas for Canvas<'_> {{
+{canvas}        }}
+
+        struct Cx<'a>(&'a mut ui::Cx);
+
+        impl $krate::Cx for Cx<'_> {{
+{cx}        }}
+
+        fn pointer(at: ui::Pointer) -> $krate::Pointer {{
+            $krate::Pointer {{ x: at.x, y: at.y, modifiers: at.modifiers, clicks: at.clicks }}
+        }}
+
+        struct Part(Box<dyn $krate::Custom>);
+
+        impl ui::CustomPart for Part {{
+            fn set(&mut self, name: &str, value: &Value, cx: &mut ui::Cx) {{
+                self.0.set(name, value, &mut Cx(cx))
+            }}
+
+            fn hear(&mut self, hear: &str, values: &[Value], cx: &mut ui::Cx) {{
+                self.0.hear(hear, values, &mut Cx(cx))
+            }}
+
+            fn draw(&self, canvas: &mut ui::Canvas, x: f64, y: f64, width: f64, height: f64) {{
+                self.0.draw(&mut Canvas(canvas), x, y, width, height)
+            }}
+{input}        }}
+
+        pub fn make() -> Box<dyn ui::CustomPart> {{
+            Box::new(Part($krate::make()))
+        }}
+    }};
+}}
+{modules}
+/// Tells Clarity.UI about every kind of part the program has, by its name.
+pub fn register() {{
+    let parts: &[(&str, fn() -> Box<dyn ui::CustomPart>)] = &[
+{registers}    ];
+    for (kind, make) in parts {{
+        if let Err(why) = ui::register_part(kind, *make) {{
+            eprintln!(\"{{why}}\");
+        }}
+    }}
+}}
+"
+    )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ui_accepts, with_ui_version};
+    use super::{ui_accepts, with_runtime_version};
 
     #[test]
-    fn a_parts_clarity_ui_line_follows_the_program() {
-        let version = super::super::ui_version();
-        let old = "[dependencies]\n# Clarity.UI\nclarity-ui = \"0.0.1\"\nbevy = \"0.16\"\n";
-        let new = with_ui_version(old).expect("an old version is changed");
-        assert_eq!(new, format!("[dependencies]\n# Clarity.UI\nclarity-ui = \"{version}\"\nbevy = \"0.16\"\n"));
-        let table = "clarity-ui = { version = \"0.0.1\", features = [] }";
-        assert_eq!(with_ui_version(table).unwrap(), format!("clarity-ui = {{ version = \"{version}\", features = [] }}"));
-        // Already right, or the person's own source: left alone.
-        assert_eq!(with_ui_version(&format!("clarity-ui = \"{version}\"\n")), None);
-        assert_eq!(with_ui_version("clarity-ui = { path = \"../ui\" }"), None);
-        // The runtime follows too.
+    fn a_parts_runtime_line_follows_the_program() {
         let runtime = super::super::runtime_version();
-        assert_eq!(with_ui_version("clarity-runtime = \"0.0.1\"").unwrap(), format!("clarity-runtime = \"{runtime}\""));
+        assert_eq!(with_runtime_version("[dependencies]\nclarity-runtime = \"0.0.1\"\nbevy = \"0.16\"\n").unwrap(), format!("[dependencies]\nclarity-runtime = \"{runtime}\"\nbevy = \"0.16\"\n"));
+        let table = "clarity-runtime = { version = \"0.0.1\", features = [] }";
+        assert_eq!(with_runtime_version(table).unwrap(), format!("clarity-runtime = {{ version = \"{runtime}\", features = [] }}"));
+        // Already right, or the person's own source: left alone.
+        assert_eq!(with_runtime_version(&format!("clarity-runtime = \"{runtime}\"\n")), None);
+        assert_eq!(with_runtime_version("clarity-runtime = { path = \"../rust\" }"), None);
     }
 
     #[test]

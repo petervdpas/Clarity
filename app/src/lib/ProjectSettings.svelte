@@ -308,14 +308,6 @@
             <option value="interpreted">Interpreted</option>
           </select>
           <p class="form-help">How the engines written in Clarity run. Compiled turns their code into WebAssembly and runs fastest; interpreted carries their code into the file and runs it with Clarity's interpreter. Both give the same answers on every stack.</p>
-          {#if settings.stack.backend === "rust"}
-            <label class="form-label" for="project-ui-crate">Clarity.UI</label>
-            <select id="project-ui-crate" value={settings.ui_crate ? "crate" : "library"} onchange={(e) => save({ ui_crate: e.currentTarget.value === "crate" })}>
-              <option value="library">Ready-made library</option>
-              <option value="crate">Built from source (crate)</option>
-            </select>
-            <p class="form-help">How the Rust desktop program gets Clarity.UI. The ready-made library builds in minutes, as Go, C and C++ use it; the crate builds Clarity.UI and Skia with the program, which takes long, and is what a Rust custom part needs.</p>
-          {/if}
           <label class="form-label" for="project-row-height">Row height</label>
           <input
             id="project-row-height"

@@ -45,10 +45,7 @@ fn a_rust_project_says_what_it_needs_and_how_to_build_it() {
     has(&text, &format!("Clarity's runtime comes as the crate clarity-runtime ({})", clarity_gen::rust_runtime_version()));
     has(&text, "    [patch.crates-io]\n    clarity-runtime = { path = \"<Clarity>/runtimes/rust\" }\n");
     has(&text, "set the environment variable `CLARITY_RUNTIME` to `<Clarity>/runtimes/rust`");
-    // With `ui crate`, Clarity.UI comes as its crate, patched from the repository too.
-    let on_crate = readme(&Settings { ui_crate: true, ..starter("Shop", "shop") });
-    has(&on_crate, &format!("Clarity's runtime and Clarity.UI come as the crates clarity-runtime ({})", clarity_gen::rust_runtime_version()));
-    has(&on_crate, "    [patch.crates-io]\n    clarity-runtime = { path = \"<Clarity>/runtimes/rust\" }\n    clarity-ui = { path = \"<Clarity>/runtimes/rust-ui\" }\n");
+    assert!(!text.contains("clarity-ui = "), "{text}");
     // A run by hand or in the IDE chooses its data without editing the program.
     has(&text, "Set the environment variable `CLARITY_DATA` to a folder to open it there instead, under its own file name.");
 }

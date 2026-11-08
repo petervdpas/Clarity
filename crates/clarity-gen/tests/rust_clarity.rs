@@ -2,7 +2,7 @@
 //! desktop`. The program (the runtime's `Program`, implemented once) is the
 //! same one the web server answers with: the windows and app frames as
 //! `.cxaml`, the themes as resolved JSON and the model travel in the program,
-//! and main starts `clarity_ui::desktop`.
+//! and main runs Clarity.UI's ready-made library (`native_ui`).
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
@@ -36,13 +36,10 @@ const NL: &str = "translations nl
     \"Customers\" \"Klanten\"
 ";
 
-/// Built on Clarity.UI's crate (`ui crate`), what these tests read; the
-/// ready-made library, the default, is rust_ui_library.rs's.
 fn settings(ui: Ui) -> Settings {
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = Backend::Rust;
     settings.stack.ui = ui;
-    settings.ui_crate = true;
     settings
 }
 
@@ -65,10 +62,10 @@ fn has(text: &str, expected: &str) {
 fn a_clarity_ui_project_has_no_tauri() {
     let files = files_of(Ui::Clarity);
     let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
-    for path in ["build.rs", "tauri.conf.json", "src/desktop.rs", "ui/index.html", "icons/icon.ico"] {
+    for path in ["tauri.conf.json", "src/desktop.rs", "ui/index.html", "icons/icon.ico"] {
         assert!(!paths.contains(&path), "{path} in {paths:?}");
     }
-    for path in ["Cargo.toml", "README.md", "src/main.rs", "src/model.json", "src/modules.rs", "src/modules/shop.rs", "src/schema.rs"] {
+    for path in ["Cargo.toml", "README.md", "build.rs", "src/main.rs", "src/model.json", "src/modules.rs", "src/modules/shop.rs", "src/schema.rs"] {
         assert!(paths.contains(&path), "no {path} in {paths:?}");
     }
     for f in &files {
@@ -77,16 +74,16 @@ fn a_clarity_ui_project_has_no_tauri() {
 }
 
 #[test]
-fn the_manifest_names_the_runtime_and_clarity_ui() {
+fn the_manifest_names_the_runtime_with_the_library() {
     let files = files_of(Ui::Clarity);
     let cargo = file(&files, "Cargo.toml");
-    has(cargo, &format!("clarity-runtime = {{ version = \"{}\", default-features = false, features = [\"sqlite\"] }}", clarity_gen::rust_runtime_version()));
-    has(cargo, &format!("clarity-ui = \"{}\"", clarity_gen::rust_ui_version()));
+    has(cargo, &format!("clarity-runtime = {{ version = \"{}\", default-features = false, features = [\"native-ui\", \"sqlite\"] }}", clarity_gen::rust_runtime_version()));
+    assert!(!cargo.contains("clarity-ui"), "{cargo}");
     has(cargo, "\n[workspace]\n");
     // The README says how to build it, and how to build on the crates in Clarity's repository.
     let readme = file(&files, "README.md");
     has(readme, "cargo build --release");
-    has(readme, "clarity-ui = { path = \"<Clarity>/runtimes/rust-ui\" }");
+    has(readme, "clarity-runtime = { path = \"<Clarity>/runtimes/rust\" }");
     assert!(!readme.contains("WebKitGTK"), "{readme}");
 }
 
@@ -116,10 +113,10 @@ fn main_starts_the_program_on_clarity_ui() {
     // Started as the Tauri main starts it: the translations, then the databases.
     has(main, "    clarity_runtime::i18n::load(MODEL);\n");
     has(main, "    let app = App(Mutex::new(db));\n");
-    has(main, "const FILES: clarity_ui::AppFiles = clarity_ui::AppFiles {\n    windows: ");
+    has(main, "const FILES: clarity_runtime::native_ui::AppFiles = clarity_runtime::native_ui::AppFiles {\n    windows: ");
     has(main, "    title: \"Shop\",\n");
     has(main, "fn main() -> std::process::ExitCode {\n");
-    has(main, "    clarity_ui::desktop::run(app, FILES)\n}");
+    has(main, "    clarity_runtime::native_ui::run(app, FILES)\n}");
     // Nothing of the web server or Tauri's commands.
     assert!(!main.contains("fn served(") && !main.contains("#[tauri::command]"), "{main}");
 }

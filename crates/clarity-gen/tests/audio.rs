@@ -34,15 +34,6 @@ fn all_code(files: &[clarity_gen::OutFile]) -> String {
     files.iter().map(|f| f.text.as_str()).collect::<Vec<_>>().join("\n")
 }
 
-/// Built on the crate (`ui crate`), Clarity.UI's `audio` feature brings Clarity.Audio.
-#[test]
-fn rust_turns_on_clarity_uis_audio_feature() {
-    let manifest = file(&generated("rust desktop\n    ui crate", "song.mp3"), "Cargo.toml").to_string();
-    assert!(manifest.contains("clarity-ui = { version = \""), "{manifest}");
-    assert!(manifest.contains("features = [\"audio\"] }"), "{manifest}");
-    assert!(!file(&generated("rust desktop\n    ui crate", "chime.wav"), "Cargo.toml").contains("audio"));
-}
-
 /// On the ready-made library, the program links Clarity.Audio beside it and hands it over before the first window.
 #[test]
 fn rust_on_the_library_links_clarity_audio_and_uses_it() {
@@ -170,13 +161,10 @@ fn code_reads_what_a_video_plays_on_every_stack() {
     }
 }
 
+/// Clarity.Video and Clarity.Audio linked beside Clarity.UI's library and handed over.
 #[test]
-fn rust_turns_on_clarity_uis_video_feature() {
+fn rust_links_clarity_video_and_uses_it() {
     let project = clarity_spec::load_sources([("player.clarity", FILM)]);
-    let files = clarity_gen::generate(&project, &settings("rust desktop\n    ui crate")).unwrap();
-    let manifest = file(&files, "Cargo.toml");
-    assert!(manifest.contains("features = [\"video\"] }"), "{manifest}");
-    // On the ready-made library: Clarity.Video and Clarity.Audio linked and handed over.
     let files = clarity_gen::generate(&project, &settings("rust desktop")).unwrap();
     assert!(file(&files, "build.rs").contains("&[\"clarity_ui\", \"clarity_audio\", \"clarity_video\"]"));
     let main = file(&files, "src/main.rs");
@@ -212,7 +200,7 @@ fn a_codec_library_the_project_adds_is_carried_and_added() {
     let file = format!("libgrey.{extension}");
     std::fs::write(folder.join(&file), b"a codec").unwrap();
     let project = clarity_spec::load_sources([("player.clarity", FILM)]);
-    for stack in ["rust desktop", "rust desktop\n    ui crate", "csharp desktop", "go desktop", "c desktop", "cpp desktop"] {
+    for stack in ["rust desktop", "csharp desktop", "go desktop", "c desktop", "cpp desktop"] {
         let text = format!("project Player\n    stack {stack}\n    codec grey from \"libgrey\"\n");
         let settings = clarity_project::build_settings(&folder, &clarity_project::parse(&text).unwrap());
         let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{stack}: {e:?}"));
@@ -221,7 +209,6 @@ fn a_codec_library_the_project_adds_is_carried_and_added() {
         let code = all_code(&files);
         let added = match stack {
             "rust desktop" => format!("clarity_runtime::native_ui::add_codec(unsafe {{ clarity_video_api() }}, \"{file}\")"),
-            "rust desktop\n    ui crate" => format!("clarity_ui::clarity_video::library::add(\"{file}\")"),
             "csharp desktop" => format!("Clarity.Video.ClarityVideo.AddCodec(\"{file}\");"),
             "go desktop" => format!("C.add_codec(C.CString(\"{file}\"), {})", file.len()),
             _ => format!("clarity_video_api()->add_codec(\"{file}\", {})", file.len()),

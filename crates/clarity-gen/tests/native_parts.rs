@@ -97,12 +97,41 @@ func (p *part) Restart(level int64, cx Cx)     { fmt.Fprintf(os.Stderr, "arena r
 func (p *part) Say(words string, loud bool, cx Cx) {}
 "#;
 
+const TEST_PART_RUST: &str = r#"mod clarity;
+pub use clarity::*;
+
+#[derive(Default)]
+pub struct Arena;
+
+impl ArenaPart for Arena {
+    fn draw(&self, canvas: &mut dyn Canvas, x: f64, y: f64, width: f64, height: f64) {
+        let accent = canvas.look_color("accent");
+        canvas.fill(x, y, width, height, accent, 0.0);
+    }
+    fn click(&mut self, cx: &mut dyn Cx) {
+        cx.scored(7, "test");
+    }
+    fn show_value(&mut self, _value: i64, _cx: &mut dyn Cx) {}
+    fn show_speed(&mut self, speed: i64, _cx: &mut dyn Cx) {
+        eprintln!("arena speed {speed}");
+    }
+    fn show_title(&mut self, title: String, _cx: &mut dyn Cx) {
+        eprintln!("arena title {title}");
+    }
+    fn show_running(&mut self, _running: bool, _cx: &mut dyn Cx) {}
+    fn on_restart(&mut self, level: i64, _cx: &mut dyn Cx) {
+        eprintln!("arena restart {level}");
+    }
+    fn on_say(&mut self, _words: String, _loud: bool, _cx: &mut dyn Cx) {}
+}
+"#;
+
 /// The game, its part written in the language of `backend`.
 fn project_for(backend: clarity_project::Backend) -> clarity_spec::Project {
     use clarity_project::Backend;
     let (line, test_file, test_part) = match backend {
-        // A Rust part is a control of Clarity.UI: its starter as declaring it writes it.
-        Backend::Rust => ("crate \"parts/Arena\"", "", ""),
+        // A Rust part is a control of Clarity.UI, drawn through its library.
+        Backend::Rust => ("crate \"parts/Arena\"", "src/lib.rs", TEST_PART_RUST),
         Backend::Go => ("go \"parts/arena\"", "arena.go", TEST_PART_GO),
         Backend::Cpp => ("native \"parts/Arena\"", "Arena.cpp", TEST_PART_CPP),
         // A C part as declaring it in a C project writes it.
@@ -207,6 +236,32 @@ fn a_cpp_program_drives_its_custom_part() {
     use std::io::Write;
     let dir = built(clarity_project::Backend::Cpp, &["cmake", "--workflow", "--preset", "debug"]);
     let mut app = std::process::Command::new(dir.join("build/debug/game"))
+        .current_dir(&dir)
+        .env("CLARITY_HEADLESS", "1")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let steps = "{\"do\":\"click\",\"part\":\"arena\"}\n{\"do\":\"settle\",\"ms\":50}\n{\"do\":\"read\"}\n{\"do\":\"quit\"}\n";
+    app.stdin.take().unwrap().write_all(steps.as_bytes()).unwrap();
+    let out = app.wait_with_output().unwrap();
+    let said = String::from_utf8_lossy(&out.stderr);
+    for line in ["arena speed 5", "arena restart 7", "arena speed 6", "arena title test"] {
+        assert!(said.contains(line), "{line} in\n{said}\n{}", String::from_utf8_lossy(&out.stdout));
+    }
+}
+
+/// A Rust program on Clarity.UI's library with its part written in Rust,
+/// driven without a window (CLARITY_HEADLESS), as the C++ and Go ones are:
+/// the part draws and hears through the runtime's `native_ui`. Needs
+/// CLARITY_UI (the library's folder) for the build.
+#[test]
+#[ignore = "builds a Rust program with a part written in Rust and drives it; slow; run with --ignored"]
+fn a_rust_program_drives_its_rust_part() {
+    use std::io::Write;
+    let dir = built(clarity_project::Backend::Rust, &["cargo", "build"]);
+    let mut app = std::process::Command::new(dir.join("target/debug/game"))
         .current_dir(&dir)
         .env("CLARITY_HEADLESS", "1")
         .stdin(std::process::Stdio::piped())
@@ -458,8 +513,7 @@ fn a_program_served_to_a_browser_alone_has_no_native_parts() {
         assert_eq!(web.stack.targets, [Target::Web]);
         let refused = clarity_gen::generate(&project, &web).expect_err("a part in a browser");
         assert_eq!(refused, ["part Arena draws in a window of the desktop, which a program served to a browser has not; add the desktop target, or leave the part out"]);
-        let ui_crate = if backend == Backend::Rust { "    ui crate\n" } else { "" };
-        let both = clarity_project::parse(&format!("project Game\n    stack {desktop}\n{ui_crate}    datasource main sqlite \"data/game.db\"\n")).unwrap();
+        let both = clarity_project::parse(&format!("project Game\n    stack {desktop}\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
         assert!(clarity_gen::generate(&project, &both).is_ok(), "{desktop} with a desktop window");
     }
     // A .NET part too: Clarity.UI runs alone in the browser, for every language (DESIGN 7.9, B2).
@@ -496,10 +550,8 @@ fn game_with_part(line: &str, own: &[(&str, &str)]) -> clarity_spec::Project {
     p
 }
 
-/// A part written in Rust draws on Clarity.UI's crate: a Rust program builds it (`ui crate`).
 fn stack(name: &str) -> clarity_project::Settings {
-    let ui_crate = if name == "rust" { "    ui crate\n" } else { "" };
-    clarity_project::parse(&format!("project Game\n    stack {name} desktop\n{ui_crate}    datasource main sqlite \"data/game.db\"\n")).unwrap()
+    clarity_project::parse(&format!("project Game\n    stack {name} desktop\n    datasource main sqlite \"data/game.db\"\n")).unwrap()
 }
 
 fn refused(project: &clarity_spec::Project, name: &str) -> String {
@@ -517,7 +569,7 @@ fn parts_that_fit_their_clarity_file_generate() {
 }
 
 #[test]
-fn a_rust_part_that_lacks_a_method_or_uses_the_old_host_is_refused() {
+fn a_rust_part_that_lacks_a_method_or_uses_what_it_no_longer_takes_is_refused() {
     let lib = "mod clarity;
 pub use clarity::*;
 
@@ -525,15 +577,15 @@ pub use clarity::*;
 pub struct Arena;
 
 impl ArenaPart for Arena {
-    fn draw(&self, painter: &Painter, area: Rect) {
+    fn draw(&self, canvas: &mut dyn Canvas, x: f64, y: f64, width: f64, height: f64) {
         fn helper() {}
         let _ = \"fn show_value\";
     }
     // fn show_title is written in a comment only, which does not count.
-    fn show_speed(&mut self, speed: i64, cx: &mut CustomCx) {}
-    fn show_running(&mut self, running: bool, cx: &mut CustomCx) {}
-    fn on_restart(&mut self, level: i64, cx: &mut CustomCx) {}
-    fn on_say(&mut self, words: String, loud: bool, cx: &mut CustomCx) {}
+    fn show_speed(&mut self, speed: i64, cx: &mut dyn Cx) {}
+    fn show_running(&mut self, running: bool, cx: &mut dyn Cx) {}
+    fn on_restart(&mut self, level: i64, cx: &mut dyn Cx) {}
+    fn on_say(&mut self, words: String, loud: bool, cx: &mut dyn Cx) {}
     fn frame(&mut self) {}
 }
 
@@ -541,8 +593,8 @@ fn tell(host: &ArenaHost) {}
 ";
     let said = refused(&game_with_part("crate \"parts/Arena\"", &[("src/lib.rs", lib)]), "rust");
     for line in [
-        "custom part Arena: parts/Arena/src/lib.rs:7 impl ArenaPart lacks show_value: write fn show_value(&mut self, value: i64, cx: &mut CustomCx) { .. }",
-        "lacks show_title: write fn show_title(&mut self, title: String, cx: &mut CustomCx)",
+        "custom part Arena: parts/Arena/src/lib.rs:7 impl ArenaPart lacks show_value: write fn show_value(&mut self, value: i64, cx: &mut dyn Cx) { .. }",
+        "lacks show_title: write fn show_title(&mut self, title: String, cx: &mut dyn Cx)",
         "parts/Arena/src/lib.rs:17 fn frame is not a method of ArenaPart",
         "parts/Arena/src/lib.rs:20 uses ArenaHost, which Clarity no longer has",
     ] {
@@ -550,9 +602,13 @@ fn tell(host: &ArenaHost) {}
     }
     assert!(!said.contains("helper") && !said.contains("lacks draw") && !said.contains("lacks show_speed"), "{said}");
     // A crate with no impl of the trait at all.
-    let said = refused(&game_with_part("crate \"parts/Arena\"", &[("src/lib.rs", "mod clarity;\nuse clarity_runtime::parts::Host;\n")]), "rust");
+    let said = refused(&game_with_part("crate \"parts/Arena\"", &[("src/lib.rs", "mod clarity;\nuse clarity_runtime::parts::Host;\nuse clarity_ui::Painter;\n")]), "rust");
     assert!(said.contains("no type of its crate implements ArenaPart (src/clarity.rs): write impl ArenaPart for Arena { .. } in src/lib.rs"), "{said}");
     assert!(said.contains("parts/Arena/src/lib.rs:2 uses clarity_runtime::parts"), "{said}");
+    // Clarity.UI's crate is not the part's: it draws on the canvas of its src/clarity.rs.
+    assert!(said.contains("parts/Arena/src/lib.rs:3 uses clarity_ui, which a part no longer takes"), "{said}");
+    let manifest = game_with_part("crate \"parts/Arena\"", &[("src/lib.rs", "mod clarity;\n"), ("Cargo.toml", "[dependencies]\nclarity-ui = \"0.16.0\"\n")]);
+    assert!(refused(&manifest, "rust").contains("custom part Arena names clarity-ui in its Cargo.toml, which a part no longer takes"));
 }
 
 #[test]

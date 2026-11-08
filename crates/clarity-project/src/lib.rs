@@ -224,11 +224,6 @@ pub struct Settings {
     /// rather than compiled (DESIGN 5.12): `engines interpreted`.
     #[serde(default)]
     pub engines_interpreted: bool,
-    /// Whether a Rust desktop program builds the clarity-ui crate from source
-    /// (`ui crate`) rather than linking Clarity.UI's ready-made library, as
-    /// Go, C and C++ do (DESIGN 7.9). A Rust custom part needs the crate.
-    #[serde(default)]
-    pub ui_crate: bool,
     /// The port a web application listens on (DESIGN 7.3): `port 8080`;
     /// none for DEFAULT_PORT.
     #[serde(default)]
@@ -388,7 +383,6 @@ pub fn starter(name: &str, module: &str) -> Settings {
         keeps: Vec::new(),
         keys_editable: false,
         engines_interpreted: false,
-        ui_crate: false,
         port: None,
         row_height: None,
     }

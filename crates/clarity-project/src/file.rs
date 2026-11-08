@@ -186,7 +186,6 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let mut currency = None;
     let mut keys_editable = None;
     let mut engines_interpreted = None;
-    let mut ui_crate = None;
     let mut port = None;
     let mut row_height = None;
     let mut themes: Option<Vec<String>> = None;
@@ -325,14 +324,9 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     _ => return Err(format!("line {line}: write 'engines compiled' or 'engines interpreted': how the engines written in Clarity run")),
                 };
             }
-            "ui" => {
-                once(ui_crate.is_some())?;
-                ui_crate = match (a.len(), a.first().and_then(|t| word(t))) {
-                    (1, Some("crate")) => Some(true),
-                    (1, Some("library")) => Some(false),
-                    _ => return Err(format!("line {line}: write 'ui library' or 'ui crate': whether a Rust program links Clarity.UI's ready-made library or builds its crate")),
-                };
-            }
+            // `ui library` and `ui crate` chose how a Rust desktop got Clarity.UI (v0.30.0): every one
+            // links the ready-made library now. The line is read and left out when the file is written.
+            "ui" if matches!((a.len(), a.first().and_then(|t| word(t))), (1, Some("library" | "crate"))) => {}
             "port" => {
                 once(port.is_some())?;
                 let number = match a.as_slice() {
@@ -529,7 +523,6 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         keeps: keeps.unwrap_or_default(),
         keys_editable: keys_editable.unwrap_or(false),
         engines_interpreted: engines_interpreted.unwrap_or(false),
-        ui_crate: ui_crate.unwrap_or(false),
         port,
         row_height,
     })
@@ -637,9 +630,6 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
     }
     if settings.engines_interpreted {
         lines.push(("engines".into(), 1, "engines interpreted".to_string()));
-    }
-    if settings.ui_crate {
-        lines.push(("ui".into(), 1, "ui crate".to_string()));
     }
     if let Some(port) = settings.port {
         lines.push(("port".into(), 1, format!("port {port}")));

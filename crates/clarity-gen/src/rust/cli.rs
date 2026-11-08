@@ -137,7 +137,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     files.push(text("src/main.rs", main_rs(project, settings, &databases)));
     files.push(text("README.md", readme(settings, &name)));
     // Built on the runtime in Clarity's repository when CLARITY_RUNTIME names it.
-    files.extend(super::local_patch_file(false)?);
+    files.extend(super::local_patch_file()?);
     files.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(files)
 }

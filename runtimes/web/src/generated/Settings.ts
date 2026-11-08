@@ -75,12 +75,6 @@ keys_editable: boolean,
  */
 engines_interpreted: boolean, 
 /**
- * Whether a Rust desktop program builds the clarity-ui crate from source
- * (`ui crate`) rather than linking Clarity.UI's ready-made library, as
- * Go, C and C++ do (DESIGN 7.9). A Rust custom part needs the crate.
- */
-ui_crate: boolean, 
-/**
  * The port a web application listens on (DESIGN 7.3): `port 8080`;
  * none for DEFAULT_PORT.
  */

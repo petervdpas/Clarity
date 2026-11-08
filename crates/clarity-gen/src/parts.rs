@@ -164,11 +164,10 @@ pub fn write_part_folders(dir: &std::path::Path, project: &Project) -> std::io::
         };
         let root = dir.join(folder);
         let fresh = !root.join(manifest).exists();
-        // A Rust part's clarity-ui line follows the library the program is built on:
-        // the one line of its Cargo.toml that names Clarity's own crate.
+        // A Rust part's clarity-runtime line, where it has one, follows the runtime the program is built on.
         if matches!(part.library, Some(PartLibrary::Crate { .. })) && !fresh {
             let cargo = root.join(manifest);
-            if let Some(text) = std::fs::read_to_string(&cargo).ok().and_then(|t| crate::rust::parts::with_ui_version(&t)) {
+            if let Some(text) = std::fs::read_to_string(&cargo).ok().and_then(|t| crate::rust::parts::with_runtime_version(&t)) {
                 std::fs::write(&cargo, text)?;
                 written.push(cargo);
             }

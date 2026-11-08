@@ -26,7 +26,7 @@ audio = ["desktop", "dep:clarity-audio"]
 video = ["audio", "dep:clarity-video"]
 
 [dependencies]
-clarity-runtime = { path = "../rust", version = "0.52.0", default-features = false }
+clarity-runtime = { path = "../rust", version = "0.53.0", default-features = false }
 # The picture work of the painting canvas's tools (fill), as code's picture functions do it (docs/IMAGE-PLAN.md).
 clarity-image = { path = "../rust-image", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }

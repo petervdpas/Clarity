@@ -1,12 +1,12 @@
-# The crate that draws custom part Dice with Bevy. Clarity builds it into the program.
+# The crate that draws custom part Dice with Bevy, a control of Clarity.UI drawn
+# through its library. Clarity builds it into the program.
 [package]
 name = "dice_part"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# Clarity.UI, whose control the part is: src/clarity.rs implements its CustomPart.
-clarity-ui = "0.16.0"
+# What the window gives and the part tells, as JSON; src/clarity.rs holds the rest.
 serde_json = "1"
 # Bevy's 3D renderer only, headless: it draws into a picture of its own that
 # the part reads back and puts in its place. No window, no window loop of its

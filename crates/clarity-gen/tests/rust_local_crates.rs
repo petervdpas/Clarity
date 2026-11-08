@@ -3,8 +3,7 @@
 //! does): set while Clarity generates the project, it names the Rust
 //! runtime's folder (`<Clarity>/runtimes/rust`), or any runtime folder of the
 //! repository, the runtimes folder or the repository, and the generator writes
-//! `.cargo/config.toml` patching the crates the project uses onto that folder
-//! and its neighbours. Unset, nothing is written and the project builds on
+//! `.cargo/config.toml` patching the runtime onto that folder. Unset, nothing is written and the project builds on
 //! crates.io.
 
 use std::path::{Path, PathBuf};
@@ -22,24 +21,18 @@ fn slashed(path: &Path) -> String {
     path.display().to_string().replace('\\', "/")
 }
 
+/// Only the runtime: every desktop program links Clarity.UI's ready-made
+/// library, and a patch of a crate the project does not use would be a
+/// warning in every build.
 #[test]
-fn a_clarity_ui_project_patches_the_runtime_and_clarity_ui() {
-    let text = rust_local_patch(&runtime(), true).unwrap();
+fn a_project_patches_the_runtime() {
+    let text = rust_local_patch(&runtime()).unwrap();
     assert!(text.contains("[patch.crates-io]\n"), "{text}");
     assert!(text.contains(&format!("clarity-runtime = {{ path = \"{}\" }}\n", slashed(&runtime()))), "{text}");
-    let ui = runtime().parent().unwrap().join("rust-ui");
-    assert!(text.contains(&format!("clarity-ui = {{ path = \"{}\" }}\n", slashed(&ui))), "{text}");
+    assert!(!text.contains("clarity-ui"), "{text}");
     // The file says where it comes from and how to go back to crates.io.
     assert!(text.starts_with("# Written by Clarity"), "{text}");
     assert!(text.contains("CLARITY_RUNTIME"), "{text}");
-}
-
-#[test]
-fn a_webview_project_patches_only_the_runtime() {
-    // A patch of a crate the project does not use would be a warning in every build.
-    let text = rust_local_patch(&runtime(), false).unwrap();
-    assert!(text.contains("clarity-runtime = "), "{text}");
-    assert!(!text.contains("clarity-ui"), "{text}");
 }
 
 /// One CLARITY_RUNTIME serves every language: naming the C# runtime's
@@ -48,15 +41,15 @@ fn a_webview_project_patches_only_the_runtime() {
 #[test]
 fn the_rust_runtime_is_found_from_any_runtime_folder_of_the_repository() {
     let runtimes = runtime().parent().unwrap().to_path_buf();
-    let want = rust_local_patch(&runtime(), true).unwrap();
+    let want = rust_local_patch(&runtime()).unwrap();
     for named in [runtimes.join("csharp"), runtimes.clone(), runtimes.parent().unwrap().to_path_buf()] {
-        assert_eq!(want, rust_local_patch(&named, true).unwrap(), "{}", named.display());
+        assert_eq!(want, rust_local_patch(&named).unwrap(), "{}", named.display());
     }
 }
 
 #[test]
 fn a_folder_without_the_runtime_says_what_to_name() {
-    let err = rust_local_patch(Path::new("/no/such/folder"), false).unwrap_err();
+    let err = rust_local_patch(Path::new("/no/such/folder")).unwrap_err();
     assert!(err.contains("CLARITY_RUNTIME"), "{err}");
     assert!(err.contains("runtimes/rust"), "{err}");
     assert!(err.contains("/no/such/folder"), "{err}");
@@ -79,13 +72,7 @@ fn generating_with_clarity_runtime_set_writes_the_patch() {
     unsafe { std::env::remove_var("CLARITY_RUNTIME") };
     let patched = patched.unwrap();
     let config = patched.iter().find(|f| f.path == ".cargo/config.toml").expect("the patch is written");
-    // On the ready-made library only the runtime is patched; built on the crate, Clarity.UI's crate too.
-    assert_eq!(config.text, rust_local_patch(&runtime(), false).unwrap());
-    unsafe { std::env::set_var("CLARITY_RUNTIME", runtime()) };
-    let on_crate = generate(&project, &clarity_project::Settings { ui_crate: true, ..settings.clone() });
-    unsafe { std::env::remove_var("CLARITY_RUNTIME") };
-    let on_crate = on_crate.unwrap();
-    assert_eq!(on_crate.iter().find(|f| f.path == ".cargo/config.toml").unwrap().text, rust_local_patch(&runtime(), true).unwrap());
+    assert_eq!(config.text, rust_local_patch(&runtime()).unwrap());
     // The README says how.
     let readme = &patched.iter().find(|f| f.path == "README.md").unwrap().text;
     assert!(readme.contains("set the environment variable `CLARITY_RUNTIME` to `<Clarity>/runtimes/rust`"), "{readme}");

@@ -31,7 +31,6 @@ pub mod preview;
 pub use csharp::runtime_version as csharp_runtime_version;
 pub use go::runtime_version as go_runtime_version;
 pub use rust::runtime_version as rust_runtime_version;
-pub use rust::ui_version as rust_ui_version;
 pub use rust::local_patch as rust_local_patch;
 pub use rust::migration_sql;
 pub use web::{APP_CLASS, base_css, theme_css};
@@ -1269,16 +1268,12 @@ fn with_codecs(files: &mut Vec<OutFile>, codecs: Vec<(String, OutFile)>, backend
     let quoted = |name: &str| serde_json::Value::String(name.to_string()).to_string();
     match backend {
         Backend::Rust => {
-            // Built on the crate, Clarity.Video's own crate adds it; on the ready-made library, its table.
-            let native = files.iter().any(|f| f.path == "src/main.rs" && f.text.contains("    clarity_runtime::native_ui::run(app, FILES)"));
+            // Clarity.Video's table, from its library beside Clarity.UI's.
             let lines: String = names
                 .iter()
-                .map(|n| {
-                    let add = if native { format!("clarity_runtime::native_ui::add_codec(unsafe {{ clarity_video_api() }}, {})", quoted(n)) } else { format!("clarity_ui::clarity_video::library::add({})", quoted(n)) };
-                    format!("    if let Err(why) = {add} {{\n        eprintln!(\"{{why}}\");\n    }}\n")
-                })
+                .map(|n| format!("    if let Err(why) = clarity_runtime::native_ui::add_codec(unsafe {{ clarity_video_api() }}, {}) {{\n        eprintln!(\"{{why}}\");\n    }}\n", quoted(n)))
                 .collect();
-            let run = if native { "    clarity_runtime::native_ui::run(app, FILES)" } else { "    clarity_ui::desktop::run(app, FILES)" };
+            let run = "    clarity_runtime::native_ui::run(app, FILES)";
             if let Some(main) = files.iter_mut().find(|f| f.path == "src/main.rs")
                 && let Some(at) = main.text.find(run)
             {
@@ -1314,15 +1309,6 @@ fn with_codecs(files: &mut Vec<OutFile>, codecs: Vec<(String, OutFile)>, backend
     }
 }
 
-/// Whether a Rust desktop program links Clarity.UI's ready-made library
-/// (DESIGN 7.9) rather than building the clarity-ui crate: the project
-/// decides, the library unless its project file says `ui crate`. A change of
-/// Clarity.UI itself is tried by rebuilding the base libraries
-/// (`rebuild_base_libraries`), which every project then links.
-pub fn rust_links_library(settings: &clarity_project::Settings) -> bool {
-    !settings.ui_crate
-}
-
 /// The crates of the base libraries every Go, C, C++ and Rust desktop program
 /// links: Clarity.UI and Clarity.Audio, Clarity.Video and Clarity.Image beside it.
 pub const BASE_LIBRARIES: [&str; 4] = ["clarity-ui-ffi", "clarity-audio-ffi", "clarity-video-ffi", "clarity-image-ffi"];
@@ -1350,14 +1336,12 @@ pub fn rebuild_base_libraries(repo: &std::path::Path) -> Result<std::path::PathB
 }
 
 /// Whether the windowed build (not the command-line program) links
-/// Clarity.UI's library from the folder CLARITY_UI names: a Go, C or C++
-/// desktop program, and a Rust one unless it builds the crate (DESIGN 7.9).
-/// C# brings the library in its package.
+/// Clarity.UI's library from the folder CLARITY_UI names: a Go, C, C++ or
+/// Rust desktop program (DESIGN 7.9). C# brings the library in its package.
 pub fn uses_clarity_ui(settings: &clarity_project::Settings) -> bool {
     let stack = &settings.stack;
     let links = match stack.backend {
-        Backend::Go | Backend::C | Backend::Cpp => true,
-        Backend::Rust => rust_links_library(settings),
+        Backend::Go | Backend::C | Backend::Cpp | Backend::Rust => true,
         _ => false,
     };
     links && stack.has(clarity_project::Target::Desktop)

@@ -312,12 +312,9 @@ fn clarity_ui_goes_to_the_build() {
         let cmake = clarity_gen::with_clarity_ui(clarity_gen::toolchain(&shop(backend, Ui::Clarity), false).unwrap(), backend, folder);
         assert_eq!(cmake.env, [("CLARITY_UI", folder.display().to_string())]);
     }
-    for backend in [Backend::Go, Backend::C, Backend::Cpp] {
+    for backend in [Backend::Go, Backend::C, Backend::Cpp, Backend::Rust] {
         assert!(clarity_gen::uses_clarity_ui(&shop(backend, Ui::Clarity)));
     }
-    // Rust links the ready-made library too, unless its project file says `ui crate`.
-    assert!(clarity_gen::uses_clarity_ui(&shop(Backend::Rust, Ui::Clarity)));
-    assert!(!clarity_gen::uses_clarity_ui(&clarity_project::Settings { ui_crate: true, ..shop(Backend::Rust, Ui::Clarity) }));
     assert!(!clarity_gen::uses_clarity_ui(&shop(Backend::Csharp, Ui::Clarity)));
 }
 

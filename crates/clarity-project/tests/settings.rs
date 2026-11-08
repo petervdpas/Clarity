@@ -63,7 +63,6 @@ fn shop() -> Settings {
         keeps: Vec::new(),
         keys_editable: false,
         engines_interpreted: false,
-        ui_crate: false,
         port: None,
         row_height: None,
     }
@@ -728,22 +727,19 @@ fn the_keys_window_opens_where_the_project_allows_it() {
     assert_eq!(problems(false), ["keysItem clicks to keys, the keys window, which opens when the project file says keys editable"]);
 }
 
-/// How a Rust desktop program gets Clarity.UI (DESIGN 7.9): the ready-made
-/// library without the line (`ui library` says so too), or `ui crate`, which
-/// builds the clarity-ui crate from source, as a Rust custom part needs.
+/// Every Rust desktop program links Clarity.UI's ready-made library (DESIGN
+/// 7.9). A project file of v0.30.0 that says `ui library` or `ui crate` still
+/// opens, and writing it leaves the line out.
 #[test]
-fn the_project_says_whether_rust_builds_clarity_ui_from_source() {
-    let text = format!("{SHOP}    ui crate\n");
-    let settings = parse(&text).unwrap();
-    assert!(settings.ui_crate);
-    assert!(!parse(SHOP).unwrap().ui_crate);
-    assert!(!parse(&format!("{SHOP}    ui library\n")).unwrap().ui_crate);
-    let written = write(Some(SHOP), &settings).unwrap();
-    assert!(written.contains("\n    ui crate\n"), "{written}");
-    assert_eq!(parse(&written).unwrap(), settings);
-    let off = write(Some(&written), &Settings { ui_crate: false, ..settings }).unwrap();
-    assert!(!off.contains("ui crate"), "{off}");
-    assert_eq!(parse(&format!("{SHOP}    ui skia\n")).unwrap_err(), "line 11: write 'ui library' or 'ui crate': whether a Rust program links Clarity.UI's ready-made library or builds its crate");
+fn an_old_ui_line_is_read_and_left_out() {
+    for line in ["ui crate", "ui library"] {
+        let text = format!("{SHOP}    {line}\n");
+        let settings = parse(&text).unwrap();
+        assert_eq!(settings, parse(SHOP).unwrap());
+        let written = write(Some(&text), &settings).unwrap();
+        assert!(!written.contains("\n    ui "), "{written}");
+    }
+    assert!(parse(&format!("{SHOP}    ui skia\n")).is_err());
 }
 
 /// How the project's engines written in Clarity run (DESIGN 5.12):

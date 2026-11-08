@@ -1,5 +1,5 @@
 //! Custom part Dice: dice on a felt table, drawn in 3D with Bevy, as a
-//! control of Clarity.UI. Told to roll, the dice tumble, bounce and land,
+//! control of Clarity.UI, drawn through its library. Told to roll, the dice tumble, bounce and land,
 //! then the part tells what they show. Keep the methods of `DicePart`
 //! (src/clarity.rs), which follow the part's declaration.
 //!
@@ -13,18 +13,12 @@ mod clarity;
 mod scene;
 pub use clarity::*;
 
-use std::time::Duration;
-
-use clarity_ui::Key;
-use clarity_ui::locale;
-use clarity_ui::TextAlign;
-
 use scene::Scene;
 
-/// How often the part updates while the table moves: about 60 times a second.
-const FRAME: Duration = Duration::from_millis(16);
+/// How often the part updates while the table moves, in milliseconds: about 60 times a second.
+const FRAME_MS: f64 = 16.0;
 /// How often it looks whether its place changed size while the table rests.
-const IDLE: Duration = Duration::from_millis(250);
+const IDLE_MS: f64 = 250.0;
 /// How far a drag turns the table, in radians per pixel.
 const TURN_PER_PIXEL: f32 = 0.01;
 /// How far a press may move and still be a click, in pixels.
@@ -34,7 +28,7 @@ const CLICK_SLOP: f64 = 4.0;
 pub struct Dice {
     /// Bevy's table, made at the first wake-up, once the part's size is known.
     scene: Option<Scene>,
-    /// Why Bevy could not start, said in the part's place.
+    /// Why Bevy could not start, said in the part's place in the language shown.
     failed: Option<String>,
     /// The count and roll asked for before the table was made.
     count: Option<i64>,
@@ -48,16 +42,15 @@ pub struct Dice {
 
 impl Dice {
     /// Asks for a wake-up now, unless one is coming.
-    fn kick(&mut self, cx: &mut CustomCx) {
+    fn kick(&mut self, cx: &mut dyn Cx) {
         if !self.waking {
             self.waking = true;
-            let now = cx.now();
-            cx.wake(now);
+            cx.wake_in(0.0);
         }
     }
 
     /// Makes the table at the part's size, the first time; says why when it cannot.
-    fn ensure_scene(&mut self, cx: &mut CustomCx) {
+    fn ensure_scene(&mut self, cx: &mut dyn Cx) {
         if self.scene.is_some() || self.failed.is_some() {
             return;
         }
@@ -73,13 +66,14 @@ impl Dice {
                 self.scene = Some(scene);
             }
             Err(why) => {
-                self.failed = Some(why);
+                let said = cx.translate("customPartFailed", "this part could not draw");
+                self.failed = Some(format!("{said}: {why}"));
                 cx.invalidate();
             }
         }
     }
 
-    fn roll(&mut self, cx: &mut CustomCx) {
+    fn roll(&mut self, cx: &mut dyn Cx) {
         match self.scene.as_mut() {
             Some(scene) => scene.roll(),
             None => self.roll_asked = true,
@@ -89,27 +83,30 @@ impl Dice {
 }
 
 /// The part's place in whole pixels.
-fn pixels_of(cx: &CustomCx) -> (u32, u32) {
-    let bounds = cx.bounds();
-    (bounds.width.round().max(1.0) as u32, bounds.height.round().max(1.0) as u32)
+fn pixels_of(cx: &dyn Cx) -> (u32, u32) {
+    let (_, _, width, height) = cx.bounds();
+    (width.round().max(1.0) as u32, height.round().max(1.0) as u32)
 }
 
 impl DicePart for Dice {
-    fn draw(&self, painter: &Painter, area: Rect) {
-        if let Some(why) = &self.failed {
-            let said = locale::translate("customPartFailed", "this part could not draw");
-            painter.stroke(area, painter.look.color("error"), 1.0, painter.look.radius("input"));
-            painter.text(&format!("{said}: {why}"), area.inset(6.0), painter.look.color("error"), painter.look.size("small"), "text", false, TextAlign::Left);
+    fn draw(&self, canvas: &mut dyn Canvas, x: f64, y: f64, width: f64, height: f64) {
+        if let Some(failed) = &self.failed {
+            let error = canvas.look_color("error");
+            canvas.stroke(x, y, width, height, error, 1.0, 4.0);
+            canvas.text(failed, x + 6.0, y + 6.0, width - 12.0, height - 12.0, error, 0.0, false, 0);
             return;
         }
         match self.scene.as_ref().and_then(Scene::pixels) {
-            Some((rgba, width, height, row_bytes)) => painter.pixels(rgba, width, height, row_bytes, area),
+            Some((rgba, w, h, row_bytes)) => canvas.pixels(rgba, w, h, row_bytes, x, y, width, height),
             // Until the first picture comes back, the felt's place stays the window's.
-            None => painter.stroke(area, painter.look.color("border"), 1.0, painter.look.radius("input")),
+            None => {
+                let border = canvas.look_color("border");
+                canvas.stroke(x, y, width, height, border, 1.0, 4.0);
+            }
         }
     }
 
-    fn show_count(&mut self, count: i64, cx: &mut CustomCx) {
+    fn show_count(&mut self, count: i64, cx: &mut dyn Cx) {
         self.count = Some(count);
         if let Some(scene) = self.scene.as_mut() {
             scene.set_count(count);
@@ -117,11 +114,11 @@ impl DicePart for Dice {
         self.kick(cx);
     }
 
-    fn on_roll(&mut self, cx: &mut CustomCx) {
+    fn on_roll(&mut self, cx: &mut dyn Cx) {
         self.roll(cx);
     }
 
-    fn start(&mut self, cx: &mut CustomCx) {
+    fn start(&mut self, cx: &mut dyn Cx) {
         // The window opened: the first wake-up makes the table.
         self.kick(cx);
     }
@@ -130,13 +127,13 @@ impl DicePart for Dice {
         true
     }
 
-    fn pointer_pressed(&mut self, at: PointerInput, cx: &mut CustomCx) {
+    fn pointer_pressed(&mut self, at: Pointer, cx: &mut dyn Cx) {
         self.pressed = Some((at.x, at.y));
         self.dragged = 0.0;
         cx.focus();
     }
 
-    fn pointer_moved(&mut self, at: PointerInput, cx: &mut CustomCx) {
+    fn pointer_moved(&mut self, at: Pointer, cx: &mut dyn Cx) {
         let Some((x, y)) = self.pressed else { return };
         let dx = at.x - x;
         self.dragged += dx.abs() + (at.y - y).abs();
@@ -147,18 +144,18 @@ impl DicePart for Dice {
         }
     }
 
-    fn pointer_released(&mut self, _at: PointerInput, _cx: &mut CustomCx) {
+    fn pointer_released(&mut self, _at: Pointer, _cx: &mut dyn Cx) {
         self.pressed = None;
     }
 
-    fn click(&mut self, cx: &mut CustomCx) {
+    fn click(&mut self, cx: &mut dyn Cx) {
         // A drag turned the table; only a click in place rolls.
         if self.dragged <= CLICK_SLOP {
             self.roll(cx);
         }
     }
 
-    fn wheel(&mut self, _dx: f64, dy: f64, _held: Modifiers, cx: &mut CustomCx) -> bool {
+    fn wheel(&mut self, _dx: f64, dy: f64, _modifiers: u32, cx: &mut dyn Cx) -> bool {
         let Some(scene) = self.scene.as_mut() else { return false };
         // The wheel turned down (dy above 0) goes farther, up comes nearer.
         scene.zoom(if dy > 0.0 { 1.0 / 0.9 } else { 0.9 });
@@ -166,18 +163,18 @@ impl DicePart for Dice {
         true
     }
 
-    fn key(&mut self, key: KeyInput, cx: &mut CustomCx) -> bool {
-        if !key.modifiers.is_empty() {
+    fn key(&mut self, name: &str, modifiers: u32, cx: &mut dyn Cx) -> bool {
+        if modifiers != 0 {
             return false;
         }
-        match key.key {
-            Key::Space | Key::Enter => self.roll(cx),
-            Key::Left | Key::Right | Key::Plus | Key::Equal | Key::Minus => {
+        match name {
+            "Space" | "Enter" => self.roll(cx),
+            "Left" | "Right" | "+" | "Equal" | "-" => {
                 let Some(scene) = self.scene.as_mut() else { return false };
-                match key.key {
-                    Key::Left => scene.turn(0.15),
-                    Key::Right => scene.turn(-0.15),
-                    Key::Minus => scene.zoom(1.0 / 0.9),
+                match name {
+                    "Left" => scene.turn(0.15),
+                    "Right" => scene.turn(-0.15),
+                    "-" => scene.zoom(1.0 / 0.9),
                     _ => scene.zoom(0.9),
                 }
                 self.kick(cx);
@@ -187,11 +184,11 @@ impl DicePart for Dice {
         true
     }
 
-    fn focus_changed(&mut self, _focused: bool, cx: &mut CustomCx) {
+    fn focus_changed(&mut self, _focused: bool, cx: &mut dyn Cx) {
         cx.invalidate();
     }
 
-    fn wake(&mut self, cx: &mut CustomCx) {
+    fn wake(&mut self, cx: &mut dyn Cx) {
         self.waking = false;
         self.ensure_scene(cx);
         let Some(scene) = self.scene.as_mut() else { return };
@@ -212,8 +209,7 @@ impl DicePart for Dice {
             busy = step.busy;
         }
         self.waking = true;
-        let next = cx.now() + if busy { FRAME } else { IDLE };
-        cx.wake(next);
+        cx.wake_in(if busy { FRAME_MS } else { IDLE_MS });
     }
 
     fn stop(&mut self) {

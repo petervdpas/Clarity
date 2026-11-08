@@ -1,7 +1,6 @@
 project Dice
     title "Dice"
     stack rust desktop
-    ui crate
     output "out"
     language "en"
     datasource main sqlite "data/dice.db"

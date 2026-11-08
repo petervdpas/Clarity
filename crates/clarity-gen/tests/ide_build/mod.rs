@@ -83,11 +83,7 @@ fn local_runtime(dir: &Path, backend: Backend, command: &mut Command) {
         Backend::Rust => {
             std::fs::create_dir_all(dir.join(".cargo")).unwrap();
             let runtime = repo().join("runtimes/rust");
-            let patch = if on_clarity_ui(dir) {
-                clarity_gen::rust_local_patch(&runtime, true).unwrap()
-            } else {
-                format!("[patch.crates-io]\nclarity-runtime = {{ path = {:?} }}\n", runtime.display().to_string())
-            };
+            let patch = clarity_gen::rust_local_patch(&runtime).unwrap();
             std::fs::write(dir.join(".cargo/config.toml"), patch).unwrap();
             // One target folder for every run, so the dependencies compile once.
             command.env("CARGO_TARGET_DIR", rust_target(dir));
@@ -127,16 +123,11 @@ fn with_browser_files(mut programs: Vec<clarity_gen::Program>) -> Vec<clarity_ge
     programs
 }
 
-/// Whether the Rust program in `dir` is drawn by Clarity.UI (its Cargo.toml names clarity-ui).
-fn on_clarity_ui(dir: &Path) -> bool {
-    std::fs::read_to_string(dir.join("Cargo.toml")).is_ok_and(|t| t.contains("clarity-ui"))
-}
-
 /// The target folder a Rust program in `dir` builds into: one shared by
-/// every run, and for a program on Clarity.UI the one where Skia's crates
-/// are built already.
+/// every run, and for a program with custom parts (dice's Bevy) the one
+/// whose game engine is built already.
 fn rust_target(dir: &Path) -> PathBuf {
-    if on_clarity_ui(dir) { repo().join("target/g8c-shared") } else { repo().join("target/generated/ide-build-target") }
+    if dir.join("parts").is_dir() { repo().join("target/g8c-shared") } else { repo().join("target/generated/ide-build-target") }
 }
 
 /// The warnings among what a build said.

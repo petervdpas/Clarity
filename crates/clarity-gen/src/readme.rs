@@ -50,11 +50,8 @@ pub fn readme(settings: &Settings, project: &clarity_spec::Project) -> String {
     );
 
     out.push_str("\n## What you need\n\n");
-    // Rust's desktop program links Clarity.UI's ready-made library, or with `ui crate` takes the crate
-    // clarity-ui; its web program serves the library's browser files.
-    let rust_desktop = backend == Backend::Rust && settings.stack.has(clarity_project::Target::Desktop);
-    let clarity_ui = rust_desktop && !crate::rust_links_library(settings);
-    let rust_library = rust_desktop && crate::rust_links_library(settings);
+    // Rust's desktop program links Clarity.UI's ready-made library; its web program serves the library's browser files.
+    let rust_library = backend == Backend::Rust && settings.stack.has(clarity_project::Target::Desktop);
     for need in tools::requirements(backend) {
         out.push_str(&format!("- {need}\n"));
     }
@@ -76,15 +73,9 @@ pub fn readme(settings: &Settings, project: &clarity_spec::Project) -> String {
     }
     if rust_library {
         // As Go, C and C++ link it (DESIGN 7.9): build.rs takes it from the folder CLARITY_UI names.
-        out.push_str(&format!("\nThe desktop program draws with Clarity.UI's ready-made library, which it links through its C interface as Go, C and C++ programs do, so the build compiles no Skia. `build.rs` takes it from the folder the environment variable `CLARITY_UI` names: `include/clarity_ui.h` and, in `lib/`, the library for the system (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` with `clarity_ui.dll.lib` on Windows), with Clarity.Audio and Clarity.Video beside it when the program plays songs or videos. Clarity's build names the folder; to build without Clarity take the archive for the system, {}, from the release {} (`<system>` is one of {}), check it against the release's `SHA256SUMS`, unpack it and set `CLARITY_UI` to the folder it holds. Each build copies the libraries next to the program, where it finds them (else in that folder): ship them along with it. In Clarity's repository `clarity libraries` rebuilds them from the source. Writing `ui crate` in the project file builds Clarity.UI from source instead, as a Rust custom part needs.\n", archive(), release_page(), SYSTEMS));
+        out.push_str(&format!("\nThe desktop program draws with Clarity.UI's ready-made library, which it links through its C interface as Go, C and C++ programs do, so the build compiles no Skia. `build.rs` takes it from the folder the environment variable `CLARITY_UI` names: `include/clarity_ui.h` and, in `lib/`, the library for the system (`libclarity_ui.so` on Linux, `libclarity_ui.dylib` on macOS, `clarity_ui.dll` with `clarity_ui.dll.lib` on Windows), with Clarity.Audio and Clarity.Video beside it when the program plays songs or videos. Clarity's build names the folder; to build without Clarity take the archive for the system, {}, from the release {} (`<system>` is one of {}), check it against the release's `SHA256SUMS`, unpack it and set `CLARITY_UI` to the folder it holds. Each build copies the libraries next to the program, where it finds them (else in that folder): ship them along with it. In Clarity's repository `clarity libraries` rebuilds them from the source.\n", archive(), release_page(), SYSTEMS));
     }
-    if clarity_ui {
-        out.push_str(&format!(
-            "\nClarity's runtime and Clarity.UI come as the crates clarity-runtime ({}) and clarity-ui ({}), which the first build fetches from crates.io; clarity-ui's first build also downloads Skia's prebuilt library for the system. To build on the crates in Clarity's repository instead, while working on them, set the environment variable `CLARITY_RUNTIME` to `<Clarity>/runtimes/rust` when Clarity generates the project: it writes `.cargo/config.toml` in this folder, which says\n\n    [patch.crates-io]\n    clarity-runtime = {{ path = \"<Clarity>/runtimes/rust\" }}\n    clarity-ui = {{ path = \"<Clarity>/runtimes/rust-ui\" }}\n\nThe file can also be written by hand. Clarity keeps .cargo when it writes the project again; remove it to build on the published crates.\n",
-            crate::rust::runtime_version(),
-            crate::rust::ui_version()
-        ));
-    } else if backend == Backend::Rust {
+    if backend == Backend::Rust {
         out.push_str(&format!(
             "\nClarity's runtime comes as the crate clarity-runtime ({}), with a feature for each database the project uses, which the first build fetches from crates.io. To build on the runtime in Clarity's repository instead, while working on it, set the environment variable `CLARITY_RUNTIME` to `<Clarity>/runtimes/rust` when Clarity generates the project: it writes `.cargo/config.toml` in this folder, which says\n\n    [patch.crates-io]\n    clarity-runtime = {{ path = \"<Clarity>/runtimes/rust\" }}\n\nThe file can also be written by hand. Clarity keeps .cargo when it writes the project again; remove it to build on the published crate.\n",
             crate::rust::runtime_version()
@@ -124,8 +115,8 @@ pub fn readme(settings: &Settings, project: &clarity_spec::Project) -> String {
             out.push_str(&format!("which writes `{}`. ", toolchain.program.display()));
         }
         out.push_str(&format!("To try it while you work, build a debug program and start it with\n\n    {run}\n"));
-        if backend == Backend::Rust && (settings.stack.has(clarity_project::Target::Desktop) || !crate::rust::parts::crate_parts(project).is_empty()) {
-            out.push_str("\nThe debug program builds its dependencies optimized, as Clarity.UI, which draws its windows, and the custom parts' crates and what they use (a game engine, say), so the windows run at speed while the program's own code stays quick to build: Cargo.toml says so under `[profile.dev.package.\"*\"]`.\n");
+        if backend == Backend::Rust && !crate::rust::parts::crate_parts(project).is_empty() {
+            out.push_str("\nThe debug program builds its dependencies optimized, as the custom parts' crates and what they use (a game engine, say), so the windows run at speed while the program's own code stays quick to build: Cargo.toml says so under `[profile.dev.package.\"*\"]`.\n");
         }
     }
 

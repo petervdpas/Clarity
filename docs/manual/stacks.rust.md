@@ -24,14 +24,15 @@ The program is a web server. Its page runs Clarity.UI in the browser (the same l
 
 With `stack rust desktop` Clarity writes a Cargo project into the output folder (`out` by default):
 
-- `Cargo.toml`: the package, on the crates `clarity-runtime` (the window model, records, queries and migrations) and `clarity-ui` (the drawing, with Skia, in the system's own window).
+- `Cargo.toml`: the package, on the crate `clarity-runtime` (the window model, records, queries and migrations, and with its `native-ui` feature the desktop through Clarity.UI's ready-made library).
+- `build.rs`: links Clarity.UI's ready-made library from the folder the environment variable `CLARITY_UI` names, as Go, C and C++ programs do, and copies it next to the program. Clarity's build names the folder.
 - `src/modules/<module>.rs`: one Rust module per Clarity module, with its records, enums, functions, actions, windows and handlers. `src/modules.rs` declares them.
 - `src/schema.rs`: the migration steps of every database Clarity owns.
 - `windows/<Window>.cxaml` and `apps/<App>.cxaml`: each window and each app frame (menu bar, toolbar, ribbon, sidebars, footer) as markup (`.cxaml`, Clarity's own dialect): its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`).
 - `themes/<theme>.light.json` and `.dark.json`: each theme the project offers, as Clarity resolves it. Without any, Clarity.UI shows Clarity's own.
 - `resources/`: the project's pictures and other resources, carried in the program.
 - `src/model.json` and `src/facts.rs`: the data dictionary and the translations, and the facts of the fields Clarity.UI's parts read.
-- `src/main.rs`: the program, which answers what the windows ask of it (the runtime's `Program`); it opens and migrates the databases and starts `clarity_ui::desktop` with the files above, which it carries in itself.
+- `src/main.rs`: the program, which answers what the windows ask of it (the runtime's `Program`); it opens and migrates the databases and runs Clarity.UI's library (`clarity_runtime::native_ui::run`) with the files above, which it carries in itself.
 - a `README.md` that says how to build the project without Clarity.
 
 With the `web` target the program also has `browser/`, the files its server serves, all carried in the program:
@@ -42,17 +43,17 @@ With the `web` target the program also has `browser/`, the files its server serv
 
 `src/main.rs` answers what the browser asks over `/clarity/invoke` with the same program the desktop runs. The program listens at `--address host:port`, else the environment's `CLARITY_ADDRESS`, else the project's port. Requests run side by side, so a long call shows its bar and Stop in the browser too.
 
-Cargo downloads Skia's prebuilt library on the first build; nothing is built from Skia's source. Do not edit these files. Change the project in Clarity; it writes the folder again. See [Run and Build](project.run-build.md).
+The build compiles no Skia: Clarity.UI comes ready-made. Do not edit these files. Change the project in Clarity; it writes the folder again. See [Run and Build](project.run-build.md).
 
 ### Custom parts
 
-A custom part written in Rust (`crate "parts/Gauge"`) is a control of Clarity.UI: it draws on the window's own surface, in its place, and takes the pointer, the wheel, keys and the focus as any part does. Its crate depends on `clarity-ui`; Clarity writes the crate's `src/clarity.rs` from the declaration, with the trait `GaugePart` that the crate's `Gauge` implements:
+A custom part written in Rust (`crate "parts/Gauge"`) is a control of Clarity.UI: it draws on the window's own surface, in its place, and takes the pointer, the wheel, keys and the focus as any part does, as a part written in Go, C or C++ does. Clarity writes the crate's `src/clarity.rs` from the declaration, in plain Rust, so the crate needs nothing of Clarity's: the `Canvas` it draws on, the `Cx` it acts through, and the trait `GaugePart` that the crate's `Gauge` implements:
 
-- `draw(&self, painter, area)`: draws the part with Skia, in the theme's look (`painter.look`).
+- `draw(&self, canvas, x, y, width, height)`: draws the part in its place: rectangles, lines, ovals, SVG paths, text and RGBA pixels, in the look's colors (`canvas.look_color("accent")`).
 - `show_value(value, cx)`, `show_<property>(value, cx)` and `on_<hear>(values, cx)`: what the window gives it, typed as the declaration says.
-- `click`, `key`, `text`, `wheel`, `pointer_pressed` and the other input methods: each does nothing unless the crate writes it.
+- `click`, `key` (a key by its name, such as `"Enter"`), `text`, `wheel`, `pointer_pressed` and the other input methods: each does nothing unless the crate writes it.
 
-From any of them the part speaks to its window through `cx`: `cx.changed(value)` changes what it binds (one edit, which Ctrl+Z takes back, and `on change` runs), and `cx.reached(level)` and the other tells run the handler wired to them. The program registers each part by its name in the generated `src/parts.rs`. Declaring a part writes a starter crate that draws its value in a frame; Clarity never writes over it, only over `src/clarity.rs`. See [Custom parts](design.custom-parts.md).
+From any of them the part speaks to its window through `cx`: `cx.changed(value)` changes what it binds (one edit, which Ctrl+Z takes back, and `on change` runs), and `cx.reached(level)` and the other tells run the handler wired to them. `cx.wake_in(ms)` has its `wake` called later, `cx.invalidate()` draws it again and `cx.translate(key, english)` gives a text of the program's translations. The program's generated `src/parts.rs` registers each part with Clarity.UI's library by its name. Declaring a part writes a starter crate that draws its value in a frame; Clarity never writes over it, only over `src/clarity.rs`. See [Custom parts](design.custom-parts.md).
 
 A program with custom parts builds its dependencies optimized in a debug build too: its `Cargo.toml` says
 
@@ -67,15 +68,14 @@ so a part that runs a game engine or other heavy work (Bevy, say) runs at speed 
 
 The generated project carries no runtime sources. It depends on the crate `clarity-runtime` from crates.io, with only the features of the databases it uses: `sqlite`, `postgres`, `mysql` or `mssql`. The first build downloads it.
 
-To build on the crates in Clarity's repository instead (while you work on them), set the environment variable `CLARITY_RUNTIME` to the Rust runtime's folder, `<Clarity>/runtimes/rust`, while Clarity generates the project (as `CLARITY_RUNTIME` names `<Clarity>/runtimes/csharp` for C#). Clarity then writes `.cargo/config.toml` in the program's folder, which patches the crates the project uses onto the repository:
+To build on the runtime in Clarity's repository instead (while you work on it), set the environment variable `CLARITY_RUNTIME` to the Rust runtime's folder, `<Clarity>/runtimes/rust`, while Clarity generates the project (as `CLARITY_RUNTIME` names `<Clarity>/runtimes/csharp` for C#). Clarity then writes `.cargo/config.toml` in the program's folder, which patches the runtime onto the repository:
 
 ```toml
 [patch.crates-io]
 clarity-runtime = { path = "<Clarity>/runtimes/rust" }
-clarity-ui = { path = "<Clarity>/runtimes/rust-ui" }
 ```
 
-The second line is there only for the desktop program: Clarity.UI's crate is taken from beside the runtime's folder. The file can also be written by hand. Clarity keeps the `.cargo` folder when it writes the project again without the variable; remove it to build on the published crates.
+To try a change of Clarity.UI itself, run `clarity libraries` in Clarity's repository: it rebuilds the ready-made libraries every program Clarity builds then links. The file can also be written by hand. Clarity keeps the `.cargo` folder when it writes the project again without the variable; remove it to build on the published crates.
 
 A project with an [engine](code.engines.md) also turns on the crate's `engines` feature, which runs engines with wasmi.
 
@@ -83,7 +83,7 @@ A project with an [engine](code.engines.md) also turns on the crate's `engines` 
 
 - Rust with cargo, from https://rustup.rs
 
-Nothing more: cargo downloads Skia's prebuilt library, and there is no webview to install. Clarity checks for these itself: run `clarity tools`, or look at Build tools on the Project tab.
+Nothing more: Clarity.UI's library comes ready-made (Clarity carries it, or fetches it once), and there is no webview to install. Clarity checks for these itself: run `clarity tools`, or look at Build tools on the Project tab.
 
 Step by step, with the commands for Windows, Linux and macOS: [Setting up the build tools](setup.tools.md).
 

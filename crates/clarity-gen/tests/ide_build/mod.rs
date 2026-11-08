@@ -51,11 +51,25 @@ pub fn example(name: &str) -> (PathBuf, clarity_spec::Project, clarity_project::
 
 /// The configurations a stack is built in: debug as Run builds and release
 /// as Build does. Rust's release build is left out: its warnings are its
-/// debug build's, and it takes long.
+/// debug build's, and it takes long. With CLARITY_EXAMPLES_QUICK set (a
+/// routine check, not the one before a release) debug alone.
 fn configurations(backend: Backend) -> &'static [bool] {
+    if std::env::var_os("CLARITY_EXAMPLES_QUICK").is_some() {
+        return &[false];
+    }
     match backend {
         Backend::Rust => &[false],
         _ => &[false, true],
+    }
+}
+
+/// C and C++ builds compile through ccache when it is installed, so the
+/// runtime every program copies is compiled once, not per example. Only
+/// these tests use it; a generated project builds as it is.
+fn with_ccache(backend: Backend, command: &mut Command) {
+    let cached = matches!(backend, Backend::C | Backend::Cpp) && Command::new("ccache").arg("--version").output().is_ok_and(|o| o.status.success());
+    if cached {
+        command.env("CMAKE_C_COMPILER_LAUNCHER", "ccache").env("CMAKE_CXX_COMPILER_LAUNCHER", "ccache");
     }
 }
 
@@ -185,6 +199,7 @@ pub fn builds_without_warnings(file: &Path, project: &clarity_spec::Project, set
             let mut command = Command::new(toolchain.tool);
             command.args(&toolchain.args).envs(toolchain.env.iter().cloned()).current_dir(&target);
             local_runtime(&target, settings.stack.backend, &mut command);
+            with_ccache(settings.stack.backend, &mut command);
             let ran = command.output().unwrap_or_else(|e| panic!("{}: {e}", toolchain.tool));
             let said = format!("{}{}", String::from_utf8_lossy(&ran.stdout), String::from_utf8_lossy(&ran.stderr));
             let how = format!("{} {} in {}", toolchain.tool, toolchain.args.join(" "), target.display());

@@ -49,10 +49,11 @@ fn every_stack_adds_a_store_that_follows_its_folder_setting() {
 }
 
 /// The folder part's button opens the system's folder picker through
-/// Clarity.UI itself: the program carries nothing of a webview's dialogs.
+/// Clarity.UI itself (its ready-made library by default): the program
+/// carries nothing of a webview's dialogs.
 #[test]
 fn the_rust_program_opens_the_folder_picker_through_clarity_ui() {
     let rust = files(Backend::Rust, Ui::Clarity);
-    has(&rust, "clarity-ui = ");
+    has(&rust, "clarity_runtime::native_ui::run(app, FILES)");
     assert!(!rust.contains("tauri"), "{rust}");
 }

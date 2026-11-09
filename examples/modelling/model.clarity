@@ -1,9 +1,17 @@
 module model
 
+// A project, as a repository: the canonical model's blueprints (FCDM) or
+// an API's tables and versions (FcdmApi), by domain. Source and target
+// projects come later.
+entity Project
+    name: text(80), required, unique, label @projectNameLabel
+    summary: text, label @projectSummaryLabel
+
 // A domain of the canonical data model, as Hr or Onderwijs: one namespace,
 // and the two packages its data objects and their events are published in.
 entity Domain
-    name: text(80), required, unique, label @domainNameLabel
+    project: ref Project, required, cascade, label @domainProjectLabel
+    name: text(80), required, label @domainNameLabel
     summary: text, label @domainSummaryLabel
     modelPackage: text(120), label @domainModelPackageLabel
     modelVersion: text(20), label @domainModelVersionLabel
@@ -18,8 +26,9 @@ enum ObjectKind
     Root label @objectKindRoot
     Child label @objectKindChild
 
-// A data object of a domain, as Medewerker or Arbeidscontract, whatever its
-// versions: its classes and entities are made from its versions.
+// A data object of a domain, as Medewerker or Arbeidscontract: in the
+// canonical model its class definitions (one per version) and event
+// definitions; in an API project its tables.
 entity DataObject
     domain: ref Domain, required, cascade, label @objectDomainLabel
     name: text(80), required, label @objectNameLabel
@@ -31,10 +40,11 @@ entity DataObject
     x: integer, label @objectXLabel
     y: integer, label @objectYLabel
 
-// What a data object looks like from a version on: 1 is the domain's own
-// namespace, 2 and up its vN namespaces. A version of the domain holds each
-// data object at its newest version up to that number.
-entity ObjectVersion
+// A class definition of a data object, its blueprint in the canonical
+// model: what it looks like from a version on (1 is the domain's own
+// namespace, 2 and up its vN namespaces). A version of the domain holds each data
+// object at its newest version up to that number.
+entity ClassDefinition
     owner: ref DataObject, required, cascade, label @versionOwnerLabel
     number: integer, min 1, default 1, label @versionNumberLabel
     // Why it is no longer to be used; empty while it is.
@@ -42,32 +52,78 @@ entity ObjectVersion
     // Why someone should look at it (the import changed a public name); empty when nothing asks for it.
     review: text(400), label @reviewLabel
 
-// A table the adapter keeps a data object in. A data object can have
-// several: the adapter makes a new entity (Models.V2) when it needs other
-// columns, and keeps the old table while older API versions read it. A
-// table of the adapter's own (DeletedEntities) has no data object.
+// A table of the adapter a data object of an API project is kept in, as
+// CursussenV2: the adapter's class for it (Fontys.Adapter.FcdmApi.Models.V2.Cursus),
+// its columns, and the blueprint it is filled from: a class definition of
+// the canonical model, which the adapter's mapper names.
 entity AdapterTable
-    // The data object kept in it; none for a table of the adapter's own.
-    owner: ref DataObject, cascade, label @tableOwnerLabel
+    owner: ref DataObject, required, cascade, label @tableOwnerLabel
     name: text(120), required, label @tableNameLabel
-    // The adapter entity's class, as Cursus or DeletedEntity.
-    entityName: text(120), label @tableEntityNameLabel
-    // The adapter entity kept in it: 1 for Models, N for Models.VN.
-    entityVersion: integer, min 1, default 1, label @tableEntityVersionLabel
-    // Its columns and primary key as the adapter's model class has them (`Bk: string`).
-    columns: list<text>, label @tableColumnsLabel
-    keys: list<text>, label @tableKeysLabel
-    // Where a table of the adapter's own stands on the ERD; 0, 0 until it is moved.
-    x: integer, label @objectXLabel
-    y: integer, label @objectYLabel
+    className: text(120), label @tableClassLabel
+    namespace: text(200), label @tableNamespaceLabel
+    blueprint: ref ClassDefinition, label @tableBlueprintLabel
+    summary: text, label @tableSummaryLabel
 
-// An event that fills an adapter table, as the adapter's data-intake
-// handler takes it: it writes a row, or a deleted event deletes one (and
-// adds one to DeletedEntities). Tables are filled from events only.
-entity TableIntake
-    table: ref AdapterTable, required, cascade, label @intakeTableLabel
-    event: ref EventType, required, cascade, label @intakeEventLabel
-    deletes: bool, default false, label @intakeDeletesLabel
+// A column of an adapter table, in its order, as its class has it.
+entity AdapterColumn
+    owner: ref AdapterTable, required, cascade, label @columnOwnerLabel
+    position: integer, min 1, default 1, label @columnPositionLabel
+    name: text(80), required, label @columnNameLabel
+    kind: PropertyKind, default TextValue, label @columnKindLabel
+    nullable: bool, default false, label @columnNullableLabel
+
+// A version of an API project, as the adapter's FcdmApi-v5.json has it: its
+// number and the views it makes. The app keeps it and writes the file.
+entity ApiVersion
+    project: ref Project, required, cascade, label @apiVersionProjectLabel
+    major: integer, min 1, default 1, label @apiMajorLabel
+    // Its major and minor version, as 5.23.
+    version: text(20), label @apiVersionLabel
+    summary: text, label @apiSummaryLabel
+
+// A view an API version makes on a table (SELECT its columns FROM the
+// table), under the entity's name: the names the generator gives it, its
+// key, and the roles that may read it. A table is in an API version by its
+// view there.
+entity ApiView
+    api: ref ApiVersion, required, cascade, label @apiEntityApiLabel
+    adapterTable: ref AdapterTable, required, cascade, label @viewTableLabel
+    position: integer, min 1, default 1, label @apiEntityPositionLabel
+    entity: text(120), required, label @apiEntityNameLabel
+    roles: list<text>, label @apiEntityRolesLabel
+    className: text(120), label @apiEntityClassLabel
+    propertyName: text(120), label @apiEntityPropertyLabel
+    propertyPluralName: text(120), label @apiEntityPluralLabel
+    viewProperties: text(400), default "*", label @apiEntityViewLabel
+    primaryKey: text(80), default "Bk", label @apiEntityKeyLabel
+
+// How a view relates to another of its API version.
+enum RelationKind
+    RelatesTo label @relationRelatesTo
+    RelatedByMany label @relationRelatedByMany
+    RelatedByOne label @relationRelatedByOne
+
+// A relation of a view, in its order: the other view, by its entity name
+// in the version, the key that links them, and its navigation property.
+entity ApiRelation
+    owner: ref ApiView, required, cascade, label @apiRelationOwnerLabel
+    position: integer, min 1, default 1, label @apiRelationPositionLabel
+    kind: RelationKind, default RelatesTo, label @apiRelationKindLabel
+    foreignEntity: text(120), required, label @apiRelationForeignLabel
+    foreignKey: text(120), label @apiRelationKeyLabel
+    // The navigation property's own name; empty takes the other entity's.
+    propertyName: text(120), label @apiRelationPropertyLabel
+    // Whether the generator leaves the navigation property out.
+    omitProperty: bool, default false, label @apiRelationOmitLabel
+
+// A column the adapter keeps as a number that the API shows as an enum.
+entity ApiEnum
+    owner: ref ApiView, required, cascade, label @apiEnumOwnerLabel
+    position: integer, min 1, default 1, label @apiEnumPositionLabel
+    propertyName: text(120), required, label @apiEnumPropertyLabel
+    propertyType: text(120), label @apiEnumTypeLabel
+    // The enum's C# file the generator copies, as AanmeldingStatusCode.cs.
+    sourcePath: text(200), label @apiEnumSourceLabel
 
 // What a property holds: a value, one of the domain's enums, a data object
 // held inside, a list of those, or the business key of another data object.
@@ -84,9 +140,9 @@ enum PropertyKind
     HeldObjects label @kindHeldObjects
     BusinessKey label @kindBusinessKey
 
-// A property of a version of a data object, in its order.
+// A property of a class definition, in its order.
 entity Property
-    owner: ref ObjectVersion, required, cascade, label @propertyOwnerLabel
+    owner: ref ClassDefinition, required, cascade, label @propertyOwnerLabel
     position: integer, min 1, default 1, label @propertyPositionLabel
     name: text(80), required, label @propertyNameLabel
     kind: PropertyKind, default TextValue, label @propertyKindLabel
@@ -128,19 +184,22 @@ enum EventKind
     Updated label @eventKindUpdated
     Other label @eventKindOther
 
-// An event a domain's messages project publishes, under Events/ (version 1)
-// or Events/vN. A base event is one line on fcdm's base classes and carries
-// one version of a data object; any other has fields of its own. Its
-// namespace is kept as published: NServiceBus routes a message by it.
-entity EventType
-    domain: ref Domain, required, cascade, label @eventDomainLabel
+// An event definition of a data object, as its domain's messages project
+// publishes it, under Events/ (version 1) or Events/vN. A base event is one
+// line on fcdm's base classes and carries one class definition; any other
+// has fields of its own. Its namespace is kept as published: NServiceBus
+// routes a message by it.
+entity EventDefinition
+    owner: ref DataObject, required, cascade, label @eventOwnerLabel
     name: text(120), required, label @eventNameLabel
     number: integer, min 1, default 1, label @eventNumberLabel
     namespace: text(200), label @eventNamespaceLabel
     kind: EventKind, default Changed, label @eventKindLabel
     base: bool, default true, label @eventBaseLabel
-    // For a base event: the version of the data object it carries.
-    carries: ref ObjectVersion, label @eventCarriesLabel
+    // An event of the old shape, kept for who still reads it.
+    legacy: bool, default false, label @eventLegacyLabel
+    // For a base event: the class definition it carries.
+    carries: ref ClassDefinition, label @eventCarriesLabel
     obsolete: text(400), label @eventObsoleteLabel
     // Why someone should look at it; empty when nothing asks for it.
     review: text(400), label @reviewLabel
@@ -161,13 +220,13 @@ enum Access
 
 // A field of an event that is no base event, in its constructor's order.
 entity EventField
-    owner: ref EventType, required, cascade, label @eventFieldOwnerLabel
+    owner: ref EventDefinition, required, cascade, label @eventFieldOwnerLabel
     position: integer, min 1, default 1, label @eventFieldPositionLabel
     name: text(80), required, label @eventFieldNameLabel
     kind: PropertyKind, default TextValue, label @eventFieldKindLabel
     nullable: bool, default false, label @eventFieldNullableLabel
-    // The version of the data object it holds.
-    holds: ref ObjectVersion, label @eventFieldHoldsLabel
+    // The class definition it holds.
+    holds: ref ClassDefinition, label @eventFieldHoldsLabel
     // The data object whose business key it is.
     keyOf: ref DataObject, label @eventFieldKeyOfLabel
     list: ListStyle, default Single, label @eventFieldListLabel

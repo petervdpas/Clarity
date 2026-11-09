@@ -4,6 +4,8 @@
 //! tab whose parts code has all hidden gives way to the first one that
 //! shows, as a ribbon's tab does (conformance/ribbons.json `shown`). A page
 //! whose parts go further down than its room scrolls, so none is out of reach.
+//! A window's content (`content`) is tabs without a look of its own: no
+//! strip, no frame, no fill; code opens the view it shows, as a tab.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -63,6 +65,8 @@ pub struct TabsPart {
     base: PartBase,
     shared: Rc<Shared>,
     count: usize,
+    /// A window's content: only the open page, nothing of its own around it.
+    plain: bool,
     look: Cell<LookNow>,
 }
 
@@ -75,7 +79,8 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         tabs: RefCell::new(Vec::new()),
     });
     let mut base = PartBase::new(spec.clone(), host.clone());
-    for (i, page) in spec.pages.iter().enumerate() {
+    let plain = spec.kind == "content";
+    for (i, page) in spec.pages.iter().enumerate().filter(|_| !plain) {
         let title = page.title.clone();
         let tab = TabButton { node: Node::new(), shared: shared.clone(), number: i as i64 + 1, title };
         shared.tabs.borrow_mut().push(tab.node.id());
@@ -86,7 +91,8 @@ pub fn make(spec: PartSpec, host: Rc<dyn PartHost>) -> Box<dyn Part> {
         let grid = container::grid_of(&page.children, page.grid.unwrap_or(columns).max(1), GAP, &host).owned(page.item.as_deref());
         base.node.add(Box::new(Page::new(Box::new(ScrollView::new(Box::new(grid)).keeping_bar_room()))));
     }
-    Box::new(TabsPart { base, shared, count: spec.pages.len(), look: Cell::new(LookNow::default()) })
+    let count = if plain { 0 } else { spec.pages.len() };
+    Box::new(TabsPart { base, shared, count, plain, look: Cell::new(LookNow::default()) })
 }
 
 impl TabsPart {
@@ -132,7 +138,8 @@ impl Element for TabsPart {
     /// The room it needs beyond its rows: the strip of tabs and the page's padding over its highest page.
     fn around(&self) -> f64 {
         let highest = self.grids().into_iter().map(container::least_of).fold(0.0, f64::max);
-        container::around_for(&self.base.spec, STRIP_HEIGHT + 4.0 * self.look.get().padding, highest)
+        let own = if self.plain { 0.0 } else { STRIP_HEIGHT + 4.0 * self.look.get().padding };
+        container::around_for(&self.base.spec, own, highest)
     }
 
     fn arrange(&mut self, area: Rect, cx: &mut Cx) {
@@ -149,7 +156,7 @@ impl Element for TabsPart {
             element::arrange_safely(child.as_mut(), Rect::new(x, area.y, width, STRIP_HEIGHT), cx);
             x += width + 2.0;
         }
-        let place = Rect::new(area.x, area.y + STRIP_HEIGHT + 2.0 * look.padding, area.width, (area.height - STRIP_HEIGHT - 4.0 * look.padding).max(0.0));
+        let place = if self.plain { area } else { Rect::new(area.x, area.y + STRIP_HEIGHT + 2.0 * look.padding, area.width, (area.height - STRIP_HEIGHT - 4.0 * look.padding).max(0.0)) };
         for (i, child) in self.base.node.children_mut()[count..].iter_mut().enumerate() {
             let shown = open == Some(i as i64 + 1);
             if let Some(page) = child.as_any_mut().downcast_mut::<Page>() {
@@ -162,6 +169,10 @@ impl Element for TabsPart {
     }
 
     fn draw(&self, p: &Painter) {
+        if self.plain {
+            element::draw_children(&self.base.node, p);
+            return;
+        }
         let look = p.look;
         let b = self.base.node.bounds;
         let radius = look.radius("panel");

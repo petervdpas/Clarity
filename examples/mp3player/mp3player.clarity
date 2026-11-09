@@ -15,13 +15,19 @@ app Mp3player
 
 page Main: window
     title @mainTitle
+    on open: windowOpened
+
+    content name main at 1,1 span 12 rows 13
+        view MainView
+
+// What the window Main shows: its parts, data and code.
+page MainView: view
     data tracks: list<Track>
     data current: integer
     data volume: integer, default 80
     data played: decimal
     data nowPlaying: text
     data chosen: text
-    on open: windowOpened
 
     // The songs play through the sound part: mp3, flac, ogg and wav files of the folder.
     sound name music volume 80 on end: songEnded on fail: songFailed
@@ -46,6 +52,7 @@ code Main
         music.volume(volume)
         loadTracks()
 
+code MainView
     handler folderChanged
         stopClicked()
         loadTracks()

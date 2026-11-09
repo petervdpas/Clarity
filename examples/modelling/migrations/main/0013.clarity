@@ -1,0 +1,6 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Old links gone"
+    remove field EventDefinition.domain
+    remove field ApiView.objectVersion
+    remove field ApiView.tableName

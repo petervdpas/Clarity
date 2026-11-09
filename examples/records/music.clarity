@@ -93,9 +93,18 @@ action exportCollection()
 // editor that slides out from the right; the table adds and removes albums.
 page AlbumBrowse: window
     title @albumBrowseTitle
-    data albums: list<Album>
     on open: filterChanged
     on return: windowReturned
+
+    content name main at 1,1 span 12 rows 11
+        view AlbumBrowseView
+    slideout @albumSlideout name albumSlide width 980 resizable min 700 max 1400 pinnable span 12 rows 11
+        content name albumSlideContent at 1,1 span 12 rows 11
+            view AlbumEditor on saved: filterChanged
+
+// What the window AlbumBrowse shows: its parts, data and code.
+page AlbumBrowseView: view
+    data albums: list<Album>
 
     heading @collectionHeadingCaption name collectionHeading at 1,1 span 6
     image name collectionLogo at 12,1 span 1 rows 1 source "logo.png" tooltip @collectionLogoTooltip
@@ -103,7 +112,6 @@ page AlbumBrowse: window
     textbox name searchBox at 3,2 span 10 placeholder @searchPlaceholder on change: filterChanged
     table name grid at 1,3 span 12 rows 8 bind albums columns title, artist, year, format, rating, price, tags resizable sortable page 25 add remove confirm on add: newClicked on remove: removeClicked on open: openClicked
     button @exportListCaption name exportList at 1,11 span 2 on click: exportClicked
-    slideout @albumSlideout name albumSlide view AlbumEditor width 980 resizable min 700 max 1400 pinnable span 12 rows 11 on saved: filterChanged
 
 // An album: what it is, its tracks, what it cost, its cover and notes.
 page AlbumEditor: view
@@ -169,9 +177,18 @@ page TrackDialog: dialog
 // The artists as cards, with the one opened in the editor that slides out from the right.
 page ArtistBrowse: window
     title @artistBrowseTitle
-    data artists: list<Artist>
     on open: filterChanged
     on return: filterChanged
+
+    content name main at 1,1 span 12 rows 10
+        view ArtistBrowseView
+    slideout @artistSlideout name artistSlide width 760 resizable min 520 max 1100 pinnable span 12 rows 6
+        content name artistSlideContent at 1,1 span 12 rows 6
+            view ArtistEditor on saved: filterChanged
+
+// What the window ArtistBrowse shows: its parts, data and code.
+page ArtistBrowseView: view
+    data artists: list<Artist>
 
     label @artistSearchLabel name artistSearchLabel at 1,1 span 2 for artistSearch
     textbox name artistSearch at 3,1 span 10 placeholder @artistSearchPlaceholder on change: filterChanged
@@ -179,7 +196,6 @@ page ArtistBrowse: window
     button @findPhotosCaption name findPhotos at 1,10 span 2 on click: photosClicked
     button @backUpPhotosCaption name backUpPhotos at 3,10 span 2 on click: backupClicked
     button @newArtistCaption name newArtist at 11,10 span 2 icon "plus" on click: newClicked
-    slideout @artistSlideout name artistSlide view ArtistEditor width 760 resizable min 520 max 1100 pinnable span 12 rows 6 on saved: filterChanged
 
 // An artist: name, country, since when, website and photo.
 page ArtistEditor: view
@@ -200,17 +216,29 @@ page ArtistEditor: view
 
 page GenreBrowse: window
     title @genreBrowseTitle
-    data genres: list<Genre>
     on return: windowReturned
+
+    content name main at 1,1 span 12 rows 9
+        view GenreBrowseView
+
+// What the window GenreBrowse shows: its parts, data and code.
+page GenreBrowseView: view
+    data genres: list<Genre>
 
     treetable name genreTree at 1,1 span 12 rows 9 bind genres children children columns name add remove confirm on add: newClicked on remove: removeClicked on open: openClicked
 
 // The collection at a glance: what it is on, when it is from, where the money went.
 page CollectionOverview: window
     title @collectionOverviewTitle
-    data albums: list<Album>
     on open: overviewOpened
     on return: overviewOpened
+
+    content name main at 1,1 span 12 rows 14
+        view CollectionOverviewView
+
+// What the window CollectionOverview shows: its parts, data and code.
+page CollectionOverviewView: view
+    data albums: list<Album>
 
     heading @albumsPerFormatHeading name albumsPerFormatHeading at 1,1 span 6
     heading @albumsPerYearHeading name albumsPerYearHeading at 7,1 span 6
@@ -241,6 +269,7 @@ code AlbumBrowse
         // Words of the title, label, notes or tags, or part of the artist's name.
         albums = find a in Album where a matches searchBox.text or a.artist.name contains searchBox.text order by a.artist.name, a.title
 
+code AlbumBrowseView
     handler openClicked
         album = grid.selected
         showTracks()
@@ -319,6 +348,7 @@ code ArtistBrowse
     handler filterChanged
         artists = find a in Artist where a matches artistSearch.text order by a.name
 
+code ArtistBrowseView
     handler openClicked
         artist = artistList.selected
         artistSlide.visible = true
@@ -349,6 +379,7 @@ code GenreBrowse
     handler windowReturned
         reload genres
 
+code GenreBrowseView
     handler openClicked
         open GenreDialog with genre = genreTree.selected
 

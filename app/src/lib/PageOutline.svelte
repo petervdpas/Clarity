@@ -47,9 +47,9 @@
             id: inner.span.start,
             key: String(inner.span.start),
             depth: depth + 1,
-            kind: inner.title === null ? "Pane" : p.kind === "steps" ? "Step" : p.kind === "accordion" ? "Section" : "Tab",
-            text: inner.title ? tr(preview, inner.title) : "",
-            removable: inner.title !== null,
+            kind: p.kind === "content" ? "View" : inner.title === null ? "Pane" : p.kind === "steps" ? "Step" : p.kind === "accordion" ? "Section" : "Tab",
+            text: p.kind === "content" ? (inner.view ?? "") : inner.title ? tr(preview, inner.title) : "",
+            removable: inner.title !== null || p.kind === "content",
           });
           walk(inner.children, depth + 2);
         }

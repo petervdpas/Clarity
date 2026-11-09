@@ -137,10 +137,12 @@ fn a_browse_window_filters_and_refreshes_when_a_form_closes() {
     let (text, after) = add_window(PageTemplate::Browse {
         entity: "Order".into(),
     });
-    assert!(text.contains("    data orders: list<Order>\n    on return: windowReturned\n"), "{text}");
+    // Window, content, view: the window keeps its events, the view its data, parts and their handlers.
+    assert!(text.contains("page FreshWindow: window\n    title @freshWindowTitle\n    on return: windowReturned\n\n    content name main at 1,1 span 12 rows 10\n        view FreshWindowView\n"), "{text}");
+    assert!(text.contains("page FreshWindowView: view\n    data orders: list<Order>\n"), "{text}");
     assert!(
         text.ends_with(
-            "\ncode FreshWindow\n    handler windowReturned\n        // A window opened from here may have changed the records.\n        filterChanged()\n\n    handler filterChanged\n        orders = find o in Order where o.number contains numberFilter.text order by o.number\n"
+            "\ncode FreshWindow\n    handler windowReturned\n        // A window opened from here may have changed the records.\n        filterChanged()\n\ncode FreshWindowView\n    handler filterChanged\n        orders = find o in Order where o.number contains numberFilter.text order by o.number\n"
         ),
         "{text}"
     );
@@ -156,7 +158,7 @@ fn a_dropped_field_brings_its_label_and_help() {
     let source = std::fs::read_to_string(&path).unwrap();
     let page = project
         .pages()
-        .find(|p| p.name.name == "CustomerCard")
+        .find(|p| p.name.name == "CustomerCardView")
         .unwrap();
     let edit = Edit::PlaceField {
         container: page.span.start,
@@ -195,7 +197,7 @@ fn a_dropped_field_brings_its_label_and_help() {
 fn edit_at(project: &Project, row: u32) -> Edit {
     let page = project
         .pages()
-        .find(|p| p.name.name == "CustomerCard")
+        .find(|p| p.name.name == "CustomerCardView")
         .unwrap();
     Edit::PlaceField {
         container: page.span.start,

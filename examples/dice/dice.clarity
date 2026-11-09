@@ -27,8 +27,21 @@ engine Odds from "odds.wasm"
 page Table: window
     title @tableTitle
     size 980 x 640
+
+    content name main at 1,1 span 12 rows 12
+        view TableView
+    slideout @historySlideout name historyPanel width 420 resizable min 300 max 800 pinnable span 6 rows 12
+        content name historyPanelContent at 1,1 span 6 rows 12
+            view RollHistory
+    slideout @oddsSlideout name oddsPanel side bottom height 320 resizable min 200 max 600 pinnable span 12 rows 7
+        content name oddsPanelContent at 1,1 span 12 rows 7
+            view DiceOdds
+
+// What the window Table shows: its parts, data and code.
+page TableView: view
     data count: integer, default 2
     data shown: integer
+
     sound name rattle source "roll.wav" volume 80
     sound name fanfare volume 60
     Dice name board at 1,1 span 8 rows 12 count 2 on landed: diceLanded
@@ -37,9 +50,6 @@ page Table: window
     label @shownLabel name shownLabel at 9,3 span 4
     display name shownBox at 9,4 span 4 rows 2 bind shown digits 2
     button @rollCaption name rollButton at 9,6 span 4 on click: rollClicked
-
-    slideout @historySlideout name historyPanel view RollHistory width 420 resizable min 300 max 800 pinnable span 6 rows 12
-    slideout @oddsSlideout name oddsPanel side bottom view DiceOdds height 320 resizable min 200 max 600 pinnable span 12 rows 7
 
 // Every roll, the last first.
 page RollHistory: view
@@ -56,7 +66,7 @@ page DiceOdds: view
     button @simulateCaption name simulateButton at 1,1 span 4 on click: simulateClicked
     chart bar name oddsChart at 1,2 span 12 rows 6 bind odds
 
-code Table
+code TableView
     handler diceLanded(total: integer, faces: text)
         shown = total
         // Every die a six: a fanfare.

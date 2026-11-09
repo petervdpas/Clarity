@@ -67,7 +67,9 @@ entity Chapter
 
 page Desk: window
     accordion name book at 1,1 span 12 rows 10 horizontal
-        section @chaptersCaption view Chapters
+        section @chaptersCaption
+            content name chaptersContent at 1,1 span 12 rows 10
+                view Chapters
 
 page Chapters: view
     data chapters: list<Chapter>

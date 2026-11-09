@@ -307,9 +307,16 @@ app Invaders
 page Play: window
     title @playTitle
     size 780 x 640
+
+    content name main at 1,1 span 12 rows 12
+        view PlayView
+
+// What the window Play shows: its parts, data and code.
+page PlayView: view
     data score: integer
     data lives: integer, default 3
     data wave: integer, default 1
+
     canvas name field at 1,1 span 9 rows 11 units 160 x 120 runs Fleet on hit: hit on lost: lost on cleared: cleared on over: over
     label @scoreLabel name scoreLabel at 10,1 span 3
     display name scoreShown at 10,2 span 3 rows 2 bind score digits 4
@@ -320,7 +327,7 @@ page Play: window
     button @startCaption name startButton at 10,10 span 3 on click: startGame
     label @howLabel name howLabel at 1,12 span 12
 
-code Play
+code PlayView
     handler startGame
         score = 0
         lives = livesPerGame

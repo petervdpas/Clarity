@@ -518,8 +518,8 @@ struct Win {
     inside: bool,
     presses: PressCounter,
     caret: Option<Rect>,
-    /// The window view whose sidebars were last seen, and how wide they were: one that opens grows the desktop window.
-    sidebars: Option<(ElementId, f64)>,
+    /// The window view whose sidebars were last seen, and how: one that opens grows the desktop window.
+    sidebars: Option<(ElementId, grow::Sidebars)>,
     /// It is the app's splash screen, which closes once the main window shows.
     splash: bool,
     /// What its window's markup says of the desktop window: borderless, centred, on top...
@@ -900,17 +900,17 @@ impl Host {
         let Some(shown) = &win.shown else { return };
         let Some(stack) = win.screen.root().as_any().downcast_ref::<WindowStack>() else { return };
         let Some(view) = stack.view() else { return };
-        let (id, width) = (view.node().id(), grow::sidebars_width(view));
+        let (id, is) = (view.node().id(), grow::sidebars_of(view));
         if let Some((was_view, was)) = win.sidebars {
-            if was_view == id && width > was {
+            if was_view == id {
                 let now = shown.size();
-                let grown = grow::sidebar_grown(now, was, width, shown.room());
+                let grown = grow::sidebars_grown(now, &was, &is, shown.room());
                 if grown != now {
                     shown.resize(grown);
                 }
             }
         }
-        win.sidebars = Some((id, width));
+        win.sidebars = Some((id, is));
     }
 
     /// Closes a desktop window, the windows opened over it first; what it

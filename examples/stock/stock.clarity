@@ -18,8 +18,14 @@ app Stock
 // edits and removes them itself: Add above it, the trash on each row.
 page Items: window
     title @itemsTitle
-    data items: list<Item>
     on open: itemsOpened
+
+    content name main at 1,1 span 12 rows 10
+        view ItemsView
+
+// What the window Items shows: its parts, data and code.
+page ItemsView: view
+    data items: list<Item>
 
     table name grid at 1,1 span 12 rows 10 bind items columns name, count, low resizable sortable edit name, count, low add remove confirm on add: addClicked on remove: deleteClicked on change: itemChanged
 
@@ -27,6 +33,7 @@ code Items
     handler itemsOpened
         items = find i in Item order by i.name
 
+code ItemsView
     // A new item gets a name no other item has; the person types its own over it.
     handler addClicked
         let item = new Item

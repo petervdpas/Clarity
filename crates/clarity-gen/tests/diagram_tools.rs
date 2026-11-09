@@ -13,7 +13,9 @@ record Box
     y: integer
 
 page Main: window
-    slideout name diagramPanel side bottom view Diagram height 300 span 12 rows 6
+    slideout name diagramPanel side bottom height 300 span 12 rows 6
+        content name diagramContent at 1,1 span 12 rows 6
+            view Diagram
 
 page Diagram: view
     data boxes: list<Box>

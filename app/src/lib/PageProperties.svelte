@@ -815,16 +815,7 @@
           <input value={p.max ?? ""} placeholder="1600" inputmode="numeric" disabled={!p.resizable} onchange={(e) => update({ max: textOf(e) })} />
         </label>
         <label><input type="checkbox" checked={p.pinnable} onchange={(e) => update({ pinnable: e.currentTarget.checked })} /> The person can pin it open</label>
-        <label class="prop" title="A view it shows: its parts, data and handlers join this window's, so this window's code sets what it shows">
-          <span>Shows view</span>
-          <select value={p.view ?? ""} onchange={(e) => update({ view: e.currentTarget.value || null })}>
-            <option value="">its own parts</option>
-            {#each views as view (view)}
-              <option value={view}>{view}</option>
-            {/each}
-          </select>
-        </label>
-        <p class="hint">A button opens it with <code>on click -&gt; {partName}</code>; code with <code>{partName}.visible</code>{#if p.pinnable} and pins it with <code>{partName}.pinned</code>{/if}.</p>
+        <p class="hint">To show a view, put a content in it. A button opens it with <code>on click -&gt; {partName}</code>; code with <code>{partName}.visible</code>{#if p.pinnable} and pins it with <code>{partName}.pinned</code>{/if}.</p>
       </fieldset>
     {/if}
     {#if info.properties.includes("min") && p.kind !== "slideout"}
@@ -1110,6 +1101,17 @@
       <button onclick={() => onedit({ op: "addTab", item: location.widget.span.start, title: `Step ${location.widget.pages.length + 1}` })}>
         Add step
       </button>
+    {:else if info.container === "content"}
+      {@const listed = location.widget.pages.map((pg) => pg.view)}
+      <label class="prop" title="A view this content can show; code picks the one it shows with name.view = View">
+        <span>Add view</span>
+        <select value="" onchange={(e) => { const view = e.currentTarget.value; if (view) onedit({ op: "addTab", item: location.widget.span.start, title: view }); e.currentTarget.value = ""; }}>
+          <option value="">pick a view</option>
+          {#each views.filter((v) => !listed.includes(v)) as view (view)}
+            <option value={view}>{view}</option>
+          {/each}
+        </select>
+      </label>
     {/if}
 
     <div class="actions">
@@ -1117,7 +1119,20 @@
     </div>
   {:else if inner}
     {@const tab = inner.widget.pages[inner.index]}
-    {#if tab.title !== null}
+    {#if inner.widget.props.kind === "content"}
+      <div class="kind">View</div>
+      <label class="prop" title="The view this line of the content shows; code picks it with name.view = View">
+        <span>Shows view</span>
+        <select value={tab.view ?? ""} onchange={(e) => e.currentTarget.value && onedit({ op: "setPageView", target: tab.span.start, view: e.currentTarget.value })}>
+          {#each views as view (view)}
+            <option value={view}>{view}</option>
+          {/each}
+        </select>
+      </label>
+      <div class="actions">
+        <button class="danger" onclick={() => onedit({ op: "remove", item: tab.span.start })}>Remove view</button>
+      </div>
+    {:else if tab.title !== null}
       {@const step = inner.widget.props.kind === "steps"}
       {@const section = inner.widget.props.kind === "accordion"}
       <div class="kind">{step ? "Step" : section ? "Section" : "Tab"}</div>
@@ -1139,22 +1154,7 @@
           </span>
         </label>
       {/if}
-      <label class="prop" title="A view it shows: its parts, data and handlers join this window's, so this window's code sets what it shows">
-        <span>Shows view</span>
-        <select
-          value={tab.view ?? ""}
-          disabled={tab.view === null && tab.children.length > 0}
-          onchange={(e) => onedit({ op: "setPageView", target: tab.span.start, view: e.currentTarget.value || null })}
-        >
-          <option value="">its own parts</option>
-          {#each views as view (view)}
-            <option value={view}>{view}</option>
-          {/each}
-        </select>
-      </label>
-      {#if tab.view === null && tab.children.length > 0}
-        <p class="hint">It holds parts of its own; remove them to show a view here.</p>
-      {/if}
+      <p class="hint">To show a view here, put a content in it.</p>
       <div class="actions">
         <button class="danger" onclick={() => onedit({ op: "remove", item: tab.span.start })}>{step ? "Remove step" : section ? "Remove section" : "Remove tab"}</button>
       </div>

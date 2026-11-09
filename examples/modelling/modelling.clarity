@@ -6,10 +6,6 @@ use model
 settings
     language
     theme
-    // The folder of the fcdm repository, which the import reads.
-    fcdmFolder: folder, label @fcdmFolderLabel
-    // The folder the app writes its C# into: a copy of the repository, or the repository itself when chosen so.
-    outputFolder: folder, label @outputFolderLabel
     // The folder of the adapter-fcdmapi repository, whose DbContext and mappers name the tables.
     adapterFolder: folder, label @adapterFolderLabel
 
@@ -27,86 +23,25 @@ engine Fcdm from "fcdm.wasm"
     function classCode(object: ObjectSpec, properties: list<PropertySpec>) -> text
     function interfaceCode(object: ObjectSpec, properties: list<PropertySpec>) -> text
     function enumCode(spec: EnumSpec, values: list<EnumValueSpec>) -> text
-    function readFiles(files: list<SourceFile>) -> list<ReadRow>
-    function diffText(path: text, onDisk: text, written: text) -> text
-    function fileBytes(text: text) -> bytes
     function eventCode(spec: EventSpec, fields: list<EventFieldSpec>) -> text
-    function readTables(files: list<SourceFile>) -> list<TableRow>
     function arrangeBoxes(boxes: list<LayoutBox>, links: list<LayoutLink>, grid: integer, width: integer) -> list<LayoutBox>
     function routeLinks(boxes: list<LayoutBox>, links: list<LayoutLink>, grid: integer, width: integer) -> list<LayoutLink>
-
-// A file the app writes, compared with the one on disk: the same, differs, or new.
-record CompareRow
-    path: text
-    state: text
-    kind: text
-    version: ref ObjectVersion
-    enumType: ref EnumType
-    eventType: ref EventType
-
-// A file of the fcdm repository, as the engine reads it.
-record SourceFile
-    path: text
-    text: text
-
-// A row of what the engine read: a domain's package, a version of a data
-// object, a property of the one before, an enum, a value of the enum
-// before, or a note for the import report.
-record ReadRow
-    kind: text
-    path: text
-    domain: text
-    name: text
-    version: integer
-    root: bool
-    keyed: bool
-    newtonsoft: bool
-    obsolete: text
-    role: text
-    packageId: text
-    propertyKind: text
-    nullable: bool
-    typeName: text
-    typeVersion: integer
-    initial: text
-    computed: text
-    number: integer
-    note: text
-    renames: bool
-    namespace: text
-    eventKind: text
-    base: bool
-    list: text
-    access: text
-    review: text
 
 // A data object and the number of one of its versions, as an editor picks them.
 record VersionPick
     object: ref DataObject
     number: integer
 
-// A table the engine read from the adapter: the entity kept in it, its
-// version, and the fcdm version its mapper fills it from (none: 0); or a
-// note for the report.
-record TableRow
-    kind: text
-    path: text
-    name: text
-    entity: integer
-    table: text
-    domain: text
-    note: text
-    columns: list<text>
-    keys: list<text>
-    event: text
-    namespaces: list<text>
-    deletes: bool
+// The API version a table gets a view in, as its editor picks it.
+record ApiPick
+    api: ref ApiVersion
 
-// An event that fills the adapter table picked, as the Tables tab lists it.
-record IntakeRow
-    event: text
+// A table filled from a class definition of a data object, for its tables
+// tab: the class version, the table, and the API versions with a view on it.
+record ApiUse
     version: integer
-    action: text
+    table: text
+    apis: text
 
 // A box the engine arranges: its id, its size, and where it puts it.
 record LayoutBox
@@ -126,14 +61,13 @@ record LayoutLink
 
 // A box on the diagrams: a data object's or an enum's, where it stands.
 record DiagramBox
-    // Different for each box: a data object's id, an enum's from 1000000, an adapter table's from 2000000.
+    // Different for each box: a data object's id, an enum's from 1000000.
     id: integer
     key: text
     x: integer
     y: integer
     dataObject: ref DataObject
     enumType: ref EnumType
-    adapterTable: ref AdapterTable
 
 // An event, as the engine writes it.
 record EventSpec
@@ -189,21 +123,19 @@ record EnumValueSpec
     name: text
     number: integer
 
-// A row of the tree at the left: a domain, the data objects, enums and
-// versions under it, an object and its versions, a child object under the
-// version that holds it, an enum, a version of the domain and the objects as
-// they are in it.
-record Node
-    key: text
-    parent: text
-    label: text
+// What is picked in the tree: its kind, what it says, and the records it is about.
+record Picked
     kind: text
+    label: text
+    project: ref Project
     domain: ref Domain
     dataObject: ref DataObject
-    version: ref ObjectVersion
+    version: ref ClassDefinition
     enumType: ref EnumType
-    eventType: ref EventType
-    level: integer
+    eventType: ref EventDefinition
+    adapterTable: ref AdapterTable
+    view: ref ApiView
+    apiVersion: ref ApiVersion
 
 // What the diagram view draws of the domain.
 enum DiagramKind
@@ -217,82 +149,98 @@ enum DiagramKind
 page Workspace: window
     title @workspaceTitle
     size 1280 x 800
-    data nodes: list<Node>
-    data domain: Domain
+    data chosen: Picked
+    data project: Project
     on open: workspaceOpened
-    on return: workspaceReturned
 
-    heading @domainHeading name domainHeading at 1,1 span 8
-    label @pickADomain name pickADomain at 1,2 span 8
-    label @domainNameCaption name domainNameLabel at 1,3 span 2 for domainNameBox
-    textbox name domainNameBox at 3,3 span 5 bind domain.name placeholder @domainNamePlaceholder
-    label @domainSummaryCaption name domainSummaryLabel at 1,4 span 2 for domainSummaryBox
-    memo name domainSummaryBox at 3,4 span 5 rows 2 bind domain.summary
-    label @modelPackageCaption name modelPackageLabel at 1,6 span 2 for modelPackageBox
-    textbox name modelPackageBox at 3,6 span 4 bind domain.modelPackage placeholder @modelPackagePlaceholder
-    textbox name modelVersionBox at 7,6 span 1 bind domain.modelVersion placeholder @packageVersionPlaceholder
-    label @messagesPackageCaption name messagesPackageLabel at 1,7 span 2 for messagesPackageBox
-    textbox name messagesPackageBox at 3,7 span 4 bind domain.messagesPackage placeholder @messagesPackagePlaceholder
-    textbox name messagesVersionBox at 7,7 span 1 bind domain.messagesVersion placeholder @packageVersionPlaceholder
-    checkbox @domainNewtonsoftLabel name newtonsoftBox at 3,8 span 3 bind domain.newtonsoft
-    button @saveDomainCaption name saveDomainButton at 6,8 span 2 on click: saveDomainClicked
+    // The middle shows the editor of what is picked in the tree.
+    content name main at 1,1 span 12 rows 14
+        view StartView
+        view ProjectEditor on saved: projectSaved
+        view DomainEditor on saved: domainSaved
+        view ObjectEditor on saved: objectSaved
+        view EnumEditor on saved: enumSaved
+        view EventEditor on saved: eventSaved
+        view TableEditor on saved: tableSaved
+        view ApiEditor on saved: apiSaved
 
-    slideout @objectSlideout name objectPanel view ObjectEditor width 720 resizable min 480 max 1200 pinnable span 8 rows 14 on saved: objectSaved
-    slideout @enumSlideout name enumPanel view EnumEditor width 520 resizable min 380 max 900 pinnable span 6 rows 12 on saved: enumSaved
-    slideout @eventSlideout name eventPanel view EventEditor width 720 resizable min 480 max 1200 pinnable span 8 rows 14 on saved: eventSaved
-    slideout @diagramSlideout name diagramPanel side bottom view DiagramCanvas height 400 resizable min 220 max 900 pinnable span 12 rows 9 on levelChanged: loadDiagram on arranged: loadDiagram on added: objectSaved
+    slideout @diagramSlideout name diagramPanel side bottom height 400 resizable min 220 max 900 pinnable span 12 rows 9
+        content name diagramPanelContent at 1,1 span 12 rows 9
+            view DiagramCanvas on levelChanged: loadDiagram on arranged: loadDiagram on added: objectSaved
 
-    sidebar left name explorer width 320 grid 6 columns
+    sidebar left name explorer width 320 resizable min 240 max 720 grid 6 columns
         button @newDomainCaption name newDomainButton at 1,1 span 3 icon "plus" on click: newDomainClicked
         button @newObjectCaption name newObjectButton at 4,1 span 3 icon "plus" on click: newObjectClicked
-        tree name modelTree at 1,2 span 6 rows 12 bind nodes key key parent parent show label on select: nodePicked
+        tree name modelTree at 1,2 span 6 rows 12
+            level Project show name order by name
+                level Domain under project show name order by name
+                    group @dataObjectsNode
+                        level DataObject under domain show name order by name
+                            level ClassDefinition under owner show @classNode order by number
+                            level EventDefinition under owner show @eventNode order by number
+                            level AdapterTable under owner show @tableNode order by name
+                                level ApiView under adapterTable show @viewNode order by position
+                    group @enumsNode
+                        level EnumType under domain show name order by name
+                group @apiVersionsNode
+                    level ApiVersion under project show @apiNode order by major
+            on select Project: projectPicked
+            on select Domain: domainPicked
+            on select DataObject: objectPicked
+            on select ClassDefinition: classPicked
+            on select EventDefinition: eventPicked
+            on select AdapterTable: tablePicked
+            on select ApiView: apiViewPicked
+            on select EnumType: enumPicked
+            on select ApiVersion: apiPicked
         button @newEnumCaption name newEnumButton at 1,14 span 3 icon "plus" on click: newEnumClicked
         button @newEventCaption name newEventButton at 4,14 span 3 icon "plus" on click: newEventClicked
         button @deleteCaption name deleteButton at 1,15 span 3 icon "trash" on click: deleteClicked
-        button @importCaption name importButton at 1,16 span 3 icon "download" on click -> ImportDialog
-        button @compareCaption name compareButton at 4,16 span 3 icon "git-compare" on click -> CompareDialog
+        button @newApiCaption name newApiButton at 4,15 span 3 icon "plus" on click: newApiClicked
+        button @newProjectCaption name newProjectButton at 1,16 span 3 icon "plus" on click: newProjectClicked
+        button @newTableCaption name newTableButton at 4,16 span 3 icon "plus" on click: newTableClicked
     footer
         status @workspaceStatus
 
-// Reads the fcdm repository into the app: its domains with their packages,
-// their data objects with every version, and their enums. A domain read
-// again replaces the one there was. The report says what was read and
-// what was tidied on the way.
-page ImportDialog: dialog
-    title @importTitle
-    size 720 x 560
-    data report: text
-    grid 6 columns
+// What the middle shows before anything is picked.
+page StartView: view
+    grid 8 columns
+    heading @workspaceTitle name startHeading at 1,1 span 8
+    label @pickInTree name pickInTree at 1,2 span 8
 
-    label @fcdmFolderLabel name folderLabel at 1,1 span 2 for folderBox
-    folder name folderBox at 3,1 span 4 bind settings.fcdmFolder
-    button @importNowCaption name importNowButton at 5,2 span 2 default on click: importClicked
-    label @adapterFolderLabel name adapterFolderLabel at 1,3 span 2 for adapterFolderBox
-    folder name adapterFolderBox at 3,3 span 4 bind settings.adapterFolder
-    button @readTablesCaption name readTablesButton at 5,4 span 2 icon "table" on click: readTablesClicked
-    memo name reportBox at 1,5 span 6 rows 7 bind report readonly copy placeholder @reportPlaceholder
-    button @closeCaption name closeButton at 5,12 span 2 cancel on click -> close
+// A domain: its name, what it is, and the packages its data objects and
+// events are published in. It tells the window when it saved.
+page DomainEditor: view
+    tells saved
+    data domain: Domain
+    grid 8 columns
 
-// What the app would write next to what the fcdm folder holds: every class,
-// interface and enum, the same, different or new, and the differences of
-// the one picked, before anything is written.
-page CompareDialog: dialog
-    title @compareTitle
-    size 1180 x 740
-    data rows: list<CompareRow>
-    data summary: text
-    data diffText: text
-    on open: compareOpened
-    grid 12 columns
+    heading @domainHeading name domainHeading at 1,1 span 8
+    label @domainNameCaption name domainNameLabel at 1,2 span 2 for domainNameBox
+    textbox name domainNameBox at 3,2 span 5 bind domain.name placeholder @domainNamePlaceholder
+    label @domainSummaryCaption name domainSummaryLabel at 1,3 span 2 for domainSummaryBox
+    memo name domainSummaryBox at 3,3 span 5 rows 2 bind domain.summary
+    label @modelPackageCaption name modelPackageLabel at 1,5 span 2 for modelPackageBox
+    textbox name modelPackageBox at 3,5 span 4 bind domain.modelPackage placeholder @modelPackagePlaceholder
+    textbox name modelVersionBox at 7,5 span 1 bind domain.modelVersion placeholder @packageVersionPlaceholder
+    label @messagesPackageCaption name messagesPackageLabel at 1,6 span 2 for messagesPackageBox
+    textbox name messagesPackageBox at 3,6 span 4 bind domain.messagesPackage placeholder @messagesPackagePlaceholder
+    textbox name messagesVersionBox at 7,6 span 1 bind domain.messagesVersion placeholder @packageVersionPlaceholder
+    checkbox @domainNewtonsoftLabel name newtonsoftBox at 3,7 span 3 bind domain.newtonsoft
+    button @saveDomainCaption name saveDomainButton at 6,7 span 2 default on click: saveDomainClicked
 
-    text name summaryText at 1,1 span 12 bind summary
-    table name fileTable at 1,2 span 5 rows 13 bind rows columns path 360, state 100 striped on select: filePicked
-    memo name diffBox at 6,2 span 7 rows 13 bind diffText readonly code diff copy placeholder @diffPlaceholder
-    label @outputFolderLabel name outputFolderLabel at 1,15 span 2 for outputFolderBox
-    folder name outputFolderBox at 3,15 span 4 bind settings.outputFolder
-    button @writeFileCaption name writeFileButton at 7,15 span 2 icon "save" on click: writeFileClicked
-    button @writeAllCaption name writeAllButton at 9,15 span 2 icon "save-all" on click: writeAllClicked
-    button @closeCaption name closeCompareButton at 11,15 span 2 cancel on click -> close
+// A project: its name and what it is. It tells the window when it saved.
+page ProjectEditor: view
+    tells saved
+    data editedProject: Project
+    grid 8 columns
+
+    heading @projectHeading name projectHeading at 1,1 span 8
+    label @projectNameLabel name projectNameCaption at 1,2 span 2 for projectNameBox
+    textbox name projectNameBox at 3,2 span 5 bind editedProject.name
+    label @projectSummaryLabel name projectSummaryCaption at 1,3 span 2 for projectSummaryBox
+    memo name projectSummaryBox at 3,3 span 5 rows 3 bind editedProject.summary
+    button @saveProjectCaption name saveProjectButton at 6,6 span 2 default on click: saveProjectClicked
 
 // A version of a data object: what it is, its properties in order with all
 // they say, and the C# class and interface the engine writes for it. It
@@ -300,13 +248,13 @@ page CompareDialog: dialog
 page ObjectEditor: view
     tells saved
     data editedObject: DataObject
-    data editedVersion: ObjectVersion
+    data editedVersion: ClassDefinition
     data properties: list<Property>
     data picked: Property
     data classText: text
     data interfaceText: text
-    data tables: list<AdapterTable>
-    data intakeRows: list<IntakeRow>
+    data apiUses: list<ApiUse>
+    grid 8 columns
 
     tabs name objectTabs at 1,1 span 8 rows 14
         tab @objectTab
@@ -334,9 +282,7 @@ page ObjectEditor: view
         tab @interfaceTab
             memo name interfaceBox at 1,1 span 8 rows 13 bind interfaceText readonly code csharp copy
         tab @tablesTab
-            table name adapterTableGrid at 1,1 span 8 rows 10 bind tables columns name 320, entityVersion 140 edit name, entityVersion add remove confirm on add: addTableClicked on remove: removeTableClicked on change: tableChanged on select: tablePicked
-            label @tableEventsCaption name tableEventsLabel at 1,11 span 8
-            table name intakeGrid at 1,12 span 8 rows 3 bind intakeRows columns event 320, version 90, action 140 striped
+            table name apiUseGrid at 1,1 span 8 rows 13 bind apiUses columns version 90, table 280, apis 280 striped
 
 // An enum of a domain: its values with their numbers, and its C#.
 page EnumEditor: view
@@ -344,6 +290,7 @@ page EnumEditor: view
     data editedEnum: EnumType
     data values: list<EnumValue>
     data enumText: text
+    grid 6 columns
 
     tabs name enumTabs at 1,1 span 6 rows 12
         tab @enumTab
@@ -360,12 +307,13 @@ page EnumEditor: view
 // the engine writes for it. It tells the window when it saved.
 page EventEditor: view
     tells saved
-    data editedEvent: EventType
+    data editedEvent: EventDefinition
     data fields: list<EventField>
     data pickedField: EventField
     data carriedPick: VersionPick
     data heldPick: VersionPick
     data eventText: text
+    grid 8 columns
 
     tabs name eventTabs at 1,1 span 8 rows 14
         tab @eventTab
@@ -375,8 +323,9 @@ page EventEditor: view
             label @eventNamespaceCaption name eventNamespaceLabel at 1,2 span 2 for eventNamespaceBox
             textbox name eventNamespaceBox at 3,2 span 6 bind editedEvent.namespace placeholder @eventNamespacePlaceholder
             label @eventKindCaption name eventKindLabel at 1,3 span 2 for eventKindBox
-            dropdown name eventKindBox at 3,3 span 3 bind editedEvent.kind on change: eventShapeChanged
-            checkbox @eventBaseLabel name eventBaseBox at 6,3 span 3 bind editedEvent.base on change: eventShapeChanged
+            dropdown name eventKindBox at 3,3 span 2 bind editedEvent.kind on change: eventShapeChanged
+            checkbox @eventBaseLabel name eventBaseBox at 5,3 span 2 bind editedEvent.base on change: eventShapeChanged
+            checkbox @eventLegacyLabel name eventLegacyBox at 7,3 span 2 bind editedEvent.legacy
             panel name carriesPanel at 1,4 span 8 rows 1
                 label @eventCarriesCaption name eventCarriesLabel at 1,1 span 2 for carriedObjectBox
                 dropdown name carriedObjectBox at 3,1 span 4 bind carriedPick.object placeholder @carriedPlaceholder on change: carriedChanged
@@ -398,6 +347,79 @@ page EventEditor: view
         tab @eventCodeTab
             memo name eventCodeBox at 1,1 span 8 rows 13 bind eventText readonly code csharp copy
 
+// A version of an API: its number, the views it makes in their order, and
+// the FcdmApi-vN.json the app writes for it into the adapter folder. A view
+// is added from its table. It tells the window when it saved.
+page ApiEditor: view
+    tells saved
+    data editedApi: ApiVersion
+    data apiViews: list<ApiView>
+    data jsonText: text
+    grid 8 columns
+
+    tabs name apiTabs at 1,1 span 8 rows 14
+        tab @apiVersionTab
+            label @apiMajorLabel name apiMajorLabel at 1,1 span 2 for apiMajorBox
+            spinbox name apiMajorBox at 3,1 span 1 bind editedApi.major min 1 max 99
+            textbox name apiVersionBox at 4,1 span 2 bind editedApi.version placeholder @apiVersionPlaceholder
+            button @saveApiCaption name saveApiButton at 7,1 span 2 default on click: saveApiClicked
+            label @viewsCaption name apiViewsLabel at 1,2 span 8
+            table name apiViewTable at 1,3 span 8 rows 11 bind apiViews columns entity 280, adapterTable 280 reorder by position remove confirm on remove: removeApiViewClicked on reorder: apiViewsMoved
+        tab @apiJsonTab
+            memo name jsonBox at 1,1 span 8 rows 12 bind jsonText readonly code json copy
+            label @adapterFolderLabel name apiFolderLabel at 1,13 span 2 for apiFolderBox
+            folder name apiFolderBox at 3,13 span 4 bind settings.adapterFolder
+            button @writeApiCaption name writeApiButton at 7,13 span 2 icon "save" on click: writeApiClicked
+
+// A table of the adapter: its class, the blueprint it is filled from, its
+// columns, and the views API versions make on it, with their names, roles,
+// relations and enum columns. It tells the window when it saved.
+page TableEditor: view
+    tells saved
+    data editedTable: AdapterTable
+    data columns: list<AdapterColumn>
+    data blueprintPick: VersionPick
+    data tableViews: list<ApiView>
+    data pickedView: ApiView
+    data addTo: ApiPick
+    data rolesText: text
+    data relations: list<ApiRelation>
+    data apiEnums: list<ApiEnum>
+    grid 8 columns
+
+    tabs name tableTabs at 1,1 span 8 rows 14
+        tab @tableTab
+            label @tableNameLabel name tableNameCaption at 1,1 span 2 for tableNameBox
+            textbox name tableNameBox at 3,1 span 4 bind editedTable.name
+            button @saveTableCaption name saveTableButton at 7,1 span 2 default on click: saveTableClicked
+            label @tableClassLabel name tableClassCaption at 1,2 span 2 for tableClassBox
+            textbox name tableClassBox at 3,2 span 2 bind editedTable.className
+            textbox name tableNamespaceBox at 5,2 span 4 bind editedTable.namespace placeholder @tableNamespaceLabel
+            label @tableBlueprintLabel name blueprintCaption at 1,3 span 2 for blueprintObjectBox
+            dropdown name blueprintObjectBox at 3,3 span 4 bind blueprintPick.object placeholder @noBlueprintPlaceholder on change: blueprintChanged
+            spinbox name blueprintNumberBox at 7,3 span 2 bind blueprintPick.number min 1 max 99 on change: blueprintChanged
+            table name columnTable at 1,4 span 8 rows 10 bind columns columns name 260, kind 170, nullable edit name, kind, nullable reorder by position add remove confirm on add: addColumnClicked on remove: removeColumnClicked on change: columnChanged on reorder: columnsMoved
+        tab @viewsTab
+            dropdown name addToBox at 1,1 span 4 bind addTo.api placeholder @addToPlaceholder
+            button @addViewCaption name addViewButton at 5,1 span 2 icon "plus" on click: addViewClicked
+            table name tableViewTable at 1,2 span 8 rows 4 bind tableViews columns api 120, entity 280 remove confirm on remove: removeTableViewClicked on select: viewPicked
+            label @apiEntityNameLabel name viewEntityLabel at 1,6 span 2 for viewEntityBox
+            textbox name viewEntityBox at 3,6 span 3 bind pickedView.entity on leave: pickedViewChanged
+            textbox name viewClassBox at 6,6 span 3 bind pickedView.className placeholder @apiEntityClassLabel on leave: pickedViewChanged
+            label @apiEntityRolesLabel name rolesLabel at 1,7 span 2 for rolesBox
+            textbox name rolesBox at 3,7 span 6 bind rolesText placeholder @rolesPlaceholder on leave: rolesChanged
+            label @apiEntityPropertyLabel name viewPropertyLabel at 1,8 span 2 for viewPropertyBox
+            textbox name viewPropertyBox at 3,8 span 3 bind pickedView.propertyName on leave: pickedViewChanged
+            textbox name viewPluralBox at 6,8 span 3 bind pickedView.propertyPluralName placeholder @apiEntityPluralLabel on leave: pickedViewChanged
+            label @apiEntityViewLabel name viewColumnsLabel at 1,9 span 2 for viewColumnsBox
+            textbox name viewColumnsBox at 3,9 span 3 bind pickedView.viewProperties on leave: pickedViewChanged
+            textbox name viewKeyBox at 6,9 span 3 bind pickedView.primaryKey placeholder @apiEntityKeyLabel on leave: pickedViewChanged
+        tab @apiRelationsTab
+            label @relationsCaption name relationsLabel at 1,1 span 8
+            table name relationTable at 1,2 span 8 rows 6 bind relations columns kind 150, foreignEntity 190, foreignKey 170, propertyName 150, omitProperty edit kind, foreignEntity, foreignKey, propertyName, omitProperty reorder by position add remove confirm on add: addRelationClicked on remove: removeRelationClicked on change: relationChanged on reorder: relationsMoved
+            label @enumColumnsCaption name enumColumnsLabel at 1,8 span 8
+            table name apiEnumTable at 1,9 span 8 rows 5 bind apiEnums columns propertyName 200, propertyType 200, sourcePath 260 edit propertyName, propertyType, sourcePath reorder by position add remove confirm on add: addApiEnumClicked on remove: removeApiEnumClicked on change: apiEnumChanged on reorder: apiEnumsMoved
+
 // The diagrams of a domain at one of its versions: its data objects as they
 // are in that version, with their properties and lines, or the tables the
 // adapter keeps them in, with their keys.
@@ -414,12 +436,11 @@ page DiagramCanvas: view
     // Whether the next click on the paper places a new data object (its tool was pressed).
     data adding: bool
     data level: integer, default 1
-    data shown: list<ObjectVersion>
+    data shown: list<ClassDefinition>
     data boxes: list<DiagramBox>
     data enumValues: list<EnumValue>
     data members: list<Property>
-    data adapterTables: list<AdapterTable>
-    data tableIntakes: list<TableIntake>
+    data erdTables: list<AdapterTable>
 
     radio name diagramKindRadio at 1,1 span 5 bind kind horizontal on change: kindPicked
     label @levelCaption name levelLabel at 9,1 span 2 for levelBox style trailing
@@ -439,69 +460,107 @@ page DiagramTools: toolbox
     tool name newObjectTool at 1,3 icon "plus" tooltip @newObjectToolTip on click: newObjectToolClicked
     tool name arrangeTool at 2,3 icon "layout-grid" tooltip @arrangeCaption on click: arrangeClicked
 
-
 code Workspace
     handler workspaceOpened
-        refreshTree()
         showDomain()
         loadDiagram()
 
     handler refreshTree
-        let domains = find d in Domain order by d.name
-        let objects = find o in DataObject order by o.name
-        let versions = find v in ObjectVersion order by v.number
-        let held = find p in Property where p.kind == HeldObjects or p.kind == HeldObject order by p.position
-        let enums = find e in EnumType order by e.name
-        let events = find e in EventType order by e.name
-        nodes = outline(domains, objects, versions, held, enums, events)
+        modelTree.reload()
 
-    // Picks the row of that key in the tree, which opens the rows above it.
-    handler pickNode(key: text)
-        for n in nodes
-            if n.key == key
-                modelTree.selected = n
-
-    // The middle shows the domain picked, or says to pick one.
+    // What the buttons can do with the domain picked.
     handler showDomain
-        let chosen = domain.id != 0
-        pickADomain.visible = not chosen
-        domainNameBox.enabled = chosen
-        domainSummaryBox.enabled = chosen
-        modelPackageBox.enabled = chosen
-        modelVersionBox.enabled = chosen
-        messagesPackageBox.enabled = chosen
-        messagesVersionBox.enabled = chosen
-        saveDomainButton.enabled = chosen
-        newObjectButton.enabled = chosen
-        newEnumButton.enabled = chosen
-        newEventButton.enabled = chosen
+        let has = domain.id != 0
+        newObjectButton.enabled = has
+        newEnumButton.enabled = has
+        newEventButton.enabled = has
 
-    handler nodePicked
-        let node = modelTree.selected
-        if node.key == ""
-            return
-        let chosen = node.domain
-        domain = chosen
+    // What is picked: its kind and what it says, in the project and domain it stands in.
+    handler pick(kind: text, label: text, pr: Project, d: Domain)
+        chosen = new Picked
+        chosen.kind = kind
+        chosen.label = label
+        chosen.project = pr
+        project = pr
+        domain = d
         showDomain()
-        if node.kind == "version" or node.kind == "resolved"
-            let found = node.version
-            openVersion(found)
-        if node.kind == "object"
-            let all = find v in ObjectVersion where v.owner == node.dataObject order by v.number
-            if count(all) > 0
-                openVersion(all[count(all)])
-        if node.kind == "enum"
-            let found = node.enumType
-            openEnum(found)
-        if node.kind == "event"
-            let found = node.eventType
-            openEvent(found)
-        if node.kind == "level"
-            level = node.level
+        main.swap(StartView)
+        if d.id != 0
+            chosen.domain = d
+            main.swap(DomainEditor)
         loadDiagram()
 
+    handler projectPicked(p: Project)
+        pick("project", p.name, p, new Domain)
+        editedProject = p
+        main.swap(ProjectEditor)
+
+    handler domainPicked(d: Domain)
+        let pr = d.project
+        pick("domain", d.name, pr, d)
+
+    // A data object opens at its newest class definition, when it has one.
+    handler objectPicked(o: DataObject)
+        let d = o.domain
+        let pr = d.project
+        pick("object", o.name, pr, d)
+        chosen.dataObject = o
+        let all = find v in ClassDefinition where v.owner == o order by v.number
+        if count(all) > 0
+            openVersion(all[count(all)])
+
+    handler classPicked(v: ClassDefinition)
+        let o = v.owner
+        let d = o.domain
+        let pr = d.project
+        pick("version", versionTitle(o.name, v.number), pr, d)
+        chosen.dataObject = o
+        chosen.version = v
+        openVersion(v)
+
+    handler eventPicked(e: EventDefinition)
+        let o = e.owner
+        let d = o.domain
+        let pr = d.project
+        pick("event", e.name, pr, d)
+        chosen.dataObject = o
+        chosen.eventType = e
+        openEvent(e)
+
+    handler tablePicked(t: AdapterTable)
+        let o = t.owner
+        let d = o.domain
+        let pr = d.project
+        pick("table", t.name, pr, d)
+        chosen.dataObject = o
+        chosen.adapterTable = t
+        openTable(t)
+
+    handler apiViewPicked(w: ApiView)
+        let t = w.adapterTable
+        let o = t.owner
+        let d = o.domain
+        let pr = d.project
+        pick("view", w.entity, pr, d)
+        chosen.dataObject = o
+        chosen.view = w
+        openTable(t)
+
+    handler enumPicked(e: EnumType)
+        let d = e.domain
+        let pr = d.project
+        pick("enum", e.name, pr, d)
+        chosen.enumType = e
+        openEnum(e)
+
+    handler apiPicked(a: ApiVersion)
+        let pr = a.project
+        pick("api", a.version, pr, new Domain)
+        chosen.apiVersion = a
+        openApi(a)
+
     // The object editor shows a version of a data object, its properties and its C#.
-    handler openVersion(v: ObjectVersion)
+    handler openVersion(v: ClassDefinition)
         editedVersion = v
         let owner = v.owner
         editedObject = owner
@@ -509,18 +568,17 @@ code Workspace
         picked = new Property
         classText = classText(editedObject, editedVersion, properties)
         interfaceText = interfaceText(editedObject, editedVersion, properties)
-        tables = find x in AdapterTable where x.owner == owner order by x.entityVersion
-        intakeRows = []
-        objectPanel.visible = true
+        apiUses = apiUsesOf(owner)
+        main.swap(ObjectEditor)
 
     handler openEnum(e: EnumType)
         editedEnum = e
         values = find x in EnumValue where x.owner == e order by x.position
         enumText = enumText(e, values)
-        enumPanel.visible = true
+        main.swap(EnumEditor)
 
     // The event editor shows an event: what it carries or its fields, and its C#.
-    handler openEvent(e: EventType)
+    handler openEvent(e: EventDefinition)
         editedEvent = e
         fields = find f in EventField where f.owner == e order by f.position
         pickedField = new EventField
@@ -536,11 +594,57 @@ code Workspace
         // A base event carries a data object; any other has fields.
         carriesPanel.visible = e.base
         fieldsPanel.visible = not e.base
-        eventPanel.visible = true
+        main.swap(EventEditor)
+
+    // The API editor shows a version of the API, its views and its JSON.
+    handler openApi(v: ApiVersion)
+        editedApi = v
+        apiViews = find x in ApiView where x.api == v order by x.position
+        jsonText = apiJsonOf(v)
+        main.swap(ApiEditor)
+
+    // The table editor shows a table of the adapter, its columns and its views.
+    handler openTable(t: AdapterTable)
+        editedTable = t
+        columns = find x in AdapterColumn where x.owner == t order by x.position
+        blueprintPick = new VersionPick
+        blueprintPick.number = 1
+        if t.blueprint != none
+            let b = t.blueprint
+            blueprintPick.object = b.owner
+            blueprintPick.number = b.number
+        tableViews = find x in ApiView where x.adapterTable == t order by x.position
+        pickedView = new ApiView
+        addTo = new ApiPick
+        rolesText = ""
+        relations = []
+        apiEnums = []
+        main.swap(TableEditor)
+
+    // A new API version of the project picked starts as a copy of its newest: its views with their relations and enum columns.
+    handler newApiClicked
+        if project.id == 0
+            return
+        let all = find x in ApiVersion where x.project == project order by x.major
+        let v = new ApiVersion
+        v.project = project
+        v.major = 1
+        if count(all) > 0
+            v.major = all[count(all)].major + 1
+        v.version = "{v.major}.0"
+        save v
+        if count(all) > 0
+            copyApi(all[count(all)], v)
+        refreshTree()
+        openApi(v)
+
+    handler apiSaved
+        refreshTree()
+        loadDiagram()
 
     // The diagram view shows the domain's data objects as they are in the version chosen.
     handler loadDiagram
-        let versions = find v in ObjectVersion order by v.number
+        let versions = find v in ClassDefinition order by v.number
         let objects = find o in DataObject where o.domain == domain order by o.name
         // The dial goes up to the domain's newest version, and no further.
         let top = 1
@@ -555,18 +659,33 @@ code Workspace
         boxes = diagramBoxes(objects, find e in EnumType where e.domain == domain order by e.name)
         enumValues = find x in EnumValue order by x.position
         members = find p in Property order by p.position
-        adapterTables = find t in AdapterTable order by t.entityVersion
+        erdTables = find t in AdapterTable order by t.name
         currentDomain = domain
-        tableIntakes = find i in TableIntake
-        boxes = boxes + ownTableBoxes(adapterTables, tableIntakes, domain)
 
+    // A new project, empty.
+    handler newProjectClicked
+        let all = find x in Project order by x.name
+        let pr = new Project
+        let next = count(all) + 1
+        pr.name = "Project{next}"
+        save pr
+        project = pr
+        domain = new Domain
+        refreshTree()
+        showDomain()
+        editedProject = pr
+        main.swap(ProjectEditor)
+
+    // A new domain of the project picked.
     handler newDomainClicked
+        if project.id == 0
+            return
         let d = new Domain
-        d.name = freeDomainName(@newDomainName, find x in Domain order by x.name)
+        d.project = project
+        d.name = freeDomainName(@newDomainName, find x in Domain where x.project == project order by x.name)
         save d
         domain = d
         refreshTree()
-        pickNode("d{d.id}")
         loadDiagram()
         showDomain()
 
@@ -582,12 +701,11 @@ code Workspace
         o.x = 40 + 320 * columnOf(count(existing))
         o.y = 40 + 300 * rowOf(count(existing))
         save o
-        let v = new ObjectVersion
+        let v = new ClassDefinition
         v.owner = o
         v.number = 1
         save v
         refreshTree()
-        pickNode("o{o.id}")
         loadDiagram()
         openVersion(v)
 
@@ -599,42 +717,56 @@ code Workspace
         e.name = @newEnumName
         save e
         refreshTree()
-        pickNode("e{e.id}")
         openEnum(e)
 
-    // A new event starts as a base Changed event in the domain's newest event version.
+    // A new event of the data object picked starts as a base Changed event in its newest event version.
     handler newEventClicked
-        if domain.id == 0
+        if chosen.dataObject == none
             return
+        let o = chosen.dataObject
         let highest = 1
-        for x in find x in EventType where x.domain == domain
+        for x in find x in EventDefinition where x.owner == o
             if x.number > highest
                 highest = x.number
-        let e = new EventType
-        e.domain = domain
+        let dom = o.domain
+        let e = new EventDefinition
+        e.owner = o
         e.name = @newEventName
         e.number = highest
-        e.namespace = folderNamespace(domain.name, highest)
+        e.namespace = folderNamespace(dom.name, highest)
         e.kind = EventKind.Changed
         e.base = true
         save e
         refreshTree()
-        pickNode("ev{e.id}")
         openEvent(e)
 
-    handler saveDomainClicked
-        save domain
+    // A new table of the adapter for the data object picked.
+    handler newTableClicked
+        if chosen.dataObject == none
+            return
+        let o = chosen.dataObject
+        let t = new AdapterTable
+        t.owner = o
+        t.name = @newTableName
+        t.className = o.name
+        save t
+        refreshTree()
+        openTable(t)
+
+    handler domainSaved
         refreshTree()
 
-    // Deletes the domain, data object, version or enum picked in the tree, after asking.
+    handler projectSaved
+        refreshTree()
+
+    // Deletes what is picked in the tree, after asking.
     handler deleteClicked
-        let node = modelTree.selected
-        if node.key == "" or node.kind == "objects" or node.kind == "enums" or node.kind == "levels" or node.kind == "level" or node.kind == "resolved" or node.kind == "model" or node.kind == "messages" or node.kind == "events" or node.kind == "eventlevel"
+        if chosen.kind == ""
             return
-        ask @deleteNode(name = node.label) yes @delete no @keep then deleteConfirmed
+        ask @deleteNode(name = chosen.label) yes @delete no @keep then deleteConfirmed
 
     handler deleteConfirmed
-        let node = modelTree.selected
+        let node = chosen
         if node.kind == "object"
             let gone = node.dataObject
             delete gone
@@ -644,24 +776,37 @@ code Workspace
         else if node.kind == "enum"
             let gone = node.enumType
             delete gone
-            enumPanel.visible = false
+            main.swap(StartView)
         else if node.kind == "event"
             let gone = node.eventType
             delete gone
-            eventPanel.visible = false
+            main.swap(StartView)
+        else if node.kind == "api"
+            let gone = node.apiVersion
+            delete gone
+            main.swap(StartView)
+        else if node.kind == "table"
+            let gone = node.adapterTable
+            delete gone
+            main.swap(StartView)
+        else if node.kind == "view"
+            let gone = node.view
+            delete gone
+            main.swap(StartView)
+        else if node.kind == "project"
+            let gone = node.project
+            delete gone
+            project = new Project
+            domain = new Domain
         else
             let gone = node.domain
             delete gone
             domain = new Domain
-        objectPanel.visible = false
+        chosen = new Picked
+        main.swap(StartView)
         refreshTree()
         loadDiagram()
         showDomain()
-
-    // What an import read shows in the tree once its dialog closes.
-    handler workspaceReturned
-        refreshTree()
-        loadDiagram()
 
     // What the editors saved shows in the tree and on the diagram at once.
     handler objectSaved
@@ -673,6 +818,19 @@ code Workspace
 
     handler eventSaved
         refreshTree()
+
+    handler tableSaved
+        refreshTree()
+
+code DomainEditor
+    handler saveDomainClicked
+        save domain
+        tell saved()
+
+code ProjectEditor
+    handler saveProjectClicked
+        save editedProject
+        tell saved()
 
 code ObjectEditor
     handler showCode
@@ -723,8 +881,8 @@ code ObjectEditor
     handler newVersionClicked
         if editedVersion.id == 0
             return
-        let all = find v in ObjectVersion where v.owner == editedObject order by v.number
-        let v = new ObjectVersion
+        let all = find v in ClassDefinition where v.owner == editedObject order by v.number
+        let v = new ClassDefinition
         v.owner = editedObject
         v.number = all[count(all)].number + 1
         save v
@@ -750,38 +908,6 @@ code ObjectEditor
         save editedVersion
         showCode()
         tell saved()
-
-    // The adapter's tables of the data object, whatever version is open.
-    handler reloadTables
-        tables = find x in AdapterTable where x.owner == editedObject order by x.entityVersion
-        intakeRows = []
-
-    // A new table, as the adapter's next entity; the import tells which events fill it.
-    handler addTableClicked
-        if editedObject.id == 0
-            return
-        let t = new AdapterTable
-        t.owner = editedObject
-        t.name = @newTableName
-        t.entityName = editedObject.name
-        t.entityVersion = count(tables) + 1
-        save t
-        reloadTables()
-        tell saved()
-
-    handler removeTableClicked
-        delete adapterTableGrid.selected
-        reloadTables()
-        tell saved()
-
-    handler tableChanged
-        save adapterTableGrid.selected
-        tell saved()
-
-    // The table picked shows the events that fill it.
-    handler tablePicked
-        let t = adapterTableGrid.selected
-        intakeRows = intakeRowsOf(t)
 
 code EnumEditor
     handler reloadValues
@@ -904,6 +1030,188 @@ code EventEditor
         showEventCode()
         tell saved()
 
+code ApiEditor
+    handler showJson
+        jsonText = apiJsonOf(editedApi)
+
+    handler saveApiClicked
+        save editedApi
+        showJson()
+        tell saved()
+
+    handler reloadApiViews
+        apiViews = find x in ApiView where x.api == editedApi order by x.position
+        showJson()
+
+    handler removeApiViewClicked
+        delete apiViewTable.selected
+        reloadApiViews()
+        tell saved()
+
+    handler apiViewsMoved
+        for w in apiViews
+            save w
+        showJson()
+
+    // Writes FcdmApi-vN.json where the adapter's generator reads it.
+    handler writeApiClicked
+        if editedApi.id == 0
+            return
+        writeApi(editedApi)
+        message @apiWritten(path = apiPath(editedApi.major))
+
+code TableEditor
+    handler reloadColumns
+        columns = find x in AdapterColumn where x.owner == editedTable order by x.position
+
+    handler addColumnClicked
+        if editedTable.id == 0
+            return
+        let c = new AdapterColumn
+        c.owner = editedTable
+        let next = count(columns) + 1
+        c.position = next
+        c.name = "Column{next}"
+        save c
+        reloadColumns()
+
+    handler removeColumnClicked
+        delete columnTable.selected
+        reloadColumns()
+
+    handler columnChanged
+        save columnTable.selected
+
+    handler columnsMoved
+        for c in columns
+            save c
+
+    // The data object and its version picked: the class definition the table is filled from.
+    handler blueprintChanged
+        if editedTable.id == 0
+            return
+        blueprintNumberBox.error = ""
+        let v = versionOf(blueprintPick.object, blueprintPick.number)
+        if v.id == 0
+            if blueprintPick.object != none
+                blueprintNumberBox.error = @noSuchVersion(number = blueprintPick.number)
+                return
+            editedTable.blueprint = none
+        else
+            editedTable.blueprint = v
+        save editedTable
+        tell saved()
+
+    handler saveTableClicked
+        save editedTable
+        tell saved()
+
+    handler reloadTableViews
+        tableViews = find x in ApiView where x.adapterTable == editedTable order by x.position
+
+    // A view of this table in the API version picked, at the end of its views, named as the table's class.
+    handler addViewClicked
+        if editedTable.id == 0 or addTo.api == none
+            return
+        let a = addTo.api
+        let there = find x in ApiView where x.api == a order by x.position
+        for x in there
+            if x.adapterTable.id == editedTable.id
+                message @viewThere(api = a.version)
+                return
+        let w = new ApiView
+        w.api = a
+        w.adapterTable = editedTable
+        w.position = count(there) + 1
+        w.entity = editedTable.className
+        w.className = editedTable.className
+        w.propertyName = editedTable.className
+        w.propertyPluralName = editedTable.name
+        save w
+        reloadTableViews()
+        tell saved()
+
+    handler removeTableViewClicked
+        delete tableViewTable.selected
+        pickedView = new ApiView
+        rolesText = ""
+        relations = []
+        apiEnums = []
+        reloadTableViews()
+        tell saved()
+
+    // The details below, and the relations and enum columns, are the view picked.
+    handler viewPicked
+        let w = tableViewTable.selected
+        pickedView = w
+        rolesText = join(w.roles, ", ")
+        relations = find x in ApiRelation where x.owner == w order by x.position
+        apiEnums = find x in ApiEnum where x.owner == w order by x.position
+
+    // The roles are typed apart by commas.
+    handler rolesChanged
+        if pickedView.id == 0
+            return
+        let roles: list<text> = []
+        for r in split(rolesText, ",")
+            if trim(r) != ""
+                roles = roles + [trim(r)]
+        pickedView.roles = roles
+        save pickedView
+
+    handler pickedViewChanged
+        if pickedView.id == 0
+            return
+        save pickedView
+        reloadTableViews()
+        tell saved()
+
+    handler reloadRelations
+        relations = find x in ApiRelation where x.owner == pickedView order by x.position
+        apiEnums = find x in ApiEnum where x.owner == pickedView order by x.position
+
+    handler addRelationClicked
+        if pickedView.id == 0
+            return
+        let r = new ApiRelation
+        r.owner = pickedView
+        r.position = count(relations) + 1
+        r.foreignEntity = @newForeignEntity
+        save r
+        reloadRelations()
+
+    handler removeRelationClicked
+        delete relationTable.selected
+        reloadRelations()
+
+    handler relationChanged
+        save relationTable.selected
+
+    handler relationsMoved
+        for r in relations
+            save r
+
+    handler addApiEnumClicked
+        if pickedView.id == 0
+            return
+        let n = new ApiEnum
+        n.owner = pickedView
+        n.position = count(apiEnums) + 1
+        n.propertyName = @newEnumColumn
+        save n
+        reloadRelations()
+
+    handler removeApiEnumClicked
+        delete apiEnumTable.selected
+        reloadRelations()
+
+    handler apiEnumChanged
+        save apiEnumTable.selected
+
+    handler apiEnumsMoved
+        for n in apiEnums
+            save n
+
 code DiagramCanvas
     handler levelPicked
         tell levelChanged()
@@ -923,7 +1231,7 @@ code DiagramCanvas
     // on the ERD it names the other's business key. It is a new property of
     // the version shown, at the end of its properties.
     handler linesDrawn
-        let laid = laidOutBoxes(boxes, shown, members, enumValues, adapterTables, tableIntakes, kind == DiagramKind.Erd)
+        let laid = laidOutBoxes(boxes, shown, members, enumValues, erdTables, kind == DiagramKind.Erd)
         let fromId = boxAt(laid, diagramCanvas.fromX, diagramCanvas.fromY)
         let toId = boxAt(laid, diagramCanvas.x, diagramCanvas.y)
         if fromId == 0 or toId == 0 or fromId == toId
@@ -973,7 +1281,7 @@ code DiagramCanvas
         o.x = snapped(diagramCanvas.x, 20)
         o.y = snapped(diagramCanvas.y, 20)
         save o
-        let v = new ObjectVersion
+        let v = new ClassDefinition
         v.owner = o
         v.number = 1
         save v
@@ -984,7 +1292,7 @@ code DiagramCanvas
     // they stand, and has the window load them there.
     handler arrangeClicked
         let erd = kind == DiagramKind.Erd
-        let wanted = laidOutBoxes(boxes, shown, members, enumValues, adapterTables, tableIntakes, erd)
+        let wanted = laidOutBoxes(boxes, shown, members, enumValues, erdTables, erd)
         let links: list<LayoutLink> = []
         for v in shown
             for p in members
@@ -1019,11 +1327,6 @@ code DiagramCanvas
                         e.x = spot.x
                         e.y = spot.y
                         save e
-                    if b.adapterTable != none
-                        let t = b.adapterTable
-                        t.x = spot.x
-                        t.y = spot.y
-                        save t
         tell arranged()
 
     handler drawDiagram
@@ -1072,18 +1375,18 @@ code DiagramCanvas
                 let e = b.enumType
                 drawBox(b, e.name, enumLines(e, enumValues), "warning")
 
-    // The ERD: a table per data object as the adapter keeps it, its business
+    // The ERD: a table per data object as the newest API version serving it names it, its business
     // key first, its values, and its two moments; a line to each table a
     // business key points at.
     handler drawErd
         for v in shown
-            let fromTable = tableTitle(v, adapterTables, tableIntakes)
+            let fromTable = tableTitle(v, erdTables)
             let ownLines = erdLines(v, members)
             let o = v.owner
             for p in members
                 if p.owner.id == v.id and p.kind == BusinessKey and p.target != none and fromTable != ""
                     for target in shown
-                        let toTable = tableTitle(target, adapterTables, tableIntakes)
+                        let toTable = tableTitle(target, erdTables)
                         // Only between tables the adapter has.
                         if p.target.id == target.owner.id and toTable != ""
                             let t = target.owner
@@ -1092,13 +1395,9 @@ code DiagramCanvas
                             diagramCanvas.link("p{p.id}", e[1], e[2], e[3], e[4], p.via, "muted", 2, "many", "one")
         // A data object the adapter keeps in no table is not on the ERD.
         for v in shown
-            let title = tableTitle(v, adapterTables, tableIntakes)
+            let title = tableTitle(v, erdTables)
             if title != ""
                 drawBox(boxFor(boxes, v.owner), title, erdLines(v, members), "success")
-        for b in boxes
-            if b.adapterTable != none
-                let t = b.adapterTable
-                drawBox(b, t.name, ownTableLines(t), "muted")
 
     // A box as wide as its title and its longest line ask.
     handler drawBox(o: DiagramBox, title: text, lines: list<text>, edge: text)
@@ -1132,11 +1431,6 @@ code DiagramCanvas
             e.x = b.x
             e.y = b.y
             save e
-        if b.adapterTable != none
-            let t = b.adapterTable
-            t.x = b.x
-            t.y = b.y
-            save t
 
     // A line bent: its property keeps the points.
     handler lineBent
@@ -1146,456 +1440,15 @@ code DiagramCanvas
                 save p
         members = find p in Property order by p.position
 
-code CompareDialog
-    // Every file the app writes, compared with the folder's.
-    handler compareOpened
-        let disk = files f in fcdm where f.extension == "cs"
-        let found: list<CompareRow> = []
-        let same = 0
-        let differ = 0
-        let fresh = 0
-        for d in find x in Domain order by x.name
-            for o in find x in DataObject where x.domain == d order by x.name
-                for v in find x in ObjectVersion where x.owner == o order by x.number
-                    let r = new CompareRow
-                    r.path = classPath(d.name, o.name, v.number)
-                    r.kind = "class"
-                    r.version = v
-                    found = found + [r]
-                    if o.kind == Root
-                        let i = new CompareRow
-                        i.path = interfacePath(d.name, o.name, v.number)
-                        i.kind = "interface"
-                        i.version = v
-                        found = found + [i]
-            for e in find x in EnumType where x.domain == d order by x.name
-                let r = new CompareRow
-                r.path = "Fontys.Fcdm.{d.name}/{e.name}.cs"
-                r.kind = "enum"
-                r.enumType = e
-                found = found + [r]
-            for e in find x in EventType where x.domain == d order by x.number, x.name
-                let r = new CompareRow
-                r.path = eventPath(d.name, e.name, e.number)
-                r.kind = "event"
-                r.eventType = e
-                found = found + [r]
-        for r in found
-            let onDisk = diskText(disk, r.path)
-            if onDisk == ""
-                r.state = @compareNew
-                fresh = fresh + 1
-            else if Fcdm.diffText(r.path, onDisk, writtenFor(r)) == ""
-                r.state = @compareSame
-                same = same + 1
-            else
-                r.state = @compareDiffers
-                differ = differ + 1
-        rows = found
-        summary = @compareSummary(same = same, differ = differ, fresh = fresh)
-
-    // The differences of the file picked, or that it is new.
-    handler filePicked
-        let r = fileTable.selected
-        let onDisk = diskText(files f in fcdm where f.path == r.path, r.path)
-        if onDisk == ""
-            diffText = writtenFor(r)
-        else
-            diffText = Fcdm.diffText(r.path, onDisk, writtenFor(r))
-
-    // The file picked, written into the folder chosen.
-    handler writeFileClicked
-        let r = fileTable.selected
-        if r.path == ""
-            return
-        if settings.outputFolder == ""
-            message warning @chooseOutputFolder
-            return
-        writeFile(r)
-        summary = @wroteFile(path = r.path)
-
-    // Every file the app writes, into the folder chosen, after asking.
-    handler writeAllClicked
-        if settings.outputFolder == ""
-            message warning @chooseOutputFolder
-            return
-        let all = count(rows)
-        ask @writeAllAsk(count = all, folder = settings.outputFolder) yes @writeAllYes no @keep then writeAllConfirmed
-
-    handler writeAllConfirmed
-        for r in rows
-            writeFile(r)
-        let all = count(rows)
-        summary = @wroteAll(count = all, folder = settings.outputFolder)
-
-code ImportDialog
-    // Every C# file and project file of the folder, read by the engine, then stored.
-    handler importClicked
-        let found = files f in fcdm where f.extension == "cs" or f.extension == "csproj"
-        let sources: list<SourceFile> = []
-        for f in found
-            if not (f.path contains "/obj/" or f.path contains "/bin/")
-                let s = new SourceFile
-                s.path = f.path
-                s.text = read text of f
-                sources = sources + [s]
-        let rows = Fcdm.readFiles(sources)
-        report = importRows(rows)
-        // The domains read again lost their tables with their data objects: the adapter's are read again too.
-        if settings.adapterFolder != ""
-            report = report + "\n\n" + importTables(Fcdm.readTables(adapterSources()))
-
-    // The adapter's DbContext and mappers, read by the engine: its tables, each on its data object.
-    handler readTablesClicked
-        report = importTables(Fcdm.readTables(adapterSources()))
-
-// The C# files of the adapter folder the engine reads its tables from: not its build output or migrations.
-action adapterSources() -> list<SourceFile>
-    effects files.read
-    let sources: list<SourceFile> = []
-    for f in files f in adapter where f.extension == "cs"
-        if not (f.path contains "/obj/" or f.path contains "/bin/" or f.path contains "/Migrations/")
-            let s = new SourceFile
-            s.path = f.path
-            s.text = read text of f
-            sources = sources + [s]
-    return sources
-
-// Where a version's class stands in the fcdm folder: its domain's project, in vN from version 2.
-function classPath(domain: text, name: text, number: integer) -> text
-    if number > 1
-        return "Fontys.Fcdm.{domain}/v{number}/{name}.cs"
-    return "Fontys.Fcdm.{domain}/{name}.cs"
-
-function interfacePath(domain: text, name: text, number: integer) -> text
-    if number > 1
-        return "Fontys.Fcdm.{domain}/Interfaces/v{number}/I{name}.cs"
-    return "Fontys.Fcdm.{domain}/Interfaces/I{name}.cs"
-
-// The text of the file at `path` among `disk`; empty when it is not there.
-action diskText(disk: list<file>, path: text) -> text
-    effects files.read
-    for f in disk
-        if f.path == path
-            return read text of f
-    return ""
-
-// A file of the comparison, written into the output folder as the repository keeps its files.
-action writeFile(r: CompareRow)
-    effects db.read, files.write
-    write Fcdm.fileBytes(writtenFor(r)) to output r.path
-
-// What the app writes for a file of the comparison.
-action writtenFor(r: CompareRow) -> text
-    effects db.read
-    if r.kind == "enum"
-        let e = r.enumType
-        return enumText(e, find x in EnumValue where x.owner == e order by x.position)
-    if r.kind == "event"
-        let e = r.eventType
-        return eventText(e, find x in EventField where x.owner == e order by x.position)
-    let v = r.version
-    let o = v.owner
-    let properties = find x in Property where x.owner == v order by x.position
-    if r.kind == "interface"
-        return interfaceText(o, v, properties)
-    return classText(o, v, properties)
-
-// Stores the adapter's tables the engine read, replacing those there were:
-// each on the data object of its entity's name (in the domain its mapper
-// reads, when it has one), with the version it is filled from. Gives the
-// report.
-action importTables(rows: list<TableRow>) -> text
-    effects db.read, db.write
-    for old in find x in AdapterTable
-        delete old
-    let lines: list<text> = []
-    let tables = 0
-    let placed = 0
-    let filled = 0
-    for r in rows
-        if r.kind == "note"
-            lines = lines + [r.note]
-        if r.kind == "table"
-            tables = tables + 1
-            let owners = find o in DataObject where o.name == r.name order by o.id
-            if r.domain != ""
-                for d in find x in Domain where x.name == r.domain
-                    let inDomain = find o in DataObject where o.domain == d and o.name == r.name
-                    if count(inDomain) > 0
-                        owners = inDomain
-            let t = new AdapterTable
-            t.name = r.table
-            t.entityName = r.name
-            t.entityVersion = r.entity
-            t.columns = r.columns
-            t.keys = r.keys
-            if count(owners) == 0
-                // A table of the adapter's own, as DeletedEntities: kept with its columns, on every ERD.
-                lines = lines + [@tableNoObject(table = r.table, name = r.name)]
-            else
-                t.owner = owners[1]
-                placed = placed + 1
-            save t
-        // The events that fill a table: in the namespace its handler names or opens, as the import keeps them.
-        if r.kind == "intake"
-            let found = find x in AdapterTable where x.name == r.table
-            let e = intakeEvent(r.event, r.namespaces)
-            if count(found) > 0 and e.id != 0
-                let i = new TableIntake
-                i.table = found[1]
-                i.event = e
-                i.deletes = r.deletes
-                save i
-                filled = filled + 1
-            else
-                lines = lines + [@intakeNoEvent(event = r.event, table = r.table)]
-    let summary = @tablesRead(tables = tables, placed = placed, filled = filled)
-    return join([summary, ""] + lines, "\n")
-
-// Stores what the engine read: the domains it names replace those there
-// were, then their enums and data objects with their versions, then the
-// properties, whose enums and data objects are found by name. Gives the
-// report.
-action importRows(rows: list<ReadRow>) -> text
-    effects db.read, db.write
-    let lines: list<text> = []
-    // The domains read, emptied: each read again replaces the one there was.
-    let names: list<text> = []
-    for r in rows
-        if r.kind == "object" or r.kind == "enum" or r.kind == "domain"
-            if not (names contains r.domain)
-                names = names + [r.domain]
-    // Their events and properties go first: they point at data objects across domains, which go with their domains.
-    for name in names
-        for old in find d in Domain where d.name == name
-            for e in find x in EventType where x.domain == old
-                delete e
-    for name in names
-        for old in find d in Domain where d.name == name
-            for o in find x in DataObject where x.domain == old
-                for v in find x in ObjectVersion where x.owner == o
-                    for p in find x in Property where x.owner == v
-                        delete p
-    for name in names
-        for old in find d in Domain where d.name == name
-            delete old
-        let d = new Domain
-        d.name = name
-        save d
-    // Their packages, enums and data objects with their versions.
-    let placed = 0
-    let currentEnum = new EnumType
-    let position = 0
-    let objects = 0
-    let versions = 0
-    let enums = 0
-    for r in rows
-        let found = find d in Domain where d.name == r.domain
-        if r.kind == "domain" and count(found) > 0
-            let d = found[1]
-            if r.role == "model"
-                d.modelPackage = r.packageId
-                d.modelVersion = r.name
-                d.newtonsoft = r.newtonsoft
-            else
-                d.messagesPackage = r.packageId
-                d.messagesVersion = r.name
-            save d
-        if r.kind == "enum" and count(found) > 0
-            let e = new EnumType
-            e.domain = found[1]
-            e.name = r.name
-            save e
-            currentEnum = e
-            position = 0
-            enums = enums + 1
-        if r.kind == "value" and currentEnum.id != 0
-            position = position + 1
-            let v = new EnumValue
-            v.owner = currentEnum
-            v.position = position
-            v.name = r.name
-            v.number = r.number
-            save v
-        if r.kind == "object" and count(found) > 0
-            let d = found[1]
-            let existing = find o in DataObject where o.domain == d and o.name == r.name
-            let o = new DataObject
-            if count(existing) > 0
-                o = existing[1]
-            else
-                o.domain = d
-                o.name = r.name
-                o.kind = Child
-                o.x = 40 + 320 * columnOf(placed)
-                o.y = 40 + 300 * rowOf(placed)
-                placed = placed + 1
-                objects = objects + 1
-            if r.root
-                o.kind = Root
-            o.keyed = r.keyed
-            save o
-            let v = new ObjectVersion
-            v.owner = o
-            v.number = r.version
-            v.obsolete = r.obsolete
-            v.review = r.review
-            save v
-            versions = versions + 1
-    // The properties, each of the version read before it.
-    let currentVersion = new ObjectVersion
-    let properties = 0
-    for r in rows
-        if r.kind == "object"
-            let d = find x in Domain where x.name == r.domain
-            let o = find x in DataObject where x.domain == d[1] and x.name == r.name
-            let v = find x in ObjectVersion where x.owner == o[1] and x.number == r.version
-            currentVersion = v[1]
-            position = 0
-        if r.kind == "property" and currentVersion.id != 0
-            position = position + 1
-            let p = new Property
-            p.owner = currentVersion
-            p.position = position
-            p.name = r.name
-            p.kind = kindNamed(r.propertyKind)
-            p.nullable = r.nullable
-            p.initial = r.initial
-            p.computed = r.computed
-            p.via = []
-            if p.kind == EnumChoice
-                let e = find x in EnumType where x.name == r.typeName
-                if count(e) > 0
-                    p.choice = e[1]
-            if p.kind == HeldObject or p.kind == HeldObjects or p.kind == BusinessKey
-                let t = find x in DataObject where x.name == r.typeName
-                if count(t) > 0
-                    p.target = t[1]
-                else if p.kind == BusinessKey
-                    lines = lines + ["{r.note}.{r.name}: no data object is called {r.typeName}; the key names none"]
-            save p
-            properties = properties + 1
-    // The events, each with its fields after it; the data objects they carry are found by name and version.
-    let currentEvent = new EventType
-    let events = 0
-    let reviews = 0
-    for r in rows
-        if r.kind == "event"
-            let found = find d in Domain where d.name == r.domain
-            if count(found) > 0
-                let e = new EventType
-                e.domain = found[1]
-                e.name = r.name
-                e.number = r.version
-                e.namespace = r.namespace
-                e.kind = eventKindNamed(r.eventKind)
-                e.base = r.base
-                e.obsolete = r.obsolete
-                e.review = r.review
-                if r.base
-                    let v = foundVersion(r.domain, r.typeName, r.typeVersion)
-                    if v.id != 0
-                        e.carries = v
-                save e
-                currentEvent = e
-                position = 0
-                events = events + 1
-                if r.review != ""
-                    reviews = reviews + 1
-        if r.kind == "event_field" and currentEvent.id != 0
-            position = position + 1
-            let f = new EventField
-            f.owner = currentEvent
-            f.position = position
-            f.name = r.name
-            f.kind = kindNamed(r.propertyKind)
-            f.nullable = r.nullable
-            f.list = listNamed(r.list)
-            f.access = accessNamed(r.access)
-            f.obsolete = r.obsolete
-            if f.kind == HeldObject or f.kind == HeldObjects
-                let at = r.domain
-                if at == ""
-                    let owner = currentEvent.domain
-                    at = owner.name
-                let v = foundVersion(at, r.typeName, r.typeVersion)
-                if v.id != 0
-                    f.holds = v
-            if f.kind == BusinessKey
-                let t = find x in DataObject where x.name == r.typeName
-                if count(t) > 0
-                    f.keyOf = t[1]
-            save f
-    let domains = count(names)
-    let summary = "Read {domains} domains, {objects} data objects with {versions} versions, {properties} properties, {enums} enums and {events} events ({reviews} to review)."
-    let report: list<text> = [summary, ""]
-    for r in rows
-        if r.kind == "note"
-            if r.renames
-                report = report + ["{r.note} (renames a public name)"]
-            else
-                report = report + [r.note]
-    return join(report + lines, "\n")
-
-// A kind of property by the name the engine gives it.
-function kindNamed(word: text) -> PropertyKind
-    if word == "WholeNumber"
-        return WholeNumber
-    if word == "DecimalNumber"
-        return DecimalNumber
-    if word == "YesNo"
-        return YesNo
-    if word == "Moment"
-        return Moment
-    if word == "MomentWithOffset"
-        return MomentWithOffset
-    if word == "DayOnly"
-        return DayOnly
-    if word == "EnumChoice"
-        return EnumChoice
-    if word == "HeldObject"
-        return HeldObject
-    if word == "HeldObjects"
-        return HeldObjects
-    if word == "BusinessKey"
-        return BusinessKey
-    return TextValue
-
-// The version `number` of the data object `name` of a domain; none when there is no such version.
-action foundVersion(domain: text, name: text, number: integer) -> ObjectVersion
-    effects db.read
-    let d = find x in Domain where x.name == domain
-    if count(d) == 0
-        return new ObjectVersion
-    let o = find x in DataObject where x.domain == d[1] and x.name == name
-    if count(o) == 0
-        return new ObjectVersion
-    let v = find x in ObjectVersion where x.owner == o[1] and x.number == number
-    if count(v) == 0
-        return new ObjectVersion
-    return v[1]
-
 // The version `number` of a data object; an empty one (id 0) when it has no such version.
-action versionOf(o: DataObject, number: integer) -> ObjectVersion
+action versionOf(o: DataObject, number: integer) -> ClassDefinition
     effects db.read
     if o.id == 0
-        return new ObjectVersion
-    let v = find x in ObjectVersion where x.owner == o and x.number == number
+        return new ClassDefinition
+    let v = find x in ClassDefinition where x.owner == o and x.number == number
     if count(v) == 0
-        return new ObjectVersion
+        return new ClassDefinition
     return v[1]
-
-function eventKindNamed(word: text) -> EventKind
-    if word == "Deleted"
-        return EventKind.Deleted
-    if word == "Created"
-        return EventKind.Created
-    if word == "Updated"
-        return EventKind.Updated
-    if word == "Other"
-        return EventKind.Other
-    return EventKind.Changed
 
 function eventKindWord(kind: EventKind) -> text
     if kind == EventKind.Deleted
@@ -1608,15 +1461,6 @@ function eventKindWord(kind: EventKind) -> text
         return "Other"
     return "Changed"
 
-function listNamed(word: text) -> ListStyle
-    if word == "IEnumerable"
-        return Sequence
-    if word == "Array"
-        return ArrayOf
-    if word == "List"
-        return ListOf
-    return Single
-
 function listWord(style: ListStyle) -> text
     if style == Sequence
         return "IEnumerable"
@@ -1626,25 +1470,12 @@ function listWord(style: ListStyle) -> text
         return "List"
     return ""
 
-function accessNamed(word: text) -> Access
-    if word == "get"
-        return GetOnly
-    if word == "set"
-        return GetSet
-    return InitOnly
-
 function accessWord(access: Access) -> text
     if access == GetOnly
         return "get"
     if access == GetSet
         return "set"
     return "init"
-
-// Where an event stands in the domain's messages project: Events/, or Events/vN from version 2.
-function eventPath(domain: text, name: text, number: integer) -> text
-    if number > 1
-        return "Fontys.Messages.{domain}/Events/v{number}/{name}.cs"
-    return "Fontys.Messages.{domain}/Events/{name}.cs"
 
 // The namespace an event's folder gives, which a new event starts with.
 function folderNamespace(domain: text, number: integer) -> text
@@ -1653,9 +1484,10 @@ function folderNamespace(domain: text, number: integer) -> text
     return "Fontys.Messages.{domain}.Events"
 
 // The C# of an event, as the engine writes it.
-function eventText(e: EventType, fields: list<EventField>) -> text
+function eventText(e: EventDefinition, fields: list<EventField>) -> text
     let spec = new EventSpec
-    let d = e.domain
+    let owner = e.owner
+    let d = owner.domain
     spec.domain = d.name
     spec.name = e.name
     spec.version = e.number
@@ -1694,182 +1526,129 @@ function reviewLabel(label: text, review: text) -> text
         return label
     return @reviewMark(label = label)
 
-// The tree's rows: each domain with its two projects as the repository has
-// them. The model project holds its data objects (their versions, and the
-// child objects a version holds under it), its enums, and its versions,
-// each listing the data objects as they are in it; the messages project
-// holds its events, by event version.
-function outline(domains: list<Domain>, objects: list<DataObject>, versions: list<ObjectVersion>, held: list<Property>, enums: list<EnumType>, events: list<EventType>) -> list<Node>
-    let all: list<Node> = []
-    for d in domains
-        let n = new Node
-        n.key = "d{d.id}"
-        n.label = d.name
-        n.kind = "domain"
-        n.domain = d
-        all = all + [n]
-        let model = new Node
-        model.key = "pm{d.id}"
-        model.parent = "d{d.id}"
-        model.label = domainLabel(projectName(d.modelPackage, "Fontys.Fcdm.{d.name}"), d.modelVersion)
-        model.kind = "model"
-        model.domain = d
-        all = all + [model]
-        let objectsNode = new Node
-        objectsNode.key = "os{d.id}"
-        objectsNode.parent = "pm{d.id}"
-        objectsNode.label = @dataObjectsNode
-        objectsNode.kind = "objects"
-        objectsNode.domain = d
-        all = all + [objectsNode]
-        let highest = 1
-        for o in objects
-            if o.domain.id == d.id
-                for v in versions
-                    if v.owner.id == o.id and v.number > highest
-                        highest = v.number
-            // A root stands under Data objects, and so does a child no version holds.
-            let heldBySome = false
-            for p in held
-                if p.target != none and p.target.id == o.id
-                    heldBySome = true
-            if o.domain.id == d.id and (o.kind == Root or not heldBySome)
-                let on = new Node
-                on.key = "o{o.id}"
-                on.parent = "os{d.id}"
-                on.label = o.name
-                on.kind = "object"
-                on.domain = d
-                on.dataObject = o
-                all = all + [on]
-                for v in versions
-                    if v.owner.id == o.id
-                        let vn = new Node
-                        vn.key = "v{v.id}"
-                        vn.parent = "o{o.id}"
-                        vn.label = reviewLabel(versionLabel(v.number, v.obsolete), v.review)
-                        vn.kind = "version"
-                        vn.domain = d
-                        vn.dataObject = o
-                        vn.version = v
-                        all = all + [vn]
-                        // The child objects this version holds, as they are in it.
-                        for p in held
-                            if p.owner.id == v.id and p.target != none and p.target.kind == Child
-                                let at = newestNumber(versions, p.target.id, v.number)
-                                for cv in versions
-                                    if cv.owner.id == p.target.id and cv.number == at
-                                        let child = p.target
-                                        let cn = new Node
-                                        cn.key = "c{cv.id}in{v.id}"
-                                        cn.parent = "v{v.id}"
-                                        cn.label = reviewLabel(versionTitle(child.name, cv.number), cv.review)
-                                        cn.kind = "version"
-                                        cn.domain = d
-                                        cn.dataObject = child
-                                        cn.version = cv
-                                        all = all + [cn]
-        let enumsNode = new Node
-        enumsNode.key = "es{d.id}"
-        enumsNode.parent = "pm{d.id}"
-        enumsNode.label = @enumsNode
-        enumsNode.kind = "enums"
-        enumsNode.domain = d
-        all = all + [enumsNode]
-        for e in enums
-            if e.domain.id == d.id
-                let en = new Node
-                en.key = "e{e.id}"
-                en.parent = "es{d.id}"
-                en.label = e.name
-                en.kind = "enum"
-                en.domain = d
-                en.enumType = e
-                all = all + [en]
-        // The domain's versions: each holds every root object at its newest version up to it.
-        let levelsNode = new Node
-        levelsNode.key = "ls{d.id}"
-        levelsNode.parent = "pm{d.id}"
-        levelsNode.label = @versionsNode
-        levelsNode.kind = "levels"
-        levelsNode.domain = d
-        all = all + [levelsNode]
-        for level in 1 to highest
-            let ln = new Node
-            ln.key = "l{d.id}at{level}"
-            ln.parent = "ls{d.id}"
-            ln.label = "v{level}"
-            ln.kind = "level"
-            ln.domain = d
-            ln.level = level
-            all = all + [ln]
-            for o in objects
-                if o.domain.id == d.id and o.kind == Root
-                    let at = newestNumber(versions, o.id, level)
-                    for v in versions
-                        if v.owner.id == o.id and v.number == at
-                            let rn = new Node
-                            rn.key = "r{v.id}at{level}"
-                            rn.parent = "l{d.id}at{level}"
-                            rn.label = versionTitle(o.name, v.number)
-                            rn.kind = "resolved"
-                            rn.domain = d
-                            rn.dataObject = o
-                            rn.version = v
-                            rn.level = level
-                            all = all + [rn]
-        // The messages project: its events, by event version.
-        let messages = new Node
-        messages.key = "pe{d.id}"
-        messages.parent = "d{d.id}"
-        messages.label = domainLabel(projectName(d.messagesPackage, "Fontys.Messages.{d.name}"), d.messagesVersion)
-        messages.kind = "messages"
-        messages.domain = d
-        all = all + [messages]
-        let eventsNode = new Node
-        eventsNode.key = "evs{d.id}"
-        eventsNode.parent = "pe{d.id}"
-        eventsNode.label = @eventsNode
-        eventsNode.kind = "events"
-        eventsNode.domain = d
-        all = all + [eventsNode]
-        let newestEvent = 0
-        for e in events
-            if e.domain.id == d.id and e.number > newestEvent
-                newestEvent = e.number
-        for number in 1 to newestEvent
-            let mine: list<EventType> = []
-            for e in events
-                if e.domain.id == d.id and e.number == number
-                    mine = mine + [e]
-            if count(mine) > 0
-                let vn = new Node
-                vn.key = "evl{d.id}at{number}"
-                vn.parent = "evs{d.id}"
-                vn.label = "v{number}"
-                vn.kind = "eventlevel"
-                vn.domain = d
-                vn.level = number
-                all = all + [vn]
-                for e in mine
-                    let en = new Node
-                    en.key = "ev{e.id}"
-                    en.parent = "evl{d.id}at{number}"
-                    en.label = reviewLabel(e.name, e.review)
-                    en.kind = "event"
-                    en.domain = d
-                    en.eventType = e
-                    all = all + [en]
+// Where the adapter's generator reads an API version.
+function apiPath(major: integer) -> text
+    return "Fontys.Adapter.FcdmApi.Generator/Configuration/FcdmApi-v{major}.json"
+
+action writeApi(v: ApiVersion)
+    effects db.read, files.write
+    write apiJsonOf(v) to adapter apiPath(v.major)
+
+// Copies the entities of one API version into another, with their relations and enum columns.
+action copyApi(from: ApiVersion, into: ApiVersion)
+    effects db.read, db.write
+    for e in find x in ApiView where x.api == from order by x.position
+        let c = new ApiView
+        c.api = into
+        c.position = e.position
+        c.adapterTable = e.adapterTable
+        c.entity = e.entity
+        c.roles = e.roles
+        c.className = e.className
+        c.propertyName = e.propertyName
+        c.propertyPluralName = e.propertyPluralName
+        c.viewProperties = e.viewProperties
+        c.primaryKey = e.primaryKey
+        save c
+        for r in find x in ApiRelation where x.owner == e order by x.position
+            let cr = new ApiRelation
+            cr.owner = c
+            cr.position = r.position
+            cr.kind = r.kind
+            cr.foreignEntity = r.foreignEntity
+            cr.foreignKey = r.foreignKey
+            cr.propertyName = r.propertyName
+            cr.omitProperty = r.omitProperty
+            save cr
+        for n in find x in ApiEnum where x.owner == e order by x.position
+            let cn = new ApiEnum
+            cn.owner = c
+            cn.position = n.position
+            cn.propertyName = n.propertyName
+            cn.propertyType = n.propertyType
+            cn.sourcePath = n.sourcePath
+            save cn
+
+// An API version's FcdmApi-vN.json, laid out as the adapter keeps it: two
+// spaces, the roles on one line (a list only when there are several), an
+// empty relations list open over two lines.
+action apiJsonOf(v: ApiVersion) -> text
+    effects db.read
+    let out = "{{\n  \"version\": " + quoted(v.version) + ",\n  \"entities\": ["
+    let entities = find x in ApiView where x.api == v order by x.position
+    let first = true
+    for e in entities
+        if first
+            out = out + "\n"
+        else
+            out = out + ",\n"
+        first = false
+        let roles = "[ " + join(quotedAll(e.roles), ", ") + " ]"
+        if count(e.roles) == 1
+            roles = quoted(e.roles[1])
+        out = out + "    {{\n"
+        out = out + "      \"entity\": " + quoted(e.entity) + ",\n"
+        out = out + "      \"entityRole\": {roles},\n"
+        out = out + "      \"className\": " + quoted(e.className) + ",\n"
+        out = out + "      \"propertyName\": " + quoted(e.propertyName) + ",\n"
+        out = out + "      \"propertyPluralName\": " + quoted(e.propertyPluralName) + ",\n"
+        let table = e.adapterTable
+        out = out + "      \"tableName\": " + quoted(table.name) + ",\n"
+        out = out + "      \"viewProperties\": " + quoted(e.viewProperties) + ",\n"
+        out = out + "      \"primaryKey\": " + quoted(e.primaryKey) + ",\n"
+        let blocks: list<text> = []
+        for r in find x in ApiRelation where x.owner == e order by x.position
+            let fields = ["\"type\": " + quoted(relationWord(r.kind)), "\"foreignEntity\": " + quoted(r.foreignEntity)]
+            if r.foreignKey != ""
+                fields = fields + ["\"foreignKey\": " + quoted(r.foreignKey)]
+            if r.propertyName != ""
+                fields = fields + ["\"propertyName\": " + quoted(r.propertyName)]
+            if r.omitProperty
+                fields = fields + ["\"omitRelationProperty\": \"true\""]
+            blocks = blocks + [jsonBlock(fields)]
+        out = out + "      \"relations\": [\n" + jsonList(blocks) + "      ]"
+        let enumBlocks: list<text> = []
+        for n in find x in ApiEnum where x.owner == e order by x.position
+            enumBlocks = enumBlocks + [jsonBlock(["\"propertyName\": " + quoted(n.propertyName), "\"propertyType\": " + quoted(n.propertyType), "\"propertySourcePath\": " + quoted(n.sourcePath)])]
+        if count(enumBlocks) > 0
+            out = out + ",\n      \"enumProperties\": [\n" + jsonList(enumBlocks) + "      ]"
+        out = out + "\n    }}"
+    if count(entities) == 0
+        return out + "]\n}}\n"
+    return out + "\n  ]\n}}\n"
+
+// A JSON string of a text.
+function quoted(t: text) -> text
+    return "\"" + replace(replace(t, "\\", "\\\\"), "\"", "\\\"") + "\""
+
+function quotedAll(texts: list<text>) -> list<text>
+    let all: list<text> = []
+    for t in texts
+        all = all + [quoted(t)]
     return all
 
-// A project's name: its package, or the name the repository gives it when none is set.
-function projectName(package: text, fallback: text) -> text
-    if package == ""
-        return fallback
-    return package
+// An object of a list inside an entity, its fields one per line.
+function jsonBlock(fields: list<text>) -> text
+    let lines: list<text> = []
+    for f in fields
+        lines = lines + ["          " + f]
+    return "        {{\n" + join(lines, ",\n") + "\n        }}"
+
+function jsonList(items: list<text>) -> text
+    if count(items) == 0
+        return ""
+    return join(items, ",\n") + "\n"
+
+// A relation's kind as the generator names it.
+function relationWord(kind: RelationKind) -> text
+    if kind == RelatedByMany
+        return "relatedByMany"
+    if kind == RelatedByOne
+        return "relatedByOne"
+    return "relatesTo"
 
 // The number of the newest version of a data object up to `level`; 0 when it has none yet.
-function newestNumber(versions: list<ObjectVersion>, owner: integer, level: integer) -> integer
+function newestNumber(versions: list<ClassDefinition>, owner: integer, level: integer) -> integer
     let best = 0
     for v in versions
         if v.owner.id == owner and v.number <= level and v.number > best
@@ -1877,8 +1656,8 @@ function newestNumber(versions: list<ObjectVersion>, owner: integer, level: inte
     return best
 
 // The data objects as they are at a version of their domain: each at its newest version up to it.
-function asIn(objects: list<DataObject>, versions: list<ObjectVersion>, level: integer) -> list<ObjectVersion>
-    let found: list<ObjectVersion> = []
+function asIn(objects: list<DataObject>, versions: list<ClassDefinition>, level: integer) -> list<ClassDefinition>
+    let found: list<ClassDefinition> = []
     for o in objects
         let at = newestNumber(versions, o.id, level)
         for v in versions
@@ -1887,15 +1666,15 @@ function asIn(objects: list<DataObject>, versions: list<ObjectVersion>, level: i
     return found
 
 // The C# class of a version, as the engine writes it.
-function classText(o: DataObject, v: ObjectVersion, properties: list<Property>) -> text
-    let versions = find x in ObjectVersion order by x.number
+function classText(o: DataObject, v: ClassDefinition, properties: list<Property>) -> text
+    let versions = find x in ClassDefinition order by x.number
     return Fcdm.classCode(objectSpec(o, v), propertySpecs(properties, versions, v.number))
 
 // The interface of a root's version; a child has none.
-function interfaceText(o: DataObject, v: ObjectVersion, properties: list<Property>) -> text
+function interfaceText(o: DataObject, v: ClassDefinition, properties: list<Property>) -> text
     if o.kind != Root
         return ""
-    let versions = find x in ObjectVersion order by x.number
+    let versions = find x in ClassDefinition order by x.number
     return Fcdm.interfaceCode(objectSpec(o, v), propertySpecs(properties, versions, v.number))
 
 function enumText(e: EnumType, values: list<EnumValue>) -> text
@@ -1911,7 +1690,7 @@ function enumText(e: EnumType, values: list<EnumValue>) -> text
         specs = specs + [s]
     return Fcdm.enumCode(spec, specs)
 
-function objectSpec(o: DataObject, v: ObjectVersion) -> ObjectSpec
+function objectSpec(o: DataObject, v: ClassDefinition) -> ObjectSpec
     let spec = new ObjectSpec
     let owner = o.domain
     spec.domain = owner.name
@@ -1925,7 +1704,7 @@ function objectSpec(o: DataObject, v: ObjectVersion) -> ObjectSpec
     return spec
 
 // The properties as the engine takes them: a held object at its newest version up to this one.
-function propertySpecs(properties: list<Property>, versions: list<ObjectVersion>, own: integer) -> list<PropertySpec>
+function propertySpecs(properties: list<Property>, versions: list<ClassDefinition>, own: integer) -> list<PropertySpec>
     let specs: list<PropertySpec> = []
     for p in properties
         let s = new PropertySpec
@@ -1945,11 +1724,6 @@ function propertySpecs(properties: list<Property>, versions: list<ObjectVersion>
         specs = specs + [s]
     return specs
 
-function domainLabel(name: text, version: text) -> text
-    if version == ""
-        return name
-    return "{name}  {version}"
-
 function versionLabel(number: integer, obsolete: text) -> text
     if obsolete != ""
         return @obsoleteVersionMark(number = number)
@@ -1960,31 +1734,14 @@ function versionTitle(name: text, number: integer) -> text
         return "{name} v{number}"
     return name
 
-// The adapter's table of a version on the ERD: the one an event carrying
-// this version writes, else one an event carrying an older version writes,
-// else one any event writes (the newest entity first), else its newest
-// table; empty when the adapter keeps it in none, so it is no table.
-function tableTitle(v: ObjectVersion, tables: list<AdapterTable>, intakes: list<TableIntake>) -> text
+// The table of a class definition on the ERD: the adapter's table filled
+// from it, the last by name when there are more (CursussenV2 after
+// Cursussen); empty when none is, so it is no table there.
+function tableTitle(v: ClassDefinition, tables: list<AdapterTable>) -> text
     let best = ""
-    let bestRank = 0
     for t in tables
-        if t.owner != none and t.owner.id == v.owner.id
-            let rank = t.entityVersion
-            for i in intakes
-                if i.table.id == t.id and not i.deletes
-                    let e = i.event
-                    let written = 1000
-                    if e.carries != none
-                        let carried = e.carries
-                        if carried.id == v.id
-                            written = 100000
-                        else if carried.number < v.number
-                            written = 1000 + 100 * carried.number
-                    if rank < written + t.entityVersion
-                        rank = written + t.entityVersion
-            if rank > bestRank
-                best = t.name
-                bestRank = rank
+        if t.blueprint != none and t.blueprint.id == v.id
+            best = t.name
     return best
 
 // What a kind of property is written as on the diagrams.
@@ -2018,7 +1775,7 @@ function propertyLine(name: text, kind: text, nullable: bool) -> text
     return "{name}: {kind}"
 
 // The lines of a data object's box on the class diagram: its business key, then its properties.
-function classLines(v: ObjectVersion, all: list<Property>) -> list<text>
+function classLines(v: ClassDefinition, all: list<Property>) -> list<text>
     let lines: list<text> = []
     if v.owner.kind == Root and v.owner.keyed
         lines = lines + ["Bk: string"]
@@ -2032,7 +1789,7 @@ function classLines(v: ObjectVersion, all: list<Property>) -> list<text>
 
 // The lines of a table on the ERD, as the adapter keeps it: its business key
 // first, its stored values, and its two moments.
-function erdLines(v: ObjectVersion, all: list<Property>) -> list<text>
+function erdLines(v: ClassDefinition, all: list<Property>) -> list<text>
     let lines: list<text> = ["PK  Bk"]
     for p in all
         if p.owner.id == v.id and p.kind != HeldObjects and p.kind != HeldObject and p.computed == ""
@@ -2106,44 +1863,6 @@ function diagramBoxes(objects: list<DataObject>, enums: list<EnumType>) -> list<
         found = found + [b]
     return found
 
-// The boxes of the adapter's own tables on a domain's ERD, as Roostercodes:
-// only those the domain's events fill (DeletedEntities on each domain whose
-// deleted events write it), in a row at the top right until moved.
-function ownTableBoxes(tables: list<AdapterTable>, intakes: list<TableIntake>, d: Domain) -> list<DiagramBox>
-    let found: list<DiagramBox> = []
-    let placed = 0
-    for t in tables
-        let filled = false
-        for i in intakes
-            if i.table.id == t.id
-                let e = i.event
-                if e.domain.id == d.id
-                    filled = true
-        if t.owner == none and filled
-            let b = new DiagramBox
-            b.id = 2000000 + t.id
-            b.key = "t{t.id}"
-            b.x = t.x
-            b.y = t.y
-            if t.x == 0 and t.y == 0
-                b.x = 1640 + 320 * placed
-                b.y = 40
-                placed = placed + 1
-            b.adapterTable = t
-            found = found + [b]
-    return found
-
-// The lines of a table of the adapter's own: its columns as its model class has them, its key marked.
-function ownTableLines(t: AdapterTable) -> list<text>
-    let lines: list<text> = []
-    for c in t.columns
-        let marked = "    "
-        for k in t.keys
-            if c contains "{k}: "
-                marked = "PK  "
-        lines = lines + ["{marked}{c}"]
-    return lines
-
 // The box of a data object among the boxes.
 function boxFor(all: list<DiagramBox>, o: DataObject) -> DiagramBox
     for b in all
@@ -2155,36 +1874,28 @@ function boxFor(all: list<DiagramBox>, o: DataObject) -> DiagramBox
     alone.dataObject = o
     return alone
 
-// The event an intake names: of that name, in the first of its namespaces the import has it in.
-action intakeEvent(name: text, namespaces: list<text>) -> EventType
+// The adapter's tables filled from a data object's class definitions, for
+// its tables tab: each with the API versions that make a view on it.
+action apiUsesOf(o: DataObject) -> list<ApiUse>
     effects db.read
-    for ns in namespaces
-        let found = find x in EventType where x.name == name and x.namespace == ns
-        if count(found) > 0
-            return found[1]
-    return new EventType
-
-// The events that fill a table, for the Tables tab: each with its version and what it does.
-action intakeRowsOf(t: AdapterTable) -> list<IntakeRow>
-    effects db.read
-    let rows: list<IntakeRow> = []
-    if t.id == 0
-        return rows
-    for i in find x in TableIntake where x.table == t
-        let e = i.event
-        let r = new IntakeRow
-        r.event = e.name
-        r.version = e.number
-        r.action = @intakeWrites
-        if i.deletes
-            r.action = @intakeDeletes
-        rows = rows + [r]
-    return rows
+    let uses: list<ApiUse> = []
+    for t in find x in AdapterTable order by x.name
+        if t.blueprint != none and t.blueprint.owner.id == o.id
+            let u = new ApiUse
+            u.version = t.blueprint.number
+            u.table = t.name
+            let majors: list<text> = []
+            for w in find x in ApiView where x.adapterTable == t order by x.position
+                let a = w.api
+                majors = majors + ["v{a.major}"]
+            u.apis = join(majors, ", ")
+            uses = uses + [u]
+    return uses
 
 // The boxes of the diagram shown, each as large as it is drawn: a data
-// object's (on the ERD only when the adapter keeps it in a table), an enum's
-// on the class diagram, a table of the adapter's own on the ERD.
-function laidOutBoxes(boxes: list<DiagramBox>, shown: list<ObjectVersion>, members: list<Property>, enumValues: list<EnumValue>, tables: list<AdapterTable>, intakes: list<TableIntake>, erd: bool) -> list<LayoutBox>
+// object's (on the ERD only when an API version serves it), and an enum's
+// on the class diagram.
+function laidOutBoxes(boxes: list<DiagramBox>, shown: list<ClassDefinition>, members: list<Property>, enumValues: list<EnumValue>, tables: list<AdapterTable>, erd: bool) -> list<LayoutBox>
     let wanted: list<LayoutBox> = []
     for b in boxes
         let box = new LayoutBox
@@ -2197,7 +1908,7 @@ function laidOutBoxes(boxes: list<DiagramBox>, shown: list<ObjectVersion>, membe
             for v in shown
                 if v.owner.id == b.dataObject.id
                     if erd
-                        title = tableTitle(v, tables, intakes)
+                        title = tableTitle(v, tables)
                         lines = erdLines(v, members)
                     else
                         title = versionTitle(v.owner.name, v.number)
@@ -2206,10 +1917,6 @@ function laidOutBoxes(boxes: list<DiagramBox>, shown: list<ObjectVersion>, membe
             let e = b.enumType
             title = e.name
             lines = enumLines(e, enumValues)
-        if b.adapterTable != none and erd
-            let t = b.adapterTable
-            title = t.name
-            lines = ownTableLines(t)
         if title != ""
             box.width = boxWidth(title, lines)
             box.height = 40 + 22 * count(lines)

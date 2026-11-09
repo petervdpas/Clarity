@@ -313,7 +313,7 @@ impl ProgramHost {
                         place.selected.insert(name.clone(), *row);
                     }
                 }
-                "accordion" | "tabs" | "steps" => {
+                "accordion" | "tabs" | "steps" | "content" => {
                     if let Some(open) = state.parts.get(name).and_then(|p| p.open.or(p.tab)) {
                         place.opened.insert(name.clone(), open);
                     }

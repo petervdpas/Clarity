@@ -870,11 +870,17 @@ impl<'a> Checker<'a> {
         let mut shown: Vec<&str> = Vec::new();
         for place in crate::views::places(&page.widgets) {
             let (name, what, span) = (place.view, place.what, place.span);
-            if place.holds_parts {
-                self.error(file, format!("a {what} that shows a view holds no parts of its own; they are {name}'s"), span);
+            // A view shows only in a window's content; without content nothing shows it.
+            if what != "content" {
+                self.error(file, format!("a {what} does not show a view: a view shows in content; put a content in the {what} with view {name}"), span);
+                continue;
             }
-            if page.kind == PageKind::View {
-                self.error(file, "a view shows in a window, not in another view", span);
+            if place.holds_parts {
+                self.error(file, format!("a view line of content holds no parts of its own; they are {name}'s"), span);
+            }
+            // A view may hold content of its own (views nest), but never shows itself.
+            if page.kind == PageKind::View && name == page.name.name {
+                self.error(file, format!("{name} shows itself"), span);
                 continue;
             }
             let Some(found) = self.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == name) else {
@@ -882,7 +888,7 @@ impl<'a> Checker<'a> {
                 continue;
             };
             if found.kind != PageKind::View {
-                self.error(file, format!("{name} is a {}; a {what} shows a view: write page {name}: view", page_kind_word(found.kind)), span);
+                self.error(file, format!("{name} is a {}; content shows a view: write page {name}: view", page_kind_word(found.kind)), span);
                 continue;
             }
             if shown.contains(&name) {
@@ -1255,6 +1261,71 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// A tree of several kinds of records (DESIGN 5.33): named, bound to
+    /// nothing (its rows are its levels'), each level an entity whose
+    /// `under` field refers to the level around it, showing a field or a key,
+    /// ordered by a field; each `on select` an entity of its levels.
+    fn check_tree_levels(&mut self, file: usize, widget: &Widget) {
+        if widget.levels.is_empty() {
+            if !widget.selects.is_empty() {
+                self.error(file, "'on select Entity: handler' belongs to a tree of levels; write level lines in it", widget.span);
+            }
+            return;
+        }
+        if widget.props.name.is_none() {
+            self.error(file, "a tree of levels needs a name, which code reloads it by", widget.span);
+        }
+        if widget.props.bind.is_some() {
+            self.error(file, "a tree of levels shows its levels' records; it binds nothing", widget.span);
+        }
+        let entity = |name: &str| self.files.iter().flat_map(|f| &f.entities).find(|e| e.name.name == name);
+        let mut problems: Vec<(String, crate::span::Span)> = Vec::new();
+        fn walk<'e>(levels: &[crate::model::TreeLevel], around: Option<&str>, entity: &dyn Fn(&str) -> Option<&'e crate::model::Entity>, problems: &mut Vec<(String, crate::span::Span)>) {
+            for level in levels {
+                let Some(name) = &level.entity else {
+                    walk(&level.levels, around, entity, problems);
+                    continue;
+                };
+                let Some(found) = entity(name) else {
+                    problems.push((format!("there is no entity '{name}' for this level"), level.span));
+                    continue;
+                };
+                match (&level.under, around) {
+                    (Some(under), Some(around)) => match found.field(under).map(|f| &f.ty) {
+                        Some(FieldType::Ref { entity }) if entity.name == around => {}
+                        Some(_) => problems.push((format!("{name}.{under} does not refer to {around}, the level around it"), level.span)),
+                        None => problems.push((format!("{name} has no field '{under}'"), level.span)),
+                    },
+                    (Some(_), None) => problems.push(("a top level stands under nothing; leave 'under' out".to_string(), level.span)),
+                    (None, Some(around)) => problems.push((format!("say which field of {name} refers to {around}: under field"), level.span)),
+                    (None, None) => {}
+                }
+                if let Some(show) = level.show.as_deref().filter(|s| !s.starts_with('@'))
+                    && found.field(show).is_none()
+                    && show != "id"
+                {
+                    problems.push((format!("{name} has no field '{show}' to show"), level.span));
+                }
+                if let Some(order) = &level.order
+                    && found.field(order).is_none()
+                {
+                    problems.push((format!("{name} has no field '{order}' to order by"), level.span));
+                }
+                walk(&level.levels, Some(name), entity, problems);
+            }
+        }
+        walk(&widget.levels, None, &entity, &mut problems);
+        let shown = crate::trees::entities(&widget.levels);
+        for select in &widget.selects {
+            if !shown.contains(&select.entity) {
+                problems.push((format!("the tree shows no {} rows; on select names an entity of its levels", select.entity), select.span));
+            }
+        }
+        for (message, span) in problems {
+            self.error(file, message, span);
+        }
+    }
+
     fn check_widgets(
         &mut self,
         file: usize,
@@ -1269,6 +1340,7 @@ impl<'a> Checker<'a> {
                 self.error(file, crate::icons::unknown(icon), widget.span);
             }
             self.check_small_part(file, widget);
+            self.check_tree_levels(file, widget);
             // A popover is outside the grid: only its own parts are placed, on its own grid.
             // A table's Add button and trash buttons run their handlers, which add and delete the row.
             if p.add && !p.handlers.iter().any(|h| h.event == crate::widgets::Event::Add) {
@@ -1390,6 +1462,9 @@ impl<'a> Checker<'a> {
                     match container {
                         ContainerKind::Tabs if widget.pages.is_empty() => {
                             self.error(file, "tabs need at least one 'tab'", widget.span);
+                        }
+                        ContainerKind::Content if widget.pages.is_empty() => {
+                            self.error(file, "content needs at least one 'view', as in view OrderEditor", widget.span);
                         }
                         ContainerKind::Accordion if widget.pages.is_empty() => {
                             self.error(file, "an accordion needs at least one 'section'", widget.span);
@@ -2129,7 +2204,7 @@ impl<'a> Checker<'a> {
         let opened = self.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == target);
         for name in with {
             let Some(page) = opened else { break };
-            let Some(theirs) = page.data.iter().find(|d| d.name.name == *name) else {
+            let Some(theirs) = crate::views::page_data(self.files.iter(), page).into_iter().find(|d| d.name.name == *name) else {
                 self.error(file, format!("{target} has no data '{name}' to open it with"), span);
                 continue;
             };

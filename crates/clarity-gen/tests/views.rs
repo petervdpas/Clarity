@@ -1,6 +1,7 @@
-//! Views in slide-outs on every stack (DESIGN 5.33): the view's parts are
-//! written in the slide-out of the window's markup, its handlers in the
-//! window's code, so every stack shows them as the window's own.
+//! Views in a window's content on every stack (DESIGN 5.33): the view's
+//! parts are written in the content of the window's markup, its handlers in
+//! the window's code, so every stack shows them as the window's own;
+//! `main.swap(X)` opens the page of X.
 
 use clarity_gen::generate;
 use clarity_project::{Backend, Ui, starter};
@@ -10,7 +11,9 @@ const MODEL: &str = "module model
 page Workspace: window
     data picked: text
     button \"Edit\" name editButton at 1,1 span 2 on click: editClicked
-    slideout \"Class\" name classPanel view ClassEditor span 6 rows 6
+    slideout \"Class\" name classPanel span 6 rows 6
+        content name classContent at 1,1 span 6 rows 6
+            view ClassEditor
 
 page ClassEditor: view
     data className: text
@@ -61,31 +64,43 @@ fn the_designer_draws_a_view_on_its_own_and_the_preview_shows_it_in_the_window()
     assert!(shown["windows"]["Workspace"].as_str().unwrap().contains("name=\"saveButton\""));
 }
 
-/// A view shown in a tab keeps its own grid on every stack: the tab's markup
-/// carries the view's columns, so its last columns stay inside the tabs.
+const SWAPPED: &str = "module model
+
+page Workspace: window
+    button \"Other\" name otherButton at 1,1 span 2 on click: otherClicked
+    content name main at 1,2 span 9 rows 6
+        view ClassEditor
+        view OtherEditor
+
+page ClassEditor: view
+    button \"Save\" name saveButton at 11,1 span 2
+
+page OtherEditor: view
+    label \"Other\" name otherLabel at 1,1 span 2
+
+code Workspace
+    handler otherClicked
+        main.swap(OtherEditor)
+";
+
+/// Content on every stack: its views as pages of `<Content>`, each keeping
+/// the view's columns, and `main.swap(OtherEditor)` opening the second.
 #[test]
-fn a_view_in_a_tab_carries_its_columns_on_every_stack() {
-    let text = MODEL.replace("    slideout \"Class\" name classPanel view ClassEditor span 6 rows 6\n", "    slideout \"Class\" name classPanel view ClassEditor span 6 rows 6\n    tabs name sides at 1,2 span 9 rows 6\n        tab \"Class\" view ClassEditor\n");
-    let project = clarity_spec::keyed::load_keyed([("model.clarity", text.as_str())], &[], "en");
+fn content_shows_its_views_and_swaps_them_on_every_stack() {
+    let project = clarity_spec::keyed::load_keyed([("model.clarity", SWAPPED)], &[], "en");
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
-    if !errors.is_empty() {
-        // One view shows in one place: then the slide-out goes.
-        let single = MODEL.replace("    slideout \"Class\" name classPanel view ClassEditor span 6 rows 6\n", "    tabs name sides at 1,2 span 9 rows 6\n        tab \"Class\" view ClassEditor\n").replace("        classPanel.visible = true\n", "");
-        let project = clarity_spec::keyed::load_keyed([("model.clarity", single.as_str())], &[], "en");
-        let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
-        assert!(errors.is_empty(), "{errors:#?}");
-        check(&project);
-    } else {
-        check(&project);
-    }
-    fn check(project: &clarity_spec::Project) {
-        for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp, Backend::Csharp] {
-            let mut settings = starter("Model", "model");
-            settings.stack.backend = backend;
-            settings.stack.ui = Ui::Clarity;
-            let code: String = generate(project, &settings).unwrap_or_else(|e| panic!("{backend:?}: {e:#?}")).iter().map(|f| f.text.clone()).collect();
-            let tab = code.lines().find(|l| l.trim_start().starts_with("<Tab ")).unwrap_or_default().to_string();
-            assert!(tab.contains("columns=\"12\""), "{backend:?}: {tab}");
-        }
+    assert!(errors.is_empty(), "{errors:#?}");
+    let opened = [(Backend::Rust, "ui.set_tab("), (Backend::Go, "SetTab("), (Backend::C, "clarity_ui_set_tab("), (Backend::Cpp, "set_tab("), (Backend::Csharp, "Main.Tab = ")];
+    for (backend, swap) in opened {
+        let mut settings = starter("Model", "model");
+        settings.stack.backend = backend;
+        settings.stack.ui = Ui::Clarity;
+        let code: String = generate(&project, &settings).unwrap_or_else(|e| panic!("{backend:?}: {e:#?}")).iter().map(|f| format!("{}\n", f.text)).collect();
+        let at = code.find("<Content name=\"main\"").unwrap_or_else(|| panic!("{backend:?} has no content"));
+        let inside = &code[at..at + code[at..].find("</Content>").unwrap_or_else(|| panic!("{backend:?}: the content holds nothing"))];
+        assert!(inside.contains("name=\"saveButton\"") && inside.contains("name=\"otherLabel\""), "{backend:?}: {inside}");
+        assert!(inside.contains("<Tab columns=\"12\""), "{backend:?}: {inside}");
+        assert!(code.lines().any(|l| l.contains(swap) && l.to_lowercase().contains("main") && l.contains('2')), "{backend:?} opens no second page with {swap}");
     }
 }
+

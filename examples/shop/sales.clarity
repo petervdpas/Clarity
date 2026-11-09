@@ -31,14 +31,22 @@ engine Pricing from "pricing.wasm"
 // that slides out from the right; the table adds and removes them.
 page OrderBrowse: window
     title @orderBrowseTitle
-    data orders: list<Order>
     on open: filterChanged
     on return: filterChanged
+
+    content name main at 1,1 span 12 rows 10
+        view OrderBrowseView
+    slideout @orderSlideout name orderSlide width 820 resizable min 600 max 1200 pinnable span 12 rows 11
+        content name orderSlideContent at 1,1 span 12 rows 11
+            view OrderEditor on saved: filterChanged
+
+// What the window OrderBrowse shows: its parts, data and code.
+page OrderBrowseView: view
+    data orders: list<Order>
 
     label @numberFilterLabel name numberFilterLabel at 1,1 span 2 for numberFilter
     textbox name numberFilter at 3,1 span 4 placeholder @numberFilterPlaceholder on change: filterChanged
     table name ordersTable at 1,2 span 12 rows 9 bind orders columns number, customer, orderedOn, status, total sortable order by orderedOn desc page 20 add remove confirm on add: newOrderClicked on remove: removeOrderClicked on open: openOrderClicked
-    slideout @orderSlideout name orderSlide view OrderEditor width 820 resizable min 600 max 1200 pinnable span 12 rows 11 on saved: filterChanged
 
 // An order: its customer and state, its lines, and its total.
 // It tells the window when the order changed, so its list shows it at once.
@@ -67,9 +75,15 @@ page OrderEditor: view
 // How sales go: orders by status, money per day, and who spends it.
 page SalesDashboard: window
     title @salesDashboardTitle
-    data orders: list<Order>
     on open: dashboardOpened
     on return: dashboardOpened
+
+    content name main at 1,1 span 12 rows 14
+        view SalesDashboardView
+
+// What the window SalesDashboard shows: its parts, data and code.
+page SalesDashboardView: view
+    data orders: list<Order>
 
     heading @ordersByStatusHeading name ordersByStatusHeading at 1,1 span 6
     heading @salesPerDayHeading name salesPerDayHeading at 7,1 span 6
@@ -99,6 +113,7 @@ code OrderBrowse
     handler filterChanged
         orders = find o in Order where o.number contains numberFilter.text order by o.number
 
+code OrderBrowseView
     handler openOrderClicked
         order = ordersTable.selected
         lines = find l in OrderLine where l.order == order

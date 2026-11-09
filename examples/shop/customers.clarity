@@ -20,14 +20,22 @@ entity Customer
 // editor that slides out from the right; the table adds and removes them.
 page CustomerBrowse: window
     title @customerBrowseTitle
-    data customers: list<Customer>
     on open: filterChanged
     on return: filterChanged
+
+    content name main at 1,1 span 12 rows 10
+        view CustomerBrowseView
+    slideout @customerSlideout name customerPanel width 760 resizable min 520 max 1200 pinnable span 12 rows 9
+        content name customerPanelContent at 1,1 span 12 rows 9
+            view CustomerEditor on saved: filterChanged
+
+// What the window CustomerBrowse shows: its parts, data and code.
+page CustomerBrowseView: view
+    data customers: list<Customer>
 
     label @searchLabel name searchLabel at 1,1 span 2 for searchBox
     textbox name searchBox at 3,1 span 10 placeholder @searchPlaceholder on change: filterChanged
     table name grid at 1,2 span 12 rows 9 bind customers columns name, email, kind, creditLimit, active, tags sortable page 20 add remove confirm on add: newClicked on remove: removeClicked on open: openClicked
-    slideout @customerSlideout name customerPanel view CustomerEditor width 760 resizable min 520 max 1200 pinnable span 12 rows 9 on saved: filterChanged
 
 // A customer: who they are, their money, and notes.
 page CustomerEditor: view
@@ -71,6 +79,7 @@ code CustomerBrowse
         // Every word typed, at the start of a word of the name, e-mail, notes or tags.
         customers = find c in Customer where c matches searchBox.text order by c.name
 
+code CustomerBrowseView
     handler openClicked
         customer = grid.selected
         vatNumber.enabled = customer.kind == Business

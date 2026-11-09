@@ -25,8 +25,12 @@ code Main
 const VIEWS: &str = "module m
 
 page Main: window
-    slideout name leftPanel side left view Values width 300 span 4 rows 4
-    slideout name rightPanel side right view Counter width 300 span 4 rows 4
+    slideout name leftPanel side left width 300 span 4 rows 4
+        content name leftContent at 1,1 span 4 rows 4
+            view Values
+    slideout name rightPanel side right width 300 span 4 rows 4
+        content name rightContent at 1,1 span 4 rows 4
+            view Counter
 
 page Values: view
     data values: list<text>
@@ -51,7 +55,8 @@ fn a_local_named_like_its_own_page_s_data_is_refused() {
 #[test]
 fn a_local_named_like_data_another_view_brings_into_the_window_is_refused() {
     let found = errors(VIEWS);
-    assert!(found.iter().any(|e| e.contains("'values'") && e.contains("Values") && e.contains("Main")), "{found:#?}");
+    // The view's code reaches what shares its window, so the local would stand for that data.
+    assert!(found.iter().any(|e| e.contains("'values' is already a name")), "{found:#?}");
     // Renamed, it is fine.
     let renamed = errors(&VIEWS.replace("let values = ", "let picked = ").replace("count(values)", "count(picked)"));
     assert!(renamed.is_empty(), "{renamed:#?}");

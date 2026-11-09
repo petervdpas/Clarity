@@ -35,6 +35,31 @@ pub fn sidebar_grown(now: (f64, f64), was: f64, width: f64, room: Option<(f64, f
     grown(now, Some((now.0 + width - was, now.1)), room)
 }
 
+/// A window view's sidebars as the desktop window last saw them: which
+/// side's is open (shown and not folded) and how wide they are together.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Sidebars {
+    pub open: [bool; 2],
+    pub width: f64,
+}
+
+/// A window view's sidebars now.
+pub fn sidebars_of(view: &WindowView) -> Sidebars {
+    let open = |left: bool| view.frame().sidebar_shows(left) && view.sidebar(left).is_some_and(|s| !s.collapsed());
+    Sidebars { open: [open(true), open(false)], width: sidebars_width(view) }
+}
+
+/// The size of a desktop window `now` when its sidebars went from `was` to
+/// `is`: it grows only when a sidebar opened, by the room that took. One
+/// dragged wider takes its room from the window's own parts.
+pub fn sidebars_grown(now: (f64, f64), was: &Sidebars, is: &Sidebars, room: Option<(f64, f64)>) -> (f64, f64) {
+    let opened = (0..2).any(|i| is.open[i] && !was.open[i]);
+    if !opened {
+        return now;
+    }
+    sidebar_grown(now, was.width, is.width, room)
+}
+
 /// How wide a window view's sidebars are now: each shown one as wide as it wants (its strip while folded).
 pub fn sidebars_width(view: &WindowView) -> f64 {
     [true, false].into_iter().filter(|left| view.frame().sidebar_shows(*left)).filter_map(|left| view.sidebar(left)).map(|s| s.wanted()).sum()

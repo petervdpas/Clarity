@@ -9,7 +9,7 @@
 #[allow(dead_code)]
 use super::core_frame_shared as shared;
 
-use clarity_ui::desktop::grow::{grown, sidebar_grown, sidebars_width};
+use clarity_ui::desktop::grow::{grown, sidebar_grown, sidebars_grown, sidebars_of, sidebars_width};
 use clarity_ui::frame::rules::STRIP_WIDTH;
 use clarity_ui::window::WindowView;
 use shared::*;
@@ -48,4 +48,28 @@ fn a_window_view_says_how_wide_its_sidebars_are() {
     assert_eq!(STRIP_WIDTH, sidebars_width(view(&screen)));
     screen.act_root::<WindowView, _>(|v, cx| v.sidebar_mut(true).unwrap().fold(false, cx));
     assert_eq!(320.0, sidebars_width(view(&screen)));
+}
+
+/// Dragging an open sidebar wider takes the room from the window's own
+/// parts: the desktop window keeps its size. Only a sidebar that opens grows it.
+#[test]
+fn a_sidebar_dragged_wider_leaves_the_window_as_it_is() {
+    let (mut screen, _host) = window(r#"<Sidebar side="left" name="explorer" width="320" resizable="true" min="240" max="720"><Text name="rules" at="1,1" span="12" /></Sidebar><Button name="go" at="1,1" span="12" />"#, None);
+    draw(&mut screen);
+    let was = sidebars_of(view(&screen));
+    screen.act_root::<WindowView, _>(|v, cx| v.sidebar_mut(true).unwrap().drag_to(500.0, cx));
+    let is = sidebars_of(view(&screen));
+    assert_eq!(500.0, is.width);
+    assert_eq!((1280.0, 800.0), sidebars_grown((1280.0, 800.0), &was, &is, Some((1920.0, 1080.0))));
+}
+
+#[test]
+fn a_sidebar_that_unfolds_still_grows_the_window() {
+    let (mut screen, host) = window(r#"<Sidebar side="left" name="help" width="320" collapsible="true" collapsed="true"><Text name="rules" at="1,1" span="12" /></Sidebar><Button name="go" at="1,1" span="12" />"#, None);
+    host.set_state("help", |s| s.collapsed = Some(true));
+    draw(&mut screen);
+    let was = sidebars_of(view(&screen));
+    screen.act_root::<WindowView, _>(|v, cx| v.sidebar_mut(true).unwrap().fold(false, cx));
+    let is = sidebars_of(view(&screen));
+    assert_eq!((697.0, 510.0), sidebars_grown((405.0, 510.0), &was, &is, Some((1920.0, 1080.0))));
 }

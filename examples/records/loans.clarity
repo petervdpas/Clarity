@@ -30,9 +30,15 @@ action bringBack(loan: Loan)
 
 page LoanBrowse: window
     title @loanBrowseTitle
-    data loans: list<Loan>
     on open: windowReturned
     on return: windowReturned
+
+    content name main at 1,1 span 12 rows 10
+        view LoanBrowseView
+
+// What the window LoanBrowse shows: its parts, data and code.
+page LoanBrowseView: view
+    data loans: list<Loan>
 
     heading @loansHeadingCaption name loansHeading at 1,1 span 6
     checkbox @showReturnedCaption name showReturned at 9,1 span 4 on change: windowReturned
@@ -60,8 +66,14 @@ page LoanDialog: dialog
 
 page FriendBrowse: window
     title @friendBrowseTitle
-    data friends: list<Friend>
     on return: windowReturned
+
+    content name main at 1,1 span 12 rows 9
+        view FriendBrowseView
+
+// What the window FriendBrowse shows: its parts, data and code.
+page FriendBrowseView: view
+    data friends: list<Friend>
 
     table name friendGrid at 1,1 span 12 rows 9 bind friends columns name, phone, email add remove confirm on add: newClicked on remove: removeClicked on open: openClicked
 
@@ -85,6 +97,7 @@ code LoanBrowse
         else
             loans = find l in Loan where l.returnedOn == none order by l.lentOn
 
+code LoanBrowseView
     handler openClicked
         open LoanDialog with loan = loanGrid.selected
 
@@ -123,6 +136,7 @@ code FriendBrowse
     handler windowReturned
         reload friends
 
+code FriendBrowseView
     handler openClicked
         open FriendDialog with friend = friendGrid.selected
 

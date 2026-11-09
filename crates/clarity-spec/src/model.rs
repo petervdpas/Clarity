@@ -511,6 +511,46 @@ pub struct Widget {
     pub pages: Vec<WidgetPage>,
     /// Its context menu: a `menu` block under the part (DESIGN 5.16).
     pub menu: Option<Menu>,
+    /// A tree of several kinds of records: its levels, each the records of an
+    /// entity under the row of the level around it, or a group heading.
+    #[serde(default)]
+    pub levels: Vec<TreeLevel>,
+    /// What a tree of levels runs when a row of a kind is picked: `on select Project: projectPicked`.
+    #[serde(default)]
+    pub selects: Vec<TreeSelect>,
+    pub span: Span,
+}
+
+/// A level of a tree of several kinds of records (DESIGN 5.33): `level
+/// Domain under project show name order by name`, the records of Domain
+/// whose `project` is the row of the level around it; or `group
+/// @dataObjectsNode`, a heading over the levels inside it, shown when they
+/// have rows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct TreeLevel {
+    /// The entity whose records are its rows; none for a group.
+    pub entity: Option<String>,
+    /// The field of those records that refers to the row of the level around it; none at the top.
+    pub under: Option<String>,
+    /// What a row shows: a field of the record, or a text key (`@classNode`) whose slots are fields.
+    pub show: Option<String>,
+    /// A group's heading, a text key.
+    pub group: Option<String>,
+    /// The field its rows are ordered by, and whether from high to low.
+    pub order: Option<String>,
+    pub descending: bool,
+    pub levels: Vec<TreeLevel>,
+    pub span: Span,
+}
+
+/// `on select ClassDefinition: classPicked`: the handler a tree of levels
+/// runs with the record when a row of that entity is picked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct TreeSelect {
+    pub entity: String,
+    pub handler: String,
     pub span: Span,
 }
 

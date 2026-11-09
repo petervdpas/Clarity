@@ -69,10 +69,10 @@ fn example_page_is_clean() {
     let project = clarity_spec::load_dir(std::path::Path::new(dir)).unwrap();
     let page = project
         .pages()
-        .find(|p| p.name.name == "CustomerCard")
-        .expect("example has the customer card");
-    assert_eq!(page.name.name, "CustomerCard");
-    assert_eq!(page.kind, PageKind::Window);
+        .find(|p| p.name.name == "CustomerCardView")
+        .expect("example has the customer card's view");
+    assert_eq!(page.name.name, "CustomerCardView");
+    assert_eq!(page.kind, PageKind::View);
     assert_eq!(page.data.len(), 2);
     assert!(page.data[1].is_list());
     let problems: Vec<_> = project

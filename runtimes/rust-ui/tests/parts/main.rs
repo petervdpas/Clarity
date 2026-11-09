@@ -16,6 +16,7 @@ mod core_radio_label;
 mod icon;
 mod parts_accordion;
 mod parts_button;
+mod parts_content;
 mod parts_custom;
 mod parts_display;
 mod parts_display_look;

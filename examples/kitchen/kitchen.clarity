@@ -37,17 +37,31 @@ app Kitchen
 page Cookbook: window
     title @kitchenTitle
     size 1200 x 720
+    on open: kitchenOpened
+
+    content name main at 1,1 span 12 rows 14
+        view CookbookView
+    footer
+        status @kitchenStatus
+
+// What the window Cookbook shows: its parts, data and code.
+page CookbookView: view
     data recipes: list<Recipe>
     data recipe: Recipe
     data timerMinutes: integer, default 10
     data secondsLeft: integer
-    on open: kitchenOpened
 
     table name recipeTable at 1,1 span 4 rows 14 bind recipes columns name, course, minutes sortable add remove confirm on add: addRecipe on remove: removeRecipe on select: recipePicked
     accordion name recipeParts at 5,1 span 8 rows 14 horizontal
-        section @overviewSection view RecipeOverview on saved: recipeSaved
-        section @ingredientsSection view IngredientList
-        section @methodSection view MethodSteps
+        section @overviewSection
+            content name recipeOverviewContent at 1,1 span 8 rows 14
+                view RecipeOverview on saved: recipeSaved
+        section @ingredientsSection
+            content name ingredientListContent at 1,1 span 8 rows 14
+                view IngredientList
+        section @methodSection
+            content name methodStepsContent at 1,1 span 8 rows 14
+                view MethodSteps
         section @timerSection
             label @timerMinutesLabel name timerMinutesLabel at 1,1 span 3 for timerBox
             spinbox name timerBox at 4,1 span 2 bind timerMinutes min 1 max 240
@@ -57,8 +71,6 @@ page Cookbook: window
             display name timerShown at 1,4 span 6 rows 2 bind secondsLeft digits 5
     timer name clock every 1 on tick: ticked
     sound name alarm volume 80
-    footer
-        status @kitchenStatus
 
 // A recipe's name, course, how many it serves, how long it takes, notes
 // and a photo of the dish. Save stores it and tells the window, which shows it in its list.
@@ -106,6 +118,7 @@ code Cookbook
         refreshRecipes()
         showRecipe()
 
+code CookbookView
     handler refreshRecipes
         recipes = find r in Recipe order by r.name
 

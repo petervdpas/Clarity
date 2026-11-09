@@ -20,7 +20,7 @@ use crate::widgets::WidgetKind;
 pub struct Place<'a> {
     /// The name of the view it shows.
     pub view: &'a str,
-    /// What the place is, as people say it: "slide-out", "tab", "step" or "section".
+    /// What the place is, as people say it: "content" (the one place a view shows), or "slide-out", "tab", "step" or "section", which the checker refuses.
     pub what: &'static str,
     /// Whether it holds parts of its own besides.
     pub holds_parts: bool,
@@ -57,6 +57,7 @@ fn page_word(kind: WidgetKind) -> &'static str {
     match kind {
         WidgetKind::Steps => "step",
         WidgetKind::Accordion => "section",
+        WidgetKind::Content => "content",
         _ => "tab",
     }
 }
@@ -64,6 +65,27 @@ fn page_word(kind: WidgetKind) -> &'static str {
 /// The view named `name` among `files`; none when there is no page of that name or it is no view.
 pub fn find<'a>(files: impl IntoIterator<Item = &'a SpecFile>, name: &str) -> Option<&'a Page> {
     files.into_iter().flat_map(|f| &f.pages).find(|p| p.name.name == name && p.kind == PageKind::View)
+}
+
+/// The data of a page and of the views it shows (and theirs): what opening
+/// it `with` a value may set, since a window's data lives in its views.
+pub fn page_data<'a>(files: impl IntoIterator<Item = &'a SpecFile> + Clone, page: &'a Page) -> Vec<&'a crate::model::DataDecl> {
+    let mut out: Vec<&'a crate::model::DataDecl> = page.data.iter().collect();
+    let mut queue: Vec<&'a Page> = vec![page];
+    let mut seen: Vec<&'a Page> = Vec::new();
+    while let Some(next) = queue.pop() {
+        if seen.iter().any(|s| std::ptr::eq(*s, next)) || seen.len() > 64 {
+            continue;
+        }
+        seen.push(next);
+        for place in places(&next.widgets) {
+            if let Some(view) = find(files.clone(), place.view) {
+                out.extend(view.data.iter());
+                queue.push(view);
+            }
+        }
+    }
+    out
 }
 
 /// The views a window shows, in the order its parts name them.
@@ -78,6 +100,11 @@ pub fn shown_in<'a>(files: &'a [SpecFile], page: &'a Page) -> Vec<&'a Page> {
 /// view's page and code block go, being the windows' now; the designer
 /// draws a view on its own from the project as written.
 pub fn placed(project: &Project) -> Project {
+    // A tree of several kinds of records is a tree of its rows once its window holds what its views show.
+    crate::trees::lowered(&placed_views(project))
+}
+
+fn placed_views(project: &Project) -> Project {
     // A toolbox (`page X: toolbox`) is placed as a view is: its parts in the canvas that names it, its code the window's.
     let placeable = |kind: PageKind| matches!(kind, PageKind::View | PageKind::Toolbox);
     if !project.files.iter().flat_map(|f| &f.pages).any(|p| placeable(p.kind)) {
@@ -107,6 +134,8 @@ pub fn placed(project: &Project) -> Project {
                 }
             }
         }
+        // `main.swap(X)` in a window's content opens the page of X, counted from 1, as a tab is opened.
+        let contents: Vec<(String, Vec<(String, Vec<String>)>)> = file.pages.iter().filter(|p| !placeable(p.kind)).map(|p| (p.name.name.clone(), content_views(&p.widgets))).collect();
         // A view is the windows' that show it, its parts and its code: never a window or code of its own in a program.
         file.code.retain(|c| !views.iter().any(|(v, _)| v.name.name == c.name.name));
         file.pages.retain(|p| !placeable(p.kind));
@@ -123,8 +152,65 @@ pub fn placed(project: &Project) -> Project {
                 }
             }
         }
+        for (window, listed) in &contents {
+            if listed.is_empty() {
+                continue;
+            }
+            if let Some(code) = file.code.iter_mut().find(|c| &c.name.name == window) {
+                for handler in &mut code.handlers {
+                    views_as_pages(&mut handler.body, listed);
+                }
+            }
+        }
     }
     placed
+}
+
+/// Each window's content among `widgets` (and the containers in them), by name, with the views it lists in order.
+fn content_views(widgets: &[Widget]) -> Vec<(String, Vec<String>)> {
+    let mut out = Vec::new();
+    for w in widgets {
+        if w.props.kind == WidgetKind::Content
+            && let Some(name) = &w.props.name
+        {
+            out.push((name.clone(), w.pages.iter().filter_map(|p| p.view.clone()).collect()));
+        }
+        out.extend(content_views(&w.children));
+        for page in &w.pages {
+            out.extend(content_views(&page.children));
+        }
+    }
+    out
+}
+
+/// Each `main.swap(X)` in `body` as `main.tab = n`, n the place of X in the views main lists, from 1.
+fn views_as_pages(body: &mut [Stmt], listed: &[(String, Vec<String>)]) {
+    for stmt in body {
+        match &mut stmt.kind {
+            StmtKind::Draw { canvas, shape, args } if shape.name == "swap" => {
+                if let Some((_, views)) = listed.iter().find(|(n, _)| *n == canvas.name)
+                    && let [crate::code::Expr { kind: ExprKind::Name { name }, .. }] = args.as_slice()
+                    && let Some(at) = views.iter().position(|v| v == name)
+                {
+                    let span = stmt.span;
+                    let part = crate::code::Expr { kind: ExprKind::Name { name: canvas.name.clone() }, span: canvas.span };
+                    let target = crate::code::Expr { kind: ExprKind::Member { object: Box::new(part), member: crate::model::Ident { name: "tab".to_string(), span: shape.span } }, span };
+                    let value = crate::code::Expr { kind: ExprKind::Number { value: (at + 1).to_string() }, span };
+                    stmt.kind = StmtKind::Assign { target, value };
+                }
+            }
+            StmtKind::If { branches, otherwise } => {
+                for branch in branches {
+                    views_as_pages(&mut branch.body, listed);
+                }
+                if let Some(otherwise) = otherwise {
+                    views_as_pages(otherwise, listed);
+                }
+            }
+            StmtKind::For { body, .. } => views_as_pages(body, listed),
+            _ => {}
+        }
+    }
 }
 
 /// The toolbox's parts work on the canvas that shows the toolbox: their `for` names it.

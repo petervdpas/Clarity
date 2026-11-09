@@ -1,0 +1,29 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Projects, tables and views"
+    add entity Project
+        name: text(80), unique
+        summary: text
+    add field Domain.project: ref Project
+    remove unique Domain.name
+    rename entity ObjectVersion to ClassDefinition
+    rename entity EventType to EventDefinition
+    add field EventDefinition.owner: ref DataObject
+    add field EventDefinition.legacy: bool, default false
+    add entity AdapterTable
+        owner: ref DataObject
+        name: text(120)
+        className: text(120)
+        namespace: text(200)
+        blueprint: ref ClassDefinition
+        summary: text
+    add entity AdapterColumn
+        owner: ref AdapterTable
+        position: integer, default 1
+        name: text(80)
+        kind: PropertyKind, default TextValue
+        nullable: bool, default false
+    add field ApiVersion.project: ref Project
+    remove unique ApiVersion.major
+    rename entity ApiEntity to ApiView
+    add field ApiView.adapterTable: ref AdapterTable

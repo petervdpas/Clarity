@@ -15,7 +15,7 @@ use crate::model::{
     EnumDecl, EnumVariant, FOOTER_COLUMNS, Field, FieldType, Footer, Frame, Ident,
     Literal, Menu, Modifiers, Orientation, Page, PageKind, Ribbon, RibbonGroup,
     RibbonTab, Side, Sidebar, SpecFile, Surface,
-    Toolbar, Widget, WidgetPage, WidgetProps, default_label,
+    Toolbar, TreeLevel, TreeSelect, Widget, WidgetPage, WidgetProps, default_label,
     WindowSize,
 };
 use crate::span::Span;
@@ -1513,6 +1513,8 @@ fn parse_widget(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<W
         children: Vec::new(),
         pages: Vec::new(),
         menu: None,
+        levels: Vec::new(),
+        selects: Vec::new(),
         span: node.span(),
     };
     // A `menu` block under a part is its context menu (DESIGN 5.16); the rest is its content.
@@ -1534,13 +1536,32 @@ fn parse_widget(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<W
     }
     let content: Vec<Node> = content.into_iter().cloned().collect();
     let node = &Node { children: content, ..node.clone() };
+    // A tree of several kinds of records: its levels and what it runs when a row is picked.
+    if kind == WidgetKind::Tree && !node.children.is_empty() {
+        for child in &node.children {
+            let cursor = Cursor::new(child.line);
+            if cursor.peek().is_some_and(|t| t.text == "on") {
+                match parse_tree_select(child) {
+                    Ok(select) => widget.selects.push(select),
+                    Err(diag) => diagnostics.push(diag),
+                }
+                continue;
+            }
+            match parse_tree_level(child, diagnostics) {
+                Ok(level) => widget.levels.push(level),
+                Err(diag) => diagnostics.push(diag),
+            }
+        }
+        return Ok(widget);
+    }
     match widgets::container(kind) {
         None => no_children(node)?,
         Some(ContainerKind::Plain) => widget.children = parse_widgets(&node.children, diagnostics),
-        Some(container @ (ContainerKind::Tabs | ContainerKind::Steps | ContainerKind::Accordion)) => {
+        Some(container @ (ContainerKind::Tabs | ContainerKind::Steps | ContainerKind::Accordion | ContainerKind::Content)) => {
             let keyword = match container {
                 ContainerKind::Tabs => "tab",
                 ContainerKind::Steps => "step",
+                ContainerKind::Content => "view",
                 _ => "section",
             };
             for child in &node.children {
@@ -1562,6 +1583,60 @@ fn parse_widget(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<W
     Ok(widget)
 }
 
+/// `level Domain under project show name order by name`, or `group @dataObjectsNode`,
+/// with the levels inside it.
+fn parse_tree_level(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<TreeLevel> {
+    let mut cursor = Cursor::new(node.line);
+    let mut level = TreeLevel { entity: None, under: None, show: None, group: None, order: None, descending: false, levels: Vec::new(), span: node.span() };
+    if cursor.eat_keyword("group") {
+        level.group = Some(cursor.expect_text("the group's heading, as in group @dataObjectsNode")?);
+    } else if cursor.eat_keyword("level") {
+        level.entity = Some(cursor.expect_ident("the entity whose records the level shows")?.name);
+        loop {
+            if cursor.eat_keyword("under") {
+                level.under = Some(cursor.expect_ident("the field that refers to the row above, as in under project")?.name);
+            } else if cursor.eat_keyword("show") {
+                level.show = Some(match cursor.peek().map(|t| t.kind) {
+                    Some(TokenKind::Ident) => cursor.expect_ident("what a row shows")?.name,
+                    _ => cursor.expect_text("a field or a text key, as in show name or show @classNode")?,
+                });
+            } else if cursor.eat_keyword("order") {
+                if !cursor.eat_keyword("by") {
+                    return Err(cursor.error_here("expected 'by' and a field, as in order by name"));
+                }
+                level.order = Some(cursor.expect_ident("the field the rows are ordered by")?.name);
+                level.descending = cursor.eat_keyword("desc");
+            } else {
+                break;
+            }
+        }
+    } else {
+        return Err(cursor.error_here("a tree holds 'level' lines, as in level Project show name, 'group' lines, and 'on select Entity: handler'"));
+    }
+    cursor.expect_end()?;
+    for child in &node.children {
+        match parse_tree_level(child, diagnostics) {
+            Ok(inner) => level.levels.push(inner),
+            Err(diag) => diagnostics.push(diag),
+        }
+    }
+    Ok(level)
+}
+
+/// `on select ClassDefinition: classPicked`.
+fn parse_tree_select(node: &Node) -> ParseResult<TreeSelect> {
+    let mut cursor = Cursor::new(node.line);
+    cursor.eat_keyword("on");
+    if !cursor.eat_keyword("select") {
+        return Err(cursor.error_here("a tree of levels runs a handler when a row is picked: on select Project: projectPicked"));
+    }
+    let entity = cursor.expect_ident("the entity of the rows, as in on select Project: projectPicked")?.name;
+    cursor.expect(TokenKind::Colon, "':' and a handler, as in on select Project: projectPicked")?;
+    let handler = cursor.expect_ident("a handler name")?.name;
+    cursor.expect_end()?;
+    Ok(TreeSelect { entity, handler, span: node.span() })
+}
+
 /// `tab "Title"` or `pane`, each with widgets inside.
 fn parse_widget_page(
     node: &Node,
@@ -1574,6 +1649,7 @@ fn parse_widget_page(
             "tab" => "'tab \"Title\"'",
             "step" => "'step \"Title\"'",
             "section" => "'section \"Title\"'",
+            "view" => "'view' and the name of a view, as in view OrderEditor",
             _ => "'pane'",
         };
         return Err(cursor.error_here(format!("expected {expected}")));
@@ -1606,7 +1682,14 @@ fn parse_widget_page(
     };
     // `section "Class" view ClassEditor`: what it holds is the view's, and
     // `on saved: recipeSaved` hears what the view tells.
-    let view = if keyword != "pane" && cursor.eat_keyword("view") { Some(cursor.expect_ident("the name of the view it shows")?.name) } else { None };
+    // `view OrderEditor` in a window's content: the keyword is the view's own line.
+    let view = if keyword == "view" {
+        Some(cursor.expect_ident("the name of the view it shows")?.name)
+    } else if keyword != "pane" && cursor.eat_keyword("view") {
+        Some(cursor.expect_ident("the name of the view it shows")?.name)
+    } else {
+        None
+    };
     let mut tells = Vec::new();
     while keyword != "pane" && cursor.eat_keyword("on") {
         let tell = cursor.expect_ident("a tell of the view it shows")?.name;

@@ -336,6 +336,9 @@ struct Use {
     span: Span,
     /// The slots code gives values to; none in the design, which gives none.
     args: Option<Vec<String>>,
+    /// Whether `args` are the names it may fill rather than those it fills:
+    /// a tree level's key, filled from the fields of its record.
+    from_fields: bool,
 }
 
 /// Everything the project shows: the keys it uses, and the texts it writes
@@ -349,13 +352,15 @@ struct Shown {
     unnamed: Vec<(String, String, Span)>,
     path: String,
     place: String,
+    /// Each entity's fields, by name: the slots a tree level's key fills from its record.
+    entity_fields: std::collections::HashMap<String, Vec<String>>,
 }
 
 impl Shown {
     /// A text in the design: a key, or a text as written.
     fn text(&mut self, text: &str, span: Span) {
         match key_of(text) {
-            Some(key) => self.uses.push(Use { key: key.to_string(), place: self.place.clone(), path: self.path.clone(), span, args: None }),
+            Some(key) => self.uses.push(Use { key: key.to_string(), place: self.place.clone(), path: self.path.clone(), span, args: None, from_fields: false }),
             None if has_letters(text) => self.literals.push((text.to_string(), self.path.clone(), span)),
             None => {}
         }
@@ -382,11 +387,26 @@ impl Shown {
             if let Some(menu) = &widget.menu {
                 self.commands(&menu.items);
             }
+            // A tree's levels: a group's heading and a key a level shows.
+            self.levels(&widget.levels);
             self.widgets(&widget.children);
             for page in &widget.pages {
                 self.some(&page.title, page.span);
                 self.widgets(&page.children);
             }
+        }
+    }
+
+    fn levels(&mut self, levels: &[crate::model::TreeLevel]) {
+        for level in levels {
+            self.some(&level.group, level.span);
+            // A level's key fills its slots from the fields of its record.
+            if let Some(show) = level.show.as_deref().filter(|s| s.starts_with('@')) {
+                let mut fields = level.entity.as_ref().and_then(|e| self.entity_fields.get(e)).cloned().unwrap_or_default();
+                fields.push("id".to_string());
+                self.uses.push(Use { key: show[1..].to_string(), place: self.place.clone(), path: self.path.clone(), span: level.span, args: Some(fields), from_fields: true });
+            }
+            self.levels(&level.levels);
         }
     }
 
@@ -428,7 +448,7 @@ impl Shown {
             if let DataKind::Value { default: Some(Literal::Str(text)), .. } = &decl.of
                 && let Some(key) = key_of(text)
             {
-                self.uses.push(Use { key: key.to_string(), place: self.place.clone(), path: self.path.clone(), span: decl.span, args: None });
+                self.uses.push(Use { key: key.to_string(), place: self.place.clone(), path: self.path.clone(), span: decl.span, args: None, from_fields: false });
             }
         }
     }
@@ -443,6 +463,7 @@ impl Shown {
                 path: self.path.clone(),
                 span: key.span,
                 args: Some(args.iter().map(|a| a.name.name.clone()).collect()),
+                from_fields: false,
             });
         }
         self.written(expr);
@@ -467,6 +488,7 @@ impl Shown {
                     path: self.path.clone(),
                     span: key.span,
                     args: Some(args.iter().map(|a| a.name.name.clone()).collect()),
+                    from_fields: false,
                 });
             }
         });
@@ -556,6 +578,7 @@ pub(crate) fn literal_places(project: &Project) -> Vec<(String, u32)> {
 
 fn shown(project: &Project) -> Shown {
     let mut shown = Shown::default();
+    shown.entity_fields = project.files.iter().flat_map(|f| &f.entities).map(|e| (e.name.name.clone(), e.fields.iter().map(|f| f.name.name.clone()).collect())).collect();
     for file in &project.files {
         shown.path = file.path.clone();
         for entity in &file.entities {
@@ -698,7 +721,10 @@ fn shown(project: &Project) -> Shown {
     let slideouts = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Slideout));
     let toolboxes = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.toolbox.is_some()));
     let table_rows = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.add || w.props.remove));
-    let open_rows = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.handlers.iter().any(|h| h.event == crate::widgets::Event::Open)));
+    let open_rows = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
+        use crate::widgets::WidgetKind::{List, Table, Tree, TreeTable};
+        matches!(w.props.kind, Table | List | Tree | TreeTable) && w.props.handlers.iter().any(|h| h.event == crate::widgets::Event::Open)
+    }));
     let markdown_memos = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.markdown));
     let engines = project.files.iter().any(|f| !f.engines.is_empty());
     // Code that divides whole numbers (`a div b`, `a mod b`) can say a division by zero failed.
@@ -759,7 +785,7 @@ fn shown(project: &Project) -> Shown {
         .chain(if divides { DIVISION_KEYS.as_slice() } else { &[] });
     // The runtimes fill the slots of Clarity's own words, the ones its English has.
     for (key, english) in own {
-        shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: Some(slots(english)) });
+        shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: Some(slots(english)), from_fields: false });
     }
     shown
 }
@@ -955,7 +981,7 @@ pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a st
                     for slot in wanted.iter().filter(|s| !given.contains(s) && !crate::code::APP_SLOTS.contains(&s.as_str())) {
                         found.push(place(Diagnostic::error(format!("@{} needs a value for {{{slot}}}", u.key), u.span)));
                     }
-                    for slot in given.iter().filter(|s| !wanted.contains(s)) {
+                    for slot in given.iter().filter(|s| !wanted.contains(s) && !u.from_fields) {
                         found.push(place(Diagnostic::error(format!("@{} has no slot {{{slot}}}", u.key), u.span)));
                     }
                 }

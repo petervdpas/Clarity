@@ -48,6 +48,13 @@ function calculate(a: decimal, op: Operation, b: decimal) -> decimal
 page Main: window
     title @mainTitle
     size 320 x 370
+    grid 4 columns
+
+    content name main at 1,1 span 4 rows 7
+        view Keypad
+
+// The keypad: the display and the keys.
+page Keypad: view
     data shown: decimal
     data entry: decimal
     data total: decimal
@@ -89,7 +96,7 @@ page Preferences: dialog
         spinbox name decimalsBox at 3,3 span 2 bind settings.decimals
     button @closeButtonCaption name closeButton at 3,5 span 2 cancel on click -> close
 
-code Main
+code Keypad
     handler digit(d: integer)
         if fresh
             entry = 0

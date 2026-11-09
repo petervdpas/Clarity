@@ -40,9 +40,15 @@ app Todo
 
 page Main: window
     title @mainTitle
-    data tasks: list<Task>
     on open: windowOpened
     on return: windowReturned
+
+    content name main at 1,1 span 12 rows 12
+        view MainView
+
+// What the window Main shows: its parts, data and code.
+page MainView: view
+    data tasks: list<Task>
 
     label @searchLabel name searchLabel at 1,1 span 2 for searchBox
     textbox name searchBox at 3,1 span 10 placeholder @searchPlaceholder on change: showTasks
@@ -52,9 +58,10 @@ page Main: window
 
 page Users: window
     title @usersTitle
-    data people: list<Person>
     on open: usersOpened
-    // This window has its own menu and ribbon: they lead back to Main, not to Users.
+
+    content name main at 1,1 span 12 rows 11
+        view UsersView
     menu name usersMenu
         item @fileItem name usersFileItem
             item @mainItem name mainItem on click -> close
@@ -71,9 +78,17 @@ page Users: window
                 button @languageButtonCaption name usersLanguageButton icon "languages" large on click -> language
                 button @themeButtonCaption name usersThemeButton large on click -> theme
 
+    slideout @personSlideout name personPanel width 460 pinnable span 6 rows 4 on close: personPanelClosed
+        content name personPanelContent at 1,1 span 6 rows 4
+            view PersonEditor
+
+// What the window Users shows: its parts, data and code.
+page UsersView: view
+    data people: list<Person>
+
+    // This window has its own menu and ribbon: they lead back to Main, not to Users.
     // A person picked opens in the editor that slides out from the right.
     table name peopleGrid at 1,1 span 12 rows 9 bind people columns name, color resizable sortable add remove on add: newClicked on remove: deletePersonClicked on select: personSelected
-    slideout @personSlideout name personPanel view PersonEditor width 460 pinnable span 6 rows 4 on close: personPanelClosed
     button @closeButtonCaption name closeButton at 11,11 span 2 cancel on click: closeClicked
 
 // A person: their name and the color their tasks show in.
@@ -105,6 +120,7 @@ code Main
         // Users may have been added, changed or removed, and the settings changed.
         showTasks()
 
+code MainView
     handler showTasks
         // Done tasks show while the person's settings say so; the search
         // box keeps the tasks with every word typed in their title.
@@ -132,6 +148,11 @@ code Users
     handler usersOpened
         reload people
 
+    // What the editor saved shows in the table once it slides away.
+    handler personPanelClosed
+        reload people
+
+code UsersView
     handler personSelected
         person = peopleGrid.selected
         name.error = ""
@@ -156,10 +177,6 @@ code Users
         reload people
         person = new Person
         personPanel.visible = false
-
-    // What the editor saved shows in the table once it slides away.
-    handler personPanelClosed
-        reload people
 
     handler closeClicked
         close

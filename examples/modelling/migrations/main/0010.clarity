@@ -1,0 +1,35 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "API versions"
+    add entity ApiVersion
+        major: integer, unique, default 1
+        version: text(20)
+        summary: text
+    add entity ApiEntity
+        api: ref ApiVersion
+        position: integer, default 1
+        dataObject: ref DataObject
+        entity: text(120)
+        roles: list<text>
+        className: text(120)
+        propertyName: text(120)
+        propertyPluralName: text(120)
+        tableName: text(120)
+        viewProperties: text(400), default "*"
+        primaryKey: text(80), default "Bk"
+    add entity ApiRelation
+        owner: ref ApiEntity
+        position: integer, default 1
+        kind: RelationKind, default RelatesTo
+        foreignEntity: text(120)
+        foreignKey: text(120)
+        propertyName: text(120)
+        omitProperty: bool, default false
+    add entity ApiEnum
+        owner: ref ApiEntity
+        position: integer, default 1
+        propertyName: text(120)
+        propertyType: text(120)
+        sourcePath: text(200)
+    remove entity TableIntake
+    remove entity AdapterTable

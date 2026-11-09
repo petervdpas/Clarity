@@ -16,9 +16,9 @@ use crate::widgets::{self, Event, WidgetKind, new_props, widget_line};
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export)]
 pub enum PageTemplate {
-    /// An empty window.
+    /// An empty window, showing an empty view in its content.
     Blank,
-    /// An empty view, which a window's slide-out shows (DESIGN 5.33).
+    /// An empty view, which a window's content shows (DESIGN 5.33).
     View,
     /// The app's splash screen: its name and a status code sets while the app starts.
     Splash,
@@ -343,4 +343,96 @@ mod tests {
         assert_eq!(plural("category"), "categories");
         assert_eq!(plural("address"), "addresses");
     }
+}
+
+/// What stays with a window when it shows its parts in a view: its title,
+/// size, look, events, frame and slide-outs.
+const WINDOW_OWN: [&str; 13] = ["title", "size", "style", "cell", "on", "menu", "toolbar", "ribbon", "sidebar", "footer", "slideout", "icon", "splash"];
+
+/// The handlers a line wires: `on click: saveClicked` gives saveClicked.
+fn wired_on(line: &str) -> Vec<String> {
+    let words: Vec<&str> = line.split_whitespace().collect();
+    let mut out = Vec::new();
+    for (i, w) in words.iter().enumerate() {
+        if *w == "on" && i + 2 < words.len() && words[i + 1].ends_with(':') {
+            let handler: String = words[i + 2].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            out.push(handler);
+        }
+    }
+    out
+}
+
+/// A new window as every window is built (DESIGN 5.33): window, content,
+/// view. The window keeps its title, size, events, frame and slide-outs and
+/// shows the view `<name>View` in its content `main`; the view holds its
+/// data, grid and parts, and the handlers no line of the window wires go
+/// with them. Gives the blocks in order: window, view, then their code.
+pub fn in_content(name: &str, page: &str, code: Option<&str>) -> Vec<String> {
+    let view = format!("{name}View");
+    let mut items: Vec<Vec<&str>> = Vec::new();
+    for line in page.lines().skip(1) {
+        let top = line.starts_with("    ") && !line.starts_with("     ") && !line.trim().is_empty();
+        if top {
+            items.push(vec![line]);
+        } else if let Some(last) = items.last_mut() {
+            last.push(line);
+        }
+    }
+    for item in &mut items {
+        while item.last().is_some_and(|l| l.trim().is_empty()) {
+            item.pop();
+        }
+    }
+    let word = |item: &Vec<&str>| item[0].split_whitespace().next().unwrap_or("").to_string();
+    let (keep, rest): (Vec<_>, Vec<_>) = items.into_iter().partition(|i| WINDOW_OWN.contains(&word(i).as_str()));
+    let (head, parts): (Vec<_>, Vec<_>) = rest.into_iter().partition(|i| matches!(word(i).as_str(), "data" | "grid"));
+    let number_after = |line: &str, key: &str| -> Option<u32> {
+        let words: Vec<&str> = line.split_whitespace().collect();
+        words.iter().position(|w| *w == key).and_then(|i| words.get(i + 1)).and_then(|w| w.split(',').nth(if key == "at" { 1 } else { 0 })).and_then(|n| n.parse().ok())
+    };
+    let columns = head.iter().find(|i| word(i) == "grid").and_then(|i| number_after(i[0], "grid")).unwrap_or(crate::model::DEFAULT_PAGE_COLUMNS);
+    let rows = parts.iter().filter_map(|i| number_after(i[0], "at").map(|row| row + number_after(i[0], "rows").unwrap_or(1) - 1)).max().unwrap_or(1);
+    let frame = |i: &&Vec<&str>| matches!(word(i).as_str(), "menu" | "toolbar" | "ribbon" | "sidebar" | "footer" | "slideout");
+    let mut window = vec![page.lines().next().unwrap_or_default().to_string()];
+    window.extend(keep.iter().filter(|i| !frame(i)).flat_map(|i| i.iter().map(|l| l.to_string())));
+    if columns != crate::model::DEFAULT_PAGE_COLUMNS {
+        window.push(format!("    grid {columns} columns"));
+    }
+    window.push(String::new());
+    window.push(format!("    content name main at 1,1 span {columns} rows {rows}"));
+    window.push(format!("        view {view}"));
+    window.extend(keep.iter().filter(frame).flat_map(|i| i.iter().map(|l| l.to_string())));
+    let mut shown = vec![format!("page {view}: view")];
+    shown.extend(head.iter().flat_map(|i| i.iter().map(|l| l.to_string())));
+    if !parts.is_empty() {
+        shown.push(String::new());
+        shown.extend(parts.iter().flat_map(|i| i.iter().map(|l| l.to_string())));
+    }
+    let mut blocks = vec![window.join("\n"), shown.join("\n")];
+    if let Some(code) = code {
+        let wired: Vec<String> = keep.iter().flat_map(|i| i.iter().flat_map(|l| wired_on(l))).collect();
+        let mut handlers: Vec<Vec<&str>> = Vec::new();
+        let mut comments: Vec<&str> = Vec::new();
+        for line in code.lines().skip(1) {
+            if line.trim_start().starts_with("//") && line.starts_with("    ") && !line.starts_with("     ") {
+                comments.push(line);
+            } else if line.starts_with("    handler ") {
+                let mut h = std::mem::take(&mut comments);
+                h.push(line);
+                handlers.push(h);
+            } else if let Some(last) = handlers.last_mut() {
+                last.push(line);
+            }
+        }
+        let name_of = |h: &Vec<&str>| h.iter().find(|l| l.starts_with("    handler ")).map(|l| l["    handler ".len()..].chars().take_while(|c| c.is_alphanumeric()).collect::<String>()).unwrap_or_default();
+        let (stay, go): (Vec<_>, Vec<_>) = handlers.into_iter().partition(|h| wired.contains(&name_of(h)));
+        let block = |owner: &str, hs: &[Vec<&str>]| format!("code {owner}\n{}", hs.iter().map(|h| h.join("\n").trim_end().to_string()).collect::<Vec<_>>().join("\n\n"));
+        if !stay.is_empty() {
+            blocks.push(block(name, &stay));
+        }
+        if !go.is_empty() {
+            blocks.push(block(&view, &go));
+        }
+    }
+    blocks
 }

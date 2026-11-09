@@ -22,6 +22,16 @@ enum FragmentKind
     Invented label @kindInvented
     Question label @kindQuestion
 
+// What kind of dialogue: several people talking, or one.
+enum DialogueKind
+    Dialogue label @dialogueKindDialogue
+    Monologue label @dialogueKindMonologue
+
+// How a dialogue is spoken: out loud, or in someone's head.
+enum Voice
+    Aloud label @voiceAloud
+    InThought label @voiceInThought
+
 // Who brought a fragment in.
 enum Contributor
     Author label @fromAuthor
@@ -123,6 +133,8 @@ entity TrialBalloon
     title: text(120), required, label @balloonTitleLabel
     book: ref Book, required, cascade, label @balloonBookLabel
     note: text, label @balloonNoteLabel
+    kind: DialogueKind, default Dialogue, label @balloonKindLabel
+    voice: Voice, default Aloud, label @balloonVoiceLabel
 
 // In which chapter a trial balloon is used.
 entity BalloonPlace
@@ -187,7 +199,7 @@ entity Event
 
 // The manuscript of a book, in the folder export/<title>: a Markdown file per
 // chapter and the whole book in Markdown, and for a screenplay also in
-// Fountain, with the trial balloons as dialogue.
+// Fountain, with the trial balloons as dialogue; thoughts as voice-over (V.O.).
 action exportManuscript(book: Book)
     effects files.write
     let whole = "# {book.title}\n\n"
@@ -205,7 +217,10 @@ action exportManuscript(book: Book)
                 if l.character == none
                     fountain = fountain + "!" + l.text + "\n\n"
                 else
-                    fountain = fountain + "@" + l.character.name + "\n" + l.text + "\n\n"
+                    let extension = ""
+                    if bp.balloon.voice == InThought
+                        extension = " (V.O.)"
+                    fountain = fountain + "@" + l.character.name + extension + "\n" + l.text + "\n\n"
     write whole to export "{book.title}/{book.title}.md"
     if book.form == Screenplay
         write fountain to export "{book.title}/{book.title}.fountain"

@@ -1,0 +1,5 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "API entity serves an object version"
+    add field ApiEntity.objectVersion: ref ObjectVersion
+    remove field ApiEntity.dataObject

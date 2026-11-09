@@ -3,4 +3,4 @@
 /**
  * How a container organizes its children.
  */
-export type ContainerKind = "plain" | "tabs" | "steps" | "accordion" | "splitter";
+export type ContainerKind = "plain" | "tabs" | "steps" | "content" | "accordion" | "splitter";

@@ -177,3 +177,13 @@ fn clarity_s_own_word_missing_from_a_language_file_shows_in_english_with_a_warni
     assert!(p.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", p.diagnostics);
     assert!(p.diagnostics.iter().any(|d| d.message == "Clarity's word 'ok' is not in en yet; it shows \"OK\" until it is"), "{:#?}", p.diagnostics);
 }
+
+/// "Double-click or press Enter to open" is a word of a table, list or tree
+/// that opens its rows; a slide-out's `on open` asks for no such word.
+#[test]
+fn a_slideout_that_runs_code_when_it_opens_needs_no_open_row_word() {
+    let shop = SHOP
+        .replace("    button \"7\" name seven at 3,2 span 1\n", "    button \"7\" name seven at 3,2 span 1\n    slideout @cardTitle name details span 4 rows 2 on open: saveClick\n        textbox name noteBox at 1,1 span 4 bind note\n");
+    let p = project(&shop, &[("translations/en.clarity", EN)]);
+    assert!(!p.diagnostics.iter().any(|d| d.message.contains("'openRow'")), "{:#?}", p.diagnostics);
+}

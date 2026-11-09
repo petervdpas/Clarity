@@ -10,7 +10,6 @@
 
 use serde::Deserialize;
 
-pub mod adapter;
 pub mod diff;
 pub mod events;
 pub mod layout;
@@ -91,7 +90,6 @@ clarity_engine::function!(interfaceCode, |(object, properties): (ObjectSpec, Vec
 clarity_engine::function!(readFiles, |(files,): (Vec<read::SourceFile>,)| Ok(read::read_files(&files)));
 clarity_engine::function!(arrangeBoxes, |(boxes, links, grid, width): (Vec<layout::LayoutBox>, Vec<layout::LayoutLink>, i64, i64)| Ok(layout::arrange(&boxes, &links, grid, width)));
 clarity_engine::function!(routeLinks, |(boxes, links, grid, width): (Vec<layout::LayoutBox>, Vec<layout::LayoutLink>, i64, i64)| Ok(layout::route(&boxes, &links, grid, width)));
-clarity_engine::function!(readTables, |(files,): (Vec<read::SourceFile>,)| Ok(adapter::read_tables(&files)));
 clarity_engine::function!(diffText, |(path, on_disk, written): (String, String, String)| Ok(diff::unified(&path, &on_disk, &written)));
 clarity_engine::function!(fileBytes, |(text,): (String,)| Ok(clarity_engine::Bytes(with_mark(&text))));
 clarity_engine::function!(eventCode, |(spec, fields): (events::EventSpec, Vec<events::EventFieldSpec>)| Ok(events::write_event(&spec, &fields)));

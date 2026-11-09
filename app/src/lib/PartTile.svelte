@@ -163,6 +163,11 @@
       <rect x="4" y="3" width="40" height="22" rx="2" />
       <rect x="28" y="3" width="16" height="22" rx="1" class="fill" />
       <path d="M24 11 L20 14 L24 17" />
+    {:else if kind === "content"}
+      <!-- A window's content: no look of its own, only the view picked in it. -->
+      <rect x="4" y="3" width="40" height="22" rx="2" stroke-dasharray="3 2" />
+      <line x1="9" y1="9" x2="30" y2="9" />
+      <line x1="9" y1="15" x2="24" y2="15" />
     {:else if kind === "steps"}
       <circle cx="10" cy="6" r="3" class="fill" />
       <line x1="13" y1="6" x2="21" y2="6" />

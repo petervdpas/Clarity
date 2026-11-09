@@ -75,6 +75,10 @@ pub enum WidgetKind {
     Form,
     Panel,
     Tabs,
+    /// A window's content that shows one view at a time, picked by code
+    /// (`main.view = X`): `view X` blocks, each a view it can show; no look
+    /// of its own, as the view brings its heading, buttons and tabs (DESIGN 5.33).
+    Content,
     /// A wizard: `step "Title"` blocks shown one at a time, with Back, Next and Finish (DESIGN 5.15).
     Steps,
     /// Parts on their own grid, outside the window's, opened next to the part in `for` (DESIGN 5.16).
@@ -327,6 +331,8 @@ pub enum ContainerKind {
     Tabs,
     /// Children inside `step "Title"` blocks, one shown at a time.
     Steps,
+    /// A view inside each `view X` block, the one code picks shown.
+    Content,
     /// Children inside `section "Title"` blocks, which fold, one open at a time.
     Accordion,
     /// Children inside exactly two `pane` blocks.
@@ -771,6 +777,22 @@ const ENTRIES: &[Entry] = &[
         container: Some(ContainerKind::Tabs),
         clickable: false,
         events: &[Event::Change],
+        properties: &[],
+    },
+    // One view at a time, the one code picks.
+    Entry {
+        kind: WidgetKind::Content,
+        keyword: "content",
+        name: "Content",
+        category: Category::Containers,
+        size: (8, 6),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: Some(ContainerKind::Content),
+        clickable: false,
+        events: &[],
         properties: &[],
     },
     // Sections that fold, one open at a time.
@@ -2278,6 +2300,7 @@ fn grows(kind: WidgetKind) -> bool {
         WidgetKind::Form
             | WidgetKind::Panel
             | WidgetKind::Tabs
+            | WidgetKind::Content
             | WidgetKind::Steps
             | WidgetKind::Accordion
             | WidgetKind::Scroll

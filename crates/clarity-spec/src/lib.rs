@@ -33,6 +33,7 @@ pub mod shortcuts;
 pub mod source;
 pub mod span;
 pub mod templates;
+pub mod trees;
 pub mod views;
 pub mod widgets;
 
@@ -138,7 +139,7 @@ fn make_form_labels(files: &mut [model::SpecFile]) {
                     label.name = Some(format!("{name}Label"));
                     label.for_part = Some(name.clone());
                     label.made = true;
-                    made.push(model::Widget { props: label, children: Vec::new(), pages: Vec::new(), menu: None, span: child.span });
+                    made.push(model::Widget { props: label, children: Vec::new(), pages: Vec::new(), menu: None, levels: Vec::new(), selects: Vec::new(), span: child.span });
                 }
                 made.append(&mut widget.children);
                 widget.children = made;
@@ -266,10 +267,35 @@ fn make_hears(files: &mut [model::SpecFile]) {
             }
         }
     }
+    // The pages that share a window with each page: the views it shows (and
+    // theirs), and the windows and views that show it; their parts are
+    // reached by name as its own (DESIGN 5.33).
+    let pages: Vec<model::Page> = files.iter().flat_map(|f| f.pages.iter().cloned()).collect();
+    let shown_by = |page: &model::Page| -> Vec<String> { views::places(&page.widgets).into_iter().map(|p| p.view.to_string()).collect() };
+    let sharing = |name: &str| -> Vec<&model::Page> {
+        let mut group: Vec<String> = vec![name.to_string()];
+        let mut grew = true;
+        while grew && group.len() < 128 {
+            grew = false;
+            for page in &pages {
+                let shows = shown_by(page);
+                let linked = group.contains(&page.name.name) || shows.iter().any(|s| group.contains(s));
+                if linked {
+                    for n in std::iter::once(page.name.name.clone()).chain(shows) {
+                        if !group.contains(&n) {
+                            group.push(n);
+                            grew = true;
+                        }
+                    }
+                }
+            }
+        }
+        pages.iter().filter(|p| group.contains(&p.name.name)).collect()
+    };
     for file in files.iter_mut() {
         for block in &mut file.code {
             let mut parts = Vec::new();
-            for page in file.pages.iter().filter(|p| p.name.name == block.name.name) {
+            for page in sharing(&block.name.name) {
                 custom_parts(&page.widgets, &mut parts);
                 for sidebar in &page.frame.sidebars {
                     custom_parts(&sidebar.widgets, &mut parts);

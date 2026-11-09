@@ -49,10 +49,17 @@ app Walker
 page Field: window
     title @fieldTitle
     size 820 x 520
+    on open: fieldOpened
+
+    content name main at 1,1 span 12 rows 10
+        view FieldView
+
+// What the window Field shows: its parts, data and code.
+page FieldView: view
     data x: integer, default 10
     data step: integer, default 1
     data heading: integer, default 1
-    on open: fieldOpened
+
     canvas name field at 1,1 span 12 rows 8 units 200 x 100 on draw: drawField
     button @walkCaption name walkButton at 1,9 span 2 on click: walkClicked
     button @stopCaption name stopButton at 3,9 span 2 on click: stopClicked
@@ -67,6 +74,7 @@ code Field
         clock.enabled = false
         stopButton.enabled = false
 
+code FieldView
     handler walkClicked
         clock.enabled = true
         walkButton.enabled = false

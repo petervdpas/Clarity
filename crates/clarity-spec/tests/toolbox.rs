@@ -131,7 +131,9 @@ record Box
     y: integer
 
 page Main: window
-    slideout name diagramPanel side bottom view Diagram height 300 span 12 rows 6
+    slideout name diagramPanel side bottom height 300 span 12 rows 6
+        content name diagramContent at 1,1 span 12 rows 6
+            view Diagram
 
 page Diagram: view
     data boxes: list<Box>
@@ -154,8 +156,8 @@ page DiagramTools: toolbox
     assert!(found.is_empty(), "{found:#?}");
     let placed = clarity_spec::views::placed(&project);
     let main = placed.files[0].pages.iter().find(|p| p.name.name == "Main").unwrap();
-    let panel = &main.widgets[0];
-    let sheet = panel.children.iter().find(|w| w.props.name.as_deref() == Some("sheet")).expect("the view's canvas is the window's");
+    let content = &main.widgets[0].children[0];
+    let sheet = content.pages[0].children.iter().find(|w| w.props.name.as_deref() == Some("sheet")).expect("the view's canvas is the window's");
     let tools: Vec<&str> = sheet.children.iter().filter_map(|w| w.props.name.as_deref()).collect();
     assert_eq!(tools, ["selectTool", "hideTool"], "the toolbox's parts are the canvas's");
 }
@@ -171,7 +173,9 @@ entity Chapter
 
 page Main: window
     accordion name parts at 1,1 span 12 rows 8
-        section \"Chapters\" view ChaptersPart
+        section \"Chapters\"
+            content name chaptersContent at 1,1 span 12 rows 8
+                view ChaptersPart
 
 page ChaptersPart: view
     data chapter: Chapter

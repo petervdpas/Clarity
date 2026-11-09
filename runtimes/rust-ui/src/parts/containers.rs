@@ -35,6 +35,7 @@ pub const KINDS: &[(&str, MakePart)] = &[
     ("separator", separator::make),
     ("scroll", scroll::make),
     ("tabs", tabs::make),
+    ("content", tabs::make),
     ("steps", steps::make),
     ("accordion", accordion::make),
     ("splitter", splitter::make),

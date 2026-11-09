@@ -566,6 +566,12 @@ fn child_kind(parent: Kind, node: &LNode) -> Kind {
         {
             Kind::WidgetTab
         }
+        // A view a window's content shows is edited as a tab showing a view is.
+        Kind::Widget(Some(ContainerKind::Content))
+            if starts_with_keyword(&node.tokens, "view", Some(TokenKind::Ident)) =>
+        {
+            Kind::WidgetTab
+        }
         Kind::Widget(Some(ContainerKind::Splitter))
             if starts_with_keyword(&node.tokens, "pane", None) || starts_with_keyword(&node.tokens, "pane", Some(TokenKind::Ident)) =>
         {
@@ -850,8 +856,15 @@ impl Doc {
                 Ok(Some(*target))
             }
             Edit::SetPageView { target, view } => {
-                let (path, _) = self.find(*target, "a tab, step or section", |k| k == Kind::WidgetTab)?;
+                let (path, _) = self.find(*target, "a view line of content", |k| k == Kind::WidgetTab)?;
                 let mut line = PageLine::of(self.node(&path));
+                // A view shows only in content: a tab, step or section names none.
+                if !line.head.is_empty() {
+                    return fail("a view shows only in content; put a content in it");
+                }
+                if view.as_deref().is_none_or(|v| v.trim().is_empty()) {
+                    return fail("a view line of content names a view; remove the line instead");
+                }
                 line.view = view.as_deref().map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
                 set_line_keeping_comment(self.node_mut(&path), line.written());
                 Ok(Some(*target))
@@ -1066,13 +1079,24 @@ struct PageLine {
 impl PageLine {
     fn of(node: &LNode) -> PageLine {
         let text = |i: usize| node.tokens.get(i).map(|t| node.text[t.span.start as usize..t.span.end as usize].to_string());
+        let heard = node.tokens.iter().position(|t| t.text == "on").map(|at| node.text[node.tokens[at].span.start as usize..node.tokens.last().map_or(0, |t| t.span.end as usize)].to_string());
+        // `view OrderEditor` of a window's content: the line is the view it shows, no head of its own.
+        if node.tokens.first().is_some_and(|t| t.text == "view") {
+            return PageLine { head: String::new(), color: None, view: text(1), heard };
+        }
         let head: Vec<String> = (0..2).filter_map(text).collect();
         let after = |word: &str| node.tokens.iter().position(|t| t.text == word).and_then(|at| text(at + 1));
-        let heard = node.tokens.iter().position(|t| t.text == "on").map(|at| node.text[node.tokens[at].span.start as usize..node.tokens.last().map_or(0, |t| t.span.end as usize)].to_string());
         PageLine { head: head.join(" "), color: after("color"), view: after("view"), heard }
     }
 
     fn written(&self) -> String {
+        if self.head.is_empty() {
+            let view = self.view.clone().unwrap_or_default();
+            return match &self.heard {
+                Some(heard) => format!("view {view} {heard}"),
+                None => format!("view {view}"),
+            };
+        }
         let mut line = self.head.clone();
         if let Some(color) = &self.color {
             line = format!("{line} color {color}");
@@ -1397,11 +1421,22 @@ impl Doc {
     /// A tab of a tabs part, or a step of a wizard.
     fn add_tab(&mut self, item: u32, title: &str) -> EditResult<Option<u32>> {
         let (path, kind) = self.find(item, "a tabs or steps widget", |k| {
-            matches!(k, Kind::Widget(Some(ContainerKind::Tabs | ContainerKind::Steps | ContainerKind::Accordion)))
+            matches!(k, Kind::Widget(Some(ContainerKind::Tabs | ContainerKind::Steps | ContainerKind::Accordion | ContainerKind::Content)))
         })?;
         let title = title.trim();
         if title.is_empty() {
             return fail("a tab or step needs a title");
+        }
+        // A window's content gets a view by its name: `view OrderEditor`.
+        if kind == Kind::Widget(Some(ContainerKind::Content)) {
+            if !crate::widgets::is_identifier(title) {
+                return fail(format!("'{title}' is not the name of a view"));
+            }
+            let indent = self.node(&path).child_indent();
+            let line = self.fresh_node(indent, format!("view {title}"));
+            let id = line.id;
+            self.node_mut(&path).children.push(line);
+            return Ok(Some(id));
         }
         let keyword = match kind {
             Kind::Widget(Some(ContainerKind::Steps)) => "step",
@@ -1583,8 +1618,12 @@ impl Doc {
         name: &str,
         template: &PageTemplate,
     ) -> EditResult<Option<u32>> {
+        // A blank window shows an empty view in its content, as every window does.
         if *template == PageTemplate::Blank {
-            return self.add_page(name, PageKind::Window);
+            self.check_new_name(name)?;
+            self.check_new_name(&format!("{name}View"))?;
+            let page = templates::page_from_template(project, name, template).map_err(EditError)?;
+            return self.add_blocks(templates::in_content(name, &page, None));
         }
         if *template == PageTemplate::View {
             return self.add_page(name, PageKind::View);
@@ -1595,8 +1634,18 @@ impl Doc {
         self.check_new_name(name)?;
         let text = templates::page_from_template(project, name, template).map_err(EditError)?;
         let code = templates::code_from_template(project, name, template).map_err(EditError)?;
+        // A window shows its parts in a view in its content (DESIGN 5.33); a dialog holds them.
+        if text.lines().next().is_some_and(|l| l.ends_with(": window")) {
+            self.check_new_name(&format!("{name}View"))?;
+            return self.add_blocks(templates::in_content(name, &text, code.as_deref()));
+        }
+        self.add_blocks(std::iter::once(text).chain(code).collect())
+    }
+
+    /// Adds top-level blocks made from text, each after a blank line; the first is what the designer selects.
+    fn add_blocks(&mut self, blocks: Vec<String>) -> EditResult<Option<u32>> {
         let mut id = None;
-        for text in std::iter::once(text).chain(code) {
+        for text in blocks {
             let mut node = self.adopt(&text)?;
             node.leading.push(Trivia {
                 indent: 0,

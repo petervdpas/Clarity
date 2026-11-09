@@ -933,6 +933,10 @@ struct Owner<'a> {
     /// other views, bring into the same window, as (name, page, window). Its
     /// code joins theirs there, so a local of one of those names would mean them.
     neighbours: Vec<(&'a str, &'a str, &'a str)>,
+    /// For a view: the handlers of the windows that show it and of their
+    /// other views, which its code calls as theirs calls its own (a name each
+    /// of those windows has).
+    shared_handlers: Vec<&'a HandlerDecl>,
 }
 
 /// A handler wired to an event: `on click: digit(7)`.
@@ -955,6 +959,8 @@ enum TellOf<'a> {
     Engine(&'a str),
     /// The view a slide-out, tab, step or section shows (DESIGN 5.33).
     View(&'a str),
+    /// A row of this entity picked in a tree of levels: the handler takes its record.
+    TreeRow(&'a str),
 }
 
 fn collect_widgets<'a>(widgets: &'a [Widget], owner: &mut Owner<'a>) {
@@ -979,6 +985,10 @@ fn collect_widgets<'a>(widgets: &'a [Widget], owner: &mut Owner<'a>) {
                 (None, Some(part)) => Some(TellOf::Part(part)),
                 (None, None) => widget.props.view.as_deref().map(TellOf::View),
             }, span: widget.span });
+        }
+        // A tree of levels runs a handler with the record of the kind of row picked.
+        for select in &widget.selects {
+            owner.wired.push(Wired { handler: &select.handler, args: &[], event: "select", own_event: false, tell_of: Some(TellOf::TreeRow(&select.entity)), span: select.span });
         }
         // A tab, step or section that shows a view hears what the view tells.
         for page in &widget.pages {
@@ -1112,6 +1122,62 @@ fn neighbours_of<'a>(view: &'a crate::model::Page, visible: &[&'a SpecFile]) -> 
     out
 }
 
+/// What the windows showing `view` share with it: their parts, data and
+/// handlers and those of their other views, each a name every such window
+/// has, added to the view's own (`owner`).
+fn shared_with<'a>(view: &'a crate::model::Page, visible: &[&'a SpecFile], owner: &mut Owner<'a>) {
+    use crate::model::PageKind;
+    let pages: Vec<&'a crate::model::Page> = visible.iter().flat_map(|f| &f.pages).collect();
+    let find = |name: &str| pages.iter().copied().find(|p| p.name.name == name && matches!(p.kind, PageKind::View | PageKind::Toolbox));
+    // The pages a page shows, itself first, however deep.
+    fn together<'a>(page: &'a crate::model::Page, find: &dyn Fn(&str) -> Option<&'a crate::model::Page>, out: &mut Vec<&'a crate::model::Page>) {
+        if out.iter().any(|p| std::ptr::eq(*p, page)) || out.len() > 64 {
+            return;
+        }
+        out.push(page);
+        for place in crate::views::places(&page.widgets) {
+            if let Some(next) = find(place.view) {
+                together(next, find, out);
+            }
+        }
+    }
+    let mut per_window: Vec<(HashMap<&'a str, Part<'a>>, Vec<&'a DataDecl>, Vec<&'a HandlerDecl>)> = Vec::new();
+    for window in pages.iter().copied().filter(|p| !matches!(p.kind, PageKind::View | PageKind::Toolbox)) {
+        let mut shown = Vec::new();
+        together(window, &find, &mut shown);
+        if !shown.iter().any(|p| std::ptr::eq(*p, view)) {
+            continue;
+        }
+        let mut theirs = Owner { name: &window.name.name, is_app: false, data: &window.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new(), tells: None, neighbours: Vec::new(), shared_handlers: Vec::new() };
+        let mut data = Vec::new();
+        let mut handlers = Vec::new();
+        for other in shown.into_iter().filter(|p| !std::ptr::eq(*p, view)) {
+            collect_widgets(&other.widgets, &mut theirs);
+            collect_frame(&other.frame, &mut theirs);
+            data.extend(other.data.iter());
+            handlers.extend(visible.iter().flat_map(|f| &f.code).filter(|c| c.name.name == other.name.name).flat_map(|c| c.handlers.iter()));
+        }
+        per_window.push((theirs.parts, data, handlers));
+    }
+    let Some((first, rest)) = per_window.split_first() else { return };
+    let everywhere = |name: &str, has: &dyn Fn(&(HashMap<&'a str, Part<'a>>, Vec<&'a DataDecl>, Vec<&'a HandlerDecl>), &str) -> bool| rest.iter().all(|w| has(w, name));
+    for (name, part) in &first.0 {
+        if !owner.parts.contains_key(name) && everywhere(name, &|w, n| w.0.contains_key(n)) {
+            owner.parts.insert(name, *part);
+        }
+    }
+    for decl in &first.1 {
+        if everywhere(&decl.name.name, &|w, n| w.1.iter().any(|d| d.name.name == n)) {
+            owner.shown.push(decl);
+        }
+    }
+    for handler in &first.2 {
+        if everywhere(&handler.name.name, &|w, n| w.2.iter().any(|h| h.name.name == n)) {
+            owner.shared_handlers.push(handler);
+        }
+    }
+}
+
 fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
     let mut owners = Vec::new();
     // The toolbox pages a part names (`toolbox WritingTools`), wherever it stands.
@@ -1136,6 +1202,7 @@ fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
             wired: Vec::new(),
             tells: (page.kind == crate::model::PageKind::View).then_some(page.tells.as_slice()),
             neighbours: if matches!(page.kind, crate::model::PageKind::View | crate::model::PageKind::Toolbox) { neighbours_of(page, visible) } else { Vec::new() },
+            shared_handlers: Vec::new(),
         };
         owner.wired.extend(page.handlers.iter().map(|h| Wired { handler: &h.handler, args: &h.args, event: h.event.keyword(), own_event: true, tell_of: None, span: page.span }));
         collect_widgets(&page.widgets, &mut owner);
@@ -1145,7 +1212,7 @@ fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
         toolboxes(&page.widgets, &mut named);
         for name in named {
             if let Some(toolbox) = visible.iter().flat_map(|f| &f.pages).find(|p| p.name.name == name && p.kind == crate::model::PageKind::Toolbox) {
-                let mut theirs = Owner { name: &toolbox.name.name, is_app: false, data: &toolbox.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new(), tells: None, neighbours: Vec::new() };
+                let mut theirs = Owner { name: &toolbox.name.name, is_app: false, data: &toolbox.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new(), tells: None, neighbours: Vec::new(), shared_handlers: Vec::new() };
                 collect_widgets(&toolbox.widgets, &mut theirs);
                 owner.parts.extend(theirs.parts);
                 // Its tools' handlers are this page's unless the toolbox's own code has them.
@@ -1153,12 +1220,29 @@ fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
                 owner.wired.extend(theirs.wired.into_iter().filter(|w| !own.is_some_and(|b| b.handlers.iter().any(|h| h.name.name == w.handler))));
             }
         }
-        // The parts and data of the views it shows are the window's too; their handlers are the view's own.
-        for view in crate::views::places(&page.widgets).into_iter().filter_map(|place| crate::views::find(visible.iter().copied(), place.view)) {
-            let mut theirs = Owner { name: &view.name.name, is_app: false, data: &view.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new(), tells: None, neighbours: Vec::new() };
-            collect_widgets(&view.widgets, &mut theirs);
-            owner.parts.extend(theirs.parts);
-            owner.shown.extend(view.data.iter());
+        // The parts, data and handlers of the views it shows (and the views those
+        // show) are the window's too: its code reaches them by name.
+        if !matches!(page.kind, crate::model::PageKind::View | crate::model::PageKind::Toolbox) {
+            let mut queue: Vec<&'a crate::model::Page> = crate::views::places(&page.widgets).into_iter().filter_map(|place| crate::views::find(visible.iter().copied(), place.view)).collect();
+            let mut seen: Vec<&'a crate::model::Page> = Vec::new();
+            while let Some(view) = queue.pop() {
+                if seen.iter().any(|s| std::ptr::eq(*s, view)) || seen.len() > 64 {
+                    continue;
+                }
+                seen.push(view);
+                let mut theirs = Owner { name: &view.name.name, is_app: false, data: &view.data, shown: Vec::new(), parts: HashMap::new(), wired: Vec::new(), tells: None, neighbours: Vec::new(), shared_handlers: Vec::new() };
+                collect_widgets(&view.widgets, &mut theirs);
+                owner.parts.extend(theirs.parts);
+                owner.shown.extend(view.data.iter());
+                owner.shared_handlers.extend(visible.iter().flat_map(|f| &f.code).filter(|c| c.name.name == view.name.name).flat_map(|c| c.handlers.iter()));
+                queue.extend(crate::views::places(&view.widgets).into_iter().filter_map(|place| crate::views::find(visible.iter().copied(), place.view)));
+            }
+        }
+        // A view's code reaches what shares its window: the window's parts, data
+        // and handlers and those of the window's other views, as the window's code
+        // reaches the view's; a name counts when every window showing it has it.
+        if page.kind == crate::model::PageKind::View {
+            shared_with(page, visible, &mut owner);
         }
         owners.push(owner);
     }
@@ -1172,6 +1256,7 @@ fn owners<'a>(file: &'a SpecFile, visible: &[&'a SpecFile]) -> Vec<Owner<'a>> {
             wired: Vec::new(),
             tells: None,
             neighbours: Vec::new(),
+            shared_handlers: Vec::new(),
         };
         owner.wired.extend(app.handlers.iter().map(|h| Wired { handler: &h.handler, args: &h.args, event: h.event.keyword(), own_event: true, tell_of: None, span: app.span }));
         collect_frame(&app.frame, &mut owner);
@@ -1226,7 +1311,9 @@ fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
         let block = file.code.iter().find(|b| b.name.name == owner.name);
         let mut reported: Vec<&str> = Vec::new();
         for wired in &owner.wired {
-            match block.and_then(|b| b.handlers.iter().find(|h| h.name.name == wired.handler)) {
+            // A view's part may run a handler of the window it shares (or of a view beside it).
+            let own = block.and_then(|b| b.handlers.iter().find(|h| h.name.name == wired.handler));
+            match own.or_else(|| owner.shared_handlers.iter().copied().find(|h| h.name.name == wired.handler)) {
                 Some(decl) => check_values(env, wired, decl, out),
                 None if !reported.contains(&wired.handler) => {
                     reported.push(wired.handler);
@@ -1261,12 +1348,21 @@ fn check_values(env: &Env, wired: &Wired, decl: &HandlerDecl, out: &mut Output) 
             args: wired.args.to_vec(),
         })
     );
+    // A tree's row of an entity gives its record: the handler takes it.
+    if let Some(TellOf::TreeRow(entity)) = wired.tell_of {
+        let fits = matches!(decl.params.as_slice(), [only] if matches!(env.type_ref(&only.ty), Ok(Ty::Record(e)) if e.name.name == entity));
+        if !fits {
+            out.push(Diagnostic::error(format!("on select {entity}: {} takes the {entity} picked, as in handler {}(x: {entity})", wired.handler, wired.handler), decl.name.span));
+        }
+        return;
+    }
     // A tell gives its values: the handler takes them, each of its type.
     if let Some(teller) = wired.tell_of {
         let (message, part) = match teller {
             TellOf::Part(part) => (env.part_decl(part).and_then(|p| p.tells.iter().find(|t| t.name.name == wired.event)), format!("part {part}")),
             TellOf::Engine(engine) => (env.engine(engine).and_then(|e| e.tells.iter().find(|t| t.name.name == wired.event)), format!("engine {engine}")),
             TellOf::View(view) => (crate::views::find(env.visible.iter().copied(), view).and_then(|v| v.tells.iter().find(|t| t.name.name == wired.event)), format!("view {view}")),
+            TellOf::TreeRow(_) => return,
         };
         let Some(message) = message else { return };
         let fits = message.params.len() == decl.params.len()
@@ -1401,7 +1497,9 @@ fn check_block(env: &Env, owner: &Owner, block: &CodeBlock, out: &mut Output) {
                 handler.name.span,
             ));
         }
-        check_handler(env, owner, &block.handlers, handler, out);
+        // A view's code calls the handlers of what shares its window too.
+        let reachable: Vec<HandlerDecl> = block.handlers.iter().cloned().chain(owner.shared_handlers.iter().filter(|h| !block.handlers.iter().any(|o| o.name.name == h.name.name)).map(|h| (*h).clone())).collect();
+        check_handler(env, owner, &reachable, handler, out);
     }
 }
 
@@ -2371,6 +2469,31 @@ impl<'a> BodyChecker<'_, 'a> {
     }
 
     fn draw(&mut self, canvas: &Ident, shape: &Ident, args: &[Expr]) {
+        // `modelTree.reload()`: a tree of levels loads its rows again.
+        if let Some((_, Part::Widget(p))) = self.part(&canvas.name)
+            && p.kind == crate::widgets::WidgetKind::Tree
+        {
+            if shape.name != "reload" || !args.is_empty() {
+                self.error(format!("{} is a tree; it loads its rows again with {}.reload()", canvas.name, canvas.name), shape.span);
+            }
+            return;
+        }
+        // `main.swap(ProjectEditor)`: a window's content shows another of the views it lists.
+        if let Some((_, Part::Widget(p))) = self.part(&canvas.name)
+            && p.kind == crate::widgets::WidgetKind::Content
+        {
+            let part = canvas.name.clone();
+            if shape.name != "swap" {
+                self.error(format!("{part} is content; it swaps the view it shows, as in {part}.swap(OrderEditor)"), shape.span);
+                return;
+            }
+            match args {
+                [Expr { kind: ExprKind::Name { name }, .. }] if self.content_views(&part).iter().any(|v| v == name) => {}
+                [Expr { kind: ExprKind::Name { name }, span, .. }] => self.error(format!("{part} shows no view '{name}'; list it in {part} as view {name}"), *span),
+                _ => self.error(format!("{part}.swap takes the name of a view it lists, as in {part}.swap(OrderEditor)"), shape.span),
+            }
+            return;
+        }
         match self.part(&canvas.name) {
             Some((_, Part::Widget(p))) if p.kind == crate::widgets::WidgetKind::Canvas => {
                 let draws = p.handlers.iter().find(|h| h.event == crate::widgets::Event::Draw).map(|h| h.handler.as_str());
@@ -2660,7 +2783,7 @@ impl<'a> BodyChecker<'_, 'a> {
                     return;
                 };
                 for arg in with {
-                    let Some(decl) = page.data.iter().find(|d| d.name.name == arg.name.name) else {
+                    let Some(decl) = crate::views::page_data(self.env.visible.iter().copied(), page).into_iter().find(|d| d.name.name == arg.name.name) else {
                         self.error(format!("{} has no data '{}'", page.name.name, arg.name.name), arg.name.span);
                         self.expr(&arg.value, None);
                         continue;
@@ -2890,7 +3013,7 @@ impl<'a> BodyChecker<'_, 'a> {
             return Ty::Unknown;
         };
         for arg in with {
-            if !page.data.iter().any(|d| d.name.name == arg.name.name) {
+            if !crate::views::page_data(self.env.visible.iter().copied(), page).iter().any(|d| d.name.name == arg.name.name) {
                 self.error(format!("{} has no data '{}'", page.name.name, arg.name.name), arg.name.span);
             }
         }
@@ -3250,6 +3373,22 @@ impl<'a> BodyChecker<'_, 'a> {
         place
     }
 
+    /// The views a window's content of that name lists, in order.
+    fn content_views(&self, name: &str) -> Vec<String> {
+        fn find(widgets: &[crate::model::Widget], name: &str) -> Option<Vec<String>> {
+            for w in widgets {
+                if w.props.kind == WidgetKind::Content && w.props.name.as_deref() == Some(name) {
+                    return Some(w.pages.iter().filter_map(|p| p.view.clone()).collect());
+                }
+                if let Some(found) = find(&w.children, name).or_else(|| w.pages.iter().find_map(|p| find(&p.children, name))) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        self.env.visible.iter().flat_map(|f| &f.pages).find_map(|page| find(&page.widgets, name)).unwrap_or_default()
+    }
+
     fn resolve(&mut self, expr: &Expr) -> Option<Place<'a>> {
         match &expr.kind {
             ExprKind::Name { name } => {
@@ -3434,6 +3573,8 @@ impl<'a> BodyChecker<'_, 'a> {
             "tab" if matches!(part, Part::Ribbon(_)) => value(Ty::Integer),
             // The open tab of tabs, counted from 1, as a ribbon's.
             "tab" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Tabs) => value(Ty::Integer),
+            // The view a window's content shows, counted from 1 in its list: `main.swap(X)` is written so when placed.
+            "tab" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Content) => value(Ty::Integer),
             // The step a wizard is on, counted from 1.
             "step" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Steps) => value(Ty::Integer),
             // The open section of an accordion, from 1; 0 when none is open.

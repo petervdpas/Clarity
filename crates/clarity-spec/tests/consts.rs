@@ -3,7 +3,7 @@
 //! "pill-red.svg"` names a picture of the resources folder, checked once.
 
 use clarity_spec::resources::{self, ResourceFile};
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 const GAME: &str = "module play
 
@@ -36,7 +36,7 @@ code Play
 ";
 
 fn with_pictures(source: &str, names: &[&str]) -> Project {
-    let mut project = load_sources([("play.clarity", source)]);
+    let mut project = load_converted([("play.clarity", source)]);
     resources::attach(&mut project, names.iter().map(|n| ResourceFile { name: n.to_string(), bytes: b"<svg/>".to_vec() }).collect());
     project
 }
@@ -52,7 +52,7 @@ fn assert_has(messages: &[String], needle: &str) {
 #[test]
 fn constants_are_read_by_name_everywhere() {
     assert_eq!(errors(&with_pictures(GAME, &["pill.svg"])), Vec::<String>::new());
-    let file = &load_sources([("play.clarity", GAME)]).files[0];
+    let file = &load_converted([("play.clarity", GAME)]).files[0];
     assert_eq!(file.consts.iter().map(|c| c.name.name.as_str()).collect::<Vec<_>>(), ["lives", "speed", "greeting", "levels", "pill"]);
     assert!(file.consts[4].picture);
     assert_eq!(file.engines[0].body.as_ref().unwrap().consts[0].name.name, "width");

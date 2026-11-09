@@ -3,7 +3,7 @@
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, SourceKind, Ui, starter};
-use clarity_spec::load_sources;
+use clarity_spec::load_converted;
 
 const SALES: &str = "module sales
 
@@ -325,7 +325,7 @@ fn an_external_source_keeps_its_names_and_is_never_migrated() {
     use clarity_project::DataSource;
     use clarity_spec::SourceRef;
     let erp = "module erp\nuse sales\nsource erp\n\nentity Invoice\n    table \"tblInvoice\"\n    key \"InvoiceID\"\n    number: text(20), column \"InvNo\"\n    total: money\n\nfunction big(limit: money) -> list<Invoice>\n    return find i in Invoice where i.number contains \"INV\" and i.total > limit order by i.number\n";
-    let mut project = load_sources([("sales.clarity", SALES), ("erp.clarity", erp)]);
+    let mut project = load_converted([("sales.clarity", SALES), ("erp.clarity", erp)]);
     project.sources = vec![SourceRef::sql("main"), SourceRef { readonly: true, ..SourceRef::sql("erp").external() }];
     let mut settings = settings();
     settings.datasources.push(DataSource {
@@ -360,7 +360,7 @@ fn an_external_source_keeps_its_names_and_is_never_migrated() {
 #[test]
 fn a_record_s_id_reads_as_its_id() {
     let source = format!("{SALES}\nfunction same(order: Order, other: Order) -> bool\n    return order.id == other.id\n");
-    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     has(file(&files, "Modules/Sales.cs"), "return (order.Id == other.Id);");
 }
 
@@ -368,7 +368,7 @@ fn a_record_s_id_reads_as_its_id() {
 #[test]
 fn a_reference_field_takes_a_record() {
     let source = format!("{SALES}\naction assign(order: Order, customer: Customer)\n    effects db.write\n    order.customer = customer\n    save order\n");
-    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     has(file(&files, "Modules/Sales.cs"), "order.Customer = customer.Id;");
 }
 
@@ -376,7 +376,7 @@ fn a_reference_field_takes_a_record() {
 #[test]
 fn none_is_null() {
     let source = format!("{SALES}\nfunction unplaced(order: Order) -> bool\n    return order.customer == none or order.customer.since != none\n\naction clear(order: Order, customer: Customer)\n    effects db.write\n    customer.since = none\n    order.customer = none\n    save order\n\nfunction withoutCustomer() -> list<Order>\n    return find o in Order where o.customer == none\n");
-    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "Modules/Sales.cs");
     for line in ["(order.Customer == null)", "!(db.Load<Customer>(order.Customer).Since == null)", "customer.Since = null;", "order.Customer = null;", "Cond.IsNone(\"customer\")"] {
         has(sales, line);
@@ -387,7 +387,7 @@ fn none_is_null() {
 #[test]
 fn today_reads_the_clock() {
     let source = format!("{SALES}\naction stamp(customer: Customer)\n    effects db.write\n    if customer.since == none or customer.since > today()\n        customer.since = today()\n    save customer\n");
-    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "Modules/Sales.cs");
     has(sales, "customer.Since = Clock.Today();");
     has(sales, "(customer.Since > Clock.Today())");
@@ -414,7 +414,7 @@ fn a_query_goes_through_a_reference() {
     let source = format!(
         "{SALES}\nfunction ofCustomers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.creditLimit > 10 order by o.customer.name desc, o.customer.creditLimit\n"
     );
-    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "Modules/Sales.cs");
     has(sales, ".Filter(Cond.Through(\"customer\", \"customer\", \"id\", Cond.Contains(\"name\", name)).And(Cond.Through(\"customer\", \"customer\", \"id\", Cond.Number(\"credit_limit\", Op.Gt, ");
     has(sales, ".OrderThrough([new Hop(\"customer\", \"customer\", \"id\")], \"name\", true, false).OrderThrough([new Hop(\"customer\", \"customer\", \"id\")], \"credit_limit\", false, true)");
@@ -425,7 +425,7 @@ fn a_query_goes_through_a_reference() {
 /// trailing `_`, so the method never hides the type inside `Logic`.
 #[test]
 fn a_function_never_takes_the_name_of_a_type() {
-    let project = load_sources([("shop.clarity", include_str!("fixtures/name_clash.clarity"))]);
+    let project = load_converted([("shop.clarity", include_str!("fixtures/name_clash.clarity"))]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let code = file(&files, "Modules/Shop.cs");

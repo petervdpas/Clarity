@@ -3,6 +3,8 @@
 pub mod check;
 pub mod colors;
 pub mod cxaml;
+pub mod design_edit;
+pub mod design_keys;
 pub mod dates;
 pub mod code;
 pub mod diagnostic;
@@ -62,6 +64,30 @@ pub fn content_version(text: &str) -> String {
 }
 
 /// Parses and checks a set of in-memory sources given as (path, text).
+/// Sources written the old way with each page and app block moved into its
+/// own `.cxaml`, as `clarity convert-pages` moves it: every source in its
+/// place, a module without its blocks, the new files after them all. For
+/// tests and tools that start from such text; a block that cannot be moved
+/// stays, and is the error a load reports.
+pub fn converted<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -> Vec<(String, String)> {
+    let mut sources: Vec<(String, String)> = sources.into_iter().map(|(p, t)| (p.to_string(), t.to_string())).collect();
+    if let Ok(moved) = cxaml::moved_out_as_read(&sources) {
+        for (path, text) in moved {
+            match sources.iter_mut().find(|(p, _)| *p == path) {
+                Some(source) => source.1 = text,
+                None => sources.push((path, text)),
+            }
+        }
+    }
+    sources
+}
+
+/// A project from sources written the old way (`converted`).
+pub fn load_converted<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -> Project {
+    let sources = converted(sources);
+    load_sources(sources.iter().map(|(p, t)| (p.as_str(), t.as_str())))
+}
+
 pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -> Project {
     let mut files = Vec::new();
     let mut diagnostics = Vec::new();
@@ -90,7 +116,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
     make_hears(&mut files);
     diagnostics.extend(check::check(&files));
     diagnostics.extend(files.iter().flat_map(themes::check_decls));
-    Project {
+    let mut project = Project {
         files,
         diagnostics,
         migrations: None,
@@ -109,7 +135,10 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         part_files: None,
         stores: None,
         translations: BTreeMap::new(),
-    }
+    };
+    // A window, view or app has a file of its own (docs/CXAML-SOURCE-PLAN.md): one still written in a module's file is an error, which Move pages into design fixes.
+    project.diagnostics.extend(cxaml::pages_left_in_modules(&project));
+    project
 }
 
 /// A form's label column (`labels 3`): a label part for each input in it,
@@ -643,8 +672,6 @@ pub fn load_dir_for(dir: &Path, replaced: &[(&Path, &str)], sources: &[SourceRef
         steps.iter().map(|(p, t)| (p.as_str(), t.as_str())),
         sources,
     );
-    // A window or view has a file of its own (docs/CXAML-SOURCE-PLAN.md); one still written in a module's file is moved there.
-    project.diagnostics.extend(cxaml::pages_left_in_modules(&project));
     let translations = translation_sources(dir, replaced)?;
     if let Some(language) = language {
         project.locale.language = Some(language.to_string());
@@ -773,6 +800,12 @@ pub struct Preview {
     #[serde(rename = "iconNames")]
     #[ts(rename = "iconNames")]
     pub icon_names: Vec<String>,
+    /// What the designer calls each thing of every window, view and app: its
+    /// key (`design/Main.cxaml#Main/saveButton`, see `design_keys`), by its
+    /// file's path and where it starts there.
+    #[serde(rename = "designKeys")]
+    #[ts(rename = "designKeys")]
+    pub design_keys: BTreeMap<String, BTreeMap<u32, String>>,
 }
 
 impl Preview {
@@ -782,7 +815,9 @@ impl Preview {
         let icons = icons::used(&project);
         let keys = if project.keys_editable { shortcuts::catalog(&project) } else { Vec::new() };
         let screen_engines = engines::screen_engines(&project);
+        let design_keys = design_keys::project_keys(&project);
         Self {
+            design_keys,
             icons,
             keys,
             screen_engines,

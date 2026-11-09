@@ -3,7 +3,7 @@
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, SourceKind, Ui, starter};
-use clarity_spec::load_sources;
+use clarity_spec::load_converted;
 
 const SALES: &str = "module sales
 
@@ -73,7 +73,7 @@ fn settings() -> Settings {
 }
 
 fn files() -> Vec<OutFile> {
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = load_converted([("sales.clarity", SALES)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"))
 }
@@ -143,7 +143,7 @@ fn a_workspace_file_survives_writing_the_module_again() {
 /// (as the C# output picks packages).
 #[test]
 fn a_module_gets_the_drivers_of_its_databases_only() {
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = load_converted([("sales.clarity", SALES)]);
     let drivers = [
         (SourceKind::Postgres, "postgresql", "github.com/jackc/pgx/v5 "),
         (SourceKind::Mysql, "mysql", "github.com/go-sql-driver/mysql "),
@@ -246,7 +246,7 @@ fn queries_text_and_loops() {
 #[test]
 fn and_or_keep_short_circuiting() {
     let source = format!("{SALES}\nfunction both(order: Order) -> bool\n    return order.total > 10 and withinCredit(order)\n");
-    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     has(
         file(&files, "sales_module.go"),
         "func Both(db *clarity.Db, order *Order) (bool, error) {
@@ -371,7 +371,7 @@ code OrderForm
 ";
 
 fn windows() -> Vec<OutFile> {
-    let project = load_sources([("shop.clarity", WINDOWS)]);
+    let project = load_converted([("shop.clarity", WINDOWS)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"))
 }
@@ -455,7 +455,7 @@ fn an_external_source_keeps_its_names_and_is_never_migrated() {
     use clarity_project::DataSource;
     use clarity_spec::SourceRef;
     let erp = "module erp\nuse sales\nsource erp\n\nentity Invoice\n    table \"tblInvoice\"\n    key \"InvoiceID\"\n    number: text(20), column \"InvNo\"\n    total: money\n\nfunction big(limit: money) -> list<Invoice>\n    return find i in Invoice where i.number contains \"INV\" and i.total > limit order by i.number\n";
-    let mut project = load_sources([("sales.clarity", SALES), ("erp.clarity", erp)]);
+    let mut project = load_converted([("sales.clarity", SALES), ("erp.clarity", erp)]);
     project.sources = vec![SourceRef::sql("main"), SourceRef { readonly: true, ..SourceRef::sql("erp").external() }];
     let mut settings = settings();
     settings.datasources.push(DataSource {
@@ -493,7 +493,7 @@ fn a_query_goes_through_a_reference() {
     let source = format!(
         "{SALES}\nfunction ofCustomers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.creditLimit > 10 order by o.customer.name desc, o.customer.creditLimit\n"
     );
-    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "sales_module.go");
     has(sales, ".Filter(clarity.And(clarity.Through(\"customer\", \"customer\", \"id\", clarity.Contains(\"name\", name)), clarity.Through(\"customer\", \"customer\", \"id\", clarity.Number(\"credit_limit\", clarity.Gt, ");
     has(sales, ".OrderThrough([]clarity.Hop{{Column: \"customer\", Table: \"customer\", Key: \"id\"}}, \"name\", true, false).OrderThrough([]clarity.Hop{{Column: \"customer\", Table: \"customer\", Key: \"id\"}}, \"credit_limit\", false, true)");
@@ -515,7 +515,7 @@ fn rows_read_again_lose_their_selected_row() {
 fn the_desktop_window_opens_at_the_main_windows_size() {
     has(file(&windows(), "main.go"), "Main: \"OrderForm\", Width: 1100, Height: 760,");
     let sized = WINDOWS.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n");
-    let project = load_sources([("shop.clarity", sized.as_str())]);
+    let project = load_converted([("shop.clarity", sized.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     has(file(&generate(&project, &settings()).unwrap(), "main.go"), "Main: \"OrderForm\", Width: 640, Height: 480,");
 }
@@ -534,7 +534,7 @@ fn a_click_passes_values_to_its_handler() {
             "    handler digit(d: integer)\n        numberInput.error = \"\"\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler gridSelected\n",
         );
     assert_ne!(source, WINDOWS);
-    let project = load_sources([("shop.clarity", source.as_str())]);
+    let project = load_converted([("shop.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let shop = file(&files, "shop_module.go");
@@ -613,7 +613,7 @@ fn a_window_holds_plain_values() {
 #[test]
 fn round_rounds_through_the_runtime() {
     let source = format!("{SALES}\nfunction rounded(x: decimal) -> decimal\n    return round(x, 2)\n");
-    let project = load_sources([("m.clarity", source.as_str())]);
+    let project = load_converted([("m.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let code: String = files.iter().map(|f| f.text.as_str()).collect();
@@ -643,7 +643,7 @@ code Dial
 #[test]
 fn a_canvas_is_drawn_by_its_draw_handler() {
     let source = format!("{SALES}{DIAL}");
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = load_converted([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let code = file(&files, "sales_module.go");
@@ -663,7 +663,7 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
 /// declaration and in every call.
 #[test]
 fn a_function_never_takes_the_name_of_a_type() {
-    let project = load_sources([("shop.clarity", include_str!("fixtures/name_clash.clarity"))]);
+    let project = load_converted([("shop.clarity", include_str!("fixtures/name_clash.clarity"))]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let code = file(&files, "shop_module.go");
@@ -681,7 +681,7 @@ fn a_function_never_takes_the_name_of_a_type() {
 #[test]
 fn a_click_on_a_canvas_runs_its_handler_with_where() {
     let source = format!("{SALES}{DIAL}").replace("on draw: drawDial\n", "on draw: drawDial on click: dialClicked\n") + "\n    handler dialClicked\n        speed = dial.x + dial.y\n";
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = load_converted([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let code = file(&files, "sales_module.go");
@@ -693,7 +693,7 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
 #[test]
 fn a_local_from_a_number_is_an_int64() {
     let source = format!("{SALES}{DIAL}") + "\n    handler countUp\n        let step = 1\n        speed = speed + step\n";
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = load_converted([("sales.clarity", source.as_str())]);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let code = file(&files, "sales_module.go");
     assert!(code.contains("var step int64 = 1\n"), "{code}");
@@ -707,7 +707,7 @@ fn a_step_without_statements_is_written_as_gofmt_writes_it() {
     let module = "module music\n\nentity Album\n    title: text(80), search\n\napp Music\n    main Albums\n\npage Albums: window\n    size 400 x 300\n";
     let first = "migration \"Albums\"\n    add entity Album\n        title: text(80)\n";
     let second = "migration \"Search albums\"\n    add search Album.title\n";
-    let project = clarity_spec::load_with_migrations([("music.clarity", module)], [("0001.clarity", first), ("0002.clarity", second)]);
+    let project = clarity_spec::load_with_migrations(clarity_spec::converted([("music.clarity", module)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", first), ("0002.clarity", second)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = settings();
     settings.datasources[0].kind = SourceKind::Mssql;
@@ -723,7 +723,7 @@ fn a_step_without_statements_is_written_as_gofmt_writes_it() {
 #[test]
 fn the_web_target_serves_the_browser_files_and_the_wire() {
     use clarity_project::Target;
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = load_converted([("sales.clarity", SALES)]);
     let generated = |targets: Vec<Target>| {
         let mut settings = settings();
         settings.stack.targets = targets;
@@ -756,7 +756,7 @@ fn the_web_target_serves_the_browser_files_and_the_wire() {
 #[test]
 fn a_loop_that_never_reads_its_value_takes_none() {
     let text = "module m\n\nfunction thrice() -> integer\n    let n = 0\n    for step in 1 to 3\n        n = n + 1\n    return n\n\nfunction total() -> integer\n    let n = 0\n    for step in 1 to 3\n        n = n + step\n    return n\n\npage Main: window\n    label \"x\" name xLabel at 1,1 span 2\n";
-    let project = load_sources([("m.clarity", text)]);
+    let project = load_converted([("m.clarity", text)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let code: String = files.iter().filter(|f| f.path.ends_with(".go")).map(|f| f.text.as_str()).collect();

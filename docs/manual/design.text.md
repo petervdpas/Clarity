@@ -1,6 +1,6 @@
 # Design as text
 
-The inspector's Code and Text tabs: a window as Clarity text, with the canvas following what you type, and the code of what is picked.
+The inspector's Code and Text tabs: a window as its `.cxaml` text, with the canvas following what you type, and the code of what is picked.
 
 ## The inspector
 
@@ -8,7 +8,7 @@ On the right of the designer is the inspector, with three tabs about what is sel
 
 - **Properties**: the selected part's properties and events, or the window's title, size, data and events.
 - **Code**: its code behind, the handlers of its events; see [Code per part](#code-per-part).
-- **Text**: the window's own declaration as Clarity text, its `page` block (or the `app` block when you design the app).
+- **Text**: the window's own file, `design/<Name>.cxaml`, shown as markup (or the app's file, `design/<App>.cxaml`, when you design the app).
 
 The Code and Text tabs reach down to the bottom. The inspector keeps one width whatever tab it shows; drag its left edge to change it. Escape in the text goes back to Properties, and **Hide** folds the inspector away.
 
@@ -20,16 +20,15 @@ Double-click a part on the canvas to go to the code of its main event: a button'
 
 ## The designer follows the text
 
-In the Text tab, type as you like: move a part by changing its `at`, add a line for a new part, change `: window` to `: dialog`. Shortly after you stop typing, Clarity checks the text. When it is one valid declaration, the canvas shows the window as the text would make it, before you save. A note under the text says so: "The designer shows this text. Save it to keep it, or Revert."
+In the Text tab, type as you like: move a part by changing its `at`, add an element for a new part, change the root `<Window` to `<Dialog`. Shortly after you stop typing, Clarity checks the text. When it is one valid window, the canvas shows the window as the text would make it, before you save. A note under the text says so: "The designer shows this text. Save it to keep it, or Revert."
 
-```clarity
-page CustomerForm: dialog
-    title @customerFormTitle
-    data customer: Customer
-
-    label @nameLabel name nameLabel at 1,1 span 3 for name
-    textbox name name at 4,1 span 6 bind customer.name
-    button @saveButtonCaption name saveButton at 11,3 span 2 default on click: saveClicked
+```xml
+<Dialog class="shop.CustomerForm" title="@customerFormTitle">
+  <Data name="customer" type="Customer" />
+  <Label name="nameLabel" at="1,1" span="3" caption="@nameLabel" for="name" />
+  <Textbox name="name" at="4,1" span="6" bind="customer.name" />
+  <Button name="saveButton" at="11,3" span="2" caption="@saveButtonCaption" default="true" onclick="saveClicked" />
+</Dialog>
 ```
 
 While the canvas shows unsaved text, it does not take changes of its own: dragging or editing a property there says to save or revert the text first.
@@ -53,8 +52,8 @@ The Code tab edits the window's handlers in the same way, checked while you type
 
 ## Typing in the Code and Text tabs
 
-- Tab puts in four spaces; Clarity uses spaces for indentation, never tabs.
-- Enter keeps the indentation of the line, and adds one level after a line that opens a block, such as `handler`, `if`, `form` or `menu`.
+- Tab puts in spaces; Clarity uses spaces for indentation, never tabs (four in code, two in a window's file).
+- Enter keeps the indentation of the line, and adds one level after a line that opens a block, such as `handler` or `if` in code, or an element that holds others, such as `<Form>` or `<Menu>`, in a window's file.
 - Ctrl+S saves; Escape goes back to Properties.
 
 Modules, functions and themes have editors of their own that work the same way; see [Functions and actions](code.functions.md) and [Themes](themes.md). For the full syntax, see [the language reference](../LANGUAGE.md).

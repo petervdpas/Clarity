@@ -5,7 +5,7 @@
 
 use clarity_gen::generate;
 use clarity_project::{Backend, SourceKind, Ui, starter};
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 const MUSIC: &str = "module music
 
@@ -44,7 +44,7 @@ const STACKS: [(Backend, Ui); 5] =
     [(Backend::Rust, Ui::Clarity), (Backend::Csharp, Ui::Clarity), (Backend::Go, Ui::Clarity), (Backend::C, Ui::Clarity), (Backend::Cpp, Ui::Clarity)];
 
 fn project() -> Project {
-    let project = load_sources([("music.clarity", MUSIC), ("loans.clarity", LOANS)]);
+    let project = load_converted([("music.clarity", MUSIC), ("loans.clarity", LOANS)]);
     let errors: Vec<_> = project.diagnostics.iter().filter(|d| d.severity == Severity::Error).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     project
@@ -91,7 +91,7 @@ fn a_module_never_overwrites_a_file_of_the_stack() {
         .into_iter()
         .chain([("start.clarity".to_string(), "module start\n\napp Records\n    main Main\n\npage Main: window\n    title \"Main\"\n".to_string())])
         .collect();
-    let project = load_sources(texts.iter().map(|(f, t)| (f.as_str(), t.as_str())));
+    let project = load_converted(texts.iter().map(|(f, t)| (f.as_str(), t.as_str())));
     let errors: Vec<_> = project.diagnostics.iter().filter(|d| d.severity == Severity::Error).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     let mut clashes = Vec::new();

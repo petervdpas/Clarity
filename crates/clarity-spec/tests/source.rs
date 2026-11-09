@@ -1,5 +1,5 @@
 use clarity_spec::edit::{Edit, apply};
-use clarity_spec::load_sources;
+use clarity_spec::load_converted;
 use clarity_spec::source::{append_decl, decl_text, problems_in_decl, replace_decl};
 
 const FILE: &str = "module m
@@ -68,8 +68,11 @@ fn refuses_text_that_is_not_one_declaration() {
 #[test]
 fn maps_problems_onto_the_declaration_lines() {
     let at = offset(FILE, "function");
-    let text = replace_decl(FILE, at, "function double(n: integer) -> integer\n    return m * 2\n").unwrap();
-    let project = load_sources([("m.clarity", text.as_str())]);
+    let written = replace_decl(FILE, at, "function double(n: integer) -> integer\n    return m * 2\n").unwrap();
+    // The module as a project holds it: its windows in files of their own.
+    let text = clarity_spec::converted([("m.clarity", written.as_str())]).remove(0).1;
+    let at = offset(&text, "function");
+    let project = load_converted([("m.clarity", text.as_str())]);
     let problems = problems_in_decl(&text, at, "m.clarity", &project.diagnostics);
     assert_eq!(problems.len(), 1, "{problems:#?}");
     assert_eq!(problems[0].message, "unknown name 'm'");

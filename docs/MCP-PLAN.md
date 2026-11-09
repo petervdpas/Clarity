@@ -56,13 +56,19 @@ And on the details: "1. yes, 2. it uses clarity's own form and translates that t
 
 ## Order of work
 
-1. Move `ProjectTools` and its tests into a shared crate; the IDE uses it from there (TDD, IDE agent tests stay green).
+Agreed 2026-11-09 (user: "agree"), interleaved with the `.cxaml` refactor ("Next: no translator between design and code" in CXAML-SOURCE-PLAN.md) because two steps touch pages:
+
+1. Move `ProjectTools` and its tests into a shared crate; the IDE uses it from there (TDD, IDE agent tests stay green). Its instructions teach `.cxaml`, which they do not yet.
 2. Add the `generate` tool.
-3. The `rename` tool (fields added to `rename.rs`), automatic folded steps without guessed renames.
-4. `crates/clarity-mcp`: stdio server, tool list from the shared tools minus the left-out ones, a test that lists every offered tool (like `no_tool_executes_anything`).
-5. `clarity mcp` in the CLI; the IDE records its open project; manual page `ai.mcp.md` with setup for Claude Code, Codex and Copilot (i18n'd manual like the rest).
-6. The questionnaire tool and Clarity's form.
+3. The `.cxaml` refactor (CXAML-SOURCE-PLAN.md), so renames and pages work on the model.
+4. The `rename` tool (fields added to `rename.rs`, on model renames), automatic folded steps without guessed renames.
+5. `crates/clarity-mcp`: stdio server, tool list from the shared tools minus the left-out ones, a test that lists every offered tool (like `no_tool_executes_anything`).
+6. `clarity mcp` in the CLI; the IDE records its open project (one key, read-modify-write); manual page `ai.mcp.md` with setup for Claude Code, Codex and Copilot (i18n'd manual like the rest).
+7. The questionnaire tool and Clarity's form (a `.cxaml` page, so after the refactor). Where it falls beside the clarity-pdf crate (REPORT-PLAN.md) is the user's choice.
 
 ## Open questions
 
-None left; waiting for the user's go.
+At their step, for the user:
+
+- The protocol: the `rmcp` crate (a new dependency) or a small JSON-RPC over stdio of Clarity's own.
+- The form: the CLI links Clarity.UI, or `clarity mcp` starts a separate form program.

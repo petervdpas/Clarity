@@ -274,62 +274,14 @@ fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> Ex
         eprintln!("clarity: {} is not a project file; give one like shop.clarity", project_file.display());
         return ExitCode::from(2);
     }
-    // As Generate in Clarity: each part's folder follows its declaration first (DESIGN 5.19).
-    if let Ok(project) = load(project_file) {
-        match clarity_gen::parts::write_part_folders(&clarity_project::module_dir(project_file), &project) {
-            Ok(written) => written.iter().for_each(|path| eprintln!("wrote {}", path.display())),
-            Err(err) => {
-                eprintln!("clarity: cannot write the parts' folders: {err}");
-                return ExitCode::FAILURE;
-            }
-        }
-    }
-    let project = match load(project_file) {
-        Ok(project) => project,
-        Err(code) => return code,
-    };
-    let file = clarity_project::load(project_file);
-    let Some(settings) = file.settings.filter(|_| file.problems.is_empty()) else {
-        for problem in &file.problems {
-            eprintln!("{}: {problem}", project_file.display());
-        }
-        return ExitCode::FAILURE;
-    };
-    let out = out.map_or_else(|| clarity_project::out_dir(project_file, &settings), std::path::Path::to_path_buf);
-    let out = out.as_path();
-    let built = clarity_project::build_settings(&clarity_project::module_dir(project_file), &settings);
-    let mut programs = match clarity_gen::programs(&project, &built) {
-        Ok(programs) => programs,
-        Err(errors) => {
-            for diagnostic in project.diagnostics.iter().filter(|d| d.severity == Severity::Error) {
-                eprintln!("{diagnostic}");
-            }
-            for error in errors {
-                eprintln!("clarity: {error}");
-            }
-            return ExitCode::FAILURE;
-        }
-    };
-    // A program served to a browser carries Clarity.UI's browser files (round B of DESIGN 7.9):
-    // CLARITY_UI_BROWSER's, the fetched ones, else the ones Clarity's repository built.
-    if clarity_gen::web_browser::needs_library(&programs) {
-        let repository = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
-        if let Err(why) = clarity_gen::web_browser::local_folder(Some(repository)).and_then(|folder| clarity_gen::web_browser::with_library(&mut programs, &folder)) {
-            eprintln!("clarity: {why}");
-            return ExitCode::FAILURE;
-        }
-    }
-    match clarity_gen::write_programs(out, &programs, settings.stack.backend, &settings.keeps) {
-        Ok(written) => {
-            for program in &programs {
-                let dir = clarity_project::target_dir(out, program.target);
-                eprintln!("{} file(s) in {}", program.files.len(), dir.display());
-            }
-            eprintln!("{written} changed");
+    // The same generating as the agents' generate tool (crates/clarity-tools).
+    match clarity_tools::generate::generate(project_file, out) {
+        Ok(lines) => {
+            lines.iter().for_each(|line| eprintln!("{line}"));
             ExitCode::SUCCESS
         }
-        Err(err) => {
-            eprintln!("clarity: cannot write {}: {err}", out.display());
+        Err(why) => {
+            why.iter().for_each(|line| eprintln!("clarity: {line}"));
             ExitCode::FAILURE
         }
     }
@@ -583,7 +535,7 @@ fn convert_pages(project_file: &std::path::Path) -> ExitCode {
             return ExitCode::from(2);
         }
     }
-    eprintln!("{pages} window(s) and view(s) moved into .cxaml files");
+    eprintln!("{pages} window(s), view(s) and app(s) moved into .cxaml files");
     // The project as it loads now: the same errors as before, no new ones.
     let after = match load(project_file) {
         Ok(project) => project,

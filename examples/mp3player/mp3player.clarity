@@ -9,10 +9,6 @@ record Track
 settings
     musicFolder: folder, label @musicFolderSetting
 
-app Mp3player
-    title @mp3playerTitle
-    main Main
-
 code Main
     handler windowOpened
         music.volume(volume)

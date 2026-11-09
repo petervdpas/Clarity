@@ -67,7 +67,7 @@ fn the_range_is_as_written_else_the_fields_own() {
     let found: Vec<&str> = p.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.as_str()).collect();
     assert!(found.is_empty(), "{found:#?}");
     let entity = &p.files[0].entities[0];
-    let parts = &p.files[0].pages[0].widgets;
+    let parts = &p.pages().nth(0).unwrap().widgets;
     let field = |name: &str| Some(&entity.field(name).unwrap().modifiers);
     assert_eq!(widgets::number_range(&parts[0].props, field("discount")), range(Some("0"), Some("50"), "0.5"));
     assert_eq!(widgets::number_range(&parts[1].props, field("quantity")), range(Some("1"), Some("99"), "1"), "the field's own");

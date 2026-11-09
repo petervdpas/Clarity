@@ -4,31 +4,6 @@ use customers
 use sales
 use counter
 
-// The application frame: shared by every window that has no region of its own.
-app Shop
-    title @shopTitle
-    main CustomerCard
-    menu name mainMenu
-        item @fileItem name fileItem
-            item @customerCardItem name customerCardItem key "Ctrl+K" on click -> CustomerCard
-            separator
-            item @languageItem name languageItem on click -> language
-            item @themeItem name themeItem on click -> theme
-            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
-        item @customersItem name customersItem
-            item @allCustomersItem name allCustomersItem on click -> CustomerBrowse
-        item @ordersItem name ordersItem
-            item @allOrdersItem name allOrdersItem on click -> OrderBrowse
-            item @salesDashboardItem name salesDashboardItem on click -> SalesDashboard in new window
-    toolbar name mainToolbar
-        button @customers2Caption name customers2 icon "users" on click -> CustomerBrowse
-        button @orders2Caption name orders2 icon "shopping-cart" on click -> OrderBrowse
-        button @dashboard2Caption name dashboard2 icon "chart-column" on click -> SalesDashboard
-        separator
-        button @cardButtonCaption name cardButton icon "credit-card" on click -> CustomerCard
-    footer
-        status @shopStatus
-
 // How the shop looks. The project file names it with: theme Shop
 theme Shop
     mode system

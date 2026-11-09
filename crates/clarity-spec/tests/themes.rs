@@ -2,7 +2,7 @@
 //! and named styles; parts pick a style by name.
 
 use clarity_spec::model::ThemeMode;
-use clarity_spec::{Project, Severity, load_sources, themes};
+use clarity_spec::{Project, Severity, load_converted, themes};
 
 const THEME: &str = "theme Shop
     mode system
@@ -23,7 +23,7 @@ const WINDOW: &str = "page Card: window
 
 fn project(text: &str, offered: &[&str]) -> Project {
     let source = format!("module shop\n\n{text}");
-    let mut project = load_sources([("shop.clarity", source.as_str())]);
+    let mut project = load_converted([("shop.clarity", source.as_str())]);
     themes::use_themes(&mut project, offered);
     project
 }
@@ -49,7 +49,7 @@ fn a_theme_has_colors_a_font_and_styles() {
     assert_eq!(theme.styles[1].look.border.as_deref(), Some("none"));
     // The project knows its theme, for the renderer.
     assert_eq!(project.themes, ["Shop"]);
-    assert_eq!(project.files[0].pages[0].widgets[0].props.style.as_deref(), Some("primary"));
+    assert_eq!(project.pages().nth(0).unwrap().widgets[0].props.style.as_deref(), Some("primary"));
 }
 
 #[test]
@@ -237,7 +237,7 @@ fn a_part_sets_its_text_size_and_no_background() {
 fn clarity_s_own_theme_sets_every_value() {
     let (file, diagnostics) = clarity_spec::parser::parse(themes::BUILT_IN, "clarity.clarity");
     assert!(diagnostics.is_empty(), "{diagnostics:#?}");
-    let checked = load_sources([("clarity.clarity", themes::BUILT_IN)]);
+    let checked = load_converted([("clarity.clarity", themes::BUILT_IN)]);
     assert!(checked.diagnostics.is_empty(), "{:#?}", checked.diagnostics);
     let theme = themes::built_in();
     assert_eq!(theme.name.name, themes::BUILT_IN_NAME);
@@ -268,7 +268,7 @@ fn a_new_theme_starts_as_a_copy_of_clarity_s_own() {
     assert!(text.starts_with("theme Ocean\n    title \"Ocean\"\n    mode system\n"), "{text}");
     assert!(!text.contains("module"), "{text}");
     let source = format!("module shop\n\n{text}");
-    let project = load_sources([("shop.clarity", source.as_str())]);
+    let project = load_converted([("shop.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let ocean = &project.files[0].themes[0];
     let own = themes::built_in();
@@ -314,7 +314,7 @@ fn a_new_theme_starts_from_a_look_of_its_choice() {
     use themes::ThemeStart;
     let theme = |start| {
         let source = format!("module shop\n\n{}", themes::starter_from("Ocean", start));
-        let project = load_sources([("shop.clarity", source.as_str())]);
+        let project = load_converted([("shop.clarity", source.as_str())]);
         assert!(project.diagnostics.is_empty(), "{start:?}: {:#?}", project.diagnostics);
         project.files[0].themes[0].clone()
     };
@@ -350,7 +350,7 @@ fn a_window_picks_a_style_of_the_projects_theme() {
     let page = "page Welcome: window\n    style loud\n    label \"Hello\" name label1 at 1,1 span 3\n";
     let styled = project(&format!("{THEME}\n{page}"), &["Shop"]);
     assert!(errors(&styled).is_empty(), "{:#?}", errors(&styled));
-    assert_eq!(styled.files[0].pages[0].style.as_deref(), Some("loud"));
+    assert_eq!(styled.pages().nth(0).unwrap().style.as_deref(), Some("loud"));
     let missing = project(&format!("{THEME}\n{}", page.replace("style loud", "style nowhere")), &["Shop"]);
     assert!(errors(&missing).iter().any(|e| e.contains("theme Shop has no style 'nowhere'")), "{:#?}", errors(&missing));
     let twice = project(&format!("{THEME}\n{}", page.replace("    style loud\n", "    style loud\n    style quiet\n")), &["Shop"]);

@@ -68,121 +68,178 @@ export function widgetForField(preview: Preview, field: Field): WidgetKind {
 // ---------------------------------------------------------------------------
 // Widget tree
 
-/** A container in a page: the page itself, a panel, a tab or a pane. */
+/** A container in a page of one file, by where it starts: the page itself, a panel, a tab or a pane. */
 export type Container = { offset: number; columns: number; widgets: Widget[] };
 
 export type WidgetLocation = { widget: Widget; container: Container };
 
-/** The view of a line of a window's content, when it stands in the same file as the page: the designer designs it there. */
-/**
- * How many bits of a designer's item are the place in a file
- * (clarity_spec::cxaml::DESIGN_PLACE_BITS): the parts of a view drawn in a
- * window's content, from the view's own file (a `.cxaml`), are told apart
- * from the window's by the file's number above them.
- */
-export const DESIGN_PLACE = 2 ** 24;
+// ---------------------------------------------------------------------------
+// Design keys
 
-/** The designer's item for `start` in the project's file number `file` (clarity_spec::cxaml::design_item). */
-export function designItem(file: number, start: number): number {
-  return (file + 1) * DESIGN_PLACE + start;
+/**
+ * What the designer calls each thing it shows (clarity_spec::design_keys):
+ * its file and name, `design/Main.cxaml#Main/saveButton`. The layer, the
+ * pick and the page each container shows go by keys; an edit is made in the
+ * places of the file its key names.
+ */
+export type DesignKey = string;
+
+/** The key of the thing that starts at `at` in `file`. */
+export function keyAt(preview: Preview, file: SpecFile, at: number): DesignKey | null {
+  return preview.designKeys[file.path]?.[at] ?? null;
 }
 
-/** The view `view` and its file's number, and whether it is in the file of `page`. */
-function viewOf(preview: Preview, page: Page, view: string | null): { view: Page; file: number; own: boolean } | null {
+/** Where a key's thing is written: its file, the window, view or app (as a page) it belongs to, and where it starts. */
+export type Placed = { file: SpecFile; page: Page; at: number };
+
+const PLACES = new WeakMap<Preview, Map<DesignKey, Placed>>();
+
+/** Where the thing `key` names is written; null for a key the project no longer has. */
+export function placeOf(preview: Preview, key: DesignKey | null): Placed | null {
+  if (key === null) return null;
+  let places = PLACES.get(preview);
+  if (!places) {
+    places = new Map();
+    for (const file of preview.project.files) {
+      const owners: Page[] = [...file.pages, ...file.apps.map(appAsPage)].sort((a, b) => a.span.start - b.span.start);
+      for (const [start, k] of Object.entries(preview.designKeys[file.path] ?? {})) {
+        const at = Number(start);
+        // The window, view or app it is in: the last that starts at or before it.
+        const page = owners.filter((o) => o.span.start <= at).pop();
+        if (page) places.set(k, { file, page, at });
+      }
+    }
+    PLACES.set(preview, places);
+  }
+  return places.get(key) ?? null;
+}
+
+/** Something of a page the designer picks: it has a place in its file. */
+type Spanned = { span: { start: number } };
+
+/**
+ * A window as the designer designs it, with the key of each thing it shows:
+ * a thing of a view drawn in the window's content is of the view's file.
+ */
+export type ShownPage = { page: Page; file: SpecFile; keyOf: (thing: Spanned) => DesignKey | null };
+
+/** The view `view`, and the file it is written in. */
+function viewOf(preview: Preview, view: string | null): { view: Page; file: SpecFile } | null {
   if (!view) return null;
-  const files = preview.project.files;
-  const own = files.findIndex((f) => f.pages.some((p) => p.span.start === page.span.start && p.name.name === page.name.name));
-  for (let i = 0; i < files.length; i++) {
-    const found = files[i].pages.find((p) => p.name.name === view && p.kind === "view");
-    if (found) return { view: found, file: i, own: i === own };
+  for (const file of preview.project.files) {
+    const found = file.pages.find((p) => p.name.name === view && p.kind === "view");
+    if (found) return { view: found, file };
   }
   return null;
-}
-
-/** A view's parts with their places as designer's items of file number `file`. */
-function asDesignItems(widgets: Widget[], file: number): Widget[] {
-  return widgets.map((w) => ({
-    ...w,
-    span: { ...w.span, start: designItem(file, w.span.start) },
-    menu: w.menu ? { ...w.menu, span: { ...w.menu.span, start: designItem(file, w.menu.span.start) }, items: commandItems(w.menu.items, file) } : w.menu,
-    children: asDesignItems(w.children, file),
-    pages: w.pages.map((p) => ({ ...p, span: { ...p.span, start: designItem(file, p.span.start) }, children: asDesignItems(p.children, file) })),
-  }));
-}
-
-function commandItems(items: Command[], file: number): Command[] {
-  return items.map((c) => ({ ...c, span: { ...c.span, start: designItem(file, c.span.start) }, items: commandItems(c.items, file) }));
 }
 
 /**
  * The page as the designer designs it (DESIGN 5.33): each line of a window's
  * content holds the parts of its view, as they show there, so the window is
- * designed as it looks. A view of the page's own file keeps its places; one
- * of its own file (`.cxaml`) has them as designer's items of that file, so an
- * edit of one changes the view (`routedEdit`).
+ * designed as it looks; an edit of one of them changes the view's file.
  */
-export function withViewsShown(preview: Preview, page: Page): Page {
+export function shownPage(preview: Preview, page: Page, file: SpecFile): ShownPage {
+  const keys = new Map<object, DesignKey | null>();
+  // Everything of a view's part, in the view's file.
+  const mark = (w: Widget, of: SpecFile) => {
+    const key = (t: Spanned) => keys.set(t, keyAt(preview, of, t.span.start));
+    const commands = (items: Command[]) => items.forEach((c) => (key(c), commands(c.items)));
+    const levels = (all: Widget["levels"]) => all.forEach((l) => (key(l), levels(l.levels)));
+    key(w);
+    if (w.menu) (key(w.menu), commands(w.menu.items));
+    levels(w.levels);
+    w.selects.forEach(key);
+    w.children.forEach((c) => mark(c, of));
+    w.pages.forEach((p) => (key(p), p.children.forEach((c) => mark(c, of))));
+  };
+  const keyOf = (t: Spanned) => (keys.has(t) ? (keys.get(t) ?? null) : keyAt(preview, file, t.span.start));
+  // A copy is the thing it copies.
+  const same = <T extends Spanned>(copy: T, of: Spanned): T => (keys.set(copy, keyOf(of)), copy);
   const fill = (widgets: Widget[], depth: number): Widget[] =>
     widgets.map((w) => {
       const pages = w.pages.map((inner) => {
-        const found = w.props.kind === "content" && depth < 8 ? viewOf(preview, page, inner.view) : null;
-        if (!found || inner.children.length > 0) return { ...inner, children: fill(inner.children, depth) };
-        const parts = found.own ? found.view.widgets : asDesignItems(found.view.widgets, found.file);
-        return { ...inner, children: fill(parts, depth + 1), columns: found.view.columns };
+        const found = w.props.kind === "content" && depth < 8 ? viewOf(preview, inner.view) : null;
+        if (!found || inner.children.length > 0) return same({ ...inner, children: fill(inner.children, depth) }, inner);
+        found.view.widgets.forEach((v) => mark(v, found.file));
+        return same({ ...inner, children: fill(found.view.widgets, depth + 1), columns: found.view.columns }, inner);
       });
-      return { ...w, children: fill(w.children, depth), pages };
+      return same({ ...w, children: fill(w.children, depth), pages }, w);
     });
-  return { ...page, widgets: fill(page.widgets, 0) };
+  return { page: { ...page, widgets: fill(page.widgets, 0) }, file, keyOf };
 }
 
-/** The fields of an edit that name a place in a file. */
-const PLACE_FIELDS = ["item", "target", "container", "page", "owner", "parent", "app", "entity"] as const;
+/** A part of the shown page by its key, and the container it is in. */
+export function locateKey(preview: Preview, shown: ShownPage, key: DesignKey | null): { widget: Widget; container: ShownContainer } | null {
+  if (key === null) return null;
+  for (const container of shownContainers(preview, shown)) {
+    const widget = container.widgets.find((w) => shown.keyOf(w) === key);
+    if (widget) return { widget, container };
+  }
+  return null;
+}
 
-/**
- * The file an edit of the designer changes, and the edit in that file's
- * places: the page's own file, or the file of the view whose parts it names
- * (designer's items above DESIGN_PLACE). `base` turns a place in that file
- * back into the designer's item, for the part to stay picked.
- */
-export function routedEdit(preview: Preview, file: SpecFile, edit: Edit): { file: SpecFile; edit: Edit; base: number } {
-  const files = new Set<number>();
-  const collect = (e: Record<string, unknown>) => {
-    for (const key of PLACE_FIELDS) if (typeof e[key] === "number") files.add(Math.floor((e[key] as number) / DESIGN_PLACE));
-    if (Array.isArray(e.edits)) for (const inner of e.edits) collect(inner as Record<string, unknown>);
+/** A tab, step, section or pane of the shown page by its key. */
+export function innerPageOf(shown: ShownPage, key: DesignKey | null): { widget: Widget; index: number } | null {
+  if (key === null) return null;
+  const visit = (widgets: Widget[]): { widget: Widget; index: number } | null => {
+    for (const w of widgets) {
+      const index = w.pages.findIndex((p) => shown.keyOf(p) === key);
+      if (index >= 0) return { widget: w, index };
+      const found = visit(w.children) ?? w.pages.map((p) => visit(p.children)).find((x) => x) ?? null;
+      if (found) return found;
+    }
+    return null;
   };
-  collect(edit as unknown as Record<string, unknown>);
-  const other = [...files].filter((f) => f > 0);
-  if (other.length === 0) return { file, edit, base: 0 };
-  if (other.length > 1 || files.has(0)) throw new Error("this change names parts of two files at once; change each in its own view");
-  const target = preview.project.files[other[0] - 1];
-  if (!target) throw new Error("the view this part belongs to is not in the project");
-  const local = (e: Record<string, unknown>): Record<string, unknown> => {
-    const out: Record<string, unknown> = { ...e };
-    for (const key of PLACE_FIELDS) if (typeof out[key] === "number") out[key] = (out[key] as number) % DESIGN_PLACE;
-    if (Array.isArray(out.edits)) out.edits = out.edits.map((inner) => local(inner as Record<string, unknown>));
-    return out;
-  };
-  return { file: target, edit: local(edit as unknown as Record<string, unknown>) as unknown as Edit, base: other[0] * DESIGN_PLACE };
+  return visit([...shown.page.widgets, ...frameGrids(shown.page.frame).flatMap((g) => g.widgets)]);
 }
 
 /**
- * The view each line of a window's content shows, by the line's place: the
- * view's parts are designed on that line's grid, which is the view's own;
- * a view of its own file by its designer's item.
+ * The view each line of a window's content shows, by the line's key: the
+ * view's parts are designed on that line's grid, which is the view's own.
  */
-export function contentViews(preview: Preview, page: Page): Map<number, number> {
-  const out = new Map<number, number>();
+export function contentViews(preview: Preview, shown: ShownPage): Map<DesignKey, DesignKey> {
+  const out = new Map<DesignKey, DesignKey>();
   const visit = (widgets: Widget[]) => {
     for (const w of widgets) {
       for (const inner of w.pages) {
-        const found = w.props.kind === "content" ? viewOf(preview, page, inner.view) : null;
-        if (found) out.set(inner.span.start, found.own ? found.view.span.start : designItem(found.file, found.view.span.start));
+        const found = w.props.kind === "content" ? viewOf(preview, inner.view) : null;
+        const line = shown.keyOf(inner);
+        const view = found ? keyAt(preview, found.file, found.view.span.start) : null;
+        if (line !== null && view !== null) out.set(line, view);
         visit(inner.children);
       }
       visit(w.children);
     }
   };
+  visit(shown.page.widgets);
+  return out;
+}
+
+/** A container of the shown page by its key: the page, a panel, a tab or pane, a line of a content (its view), a frame's grid. */
+export type ShownContainer = { key: DesignKey | null; columns: number; widgets: Widget[] };
+
+export function shownContainers(preview: Preview, shown: ShownPage): ShownContainer[] {
+  const page = shown.page;
+  const out: ShownContainer[] = [{ key: shown.keyOf(page), columns: page.columns, widgets: page.widgets }];
+  const visit = (widgets: Widget[]) => {
+    for (const w of widgets) {
+      if (widgetInfo(preview, w.props.kind).container === "plain") {
+        out.push({ key: shown.keyOf(w), columns: w.props.width, widgets: w.children });
+      }
+      for (const inner of w.pages) {
+        // A line of a window's content is its view: what is dropped there goes into the view, on its grid.
+        const found = w.props.kind === "content" ? viewOf(preview, inner.view) : null;
+        out.push(found ? { key: keyAt(preview, found.file, found.view.span.start), columns: found.view.columns, widgets: inner.children } : { key: shown.keyOf(inner), columns: w.props.width, widgets: inner.children });
+      }
+      visit(w.children);
+      for (const inner of w.pages) visit(inner.children);
+    }
+  };
+  for (const grid of frameGrids(page.frame)) {
+    out.push({ key: keyAt(preview, shown.file, grid.offset), columns: grid.columns, widgets: grid.widgets });
+  }
   visit(page.widgets);
+  for (const grid of frameGrids(page.frame)) visit(grid.widgets);
   return out;
 }
 
@@ -193,12 +250,8 @@ export function containers(preview: Preview, page: Page): Container[] {
       if (widgetInfo(preview, w.props.kind).container === "plain") {
         out.push({ offset: w.span.start, columns: w.props.width, widgets: w.children });
       }
-      for (const inner of w.pages) {
-        // A line of a window's content is its view: what is dropped there goes into the view, on its grid.
-        const found = w.props.kind === "content" ? viewOf(preview, page, inner.view) : null;
-        const offset = found ? (found.own ? found.view.span.start : designItem(found.file, found.view.span.start)) : inner.span.start;
-        out.push(found ? { offset, columns: found.view.columns, widgets: inner.children } : { offset, columns: w.props.width, widgets: inner.children });
-      }
+      // The pages of one file's window; a line of a content shows its view from the view's own file (shownContainers).
+      for (const inner of w.pages) out.push({ offset: inner.span.start, columns: w.props.width, widgets: inner.children });
       visit(w.children);
       for (const inner of w.pages) visit(inner.children);
     }

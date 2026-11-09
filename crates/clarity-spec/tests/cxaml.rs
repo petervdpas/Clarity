@@ -1,11 +1,11 @@
-//! Windows and views as `.cxaml` (docs/CXAML-SOURCE-PLAN.md): every page of
-//! every example, and of the fixture with every part, written as its
-//! `.cxaml` and read back is the same page; each part's span is its
-//! element's place in the file.
+//! Windows, views and the app as `.cxaml` (docs/CXAML-SOURCE-PLAN.md):
+//! every page and app of every example, and of the fixture with every part,
+//! written as its `.cxaml` and read back is the same; each part's span is
+//! its element's place in the file.
 
 use std::path::{Path, PathBuf};
 
-use clarity_spec::cxaml::{page_source, read_page};
+use clarity_spec::cxaml::{app_source, is_app_markup, page_source, read_app, read_page};
 use serde_json::Value;
 
 fn repo() -> PathBuf {
@@ -36,6 +36,9 @@ fn all_pages() -> Vec<(String, clarity_spec::model::Page)> {
         }
         for path in clarity_spec::cxaml::page_files(&folder, &[], &[]).unwrap() {
             let text = std::fs::read_to_string(&path).unwrap();
+            if is_app_markup(&text) {
+                continue;
+            }
             let (page, d) = read_page(&text, "");
             assert!(d.is_empty(), "{}: {d:#?}", path.display());
             out.push((path.display().to_string(), page.unwrap()));
@@ -113,7 +116,7 @@ fn every_example_with_its_pages_in_cxaml_loads_as_before() {
             continue;
         }
         let files: Vec<(String, String)> = paths.iter().map(|p| (p.display().to_string(), std::fs::read_to_string(p).unwrap())).collect();
-        let before = clarity_spec::load_sources(files.iter().map(|(p, t)| (p.as_str(), t.as_str())));
+        let before = clarity_spec::load_converted(files.iter().map(|(p, t)| (p.as_str(), t.as_str())));
         let moved = clarity_spec::cxaml::moved_out(&files).unwrap();
         let mut after_files = files.clone();
         for (path, text) in &moved {
@@ -122,7 +125,7 @@ fn every_example_with_its_pages_in_cxaml_loads_as_before() {
                 None => after_files.push((path.clone(), text.clone())),
             }
         }
-        let after = clarity_spec::load_sources(after_files.iter().map(|(p, t)| (p.as_str(), t.as_str())));
+        let after = clarity_spec::load_converted(after_files.iter().map(|(p, t)| (p.as_str(), t.as_str())));
         let messages = |p: &clarity_spec::Project| {
             let mut m: Vec<String> = p.diagnostics.iter().map(|d| format!("{:?} {}", d.severity, d.message)).collect();
             m.sort();
@@ -137,18 +140,7 @@ fn every_example_with_its_pages_in_cxaml_loads_as_before() {
         };
         assert!(pages(&before) == pages(&after), "{}: the placed windows differ", folder.display());
         assert!(moved.iter().all(|(p, t)| !p.ends_with(".clarity") || !t.contains("\npage ")), "{}: a page block was left", folder.display());
-    }
-}
-
-/// Every page written back as its block of Clarity reads as the same page:
-/// the designer edits a `.cxaml` page through that text.
-#[test]
-fn every_page_reads_back_from_its_block_as_it_was() {
-    for (path, page) in all_pages() {
-        let block = clarity_spec::cxaml::page_block(&page);
-        let (read, diagnostics) = clarity_spec::parser::parse(&format!("module m\n{block}"), "");
-        assert!(diagnostics.is_empty(), "{path} {}: {diagnostics:#?}\n{block}", page.name.name);
-        same(&path, &page, &read.pages[0], &block);
+        assert!(moved.iter().all(|(p, t)| !p.ends_with(".clarity") || !t.contains("\napp ")), "{}: an app block was left", folder.display());
     }
 }
 
@@ -206,7 +198,7 @@ fn a_rename_reaches_the_cxaml_pages() {
     let module = "module shop\n\nentity Sale\n    amount: decimal(10, 2), label @amountLabel\n\ncode Sales\n    handler opened\n        sales = find s in Sale\n";
     let markup = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- Every sale. -->\n<Window class=\"shop.Sales\" onopen=\"opened\">\n  <Data name=\"sales\" type=\"list&lt;Sale&gt;\" />\n  <Table name=\"salesGrid\" at=\"1,1\" span=\"12\" rows=\"6\" bind=\"sales\" columns=\"amount\" />\n</Window>\n";
     let files = [("shop/shop.clarity", module), ("shop/design/Sales.cxaml", markup)];
-    let project = clarity_spec::load_sources(files);
+    let project = clarity_spec::load_converted(files);
     let source = |path: &str| files.iter().find(|(p, _)| *p == path).map(|(_, t)| t.to_string());
     let renamed = clarity_spec::rename::rename(&project, source, clarity_spec::rename::RenameKind::Entity, "Sale", "Purchase").unwrap();
     let page = renamed.iter().find(|r| r.path.ends_with("Sales.cxaml")).expect("the window's file is renamed too");
@@ -225,14 +217,12 @@ fn every_example_cxaml_writes_back_as_it_was() {
         for entry in files.filter_map(Result::ok) {
             let path = entry.path();
             let text = std::fs::read_to_string(&path).unwrap();
-            let (page, d) = read_page(&text, &path.display().to_string());
-            assert!(d.is_empty(), "{}: {d:#?}", path.display());
-            let written = clarity_spec::cxaml::rewritten(&text, &format!("module m\n{}", clarity_spec::cxaml::page_block(&page.unwrap()))).unwrap();
-            assert_eq!(written, text, "{}", path.display());
+            let designed = clarity_spec::cxaml::read_designed(&text, &path.display().to_string()).unwrap();
+            assert_eq!(clarity_spec::cxaml::written_again(&text, &designed), text, "{}", path.display());
             count += 1;
         }
     }
-    assert!(count > 80, "{count} files");
+    assert!(count > 95, "{count} files");
 }
 
 /// The Design text of a `.cxaml` is colored as markup, in Clarity's own kinds.
@@ -273,4 +263,113 @@ fn make_texts_keys_reaches_the_cxaml_pages() {
     let en = &keyed.languages["en"];
     assert_eq!(en.get(&caption[1..]).map(String::as_str), Some("Total so far"));
     assert_eq!(en.get(&title[1..]).map(String::as_str), Some("Sales"));
+}
+
+/// Every app of every example and of the fixture: in its `design/` file,
+/// or still written in a module's file.
+fn all_apps() -> Vec<(String, clarity_spec::model::App)> {
+    let mut out = Vec::new();
+    for folder in module_folders() {
+        for path in clarity_spec::spec_files(&folder).unwrap() {
+            let text = std::fs::read_to_string(&path).unwrap();
+            let (file, _) = clarity_spec::parser::parse(&text, "");
+            out.extend(file.apps.into_iter().map(|a| (path.display().to_string(), a)));
+        }
+        for path in clarity_spec::cxaml::page_files(&folder, &[], &[]).unwrap() {
+            let text = std::fs::read_to_string(&path).unwrap();
+            if !is_app_markup(&text) {
+                continue;
+            }
+            let (app, d) = read_app(&text, "");
+            assert!(d.is_empty(), "{}: {d:#?}", path.display());
+            out.push((path.display().to_string(), app.unwrap()));
+        }
+    }
+    out
+}
+
+/// `got` is `want` read back, places aside; else where they first differ.
+fn same_app(path: &str, want: &clarity_spec::model::App, got: &clarity_spec::model::App, written: &str) {
+    let (want_json, got_json) = (without_places(&serde_json::to_value(want).unwrap()), without_places(&serde_json::to_value(got).unwrap()));
+    if want_json != got_json {
+        let (w, g) = (serde_json::to_string_pretty(&want_json).unwrap(), serde_json::to_string_pretty(&got_json).unwrap());
+        let first = w.lines().zip(g.lines()).position(|(a, b)| a != b).unwrap_or(0);
+        panic!("{path} {} differs from line {first}:\nwant: {}\ngot:  {}\n{written}", want.name.name, w.lines().skip(first.saturating_sub(3)).take(8).collect::<Vec<_>>().join("\n"), g.lines().skip(first.saturating_sub(3)).take(8).collect::<Vec<_>>().join("\n"));
+    }
+}
+
+#[test]
+fn every_app_reads_back_from_its_cxaml_as_it_was() {
+    let apps = all_apps();
+    for (path, app) in &apps {
+        let markup = app_source(app, "m");
+        assert!(markup.contains(&format!("<App class=\"m.{}\"", app.name.name)), "{markup}");
+        let (read, diagnostics) = read_app(&markup, "App.cxaml");
+        assert!(diagnostics.is_empty(), "{path} {}: {diagnostics:#?}\n{markup}", app.name.name);
+        same_app(path, app, &read.expect("an app"), &markup);
+    }
+    assert!(apps.len() > 15, "{} apps", apps.len());
+}
+
+const SHOP: &str = "module shop\n\n// The shop: its frame and where it starts.\napp Shop\n    title @shopTitle\n    main Desk\n    splash Welcome for 1.5 seconds\n    data session: Session\n    on start: appStarted\n    menu name mainMenu\n        item @fileItem name fileItem\n            item @quitItem name quitItem key \"Ctrl+Q\" on click -> quit\n    footer\n        status @shopStatus\n\nentity Session\n    user: text, label @userLabel\n\npage Desk: window\n    title @deskTitle\n\npage Welcome: splash\n    label @welcomeLabel name welcomeLabel at 1,1 span 4\n\ncode Shop\n    handler appStarted\n        session.user = \"\"\n";
+
+/// An app moves out of its module into `design/<App>.cxaml`, as a window
+/// does, with the comment above it; the module keeps its code.
+#[test]
+fn an_app_moves_into_its_own_cxaml() {
+    let moved = clarity_spec::cxaml::moved_out(&[("shop/shop.clarity".to_string(), SHOP.to_string())]).unwrap();
+    let (_, app) = moved.iter().find(|(p, _)| p == "shop/design/Shop.cxaml").expect("the app's file");
+    assert!(app.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- The shop: its frame and where it starts. -->\n<App class=\"shop.Shop\" title=\"@shopTitle\" main=\"Desk\" splash=\"Welcome\" splashFor=\"1.5\" onstart=\"appStarted\">\n"), "{app}");
+    assert!(app.contains("  <Data name=\"session\" type=\"Session\" />\n"), "{app}");
+    assert!(app.contains("<Menu name=\"mainMenu\">") && app.contains("<Footer status=\"@shopStatus\""), "{app}");
+    let (_, module) = moved.iter().find(|(p, _)| p == "shop/shop.clarity").expect("the module");
+    assert!(!module.contains("app Shop") && !module.contains("The shop: its frame"), "{module}");
+    assert!(module.contains("code Shop\n    handler appStarted"), "the app's code stays: {module}");
+    let project = clarity_spec::load_converted(moved.iter().map(|(p, t)| (p.as_str(), t.as_str())));
+    let before = clarity_spec::load_converted([("shop/shop.clarity", SHOP)]);
+    let messages = |p: &clarity_spec::Project| p.diagnostics.iter().map(|d| d.message.clone()).collect::<Vec<_>>();
+    assert_eq!(messages(&project), messages(&before));
+    let app = project.apps().next().expect("the app is loaded");
+    assert_eq!((app.main.as_ref().unwrap().name.as_str(), app.splash_for), ("Desk", Some(1500)));
+    assert_eq!(clarity_spec::cxaml::folded(&project).files.iter().filter(|f| !f.apps.is_empty()).map(|f| f.path.as_str()).collect::<Vec<_>>(), ["shop/shop.clarity"], "folded, the app is its module's again");
+}
+
+/// An app left in a module's file is an error, as a page is.
+#[test]
+fn an_app_left_in_a_module_is_an_error() {
+    let project = clarity_spec::load_sources([("shop/shop.clarity", SHOP)]);
+    let left = clarity_spec::cxaml::pages_left_in_modules(&project);
+    assert!(left.iter().any(|d| d.message.starts_with("Shop ") && d.message.contains(clarity_spec::cxaml::APP_LEFT_IN_MODULE)), "{left:#?}");
+}
+
+/// What is wrong in an app's markup is said where.
+#[test]
+fn what_is_wrong_in_an_app_is_said_where() {
+    let (_, d) = read_app("<App title=\"@t\">\n</App>\n", "Shop.cxaml");
+    assert!(d.iter().any(|d| d.message.contains("class=\"shop.Shop\"")), "{d:#?}");
+    let (_, d) = read_app("<App class=\"shop.Shop\" splash=\"Welcome\" splashFor=\"90\">\n</App>\n", "Shop.cxaml");
+    assert!(d.iter().any(|d| d.message.contains("0.1 to 30")), "{d:#?}");
+    let (_, d) = read_app("<App class=\"shop.Shop\" colour=\"red\">\n  <Buton at=\"1,1\" />\n</App>\n", "Shop.cxaml");
+    assert!(d.iter().any(|d| d.message.contains("<App> has no 'colour'")), "{d:#?}");
+    assert!(d.iter().any(|d| d.message.contains("<Buton>") && d.span.line == 2), "{d:#?}");
+    let (_, d) = read_page("<App class=\"shop.Shop\">\n</App>\n", "Shop.cxaml");
+    assert!(d.iter().any(|d| d.message.contains("<App>")), "a page's reader says an app is no page: {d:#?}");
+}
+
+
+/// Make texts keys reaches the app's `.cxaml` too: a menu item written as
+/// text becomes a key there, and the language file gets its text.
+#[test]
+fn make_texts_keys_reaches_the_app_cxaml() {
+    let module = "module shop\n\ncode Shop\n    handler appStarted\n        return\n";
+    let markup = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- The frame. -->\n<App class=\"shop.Shop\" title=\"Shop\" onstart=\"appStarted\">\n  <Menu name=\"mainMenu\">\n    <Item caption=\"File\" name=\"fileItem\" />\n  </Menu>\n</App>\n";
+    let keyed = clarity_spec::cxaml::make_keys_with_pages(&[("shop/shop.clarity", module)], &[("shop/design/Shop.cxaml", markup)], &[("shop/translations/en.clarity", "translation en\n")], "en");
+    let (_, app) = keyed.modules.iter().find(|(p, _)| p == "shop/design/Shop.cxaml").expect("the app's file");
+    assert!(app.contains("<!-- The frame. -->") && app.contains("<App class=\"shop.Shop\""), "{app}");
+    let (read, d) = read_app(app, "");
+    assert!(d.is_empty(), "{d:#?}");
+    let read = read.unwrap();
+    let caption = read.frame.menu.unwrap().items[0].props.caption.clone().unwrap();
+    assert!(caption.starts_with('@') && read.title.as_deref().is_some_and(|t| t.starts_with('@')), "{app}");
+    assert_eq!(keyed.languages["en"].get(&caption[1..]).map(String::as_str), Some("File"));
 }

@@ -40,7 +40,7 @@ const EN: &str = "translation en
 
 #[test]
 fn a_tree_of_levels_is_generated_on_every_stack() {
-    let mut project = clarity_spec::load_sources([("shop.clarity", SOURCE)]);
+    let mut project = clarity_spec::load_converted([("shop.clarity", SOURCE)]);
     project.locale.language = Some("en".into());
     clarity_spec::translations::attach(&mut project, [("translations/en.clarity", EN)]);
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();

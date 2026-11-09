@@ -60,7 +60,9 @@ pub fn rename(
     for file in &project.files {
         let original_path = file.path.clone();
         let this = file.module.as_ref().map(|m| m.name.as_str());
-        let sees = this == module || file.uses.iter().any(|u| Some(u.name.as_str()) == module);
+        // A window's file sees what its module's file sees.
+        let uses = project.files.iter().filter(|f| f.module.as_ref().map(|m| m.name.as_str()) == this).flat_map(|f| &f.uses);
+        let sees = this == module || uses.into_iter().any(|u| Some(u.name.as_str()) == module);
         if !sees {
             continue;
         }
@@ -75,17 +77,15 @@ pub fn rename(
         let Some(text) = source(&file.path) else {
             return Err(format!("cannot read {}", file.path));
         };
-        // A window's or view's own file (`.cxaml`) is renamed in its page's
-        // text of Clarity, and written back as markup.
-        let (text, block) = if crate::cxaml::is_page_file(&file.path) {
-            let (page, _) = crate::cxaml::read_page(&text, &file.path);
-            let Some(page) = page else { return Err(format!("cannot read {}", file.path)) };
-            let block = format!("module {}\n{}", this.unwrap_or("m"), crate::cxaml::page_block(&page));
-            (block.clone(), Some((crate::parser::parse(&block, "").0, text)))
-        } else {
-            (text, None)
-        };
-        let file = block.as_ref().map_or(file, |(parsed, _)| parsed);
+        // A window's, view's or app's own file (`.cxaml`): its data names
+        // entities and enums; renamed on what it holds, the file written again.
+        if crate::cxaml::is_page_file(&file.path) {
+            let mut designed = crate::cxaml::read_designed(&text, &file.path)?;
+            if renamed_in_data(&mut designed, old, new) {
+                changed.push(Renamed { path: original_path.clone(), text: crate::cxaml::written_again(&text, &designed) });
+            }
+            continue;
+        }
         // Each place to change: where it is, what it says now, and what it
         // says after.
         let mut spans: Vec<(usize, usize, String, String)> = references(file, kind, old)
@@ -115,23 +115,50 @@ pub fn rename(
         let mut text = text;
         spans.sort_unstable();
         spans.dedup();
-        let path = block.as_ref().map_or(file.path.clone(), |_| String::new());
+        let path = file.path.clone();
         for (start, end, was, now) in spans.into_iter().rev() {
             if text.get(start..end) != Some(was.as_str()) {
                 return Err(format!("{path} changed while renaming; try again"));
             }
             text.replace_range(start..end, &now);
         }
-        let text = match block {
-            Some((_, markup)) => crate::cxaml::rewritten(&markup, &text).map_err(|e| e.0)?,
-            None => text,
-        };
         changed.push(Renamed {
             path: original_path.clone(),
             text,
         });
     }
     Ok(changed)
+}
+
+/// The window's or app's data renamed: the entity a record or list holds,
+/// the enum a plain value is of. Whether anything changed.
+fn renamed_in_data(designed: &mut crate::design_edit::Designed, old: &str, new: &str) -> bool {
+    use crate::model::DataKind;
+    let data = match designed {
+        crate::design_edit::Designed::Page(page) => &mut page.data,
+        crate::design_edit::Designed::App(app) => &mut app.data,
+    };
+    // Read from the file, a type is not yet told entity or enum (the project
+    // does that as it loads); a name is one or the other, so either is renamed.
+    let mut changed = false;
+    for decl in data.iter_mut().filter(|d| !d.made) {
+        match &mut decl.of {
+            DataKind::Record { entity } | DataKind::List { entity } if entity.name == old => {
+                entity.name = new.to_string();
+                changed = true;
+            }
+            DataKind::Value { ty, .. } => {
+                if let crate::code::TypeRefKind::Named { name } = &mut ty.kind
+                    && name == old
+                {
+                    *name = new.to_string();
+                    changed = true;
+                }
+            }
+            _ => {}
+        }
+    }
+    changed
 }
 
 /// The identifiers in a file that name the entity or enum `name`.
@@ -174,6 +201,13 @@ fn record_uses(file: &SpecFile, entity: &str) -> Vec<Span> {
         }
     }
     found
+}
+
+/// Whether the statements `body` say the name `name` anywhere.
+pub(crate) fn said_in(body: &[Stmt], name: &str) -> bool {
+    let mut found = Vec::new();
+    stmts(body, name, &mut found);
+    !found.is_empty()
 }
 
 fn stmts(body: &[Stmt], name: &str, found: &mut Vec<Span>) {

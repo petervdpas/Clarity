@@ -3,9 +3,10 @@
 //! tab to unfold it; code reads and sets `collapsed`, the open `tab` (from
 //! 1), and hides tabs and groups by their names.
 
-use clarity_spec::edit::{Edit, apply};
+use clarity_spec::cxaml::apply;
+use clarity_spec::edit::Edit;
 use clarity_spec::parser::parse;
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const WINDOW: &str = "module m
 
@@ -29,7 +30,7 @@ code Main
 ";
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("m.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("m.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 fn assert_has(messages: &[String], needle: &str) {
@@ -60,23 +61,43 @@ fn a_ribbon_is_checked() {
     assert_has(&errors(&WINDOW.replace("mainRibbon.tab = 2", "mainRibbon.tab = \"View\"")), "integer");
 }
 
+
+/// The `.cxaml` the page or app `name` of `source` becomes.
+fn design(source: &str, name: &str) -> String {
+    let file = format!("design/{name}.cxaml");
+    clarity_spec::converted([("m/m.clarity", source)])
+        .into_iter()
+        .find(|(p, _)| p.ends_with(&file))
+        .map(|(_, t)| t)
+        .unwrap_or_else(|| panic!("no {file}"))
+}
+
+/// Where the element that starts with `needle` starts in `markup`.
+fn at(markup: &str, needle: &str) -> u32 {
+    markup.find(needle).unwrap_or_else(|| panic!("no {needle:?} in {markup}")) as u32
+}
+
+fn edit(markup: &str, edit: &Edit) -> String {
+    apply(None, markup, edit).unwrap_or_else(|e| panic!("edit failed: {e}")).text
+}
+
 /// Name them names the ribbon, its tabs and its groups after what they are.
 #[test]
 fn name_them_names_a_ribbon_its_tabs_and_groups() {
-    let unnamed = "module m\n\napp Shop\n    ribbon\n        tab \"Home\"\n            group \"Clipboard Tools\"\n                button \"Paste\" name pasteButton\n";
-    let named = apply(unnamed, &Edit::NameParts).unwrap().text;
-    assert!(named.contains("    ribbon name mainRibbon\n        tab \"Home\" name homeTab\n            group \"Clipboard Tools\" name clipboardToolsGroup\n"), "{named}");
+    let unnamed = design("module m\n\napp Shop\n    ribbon\n        tab \"Home\"\n            group \"Clipboard Tools\"\n                button \"Paste\" name pasteButton\n", "Shop");
+    let named = edit(&unnamed, &Edit::NameParts);
+    assert!(named.contains("  <Ribbon name=\"mainRibbon\">\n    <Tab title=\"Home\" name=\"homeTab\">\n      <Group title=\"Clipboard Tools\" name=\"clipboardToolsGroup\">\n"), "{named}");
 }
 
 /// The designer sets a ribbon's name and folding, and a tab's or group's name.
 #[test]
 fn the_designer_sets_a_ribbons_options_and_its_parts_names() {
-    let at = |source: &str, needle: &str| source.find(needle).unwrap() as u32;
-    let text = apply(WINDOW, &Edit::UpdateRibbon { item: at(WINDOW, "ribbon name"), name: Some("tools".into()), collapsible: true, collapsed: false }).unwrap().text;
-    assert!(text.contains("    ribbon name tools collapsible\n"), "{text}");
-    let text = apply(&text, &Edit::SetName { item: at(&text, "tab \"View\""), name: "showTab".into() }).unwrap().text;
-    assert!(text.contains("        tab \"View\" name showTab\n"), "{text}");
-    let unnamed = text.replace("group \"Zoom\" name zoomGroup", "group \"Zoom\"");
-    let text = apply(&unnamed, &Edit::SetName { item: at(&unnamed, "group \"Zoom\""), name: "sizeGroup".into() }).unwrap().text;
-    assert!(text.contains("            group \"Zoom\" name sizeGroup\n"), "{text}");
+    let window = design(WINDOW, "Main");
+    let text = edit(&window, &Edit::UpdateRibbon { item: at(&window, "<Ribbon"), name: Some("tools".into()), collapsible: true, collapsed: false });
+    assert!(text.contains("  <Ribbon name=\"tools\" collapsible=\"true\">\n"), "{text}");
+    let text = edit(&text, &Edit::SetName { item: at(&text, "<Tab title=\"View\""), name: "showTab".into() });
+    assert!(text.contains("    <Tab title=\"View\" name=\"showTab\">\n"), "{text}");
+    let unnamed = text.replace("<Group title=\"Zoom\" name=\"zoomGroup\">", "<Group title=\"Zoom\">");
+    let text = edit(&unnamed, &Edit::SetName { item: at(&unnamed, "<Group title=\"Zoom\""), name: "sizeGroup".into() });
+    assert!(text.contains("      <Group title=\"Zoom\" name=\"sizeGroup\">\n"), "{text}");
 }

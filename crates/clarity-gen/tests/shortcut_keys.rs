@@ -30,7 +30,7 @@ fn files(backend: Backend, ui: Ui, editable: bool) -> Vec<OutFile> {
     settings.stack.backend = backend;
     settings.stack.ui = ui;
     settings.keys_editable = editable;
-    let project = clarity_spec::load_in([("shop.clarity", SHOP)], [], &clarity_project::source_refs(&settings));
+    let project = clarity_spec::load_in(clarity_spec::converted([("shop.clarity", SHOP)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &clarity_project::source_refs(&settings));
     generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"))
 }
 
@@ -59,7 +59,7 @@ fn csharp_on_the_web_carries_the_catalog_in_its_model() {
     settings.stack.ui = Ui::Clarity;
     settings.keys_editable = true;
     settings.stack.targets = vec![clarity_project::Target::Web];
-    let project = clarity_spec::load_in([("shop.clarity", SHOP)], [], &clarity_project::source_refs(&settings));
+    let project = clarity_spec::load_in(clarity_spec::converted([("shop.clarity", SHOP)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &clarity_project::source_refs(&settings));
     let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     assert!(!files.iter().any(|f| f.path.ends_with("KeysCatalog.cs")));
     let model = file(&files, "App/model.json");
@@ -73,12 +73,12 @@ fn without_keys_editable_the_design_keys_stay() {
     let mut settings: Settings = starter("Shop", "shop");
     settings.stack.backend = Backend::Csharp;
     settings.stack.ui = Ui::Clarity;
-    let project = clarity_spec::load_in([("shop.clarity", SHOP)], [], &clarity_project::source_refs(&settings));
+    let project = clarity_spec::load_in(clarity_spec::converted([("shop.clarity", SHOP)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &clarity_project::source_refs(&settings));
     // `-> keys` needs the project file's say.
     let refused = generate(&project, &settings).unwrap_err();
     assert_eq!(refused, ["keysItem clicks to keys, the keys window, which opens when the project file says keys editable"]);
     let plain = SHOP.replace("            item @keysItem name keysItem on click -> keys\n", "");
-    let project = clarity_spec::load_in([("shop.clarity", plain.as_str())], [], &clarity_project::source_refs(&settings));
+    let project = clarity_spec::load_in(clarity_spec::converted([("shop.clarity", plain.as_str())]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &clarity_project::source_refs(&settings));
     let files = generate(&project, &settings).unwrap();
     assert!(!file(&files, "Program.cs").contains("PersonKeys"));
     assert!(!files.iter().any(|f| f.path == "KeysCatalog.cs"));

@@ -11,19 +11,19 @@ import type { Preview } from "@clarity/ui/generated/Preview.ts";
 import type { RegionKind } from "@clarity/ui/generated/RegionKind.ts";
 import type { WidgetKind } from "@clarity/ui/generated/WidgetKind.ts";
 import type { WidgetProps } from "@clarity/ui/generated/WidgetProps.ts";
-import { gapOf, rowAt } from "@clarity/ui/screen/pages.ts";
+import { gapOf, rowAt, type DesignKey } from "@clarity/ui/screen/pages.ts";
 
 
 /** What is dragged onto the window: a new part, a field, a part moved or sized, or a frame region. */
 export type PageDragSource =
   | { kind: "new"; widget: WidgetKind; width: number; height: number; label: string; part?: string }
   | { kind: "field"; widget: WidgetKind; bind: string; caption: string; width: number; height: number; label: string }
-  | { kind: "move"; item: number; from: number; props: WidgetProps; grab: { dc: number; dr: number }; label: string }
-  | { kind: "resize"; item: number; props: WidgetProps; label: string }
+  | { kind: "move"; item: DesignKey; from: DesignKey; props: WidgetProps; grab: { dc: number; dr: number }; label: string }
+  | { kind: "resize"; item: DesignKey; props: WidgetProps; label: string }
   | { kind: "region"; region: RegionKind; docks: Dock[]; label: string };
 
-/** Where a drop would land: a container and the rectangle in its grid. */
-export type Placement = { container: number; columns: number; col: number; row: number; width: number; height: number };
+/** Where a drop would land: a container, by its key, and the rectangle in its grid. */
+export type Placement = { container: DesignKey; columns: number; col: number; row: number; width: number; height: number };
 
 /** What the text panel shows of a window: its design or its code behind. */
 export type PanelView = "design" | "code";
@@ -33,8 +33,10 @@ const DRAG_THRESHOLD = 4;
 type Pending = { source: PageDragSource; x: number; y: number; onclick: () => void };
 
 class PageDesigner {
-  selected = $state<number | null>(null);
-  activeTabs = $state<Record<number, number>>({});
+  /** What is picked, by its key; null for the window itself. */
+  selected = $state<DesignKey | null>(null);
+  /** The page each tabs, steps or accordion part shows, by the part's key. */
+  activeTabs = $state<Record<DesignKey, number>>({});
   error = $state<string | null>(null);
   /** An edit is being written. */
   saving = $state(false);
@@ -55,13 +57,13 @@ class PageDesigner {
   #canvas: HTMLElement | null = null;
   #ondrop: ((source: PageDragSource, placement: Placement) => void) | null = null;
   #ondock: ((region: RegionKind, dock: Dock) => void) | null = null;
-  #onedit: ((edit: Edit) => void) | null = null;
+  #onedit: ((edit: Edit, key: DesignKey) => void) | null = null;
 
   attach(
     canvas: HTMLElement,
     ondrop: (source: PageDragSource, placement: Placement) => void,
     ondock: (region: RegionKind, dock: Dock) => void,
-    onedit: (edit: Edit) => void = () => {},
+    onedit: (edit: Edit, key: DesignKey) => void = () => {},
   ): () => void {
     this.#canvas = canvas;
     this.#ondrop = ondrop;
@@ -86,9 +88,9 @@ class PageDesigner {
     };
   }
 
-  /** An edit a part makes on the canvas itself, such as a table column's width dragged in its header. */
-  edit(edit: Edit) {
-    this.#onedit?.(edit);
+  /** An edit a part makes on the canvas itself, such as a table column's width dragged in its header: in the places of the file of `key`. */
+  edit(edit: Edit, key: DesignKey) {
+    this.#onedit?.(edit, key);
   }
 
   press(e: PointerEvent, source: PageDragSource, onclick: () => void = () => {}) {
@@ -100,19 +102,19 @@ class PageDesigner {
   }
 
   /** A part double-clicked on the window, whose main event's code is to open; `n` changes for each. */
-  partCode = $state<{ item: number; n: number } | null>(null);
+  partCode = $state<{ item: DesignKey; n: number } | null>(null);
 
-  /** Asks for the code of the part at `item`, as a double click on it does. */
-  openPartCode(item: number) {
+  /** Asks for the code of the part `item`, as a double click on it does. */
+  openPartCode(item: DesignKey) {
     this.selected = item;
     this.partCode = { item, n: (this.partCode?.n ?? 0) + 1 };
   }
 
   /** An app's menu item or button double-clicked in a window, which is edited in the app; `n` changes for each. */
-  appCode = $state<{ item: number; n: number } | null>(null);
+  appCode = $state<{ item: DesignKey; n: number } | null>(null);
 
   /** Asks to open the app's designer at its command `item`, with that command's code. */
-  openInApp(item: number) {
+  openInApp(item: DesignKey) {
     this.appCode = { item, n: (this.appCode?.n ?? 0) + 1 };
   }
 
@@ -164,7 +166,9 @@ class PageDesigner {
     const target = document.elementFromPoint(e.clientX, e.clientY);
     const tab = target instanceof Element ? target.closest<HTMLElement>("[data-tab-switch]") : null;
     if (!tab?.dataset.tabSwitch) return;
-    const [tabs, index] = tab.dataset.tabSwitch.split(":").map(Number);
+    const at = tab.dataset.tabSwitch.lastIndexOf(":");
+    const tabs = tab.dataset.tabSwitch.slice(0, at);
+    const index = Number(tab.dataset.tabSwitch.slice(at + 1));
     if (this.activeTabs[tabs] !== index) this.activeTabs[tabs] = index;
   }
 
@@ -181,19 +185,19 @@ class PageDesigner {
     if (!this.#canvas) return null;
     if (source.kind === "resize") {
       // A resize stays in the widget's own container, which its box on the design layer names.
-      const widget = this.#canvas.querySelector<HTMLElement>(`[data-widget="${source.item}"]`);
+      const widget = this.#canvas.querySelector<HTMLElement>(`[data-widget="${CSS.escape(source.item)}"]`);
       const container = widget?.dataset.container;
-      const grid = container ? this.#canvas.querySelector<HTMLElement>(`[data-grid="${container}"]`) : null;
+      const grid = container ? this.#canvas.querySelector<HTMLElement>(`[data-grid="${CSS.escape(container)}"]`) : null;
       return grid;
     }
-    const moving = source.kind === "move" ? String(source.item) : null;
+    const moving = source.kind === "move" ? source.item : null;
     // The innermost grid under the pointer: the layer lays them out over each other, the inner ones last.
     const grids = [...this.#canvas.querySelectorAll<HTMLElement>("[data-grid]")].reverse();
     for (const grid of grids) {
       const at = grid.getBoundingClientRect();
       if (x < at.left || x > at.right || y < at.top || y > at.bottom) continue;
       // A part never goes into itself.
-      if (moving !== null && (grid.dataset.inside ?? "").split(" ").includes(moving)) continue;
+      if (moving !== null && (JSON.parse(grid.dataset.inside ?? "[]") as DesignKey[]).includes(moving)) continue;
       return grid;
     }
     return null;
@@ -207,7 +211,7 @@ class PageDesigner {
     const grid = this.#gridAt(x, y, source);
     if (!grid) return null;
     const columns = Number(grid.dataset.columns);
-    const container = Number(grid.dataset.grid);
+    const container = grid.dataset.grid ?? "";
     const rect = grid.getBoundingClientRect();
     const gap = gapOf(grid);
     const colWidth = (rect.width - gap * (columns - 1)) / columns;

@@ -5,7 +5,7 @@
 
 use clarity_spec::engines::{self, EngineFile};
 use clarity_spec::parser::parse;
-use clarity_spec::{Preview, Project, Severity, load_sources};
+use clarity_spec::{Preview, Project, Severity, load_converted};
 
 const SCREEN_ENGINE: &[u8] = include_bytes!("../../../conformance/engines/screen.wasm");
 const TEST_ENGINE: &[u8] = include_bytes!("../../../conformance/engines/test.wasm");
@@ -27,7 +27,7 @@ fn files() -> Vec<EngineFile> {
 }
 
 fn project(source: &str) -> Project {
-    let mut project = load_sources([("play.clarity", source)]);
+    let mut project = load_converted([("play.clarity", source)]);
     engines::attach(&mut project, files());
     project
 }
@@ -234,14 +234,14 @@ code Play
 
 #[test]
 fn an_engine_beside_the_screen_is_written_in_clarity() {
-    let project = load_sources([("play.clarity", WRITTEN)]);
+    let project = load_converted([("play.clarity", WRITTEN)]);
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.as_str()).collect();
     assert!(errors.is_empty(), "{errors:#?}");
 }
 
 #[test]
 fn a_written_engine_beside_the_screen_has_its_frame_loop() {
-    let errors = |source: String| load_sources([("play.clarity", source.as_str())]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect::<Vec<_>>();
+    let errors = |source: String| load_converted([("play.clarity", source.as_str())]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect::<Vec<_>>();
     assert_has(&errors(WRITTEN.replace("function clarity_draw()", "function draw()")), "engine Sky beside the screen has no function clarity_draw() -> list<Record>, which its frames call");
     assert_has(&errors(WRITTEN.replace("function clarity_tick(ms: integer)", "function clarity_tick(ms: text)")), "engine Sky beside the screen has no function clarity_tick(ms: integer), which its frames call");
     assert_has(&errors(WRITTEN.replace("    function start(level: integer)\n        elapsed = 0\n        stage = level\n", "")), "engine Sky hears start, so it has a function start(level: integer)");

@@ -14,7 +14,7 @@
   import { layout } from "./layout.svelte";
   import PartTile from "./PartTile.svelte";
   import { portal } from "./portal";
-  import { grown, nudged } from "./designLayer";
+  import { commandsOf, grown, nudged } from "./designLayer";
   import { applyEdit } from "./applyEdit";
   import type { Category } from "@clarity/ui/generated/Category.ts";
   import type { PartDecl } from "@clarity/ui/generated/PartDecl.ts";
@@ -24,6 +24,7 @@
   import type { RegionInfo } from "@clarity/ui/generated/RegionInfo.ts";
   import type { RegionKind } from "@clarity/ui/generated/RegionKind.ts";
   import type { Page } from "@clarity/ui/generated/Page.ts";
+  import type { Widget } from "@clarity/ui/generated/Widget.ts";
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
   import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
   import type { Settings } from "@clarity/ui/generated/Settings.ts";
@@ -40,8 +41,11 @@
     findPage,
     locateInnerPage,
     locateWidget,
-    withViewsShown,
-    routedEdit,
+    locateKey,
+    keyAt,
+    placeOf,
+    shownPage,
+    type DesignKey,
     allParts,
     pageData,
     widgetForField,
@@ -100,16 +104,23 @@
   const preview = $derived(pageDesigner.draft ?? savedPreview);
   // The canvas shows the project's theme, as the application will.
   const area = $derived(themeArea(themeOf(preview)));
-  // A window's content shows its views' parts, designed in place (withViewsShown).
-  const page = $derived.by(() => {
+  // The window as written, or as the Design text being typed would make it.
+  const ownPage = $derived.by(() => {
     const draft = pageDesigner.draft;
-    if (!draft) return withViewsShown(preview, savedPage);
+    if (!draft) return savedPage;
     if (app) {
       const draftApp = findApp(draft);
       return draftApp ? appAsPage(draftApp) : savedPage;
     }
-    return withViewsShown(preview, findPage(draft, savedPage.name.name) ?? savedPage);
+    return findPage(draft, savedPage.name.name) ?? savedPage;
   });
+  // A window's content shows its views' parts, designed in place; each thing is known by its key (shownPage).
+  const shown = $derived(shownPage(preview, ownPage, file));
+  const page = $derived(shown.page);
+  // What is picked: its file, the window, view or app it is in, and its place there; else this window.
+  // The inspector and the code show it in its own file, and its edits change that file.
+  const picked = $derived(placeOf(preview, pageDesigner.selected));
+  const inspected = $derived<{ file: SpecFile; page: Page; at: number | null }>(picked ?? { file, page: ownPage, at: null });
 
   // The inspector on the right: the picked part's (or the window's)
   // properties, its code, or the window as text, in tabs, as an IDE's object
@@ -118,7 +129,7 @@
   const INSPECTOR_TABS: { key: InspectorTab; name: string; title: string }[] = [
     { key: "properties", name: "Properties", title: "What the picked part or the window is" },
     { key: "code", name: "Code", title: "The code of the picked part, or of the window" },
-    { key: "text", name: "Text", title: "The window as Clarity text" },
+    { key: "text", name: "Text", title: "The window's .cxaml file, as markup" },
   ];
   const inspectorTab = $derived<InspectorTab>(!pageDesigner.code.open ? "properties" : pageDesigner.code.view === "code" ? "code" : "text");
   const coding = $derived(inspectorTab !== "properties");
@@ -186,14 +197,25 @@
   let laid = $state<Layout | null>(null);
   // A popover or slide-out shows while it or a part in it is picked, as it opens when the program runs.
   const popovers = $derived(allParts(page).filter((w) => w.props.kind === "popover" || w.props.kind === "slideout"));
+  /** Whether `key` is the part `w`, or a part or page in it. */
+  function holds(w: Widget, key: DesignKey): boolean {
+    return shown.keyOf(w) === key || w.children.some((c) => holds(c, key)) || w.pages.some((p) => shown.keyOf(p) === key || p.children.some((c) => holds(c, key)));
+  }
   const openPopovers = $derived(
-    popovers.filter((w) => pageDesigner.selected !== null && pageDesigner.selected >= w.span.start && pageDesigner.selected < w.span.end && w.props.name).map((w) => w.props.name as string),
+    popovers.filter((w) => pageDesigner.selected !== null && w.props.name && holds(w, pageDesigner.selected)).map((w) => w.props.name as string),
   );
+  // The app's frame buttons a window shows: designed in the app, so known by the app's file.
+  const appCommands = $derived.by(() => {
+    if (app !== null || page.kind !== "window" || !projectApp) return new Set<DesignKey>();
+    const appFile = preview.project.files.find((f) => f.apps.includes(projectApp));
+    return new Set(appFile ? commandsOf(projectApp.frame, (t) => keyAt(preview, appFile, t.span.start)) : []);
+  });
   // What the drawing shows beyond the saved window: the page each container shows, the draft, the popover picked.
   const showing = $derived({ pages: { ...pageDesigner.activeTabs }, draft: pageDesigner.draft !== null, open: openPopovers });
   const chosen = $derived(chosenOf(languageChoice.language, preview.project.locale.language ?? "en"));
 
-  async function apply(edit: Edit): Promise<void> {
+  /** Makes `edit`, in the places of the file of `key` (this window's when null). */
+  async function apply(edit: Edit, key: DesignKey | null = null): Promise<void> {
     if (pageDesigner.draft) {
       pageDesigner.error = "The window shows unsaved Design text; save or revert it before changing the window here.";
       return;
@@ -202,10 +224,11 @@
     pageDesigner.error = null;
     try {
       // A view's part drawn in this window changes the view's own file.
-      const routed = routedEdit(preview, file, edit);
-      const result = await applyEdit(routed.file, routed.edit);
+      const target = key === null ? file : placeOf(preview, key)?.file;
+      if (!target) throw new Error("what this changes is no longer in the project");
+      const result = await applyEdit(target, edit);
       onapplied(result.preview);
-      pageDesigner.selected = result.focus === null ? null : routed.base + result.focus;
+      pageDesigner.selected = result.focus === null ? null : keyAt(result.preview, target, result.focus);
     } catch (err) {
       pageDesigner.error = String(err);
     } finally {
@@ -224,9 +247,12 @@
     untrack(() => openPartCode(request.item));
   });
 
-  function openPartCode(item: number) {
-    const owner = app ? app.name.name : page.name.name;
-    const element = findFrameElement(page.frame, item, page.widgets);
+  function openPartCode(key: DesignKey) {
+    const placed = placeOf(preview, key);
+    if (!placed) return;
+    const { page: itsPage, at: item } = placed;
+    const owner = itsPage.name.name;
+    const element = findFrameElement(itsPage.frame, item, itsPage.widgets);
     if (element?.kind === "command") {
       const props = element.command.props;
       const does = commandAction(props);
@@ -234,12 +260,12 @@
       else if (does) pageDesigner.error = `${props.caption ?? "It"} ${does}: it runs no code. To give it code, wire a handler under Events in its properties.`;
       else {
         const handler = commandHandler(props);
-        edit(wireCommand({ item, props, owner, handler }));
+        edit(wireCommand({ item, props, owner, handler }), key);
         pageDesigner.showCode(handler);
       }
       return;
     }
-    const location = locateWidget(preview, page, item);
+    const location = locateWidget(preview, itsPage, item);
     if (!location) return;
     const p = location.widget.props;
     const info = widgetInfo(preview, p.kind);
@@ -250,23 +276,27 @@
       return;
     }
     // Every part has a name; one written without gets it now, with its handler.
-    const name = p.name ?? freePartName(allParts(page).flatMap((w) => (w.props.name ? [w.props.name] : [])), info.keyword);
+    const name = p.name ?? freePartName(allParts(itsPage).flatMap((w) => (w.props.name ? [w.props.name] : [])), info.keyword);
     const handler = eventHandler(name, event);
-    edit(wireEvent({ item, props: { ...p, name }, events: info.events, owner, event, handler }));
+    edit(wireEvent({ item, props: { ...p, name }, events: info.events, owner, event, handler }), key);
     pageDesigner.showCode(handler);
   }
 
-  function edit(e: Edit) {
-    if (!pageDesigner.saving) apply(e);
+  /** Makes `e` in the places of the file of `key` (this window's when null). */
+  function edit(e: Edit, key: DesignKey | null = null) {
+    if (!pageDesigner.saving) apply(e, key);
   }
 
   async function drop(source: PageDragSource, at: Placement) {
     if (pageDesigner.saving) return;
+    // The container dropped into, in its own file: the window's, or the view's a line of its content shows.
+    const into = placeOf(preview, at.container);
+    if (!into) return;
     switch (source.kind) {
       case "new":
         await apply({
           op: "createWidget",
-          container: at.container,
+          container: into.at,
           kind: source.widget,
           col: at.col,
           row: at.row,
@@ -276,7 +306,7 @@
           // A custom part arrives at its declared size (DESIGN 5.19).
           part: source.part ?? null,
           height: source.part ? at.height : null,
-        });
+        }, at.container);
         break;
       case "field": {
         // A list arrives as a table. A field arrives as its input, with a
@@ -287,7 +317,7 @@
         if (source.bind && !source.bind.includes(".")) {
           await apply({
             op: "createWidget",
-            container: at.container,
+            container: into.at,
             kind: source.widget,
             col: at.col,
             row: at.row,
@@ -296,21 +326,27 @@
             bind: source.bind,
             part: null,
             height: null,
-          });
+          }, at.container);
         } else {
-          await apply({ op: "placeField", container: at.container, col: at.col, row: at.row, room, bind: source.bind });
+          await apply({ op: "placeField", container: into.at, col: at.col, row: at.row, room, bind: source.bind }, at.container);
         }
         break;
       }
       case "move": {
         const p = source.props;
         if (at.container === source.from && at.col === p.col && at.row === p.row) return;
+        const moved = placeOf(preview, source.item);
+        if (!moved) return;
+        if (moved.file.path !== into.file.path) {
+          pageDesigner.error = "A part moves within its own window or view. To have it in the other, cut it there and paste it here.";
+          return;
+        }
         await apply({
           op: "updateWidget",
-          item: source.item,
-          container: at.container === source.from ? null : at.container,
+          item: moved.at,
+          container: at.container === source.from ? null : into.at,
           props: withProps(p, { col: at.col, row: at.row }),
-        });
+        }, source.item);
         break;
       }
       case "resize": {
@@ -318,11 +354,13 @@
         designLog("resize drop", `${p.width}x${p.height} -> ${at.width}x${at.height}`);
         if (at.width === p.width && at.height === p.height) return designLog("resize drop: same size, no edit");
         // A container's parts scale across with it, in the same edit.
-        const found = locateWidget(preview, page, source.item);
+        const found = locateKey(preview, shown, source.item);
+        const sized = placeOf(preview, source.item);
+        if (!found && !sized) return;
         const edits = found
           ? resizeEdits(found.widget, at.width, at.height)
-          : [{ op: "updateWidget" as const, item: source.item, container: null, props: withProps(p, { width: at.width, height: at.height }) }];
-        await apply(edits.length === 1 ? edits[0] : { op: "batch", edits });
+          : [{ op: "updateWidget" as const, item: sized!.at, container: null, props: withProps(p, { width: at.width, height: at.height }) }];
+        await apply(edits.length === 1 ? edits[0] : { op: "batch", edits }, source.item);
         break;
       }
     }
@@ -398,14 +436,17 @@
     if (target?.closest("input, textarea, select")) return;
     const selected = pageDesigner.selected;
     if ((e.key === "Delete" || e.key === "Backspace") && selected !== null) {
-      if (locateWidget(preview, page, selected) || locateInnerPage(page, selected) || findFrameElement(page.frame, selected, page.widgets)) {
+      const placed = placeOf(preview, selected);
+      if (!placed) return;
+      const { page: itsPage, at } = placed;
+      if (locateWidget(preview, itsPage, at) || locateInnerPage(itsPage, at) || findFrameElement(itsPage.frame, at, itsPage.widgets)) {
         e.preventDefault();
-        edit({ op: "remove", item: selected });
+        edit({ op: "remove", item: at }, selected);
       }
     } else if (e.key === "Escape") {
       pageDesigner.selected = null;
     } else if (e.key.startsWith("Arrow") && selected !== null && !e.altKey && !e.ctrlKey && !e.metaKey) {
-      const found = locateWidget(preview, page, selected);
+      const found = locateKey(preview, shown, selected);
       if (!found) return;
       const p = found.widget.props;
       if (e.shiftKey) {
@@ -414,13 +455,13 @@
         if (!size) return;
         e.preventDefault();
         const edits = resizeEdits(found.widget, size.width, size.height);
-        edit(edits.length === 1 ? edits[0] : { op: "batch", edits });
+        edit(edits.length === 1 ? edits[0] : { op: "batch", edits }, selected);
       } else {
         // The selected part moves one cell that way, on any page's grid; undo takes it back.
         const to = nudged(p, found.container.columns, e.key);
         if (!to) return;
         e.preventDefault();
-        edit({ op: "updateWidget", item: selected, container: null, props: withProps(p, to) });
+        edit({ op: "updateWidget", item: found.widget.span.start, container: null, props: withProps(p, to) }, selected);
       }
     }
   }
@@ -428,15 +469,14 @@
   // Drop a selection that no longer exists after an outside edit.
   $effect(() => {
     const s = pageDesigner.selected;
-    const gone = !locateWidget(preview, page, s ?? -1) && !locateInnerPage(page, s ?? -1) && !findFrameElement(page.frame, s ?? -1, page.widgets);
-    if (s !== null && s !== page.span.start && gone) {
+    if (s !== null && !placeOf(preview, s)) {
       pageDesigner.selected = null;
     }
   });
 
   onMount(() => {
     if (!canvas) return;
-    return pageDesigner.attach(canvas, drop, dock, (edit) => void apply(edit));
+    return pageDesigner.attach(canvas, drop, dock, (edit, key) => void apply(edit, key));
   });
 </script>
 
@@ -504,7 +544,7 @@
 </section>
 
 <div use:portal={"design-outline"}>
-  <PageOutline {preview} {page} {frame} rootName={app ? "App" : null} onedit={edit} />
+  <PageOutline {preview} {shown} {frame} rootName={app ? "App" : null} onedit={edit} />
 </div>
 </div>
 
@@ -534,7 +574,7 @@
       >
         <!-- The window as Clarity.UI draws it, as it runs; the design layer over it takes the pointer. -->
         <ClarityWindow shown={app ? { app: app.name.name } : { window: page.name.name }} design={true} project={pageDesigner.draft ?? savedPreview} {showing} {chosen} onlayout={(l) => (laid = l)} />
-        <DesignLayer layout={laid} {page} {preview} appFrame={app === null && page.kind === "window" ? (projectApp?.frame ?? null) : null} />
+        <DesignLayer layout={laid} {shown} {preview} {appCommands} />
       </div>
       {#if app}
         <p class="main-hint">
@@ -549,15 +589,15 @@
       {@const unplaced = [...page.widgets.filter((w) => w.props.kind === "sound" || w.props.kind === "timer"), ...popovers]}
       {#if unplaced.length > 0}
         <div class="tray" role="listbox" aria-label="Parts without a place in the window">
-          {#each unplaced as w (w.span.start)}
-            <span role="option" aria-selected={pageDesigner.selected === w.span.start} class:selected={pageDesigner.selected === w.span.start} class:hidden-part={w.props.kind === "popover" || w.props.kind === "slideout"} data-hidden-part={w.props.kind === "popover" || w.props.kind === "slideout" ? w.props.name : undefined}>
+          {#each unplaced as w (shown.keyOf(w) ?? w.span.start)}
+            <span role="option" aria-selected={pageDesigner.selected === shown.keyOf(w)} class:selected={pageDesigner.selected === shown.keyOf(w)} class:hidden-part={w.props.kind === "popover" || w.props.kind === "slideout"} data-hidden-part={w.props.kind === "popover" || w.props.kind === "slideout" ? w.props.name : undefined}>
               <PartTile
                 kind={w.props.kind}
                 name={w.props.name ?? w.props.kind}
                 title="{w.props.kind}{w.props.source ? ', plays ' + w.props.source : ''}{w.props.every ? ', every ' + w.props.every + ' s' : ''}{w.props.kind === 'popover' || w.props.kind === 'slideout' ? ', hidden until opened: picked, it shows on the window' : ''}. Pick it to set it in the inspector."
                 onpointerdown={(e) => {
                   e.stopPropagation();
-                  pageDesigner.selected = w.span.start;
+                  pageDesigner.selected = shown.keyOf(w);
                 }}
               />
             </span>
@@ -572,9 +612,12 @@
   {:else if layout.folded.properties}
     <span></span>
   {:else}
-    <Splitter axis="x" label="Width of the inspector" onmove={(d) => layout.resize("properties", -d)} />
+    <!-- As tall as the room in view and kept there, so its grip is in the middle of what is seen. -->
+    <div class="splitter-room" style:height="{inspectorHeight}px">
+      <Splitter axis="x" label="Width of the inspector" onmove={(d) => layout.resize("properties", -d)} />
+    </div>
   {/if}
-  <aside bind:this={inspector} class:coding style:height={coding && !layout.folded.properties ? `${inspectorHeight}px` : null}>
+  <aside bind:this={inspector} class:coding class:folded={layout.folded.properties} style:height={coding && !layout.folded.properties ? `${inspectorHeight}px` : null}>
     {#if layout.folded.properties}
       <button class="dock" title="Show the inspector" onclick={() => layout.toggle("properties")}>&lsaquo; Inspector</button>
     {:else}
@@ -596,17 +639,18 @@
         </span>
       </div>
       <div class="properties" class:hidden={coding}>
-        <PageProperties {preview} {page} {app} {settings} {onsavesettings} onedit={edit} {onapplied} />
+        <PageProperties {preview} page={inspected.page} selected={inspected.at} {app} {settings} {onsavesettings} onedit={(e) => edit(e, pageDesigner.selected)} {onapplied} />
       </div>
       <!-- Mounted once opened, so switching tabs keeps unsaved text. -->
       {#if codeOpened}
         <div class="code" class:hidden={!coding}>
           <CodePanel
             {preview}
-            {page}
-            {file}
-            owner={app ? app.name.name : savedPage.name.name}
-            item={app ? app.span.start : savedPage.span.start}
+            page={inspected.page}
+            file={inspected.file}
+            owner={inspected.page.name.name}
+            item={inspected.page.span.start}
+            selected={inspected.at}
             {onapplied}
             onclose={() => showTab("properties")}
           />
@@ -637,8 +681,11 @@
     align-items: start;
   }
 
-  .designer > :global(.splitter) {
-    align-self: stretch;
+  .splitter-room {
+    display: flex;
+    align-self: start;
+    position: sticky;
+    top: 0;
   }
 
   .stage.hidden {
@@ -748,6 +795,15 @@
     position: sticky;
     top: 0;
     min-width: 0;
+  }
+
+  /* Folded: the button keeps its own narrow size at the right, whatever else the column holds. */
+  aside.folded {
+    align-items: flex-end;
+  }
+
+  aside.folded .error {
+    max-width: 220px;
   }
 
   aside.coding {

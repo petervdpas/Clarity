@@ -6,10 +6,15 @@ How a window plays a video with the video part, on every stack.
 
 A video stands on a window in its place in the grid, as large as its span and rows, and shows the video as large as fits, centred, on black. Drag **Video** from the Media group of the palette onto the window and set it in the inspector.
 
-```clarity
-page Screen: window
-    video name film at 1,1 span 8 rows 6 source "intro.mp4" volume 80 on end: filmEnded on fail: filmFailed
+In the window's file, `design/Screen.cxaml`:
+
+```xml
+<Window class="cinema.Screen" title="@screenTitle">
+  <Video name="film" at="1,1" span="8" rows="6" source="intro.mp4" volume="80" onend="filmEnded" onfail="filmFailed" />
+</Window>
 ```
+
+The handlers `filmEnded` and `filmFailed` are in the module's `code Screen` block.
 
 - **Source**: an `.mp4` video of the resources folder, which `film.play()` plays. Add one under Resources with **+ New resource**, Video.
 - **Volume**: 0 to 100, 100 unless set.

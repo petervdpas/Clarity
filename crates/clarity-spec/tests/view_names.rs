@@ -4,10 +4,10 @@
 //! there it would mean that data on every stack. The checker says so, as it
 //! does for a local named like its own page's data.
 
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("m.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("m.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 const OWN: &str = "module m

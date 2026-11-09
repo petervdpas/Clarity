@@ -57,8 +57,10 @@ fn check_window_handlers(files: &[SpecFile]) -> Vec<Diagnostic> {
         .filter(|b| apps.contains(&b.name.name.as_str()))
         .flat_map(|b| b.handlers.iter().map(move |h| (h.name.name.as_str(), b.name.name.as_str())))
         .collect();
+    // A window's code is in its module's file; the window itself has a file of its own.
+    let pages: Vec<&str> = files.iter().flat_map(|f| &f.pages).map(|p| p.name.name.as_str()).collect();
     for file in files {
-        for block in file.code.iter().filter(|b| file.pages.iter().any(|p| p.name.name == b.name.name)) {
+        for block in file.code.iter().filter(|b| pages.contains(&b.name.name.as_str())) {
             for handler in &block.handlers {
                 if let Some((_, app)) = app_handlers.iter().find(|(name, _)| *name == handler.name.name) {
                     out.push(

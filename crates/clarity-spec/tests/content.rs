@@ -59,8 +59,8 @@ fn has(text: &str, words: &str) {
 #[test]
 fn a_windows_content_lists_the_views_it_shows_and_code_picks_one() {
     assert!(errors(MODEL).is_empty(), "{:#?}", errors(MODEL));
-    let file = &project(MODEL).files[0];
-    let main = &file.pages[0].widgets[0];
+    let project = project(MODEL);
+    let main = &project.pages().nth(0).unwrap().widgets[0];
     assert_eq!(main.props.kind, WidgetKind::Content);
     assert_eq!(clarity_spec::widgets::container(WidgetKind::Content), Some(ContainerKind::Content));
     let shown: Vec<_> = main.pages.iter().map(|p| p.view.as_deref()).collect();
@@ -106,7 +106,8 @@ fn placed_the_views_are_pages_and_picking_one_opens_its_page() {
 
 #[test]
 fn a_content_line_writes_itself_back() {
-    let main = &project(MODEL).files[0].pages[0].widgets[0];
+    let project = project(MODEL);
+    let main = &project.pages().nth(0).unwrap().widgets[0];
     assert_eq!(clarity_spec::widgets::widget_line(&main.props), "content name main at 1,1 span 8 rows 10");
 }
 
@@ -114,14 +115,16 @@ fn a_content_line_writes_itself_back() {
 /// keeps what the window hears of it.
 #[test]
 fn the_designer_edits_the_views_of_content() {
-    use clarity_spec::edit::{apply, Edit};
-    let file = &clarity_spec::parser::parse(MODEL, "model.clarity").0;
-    let main = &file.pages[0].widgets[0];
-    let added = apply(MODEL, &Edit::AddTab { item: main.span.start, title: "OtherEditor".into() }).unwrap().text;
-    assert!(added.contains("        view ProjectEditor\n        view OtherEditor\n"), "{added}");
-    let swapped = apply(MODEL, &Edit::SetPageView { target: main.pages[0].span.start, view: Some("OtherEditor".into()) }).unwrap().text;
-    assert!(swapped.contains("        view OtherEditor on saved: domainSaved\n"), "{swapped}");
-    assert!(apply(MODEL, &Edit::AddTab { item: main.span.start, title: "not a name".into() }).is_err());
+    use clarity_spec::cxaml::{apply, read_page};
+    use clarity_spec::edit::Edit;
+    let markup = clarity_spec::converted([("model.clarity", MODEL)]).into_iter().find(|(p, _)| p.ends_with("design/Workspace.cxaml")).map(|(_, t)| t).expect("the window's file");
+    let page = read_page(&markup, "").0.expect("the page");
+    let main = &page.widgets[0];
+    let added = apply(None, &markup, &Edit::AddTab { item: main.span.start, title: "OtherEditor".into() }).unwrap().text;
+    assert!(added.contains("    <View name=\"ProjectEditor\" />\n    <View name=\"OtherEditor\" />\n  </Content>"), "{added}");
+    let swapped = apply(None, &markup, &Edit::SetPageView { target: main.pages[0].span.start, view: Some("OtherEditor".into()) }).unwrap().text;
+    assert!(swapped.contains("    <View name=\"OtherEditor\" onsaved=\"domainSaved\" />\n"), "{swapped}");
+    assert!(apply(None, &markup, &Edit::AddTab { item: main.span.start, title: "not a name".into() }).is_err());
 }
 
 const SHARED: &str = "module model
@@ -195,13 +198,10 @@ fn a_view_reaches_what_shares_its_window_and_views_nest() {
 /// A new window from a template is built window, content, view; a blank one shows an empty view.
 #[test]
 fn a_new_window_shows_its_parts_in_a_view() {
-    let blocks = clarity_spec::templates::in_content("Orders", "page Orders: window\n    title \"Orders\"\n    on open: opened\n    data orders: list<text>\n\n    label \"x\" name xLabel at 1,3 span 4 on click: xClicked", Some("code Orders\n    handler opened\n        xClicked()\n\n    // Clicked.\n    handler xClicked\n        xLabel.visible = false"));
-    assert_eq!(blocks[0], "page Orders: window\n    title \"Orders\"\n    on open: opened\n\n    content name main at 1,1 span 12 rows 3\n        view OrdersView");
-    assert_eq!(blocks[1], "page OrdersView: view\n    data orders: list<text>\n\n    label \"x\" name xLabel at 1,3 span 4 on click: xClicked");
-    assert_eq!(blocks[2], "code Orders\n    handler opened\n        xClicked()");
-    assert_eq!(blocks[3], "code OrdersView\n    // Clicked.\n    handler xClicked\n        xLabel.visible = false");
-    use clarity_spec::edit::{apply_in, Edit};
+    use clarity_spec::edit::Edit;
     use clarity_spec::templates::PageTemplate;
-    let blank = apply_in(&project("module model\n"), "module model\n", &Edit::AddWindow { name: "Fresh".into(), template: PageTemplate::Blank }).unwrap().text;
-    assert!(blank.contains("page Fresh: window\n") && blank.contains("    content name main at 1,1 span 12 rows 1\n        view FreshView\n") && blank.contains("page FreshView: view"), "{blank}");
+    let added = clarity_spec::cxaml::added(&project("module model\n"), std::path::Path::new("model.clarity"), "module model\n", &Edit::AddWindow { name: "Fresh".into(), template: PageTemplate::Blank }).unwrap().unwrap();
+    let (window, view) = (&added.files[0].1, &added.files[1].1);
+    assert!(window.contains("<Window class=\"model.Fresh\"") && window.contains("  <Content name=\"main\" at=\"1,1\" span=\"12\">\n    <View name=\"FreshView\" />\n"), "{window}");
+    assert!(view.contains("<View class=\"model.FreshView\""), "{view}");
 }

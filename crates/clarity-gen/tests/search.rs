@@ -33,7 +33,7 @@ const SECOND: &str = "migration \"Search more\"
 ";
 
 fn steps(kind: SourceKind) -> Vec<Vec<String>> {
-    let project = clarity_spec::load_with_migrations([("music.clarity", MUSIC)], [("0001.clarity", FIRST), ("0002.clarity", SECOND)]);
+    let project = clarity_spec::load_with_migrations(clarity_spec::converted([("music.clarity", MUSIC)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", FIRST), ("0002.clarity", SECOND)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     clarity_gen::migration_sql(&project, "main", kind).unwrap().into_iter().map(|(_, s)| s).collect()
 }

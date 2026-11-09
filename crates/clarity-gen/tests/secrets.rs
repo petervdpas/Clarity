@@ -27,7 +27,7 @@ fn generated(backend: Backend, ui: Ui, connection: &str) -> String {
         settings.datasources[0].kind = SourceKind::Postgres;
         settings.datasources[0].url = connection.into();
     }
-    let project = clarity_spec::load_in([("shop.clarity", SHOP)], [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
+    let project = clarity_spec::load_in(clarity_spec::converted([("shop.clarity", SHOP)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     let files: Vec<OutFile> = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
@@ -88,7 +88,7 @@ fn handled(backend: Backend, ui: Ui) -> String {
     settings.datasources[0].kind = SourceKind::Postgres;
     settings.datasources[0].url = "setting:shopDb".into();
     let source = format!("{SHOP}{HANDLED}");
-    let project = clarity_spec::load_in([("shop.clarity", source.as_str())], [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
+    let project = clarity_spec::load_in(clarity_spec::converted([("shop.clarity", source.as_str())]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     let files: Vec<OutFile> = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
@@ -126,7 +126,7 @@ fn c_and_cpp_handle_their_database_not_opening() {
         settings.stack.backend = backend;
         settings.stack.ui = Ui::Clarity;
         let source = format!("{SHOP}{HANDLED}");
-        let project = clarity_spec::load_in([("shop.clarity", source.as_str())], [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
+        let project = clarity_spec::load_in(clarity_spec::converted([("shop.clarity", source.as_str())]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
         let files: Vec<OutFile> = generate(&project, &settings).unwrap_or_else(|e| panic!("{backend:?}: {e:#?}"));
         let code: String = files.iter().map(|f| f.text.clone()).collect();
         assert!(code.contains("options.unconnected_handler = \"notConnected\";"), "{backend:?} names the handler to the screen");
@@ -149,7 +149,7 @@ fn written(backend: Backend, ui: Ui) -> std::path::PathBuf {
         settings.datasources[0].url = "setting:shopDb".into();
     }
     let source = format!("{SHOP}{HANDLED}");
-    let project = clarity_spec::load_in([("shop.clarity", source.as_str())], [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
+    let project = clarity_spec::load_in(clarity_spec::converted([("shop.clarity", source.as_str())]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
     let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/generated").join(format!("unconnected-{backend:?}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
@@ -230,7 +230,7 @@ fn every_stack_keeps_under_the_one_program_name() {
                     settings.datasources[0].url = "setting:shopDb".into();
                 }
                 let source = if server && !cli { format!("{SHOP}{HANDLED}").replace("app Shop", &format!("app {name}")).replace("code Shop", &format!("code {name}")) } else { SHOP.to_string() };
-                let project = clarity_spec::load_in([("shop.clarity", source.as_str())], [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
+                let project = clarity_spec::load_in(clarity_spec::converted([("shop.clarity", source.as_str())]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
                 let files = if cli { clarity_gen::generate_cli(&project, &settings) } else { generate(&project, &settings) }.unwrap_or_else(|e| panic!("{name} {backend:?} cli={cli}: {e:#?}"));
                 let code: String = files.iter().map(|f| f.text.clone()).collect();
                 let kept_as = match (backend, cli) {

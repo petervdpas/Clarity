@@ -3,13 +3,13 @@
 
 use clarity_gen::generate;
 use clarity_project::{Backend, Ui, starter};
-use clarity_spec::load_sources;
+use clarity_spec::load_converted;
 
 const SOURCE: &str = "module m\n\npage Main: window\n    data note: text\n\naction exportBook()\n    effects files.write\n    let paths = [\"mimetype\", \"a.txt\"]\n    let texts = [\"application/epub+zip\", \"one two\"]\n    let n = count(words(\"one two\"))\n    write zip(paths, texts) to export \"book.epub\"\n";
 
 #[test]
 fn built_ins_call_each_runtime_by_its_name() {
-    let project = load_sources([("m.clarity", SOURCE)]);
+    let project = load_converted([("m.clarity", SOURCE)]);
     let errors: Vec<_> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     let stacks = [

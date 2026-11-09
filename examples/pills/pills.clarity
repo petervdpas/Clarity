@@ -194,10 +194,6 @@ engine Breaker
         wall()
         serve()
 
-app Pills
-    title @pillsTitle
-    main Play
-
 code PlayView
     handler startGame
         score = 0

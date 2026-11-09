@@ -3,7 +3,7 @@
 //! by an engine as JSON objects of their fields. App code uses them too:
 //! window data, functions and actions, tables and trees of them.
 
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const SHAPES: &str = "module play
 
@@ -34,7 +34,7 @@ engine Shapes
 ";
 
 fn messages(source: &str, severity: Severity) -> Vec<String> {
-    load_sources([("play.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == severity).map(|d| d.message).collect()
+    load_converted([("play.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == severity).map(|d| d.message).collect()
 }
 
 fn assert_has(messages: &[String], needle: &str) {
@@ -43,7 +43,7 @@ fn assert_has(messages: &[String], needle: &str) {
 
 #[test]
 fn a_record_is_declared_with_its_fields() {
-    let project = load_sources([("play.clarity", SHAPES)]);
+    let project = load_converted([("play.clarity", SHAPES)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let file = &project.files[0];
     assert!(file.entities.is_empty(), "a record is no entity");
@@ -121,7 +121,7 @@ code Outline
 fn app_code_holds_records() {
     let errors = messages(OUTLINE, Severity::Error);
     assert!(errors.is_empty(), "{errors:#?}");
-    let project = load_sources([("outline.clarity", OUTLINE)]);
+    let project = load_converted([("outline.clarity", OUTLINE)]);
     assert!(project.entity("Node").is_some_and(|n| n.record), "a project finds its records by name");
     // The designer shows a list of records with sample rows, as an entity's.
     let rows = &clarity_spec::sample::sample_data(&project)["Node"];
@@ -167,7 +167,7 @@ fn a_record_and_an_entity_have_names_of_their_own() {
 #[test]
 fn code_builds_a_list_of_stored_records() {
     let source = "module m\n\nentity Project\n    name: text(80)\n\nfunction named(projects: list<Project>, word: text) -> list<Project>\n    let found: list<Project> = []\n    for p in projects\n        if p.name contains word\n            found = found + [p]\n    return found\n";
-    let project = clarity_spec::load_sources([("m.clarity", source)]);
+    let project = clarity_spec::load_converted([("m.clarity", source)]);
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
     assert!(errors.is_empty(), "{errors:#?}");
 }

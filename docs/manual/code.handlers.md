@@ -21,7 +21,7 @@ code CustomerForm
         close
 ```
 
-A part wires an event with `on click: saveClicked`; a window wires its own with `on open:`, `on close:` and `on return:`. The app's handlers, such as `on start` and `on unconnected`, are in a `code` block named after the app. A handler that is wired but not written is an error; one that is written but wired nowhere is a warning.
+A part wires an event in its window's file with `onclick="saveClicked"`; a window wires its own on its root with `onopen`, `onclose` and `onreturn`. The app wires `onstart` and `onunconnected` on the root of its file, and its handlers are in a `code` block named after the app. A handler that is wired but not written is an error; one that is written but wired nowhere is a warning.
 
 ## Values from a click
 

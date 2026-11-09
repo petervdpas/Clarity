@@ -76,8 +76,8 @@ On the Project tab, under **Language, formats and theme**, you tick the themes t
 
 To let people switch, give a menu item or button the click target `theme`:
 
-```clarity
-item @themeItem name themeItem on click -> theme
+```xml
+<Item caption="@themeItem" name="themeItem" opens="theme" />
 ```
 
 It lists the themes by their titles, switches at once and remembers the choice for the next start.

@@ -121,11 +121,15 @@ fn the_rules_of_menus_and_popovers() {
 
 #[test]
 fn name_them_names_a_popover_and_the_items_of_a_context_menu() {
-    use clarity_spec::edit::{Edit, apply};
+    use clarity_spec::edit::Edit;
     let unnamed = MUSIC.replace(" name openItem", "").replace(" name deleteItem", "").replace("popover name filters for", "popover for");
-    let named = apply(&unnamed, &Edit::NameParts).unwrap().text;
-    assert!(named.contains("item \"Open\" name openItem on click"), "{named}");
-    assert!(named.contains("item \"Delete\" name deleteItem on click"), "{named}");
-    assert!(named.contains("    popover name popover1 for filterButton span 4 rows 2\n"), "{named}");
-    assert!(named.contains("        menu\n"), "the menu itself keeps no name: {named}");
+    // The window as the designer edits it: its own file.
+    let files = clarity_spec::converted([("music.clarity", unnamed.as_str())]);
+    let (_, markup) = files.iter().find(|(p, _)| p.ends_with("design/AlbumBrowse.cxaml")).expect("the window's file");
+    let named = clarity_spec::cxaml::apply(None, markup, &Edit::NameParts).unwrap_or_else(|e| panic!("{e}")).text;
+    assert!(named.contains("<Item caption=\"Open\" name=\"openItem\" onclick=\"openClicked\" />"), "{named}");
+    assert!(named.contains("<Item caption=\"Delete\" name=\"deleteItem\" onclick=\"deleteClicked\" />"), "{named}");
+    let popover = named.lines().find(|l| l.trim_start().starts_with("<Popover ")).expect("the popover");
+    assert!(popover.trim_start().starts_with("<Popover name=\"popover1\" ") && popover.contains(" span=\"4\" rows=\"2\"") && popover.contains(" for=\"filterButton\""), "{named}");
+    assert!(named.contains("    <Menu>\n"), "the menu itself keeps no name: {named}");
 }

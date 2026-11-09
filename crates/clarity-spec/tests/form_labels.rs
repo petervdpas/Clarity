@@ -7,7 +7,7 @@ use clarity_spec::keyed::load_keyed;
 use clarity_spec::model::Widget;
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::{self, WidgetKind};
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 const SHOP: &str = "module shop
 
@@ -40,7 +40,7 @@ fn errors(page: &str) -> Vec<String> {
 }
 
 fn made_labels(project: &Project) -> Vec<&Widget> {
-    project.files[0].pages[0].widgets[0].children.iter().filter(|w| w.props.made).collect()
+    project.pages().nth(0).unwrap().widgets[0].children.iter().filter(|w| w.props.made).collect()
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn each_input_gets_a_label_part_named_after_it_showing_its_fields_label() {
     assert_eq!(labels[1].props.caption.as_deref(), Some("@customerCityLabel"));
     assert_eq!(labels[1].props.row, 2);
     // Without keys yet, the label is the field's label as written, or made from its name.
-    let unkeyed = load_sources([("shop.clarity", format!("{SHOP}{CODE}").as_str())]);
+    let unkeyed = load_converted([("shop.clarity", format!("{SHOP}{CODE}").as_str())]);
     let captions: Vec<Option<&str>> = made_labels(&unkeyed).iter().map(|w| w.props.caption.as_deref()).collect();
     assert_eq!(captions, vec![Some("Full name"), Some("City")]);
 }
@@ -95,11 +95,11 @@ fn the_rules_of_a_label_column() {
 #[test]
 fn a_checkbox_without_a_caption_shows_its_fields_label() {
     let page = SHOP.replace("    vip: bool\n", "    vip: bool, label \"Valued customer\"\n").replace("        checkbox \"VIP\" name vipBox", "        checkbox name vipBox");
-    let p = load_sources([("shop.clarity", format!("{page}{CODE}").as_str())]);
-    let vip = p.files[0].pages[0].widgets[0].children.iter().find(|w| w.props.name.as_deref() == Some("vipBox")).unwrap();
+    let p = load_converted([("shop.clarity", format!("{page}{CODE}").as_str())]);
+    let vip = p.pages().nth(0).unwrap().widgets[0].children.iter().find(|w| w.props.name.as_deref() == Some("vipBox")).unwrap();
     assert_eq!(vip.props.caption.as_deref(), Some("Valued customer"));
     // One with a caption keeps its own.
-    let p = load_sources([("shop.clarity", format!("{SHOP}{CODE}").as_str())]);
-    let vip = p.files[0].pages[0].widgets[0].children.iter().find(|w| w.props.name.as_deref() == Some("vipBox")).unwrap();
+    let p = load_converted([("shop.clarity", format!("{SHOP}{CODE}").as_str())]);
+    let vip = p.pages().nth(0).unwrap().widgets[0].children.iter().find(|w| w.props.name.as_deref() == Some("vipBox")).unwrap();
     assert_eq!(vip.props.caption.as_deref(), Some("VIP"));
 }

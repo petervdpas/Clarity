@@ -1,0 +1,14 @@
+[package]
+name = "clarity-tools"
+description = "The tools Clarity's agents design and generate a project with: shared by the IDE's agent and the MCP server"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+clarity-spec.workspace = true
+clarity-project.workspace = true
+clarity-agent.workspace = true
+clarity-gen = { path = "../clarity-gen" }
+serde.workspace = true
+serde_json.workspace = true

@@ -3,7 +3,7 @@
 //! list of texts together, as code that builds a file needs.
 
 use clarity_spec::code::{ExprKind, StmtKind};
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const SOURCE: &str = "module counting
 
@@ -22,13 +22,13 @@ code Main
 ";
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("counting.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("counting.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]
 fn a_to_b_counts_and_join_puts_texts_together() {
     assert_eq!(errors(SOURCE), Vec::<String>::new());
-    let project = load_sources([("counting.clarity", SOURCE)]);
+    let project = load_converted([("counting.clarity", SOURCE)]);
     let handler = &project.files[0].code[0].handlers[0];
     let StmtKind::For { list, .. } = &handler.body[1].kind else { panic!("{:?}", handler.body[1].kind) };
     assert!(matches!(list.kind, ExprKind::Range { .. }), "{:?}", list.kind);
@@ -58,7 +58,7 @@ action export(lines: text)
     effects files.write
     write lines to exports \"list.txt\"
 ";
-    let mut project = load_sources([("files.clarity", source)]);
+    let mut project = load_converted([("files.clarity", source)]);
     clarity_spec::attach_stores(&mut project, vec!["exports".into()]);
     let errors: Vec<String> = project.diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect();
     assert_eq!(errors, Vec::<String>::new());

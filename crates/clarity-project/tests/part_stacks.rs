@@ -7,7 +7,7 @@ const PARTS: &str = "module game\n\npart Native\n    native \"parts/Native\"\n\n
 
 fn problems(stack: &str) -> Vec<String> {
     let settings = parse(&format!("project Game\n    stack {stack}\n")).unwrap();
-    let project = clarity_spec::load_sources([("game.clarity", PARTS)]);
+    let project = clarity_spec::load_converted([("game.clarity", PARTS)]);
     target_problems(&settings, &project, "game.clarity").into_iter().map(|d| d.message).collect()
 }
 
@@ -32,7 +32,7 @@ fn each_stack_takes_the_libraries_of_its_language() {
     let text = "module game\n\nlibrary A\n    cmake \"SFML\"\n\nlibrary B\n    crate \"humanize\" \"0.1\"\n\nlibrary C\n    go \"github.com/x/y\" v1.0.0\n\nlibrary D\n    nuget \"P\" 1.0.0\n";
     let misfits = |stack: &str| {
         let settings = parse(&format!("project Game\n    stack {stack}\n")).unwrap();
-        let project = clarity_spec::load_sources([("game.clarity", text)]);
+        let project = clarity_spec::load_converted([("game.clarity", text)]);
         let mut found: Vec<String> = target_problems(&settings, &project, "game.clarity").into_iter().filter_map(|d| d.message.strip_prefix("library ").and_then(|m| m.split(' ').next()).map(String::from)).collect();
         found.sort();
         found

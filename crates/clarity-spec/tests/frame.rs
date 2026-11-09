@@ -1,6 +1,6 @@
 use clarity_spec::model::{CommandKind, Side};
 use clarity_spec::parser::parse;
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const PAGES: &str = "module p
 entity Customer
@@ -40,7 +40,7 @@ app Shop
 ";
 
 fn diagnostics(app: &str) -> Vec<(Severity, String)> {
-    load_sources([("p.clarity", PAGES), ("shop.clarity", app)])
+    load_converted([("p.clarity", PAGES), ("shop.clarity", app)])
         .diagnostics
         .into_iter()
         .map(|d| (d.severity, d.message))
@@ -112,7 +112,7 @@ fn reports_duplicate_regions() {
 #[test]
 fn only_windows_have_regions() {
     let pages = "module p\npage V: view\n    menu name mainMenu\n        item \"A\" name a2\n";
-    let errors: Vec<_> = load_sources([("p.clarity", pages)])
+    let errors: Vec<_> = load_converted([("p.clarity", pages)])
         .diagnostics
         .into_iter()
         .filter(|d| d.severity == Severity::Error)
@@ -143,7 +143,7 @@ fn main_must_be_a_window() {
 #[test]
 fn a_project_has_one_app() {
     let second = "module other\napp Second\n    main X\n";
-    let messages: Vec<_> = load_sources([
+    let messages: Vec<_> = load_converted([
         ("p.clarity", PAGES),
         ("shop.clarity", APP),
         ("o.clarity", second),
@@ -231,7 +231,7 @@ app Shop
     footer
         status \"Ready\"
 ";
-    let project = load_sources([("p.clarity", pages), ("shop.clarity", app)]);
+    let project = load_converted([("p.clarity", pages), ("shop.clarity", app)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let app = project.apps().next();
     let page = |name: &str| project.pages().find(|p| p.name.name == name).unwrap();
@@ -269,7 +269,7 @@ page CustomerCard: window
     title \"Card\"
     button \"Other\" name button1 at 1,1 span 2 on click -> CustomerCard in new window
 ";
-    let project = load_sources([("p.clarity", pages), ("shop.clarity", app)]);
+    let project = load_converted([("p.clarity", pages), ("shop.clarity", app)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let app = project.apps().next().unwrap();
     let items = &app.frame.menu.as_ref().unwrap().items[0].items;
@@ -319,7 +319,7 @@ fn one_key_runs_one_command_where_it_is_active() {
         "page CustomerCard: window\n    title \"Card\"\n",
         "page CustomerCard: window\n    title \"Card\"\n    button \"Save\" name saveButton at 1,1 span 2 key \"Ctrl+N\" on click: saveClicked\n    button \"Keep\" name keepButton at 3,1 span 2 key \"Ctrl+N\" on click: keepClicked\n",
     );
-    let found: Vec<String> = load_sources([("p.clarity", pages.as_str()), ("shop.clarity", APP)])
+    let found: Vec<String> = load_converted([("p.clarity", pages.as_str()), ("shop.clarity", APP)])
         .diagnostics
         .into_iter()
         .filter(|d| d.severity == Severity::Error)

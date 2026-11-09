@@ -162,7 +162,7 @@ fn only_a_handler_asks_and_it_cannot_close_its_window_too() {
 fn a_question_written_as_text_asks_for_a_key_as_a_message_does() {
     let text = format!("{MUSIC}\ncode Albums\n    handler deleteClicked\n        ask \"Delete it?\" then gone\n    handler gone\n        delete album\n");
     let checked = |text: &str| {
-        let mut p = clarity_spec::load_sources([("music.clarity", text)]);
+        let mut p = clarity_spec::load_converted([("music.clarity", text)]);
         clarity_spec::translations::attach(&mut p, std::iter::empty());
         p
     };
@@ -202,7 +202,7 @@ fn a_dialog_gives_what_it_closes_with_to_the_handler_after_then() {
     let p = dialog_project(LEND, PICK);
     let errors: Vec<&str> = p.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.as_str()).collect();
     assert!(errors.is_empty(), "{errors:#?}");
-    let page = p.files[0].pages.iter().find(|pg| pg.name.name == "PickFriend").unwrap();
+    let page = p.pages().find(|pg| pg.name.name == "PickFriend").unwrap();
     assert_eq!(page.gives.as_ref().map(|t| t.kind.clone()), Some(TypeRefKind::Named { name: "Friend".into() }));
     let albums = p.files[0].code.iter().find(|c| c.name.name == "Albums").unwrap();
     let StmtKind::Ask { question, form, then, args } = &albums.handlers[0].body[0].kind else { panic!() };

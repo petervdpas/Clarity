@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<App class="mp3player.Mp3player" title="@mp3playerTitle" main="Main">
+</App>

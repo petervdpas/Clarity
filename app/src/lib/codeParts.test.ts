@@ -130,6 +130,7 @@ test("a naming problem offers the fix that solves it for the whole file", () => 
   assert.deepEqual(fixOf("text at 1,9 has no name; every part has one (Name them, in Problems, names them all)"), { label: "Name them", edit: { op: "nameParts" } });
   // As clarity_spec::cxaml::pages_left_in_modules says it.
   assert.deepEqual(fixOf("Main is written in this module's file; a window or view has a file of its own, design/Main.cxaml: Move pages into design, in Problems, moves it"), { label: "Move pages into design", command: "move_pages_out" });
+  assert.deepEqual(fixOf("Shop is written in this module's file; the app has a file of its own, design/Shop.cxaml: Move pages into design, in Problems, moves it"), { label: "Move pages into design", command: "move_pages_out" });
   assert.deepEqual(fixOf("handler 'new_game' is not camelCase: letters and digits, starting with a small letter, such as 'newGame'"), {
     label: "Make them camelCase",
     edit: { op: "camelNames" },

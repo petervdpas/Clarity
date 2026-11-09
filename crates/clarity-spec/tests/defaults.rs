@@ -5,7 +5,7 @@
 //! is left out of the call when its condition does not hold.
 
 use clarity_spec::code::{ExprKind, StmtKind};
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 const API: &str = "module api
 
@@ -35,7 +35,7 @@ code Status
 ";
 
 fn load(source: &str) -> Project {
-    load_sources([("api.clarity", source)])
+    load_converted([("api.clarity", source)])
 }
 
 fn errors(source: &str) -> Vec<String> {

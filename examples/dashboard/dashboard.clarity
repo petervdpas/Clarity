@@ -1,9 +1,5 @@
 module dashboard
 
-app Dashboard
-    title @dashboardTitle
-    main Board
-
 // A sale of a product.
 entity Sale
     product: text(80), required, label @saleProductLabel

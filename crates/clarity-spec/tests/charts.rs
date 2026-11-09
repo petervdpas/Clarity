@@ -6,7 +6,7 @@
 use clarity_spec::model::{ChartKind, ChartMeasure};
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::{self, WidgetKind};
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const SHOP: &str = "module shop
 
@@ -32,7 +32,7 @@ page Dashboard: window
 ";
 
 fn errors(page: &str) -> Vec<String> {
-    load_sources([("shop.clarity", page)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("shop.clarity", page)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]

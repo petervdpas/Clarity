@@ -10,10 +10,6 @@ entity Item
 function runsLow(item: Item) -> bool
     return item.count <= item.low
 
-app Stock
-    title @stockTitle
-    main Items
-
 code Items
     handler itemsOpened
         items = find i in Item order by i.name

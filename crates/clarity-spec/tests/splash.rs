@@ -4,7 +4,7 @@
 //! optional: an app without the line starts as it always did.
 
 use clarity_spec::model::PageKind;
-use clarity_spec::{load_sources, Severity};
+use clarity_spec::{load_converted, Severity};
 
 const APP: &str = "module shop
 app Shop
@@ -20,7 +20,7 @@ page Welcome: splash
 ";
 
 fn load(text: &str) -> clarity_spec::Project {
-    load_sources([("shop.clarity", text)])
+    load_converted([("shop.clarity", text)])
 }
 
 fn messages(text: &str, severity: Severity) -> Vec<String> {
@@ -37,14 +37,14 @@ fn the_app_names_its_splash_page_and_how_long_it_shows_at_least() {
     assert!(messages(APP, Severity::Error).is_empty(), "{:#?}", messages(APP, Severity::Error));
     assert!(messages(APP, Severity::Warning).is_empty(), "{:#?}", messages(APP, Severity::Warning));
     let project = load(APP);
-    let app = &project.files[0].apps[0];
+    let app = &project.apps().nth(0).unwrap();
     assert_eq!(app.splash.as_ref().map(|s| s.name.as_str()), Some("Welcome"));
     assert_eq!(app.splash_for, Some(2000));
-    assert_eq!(project.files[0].pages[1].kind, PageKind::Splash);
+    assert_eq!(project.pages().nth(1).unwrap().kind, PageKind::Splash);
     let half = load(&APP.replace("for 2 seconds", "for 1.5 seconds"));
-    assert_eq!(half.files[0].apps[0].splash_for, Some(1500));
+    assert_eq!(half.apps().nth(0).unwrap().splash_for, Some(1500));
     let bare = load(&APP.replace(" for 2 seconds", ""));
-    assert_eq!(bare.files[0].apps[0].splash_for, None, "without a time it closes as soon as the main window shows");
+    assert_eq!(bare.apps().nth(0).unwrap().splash_for, None, "without a time it closes as soon as the main window shows");
 }
 
 #[test]
@@ -52,7 +52,7 @@ fn a_splash_is_optional() {
     let without = APP.replace("    splash Welcome for 2 seconds\n", "").replace("page Welcome: splash\n    size 480 x 280\n    heading \"Shop\" name nameHeading at 1,1 span 6\n    text name status at 1,3 span 6\n", "");
     assert!(messages(&without, Severity::Error).is_empty());
     assert!(messages(&without, Severity::Warning).is_empty(), "no splash, nothing said");
-    assert_eq!(load(&without).files[0].apps[0].splash, None);
+    assert_eq!(load(&without).apps().next().unwrap().splash, None);
 }
 
 #[test]
@@ -93,13 +93,14 @@ fn code_says_what_loads_on_the_splash() {
 
 #[test]
 fn the_designer_adds_a_splash_page_that_says_what_loads() {
-    use clarity_spec::edit::{apply_in, Edit};
+    use clarity_spec::edit::Edit;
     use clarity_spec::templates::PageTemplate;
     let source = APP.replace("    splash Welcome for 2 seconds\n", "").replace("page Welcome: splash\n    size 480 x 280\n    heading \"Shop\" name nameHeading at 1,1 span 6\n    text name status at 1,3 span 6\n", "");
     let project = load(&source);
-    let text = apply_in(&project, &source, &Edit::AddWindow { name: "Welcome".into(), template: PageTemplate::Splash }).unwrap().text;
-    assert!(text.contains("page Welcome: splash\n"), "{text}");
-    assert!(text.contains("name status"), "a status part for code to set: {text}");
+    let added = clarity_spec::cxaml::added(&project, std::path::Path::new("shop.clarity"), &source, &Edit::AddWindow { name: "Welcome".into(), template: PageTemplate::Splash }).unwrap().unwrap();
+    let text = &added.files[0].1;
+    assert!(text.contains("<Splash class=\"shop.Welcome\" width=\"480\" height=\"280\">"), "{text}");
+    assert!(text.contains("name=\"status\""), "a status part for code to set: {text}");
 }
 
 /// A designed page lays its parts on exact square cells: `grid 56 columns
@@ -108,10 +109,11 @@ fn the_designer_adds_a_splash_page_that_says_what_loads() {
 fn a_page_may_set_its_own_fine_grid() {
     let fine = APP.replace("    size 480 x 280\n", "    size 560 x 280\n    grid 56 columns rows 10\n").replace("at 1,1 span 6", "at 1,1 span 30 rows 4").replace("at 1,3 span 6", "at 1,6 span 30 rows 2");
     assert!(messages(&fine, Severity::Error).is_empty(), "{:#?}", messages(&fine, Severity::Error));
-    let page = &load(&fine).files[0].pages[1];
+    let loaded = load(&fine);
+    let page = loaded.pages().nth(1).unwrap();
     assert_eq!((page.columns, page.cell), (56, Some(10)));
     has(&fine.replace("rows 10", "rows 4"), Severity::Error, "a page's rows are 8 to 64 pixels high");
     has(&fine.replace("grid 56 columns", "grid 97 columns"), Severity::Error, "a page grid has 1 to 96 columns");
     let coarse = load(APP);
-    assert_eq!(coarse.files[0].pages[1].cell, None, "without rows the project's rows, with their gaps");
+    assert_eq!(coarse.pages().nth(1).unwrap().cell, None, "without rows the project's rows, with their gaps");
 }

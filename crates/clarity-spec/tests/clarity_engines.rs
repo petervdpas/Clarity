@@ -2,7 +2,7 @@
 //! with the values it keeps between calls (`keep`), per window or per app.
 //! Every stack runs it as generated code of its own.
 
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const GAME: &str = "module game
 
@@ -40,7 +40,7 @@ code Game
 ";
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("game.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("game.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 fn assert_has(messages: &[String], needle: &str) {
@@ -49,7 +49,7 @@ fn assert_has(messages: &[String], needle: &str) {
 
 #[test]
 fn an_engine_is_written_in_clarity() {
-    let project = load_sources([("game.clarity", GAME)]);
+    let project = load_converted([("game.clarity", GAME)]);
     let engine = &project.files[0].engines[0];
     assert!(engine.file.is_empty());
     let body = engine.body.as_ref().expect("written in Clarity");
@@ -71,7 +71,7 @@ fn an_engine_in_clarity_is_checked() {
 
 #[test]
 fn the_keys_an_engine_in_clarity_names_are_used() {
-    let project = load_sources([("game.clarity", GAME)]);
+    let project = load_converted([("game.clarity", GAME)]);
     let keys = clarity_spec::translations::keys(&project);
     let play = keys.iter().find(|k| k.key == "yourMove").expect("yourMove is used");
     assert!(play.places.iter().any(|p| p.contains("engine Board, function play")), "{:?}", play.places);

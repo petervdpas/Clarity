@@ -108,10 +108,15 @@ fn the_rules_of_slideouts() {
 
 #[test]
 fn name_them_names_a_slideout_after_its_caption() {
-    use clarity_spec::edit::{Edit, apply};
+    use clarity_spec::edit::Edit;
     let unnamed = SHOP.replace("slideout \"Order\" name details side", "slideout \"Order\" side").replace("on click -> details", "on click: loadDetails");
-    let named = apply(&unnamed, &Edit::NameParts).unwrap().text;
-    assert!(named.contains("    slideout \"Order\" name "), "{named}");
+    // The window as the designer edits it: its own file.
+    let files = clarity_spec::converted([("shop.clarity", unnamed.as_str())]);
+    let (_, markup) = files.iter().find(|(p, _)| p.ends_with("design/Orders.cxaml")).expect("the window's file");
+    assert!(markup.contains("<Slideout at="), "it has no name yet: {markup}");
+    let named = clarity_spec::cxaml::apply(None, markup, &Edit::NameParts).unwrap_or_else(|e| panic!("{e}")).text;
+    let line = named.lines().find(|l| l.trim_start().starts_with("<Slideout ")).expect("the slide-out");
+    assert!(line.trim_start().starts_with("<Slideout name=\"") && line.contains("caption=\"Order\""), "{named}");
 }
 
 #[test]

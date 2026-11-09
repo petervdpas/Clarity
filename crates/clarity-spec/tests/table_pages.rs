@@ -5,7 +5,7 @@
 use clarity_spec::keyed::load_keyed;
 use clarity_spec::parser::parse;
 use clarity_spec::widgets;
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const MUSIC: &str = "module music
 
@@ -24,7 +24,7 @@ fn with(part: &str) -> String {
 
 fn errors(part: &str) -> Vec<String> {
     let text = with(part);
-    load_sources([("music.clarity", text.as_str())]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("music.clarity", text.as_str())]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 const TABLE: &str = "table name grid at 1,1 span 12 rows 6 bind albums columns title, artist sortable order by title page 50";

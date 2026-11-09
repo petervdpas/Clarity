@@ -1,6 +1,6 @@
 use clarity_spec::code::{FunctionKind, StmtKind};
 use clarity_spec::parser::parse;
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const SALES: &str = "module sales
 
@@ -46,7 +46,7 @@ code OrderForm
 ";
 
 fn problems_of(sources: &[(&str, &str)]) -> Vec<(Severity, String)> {
-    load_sources(sources.iter().copied())
+    load_converted(sources.iter().copied())
         .diagnostics
         .into_iter()
         .map(|d| (d.severity, d.message))

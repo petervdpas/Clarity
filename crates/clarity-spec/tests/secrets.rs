@@ -6,7 +6,7 @@
 //! "setting:shopToken"`.
 
 use clarity_spec::model::FieldType;
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const SHOP: &str = "module shop
 
@@ -26,7 +26,7 @@ code Main
 ";
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("shop.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("shop.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 fn with(old: &str, new: &str) -> String {
@@ -37,7 +37,7 @@ fn with(old: &str, new: &str) -> String {
 #[test]
 fn a_secret_is_a_setting_a_password_input_shows() {
     assert_eq!(errors(SHOP), Vec::<String>::new());
-    let project = load_sources([("shop.clarity", SHOP)]);
+    let project = load_converted([("shop.clarity", SHOP)]);
     let settings = project.files[0].entities.iter().find(|e| e.settings).unwrap();
     assert_eq!(settings.fields[1].ty, FieldType::Secret);
     assert_eq!(project.secret_settings(), ["shopToken"]);
@@ -68,7 +68,7 @@ fn a_secret_has_no_default() {
 fn a_web_api_signs_with_a_secret_setting() {
     let sources = |secret: &str| vec![clarity_spec::SourceRef::sql("main"), clarity_spec::SourceRef::web("shop").at("https://shop.example.com", Some(("bearer", secret)))];
     let errors_with = |secret: &str| -> Vec<String> {
-        clarity_spec::load_in([("shop.clarity", SHOP)], [], &sources(secret)).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+        clarity_spec::load_in(clarity_spec::converted([("shop.clarity", SHOP)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &sources(secret)).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
     };
     assert_eq!(errors_with("setting:shopToken"), Vec::<String>::new());
     assert_eq!(errors_with("setting:apiKey"), ["web API shop signs with setting 'apiKey', which is no secret setting; add it to settings as apiKey: secret"]);
@@ -78,7 +78,7 @@ fn a_web_api_signs_with_a_secret_setting() {
 fn a_database_connects_with_a_secret_setting() {
     let errors_with = |connection: &str| -> Vec<String> {
         let sources = [clarity_spec::SourceRef::sql("main").at(connection, None)];
-        clarity_spec::load_in([("shop.clarity", SHOP)], [], &sources).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+        clarity_spec::load_in(clarity_spec::converted([("shop.clarity", SHOP)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &sources).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
     };
     assert_eq!(errors_with("setting:shopToken"), Vec::<String>::new());
     assert_eq!(errors_with("env:SHOP_DB"), Vec::<String>::new());
@@ -90,7 +90,7 @@ fn a_database_connects_with_a_secret_setting() {
 #[test]
 fn the_window_that_shows_a_secret_connection_is_found() {
     let shop = SHOP.replace("shopToken", "shopDb");
-    let project = |source: &str| clarity_spec::load_in([("shop.clarity", source)], [], &[clarity_spec::SourceRef::sql("main").at("setting:shopDb", None)]);
+    let project = |source: &str| clarity_spec::load_in(clarity_spec::converted([("shop.clarity", source)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &[clarity_spec::SourceRef::sql("main").at("setting:shopDb", None)]);
     let found = project(&shop);
     assert_eq!(found.secret_connections(), ["shopDb"]);
     assert_eq!(found.connection_window().map(|p| p.name.name.as_str()), Some("Preferences"));
@@ -109,7 +109,7 @@ fn an_app_handles_its_databases_not_opening() {
         format!("{shop}\napp Shop\n    main Main\n    on unconnected: notConnected\n\ncode Shop\n    handler {handler}\n        message reason\n")
     };
     let errors_of = |source: &str| -> Vec<String> {
-        clarity_spec::load_in([("shop.clarity", source)], [], &[clarity_spec::SourceRef::sql("main").at("setting:shopDb", None)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+        clarity_spec::load_in(clarity_spec::converted([("shop.clarity", source)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &[clarity_spec::SourceRef::sql("main").at("setting:shopDb", None)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
     };
     assert_eq!(errors_of(&app("notConnected(reason: text)")), Vec::<String>::new());
     let none = app("notConnected").replace("        message reason\n", "        message \"no database\"\n");
@@ -127,7 +127,7 @@ fn an_app_handles_its_databases_not_opening() {
 fn why_the_databases_did_not_open_is_in_clarity_s_own_words() {
     let shop = SHOP.replace("shopToken", "shopDb");
     let keys_of = |source: &str, connection: &str| -> Vec<String> {
-        let project = clarity_spec::load_in([("shop.clarity", source)], [], &[clarity_spec::SourceRef::sql("main").at(connection, None)]);
+        let project = clarity_spec::load_in(clarity_spec::converted([("shop.clarity", source)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &[clarity_spec::SourceRef::sql("main").at(connection, None)]);
         clarity_spec::translations::keys(&project).into_iter().map(|k| k.key).collect()
     };
     let words: Vec<String> = clarity_spec::translations::UNCONNECTED_KEYS.iter().map(|(k, _)| k.to_string()).collect();
@@ -155,7 +155,7 @@ fn clarity_s_words_for_the_databases_not_opening_are_the_shared_ones() {
 /// its buttons are named in Clarity's own words, which a project with one translates.
 #[test]
 fn a_password_input_has_clarity_s_words_to_show_hide_and_copy() {
-    let keys_of = |source: &str| -> Vec<String> { clarity_spec::translations::keys(&load_sources([("shop.clarity", source)])).into_iter().map(|k| k.key).collect() };
+    let keys_of = |source: &str| -> Vec<String> { clarity_spec::translations::keys(&load_converted([("shop.clarity", source)])).into_iter().map(|k| k.key).collect() };
     let words: Vec<String> = clarity_spec::translations::SECRET_KEYS.iter().map(|(k, _)| k.to_string()).collect();
     assert_eq!(words, ["showSecret", "hideSecret", "copySecret"]);
     let with = keys_of(SHOP);

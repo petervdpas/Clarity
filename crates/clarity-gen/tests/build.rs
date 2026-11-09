@@ -265,7 +265,7 @@ fn approves_within_the_credit_limit() {
 fn generated_logic_runs() {
     // The database is built by the two steps, so the SQL of a rename, a
     // rebuild and a unique index runs on SQLite.
-    let project = clarity_spec::load_with_migrations([("sales.clarity", SALES)], STEPS);
+    let project = clarity_spec::load_with_migrations(clarity_spec::converted([("sales.clarity", SALES)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), STEPS);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = clarity_gen::generate(&project, &clarity_project::starter("Sales", "sales")).unwrap();
     let out = scratch().join(format!("clarity-gen-logic-{}", std::process::id()));
@@ -452,7 +452,7 @@ fn every_engine_function_answers_from_clarity_code() {
 #[test]
 #[ignore]
 fn an_engine_answers_in_the_generated_application() {
-    let mut project = clarity_spec::load_sources([("shop.clarity", ENGINE_SHOP)]);
+    let mut project = clarity_spec::load_converted([("shop.clarity", ENGINE_SHOP)]);
     clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes: TEST_ENGINE.to_vec() }]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = clarity_gen::generate(&project, &clarity_project::starter("Shop", "shop")).unwrap_or_else(|e| panic!("{e:#?}"));

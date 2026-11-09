@@ -2,7 +2,7 @@
 //! shows, checked like any expression.
 
 use clarity_spec::code::{ExprKind, StmtKind, TextPart, template};
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 fn window(code: &str) -> Project {
     let text = format!(
@@ -22,7 +22,7 @@ code Card
 {}",
         code.lines().map(|l| format!("        {l}\n")).collect::<String>()
     );
-    load_sources([("shop.clarity", text.as_str())])
+    load_converted([("shop.clarity", text.as_str())])
 }
 
 fn messages(project: &Project, severity: Severity) -> Vec<String> {

@@ -6,7 +6,7 @@ use clarity_spec::code::StmtKind;
 use clarity_spec::parser::parse;
 use clarity_spec::resources::{self, ResourceFile};
 use clarity_spec::widgets::{WidgetKind, widget_line};
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 const TABLE: &str = "module m
 
@@ -25,7 +25,7 @@ code Table
 ";
 
 fn with_sounds(source: &str, names: &[&str]) -> Project {
-    let mut project = load_sources([("m.clarity", source)]);
+    let mut project = load_converted([("m.clarity", source)]);
     resources::attach(&mut project, names.iter().map(|n| ResourceFile { name: n.to_string(), bytes: b"RIFF".to_vec() }).collect());
     project
 }
@@ -156,7 +156,7 @@ code Player
 fn code_plays_a_file_pauses_seeks_and_reads_what_plays() {
     let project = with_sounds(PLAYER, &[]);
     assert_eq!(errors(&project), Vec::<String>::new());
-    let music = &project.files[0].pages[0].widgets[0].props;
+    let music = &project.pages().nth(0).unwrap().widgets[0].props;
     let events: Vec<&str> = music.handlers.iter().map(|h| h.event.keyword()).collect();
     assert_eq!(events, ["end", "fail"]);
     assert_eq!(widget_line(music), "sound name music volume 80 on end: songEnded on fail: songFailed");

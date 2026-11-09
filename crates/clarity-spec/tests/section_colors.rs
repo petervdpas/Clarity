@@ -1,7 +1,8 @@
 //! An accordion's section headers in colors of their own (`section "Chapters"
 //! color "#2e86de"`); one without keeps the theme's look.
 
-use clarity_spec::edit::{apply, Edit};
+use clarity_spec::cxaml::{apply, read_page};
+use clarity_spec::edit::Edit;
 use clarity_spec::parser::parse;
 
 const DESK: &str = "module m
@@ -39,13 +40,14 @@ fn a_section_takes_a_color_written_out_or_of_the_theme() {
 }
 
 #[test]
-fn the_designer_sets_and_clears_it_keeping_the_rest_of_the_line() {
-    let (file, _) = parse(DESK, "m.clarity");
-    let pages = &file.pages.iter().find(|p| p.name.name == "Desk").unwrap().widgets[0].pages;
-    let set = apply(DESK, &Edit::SetPageColor { target: pages[2].span.start, color: Some("#c0392b".into()) }).unwrap().text;
-    assert!(set.contains("        section \"Plain\" color \"#c0392b\"\n"), "{set}");
-    let cleared = apply(DESK, &Edit::SetPageColor { target: pages[1].span.start, color: None }).unwrap().text;
-    assert!(cleared.contains("        section \"Notes\"\n"), "{cleared}");
+fn the_designer_sets_and_clears_it_keeping_the_rest_of_the_element() {
+    let desk = clarity_spec::converted([("m/m.clarity", DESK)]).into_iter().find(|(p, _)| p.ends_with("design/Desk.cxaml")).map(|(_, t)| t).expect("the window's file");
+    let page = read_page(&desk, "").0.expect("the window");
+    let pages = &page.widgets[0].pages;
+    let set = apply(None, &desk, &Edit::SetPageColor { target: pages[2].span.start, color: Some("#c0392b".into()) }).unwrap().text;
+    assert!(set.contains("    <Section title=\"Plain\" color=\"#c0392b\">\n"), "{set}");
+    let cleared = apply(None, &desk, &Edit::SetPageColor { target: pages[1].span.start, color: None }).unwrap().text;
+    assert!(cleared.contains("    <Section title=\"Notes\">\n      <Content name=\"notesContent\""), "{cleared}");
     // A section shows no view: only content does.
-    assert!(apply(DESK, &Edit::SetPageView { target: pages[0].span.start, view: Some("Notes".into()) }).is_err());
+    assert!(apply(None, &desk, &Edit::SetPageView { target: pages[0].span.start, view: Some("Notes".into()) }).is_err());
 }

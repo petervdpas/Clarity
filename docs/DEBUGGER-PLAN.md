@@ -30,6 +30,20 @@ Inside the IDE a developer stops their running app at a line of Clarity, sees wh
 | Data view | While stopped, the app's database read only (the tables the entities are kept in), through Clarity's own database layer. |
 | Engines | An interpreted engine steps line by line too, through Clarity's engine interpreter; a compiled one is stepped over. |
 
+## Debugging the design (added 2026-11-09)
+
+The user: "you mean remove the translator between them... that might enable debugging design too?" and "yes, add those to the debugger plan... but that are consequences of the change".
+
+These follow from the change in CXAML-SOURCE-PLAN.md ("Next: no translator between design and code"): once the designer, the code and the running app know a part by the same file and name, and Clarity.UI already reads the `.cxaml` on every stack, the running app maps back to the design without translating. They come after that change, not before it.
+
+| Feature | What it does |
+|---|---|
+| Pick in the app | A click on a part in the running app opens its `.cxaml` with that part selected in the designer. |
+| Part state | While the app runs or is stopped: a part's value, visible, enabled, read-only, and what code set last; the window's data beside it. |
+| Event breakpoints | "Stop when saveButton is clicked" stops in the handler its `onclick` names; an event is one more mark. |
+| Design trace | While stepping a handler, the designer highlights each part the code touches. |
+| Live edits | A design edit is a change to the page's model, sent to the running app; Clarity.UI swaps in that element without a restart. |
+
 ## The pieces
 
 - **Places.** Each statement gets a place number; the generator writes a table of places (file, line, column, the names in scope and their types) beside the program, so marks pass a number, not text.
@@ -57,6 +71,7 @@ Inside the IDE a developer stops their running app at a line of Clarity, sees wh
 4. **The event log and the data view.**
 5. **Watches as expressions**, and stepping through interpreted engines.
 6. **The browser target**, and debugging from VS Code through its Clarity extension.
+7. **Debugging the design**, once the change it depends on is built (CXAML-SOURCE-PLAN.md).
 
 ## To settle when building
 

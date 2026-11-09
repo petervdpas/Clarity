@@ -39,13 +39,6 @@ settings
     speed: integer, default 2, min 1, max 6, label @speedLabel
     walkerName: text, label @walkerNameLabel
 
-app Walker
-    title @walkerTitle
-    main Field
-    toolbar name mainToolbar
-        button @languageCaption name languageButton icon "languages" on click -> language
-        button @themeCaption name themeButton on click -> theme
-
 code Field
     handler fieldOpened
         clock.enabled = false

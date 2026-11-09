@@ -13,7 +13,7 @@ fn files(source: &str) -> Vec<OutFile> {
 
 /// With `keys`, the project lets the person change their keys.
 fn files_with(source: &str, keys: bool) -> Vec<OutFile> {
-    let mut project = clarity_spec::load_sources([("shop.clarity", source)]);
+    let mut project = clarity_spec::load_converted([("shop.clarity", source)]);
     project.keys_editable = keys;
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
     assert!(errors.is_empty(), "{errors:#?}");

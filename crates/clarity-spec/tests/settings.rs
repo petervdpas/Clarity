@@ -113,27 +113,34 @@ fn the_rules_of_settings() {
 
 #[test]
 fn the_settings_window_template_writes_a_form_of_every_setting() {
-    use clarity_spec::templates::{PageTemplate, page_from_template};
+    use clarity_spec::edit::Edit;
+    use clarity_spec::templates::PageTemplate;
     let p = project(SHOP, CODE);
-    let page = page_from_template(&p, "Options", &PageTemplate::Settings).unwrap();
-    assert!(page.starts_with("page Options: dialog\n"), "{page}");
+    let files = clarity_spec::converted([("shop.clarity", format!("{SHOP}{CODE}").as_str())]);
+    let module = files[0].1.clone();
+    let added = |p: &Project| clarity_spec::cxaml::added(p, std::path::Path::new("shop.clarity"), &module, &Edit::AddWindow { name: "Options".into(), template: PageTemplate::Settings }).unwrap();
+    let made = added(&p).unwrap();
+    let page = &made.files[0].1;
+    assert!(page.contains("<Dialog class=\"shop.Options\" title=\"@optionsTitle\">"), "{page}");
     for line in [
-        "    form name settingsForm at 1,1 span 12 rows 5 bind settings labels 3",
-        "        dropdown name languageBox at 4,1 span 6 bind settings.language",
-        "        dropdown name themeBox at 4,2 span 6 bind settings.theme",
-        "        checkbox @settingsShowToolbarLabel name showToolbarBox at 4,3 span 6 bind settings.showToolbar",
-        "        spinbox name pageSizeBox at 4,4 span 3 bind settings.pageSize",
-        "        dropdown name densityBox at 4,5 span 4 bind settings.density",
-        "    button \"Close\" name closeButton at 11,7 span 2 cancel on click -> close",
+        "  <Form name=\"settingsForm\" at=\"1,1\" span=\"12\" rows=\"5\" bind=\"settings\" labels=\"3\">",
+        "    <Dropdown name=\"languageBox\" at=\"4,1\" span=\"6\" bind=\"settings.language\" />",
+        "    <Dropdown name=\"themeBox\" at=\"4,2\" span=\"6\" bind=\"settings.theme\" />",
+        "    <Checkbox name=\"showToolbarBox\" at=\"4,3\" span=\"6\" caption=\"@settingsShowToolbarLabel\" bind=\"settings.showToolbar\" />",
+        "    <Spinbox name=\"pageSizeBox\" at=\"4,4\" span=\"3\" bind=\"settings.pageSize\" />",
+        "    <Dropdown name=\"densityBox\" at=\"4,5\" span=\"4\" bind=\"settings.density\" />",
     ] {
         assert!(page.lines().any(|l| l == line), "missing {line:?} in\n{page}");
     }
-    // The window it writes checks clean in the project.
-    let text = format!("{SHOP}\n{page}\n{CODE}");
-    let found: Vec<String> = load_keyed([("shop.clarity", text.as_str())], &[], "en").diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect();
+    assert!(page.lines().any(|l| l.starts_with("  <Button name=\"closeButton\" at=\"11,7\" span=\"2\"") && l.contains("cancel=\"true\"") && l.contains("close")), "{page}");
+    // The window it writes checks clean in the project, with the keys its texts were made.
+    let mut all: Vec<(&str, &str)> = files.iter().skip(1).map(|(p, t)| (p.as_str(), t.as_str())).collect();
+    all.extend([("shop.clarity", made.module.as_str()), ("design/Options.cxaml", page.as_str())]);
+    let mut loaded = clarity_spec::load_sources(all);
+    let found: Vec<String> = loaded.diagnostics.drain(..).filter(|d| d.severity == Severity::Error).map(|d| d.message).collect();
     assert!(found.is_empty(), "{found:#?}");
     let none = project(&SHOP.replace("settings\n    language\n    theme\n    showToolbar: bool, default true, label \"Show the toolbar\"\n    pageSize: integer, min 10, max 200, default 50\n    density: Density, default roomy\n\n", ""), "");
-    assert!(page_from_template(&none, "Options", &PageTemplate::Settings).is_err(), "without settings there is nothing to show");
+    assert!(added(&none).is_err(), "without settings there is nothing to show");
 }
 
 /// A setting can refer to a record: it keeps the record's id, as a `ref`

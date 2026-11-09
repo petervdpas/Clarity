@@ -1,6 +1,6 @@
 //! `toolbox popup` / `toolbox slideout`: a painting canvas's tools in a toolbox (docs/IMAGE-PLAN.md).
 
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const SKETCH: &str = "module m
 
@@ -17,18 +17,18 @@ code Desk
 ";
 
 fn errors(text: &str) -> Vec<String> {
-    load_sources([("m.clarity", text)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("m.clarity", text)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]
 fn a_painting_canvas_has_a_toolbox_as_a_popup_or_a_slideout() {
     assert!(errors(SKETCH).is_empty(), "{:#?}", errors(SKETCH));
-    let project = load_sources([("m.clarity", SKETCH)]);
-    let pad = &project.files[0].pages[0].widgets[0];
+    let project = load_converted([("m.clarity", SKETCH)]);
+    let pad = &project.pages().nth(0).unwrap().widgets[0];
     assert_eq!(Some(clarity_spec::model::ToolboxKind::Popup), pad.props.toolbox);
     assert!(clarity_spec::widgets::widget_line(&pad.props).contains("mode paint toolbox"));
-    let slide = load_sources([("m.clarity", SKETCH.replace("mode paint toolbox", "mode paint toolbox slideout").as_str())]);
-    let pad = &slide.files[0].pages[0].widgets[0];
+    let slide = load_converted([("m.clarity", SKETCH.replace("mode paint toolbox", "mode paint toolbox slideout").as_str())]);
+    let pad = &slide.pages().nth(0).unwrap().widgets[0];
     assert_eq!(Some(clarity_spec::model::ToolboxKind::Slideout), pad.props.toolbox);
     assert!(clarity_spec::widgets::widget_line(&pad.props).contains("toolbox slideout"));
     let e = errors(&SKETCH.replace("mode paint toolbox", "toolbox"));
@@ -69,12 +69,12 @@ code Desk
 #[test]
 fn a_toolbox_is_designed_as_a_view_and_placed_in_its_canvas() {
     assert!(errors(DESIGNED).is_empty(), "{:#?}", errors(DESIGNED));
-    let project = load_sources([("m.clarity", DESIGNED)]);
-    let desk = project.files[0].pages.iter().find(|p| p.name.name == "Desk").unwrap();
+    let project = load_converted([("m.clarity", DESIGNED)]);
+    let desk = project.pages().find(|p| p.name.name == "Desk").unwrap();
     assert!(clarity_spec::widgets::widget_line(&desk.widgets[0].props).contains("toolbox Painting"));
     let placed = clarity_spec::views::placed(&project);
-    let desk = placed.files[0].pages.iter().find(|p| p.name.name == "Desk").expect("the window stays");
-    assert!(placed.files[0].pages.iter().all(|p| p.name.name != "Painting"), "the toolbox is the window's now");
+    let desk = placed.pages().find(|p| p.name.name == "Desk").expect("the window stays");
+    assert!(placed.pages().all(|p| p.name.name != "Painting"), "the toolbox is the window's now");
     let pad = &desk.widgets[0];
     assert_eq!(5, pad.children.len(), "its parts are the canvas's");
     assert!(pad.children.iter().all(|c| c.props.for_part.as_deref() == Some("pad")), "each works on the canvas");
@@ -99,12 +99,14 @@ fn a_toolbox_s_parts_and_tools_are_checked() {
 /// New window offers a toolbox to start from: a painting canvas's tools on a grid of 4, which checks clean.
 #[test]
 fn a_new_toolbox_starts_from_the_painting_tools() {
-    let project = load_sources([("m.clarity", "module m\n")]);
-    let page = clarity_spec::templates::page_from_template(&project, "Painting", &clarity_spec::templates::PageTemplate::Toolbox).unwrap();
-    let text = format!("module m\n\n{page}\n");
-    assert!(errors(&text).is_empty(), "{:#?}\n{text}", errors(&text));
-    let loaded = load_sources([("m.clarity", text.as_str())]);
-    assert_eq!(clarity_spec::model::PageKind::Toolbox, loaded.files[0].pages[0].kind);
+    let project = load_converted([("m.clarity", "module m\n")]);
+    let added = clarity_spec::cxaml::added(&project, std::path::Path::new("m.clarity"), "module m\n", &clarity_spec::edit::Edit::AddWindow { name: "Painting".into(), template: clarity_spec::templates::PageTemplate::Toolbox }).unwrap().unwrap();
+    let markup = &added.files[0].1;
+    assert!(markup.contains("<Toolbox class=\"m.Painting\" columns=\"4\">") && markup.contains("does=\"pencil\""), "{markup}");
+    let loaded = clarity_spec::load_sources([("m.clarity", "module m\n"), ("design/Painting.cxaml", markup.as_str())]);
+    let found: Vec<_> = loaded.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).collect();
+    assert!(found.is_empty(), "{found:#?}\n{markup}");
+    assert_eq!(clarity_spec::model::PageKind::Toolbox, loaded.pages().nth(0).unwrap().kind);
 }
 
 /// Layers and the colour dialog are a picture's: a vector canvas's toolbox has neither.
@@ -151,11 +153,11 @@ page DiagramTools: toolbox
     tool name selectTool at 1,1 icon \"mouse-pointer-2\" does select
     tool name hideTool at 2,1 icon \"plus\" on click: connected
 ";
-    let project = load_sources([("m.clarity", source)]);
+    let project = load_converted([("m.clarity", source)]);
     let found: Vec<String> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.clone()).collect();
     assert!(found.is_empty(), "{found:#?}");
     let placed = clarity_spec::views::placed(&project);
-    let main = placed.files[0].pages.iter().find(|p| p.name.name == "Main").unwrap();
+    let main = placed.pages().find(|p| p.name.name == "Main").unwrap();
     let content = &main.widgets[0].children[0];
     let sheet = content.pages[0].children.iter().find(|w| w.props.name.as_deref() == Some("sheet")).expect("the view's canvas is the window's");
     let tools: Vec<&str> = sheet.children.iter().filter_map(|w| w.props.name.as_deref()).collect();
@@ -189,7 +191,7 @@ code ChaptersPart
     handler bolded
         manuscriptBox.insert(\"**\")
 ";
-    let project = load_sources([("m.clarity", source)]);
+    let project = load_converted([("m.clarity", source)]);
     let found: Vec<String> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.clone()).collect();
     assert!(found.is_empty(), "{found:#?}");
     let placed = clarity_spec::views::placed(&project);
@@ -201,7 +203,7 @@ code ChaptersPart
             find(&w.children, name).or_else(|| w.pages.iter().find_map(|p| find(&p.children, name)))
         })
     }
-    let main = placed.files[0].pages.iter().find(|p| p.name.name == "Main").unwrap();
+    let main = placed.pages().find(|p| p.name.name == "Main").unwrap();
     let memo = find(&main.widgets, "manuscriptBox").expect("the view's memo is the window's");
     let tools: Vec<&str> = memo.children.iter().filter_map(|w| w.props.name.as_deref()).collect();
     assert_eq!(tools, ["boldTool"], "the toolbox's tools are the memo's");

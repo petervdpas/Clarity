@@ -1,4 +1,4 @@
-use clarity_spec::load_sources;
+use clarity_spec::{converted, load_sources};
 use clarity_spec::rename::{RenameKind, rename};
 
 const CUSTOMERS: &str = "module customers
@@ -35,13 +35,19 @@ entity Customer
     x: text
 ";
 
-fn sources() -> Vec<(&'static str, &'static str)> {
-    vec![("customers.clarity", CUSTOMERS), ("sales.clarity", SALES), ("other.clarity", OTHER)]
+/// The sources as a project holds them: the window Card in design/Card.cxaml.
+fn sources() -> Vec<(String, String)> {
+    converted([("customers.clarity", CUSTOMERS), ("sales.clarity", SALES), ("other.clarity", OTHER)])
+}
+
+fn load(sources: &[(String, String)]) -> clarity_spec::Project {
+    load_sources(sources.iter().map(|(p, t)| (p.as_str(), t.as_str())))
 }
 
 fn renamed(kind: RenameKind, old: &str, new: &str) -> Result<Vec<(String, String)>, String> {
-    let project = load_sources(sources());
-    let source = |path: &str| sources().into_iter().find(|(p, _)| *p == path).map(|(_, t)| t.to_string());
+    let all = sources();
+    let project = load(&all);
+    let source = |path: &str| all.iter().find(|(p, _)| p == path).map(|(_, t)| t.clone());
     rename(&project, source, kind, old, new).map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
 }
 
@@ -50,12 +56,9 @@ fn renames_an_entity_and_every_reference() {
     // `other` declares its own Customer, which makes the name ambiguous.
     assert!(renamed(RenameKind::Entity, "Customer", "Client").unwrap_err().contains("more than one module"));
 
-    let project = load_sources([("customers.clarity", CUSTOMERS), ("sales.clarity", SALES)]);
-    let source = |path: &str| match path {
-        "customers.clarity" => Some(CUSTOMERS.to_string()),
-        "sales.clarity" => Some(SALES.to_string()),
-        _ => None,
-    };
+    let all = converted([("customers.clarity", CUSTOMERS), ("sales.clarity", SALES)]);
+    let project = load(&all);
+    let source = |path: &str| all.iter().find(|(p, _)| p == path).map(|(_, t)| t.clone());
     let files = rename(&project, source, RenameKind::Entity, "Customer", "Client").unwrap();
     let text = |path: &str| files.iter().find(|f| f.path == path).unwrap().text.clone();
     let customers = text("customers.clarity");
@@ -63,10 +66,13 @@ fn renames_an_entity_and_every_reference() {
     assert!(customers.contains("bestFriend: ref Client\n"));
     let sales = text("sales.clarity");
     assert!(sales.contains("customer: ref Client\n    lines: list<Client>\n"), "{sales}");
-    assert!(sales.contains("data customer: Client\n    data customers: list<Client>\n"), "{sales}");
+    // The window's data, in its own file.
+    let card = text("design/Card.cxaml");
+    assert!(card.contains("<Data name=\"customer\" type=\"Client\" />") && card.contains("<Data name=\"customers\" type=\"list&lt;Client&gt;\" />"), "{card}");
     // The window title and bindings are untouched.
-    assert!(sales.contains("title \"Customer\"") && sales.contains("bind customer.name"));
-    let after = load_sources([("customers.clarity", customers.as_str()), ("sales.clarity", sales.as_str())]);
+    assert!(card.contains("title=\"Customer\"") && card.contains("bind=\"customer.name\""), "{card}");
+    let after: Vec<(String, String)> = all.iter().map(|(p, t)| (p.clone(), files.iter().find(|f| f.path == *p).map_or(t.clone(), |f| f.text.clone()))).collect();
+    let after = load(&after);
     assert!(after.diagnostics.is_empty(), "{:#?}", after.diagnostics);
 }
 
@@ -84,4 +90,19 @@ fn refuses_bad_or_taken_names() {
     assert!(renamed(RenameKind::Enum, "Kind", "Customer").unwrap_err().contains("already declared"));
     assert!(renamed(RenameKind::Enum, "Nope", "X").unwrap_err().contains("no enum 'Nope'"));
     assert!(renamed(RenameKind::Enum, "Kind", "Kind").unwrap().is_empty());
+}
+
+/// A window's plain value of an enum, in the window's own file, takes the new name.
+#[test]
+fn renames_an_enum_in_a_windows_data() {
+    let all = converted([
+        ("customers.clarity", CUSTOMERS),
+        ("pick.clarity", "module pick\n\nuse customers\n\npage Picker: window\n    data chosen: Kind\n"),
+    ]);
+    let project = load(&all);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let source = |path: &str| all.iter().find(|(p, _)| p == path).map(|(_, t)| t.clone());
+    let files = rename(&project, source, RenameKind::Enum, "Kind", "CustomerKind").unwrap();
+    let picker = files.iter().find(|f| f.path == "design/Picker.cxaml").expect("the window's file").text.clone();
+    assert!(picker.contains("<Data name=\"chosen\" type=\"CustomerKind\" />"), "{picker}");
 }

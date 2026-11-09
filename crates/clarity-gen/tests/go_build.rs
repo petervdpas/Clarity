@@ -325,7 +325,7 @@ func TestEveryEngineFunctionAnswersFromClarityCode(t *testing.T) {
 #[test]
 #[ignore]
 fn an_engine_answers_in_the_generated_application_in_go() {
-    let mut project = clarity_spec::load_sources([("shop.clarity", ENGINE_SHOP)]);
+    let mut project = clarity_spec::load_converted([("shop.clarity", ENGINE_SHOP)]);
     clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes: TEST_ENGINE.to_vec() }]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = clarity_project::starter("Shop", "shop");
@@ -362,7 +362,7 @@ func TestEveryFunctionKeepsItsOwnName(t *testing.T) {
 #[test]
 #[ignore]
 fn functions_named_like_types_build_in_go() {
-    let project = clarity_spec::load_sources([("shop.clarity", include_str!("fixtures/name_clash.clarity"))]);
+    let project = clarity_spec::load_converted([("shop.clarity", include_str!("fixtures/name_clash.clarity"))]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = clarity_project::starter("Shop", "shop");
     settings.stack.backend = clarity_project::Backend::Go;
@@ -503,7 +503,7 @@ fn a_clarity_engine_beside_the_screen_builds_in_go() {
         "{}\napp Skies\n    main Watch\n\npage Watch: window\n    data time: integer\n    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Sky on finished: finished\n    button \"Start\" name go at 1,11 span 2 on click: startSky\n    number name timeShown at 3,11 span 2 bind time readonly\n\ncode Watch\n    handler startSky\n        sky.start(3)\n\n    handler finished(at: integer)\n        time = at\n",
         include_str!("../../../conformance/engines/sky.clarity")
     );
-    let project = clarity_spec::load_sources([("sky.clarity", source.as_str())]);
+    let project = clarity_spec::load_converted([("sky.clarity", source.as_str())]);
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     let mut settings = clarity_project::starter("Skies", "sky");
@@ -559,7 +559,7 @@ fn an_outline_of_records_builds_in_go() {
 #[test]
 #[ignore]
 fn an_engine_beside_the_screen_builds_in_go() {
-    let mut project = clarity_spec::load_sources([("play.clarity", include_str!("../../../conformance/engines/play.clarity"))]);
+    let mut project = clarity_spec::load_converted([("play.clarity", include_str!("../../../conformance/engines/play.clarity"))]);
     let bytes = include_bytes!("../../../conformance/engines/screen.wasm").to_vec();
     clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "screen.wasm".into(), bytes }]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);

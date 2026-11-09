@@ -25,7 +25,7 @@ page Card: window
 ";
 
 fn generated(backend: Backend) -> String {
-    let project = clarity_spec::load_sources([("shop.clarity", SHOP)]);
+    let project = clarity_spec::load_converted([("shop.clarity", SHOP)]);
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     let mut settings: Settings = starter("Shop", "shop");
@@ -98,7 +98,7 @@ page Card: window
         textbox name nameBox at 1,1 span 6 bind customer.name
         textbox name cityBox at 1,2 span 6 bind customer.city
 ";
-    let project = clarity_spec::load_sources([("shop.clarity", source)]);
+    let project = clarity_spec::load_converted([("shop.clarity", source)]);
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     let mut settings: Settings = starter("Shop", "shop");

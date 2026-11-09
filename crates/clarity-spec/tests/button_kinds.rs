@@ -108,11 +108,15 @@ fn the_rules_of_the_button_kinds() {
 
 #[test]
 fn the_designer_gives_a_part_a_menu_with_one_item() {
-    use clarity_spec::edit::{Edit, apply};
+    use clarity_spec::cxaml::apply;
+    use clarity_spec::edit::Edit;
     let plain = NOTES.replace("        menu\n            item \"Save as...\" name saveAsItem on click: saveAs\n", "");
-    let at = plain.find("button \"Save\"").unwrap() as u32;
-    let outcome = apply(&plain, &Edit::AddMenu { item: at }).unwrap();
-    assert!(outcome.text.contains("split at 7,1 span 2 on click: save\n        menu\n            item \"First item\" name firstItem\n"), "{}", outcome.text);
-    let at = outcome.text.find("button \"Save\"").unwrap() as u32;
-    assert!(apply(&outcome.text, &Edit::AddMenu { item: at }).is_err(), "one menu per part");
+    let card = clarity_spec::converted([("notes/notes.clarity", plain.as_str())]).into_iter().find(|(p, _)| p.ends_with("design/NoteCard.cxaml")).map(|(_, t)| t).expect("the window's file");
+    let at = card.find("<Button name=\"saveButton\"").unwrap() as u32;
+    let outcome = apply(None, &card, &Edit::AddMenu { item: at }).unwrap();
+    let button = outcome.text.lines().find(|l| l.contains("<Button name=\"saveButton\"")).expect("the button");
+    assert!(button.contains("split=\"true\"") && button.contains("onclick=\"save\"") && button.ends_with('>') && !button.ends_with("/>"), "{}", outcome.text);
+    assert!(outcome.text.contains("onclick=\"save\">\n    <Menu>\n      <Item caption=\"First item\" name=\"firstItem\" />\n    </Menu>\n  </Button>\n"), "{}", outcome.text);
+    let at = outcome.text.find("<Button name=\"saveButton\"").unwrap() as u32;
+    assert!(apply(None, &outcome.text, &Edit::AddMenu { item: at }).is_err(), "one menu per part");
 }

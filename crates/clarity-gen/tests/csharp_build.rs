@@ -226,7 +226,7 @@ Console.WriteLine("every engine function answered");
 #[test]
 #[ignore]
 fn an_engine_answers_in_the_generated_application_in_csharp() {
-    let mut project = clarity_spec::load_sources([("shop.clarity", ENGINE_SHOP)]);
+    let mut project = clarity_spec::load_converted([("shop.clarity", ENGINE_SHOP)]);
     clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes: TEST_ENGINE.to_vec() }]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = clarity_project::starter("Shop", "shop");
@@ -259,7 +259,7 @@ fn an_engine_answers_in_the_generated_application_in_csharp() {
 #[test]
 #[ignore]
 fn functions_named_like_types_build_in_csharp() {
-    let project = clarity_spec::load_sources([("shop.clarity", include_str!("fixtures/name_clash.clarity"))]);
+    let project = clarity_spec::load_converted([("shop.clarity", include_str!("fixtures/name_clash.clarity"))]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = clarity_project::starter("Shop", "shop");
     settings.stack.backend = Backend::Csharp;
@@ -416,7 +416,7 @@ fn an_outline_of_records_builds_in_csharp() {
 #[ignore]
 fn pictures_build_in_csharp() {
     let source = "module art\n\napp Art\n    main Gallery\n\npage Gallery: window\n    image name logo at 1,1 span 3 rows 3 source \"logo.svg\"\n    canvas name field at 4,1 span 6 rows 6 units 160 x 100 on draw: drawField\n\ncode Gallery\n    handler drawField\n        field.image(10, 20, 17, 5, \"logo.svg\")\n";
-    let mut project = clarity_spec::load_sources([("art.clarity", source)]);
+    let mut project = clarity_spec::load_converted([("art.clarity", source)]);
     let svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"red\"/></svg>".to_vec();
     clarity_spec::resources::attach(&mut project, vec![clarity_spec::resources::ResourceFile { name: "logo.svg".into(), bytes: svg }]);
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
@@ -440,7 +440,7 @@ fn pictures_build_in_csharp() {
 #[test]
 #[ignore]
 fn an_engine_beside_the_screen_builds_in_csharp() {
-    let mut project = clarity_spec::load_sources([("play.clarity", include_str!("../../../conformance/engines/play.clarity"))]);
+    let mut project = clarity_spec::load_converted([("play.clarity", include_str!("../../../conformance/engines/play.clarity"))]);
     let bytes = include_bytes!("../../../conformance/engines/screen.wasm").to_vec();
     clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "screen.wasm".into(), bytes }]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);

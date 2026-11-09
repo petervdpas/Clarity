@@ -27,7 +27,7 @@ engine Board from \"board.wasm\"
 ";
 
 fn engine() -> clarity_spec::code::EngineDecl {
-    let project = clarity_spec::load_sources([("game.clarity", MODULE)]);
+    let project = clarity_spec::load_converted([("game.clarity", MODULE)]);
     project.files[0].engines[0].clone()
 }
 

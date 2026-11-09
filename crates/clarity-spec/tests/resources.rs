@@ -7,7 +7,7 @@
 
 use clarity_spec::resources::{self, ResourceFile};
 use clarity_spec::translations::Value;
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 const HOME: &str = "module shop
 
@@ -24,7 +24,7 @@ fn text(name: &str, text: &str) -> ResourceFile {
 }
 
 fn with_files(source: &str, names: &[&str]) -> Project {
-    let mut project = load_sources([("shop.clarity", source)]);
+    let mut project = load_converted([("shop.clarity", source)]);
     resources::attach(&mut project, names.iter().map(|n| file(n)).collect());
     project
 }
@@ -69,7 +69,7 @@ fn pictures_in_containers_are_checked() {
 /// A project loaded without its folder (from memory) is not checked.
 #[test]
 fn without_the_folder_nothing_is_checked() {
-    let project = load_sources([("shop.clarity", HOME)]);
+    let project = load_converted([("shop.clarity", HOME)]);
     assert!(project.resources.is_none());
     assert_eq!(errors(&project), Vec::<String>::new());
 }
@@ -82,7 +82,7 @@ page Home: window
 
 /// The project's languages: English by default, and Dutch, with the values its language files give.
 fn in_languages(source: &str, files: Vec<ResourceFile>, values: &[(&str, &str, Value)]) -> Project {
-    let mut project = load_sources([("shop.clarity", source)]);
+    let mut project = load_converted([("shop.clarity", source)]);
     project.translations.insert("en".into(), Default::default());
     project.translations.insert("nl".into(), Default::default());
     for (language, key, value) in values {

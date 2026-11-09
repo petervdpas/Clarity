@@ -1,7 +1,7 @@
 //! Code works where the person types (Writer gap 21): a memo's caret, its
 //! selected text, text put in at the caret, and rows dropped onto it.
 
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const DESK: &str = "module desk
 
@@ -33,7 +33,7 @@ code Desk
 ";
 
 fn errors(text: &str) -> Vec<String> {
-    load_sources([("desk.clarity", text)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("desk.clarity", text)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]

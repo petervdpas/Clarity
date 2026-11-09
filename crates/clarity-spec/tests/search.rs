@@ -103,7 +103,7 @@ const FIRST: &str = "migration \"Music\"
 #[test]
 fn search_comes_and_goes_in_migration_steps() {
     let source = format!("{MUSIC}{CODE}");
-    let load = |steps: &[(&str, &str)]| load_with_migrations([("music.clarity", source.as_str())], steps.iter().copied());
+    let load = |steps: &[(&str, &str)]| load_with_migrations(clarity_spec::converted([("music.clarity", source.as_str())]).iter().map(|(p, t)| (p.as_str(), t.as_str())), steps.iter().copied());
     // The dictionary searches notes and tags too: two pending steps.
     let project = load(&[("0001.clarity", FIRST)]);
     let pending: Vec<String> = migrate::pending(&project, "main", &[]).iter().map(migrate::op_text).collect();

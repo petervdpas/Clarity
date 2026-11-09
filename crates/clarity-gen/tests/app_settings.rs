@@ -4,13 +4,13 @@
 
 use clarity_gen::generate;
 use clarity_project::{Backend, Ui, starter};
-use clarity_spec::load_sources;
+use clarity_spec::load_converted;
 
 const SOURCE: &str = "module m\n\napp Shop\n    main Desk\n    menu name mainMenu\n        item \"Dutch\" name dutchItem on click: toDutch\n\nsettings\n    language\n\npage Desk: window\n    data note: text\n\ncode Shop\n    handler toDutch\n        settings.language = \"nl\"\n";
 
 #[test]
 fn the_app_s_handlers_carry_the_window_s_settings_on_every_stack() {
-    let project = load_sources([("m.clarity", SOURCE)]);
+    let project = load_converted([("m.clarity", SOURCE)]);
     assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
     // What each stack writes to read the window's settings and to give them back.
     let stacks = [

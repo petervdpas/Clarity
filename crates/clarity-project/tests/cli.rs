@@ -5,7 +5,7 @@ use clarity_project::{parse, target_problems};
 
 fn problems(stack: &str, module: &str) -> Vec<String> {
     let settings = parse(&format!("project Shop\n    stack {stack}\n")).unwrap();
-    let project = clarity_spec::load_sources([("shop/shop.clarity", module)]);
+    let project = clarity_spec::load_converted([("shop/shop.clarity", module)]);
     target_problems(&settings, &project, "shop.clarity").into_iter().map(|d| d.message).collect()
 }
 

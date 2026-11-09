@@ -63,7 +63,7 @@ const EN: &str = "translation en
 ";
 
 fn project(text: &str) -> Project {
-    let mut project = clarity_spec::load_sources([("shop.clarity", text)]);
+    let mut project = clarity_spec::load_converted([("shop.clarity", text)]);
     project.locale.language = Some("en".into());
     clarity_spec::translations::attach(&mut project, [("translations/en.clarity", EN)]);
     project
@@ -82,7 +82,7 @@ fn has(text: &str, words: &str) {
 fn a_tree_holds_levels_of_several_entities() {
     assert!(errors(SHOP).is_empty(), "{:#?}", errors(SHOP));
     let p = project(SHOP);
-    let explorer = p.files[0].pages.iter().find(|p| p.name.name == "Explorer").unwrap();
+    let explorer = p.pages().find(|p| p.name.name == "Explorer").unwrap();
     let tree = &explorer.widgets[0];
     assert_eq!(tree.levels[0].entity.as_deref(), Some("Project"));
     let domain = &tree.levels[0].levels[0];
@@ -145,6 +145,6 @@ fn a_window_without_an_open_handler_loads_its_tree_too() {
     let text = text.replace("code Main\n    handler mainOpened\n        picked = \"\"\n\n", "");
     assert!(errors(&text).is_empty(), "{:#?}", errors(&text));
     let placed = clarity_spec::views::placed(&project(&text));
-    let window = placed.files[0].pages.iter().find(|p| p.name.name == "Main").unwrap();
+    let window = placed.pages().find(|p| p.name.name == "Main").unwrap();
     assert!(window.handlers.iter().any(|h| h.handler == "modelTreeOpened"));
 }

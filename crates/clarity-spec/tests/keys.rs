@@ -7,7 +7,7 @@
 use clarity_spec::model::Locale;
 use clarity_spec::parser::parse;
 use clarity_spec::translations;
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 const SHOP: &str = "module shop
 
@@ -80,7 +80,7 @@ const NL: &str = "translation nl
 ";
 
 fn project(source: &str, files: &[(&str, &str)]) -> Project {
-    let mut project = load_sources([("shop.clarity", source)]);
+    let mut project = load_converted([("shop.clarity", source)]);
     project.locale = Locale { language: Some("en".into()), currency: None };
     translations::attach(&mut project, files.iter().copied());
     project

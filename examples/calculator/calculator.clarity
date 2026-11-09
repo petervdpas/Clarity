@@ -1,14 +1,5 @@
 module calculator
 
-app Calculator
-    title @calculatorTitle
-    main Main
-    menu name mainMenu
-        item @calculatorItem name calculatorItem
-            item @preferencesItem name preferencesItem on click -> Preferences
-            separator
-            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
-
 // What each person sets for themselves, kept on their machine: the
 // language, the look, and the decimals a result is rounded to.
 settings

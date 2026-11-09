@@ -29,40 +29,52 @@ pub const APPS_FOLDER: &str = "ui/apps";
 thread_local! {
     /// Set while the IDE's designer has markup written (`designed`).
     static DESIGNED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    /// The page each tabs, steps or accordion part shows in the designer, by the part's item, from 0.
-    static SHOWING: std::cell::RefCell<std::collections::BTreeMap<u32, usize>> = std::cell::RefCell::new(std::collections::BTreeMap::new());
+    /// The key of each thing the designer's markup marks, by its number
+    /// (`clarity_spec::design_keys::numbered`).
+    static KEYS: std::cell::RefCell<std::collections::BTreeMap<u32, String>> = std::cell::RefCell::new(std::collections::BTreeMap::new());
+    /// The page each tabs, steps or accordion part shows in the designer, by the part's key, from 0.
+    static SHOWING: std::cell::RefCell<std::collections::BTreeMap<String, usize>> = std::cell::RefCell::new(std::collections::BTreeMap::new());
 }
 
 /// Writes markup as the IDE's designer draws it (DESIGN 8.1): each window,
-/// part, page and menu item with `designItem`, where it is written in the
-/// project, so the designer's layer knows each box Clarity.UI draws. A
-/// program's own markup never has it.
-pub fn designed<R>(write: impl FnOnce() -> R) -> R {
-    designed_showing(&std::collections::BTreeMap::new(), write)
-}
-
-/// `designed`, each container in `showing` (by its item) on the page the
-/// designer switched to (from 0), as `designShown` (from 1).
-pub fn designed_showing<R>(showing: &std::collections::BTreeMap<u32, usize>, write: impl FnOnce() -> R) -> R {
+/// part, page and menu item with `designItem`, its key (its file and name,
+/// `design/Main.cxaml#Main/saveButton`), so the designer's layer knows each
+/// box Clarity.UI draws. `keys` gives the key of each number the project's
+/// things carry (`design_keys::numbered`); each container in `showing` (by
+/// its key) shows the page the designer switched to (from 0), as
+/// `designShown` (from 1). A program's own markup never has them.
+pub fn designed_showing<R>(keys: &std::collections::BTreeMap<u32, String>, showing: &std::collections::BTreeMap<String, usize>, write: impl FnOnce() -> R) -> R {
     let before = DESIGNED.with(|d| d.replace(true));
+    let keys_before = KEYS.with(|k| k.replace(keys.clone()));
     let shown_before = SHOWING.with(|s| s.replace(showing.clone()));
     let written = write();
     DESIGNED.with(|d| d.set(before));
+    KEYS.with(|k| *k.borrow_mut() = keys_before);
     SHOWING.with(|s| *s.borrow_mut() = shown_before);
     written
 }
 
-/// ` designItem="start"` while the designer's markup is written, else nothing.
+/// The key of the thing numbered by `span`, while the designer's markup is written.
+fn key_of(span: &clarity_spec::Span) -> Option<String> {
+    DESIGNED.with(|d| d.get()).then(|| KEYS.with(|k| k.borrow().get(&span.start).cloned())).flatten()
+}
+
+/// ` designItem="key"` while the designer's markup is written, else nothing.
 fn design_item(span: &clarity_spec::Span) -> String {
-    if DESIGNED.with(|d| d.get()) { format!(" designItem=\"{}\"", span.start) } else { String::new() }
+    key_of(span).map(|key| format!(" designItem=\"{}\"", cxaml_escaped(&key))).unwrap_or_default()
 }
 
 /// ` designShown="n"` for a container the designer switched to another page.
 fn design_shown(span: &clarity_spec::Span) -> String {
-    match DESIGNED.with(|d| d.get()).then(|| SHOWING.with(|s| s.borrow().get(&span.start).copied())).flatten() {
+    match key_of(span).and_then(|key| SHOWING.with(|s| s.borrow().get(&key).copied())) {
         Some(page) => format!(" designShown=\"{}\"", page + 1),
         None => String::new(),
     }
+}
+
+/// A key as an attribute's value.
+fn cxaml_escaped(text: &str) -> String {
+    text.replace('&', "&amp;").replace('"', "&quot;").replace('<', "&lt;")
 }
 
 /// The marks a program's markup or the designer's carries (`designed`).

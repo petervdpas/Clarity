@@ -22,7 +22,7 @@ fn every_backend_sends_where_a_text_is_aligned() {
         let mut settings = starter("Sheet", "sheet");
         settings.stack.backend = backend;
         settings.stack.ui = ui;
-        let project = clarity_spec::load_in([("sheet.clarity", SHEET)], [], &clarity_project::source_refs(&settings));
+        let project = clarity_spec::load_in(clarity_spec::converted([("sheet.clarity", SHEET)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &clarity_project::source_refs(&settings));
         let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
         assert!(errors.is_empty(), "{errors:#?}");
         let code: String = generate(&project, &settings).unwrap().iter().map(|f| f.text.as_str()).collect();
@@ -48,7 +48,7 @@ fn every_backend_counts_the_characters_of_a_text() {
         let mut settings = starter("Sheet", "sheet");
         settings.stack.backend = backend;
         settings.stack.ui = ui;
-        let project = clarity_spec::load_in([("sheet.clarity", source.as_str())], [], &clarity_project::source_refs(&settings));
+        let project = clarity_spec::load_in(clarity_spec::converted([("sheet.clarity", source.as_str())]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &clarity_project::source_refs(&settings));
         let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
         assert!(errors.is_empty(), "{errors:#?}");
         let code: String = generate(&project, &settings).unwrap().iter().map(|f| f.text.as_str()).collect();

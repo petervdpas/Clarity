@@ -20,7 +20,7 @@ code Table
 ";
 
 fn project() -> clarity_spec::Project {
-    let mut p = clarity_spec::load_sources([("dice.clarity", TABLE)]);
+    let mut p = clarity_spec::load_converted([("dice.clarity", TABLE)]);
     resources::attach(&mut p, vec![ResourceFile { name: "roll.wav".into(), bytes: b"RIFF0000WAVE".to_vec() }]);
     assert!(!p.has_errors(), "{:?}", p.diagnostics);
     p

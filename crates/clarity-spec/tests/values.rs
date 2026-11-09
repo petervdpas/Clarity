@@ -2,7 +2,7 @@
 //! and time or a reference field; `today()` and `now()`; and the `checked`
 //! state of an unbound checkbox or switch.
 
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const SHOP: &str = "module shop
 
@@ -32,7 +32,7 @@ code Orders
 fn errors(body: &str) -> Vec<String> {
     let body: String = body.lines().map(|l| format!("        {l}\n")).collect();
     let source = format!("{SHOP}{body}");
-    load_sources([("shop.clarity", source.as_str())])
+    load_converted([("shop.clarity", source.as_str())])
         .diagnostics
         .into_iter()
         .filter(|d| d.severity == Severity::Error)
@@ -99,11 +99,11 @@ action double(track: Track)
 /// number of seconds; shown as 3:45 on every stack.
 #[test]
 fn a_duration_is_seconds_that_add_up() {
-    let project = load_sources([("music.clarity", MUSIC)]);
+    let project = load_converted([("music.clarity", MUSIC)]);
     let problems: Vec<String> = project.diagnostics.iter().map(|d| d.message.clone()).collect();
     assert!(problems.is_empty(), "{problems:#?}");
     let wrong = format!("{MUSIC}\nfunction named(track: Track) -> duration\n    return track.title\n");
-    let project = load_sources([("music.clarity", wrong.as_str())]);
+    let project = load_converted([("music.clarity", wrong.as_str())]);
     let problems: Vec<String> = project.diagnostics.iter().map(|d| d.message.clone()).collect();
     assert_eq!(problems, ["named must return duration, not text"]);
 }

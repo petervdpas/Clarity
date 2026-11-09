@@ -1,7 +1,7 @@
 //! A route opens its window with data of the window it is in:
 //! `on click -> ChapterForm with book`, from a button, a menu or a toolbar.
 
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const SHOP: &str = "module writer
 
@@ -25,17 +25,17 @@ page Chapters: window
 ";
 
 fn errors(text: &str) -> Vec<String> {
-    load_sources([("writer.clarity", text)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("writer.clarity", text)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]
 fn a_route_opens_its_window_with_data_of_the_same_name() {
     assert!(errors(SHOP).is_empty(), "{:#?}", errors(SHOP));
-    let project = load_sources([("writer.clarity", SHOP)]);
-    let desk = project.files[0].pages.iter().find(|p| p.name.name == "Desk").unwrap();
+    let project = load_converted([("writer.clarity", SHOP)]);
+    let desk = project.pages().find(|p| p.name.name == "Desk").unwrap();
     assert_eq!(desk.widgets[0].props.open_with, vec!["book".to_string()]);
     assert!(clarity_spec::widgets::widget_line(&desk.widgets[0].props).contains("on click -> Chapters with book in new window"));
-    let app = &project.files[0].apps[0];
+    let app = &project.apps().nth(0).unwrap();
     assert_eq!(app.frame.toolbar.as_ref().unwrap().items[0].props.open_with, vec!["book".to_string()]);
 }
 
@@ -54,8 +54,8 @@ fn the_opened_window_and_the_button_s_window_hold_the_data() {
 fn reorder_counts_from_the_number_written() {
     let source = "module writer\n\nentity Chapter\n    title: text\n    number: integer\n\npage Desk: window\n    data chapters: list<Chapter>\n    list name chapterList at 1,1 span 4 rows 10 bind chapters show title reorder by number from 0 on reorder: moved\n\ncode Desk\n    handler moved\n        for c in chapters\n            save c\n";
     assert!(errors(source).is_empty(), "{:#?}", errors(source));
-    let project = load_sources([("writer.clarity", source)]);
-    let list = &project.files[0].pages[0].widgets[0];
+    let project = load_converted([("writer.clarity", source)]);
+    let list = &project.pages().nth(0).unwrap().widgets[0];
     assert_eq!(list.props.reorder_from, Some(0));
     assert!(clarity_spec::widgets::widget_line(&list.props).contains("reorder by number from 0"));
 }
@@ -83,8 +83,8 @@ page Chapters: view
 #[test]
 fn a_slide_out_lies_beside_a_part_of_its_container() {
     assert!(errors(DESK).is_empty(), "{:#?}", errors(DESK));
-    let project = load_sources([("writer.clarity", DESK)]);
-    let view = project.files[0].pages.iter().find(|p| p.name.name == "Chapters").unwrap();
+    let project = load_converted([("writer.clarity", DESK)]);
+    let view = project.pages().find(|p| p.name.name == "Chapters").unwrap();
     let slide = view.widgets.iter().find(|w| w.props.name.as_deref() == Some("chapterProps")).unwrap();
     assert!(clarity_spec::widgets::widget_line(&slide.props).contains("beside chapterTable"));
     let e = errors(&DESK.replace("beside chapterTable", "beside nothing"));

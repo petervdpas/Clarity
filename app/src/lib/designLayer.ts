@@ -1,7 +1,7 @@
 // The designer's layer over the window Clarity.UI draws (DESIGN 8.1): a
 // box for each part and each grid, placed where the library reports them
-// (`Layout`, its `layout` step), each known by where it is written in the
-// project (its item, the offset the designer's edits name). Pure, so the
+// (`Layout`, its `layout` step), each known by its key (its file and name,
+// `design/Main.cxaml#Main/saveButton`, see `DesignKey`). Pure, so the
 // placing is tested without a browser.
 
 import { ROW_HEIGHT } from "@clarity/ui/screen/grid.ts";
@@ -9,47 +9,50 @@ import type { Command } from "@clarity/ui/generated/Command.ts";
 import type { Frame } from "@clarity/ui/generated/Frame.ts";
 import type { Page } from "@clarity/ui/generated/Page.ts";
 import type { Widget } from "@clarity/ui/generated/Widget.ts";
+import type { DesignKey } from "@clarity/ui/screen/pages.ts";
 import type { Layout } from "./clarityWindow";
 
 export type Box = { x: number; y: number; width: number; height: number };
 
-/** A page of a container: the item of the page, and the header that shows it, where it has one. */
-export type LayerPage = { item: number; title: string | null; box: Box | null };
+/** The key of a thing of the window shown (`ShownPage.keyOf`). */
+export type KeyOf = (thing: { span: { start: number } }) => DesignKey | null;
+
+/** A page of a container: its key, and the header that shows it, where it has one. */
+export type LayerPage = { item: DesignKey; title: string | null; box: Box | null };
 
 /**
  * A part of the design as the layer shows it; a frame's button is a
  * `command`, the window's own (`own`) or its app's. A container's pages and
  * a table's columns come with it.
  */
-export type LayerPart = { item: number; name: string | null; kind: string; box: Box; own: boolean; pages: LayerPage[]; columns: { field: string; box: Box }[] };
+export type LayerPart = { item: DesignKey; name: string | null; kind: string; box: Box; own: boolean; pages: LayerPage[]; columns: { field: string; box: Box }[] };
 
 /** A grid of the design: what holds it (the window, a container, a page), its columns and rows, and the containers it lies in. */
-export type LayerGrid = { item: number; columns: number; gap: number; box: Box; rows: number[]; inside: number[] };
+export type LayerGrid = { item: DesignKey; columns: number; gap: number; box: Box; rows: number[]; inside: DesignKey[] };
 
 function boxOf(at: [number, number, number, number]): Box {
   return { x: at[0], y: at[1], width: at[2], height: at[3] };
 }
 
-function itemOf(item: string | null): number | null {
-  if (item === null || item === "") return null;
-  const n = Number(item);
-  return Number.isInteger(n) ? n : null;
+function itemOf(item: string | null | undefined): DesignKey | null {
+  return item === null || item === undefined || item === "" ? null : item;
 }
 
-/** The items of every container inside `widget`, its own grid and pages too. */
-export function heldBy(widget: Widget): number[] {
-  const out = [widget.span.start];
-  for (const page of widget.pages) out.push(page.span.start);
-  for (const child of [...widget.children, ...widget.pages.flatMap((p) => p.children)]) out.push(...heldBy(child));
-  return out;
+/** The keys of every container inside `widget`, its own grid and pages too. */
+export function heldBy(widget: Widget, keyOf: KeyOf): DesignKey[] {
+  const out = [keyOf(widget)];
+  for (const page of widget.pages) out.push(keyOf(page));
+  for (const child of [...widget.children, ...widget.pages.flatMap((p) => p.children)]) out.push(...heldBy(child, keyOf));
+  return out.filter((k): k is DesignKey => k !== null);
 }
 
-/** Every part of the window, by its item. */
-function partsOf(page: Page): Map<number, Widget> {
-  const out = new Map<number, Widget>();
+/** Every part of the window, by its key. */
+function partsOf(page: Page, keyOf: KeyOf): Map<DesignKey, Widget> {
+  const out = new Map<DesignKey, Widget>();
   const visit = (widgets: Widget[]) => {
     for (const w of widgets) {
-      out.set(w.span.start, w);
+      const key = keyOf(w);
+      if (key !== null) out.set(key, w);
       visit(w.children);
       for (const inner of w.pages) visit(inner.children);
     }
@@ -60,13 +63,14 @@ function partsOf(page: Page): Map<number, Widget> {
   return out;
 }
 
-/** The items of a frame's buttons and menu items, those of submenus too. */
-export function commandsOf(frame: Frame | null | undefined): number[] {
+/** The keys of a frame's buttons and menu items, those of submenus too. */
+export function commandsOf(frame: Frame | null | undefined, keyOf: KeyOf): DesignKey[] {
   if (!frame) return [];
-  const out: number[] = [];
+  const out: DesignKey[] = [];
   const visit = (items: Command[]) => {
     for (const c of items) {
-      out.push(c.span.start);
+      const key = keyOf(c);
+      if (key !== null) out.push(key);
       visit(c.items);
     }
   };
@@ -78,38 +82,37 @@ export function commandsOf(frame: Frame | null | undefined): number[] {
 
 /**
  * The layer's parts and grids from what Clarity.UI reports: only what the
- * design has (an item it knows), each part once (the first drawn), and each
+ * design has (a key it knows), each part once (the first drawn), and each
  * grid with the parts it lies inside, so a part is never dropped into itself.
  * A frame's buttons are known by the window's own frame, or else by its
- * app's (`appFrame`), whose buttons are designed in the app. The grid of a
- * line of a window's content is its view's (`views`, line to view), as the
- * view's parts lie in the view.
+ * app's (`appCommands`, their keys), whose buttons are designed in the app.
+ * The grid of a line of a window's content is its view's (`views`, line to
+ * view), as the view's parts lie in the view.
  */
-export function layerOf(layout: Layout, page: Page, appFrame: Frame | null = null, views: Map<number, number> = new Map()): { parts: LayerPart[]; grids: LayerGrid[] } {
-  const known = partsOf(page);
-  const own = new Set(commandsOf(page.frame));
-  const app = new Set(commandsOf(appFrame));
-  const seen = new Set<number>();
+export function layerOf(layout: Layout, page: Page, keyOf: KeyOf, appCommands: Set<DesignKey> = new Set(), views: Map<DesignKey, DesignKey> = new Map()): { parts: LayerPart[]; grids: LayerGrid[] } {
+  const known = partsOf(page, keyOf);
+  const own = new Set(commandsOf(page.frame, keyOf));
+  const seen = new Set<DesignKey>();
   const parts: LayerPart[] = [];
   for (const laid of layout.parts) {
     const item = itemOf(laid.item);
     const command = laid.kind === "command";
     if (item === null || seen.has(item)) continue;
-    if (command ? !own.has(item) && !app.has(item) : !known.has(item)) continue;
+    if (command ? !own.has(item) && !appCommands.has(item) : !known.has(item)) continue;
     seen.add(item);
     // A line of a window's content has no title: it is named by the view it shows.
     const lines = known.get(item)?.pages ?? [];
     const pages = (laid.pages ?? []).flatMap((p) => {
       const at = itemOf(p.item);
-      const view = lines.find((l) => l.span.start === at)?.view ?? null;
+      const view = lines.find((l) => keyOf(l) === at)?.view ?? null;
       return at === null ? [] : [{ item: at, title: p.title ?? view, box: p.at ? boxOf(p.at) : null }];
     });
     const columns = (laid.columns ?? []).map((c) => ({ field: c.field, box: boxOf(c.at) }));
     parts.push({ item, name: laid.name, kind: laid.kind, box: boxOf(laid.at), own: command ? own.has(item) : true, pages, columns });
   }
-  const within = new Map<number, number[]>();
-  for (const widget of known.values()) {
-    for (const held of heldBy(widget)) within.set(held, [...(within.get(held) ?? []), widget.span.start]);
+  const within = new Map<DesignKey, DesignKey[]>();
+  for (const [key, widget] of known) {
+    for (const held of heldBy(widget, keyOf)) within.set(held, [...(within.get(held) ?? []), key]);
   }
   const grids: LayerGrid[] = [];
   for (const laid of layout.grids) {

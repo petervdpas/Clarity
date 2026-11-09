@@ -2,7 +2,7 @@
 
 This is the reference for the Clarity language: every construct the checker accepts today, with its syntax and its rules. It is written for people and for AI assistants alike. When this file and the parser disagree, the parser is right and this file has a bug.
 
-A Clarity project is written entirely in Clarity: the project settings, the data, the windows and the behavior. Clarity transpiles it to a real application in the stack the project names. Why the language looks the way it does is in [DESIGN.md](DESIGN.md); this file only says what it is.
+A Clarity project is written entirely in Clarity: the project settings, the data and the behavior in `.clarity` files, and each window and view in a `.cxaml` file of its own. Clarity transpiles it to a real application in the stack the project names. Why the language looks the way it does is in [DESIGN.md](DESIGN.md); this file only says what it is.
 
 Contents:
 
@@ -141,10 +141,11 @@ Every generated application carries the folder: next to the renderer on the web 
 
 An image part shows a picture by its file name, or the picture its key points each language at (`image @bannerPicture`, with `bannerPicture resource "banner-nl.png"` in the Dutch file):
 
-```clarity
-// records/resources/logo.png
-page AlbumBrowse: window
-    image name collectionLogo at 12,1 span 1 rows 1 source "logo.png"
+```xml
+<!-- records/design/AlbumBrowseView.cxaml, with records/resources/logo.png -->
+<View class="records.AlbumBrowseView">
+  <Image name="collectionLogo" at="12,1" span="1" rows="1" source="logo.png" />
+</View>
 ```
 
 - The picture must be in the `resources` folder; a name that is not there is an error that lists the pictures that are.
@@ -204,6 +205,7 @@ A reference to an entity in another database is stored as its id, without a fore
 - `module name` is the first line of the file (comments and blank lines may come before it).
 - `use other` makes the declarations of module `other` visible in this file. Without it, a name from another module is an error that tells you which `use` is missing.
 - `source name` places the entities of this module in that data source of the project. Without it, they live in the first data source. In a SQL database (sqlite, postgres, mysql or mssql) Clarity stores them; in a web API (`rest`) the service keeps them, so no migration covers them and `find`, `save` and `delete` do not reach them: the module's actions read and send them with `http ... from name` (see [Calling web APIs](#calling-web-apis)). One module has at most one `source` line.
+- A window, a view and the app are no declarations of a module: each is a file of its own in the module folder's `design` folder, whose root names the module and the page or app (see [5](#5-windows) and [7](#7-the-app-and-its-frame)). Its code is a `code Name` block in the module.
 - A name is declared once per module. Two modules may declare the same name, but a file that sees both (its own module and the modules it uses) cannot use that name: it is ambiguous, and the checker says so.
 
 The declarations a module can hold:
@@ -213,8 +215,6 @@ The declarations a module can hold:
 | `enum Name` | [4](#4-data-enums-and-entities) |
 | `entity Name` | [4](#4-data-enums-and-entities) |
 | `settings` | [Settings](#settings), one per project |
-| `page Name: kind` | [5](#5-windows) |
-| `app Name` | [7](#7-the-app-and-its-frame), one per project |
 | `code Name` | [8](#8-code-behind) |
 | `function name(...)` and `action name(...)` | [9](#9-functions-and-actions) |
 | `engine Name`, `engine Name from "file.wasm"` | [9](#engines) |
@@ -504,7 +504,7 @@ settings
 - **References.** A `ref` setting keeps the record's id, and is empty until the person picks one. Code reads it as a `ref` field: `settings.openProject != none`, `let open = settings.openProject`, `settings.openProject = project`. A dropdown bound to it offers the entity's records. A kept id that is not a whole number above 0 is dropped; when its record is deleted, loading it fails as for any reference, so code that deletes the record clears the setting.
 - **Clarity's own.** `language` and `theme` take no type: they are the language and the theme shown, labeled with Clarity's words `languagePicker` and `themePicker`. Setting either switches the language or the theme, as the pickers of the click targets `language` and `theme` do, and those pickers change the same settings.
 - **Kept per person.** Settings are never in the database. Each person's are kept on their machine, as `settings.json` in a folder named after the application, in the folder for application settings of their system (`%APPDATA%` on Windows, `~/Library/Application Support` on macOS, `$XDG_CONFIG_HOME` or `~/.config` elsewhere). A setting not kept yet has its `default`; a kept value that no longer fits (a setting removed, an enum value gone, a number past its ends) is dropped.
-- **In every window.** Every window and the app have `settings` as their data without a `data` line. A part binds `settings.pageSize`, a form binds `settings`, and code reads and sets `settings.pageSize`. A change takes effect at once and is kept, and every window sees it. A dropdown bound to `settings.language` offers the project's languages by their own names, and one bound to `settings.theme` the offered themes by their titles.
+- **In every window.** Every window and the app have `settings` as their data without a `Data` element. A part binds `settings.pageSize`, a form binds `settings`, and code reads and sets `settings.pageSize`. A change takes effect at once and is kept, and every window sees it. A dropdown bound to `settings.language` offers the project's languages by their own names, and one bound to `settings.theme` the offered themes by their titles.
 - **A settings window.** New window offers "Settings window" when the project has settings: a dialog with a labeled form of every setting and a Close button.
 
 The name `Settings` is theirs: no entity can have it, and no window can have other data called `settings`.
@@ -531,9 +531,13 @@ The folder a file store keeps its files in can be each person's own choice, chos
 ```clarity
 settings
     photosFolder: folder, default "photos", label @photosFolderSetting
+```
 
-page Preferences: dialog
-    folder name photosBox at 1,1 span 6 bind settings.photosFolder
+```xml
+<!-- records/design/Preferences.cxaml -->
+<Dialog class="records.Preferences" title="@preferencesTitle">
+  <Folder name="photosBox" at="1,1" span="6" bind="settings.photosFolder" />
+</Dialog>
 ```
 
 ```clarity
@@ -550,82 +554,136 @@ page Preferences: dialog
 
 ## 5. Windows
 
-A window is a `page` block. Its settings come first, then its parts, which sit on a snap grid.
+A window is a file of its own, `design/<Name>.cxaml` in the module's folder: XML whose root element says what the page is and names its module and page, as Avalonia's `x:Class` does. Its attributes are the window's settings; inside are its data, then its parts, which sit on a snap grid.
+
+```xml
+<!-- shop/design/CustomerForm.cxaml -->
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="shop.CustomerForm" title="@customerFormTitle" onreturn="windowReturned">
+  <Content name="main" at="1,1" span="12" rows="10">
+    <View name="CustomerFormView" />
+  </Content>
+</Window>
+```
+
+```xml
+<!-- shop/design/CustomerFormView.cxaml -->
+<?xml version="1.0" encoding="UTF-8"?>
+<View class="shop.CustomerFormView">
+  <Data name="customer" type="Customer" />
+  <Data name="orders" type="list&lt;Order&gt;" />
+  <Label name="nameLabel" at="1,1" span="3" caption="@nameLabel" for="name" />
+  <Textbox name="name" at="4,1" span="6" bind="customer.name" />
+  <Table name="orderTable" at="1,3" span="12" rows="6" bind="orders" columns="number, total" />
+  <Button name="saveButton" at="11,10" span="2" caption="@saveButtonCaption" default="true" onclick="saveClicked" />
+</View>
+```
 
 ```clarity
-page CustomerForm: window
-    title @customerFormTitle
-    data customer: Customer
-    data orders: list<Order>
-    grid 12 columns
-    on return: windowReturned
+// shop/shop.clarity: the code of both
+code CustomerForm
+    handler windowReturned
+        reload orders
 
-    label @nameLabel name nameLabel at 1,1 span 3 for name
-    textbox name name at 4,1 span 6 bind customer.name
-    table name orderTable at 1,3 span 12 rows 6 bind orders columns number, total
-    button @saveButtonCaption name saveButton at 11,10 span 2 default on click: saveClicked
+code CustomerFormView
+    handler saveClicked
+        save customer
 ```
+
+- **One file per page.** The file is named after the page, `CustomerForm.cxaml`, and lives in `design/` beside the module's `.clarity` files. The app has one too, `design/Shop.cxaml` (see [7](#7-the-app-and-its-frame)).
+- **The root names it.** `class="shop.CustomerForm"` is the page `CustomerForm` of module `shop`; its code is the block `code CustomerForm` of that module. A class whose module the project does not have is an error, and so is a `page` block left in a module's `.clarity` file.
+- **The code stays in the module.** Handlers, functions and actions are Clarity, in the module's `.clarity` files; the `.cxaml` file names them (`onclick="saveClicked"`) and holds no code.
+- **Window, content, view.** A window shows its parts in a view: its `Content` part lists the views it can show, and the view holds the parts, data and handlers (see [Views](#views)). New window in the designer makes a window this way, with an empty view `<Name>View`.
+- **Escaped as XML.** A value with `<` or `&` writes them as `&lt;` and `&amp;`, as in `type="list&lt;Order&gt;"`.
+- **The designer writes it.** The designer reads and writes these files; the Text tab of the inspector shows the file as it is. A part writes only what differs from its kind's defaults.
 
 ### Kinds
 
-`page Name: kind`, where the kind is one of:
+The root element is the page's kind:
 
-| Kind | Is |
+| Root | Is |
 |---|---|
-| `window` | a window of its own, which can have a menu, toolbar, ribbon, sidebars and a footer |
-| `dialog` | a modal window; `dialog gives Type` closes with a value of that type (see [Asking the person](#asking-the-person)) |
-| `view` | content shown inside the app's frame |
-| `splash` | the splash screen the app shows while it starts (see [Splash screen](#splash-screen)) |
+| `<Window>` | a window of its own, which can have a menu, toolbar, ribbon, sidebars and a footer |
+| `<Dialog>` | a modal window; `gives="Type"` closes it with a value of that type (see [Asking the person](#asking-the-person)) |
+| `<View>` | a piece of a window, shown in a content (see [Views](#views)) |
+| `<Splash>` | the splash screen the app shows while it starts (see [Splash screen](#splash-screen)) |
+| `<Toolbox>` | the tools a canvas or memo shows, designed as a view (see [Canvas modes](#canvas-modes)) |
 
-Only a `window` has frame regions of its own.
+Only a `Window` has frame regions of its own, written as elements in its file: `<Menu>`, `<Toolbar>`, `<Ribbon>`, `<Sidebar>` and `<Footer>`.
 
 ### Splash screen
 
-An application may show a splash screen while it starts; it is optional, and an app without one opens its main window as before. The splash is a page of the kind `splash`, designed as any page is (a picture, the name, a progress bar), and the app names it with how long it shows at least:
+An application may show a splash screen while it starts; it is optional, and an app without one opens its main window as before. The splash is a page of the kind `Splash`, designed as any page is (a picture, the name, a progress bar), and the app names it with how long it shows at least, `splash` and `splashFor` (seconds) on its root:
+
+```xml
+<!-- shop/design/Shop.cxaml -->
+<App class="shop.Shop" main="Main" splash="Welcome" splashFor="2" onstart="loadCatalogue">
+</App>
+```
 
 ```clarity
-app Shop
-    main Main
-    splash Welcome for 2 seconds
-    on start: loadCatalogue
-
-page Welcome: splash
-    size 560 x 290
-    style splashBack
-    image source "logo.png" name logo at 1,1 span 4 rows 5
-    heading @shopTitle name titleHeading at 5,2 span 8 rows 2 style splashTitle
-    label @shopTagline name tagline at 5,4 span 8 style splashTagline
-    busy @welcomeStarting name status at 5,5 span 8 style splashStatus
-
+// shop/shop.clarity
 code Shop
     handler loadCatalogue
         splash.status = @loadingCatalogue
 ```
 
+```xml
+<!-- shop/design/Welcome.cxaml -->
+<?xml version="1.0" encoding="UTF-8"?>
+<Splash class="shop.Welcome" width="560" height="290" style="splashBack">
+  <Image name="logo" at="1,1" span="4" rows="5" source="logo.png" />
+  <Heading name="titleHeading" at="5,2" span="8" rows="2" caption="@shopTitle" style="splashTitle" />
+  <Label name="tagline" at="5,4" span="8" caption="@shopTagline" style="splashTagline" />
+  <Busy name="status" at="5,5" span="8" caption="@welcomeStarting" style="splashStatus" />
+</Splash>
+```
+
 - It shows first, while the app's `on start` runs, and goes once the main window shows, but not before the time the line gives (0.1 to 30 seconds; without `for`, as soon as the main window shows).
 - `splash.status = text` in code says what loads: the caption of the splash page's part named `status`, a `label`, or a `busy` part that spins while it shows. Code anywhere may set it; it shows while the splash does.
 - On the desktop (every stack, through Clarity.UI) it is a borderless window in the middle of the screen, above the others. In the browser it fills the page until the main window takes its place.
-- As in Avalonia, the generated markup says it: the splash's own window file (`windows/Welcome.cxaml`) declares its window, `<Window name="Welcome" width="480" height="280" decorations="none" startup="centerScreen" resizable="false" topmost="true" taskbar="false" frame="none">` (Avalonia's Width, Height, SystemDecorations, WindowStartupLocation, CanResize, Topmost and ShowInTaskbar, and none of the app's menu, toolbar or ribbon, as an Avalonia window holds only what its XAML holds), and the app's markup names it, `<App name="Shop" splash="Welcome" splashFor="2">`. A splash page without `size` is 480 by 280.
+- As in Avalonia, the generated markup says it: the generated program's window file for the splash (`windows/Welcome.cxaml`) declares its window, `<Window name="Welcome" width="480" height="280" decorations="none" startup="centerScreen" resizable="false" topmost="true" taskbar="false" frame="none">` (Avalonia's Width, Height, SystemDecorations, WindowStartupLocation, CanResize, Topmost and ShowInTaskbar, and none of the app's menu, toolbar or ribbon, as an Avalonia window holds only what its XAML holds), and the app's markup names it, `<App name="Shop" splash="Welcome" splashFor="2">`. A splash page without `width` and `height` is 480 by 280.
 - The application shows and closes it: nothing opens it (`on click -> Welcome` is refused), it has no events of its own, and it cannot be the main window. A splash page no app names is warned about.
 - When the databases did not open, the app starts without its splash and shows what keeps the connection.
 
 ### Views
 
-A window can be a composition of views. A `view` is designed as a window is (its parts on its grid, its data, its code), without a frame of its own, and shows where a window's part names it: a slide-out with `view ClassEditor` on its line, or a tab, step or section with it on its own (`section @classCaption view ClassEditor`). A place that shows a view holds no parts of its own.
+A window is a composition of views. A view is designed as a window is (its parts on its grid, its data, its code), in its own file with a `<View>` root, without a frame of its own. It shows where a window's `Content` part names it, with a `<View name="..." />` line. A content shows one of the views it lists at a time; code picks another with `main.view = OtherView`. A slide-out, tab, step or section shows a view through a content inside it. A content holds no parts of its own besides its view lines.
+
+```xml
+<!-- design/Workspace.cxaml -->
+<Window class="modelling.Workspace" title="@workspaceTitle">
+  <Content name="main" at="1,1" span="12" rows="20">
+    <View name="WorkspaceView" />
+  </Content>
+</Window>
+```
+
+```xml
+<!-- design/WorkspaceView.cxaml -->
+<View class="modelling.WorkspaceView">
+  <Data name="picked" type="text" />
+  <Tree name="classTree" at="1,1" span="3" rows="20" bind="nodes" rowKey="key" parentKey="parent" show="label" onselect="classPicked" />
+  <Slideout name="classPanel" at="4,1" span="6" rows="12" caption="@classCaption" slideWidth="520" pinnable="true">
+    <Content name="classContent" at="1,1" span="6" rows="12">
+      <View name="ClassEditor" />
+    </Content>
+  </Slideout>
+</View>
+```
+
+```xml
+<!-- design/ClassEditor.cxaml -->
+<View class="modelling.ClassEditor">
+  <Data name="className" type="text" />
+  <Label name="nameLabel" at="1,1" span="2" caption="@nameLabel" for="nameBox" />
+  <Textbox name="nameBox" at="3,1" span="4" bind="className" />
+  <Button name="saveButton" at="5,2" span="2" caption="@saveCaption" onclick="saveClicked" />
+</View>
+```
 
 ```clarity
-page Workspace: window
-    data picked: text
-    tree name classTree at 1,1 span 3 rows 20 bind nodes key key parent parent show label on select: classPicked
-    slideout @classCaption name classPanel view ClassEditor width 520 pinnable span 6 rows 12
-
-page ClassEditor: view
-    data className: text
-    label @nameLabel name nameLabel at 1,1 span 2 for nameBox
-    textbox name nameBox at 3,1 span 4 bind className
-    button @saveCaption name saveButton at 5,2 span 2 on click: saveClicked
-
-code Workspace
+code WorkspaceView
     handler classPicked
         className = classTree.selected.label
         classPanel.visible = true
@@ -636,23 +694,33 @@ code ClassEditor
 ```
 
 - Where it shows, the view's parts, data and handlers join the window's: the window's code reaches them by name, so the window sets what the view shows (`className = ...`). The view's own code reaches only its own parts and data, so one view can show in several windows.
-- A window shows a view once; the view's part and data names differ from the window's; a view shows in a window, not in another view, and has no slide-out of its own.
-- Only a view tells; the place that shows it hears only what the view's page says it tells, and the handler takes the tell's values.
-- In the IDE views have their own section in the project tree, with **New view**, and are designed on their own as windows are. The inspector of a slide-out, tab, step or section has **Shows view**. The designer shows the place as written; the Preview shows it with the view in it.
+- A window shows a view once; the view's part and data names differ from the window's.
+- Only a view tells; the content that shows it hears only what the view's file says it tells, and the handler takes the tell's values.
+- In the IDE views have their own section in the project tree, with **+ New view**, and are designed on their own as windows are. The designer shows the content as written; the Preview shows it with the view in it.
 
-A view tells its window what happened, as an engine beside the screen does: its page says `tells saved` (with values, `tells saved(name: text)`), its code says `tell saved()`, and the window hears it on the slide-out, tab, step or section that shows the view, `on saved: recipeSaved`, with a handler that takes those values. A tell the window does not hear does nothing.
+A view tells its window what happened, as an engine beside the screen does: its file says `<Tells message="saved" />` (with values, `<Tells message="saved(name: text)" />`), its code says `tell saved()`, and the window hears it on the view line that shows it, `<View name="RecipeEditor" onsaved="recipeSaved" />`, with a handler that takes those values. A tell the window does not hear does nothing.
+
+```xml
+<!-- design/CookbookView.cxaml -->
+<View class="kitchen.CookbookView">
+  <Data name="recipes" type="list&lt;Recipe&gt;" />
+  <Content name="recipeContent" at="5,1" span="8" rows="14">
+    <View name="RecipeEditor" onsaved="recipeSaved" />
+  </Content>
+</View>
+```
+
+```xml
+<!-- design/RecipeEditor.cxaml -->
+<View class="kitchen.RecipeEditor">
+  <Data name="dish" type="Recipe" />
+  <Tells message="saved" />
+  <Button name="saveButton" at="5,8" span="2" caption="@saveCaption" onclick="saveClicked" />
+</View>
+```
 
 ```clarity
-page Cookbook: window
-    data recipes: list<Recipe>
-    slideout @recipeCaption name recipePanel view RecipeEditor on saved: recipeSaved
-
-page RecipeEditor: view
-    tells saved
-    data dish: Recipe
-    button @saveCaption name saveButton at 5,8 span 2 on click: saveClicked
-
-code Cookbook
+code CookbookView
     handler recipeSaved
         recipes = find r in Recipe order by r.name
 
@@ -662,37 +730,42 @@ code RecipeEditor
         tell saved()
 ```
 
-An accordion, tabs or a wizard can be a composition of views too, each section, tab or step one view:
+An accordion, tabs or a wizard can be a composition of views too, each section, tab or step holding a content with one view:
 
-```clarity
-page Workspace: window
-    accordion name panels at 1,1 span 12 rows 12 horizontal
-        section @classesCaption view ClassList
-        section @diagramCaption view Diagram
-        section @notesCaption
-            memo name notesBox at 1,1 span 6 rows 6
+```xml
+<Accordion name="recipeParts" at="5,1" span="8" rows="14" orientation="horizontal">
+  <Section title="@overviewSection">
+    <Content name="recipeOverviewContent" at="1,1" span="8" rows="14">
+      <View name="RecipeOverview" onsaved="recipeSaved" />
+    </Content>
+  </Section>
+  <Section title="@timerSection">
+    <Button name="startTimerButton" at="1,2" span="3" caption="@startTimerCaption" onclick="startTimer" />
+  </Section>
+</Accordion>
 ```
 
-
-An application has one desktop window, on every stack. `open` shows a window in place, on top of the one that opened it, and `close` goes back to the one below. A desktop window of its own opens only where the design says so: a target marked `in new window` starts one, and a `dialog` may get one too (the web stacks show it on top of the window that opened it; on C# dialogs come with Clarity.UI).
+An application has one desktop window, on every stack. `open` shows a window in place, on top of the one that opened it, and `close` goes back to the one below. A desktop window of its own opens only where the design says so: a target marked `newWindow="true"` starts one, and a dialog may get one too (the web stacks show it on top of the window that opened it; on C# dialogs come with Clarity.UI).
 
 ### Settings
 
+A window's settings are attributes of its root element; its data are `Data` elements, the first things inside it.
+
 | Setting | Meaning |
 |---|---|
-| `title "text"` | The window's title, in its title bar; a key may hold `{app.version}`, as `mainTitle "Todo v{app.version}"`. Without one, the window shows the app's title. |
-| `size W x H` | The size its desktop window opens at, in pixels, like `size 320 x 460`: 200 to 3840 wide and 150 to 2160 high. Without it a window opens at 1100 x 760. A desktop window takes the size of the window it shows first; a window opened in place keeps the desktop window's size. The designer shows a window at its size. |
-| `style name` | A style of the project's theme for the window itself: its background fills the whole window and its text color is its parts' text, as a splash screen's deep color. Every theme the application offers must have it. |
-| `data name: Entity` | One record the window works on. |
-| `data name: list<Entity>` | A list of records the window works on. |
-| `data name: Record`, `data name: list<Record>` | A [record](#records) the window holds, new when it opens, or a list of them, empty when it opens; code fills them, nothing stores them. |
-| `data name: type` | A plain value the window holds: `data shown: decimal`, `data pending: Operation`, `data readings: list<decimal>`. The type is `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`, an enum, or a list of text, integers, decimals or dates, which starts empty. It is no record and is never stored; it lives as long as the window. |
-| `data name: type, default value` | A plain value that starts at `value`: `data fresh: bool, default true`. Without a default it starts empty: 0, empty text, false, no date, or the enum's first value. |
-| `grid N columns` | The number of grid columns, 1 to 96. The default is 12. |
-| `grid N columns rows R` | The page's own exact grid, for a designed page such as a splash: rows of R pixels (8 to 64), cells without gaps or padding, rows that keep their height. `grid 56 columns rows 10` on a 560 px window is square cells of 10 pixels. |
-| `on open: handler` | Runs when the window has opened and its data is loaded. |
-| `on close: handler` | Runs when the window is about to close. |
-| `on return: handler` | Runs when a window this one opened has closed, and this one is on top again. This is where a list reloads after a form saved a record. |
+| `title="@key"` | The window's title, in its title bar; a key may hold `{app.version}`, as `mainTitle "Todo v{app.version}"`. Without one, the window shows the app's title. |
+| `width="320" height="460"` | The size its desktop window opens at, in pixels: 200 to 3840 wide and 150 to 2160 high. Without it a window opens at 1100 x 760. A desktop window takes the size of the window it shows first; a window opened in place keeps the desktop window's size. The designer shows a window at its size. |
+| `style="name"` | A style of the project's theme for the window itself: its background fills the whole window and its text color is its parts' text, as a splash screen's deep color. Every theme the application offers must have it. |
+| `<Data name="customer" type="Customer" />` | One record the window works on. |
+| `<Data name="orders" type="list&lt;Order&gt;" />` | A list of records the window works on. |
+| `type="Record"`, `type="list&lt;Record&gt;"` | A [record](#records) the window holds, new when it opens, or a list of them, empty when it opens; code fills them, nothing stores them. |
+| `<Data name="shown" type="decimal" />` | A plain value the window holds: `type="decimal"`, `type="Operation"`, `type="list&lt;decimal&gt;"`. The type is `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`, an enum, or a list of text, integers, decimals or dates, which starts empty. It is no record and is never stored; it lives as long as the window. |
+| `<Data name="fresh" type="bool" default="true" />` | A plain value that starts at its `default`. Without a default it starts empty: 0, empty text, false, no date, or the enum's first value. |
+| `columns="N"` | The number of grid columns, 1 to 96. The default is 12. |
+| `columns="56" cell="10"` | The page's own exact grid, for a designed page such as a splash: rows of `cell` pixels (8 to 64), cells without gaps or padding, rows that keep their height. `columns="56" cell="10"` on a 560 px window is square cells of 10 pixels. |
+| `onopen="handler"` | Runs when the window has opened and its data is loaded. |
+| `onclose="handler"` | Runs when the window is about to close. |
+| `onreturn="handler"` | Runs when a window this one opened has closed, and this one is on top again. This is where a list reloads after a form saved a record. |
 
 The window's data is what its parts bind to and what its handlers work on. When a window is opened with `open CustomerForm with customer = ...`, the data is filled by name. Data that is not filled starts as a new, empty record, for a list as all records of the entity, and for a plain value at its default. A plain value cannot be read again with `reload`.
 
@@ -700,25 +773,47 @@ The window's data is what its parts bind to and what its handlers work on. When 
 
 Every part sits on the grid of the window or of the container it is in:
 
-- `at col,row` is the top-left cell, counted from 1. Every part needs one.
-- `span n` is the number of columns it covers. The default comes from the part's kind.
-- `rows n` is the number of rows it covers. The default also comes from the part's kind.
+- `at="col,row"` is the top-left cell, counted from 1. Every part needs one.
+- `span="n"` is the number of columns it covers. The default comes from the part's kind.
+- `rows="n"` is the number of rows it covers. The default also comes from the part's kind.
 
 Rows have a fixed height in the designer. In a running application the columns share the width of the window, and rows that hold something that grows (a table, a list, an image, a canvas, a memo, a custom part declared with `grows`, or a container with one of these inside) share the extra height. Everything else keeps its height, also in a row that grows: it stands at the top of its rows, as high as they are at their least.
 
-When no row of a grid grows and the grid is higher than its rows, `bottom` on a part sticks it to the bottom: the rows from the first row of a part with `bottom` down move down by the height to spare, keeping their heights. Buttons under a form in a pane that a list beside it makes taller sit at the bottom of the pane: `button @saveCaption name save at 3,11 span 2 bottom`. Where a row grows, `bottom` changes nothing.
+When no row of a grid grows and the grid is higher than its rows, `bottom="true"` on a part sticks it to the bottom: the rows from the first row of a part with `bottom` down move down by the height to spare, keeping their heights. Buttons under a form in a pane that a list beside it makes taller sit at the bottom of the pane: `<Button name="save" at="3,11" span="2" caption="@saveCaption" bottom="true" />`. Where a row grows, `bottom` changes nothing.
 
 The checker reports parts that start outside the grid, run past its last column, or overlap another part in the same container.
 
 ## 6. Parts
 
-A part is one line: its kind, then an optional caption in quotes, then its properties.
+In a window's or view's file a part is an element: its kind as the element's name, its properties as attributes, and the parts it holds inside it.
 
-```clarity
-textbox name email at 4,2 span 6 bind customer.email placeholder "name@example.com" on change: emailChanged
+```xml
+<Textbox name="email" at="4,2" span="6" bind="customer.email" placeholder="@emailPlaceholder" onchange="emailChanged" />
 ```
 
-Properties may be written in any order. The designer writes them in a fixed order, which is the order the tables below use.
+The tables below name the properties in Clarity's own words, as the checker's messages say them (`bind customer.email`, `on change: emailChanged`). In a `.cxaml` file they are written this way:
+
+| Clarity's words | In a `.cxaml` file |
+|---|---|
+| the kind, `textbox`, `treetable` | the element, `<Textbox>`, `<TreeTable>` |
+| the caption, `button @saveCaption` | `caption="@saveCaption"` |
+| `at 4,2`, `span 6`, `rows 3` | `at="4,2"`, `span="6"`, `rows="3"` |
+| a word alone, `default`, `bottom`, `sortable` | `default="true"`, `bottom="true"`, `sortable="true"` |
+| a word and a value, `bind customer.email`, `columns number, total` | `bind="customer.email"`, `columns="number, total"` |
+| `on change: emailChanged`, `on click: digit(7)` | `onchange="emailChanged"`, `onclick="digit(7)"` |
+| `on click -> CustomerBrowse`, `in new window` | `opens="CustomerBrowse"`, `newWindow="true"` |
+| `key "Ctrl+S"` (a shortcut) | `key="Ctrl+S"` |
+| `children children` | `childList="children"` |
+| `key id parent parentId` (a tree's rows) | `rowKey="id" parentKey="parentId"` |
+| `width 420` of a slide-out | `slideWidth="420"` |
+| `horizontal` of an accordion | `orientation="horizontal"` |
+| `reorder by position` | `reorder="position"` |
+| `view RecipeEditor` in a content | `<View name="RecipeEditor" />` inside the `<Content>` |
+| a value with several fields, such as a canvas's `units 160 x 100` or its tells | JSON, as the designer writes it: `units="{&quot;height&quot;:100,&quot;width&quot;:160}"` |
+
+A part writes only what differs from its kind's defaults. The designer writes the attributes in a fixed order, which is the order the tables below use.
+
+In the samples a window shows its parts in a view, as every window does (see [Views](#views)); a dialog holds its parts itself.
 
 ### Properties every part has
 
@@ -869,12 +964,23 @@ A column may have a width, and a table may let the person resize and sort it:
 
 A `chart` draws a list the window holds, its rows grouped by a field and each group given a number:
 
-```clarity
-page Dashboard: window
-    data orders: list<Order>
-    chart bar name byStatus at 1,1 span 6 rows 6 bind orders by status count
-    chart line name perDay at 7,1 span 6 rows 6 bind orders by placed sum total
-    chart pie name share at 1,7 span 4 rows 6 bind orders by customer average total
+```xml
+<!-- shop/design/Dashboard.cxaml -->
+<Window class="shop.Dashboard">
+  <Content name="main" at="1,1" span="12" rows="12">
+    <View name="DashboardView" />
+  </Content>
+</Window>
+```
+
+```xml
+<!-- shop/design/DashboardView.cxaml -->
+<View class="shop.DashboardView">
+  <Data name="orders" type="list&lt;Order&gt;" />
+  <Chart name="byStatus" at="1,1" span="6" rows="6" bind="orders" by="status" />
+  <Chart name="perDay" at="7,1" span="6" rows="6" bind="orders" chart="line" by="placed" measure="{&quot;field&quot;:&quot;total&quot;,&quot;kind&quot;:&quot;sum&quot;}" />
+  <Chart name="share" at="1,7" span="4" rows="6" bind="orders" chart="pie" by="customer" measure="{&quot;field&quot;:&quot;total&quot;,&quot;kind&quot;:&quot;average&quot;}" />
+</View>
 ```
 
 - The word after `chart` is what it draws: `bar`, `line` or `pie`.
@@ -882,21 +988,34 @@ page Dashboard: window
 - The groups come in the order of their values: numbers and dates low to high, text ignoring case, an enum's values as it declares them, no before yes, a reference by the text of the record it names. Each shows as people read it: an enum by its label, a date in their format.
 - A bar or line chart has an axis in steps of 1, 2, 2.5 or 5 times a power of ten that always takes in 0. A pie's slices take the colors of the palette's fourth row, in order; a group of 0 or less has no slice. Each bar, point and slice tells its group and number when pointed at.
 - The chart draws again when its rows change. Every renderer groups and draws alike (`conformance/charts.json`).
-- Bound to a list of numbers (`data readings: list<decimal>`, or such a field of a record), a bar or line chart draws the numbers as they are, in order, without groups: `chart line name history at 1,1 span 6 rows 4 bind readings points 30 max 100`. `points n` shows the list's last n numbers, `max n` fixes the top of the axis. A line of more than 30 points has no dot at each. See [Live graphs](#live-graphs).
+- Bound to a list of numbers (`<Data name="readings" type="list&lt;decimal&gt;" />`, or such a field of a record), a bar or line chart draws the numbers as they are, in order, without groups: `chart line name history at 1,1 span 6 rows 4 bind readings points 30 max 100`. `points n` shows the list's last n numbers, `max n` fixes the top of the axis. A line of more than 30 points has no dot at each. See [Live graphs](#live-graphs).
 
 ### Live graphs
 
 A window shows numbers as they change with a `timer`, which runs a handler every so many seconds, and a `trend` or a chart of a list of numbers, which draw them (DESIGN 5.26):
 
-```clarity
-page Monitor: window
-    data cpu: decimal
-    data readings: list<decimal>
-    timer name clock every 1 on tick: sampled
-    trend name cpuTrend at 1,1 span 6 rows 4 bind cpu points 60 max 100
-    chart line name history at 1,5 span 6 rows 4 bind readings points 30 max 100
+```xml
+<!-- monitor/design/Monitor.cxaml -->
+<Window class="monitor.Monitor">
+  <Content name="main" at="1,1" span="12" rows="8">
+    <View name="MonitorView" />
+  </Content>
+</Window>
+```
 
-code Monitor
+```xml
+<!-- monitor/design/MonitorView.cxaml -->
+<View class="monitor.MonitorView">
+  <Data name="cpu" type="decimal" />
+  <Data name="readings" type="list&lt;decimal&gt;" />
+  <Timer name="clock" at="1,1" span="1" every="1" ontick="sampled" />
+  <Trend name="cpuTrend" at="1,1" span="6" rows="4" bind="cpu" max="100" points="60" />
+  <Chart name="history" at="1,5" span="6" rows="4" bind="readings" chart="line" max="100" points="30" none="measure" />
+</View>
+```
+
+```clarity
+code MonitorView
     handler sampled
         cpu = load()
         readings = readings + [cpu]
@@ -916,13 +1035,27 @@ entity Folder
     size: integer
     parent: ref Folder
     children: list<Folder>
+```
 
-page Files: window
-    on open: loadFolders
-    data folders: list<Folder>
-    tree name folderTree at 1,1 span 4 rows 10 bind folders children children
-    treetable name folderTable at 5,1 span 8 rows 10 bind folders children children columns name 200, size
+```xml
+<!-- files/design/Files.cxaml -->
+<Window class="files.Files" onopen="loadFolders">
+  <Content name="main" at="1,1" span="12" rows="10">
+    <View name="FilesView" />
+  </Content>
+</Window>
+```
 
+```xml
+<!-- files/design/FilesView.cxaml -->
+<View class="files.FilesView">
+  <Data name="folders" type="list&lt;Folder&gt;" />
+  <Tree name="folderTree" at="1,1" span="4" rows="10" bind="folders" childList="children" />
+  <TreeTable name="folderTable" at="5,1" span="8" rows="10" bind="folders" columns="name, size" widths="{&quot;name&quot;:200}" childList="children" />
+</View>
+```
+
+```clarity
 code Files
     handler loadFolders
         folders = find f in Folder order by f.name
@@ -948,12 +1081,16 @@ treetable name grid at 5,1 span 8 rows 20 bind nodes key key parent parent colum
 
 A table (and a tree table) adds and removes its own rows when its line says `add` and `remove`: an Add button stands above its header at the right, and every row has a trash button in a last column of its own. The Add button runs `on add`; a trash button picks its row and runs `on remove`, which reads the row as `table.selected`. Insert and Delete do the same from the keys, and a read-only or disabled table runs neither. The handlers do the adding and deleting, so each needs its handler.
 
-```clarity
-page ClassEditor: view
-    data editedClass: ModelClass
-    data properties: list<Property>
-    table name propertyTable at 1,1 span 6 rows 6 bind properties columns name, type edit name, type add remove on add: propertyAdded on remove: propertyRemoved on change: propertyChanged
+```xml
+<!-- modelling/design/ClassEditor.cxaml -->
+<View class="modelling.ClassEditor">
+  <Data name="editedClass" type="ModelClass" />
+  <Data name="properties" type="list&lt;Property&gt;" />
+  <Table name="propertyTable" at="1,1" span="6" rows="6" bind="properties" columns="name, type" edit="name, type" add="true" remove="true" onadd="propertyAdded" onremove="propertyRemoved" onchange="propertyChanged" />
+</View>
+```
 
+```clarity
 code ClassEditor
     handler propertyAdded
         let p = new Property
@@ -978,16 +1115,31 @@ A `list`, `table`, `tree` or `treetable` lets the person put its rows in their o
 entity Task
     title: text, label @title
     position: integer
+```
 
-page Tasks: window
-    on open: loadTasks
-    data tasks: list<Task>
-    list name taskList at 1,1 span 4 rows 10 bind tasks show title reorder by position on reorder: tasksMoved
+```xml
+<!-- todo/design/Tasks.cxaml -->
+<Window class="todo.Tasks" onopen="loadTasks">
+  <Content name="main" at="1,1" span="12" rows="10">
+    <View name="TasksView" />
+  </Content>
+</Window>
+```
 
+```xml
+<!-- todo/design/TasksView.cxaml -->
+<View class="todo.TasksView">
+  <Data name="tasks" type="list&lt;Task&gt;" />
+  <List name="taskList" at="1,1" span="4" rows="10" bind="tasks" reorder="position" show="title" onreorder="tasksMoved" />
+</View>
+```
+
+```clarity
 code Tasks
     handler loadTasks
         tasks = find t in Task order by t.position
 
+code TasksView
     handler tasksMoved
         for t in tasks
             save t
@@ -1056,7 +1208,7 @@ A button, an image, a menu item, or a toolbar or ribbon button can open a window
 button @allCustomersCaption name allCustomers at 1,12 span 3 on click -> CustomerBrowse
 ```
 
-`on click -> Target` opens the window `Target`, in place, on top of the window the click is in. `on click -> Target with book, chapter` fills the opened window's data of those names from the data of the same names of the window the click is in, as `open Target with book = book` does in a handler; from a menu or toolbar of the app that is the window showing, and data that window does not have starts new. On a button the window must hold the data, of the same entity. `on click -> Target in new window` opens it in a desktop window of its own instead: the one way, besides a `dialog`, that an application gets a second desktop window. Closing the last window there closes that desktop window, and the window that opened it gets its `on return`. In menus, toolbars and on buttons, `close` closes the current window, `quit` ends the application, and `undo` and `redo` take back or do again the last edit of the part that had the focus (see [Undo](#undo)). `back` and `forward` go through the places the person was in the window, as a browser does: each place is the chosen row of its lists, tables and trees and the open section, tab or step of its accordions, tabs and steps, noted once the person's click or key is done. Going back chooses those rows and opens those sections again, and their `select` and `change` handlers run as when the person did it; Alt+Left and Alt+Right do the same, unless the part with the focus takes those keys (a tree that reorders). In menus and toolbars, `language` lets the person choose the language the application shows (see [Translations](#translations)), and `theme` one of the themes it offers (see [Themes](#themes)). A click either opens a window this way or runs a handler (`on click: handler`), not both.
+`on click -> Target` opens the window `Target`, in place, on top of the window the click is in. `on click -> Target with book, chapter` fills the opened window's data of those names from the data of the same names of the window the click is in, as `open Target with book = book` does in a handler; from a menu or toolbar of the app that is the window showing, and data that window does not have starts new. On a button the window must hold the data, of the same entity. `on click -> Target in new window` (in a `.cxaml` file `opens="Target" newWindow="true"`) opens it in a desktop window of its own instead: the one way, besides a `dialog`, that an application gets a second desktop window. Closing the last window there closes that desktop window, and the window that opened it gets its `on return`. In menus, toolbars and on buttons, `close` closes the current window, `quit` ends the application, and `undo` and `redo` take back or do again the last edit of the part that had the focus (see [Undo](#undo)). `back` and `forward` go through the places the person was in the window, as a browser does: each place is the chosen row of its lists, tables and trees and the open section, tab or step of its accordions, tabs and steps, noted once the person's click or key is done. Going back chooses those rows and opens those sections again, and their `select` and `change` handlers run as when the person did it; Alt+Left and Alt+Right do the same, unless the part with the focus takes those keys (a tree that reorders). In menus and toolbars, `language` lets the person choose the language the application shows (see [Translations](#translations)), and `theme` one of the themes it offers (see [Themes](#themes)). A click either opens a window this way or runs a handler (`on click: handler`), not both.
 
 ### Containers
 
@@ -1088,14 +1240,19 @@ form name customerForm at 1,1 span 12 rows 4 bind customer labels 3
 
 A wizard is a `steps` part: its `step` blocks show one at a time, with the titles of all steps above and Clarity's own Back, Next and Finish below (the words `back`, `next` and `finish` in the language files). It needs at least two steps.
 
-```clarity
-page NewOrder: dialog gives Order
-    data order: Order
-    steps name wizard at 1,1 span 12 rows 10 on next: checkStep on finish: done
-        step @customerStep
-            dropdown at 1,1 span 6 bind order.customer
-        step @noteStep
-            textbox at 1,1 span 12 bind order.note
+```xml
+<!-- shop/design/NewOrder.cxaml -->
+<Dialog class="shop.NewOrder" gives="Order">
+  <Data name="order" type="Order" />
+  <Steps name="wizard" at="1,1" span="12" rows="10" onnext="checkStep" onfinish="done">
+    <Step title="@customerStep">
+      <Dropdown at="1,1" span="6" bind="order.customer" />
+    </Step>
+    <Step title="@noteStep">
+      <Textbox at="1,1" span="12" bind="order.note" />
+    </Step>
+  </Steps>
+</Dialog>
 ```
 
 A popover is a container outside the window's grid: it has no `at`, only a size, and `for` names the part it opens next to. It is closed until a click opens it (`on click -> filters`, from a button or a menu item) or code sets `filters.visible = true`; a click outside it or Escape closes it. It stands on the window, not inside another part.
@@ -1144,12 +1301,25 @@ Next runs the handler of `on next` on the step the person is on, then moves one 
 
 A sound part plays the project's sound files and makes tones and melodies (DESIGN 5.22). It is heard, not seen: it stands on the window without a place in its grid, and the designer keeps it in a tray under the window. Code tells it what to play, as it tells a custom part:
 
-```clarity
-page Table: window
-    sound name rattle source "roll.wav" volume 80
-    sound name fanfare
+```xml
+<!-- dice/design/Table.cxaml -->
+<Window class="dice.Table">
+  <Content name="main" at="1,1" span="12">
+    <View name="TableView" />
+  </Content>
+</Window>
+```
 
-code Table
+```xml
+<!-- dice/design/TableView.cxaml -->
+<View class="dice.TableView">
+  <Sound name="rattle" at="1,1" span="1" source="roll.wav" volume="80" />
+  <Sound name="fanfare" at="1,1" span="1" />
+</View>
+```
+
+```clarity
+code TableView
     handler rollClicked
         rattle.play()
 
@@ -1171,14 +1341,27 @@ code Table
 
 **Songs** (docs/AUDIO-PLAN.md). A sound plays a song from disk too, and code follows it as it plays:
 
-```clarity
-page Player: window
-    data played: integer
-    sound name music on end: songEnded on fail: songFailed
-    timer name clock every 0.5 on tick: clockTicked
-    slider name progress at 1,2 span 8 bind played min 0 max 100 on change: progressChanged
+```xml
+<!-- player/design/Player.cxaml -->
+<Window class="player.Player">
+  <Content name="main" at="1,1" span="12" rows="2">
+    <View name="PlayerView" />
+  </Content>
+</Window>
+```
 
-code Player
+```xml
+<!-- player/design/PlayerView.cxaml -->
+<View class="player.PlayerView">
+  <Data name="played" type="integer" />
+  <Sound name="music" at="1,1" span="1" onend="songEnded" onfail="songFailed" />
+  <Timer name="clock" at="1,1" span="1" every="0.5" ontick="clockTicked" />
+  <Slider name="progress" at="1,2" span="8" bind="played" max="100" min="0" onchange="progressChanged" />
+</View>
+```
+
+```clarity
+code PlayerView
     handler playClicked
         music.play(chosen.path)
 
@@ -1208,9 +1391,20 @@ What a sound says is read, not set. On the desktop songs play through Clarity.Au
 
 A video part plays a video in its place in the grid (docs/VIDEO-PLAN.md): an `.mp4` of the resources (`source`) or a file from disk, told by code as a sound plays songs, and shown as large as fits, centred, on black.
 
-```clarity
-page Screen: window
-    video name film at 1,1 span 8 rows 6 source "intro.mp4" volume 80 on end: filmEnded on fail: filmFailed
+```xml
+<!-- cinema/design/Screen.cxaml -->
+<Window class="cinema.Screen">
+  <Content name="main" at="1,1" span="12" rows="6">
+    <View name="ScreenView" />
+  </Content>
+</Window>
+```
+
+```xml
+<!-- cinema/design/ScreenView.cxaml -->
+<View class="cinema.ScreenView">
+  <Video name="film" at="1,1" span="8" rows="6" source="intro.mp4" volume="80" onend="filmEnded" onfail="filmFailed" />
+</View>
 ```
 
 - Code tells it `play()` (its source), `play(path)`, `pause()`, `resume()`, `seek(seconds)`, `stop()` and `volume(level)`, and reads `playing`, `paused`, `position` and `length` (whole seconds), `file` and `problem`; what it says is read, not set.
@@ -1251,12 +1445,25 @@ part Arena
 
 A part's name starts with a capital, which no built-in part does. Its properties cannot be named after a word every part has: `at`, `span`, `rows`, `bottom`, `bind`, `name`, `on`, `tooltip`, `taborder`, `visible`, `enabled` or `value`.
 
-```clarity
-page Game: window
-    data player: Player
-    Arena name arena at 1,1 span 8 rows 6 bind player.best speed 5 title @levelOne on change: bestChanged on scored: arenaScored
+```xml
+<!-- game/design/Game.cxaml -->
+<Window class="game.Game">
+  <Content name="main" at="1,1" span="12" rows="6">
+    <View name="GameView" />
+  </Content>
+</Window>
+```
 
-code Game
+```xml
+<!-- game/design/GameView.cxaml -->
+<View class="game.GameView">
+  <Data name="player" type="Player" />
+  <Custom name="arena" at="1,1" span="8" rows="6" bind="player.best" part="Arena" values="{&quot;speed&quot;:{&quot;kind&quot;:&quot;number&quot;,&quot;value&quot;:&quot;5&quot;},&quot;title&quot;:{&quot;kind&quot;:&quot;str&quot;,&quot;value&quot;:&quot;@levelOne&quot;}}" tells="[{&quot;handler&quot;:&quot;arenaScored&quot;,&quot;tell&quot;:&quot;scored&quot;}]" onchange="bestChanged" />
+</View>
+```
+
+```clarity
+code GameView
     handler arenaScored(points: integer)
         message @scored(points = points)
         arena.speed = arena.speed + 1
@@ -1301,65 +1508,95 @@ Code calls a function as `Words.spell(42)`, checked like an engine's. Values in 
 
 ## 7. The app and its frame
 
-A project has one `app` block. It names the main window and declares the frame every window shares: a menu, a toolbar, a ribbon, sidebars and a footer.
+A project has one app, in a file of its own beside the windows: `design/<App>.cxaml`, whose root `<App class="shop.Shop">` names its module and its name. It names the main window and declares the frame every window shares: a menu, a toolbar, a ribbon, sidebars and a footer. Its code is the block `code Shop` of its module.
 
-```clarity
-app Shop
-    title @shopTitle
-    main CustomerCard
-    data session: Session
-    on start: appStarted
-    menu name mainMenu
-        item @fileItem name fileItem
-            item @newCustomerItem name newCustomerItem key "Ctrl+N" on click -> CustomerForm
-            separator
-            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
-    toolbar name mainToolbar
-        button @customersButtonCaption name customersButton icon "list" on click -> CustomerBrowse
-        separator
-        button @ordersButtonCaption name ordersButton on click: ordersClicked
-    ribbon name mainRibbon collapsible
-        tab @homeTab name homeTab
-            group @customersGroup name customersGroup
-                button @newButtonCaption name newButton icon "plus" large on click -> CustomerForm
-                button @browseButtonCaption name browseButton icon "list" on click -> CustomerBrowse
-    sidebar left name leftSidebar width 192
-        list name recentList at 1,1 span 3 rows 10 bind recent show name
-    footer
-        status @shopStatus
-        text name userText at 10,1 span 3 bind session.user
+```xml
+<!-- shop/design/Shop.cxaml -->
+<App class="shop.Shop" title="@shopTitle" main="CustomerCard" onstart="appStarted">
+  <Data name="session" type="Session" />
+  <Menu name="mainMenu">
+    <Item caption="@fileItem" name="fileItem">
+      <Item caption="@newCustomerItem" name="newCustomerItem" key="Ctrl+N" opens="CustomerForm" />
+      <Item kind="separator" />
+      <Item caption="@quitItem" name="quitItem" key="Ctrl+Q" opens="quit" />
+    </Item>
+  </Menu>
+  <Toolbar name="mainToolbar">
+    <Item kind="button" caption="@customersButtonCaption" name="customersButton" icon="list" opens="CustomerBrowse" />
+    <Item kind="separator" />
+    <Item kind="button" caption="@ordersButtonCaption" name="ordersButton" onclick="ordersClicked" />
+  </Toolbar>
+  <Ribbon name="mainRibbon" collapsible="true">
+    <Tab title="@homeTab" name="homeTab">
+      <Group title="@customersGroup" name="customersGroup">
+        <Item kind="button" caption="@newButtonCaption" name="newButton" icon="plus" large="true" opens="CustomerForm" />
+        <Item kind="button" caption="@browseButtonCaption" name="browseButton" icon="list" opens="CustomerBrowse" />
+      </Group>
+    </Tab>
+  </Ribbon>
+  <Sidebar side="left" name="leftSidebar" width="192">
+    <List name="recentList" at="1,1" span="3" rows="10" bind="recent" show="name" />
+  </Sidebar>
+  <Footer status="@shopStatus" columns="12">
+    <Text name="userText" at="10,1" span="3" bind="session.user" />
+  </Footer>
+</App>
 ```
 
 ### App settings
 
+The app's settings are attributes of its root; its data are `Data` elements, the first things inside it.
+
 | Setting | Meaning |
 |---|---|
-| `title "text"` | The application's title: what a window without a title of its own shows in its title bar. A key may hold `{app.version}`. |
-| `main Window` | The window shown at start; it must be a `window`. |
-| `splash Page for 2 seconds` | Optional: the [splash screen](#splash-screen) shown while the application starts, at least the seconds given. |
-| `data name: Entity` | Data for the parts in the sidebars and the footer. |
-| `on start: handler` | Runs when the application starts, before its main window opens. Its code is in `code AppName`. |
-| `on unconnected: handler` | Runs when the databases did not open, such as a server that is down or a [secret setting](#secret-settings) not kept yet, instead of the main window; `handler notConnected(reason: text)` gets why, in the person's language (Clarity's texts `unconnectedNotKept` and `unconnectedFailed`). What it opens shows first. Closing the last window, or the desktop window from its title bar, then connects again if a setting changed, and the main window opens once it does; closing it unchanged ends the application. |
+| `title="@key"` | The application's title: what a window without a title of its own shows in its title bar. A key may hold `{app.version}`. |
+| `main="Window"` | The window shown at start; it must be a window. |
+| `splash="Page" splashFor="2"` | Optional: the [splash screen](#splash-screen) shown while the application starts, at least the seconds `splashFor` gives (0.1 to 30). |
+| `<Data name="session" type="Session" />` | Data for the parts in the sidebars and the footer. |
+| `onstart="handler"` | Runs when the application starts, before its main window opens. Its code is in `code AppName`. |
+| `onunconnected="handler"` | Runs when the databases did not open, such as a server that is down or a [secret setting](#secret-settings) not kept yet, instead of the main window; `handler notConnected(reason: text)` gets why, in the person's language (Clarity's texts `unconnectedNotKept` and `unconnectedFailed`). What it opens shows first. Closing the last window, or the desktop window from its title bar, then connects again if a setting changed, and the main window opens once it does; closing it unchanged ends the application. |
+
+An app written as an `app` block in a module's `.clarity` file is an error; **Move pages into design** in Problems, or `clarity convert-pages`, moves it into its own file, as it does a window.
 
 ### Regions
 
 | Region | Docks | Holds |
 |---|---|---|
-| `menu` | at the top | `item @key` lines, which can hold more items below them (a submenu), and `separator` |
-| `toolbar` | at the top, below the menu | `button` and `separator` |
-| `ribbon` | at the top | `tab @key` blocks with `group @key` blocks of `button` and `separator` |
-| `sidebar left` or `sidebar right` | at that side, `width` pixels wide (240 without it) | parts, on its own grid of `grid n columns` (3 without it) |
-| `footer` | at the bottom | an optional `status "text"` and parts on a one-row grid of 12 columns |
+| `<Menu>` | at the top | `<Item>` elements, which can hold more items inside them (a submenu), and `<Item kind="separator" />` |
+| `<Toolbar>` | at the top, below the menu | `<Item kind="button">` and separators |
+| `<Ribbon>` | at the top | `<Tab title="@key">` elements with `<Group title="@key">` elements of buttons and separators |
+| `<Sidebar side="left">` or `side="right"` | at that side, `width` pixels wide (240 without it) | parts, on its own grid of `columns` (3 without it) |
+| `<Footer>` | at the bottom | an optional `status="@key"` and parts on a one-row grid of 12 columns |
 
-Every menu item and button has a name, in camelCase like a part's (`item @newCustomerItem name newCustomerItem`); a separator has none. Its name is unique among the window's parts, including the menu and the toolbar themselves. The designer names a new one after its caption and kind, as `newCustomerItem`, which keeps it apart from data and parts of the same word.
+Every menu item and button has a name, in camelCase like a part's (`<Item caption="@newCustomerItem" name="newCustomerItem">`); a separator has none. Its name is unique among the window's parts, including the menu and the toolbar themselves. The designer names a new one after its caption and kind, as `newCustomerItem`, which keeps it apart from data and parts of the same word.
 
-The menu and the toolbar are named parts: `menu name mainMenu`, `toolbar name mainToolbar`. Code hides one with its `visible` and turns it off with its `enabled`.
+The menu and the toolbar are named parts: `<Menu name="mainMenu">`, `<Toolbar name="mainToolbar">`. Code hides one with its `visible` and turns it off with its `enabled`.
 
-A ribbon is a named part too, and so are its tabs and groups: `ribbon name mainRibbon collapsible collapsed`, `tab @homeTab name homeTab`, `group @clipboardGroup name clipboardGroup`. With `collapsible` the person double-clicks a tab to fold the ribbon to its tabs, and opening a tab unfolds it; `collapsed` starts it folded. Code reads and sets the open tab as `part.tab` (from 1; a hidden tab gives way to the first visible one) and the folding as `part.collapsed`, and hides a tab or group with its `visible`.
+A ribbon is a named part too, and so are its tabs and groups: `<Ribbon name="mainRibbon" collapsible="true" collapsed="true">`, `<Tab title="@homeTab" name="homeTab">`, `<Group title="@clipboardGroup" name="clipboardGroup">`. With `collapsible` the person double-clicks a tab to fold the ribbon to its tabs, and opening a tab unfolds it; `collapsed` starts it folded. Code reads and sets the open tab as `part.tab` (from 1; a hidden tab gives way to the first visible one) and the folding as `part.collapsed`, and hides a tab or group with its `visible`.
 
-A sidebar is a named part: `sidebar left name nav width 280 min 200 max 480 resizable collapsible collapsed maximizable grid 4 columns`. Its width is in pixels (240 without `width`, 100 to 1600). With `resizable` the person drags its inner edge between `min` and `max`; with `collapsible` a button folds it to a narrow strip and back, and `collapsed` starts it folded; with `maximizable` a button lets it fill the window. `grid n columns` gives its own grid (3 without it). Code reads and sets `part.collapsed` and `part.maximized`. The old form `sidebar left span 3` is an error that **Update the sidebars** fixes.
+A sidebar is a named part: `<Sidebar side="left" name="nav" width="280" min="200" max="480" resizable="true" collapsible="true" collapsed="true" maximizable="true" columns="4">`. Its width is in pixels (240 without `width`, 100 to 1600). With `resizable` the person drags its inner edge between `min` and `max`; with `collapsible` a button folds it to a narrow strip and back, and `collapsed` starts it folded; with `maximizable` a button lets it fill the window. `columns` gives its own grid (3 without it). Code reads and sets `part.collapsed` and `part.maximized`.
 
-A window can declare its own regions. A window's region replaces the app's region of the same kind, and a window's sidebar replaces the app's sidebar on the same side. The other regions still come from the app.
+A window can declare its own regions, with the same elements in its own `.cxaml` file:
+
+```xml
+<Window class="todo.Users" title="@usersTitle" onopen="usersOpened">
+  <Menu name="usersMenu">
+    <Item caption="@fileItem" name="usersFileItem">
+      <Item caption="@mainItem" name="mainItem" opens="close" />
+      <Item kind="separator" />
+      <Item caption="@languageItem" name="usersLanguageItem" opens="language" />
+    </Item>
+  </Menu>
+  <Sidebar side="left" name="nav" width="280" min="200" max="480" resizable="true" columns="4">
+    <List name="userList" at="1,1" span="4" rows="10" bind="users" show="name" />
+  </Sidebar>
+  <Content name="main" at="1,1" span="12" rows="11">
+    <View name="UsersView" />
+  </Content>
+</Window>
+```
+
+A window's region replaces the app's region of the same kind, and a window's sidebar replaces the app's sidebar on the same side. The other regions still come from the app.
 
 ### Commands
 
@@ -1367,19 +1604,20 @@ A link does one of three things: opens the address in `to`, opens the address it
 
 Icons are [Lucide](https://lucide.dev)'s, by name: `icon "save"`, `icon "trash"`, `icon "triangle-alert"`. A button, a menu item and a toolbar or ribbon button show one beside their caption, and the `icon` part shows one on its own. The checker knows every name and suggests the nearest for a misspelt one; the designer offers them all. An application carries only the icons it uses, with Lucide's license in its `THIRD_PARTY_NOTICES.md`.
 
-Menu items and toolbar and ribbon buttons are commands. Their properties:
+Menu items and toolbar and ribbon buttons are commands, `<Item>` elements. Their attributes:
 
-| Property | On | Meaning |
+| Attribute | On | Meaning |
 |---|---|---|
-| `"caption"` | all | The text, right after the kind. A menu item needs one; a button needs a caption or an icon. |
-| `name n` | all | The command's name, for handlers. |
-| `icon "name"` | all | An icon, by its name among Clarity's icons. |
-| `key "Ctrl+N"` | all | The key that runs it: shown in the menu, or in the button's tooltip. A ribbon button's works whichever tab is open. One key runs one command in a frame; the window's own buttons go first. |
-| `large` | ribbon buttons | A large button. |
-| `on click -> Target` | all | Opens a window, or `close`, `quit`, `undo`, `redo`, `language`, `theme` or `keys` (the keys window, where the project file says `keys editable`). |
-| `on click: handler` | all | Runs a handler. |
+| `kind` | toolbar and ribbon | `button`, or `separator` (also in a menu). A menu's items have no kind. |
+| `caption="@key"` | all | The text. A menu item needs one; a button needs a caption or an icon. |
+| `name` | all | The command's name, for handlers. |
+| `icon="name"` | all | An icon, by its name among Clarity's icons. |
+| `key="Ctrl+N"` | all | The key that runs it: shown in the menu, or in the button's tooltip. A ribbon button's works whichever tab is open. One key runs one command in a frame; the window's own buttons go first. |
+| `large="true"` | ribbon buttons | A large button. |
+| `opens="Target"` | all | Opens a window (with `newWindow="true"`, in a desktop window of its own), or `close`, `quit`, `undo`, `redo`, `language`, `theme` or `keys` (the keys window, where the project file says `keys editable`). |
+| `onclick="handler"` | all | Runs a handler. |
 
-An item with a submenu opens the submenu, so it has no `on click` of its own.
+An item with a submenu opens the submenu, so it has no `onclick` or `opens` of its own.
 
 ### Themes
 
@@ -1448,7 +1686,7 @@ Other names are colors of the theme's own, for its parts and styles.
 
 ## 8. Code behind
 
-A window's handlers are in a `code` block named after the window, in the same file as the window. The app's handlers are in a `code` block named after the app, and an entity's data events in one named after the entity (see [Data events](#data-events)).
+A window's handlers are in a `code` block named after the window, in its module's `.clarity` file (the window's own `.cxaml` names them). The app's handlers are in a `code` block named after the app, and an entity's data events in one named after the entity (see [Data events](#data-events)).
 
 ```clarity
 code CustomerForm
@@ -1516,7 +1754,7 @@ A name that is both data and a part in the same window is an error.
 | `caret` | text boxes and memos | integer: where the caret is, as how many characters stand before it (0 at the start) | yes: the caret moves there, selecting nothing |
 | `selectedText` | text boxes and memos | text: what the person selected; empty when nothing is | no |
 
-A text box or memo takes text from code where the person is: `manuscriptBox.insert(text)` puts it where the selection is (at the caret when nothing is selected), replacing the selection, as one step Ctrl+Z takes back; it goes to the field the memo binds, without its `on change`. So a tool inserts at the caret: `manuscriptBox.insert("> " + manuscriptBox.selectedText)` turns the selection into a quote. A memo can have a toolbox of such tools, a page of its own as a canvas's is: `memo name manuscriptBox ... markdown toolbox WritingTools` with `page WritingTools: toolbox` holding tools with `on click` (`tool name quoteTool icon "quote" at 1,1 on click: quoteClicked`), buttons and labels; it comes at the caret: Ctrl+Space calls it up just under the caret, and a right-click moves the caret where it was pressed and calls it up there, with the memo's Cut, Copy and Paste as its last row. A tool's handler runs on the text where the person is, then the toolbox goes; a press beside it or Escape closes it too. Written `toolbox WritingTools popup` it floats over the window instead, or `slideout` against the memo's edge, while the memo may be written in (in a markdown memo while it shows Write). Painting tools (`does`, size, colors, layers) are a canvas's.
+A text box or memo takes text from code where the person is: `manuscriptBox.insert(text)` puts it where the selection is (at the caret when nothing is selected), replacing the selection, as one step Ctrl+Z takes back; it goes to the field the memo binds, without its `on change`. So a tool inserts at the caret: `manuscriptBox.insert("> " + manuscriptBox.selectedText)` turns the selection into a quote. A memo can have a toolbox of such tools, a page of its own as a canvas's is: `<Memo name="manuscriptBox" ... markdown="true" toolbox="caret" toolboxPage="WritingTools" />` with a `<Toolbox class="novel.WritingTools">` file holding tools with `onclick` (`<Tool name="quoteTool" at="1,1" span="1" icon="quote" onclick="quoteClicked" />`), buttons and labels; it comes at the caret: Ctrl+Space calls it up just under the caret, and a right-click moves the caret where it was pressed and calls it up there, with the memo's Cut, Copy and Paste as its last row. A tool's handler runs on the text where the person is, then the toolbox goes; a press beside it or Escape closes it too. Written `toolbox="popup"` it floats over the window instead, or `toolbox="slideout"` against the memo's edge, while the memo may be written in (in a markdown memo while it shows Write). Painting tools (`does`, size, colors, layers) are a canvas's.
 
 A passage put in from elsewhere can keep where it came from as a link into the application: `manuscriptBox.insert("[" + f.text + "](clarity:fragment/" + f.id + ")")`. The preview, or a markdown part, shows it as a link; a click on it opens no browser but runs the part's `on link` handler, which reads the address as `manuscriptBox.link` (`clarity:fragment/412`) and goes there.
 
@@ -1543,11 +1781,14 @@ A handler can ask the person something: a yes or no, a text, a number, a day, a 
 - **The answer** is the last value of the handler after `then`. Values written in the call come first (`then lend(album)`), which is how what the asking handler knew reaches the answering one, as it was when it asked. The answer's type must be the type of the handler's last parameter.
 - **A dialog window of your own** answers too. A dialog that gives a value says its type, and its handlers close it with one:
 
-      page PickFriend: dialog gives Friend
-          data friends: list<Friend>
-          table name grid at 1,1 span 12 rows 6 bind friends columns name
-          button @ok name okButton at 1,7 span 2 on click: picked
+      <!-- design/PickFriend.cxaml -->
+      <Dialog class="loans.PickFriend" gives="Friend">
+        <Data name="friends" type="list&lt;Friend&gt;" />
+        <Table name="grid" at="1,1" span="12" rows="6" bind="friends" columns="name" />
+        <Button name="okButton" at="1,7" span="2" caption="@ok" onclick="picked" />
+      </Dialog>
 
+      // in the module
       code PickFriend
           handler picked
               close with grid.selected
@@ -1562,13 +1803,26 @@ A handler can ask the person something: a yes or no, a text, a number, a day, a 
 
 A canvas is drawn by its draw handler, wired with `on draw`. The handler draws shapes in the canvas's own units (`units 200 x 100`, 100 x 100 without it), x to the right and y down; the canvas scales them to fit the part, in proportion and centered.
 
-```clarity
-page Main: window
-    data speed: integer, default 80
-    canvas name dial at 1,1 span 12 rows 7 on draw: drawDial
-    button @fasterCaption name faster at 7,8 span 6 key "+" on click: change(10)
+```xml
+<!-- dial/design/Main.cxaml -->
+<Window class="dial.Main">
+  <Content name="main" at="1,1" span="12" rows="8">
+    <View name="MainView" />
+  </Content>
+</Window>
+```
 
-code Main
+```xml
+<!-- dial/design/MainView.cxaml -->
+<View class="dial.MainView">
+  <Data name="speed" type="integer" default="80" />
+  <Canvas name="dial" at="1,1" span="12" rows="7" none="surface" ondraw="drawDial" />
+  <Button name="faster" at="7,8" span="6" caption="@fasterCaption" key="+" onclick="change(10)" />
+</View>
+```
+
+```clarity
+code MainView
     handler drawDial
         let angle = 210 - speed * 240 / 200
         dial.clear("panel")
@@ -1598,12 +1852,25 @@ code Main
 - The draw handler runs when the window opens and after every other handler of the window, each time on an empty drawing, so the canvas always shows the data as it is. Only a canvas's own draw handler draws on it, and the handlers it calls that nothing else runs: `draw_mark(5, 100, 100)` can draw one square of a board. A handler that an event or another handler also runs cannot draw, since its shapes would land outside a drawing.
 - `on click: handler` on a canvas runs the handler when the canvas is clicked, with `canvas.x` and `canvas.y` saying where, in the canvas's units, rounded down. They are read, not set, and 0 before the first click. A click beside the drawing, where the part shows none of it, runs nothing. The window draws the canvas anew after the handler, as after any other.
 
-```clarity
-page Game: window
-    data status: text
-    canvas name board at 1,1 span 12 rows 8 units 300 x 300 on draw: drawBoard on click: boardClicked
+```xml
+<!-- noughts/design/Game.cxaml -->
+<Window class="noughts.Game">
+  <Content name="main" at="1,1" span="12" rows="8">
+    <View name="GameView" />
+  </Content>
+</Window>
+```
 
-code Game
+```xml
+<!-- noughts/design/GameView.cxaml -->
+<View class="noughts.GameView">
+  <Data name="status" type="text" />
+  <Canvas name="board" at="1,1" span="12" rows="8" units="{&quot;height&quot;:300,&quot;width&quot;:300}" none="surface" ondraw="drawBoard" onclick="boardClicked" />
+</View>
+```
+
+```clarity
+code GameView
     handler drawBoard
         board.clear("panel")
 
@@ -1619,6 +1886,7 @@ code Game
             square = square + 3
         status = "Square {square}"
 ```
+
 - `zoom` on a canvas lets the person zoom and pan its drawing, as Clarity's own diagram designer does, for a drawing larger than the part shows well, such as a diagram. It starts whole, fitted in proportion. The wheel pans (with Shift sideways), Ctrl (Cmd on macOS) with the wheel or a touchpad's pinch zooms around the pointer, and three buttons in its top right corner zoom out, show the zoom it is at (a click shows it whole again) and zoom in, named in Clarity's words `zoomOut`, `zoomWhole` and `zoomIn`. It zooms from a quarter of its size up to three times (further when the whole drawing is smaller or larger than that), and pans past its edges. The view stays while the canvas is drawn anew. `canvas.x` and `canvas.y` stay in the canvas's units, whatever is in view.
 - `on drag: handler` runs while the pointer moves on the canvas with its button down, and `on drop: handler` once when it is let go. Both read where the pointer is (`canvas.x`, `canvas.y`, at the canvas's nearest edge when it is beside it) and where it was pressed (`canvas.fromX`, `canvas.fromY`), in the canvas's units. A press that does not move is a click. The handler runs with the latest place: moves that come while it runs are not queued one by one. The canvas is drawn anew after each, so code that moves what it draws by `canvas.x - canvas.fromX` shows it moving; the drop is the place to save. On a canvas with `zoom`, a drag pans instead when there is no drag handler, or when it starts on empty paper; a press on something drawn (a box, a circle, an ellipse, a ring, a picture or an object; not lines or text) is the handler's drag, whatever the handler does with it, as in Clarity's diagram designer. A panning drag has no drop.
 - `on drop` without `on drag`: the canvas carries a box itself, as Clarity's diagram designer does. A press on a box (as `on connect` finds boxes, below) and a drag move the box and everything drawn inside it with the pointer, by whole grid steps when the canvas has `snap`, and the end of a link that lies in the box comes along; no handler runs while it moves, so a large drawing moves as smoothly as a small one. When the person lets go, `on drop` runs once with where it was pressed (`canvas.fromX`, `canvas.fromY`) and where that point was carried to (`canvas.x`, `canvas.y`), so the code moves the box it was pressed on by `canvas.x - canvas.fromX` and saves it. The canvas shows the box where it was put until the drawing comes back. Let go where it was, nothing runs. A drag on empty paper pans a canvas with `zoom`.
@@ -1627,15 +1895,28 @@ code Game
 - `dots 3 muted` says how many pixels across a grid's dots are (1 to 20; 2 without it) and their color (a theme color by name, or written out; the theme's `border` without it, and the color can be left out: `dots 3`). They are the same size whatever the zoom. Code reads and sets them as `canvas.dotSize` and `canvas.dotColor`, as the line says until a handler sets them; an empty color is the theme's border again.
 - `on bend: handler` lets people bend the canvas's links, as Clarity's diagram designer does: a press on a link adds a point there (or takes the point under it), dragging moves that point, and a double click on a point takes it away; the points of the link in hand show while it is. When the person lets go, the handler runs and reads which link (`canvas.bent`, its name) and its points now (`canvas.via`, a `list<integer>`), to keep them: `association.via = sheet.via` and `save association`. The canvas draws the link with those points until the drawing comes back with them. A press on a shape drawn over a link (a box above its line) is not a bend, and a press on no link is a click or a drag as before.
 
-```clarity
-page Sheet: window
-    data boxX: integer, default 20
-    data boxY: integer, default 20
-    data startX: integer
-    data startY: integer
-    canvas name sheet at 1,1 span 12 rows 10 units 3000 x 2000 zoom on draw: drawSheet on drag: dragged on drop: dropped
+```xml
+<!-- sheets/design/Sheet.cxaml -->
+<Window class="sheets.Sheet">
+  <Content name="main" at="1,1" span="12" rows="10">
+    <View name="SheetView" />
+  </Content>
+</Window>
+```
 
-code Sheet
+```xml
+<!-- sheets/design/SheetView.cxaml -->
+<View class="sheets.SheetView">
+  <Data name="boxX" type="integer" default="20" />
+  <Data name="boxY" type="integer" default="20" />
+  <Data name="startX" type="integer" />
+  <Data name="startY" type="integer" />
+  <Canvas name="sheet" at="1,1" span="12" rows="10" units="{&quot;height&quot;:2000,&quot;width&quot;:3000}" zoom="true" none="surface" ondraw="drawSheet" ondrag="dragged" ondrop="dropped" />
+</View>
+```
+
+```clarity
+code SheetView
     handler drawSheet
         sheet.clear("panel")
         sheet.rect(boxX, boxY, 200, 100, "raised")
@@ -1651,15 +1932,29 @@ code Sheet
         startX = 0
         startY = 0
 ```
+
 - `on connect: handler` lets people draw a new line from one box to another, as Clarity's diagram designer does. A box is a shape the canvas can hit (a rect, circle, ellipse, ring, picture or object), together with the shapes under it that hold it whole, so a box drawn as an outline, a body and a header is one box; a shape over the whole paper is the paper. While the pointer is over a box, a small dot in the theme's accent shows in the middle of each side, with a crosshair over a dot. A press on a dot starts a new line (before the box's drag and before a bend): a dashed line follows the pointer and the box under it is outlined. No handler runs while it is drawn. When the person lets go, the handler runs once and reads where the line started (`canvas.fromX`, `canvas.fromY`: the middle of the box it started from) and where it was let go (`canvas.x`, `canvas.y`), in the canvas's units as a drop reads them, so the code finds the two boxes the way its drag finds the one it moves. Let go on the same box or on empty paper, it still runs and the code decides; let go where it was pressed, nothing runs. `canvas.connecting` (a bool, false until code sets it) makes any press on a box start a new line instead of a drag, from where it was pressed, so an app can offer a line tool as the designer's palette does. The dots and the line are drawn over the drawing, never in it, and look the same on every surface. A new line is one edit for undo, like a drop. The right button draws a new line too, from anywhere on a box, without the line tool: a right press and drag from one box to another is the same new line, and a right click that does not move opens the canvas's `menu` instead. Only a canvas whose code draws it has `on connect`: the checker refuses it on a canvas with a `mode` or one an engine draws, and without `on connect` a canvas shows no dots and its pointer works as before.
 
-```clarity
-page Diagram: window
-    data types: list<ClassType>
-    canvas name sheet at 1,1 span 12 rows 10 units 4000 x 3000 zoom on draw: drawTypes on connect: typesConnected
-    button "Line" name lineTool at 1,11 span 2 on click: lineToolClicked
+```xml
+<!-- modelling/design/Diagram.cxaml -->
+<Window class="modelling.Diagram">
+  <Content name="main" at="1,1" span="12" rows="11">
+    <View name="DiagramView" />
+  </Content>
+</Window>
+```
 
-code Diagram
+```xml
+<!-- modelling/design/DiagramView.cxaml -->
+<View class="modelling.DiagramView">
+  <Data name="types" type="list&lt;ClassType&gt;" />
+  <Canvas name="sheet" at="1,1" span="12" rows="10" units="{&quot;height&quot;:3000,&quot;width&quot;:4000}" zoom="true" none="surface" ondraw="drawTypes" onconnect="typesConnected" />
+  <Button name="lineTool" at="1,11" span="2" caption="@lineToolCaption" onclick="lineToolClicked" />
+</View>
+```
+
+```clarity
+code DiagramView
     handler typesConnected
         let sourceId = 0
         let targetId = 0
@@ -1674,6 +1969,7 @@ code Diagram
     handler lineToolClicked
         sheet.connecting = not sheet.connecting
 ```
+
 - `on resize: handler` lets people resize a box by dragging its corner, as Clarity's diagram designer does. A box is what `on connect` calls a box. While the pointer is over a box, a small square grip in the theme's accent shows at its bottom-right corner, with the resize cursor over it. A press on the grip (it comes before the box's dot, carry, bend and pan) starts a resize: a dashed outline of the box at its new size follows the pointer. The box's top-left corner stays; its right and bottom edges follow the pointer in whole units, on the grid when the canvas has `snap`, and it is never smaller than 40 by 30 units (on the grid, the next grid step past that). No handler runs while it is dragged. When the person lets go, the handler runs once and reads where the box's bottom-right corner was (`canvas.fromX`, `canvas.fromY`) and where it is now (`canvas.x`, `canvas.y`), in the canvas's units. The code finds the box whose corner was at `fromX`, `fromY` (a point just inside it, `fromX - 1`, `fromY - 1`, is in the box) and makes it `canvas.x - box.x` wide and `canvas.y - box.y` high. Let go at the size it had, nothing runs; a pointer taken away mid-drag drops it. A resize is one edit for undo, like a drop. `canvas.resizable` (a bool, true until code sets it) turns the grip off and on, so an app shows it only while its boxes have a size of their own. The grip and the outline are drawn over the drawing, never in it. Only a canvas whose code draws it has `on resize`: the checker refuses it on a canvas with a `mode` or one an engine draws, and without `on resize` a canvas shows no grip and its pointer works as before.
 
 ```clarity
@@ -1685,6 +1981,7 @@ code Diagram
                 t.height = sheet.y - t.y
                 save t
 ```
+
 - `sin(degrees)` and `cos(degrees)` give a decimal, rounded to 10 decimals.
 
 ### Canvas modes
@@ -1699,7 +1996,7 @@ A canvas the person changes has a `mode`; without one, its draw handler draws it
 
 - `tools pen, eraser` names the tools of the mode the person may use, in the order its toolbar shows them: `pen` (soft edges), `pencil` (hard pixels), `eraser`, `fill` (the area of near colours under the press takes the ink) and `picker` (the pixel pressed becomes the ink) for paint, `select`, `line`, `rect`, `ellipse`, `path` and `text` for vector, `select` (drag an object) and `connect` (draw a new line from one object to another, which runs `on connect`) for a diagram in mode objects with `on connect`; all of them without it. A diagram without `on connect` has no tools: a press drags.
 - `toolbox` puts a canvas's tools in a toolbox (a diagram's built-in one: select, connect, zoom in and out), as a paint program's: a grid of the tools with the brush's size and opacity and the foreground and background colours (a click on one opens the palette; the arrow swaps them). `toolbox` (or `toolbox popup`) floats over the window, dragged by its title and folded with its arrow; `toolbox slideout` lies against the canvas's right edge, as high as the canvas. Without it the tools are a strip on the canvas. The toolbox's tool, size and foreground colour are the canvas's `tool`, `brush` and `ink`, which code reads and sets too.
-- `toolbox CoverTools` shows a toolbox page instead of Clarity's own: a toolbox is designed as a view is, `page CoverTools: toolbox`, its parts on its grid (`grid 4 columns`), and placed in the canvas that names it, its code joining the window's. Its parts have a given look: `tool` (a button with an icon), `toolgroup` (tools inside it, one button showing the tool last used, the others beside it while it is held or right-clicked), `toolsize` and `toolopacity` (the brush's size and the paint's opacity, less and more), `toolcolors` (the foreground and background colours, picked and swapped), and buttons, labels, headings and lines. What a tool does is built in, `does pencil`, or coded, `on click: stampStar`, a handler of the toolbox's code; the built-in actions are the canvas tools of paint and vector (`pen`, `pencil`, `spray`, `eraser`, `fill`, `picker`, `select`, `ellipseSelect`, `lasso`, `line`, `rect`, `ellipse`, `path`, `text`) and `rotate`, `flipAcross`, `flipDown`, `crop`, `import`, `export`, `zoomIn` and `zoomOut`. A tool the canvas's mode does not have is an error at the canvas, so one toolbox serves a painting canvas, another a vector drawing, and coded tools any other use. New window offers a toolbox to start from. On a painting canvas, `does adjust` opens the colour dialog (hue, saturation, brightness, contrast), shown on the picture as they change and kept with OK as one edit, on the selection or the whole picture; `toollayers` lists the picture's layers while the canvas is open: each shown or hidden, taken in hand to paint on, added, removed and moved, the picture kept being the shown layers laid over each other (a change of the picture otherwise, Ctrl+Z or another record, folds them back into one).
+- `toolboxPage="CoverTools"` shows a toolbox page instead of Clarity's own: a toolbox is designed as a view is, in its own file with a `<Toolbox class="novel.CoverTools">` root, its parts on its grid (`columns="4"`), and placed in the canvas that names it, its code joining the window's. Its parts have a given look: `tool` (a button with an icon), `toolgroup` (tools inside it, one button showing the tool last used, the others beside it while it is held or right-clicked), `toolsize` and `toolopacity` (the brush's size and the paint's opacity, less and more), `toolcolors` (the foreground and background colours, picked and swapped), and buttons, labels, headings and lines. What a tool does is built in, `does pencil`, or coded, `on click: stampStar`, a handler of the toolbox's code; the built-in actions are the canvas tools of paint and vector (`pen`, `pencil`, `spray`, `eraser`, `fill`, `picker`, `select`, `ellipseSelect`, `lasso`, `line`, `rect`, `ellipse`, `path`, `text`) and `rotate`, `flipAcross`, `flipDown`, `crop`, `import`, `export`, `zoomIn` and `zoomOut`. A tool the canvas's mode does not have is an error at the canvas, so one toolbox serves a painting canvas, another a vector drawing, and coded tools any other use. New window offers a toolbox to start from. On a painting canvas, `does adjust` opens the colour dialog (hue, saturation, brightness, contrast), shown on the picture as they change and kept with OK as one edit, on the selection or the whole picture; `toollayers` lists the picture's layers while the canvas is open: each shown or hidden, taken in hand to paint on, added, removed and moved, the picture kept being the shown layers laid over each other (a change of the picture otherwise, Ctrl+Z or another record, folds them back into one).
 - `brush 4` (1 to 100 pixels, 2 without it) and `ink accent` (a theme color by name, or written out) are how wide and in which color paint and vector draw. A vector drawing keeps a theme color written out, so other programs show it alike.
 - `on change: handler` runs when an edit of the canvas ended: an object dropped, a stroke painted, a shape added, changed, moved or deleted. Without it the change is lost, which the designer warns about.
 - `canvas.selected` is what the person touched last: the record of the object (mode objects), or the place of the shape in the drawing, from 1, and 0 for none (mode vector). Handlers set `canvas.tool`, `canvas.brush` and `canvas.ink`, so buttons can be a palette.
@@ -1714,12 +2011,46 @@ entity ClassType
 entity Note
     picture: image
     drawing: text
+```
 
-page Diagram: window
-    data types: list<ClassType>
-    canvas name diagram at 1,1 span 12 rows 10 units 4000 x 3000 zoom grid 20 snap mode objects types at x, y on draw: drawTypes on change: typeMoved
+```xml
+<!-- notes/design/Diagram.cxaml -->
+<Window class="notes.Diagram">
+  <Content name="main" at="1,1" span="12" rows="10">
+    <View name="DiagramView" />
+  </Content>
+</Window>
+```
 
-code Diagram
+```xml
+<!-- notes/design/DiagramView.cxaml -->
+<View class="notes.DiagramView">
+  <Data name="types" type="list&lt;ClassType&gt;" />
+  <Canvas name="diagram" at="1,1" span="12" rows="10" mode="objects" objects="{&quot;list&quot;:&quot;types&quot;,&quot;x&quot;:&quot;x&quot;,&quot;y&quot;:&quot;y&quot;}" units="{&quot;height&quot;:3000,&quot;width&quot;:4000}" zoom="true" grid="20" snap="true" none="surface" ondraw="drawTypes" onchange="typeMoved" />
+</View>
+```
+
+```xml
+<!-- notes/design/Sketch.cxaml -->
+<Window class="notes.Sketch">
+  <Content name="main" at="1,1" span="12" rows="9">
+    <View name="SketchView" />
+  </Content>
+</Window>
+```
+
+```xml
+<!-- notes/design/SketchView.cxaml -->
+<View class="notes.SketchView">
+  <Data name="note" type="Note" />
+  <Canvas name="sketch" at="1,1" span="6" rows="8" bind="note.picture" mode="paint" brush="4" ink="accent" none="surface" onchange="saveNote" />
+  <Canvas name="drawing" at="7,1" span="6" rows="8" bind="note.drawing" mode="vector" grid="10" snap="true" none="surface" onchange="saveNote" />
+  <Button name="redButton" at="1,9" span="2" caption="@redCaption" onclick="red" />
+</View>
+```
+
+```clarity
+code DiagramView
     handler drawTypes
         diagram.clear()
         for t in types
@@ -1730,13 +2061,7 @@ code Diagram
     handler typeMoved
         save diagram.selected
 
-page Sketch: window
-    data note: Note
-    canvas name sketch at 1,1 span 6 rows 8 bind note.picture mode paint brush 4 ink accent on change: saveNote
-    canvas name drawing at 7,1 span 6 rows 8 bind note.drawing mode vector grid 10 snap on change: saveNote
-    button "Red" name redButton at 1,9 span 2 on click: red
-
-code Sketch
+code SketchView
     handler saveNote
         save note
 
@@ -1868,13 +2193,28 @@ engine Screen from "screen.wasm"
     limit 1 second
     tells finished(time: integer)
     hears start(level: integer)
+```
 
-page Play: window
-    data best: integer
-    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Screen on finished: gameOver
-    button "Start" name go at 1,11 span 2 on click: startGame
+```xml
+<!-- game/design/Play.cxaml -->
+<Window class="game.Play">
+  <Content name="main" at="1,1" span="12" rows="11">
+    <View name="PlayView" />
+  </Content>
+</Window>
+```
 
-code Play
+```xml
+<!-- game/design/PlayView.cxaml -->
+<View class="game.PlayView">
+  <Data name="best" type="integer" />
+  <Canvas name="sky" at="1,1" span="12" rows="10" units="{&quot;height&quot;:100,&quot;width&quot;:160}" runs="Screen" tells="[{&quot;handler&quot;:&quot;gameOver&quot;,&quot;tell&quot;:&quot;finished&quot;}]" none="surface" />
+  <Button name="go" at="1,11" span="2" caption="@startCaption" onclick="startGame" />
+</View>
+```
+
+```clarity
+code PlayView
     handler gameOver(time: integer)
         best = time
 
@@ -1976,7 +2316,7 @@ record Dot
 - **A record is never none.** It always has its fields; compare a field instead. Only a part's selected row is set to `none`.
 - **Never stored.** `save`, `delete` and `find` on a record are errors.
 - **Engines** written in Clarity give and take records as JSON objects of their fields.
-- **App code** uses them too: functions and actions take and give them, a window holds one (`data picked: Node`, new when the window opens) or a list of them (`data nodes: list<Node>`, empty when it opens), and a `list`, `table`, `tree` or `treetable` shows such a list as it shows records of an entity: `columns` and `show` name its fields, `grid.selected` is the record of the chosen row, and `on select` and `on open` run. A record has no id, so a row is its place in the list. Giving the window a new list (`nodes = outline()`) selects no row; code selects one again with `nav.selected = ...`. A table of records is not edited by the person (`edit`) and its rows are not moved by hand (`reorder`): build the list in code.
+- **App code** uses them too: functions and actions take and give them, a window holds one (`<Data name="picked" type="Node" />`, new when the window opens) or a list of them (`type="list&lt;Node&gt;"`, empty when it opens), and a `list`, `table`, `tree` or `treetable` shows such a list as it shows records of an entity: `columns` and `show` name its fields, `grid.selected` is the record of the chosen row, and `on select` and `on open` run. A record has no id, so a row is its place in the list. Giving the window a new list (`nodes = outline()`) selects no row; code selects one again with `nav.selected = ...`. A table of records is not edited by the person (`edit`) and its rows are not moved by hand (`reorder`): build the list in code.
 
 ```clarity
 record Node
@@ -1999,19 +2339,34 @@ function outline(projects: list<Project>) -> list<Node>
         n.project = p
         all = all + [n]
     return all
+```
 
-page Workspace: window
-    on open: loadNodes
-    data projects: list<Project>
-    data nodes: list<Node>
-    tree name nav at 1,1 span 4 rows 20 bind nodes key key parent parent show label on select: chosen
+```xml
+<!-- modelling/design/Workspace.cxaml -->
+<Window class="modelling.Workspace" onopen="loadNodes">
+  <Content name="main" at="1,1" span="12" rows="20">
+    <View name="WorkspaceView" />
+  </Content>
+</Window>
+```
 
+```xml
+<!-- modelling/design/WorkspaceView.cxaml -->
+<View class="modelling.WorkspaceView">
+  <Data name="projects" type="list&lt;Project&gt;" />
+  <Data name="nodes" type="list&lt;Node&gt;" />
+  <Tree name="nav" at="1,1" span="4" rows="20" bind="nodes" rowKey="key" parentKey="parent" show="label" onselect="chosen" />
+</View>
+```
+
+```clarity
 code Workspace
     handler loadNodes
         projects = find p in Project order by p.name
         nodes = outline(projects)
         nav.selected = nodes[1]
 
+code WorkspaceView
     handler chosen
         if nav.selected.project != none
             message nav.selected.project.name
@@ -2296,7 +2651,7 @@ An integer is accepted where a decimal is expected. Nothing else converts by its
 
 ## 11. A complete example
 
-A project file and one module: a customer list with a filter that opens a form, the form that saves a customer, and a data event that clears the VAT number of a private customer.
+A project file, one module and the files of its app and windows: a customer list with a filter that opens a form, the form that saves a customer, and a data event that clears the VAT number of a private customer.
 
 `shop.clarity`:
 
@@ -2321,38 +2676,6 @@ entity Customer
     vatNumber: text(14), help @customerVatNumberHelp, label @customerVatNumberLabel
     notes: text, label @customerNotesLabel
 
-app Shop
-    main CustomerBrowse
-
-page CustomerBrowse: window
-    title @customerBrowseTitle
-    data customers: list<Customer>
-    on return: windowReturned
-
-    label @nameFilterLabel name nameFilterLabel at 1,1 span 2 for nameFilter
-    textbox name nameFilter at 3,1 span 4 placeholder @nameFilterPlaceholder on change: filterChanged
-    table name grid at 1,2 span 12 rows 8 bind customers columns name, kind on open: openClicked
-    button @newCaption name newCustomer at 9,10 span 2 on click -> CustomerForm
-    button @openButtonCaption name openButton at 11,10 span 2 on click: openClicked
-
-page CustomerForm: window
-    title @customerFormTitle
-    data customer: Customer
-
-    form name customerForm at 1,1 span 12 rows 4 bind customer
-        label @nameLabel name nameLabel at 1,1 span 3 for name
-        textbox name name at 4,1 span 6 bind customer.name
-        help name nameHelp at 10,1 span 3 for name
-        label @kindLabel name kindLabel at 1,2 span 3 for kind
-        radio name kind at 4,2 span 6 bind customer.kind on change: kindChanged
-        label @vatNumberLabel name vatNumberLabel at 1,3 span 3 for vatNumber
-        textbox name vatNumber at 4,3 span 4 bind customer.vatNumber
-        help name vatNumberHelp at 8,3 span 5 for vatNumber
-        label @notesLabel name notesLabel at 1,4 span 3 for notes
-        textbox name notes at 4,4 span 9 bind customer.notes
-    button @saveButtonCaption name saveButton at 9,6 span 2 key "Ctrl+S" default on click: saveClicked
-    button @closeFormCaption name closeForm at 11,6 span 2 cancel on click: closeClicked
-
 code Customer
     before save
         // Only business customers keep a VAT number, whichever window saves them.
@@ -2364,13 +2687,14 @@ code CustomerBrowse
         // The form may have saved a customer.
         filterChanged()
 
+code CustomerBrowseView
     handler filterChanged
         customers = find c in Customer where c.name contains nameFilter.text order by c.name
 
     handler openClicked
         open CustomerForm with customer = grid.selected
 
-code CustomerForm
+code CustomerFormView
     handler kindChanged
         vatNumber.enabled = customer.kind == Business
 
@@ -2391,6 +2715,71 @@ code CustomerForm
         close
 ```
 
+Beside it in `shop/design/` are the app and the windows, each a `.cxaml` file of its own. Each window shows its parts in a view. `open CustomerForm with customer = ...` fills the data of the view the window shows.
+
+`Shop.cxaml`, the app, which starts at the customer list:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<App class="customers.Shop" main="CustomerBrowse">
+</App>
+```
+
+`CustomerBrowse.cxaml` and `CustomerBrowseView.cxaml`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="customers.CustomerBrowse" title="@customerBrowseTitle" onreturn="windowReturned">
+  <Content name="main" at="1,1" span="12" rows="10">
+    <View name="CustomerBrowseView" />
+  </Content>
+</Window>
+```
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<View class="customers.CustomerBrowseView">
+  <Data name="customers" type="list&lt;Customer&gt;" />
+  <Label name="nameFilterLabel" at="1,1" span="2" caption="@nameFilterLabel" for="nameFilter" />
+  <Textbox name="nameFilter" at="3,1" span="4" placeholder="@nameFilterPlaceholder" onchange="filterChanged" />
+  <Table name="grid" at="1,2" span="12" rows="8" bind="customers" columns="name, kind" onopen="openClicked" />
+  <Button name="newCustomer" at="9,10" span="2" caption="@newCaption" opens="CustomerForm" />
+  <Button name="openButton" at="11,10" span="2" caption="@openButtonCaption" onclick="openClicked" />
+</View>
+```
+
+`CustomerForm.cxaml` and `CustomerFormView.cxaml`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="customers.CustomerForm" title="@customerFormTitle">
+  <Content name="main" at="1,1" span="12" rows="6">
+    <View name="CustomerFormView" />
+  </Content>
+</Window>
+```
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<View class="customers.CustomerFormView">
+  <Data name="customer" type="Customer" />
+  <Form name="customerForm" at="1,1" span="12" rows="4" bind="customer">
+    <Label name="nameLabel" at="1,1" span="3" caption="@nameLabel" for="name" />
+    <Textbox name="name" at="4,1" span="6" bind="customer.name" />
+    <Help name="nameHelp" at="10,1" span="3" for="name" />
+    <Label name="kindLabel" at="1,2" span="3" caption="@kindLabel" for="kind" />
+    <Radio name="kind" at="4,2" span="6" bind="customer.kind" none="orientation" onchange="kindChanged" />
+    <Label name="vatNumberLabel" at="1,3" span="3" caption="@vatNumberLabel" for="vatNumber" />
+    <Textbox name="vatNumber" at="4,3" span="4" bind="customer.vatNumber" />
+    <Help name="vatNumberHelp" at="8,3" span="5" for="vatNumber" />
+    <Label name="notesLabel" at="1,4" span="3" caption="@notesLabel" for="notes" />
+    <Textbox name="notes" at="4,4" span="9" bind="customer.notes" />
+  </Form>
+  <Button name="saveButton" at="9,6" span="2" caption="@saveButtonCaption" key="Ctrl+S" default="true" onclick="saveClicked" />
+  <Button name="closeForm" at="11,6" span="2" caption="@closeFormCaption" cancel="true" onclick="closeClicked" />
+</View>
+```
+
 The full shop example, with orders, a menu and a ribbon, is `examples/shop.clarity`.
 
 ## 12. Grammar summary
@@ -2408,7 +2797,7 @@ module-file   = "module" name
                 ("use" name)*
                 ["source" name]
                 declaration*
-declaration   = enum | entity | settings | page | app | theme | code | function | action | engine | cli | command | custom-part | library
+declaration   = enum | entity | settings | theme | code | function | action | engine | cli | command | custom-part | library
 
 enum          = "enum" Name
                     (Value ["label" String])+
@@ -2420,11 +2809,19 @@ type          = "text" ["(" n ")"] | "decimal" "(" p "," s ")" | "integer" | "mo
 modifier      = "required" | "unique" | "owned" | "cascade" | "computed"
               | ("min" | "max" | "default") value | ("pattern" | "label" | "help" | "column") String | "format" name
 
-page          = "page" Name ":" ("window" | "dialog" ["gives" type] | "view")
-                    (page-setting | region | part)*
-page-setting  = "title" String | "size" n "x" n
-              | "data" name ":" (Entity | "list" "<" Entity ">" | type-ref ["," "default" value])
-              | "grid" n "columns" | "on" ("open" | "close" | "return") ":" handler
+page-file     = <Root class="module.Name" root-attr*>            // design/Name.cxaml, one per page
+                    <Data name="name" type="type-ref" [default="value"] />*
+                    <Tells message="name[(params)]" />*                   // a view
+                    region-element* part-element*
+                </Root>
+Root          = "Window" | "Dialog" | "View" | "Splash" | "Toolbox"
+root-attr     = title="String" | width="n" height="n" | columns="n" | cell="n" | style="name"
+              | gives="type"                                             // a dialog
+              | ("onopen" | "onclose" | "onreturn")="handler"
+part-element  = <Kind attribute*> (part-element | content-view | page-element)* </Kind>   // or <Kind ... />
+content-view  = <View name="Name" ["on" tell="handler"]* />            // inside a Content
+page-element  = <("Tab" | "Step" | "Section") title="String"> part-element* </...>   // a tab, step or section
+attribute     = property="value"                                        // see the table in section 6
 custom-part   = "part" Name
                     ("native" String | "nuget" String version | "dll" String)
                     ["binds" type-ref] ["size" n "x" n] ["grows"] ["preview" String]
@@ -2433,20 +2830,18 @@ custom-part   = "part" Name
 library       = "library" Name
                     ("nuget" String version | "dll" String | "crate" String String | "go" String version | "cmake" String)
                     ("function" name "(" params ")" ["->" type-ref])*
-part          = kind [String] property*
-              | Name property* (name value)* ("on" name ":" handler)*   // a custom part
-                    (part | "tab" String | "pane")*        // containers only
-property      = "name" name | "at" col "," row | "span" n | "rows" n | "bind" path
-              | "for" name | "placeholder" String | "tooltip" String | "style" name | "readonly" | "taborder" n
-              | "key" String | "default" | "cancel" | "horizontal" | "vertical"
-              | "columns" name [Number] ("," name [Number])* | "resizable" | "sortable" | "striped" | "order" "by" name ["desc"] | "edit" name ["as" "switch"] ("," name ["as" "switch"])* | "show" names | "source" String | "surface" word
-              | "on" event ":" handler ["(" [value ("," value)*] ")"] | "on" "click" "->" Target ["in" "new" "window"]
-
-app           = "app" Name
-                    ("title" String | "main" Window | "data" ... | "on" "start" ":" handler | region)*
-region        = "menu" | "toolbar" | "ribbon" | "sidebar" ("left" | "right") ["span" n] | "footer"
-command       = ("item" | "button" | "separator") [String]
-                ("name" name | "icon" String | "key" String | "large" | "on" "click" (":" handler | "->" Target ["in" "new" "window"]))*
+app-file      = <App class="module.Name" app-attr*>                     // design/Name.cxaml, one per project
+                    <Data name="name" type="type-ref" [default="value"] />*
+                    region-element*
+                </App>
+app-attr      = title="String" | main="Window" | splash="Page" | splashFor="seconds"
+              | ("onstart" | "onunconnected")="handler"
+region-element = <Menu name="name"> frame-command* </Menu> | <Toolbar name="name"> frame-command* </Toolbar>
+              | <Ribbon name="name" [collapsible="true"] [collapsed="true"]> (<Tab title="String" name="name"> (<Group title="String" name="name"> frame-command* </Group>)* </Tab>)* </Ribbon>
+              | <Sidebar side=("left" | "right") name="name" [width="n"] [min="n"] [max="n"] [resizable="true"] [collapsible="true"] [collapsed="true"] [maximizable="true"] [columns="n"]> part-element* </Sidebar>
+              | <Footer [status="String"] columns="n"> part-element* </Footer>
+frame-command = <Item [kind=("button" | "separator")] [caption="String"] [name="name"] [icon="name"] [key="String"] [large="true"]
+                    [opens="Target" [newWindow="true"] | onclick="handler"]> frame-command* </Item>
 
 code          = "code" (Window | App)
                     ("handler" name ["(" [param ("," param)*] ")"]

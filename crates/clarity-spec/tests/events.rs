@@ -1,8 +1,9 @@
-use clarity_spec::edit::{Edit, apply};
+use clarity_spec::cxaml::{apply, read_page};
+use clarity_spec::edit::Edit;
 use clarity_spec::model::Handler;
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::{Event, WidgetKind, new_props, validate_props, widget_line};
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const PAGE: &str = "module m
 
@@ -14,7 +15,7 @@ page Card: window
 ";
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("m.clarity", source)])
+    load_converted([("m.clarity", source)])
         .diagnostics
         .into_iter()
         .filter(|d| d.severity == Severity::Error)
@@ -102,7 +103,8 @@ fn names_are_unique_in_a_window() {
 
 #[test]
 fn new_parts_get_the_first_free_name() {
-    let page = PAGE.find("page Card").unwrap() as u32;
+    let markup = clarity_spec::converted([("m.clarity", PAGE)]).into_iter().find(|(p, _)| p.ends_with("design/Card.cxaml")).map(|(_, t)| t).expect("the page's file");
+    let page = read_page(&markup, "").0.expect("the page").span.start;
     let edit = Edit::CreateWidget {
         container: page,
         kind: WidgetKind::Button,
@@ -114,7 +116,7 @@ fn new_parts_get_the_first_free_name() {
         part: None,
         height: None,
     };
-    let text = apply(PAGE, &edit).unwrap().text;
-    // `button1` is taken, so the new button is `button2`.
-    assert!(text.contains("button \"Button\" name button2 at 5,2 span 2"), "{text}");
+    let text = apply(None, &markup, &edit).unwrap().text;
+    // `button1` is taken, so the new button is `button2`, with its kind's own caption (written only when it differs).
+    assert!(text.contains("<Button name=\"button2\" at=\"5,2\" span=\"2\" />"), "{text}");
 }

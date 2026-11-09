@@ -1,7 +1,7 @@
 use clarity_spec::model::{PageKind, Widget, WindowSize};
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::{WidgetKind, widget_line};
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const CUSTOMERS: &str = "module c
 enum Kind
@@ -21,7 +21,7 @@ page CustomerBrowse: window
 
 fn diagnostics(page: &str) -> Vec<(Severity, String)> {
     let source = format!("module p\nuse c\n{page}");
-    load_sources([("c.clarity", CUSTOMERS), ("p.clarity", source.as_str())])
+    load_converted([("c.clarity", CUSTOMERS), ("p.clarity", source.as_str())])
         .diagnostics
         .into_iter()
         .map(|d| (d.severity, d.message))
@@ -127,8 +127,9 @@ page P: dialog
 
 #[test]
 fn widget_lines_round_trip() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/shop/counter.clarity");
-    let source = clarity_spec::cxaml::module_text_with_pages(&path).unwrap();
+    // The shop's counter written the old way, its window as a page block.
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/old-pages/counter.clarity");
+    let source = std::fs::read_to_string(path).unwrap();
     let (file, _) = parse(&source, "desk.clarity");
     for widget in all_widgets(&file.pages[0].widgets) {
         let line = widget_line(&widget.props);
@@ -282,11 +283,13 @@ fn page_names_share_the_namespace() {
         errs.is_empty(),
         "different modules may reuse names: {errs:#?}"
     );
-    let errs = errors(
-        "page A: window
-page A: view
-",
-    );
+    // Two windows of one name: two files whose roots both name it.
+    let project = clarity_spec::load_sources([
+        ("p.clarity", "module p\n"),
+        ("design/A.cxaml", "<Window class=\"p.A\" />\n"),
+        ("design/AlsoA.cxaml", "<View class=\"p.A\" />\n"),
+    ]);
+    let errs: Vec<String> = project.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.clone()).collect();
     assert_has(&errs, "'A' is already declared");
 }
 
@@ -304,9 +307,9 @@ fn a_window_holds_plain_values() {
     data customers: list<Customer>
 ";
     let source = format!("module p\nuse c\n{page}");
-    let project = load_sources([("c.clarity", CUSTOMERS), ("p.clarity", source.as_str())]);
+    let project = load_converted([("c.clarity", CUSTOMERS), ("p.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
-    let data = &project.files[1].pages[0].data;
+    let data = &project.pages().find(|p| p.name.name == "Calc").unwrap().data;
     let of: Vec<&DataKind> = data.iter().map(|d| &d.of).collect();
     assert!(matches!(of[0], DataKind::Value { ty, default: None } if ty.kind == TypeRefKind::Decimal), "{of:#?}");
     // A name is a plain value when it names an enum, a record when it names an entity.

@@ -72,7 +72,7 @@ fn migrations_add_a_list_as_an_empty_one() {
     let module = "module shop\n\nentity Product\n    name: text(80)\n    tags: list<text>\n\npage Card: window\n    data product: Product\n";
     let first = "migration \"First\"\n    add entity Product\n        name: text(80)\n";
     let second = "migration \"Tags\"\n    add field Product.tags: list<text>\n";
-    let project = clarity_spec::load_with_migrations([("shop.clarity", module)], [("0001.clarity", first), ("0002.clarity", second)]);
+    let project = clarity_spec::load_with_migrations(clarity_spec::converted([("shop.clarity", module)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", first), ("0002.clarity", second)]);
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     let mut settings: Settings = starter("Shop", "shop");

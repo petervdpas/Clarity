@@ -6,7 +6,7 @@
 
 use clarity_spec::model::FieldType;
 use clarity_spec::widgets::{self, WidgetKind};
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 const SHOP: &str = "module shop
 
@@ -34,7 +34,7 @@ fn errors_of(project: &Project) -> Vec<String> {
 }
 
 fn errors(source: &str) -> Vec<String> {
-    errors_of(&load_sources([("shop.clarity", source)]))
+    errors_of(&load_converted([("shop.clarity", source)]))
 }
 
 fn with(old: &str, new: &str) -> String {
@@ -45,11 +45,11 @@ fn with(old: &str, new: &str) -> String {
 #[test]
 fn a_folder_is_a_setting_a_folder_part_shows() {
     assert_eq!(errors(SHOP), Vec::<String>::new());
-    let project = load_sources([("shop.clarity", SHOP)]);
+    let project = load_converted([("shop.clarity", SHOP)]);
     let settings = project.files[0].entities.iter().find(|e| e.settings).unwrap();
     assert_eq!(settings.fields[1].ty, FieldType::Folder);
     assert_eq!(project.folder_settings(), ["photosFolder"]);
-    let part = &project.files[0].pages[0].widgets[0];
+    let part = &project.pages().nth(0).unwrap().widgets[0];
     assert_eq!(part.props.kind, WidgetKind::Folder);
     assert_eq!(widgets::widget_line(&part.props), "folder name photosBox at 1,1 span 6 bind settings.photosFolder");
     assert_eq!(widgets::widget_for(&FieldType::Folder), WidgetKind::Folder, "a settings window gets a folder part");
@@ -75,7 +75,7 @@ fn only_a_folder_part_shows_a_folder_setting() {
 #[test]
 fn a_file_store_keeps_its_files_in_a_folder_setting() {
     let checked = |location: &str| {
-        let mut project = load_sources([("shop.clarity", SHOP)]);
+        let mut project = load_converted([("shop.clarity", SHOP)]);
         clarity_spec::attach_stores(&mut project, vec!["photos".into()]);
         clarity_spec::check_store_folders(&mut project, &[("photos".into(), location.into())]);
         errors_of(&project)

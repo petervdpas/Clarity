@@ -6,7 +6,7 @@ use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Ui, starter};
 
 fn files(backend: Backend, ui: Ui) -> Vec<OutFile> {
-    let mut project = clarity_spec::load_sources([("shop.clarity", include_str!("../../../conformance/engines/shop.clarity"))]);
+    let mut project = clarity_spec::load_converted([("shop.clarity", include_str!("../../../conformance/engines/shop.clarity"))]);
     let bytes = include_bytes!("../../../conformance/engines/test.wasm").to_vec();
     clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes }]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);

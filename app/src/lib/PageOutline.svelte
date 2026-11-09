@@ -2,31 +2,39 @@
   import { tr } from "@clarity/ui/screen/model.ts";
   import type { Command } from "@clarity/ui/generated/Command.ts";
   import type { Edit } from "@clarity/ui/generated/Edit.ts";
-  import type { Page } from "@clarity/ui/generated/Page.ts";
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
   import type { Widget } from "@clarity/ui/generated/Widget.ts";
   import { pageDesigner } from "./pageDesignerStore.svelte";
   import type { ShownFrame } from "@clarity/ui/screen/frame.ts";
-  import { widgetInfo } from "@clarity/ui/screen/pages.ts";
+  import { placeOf, widgetInfo, type DesignKey, type ShownPage } from "@clarity/ui/screen/pages.ts";
 
   let {
     preview,
-    page,
+    shown,
     onedit,
     frame,
     rootName = null,
   }: {
     preview: Preview;
-    page: Page;
-    onedit: (edit: Edit) => void;
+    /** The window as designed, with the key of each thing it shows. */
+    shown: ShownPage;
+    /** An edit in the places of the file of `key`. */
+    onedit: (edit: Edit, key: DesignKey) => void;
     /** The regions the window shows, its own and the app's. */
     frame: ShownFrame;
     /** Overrides the root line, for the app. */
     rootName?: string | null;
   } = $props();
 
-  /** `id` is null for lines that cannot be picked, such as regions from the app. */
-  type Line = { id: number | null; key: string; depth: number; kind: string; text: string; removable: boolean };
+  /** `id` is the thing's key; null for lines that cannot be picked, such as regions from the app. */
+  type Line = { id: DesignKey | null; key: string; depth: number; kind: string; text: string; removable: boolean };
+
+  const page = $derived(shown.page);
+  /** A line's key in the list: the thing's key, or its kind and place for one without. */
+  const keyed = (thing: { span: { start: number } }) => {
+    const id = shown.keyOf(thing);
+    return { id, key: id ?? `at ${thing.span.start}` };
+  };
 
   const lines = $derived.by(() => {
     const out: Line[] = [];
@@ -36,16 +44,15 @@
       for (const w of sorted.filter((w) => !w.props.made)) {
         const p = w.props;
         const text = p.name ?? (p.caption ? tr(preview, p.caption) : null) ?? p.bind ?? "";
-        out.push({ id: w.span.start, key: String(w.span.start), depth, kind: widgetInfo(preview, p.kind).name, text, removable: true });
+        out.push({ ...keyed(w), depth, kind: widgetInfo(preview, p.kind).name, text, removable: true });
         if (w.menu) {
-          out.push({ id: w.menu.span.start, key: String(w.menu.span.start), depth: depth + 1, kind: "Context menu", text: w.menu.name ?? "", removable: true });
+          out.push({ ...keyed(w.menu), depth: depth + 1, kind: "Context menu", text: w.menu.name ?? "", removable: true });
           commands(w.menu.items, depth + 2);
         }
         walk(w.children, depth + 1);
         for (const inner of w.pages) {
           out.push({
-            id: inner.span.start,
-            key: String(inner.span.start),
+            ...keyed(inner),
             depth: depth + 1,
             kind: p.kind === "content" ? "View" : inner.title === null ? "Pane" : p.kind === "steps" ? "Step" : p.kind === "accordion" ? "Section" : "Tab",
             text: p.kind === "content" ? (inner.view ?? "") : inner.title ? tr(preview, inner.title) : "",
@@ -59,36 +66,36 @@
     const commands = (items: Command[], depth: number) => {
       for (const c of items) {
         const kind = c.items.length > 0 ? "Submenu" : COMMAND_NAMES[c.props.kind];
-        out.push({ id: c.span.start, key: String(c.span.start), depth, kind, text: c.props.name ?? (c.props.caption ? tr(preview, c.props.caption) : ""), removable: true });
+        out.push({ ...keyed(c), depth, kind, text: c.props.name ?? (c.props.caption ? tr(preview, c.props.caption) : ""), removable: true });
         commands(c.items, depth + 1);
       }
     };
-    const region = (id: number, kind: string, inherited: boolean, text = "") => {
+    const region = (thing: { span: { start: number } }, kind: string, inherited: boolean, text = "") => {
       out.push(
         inherited
           ? { id: null, key: "app:" + kind, depth: 1, kind, text: "from app", removable: false }
-          : { id, key: String(id), depth: 1, kind, text, removable: true },
+          : { ...keyed(thing), depth: 1, kind, text, removable: true },
       );
       return !inherited;
     };
     const f = frame;
-    if (f.menu && region(f.menu.value.span.start, "Menu", f.menu.inherited)) commands(f.menu.value.items, 2);
-    if (f.toolbar && region(f.toolbar.value.span.start, "Toolbar", f.toolbar.inherited)) commands(f.toolbar.value.items, 2);
-    if (f.ribbon && region(f.ribbon.value.span.start, "Ribbon", f.ribbon.inherited)) {
+    if (f.menu && region(f.menu.value, "Menu", f.menu.inherited)) commands(f.menu.value.items, 2);
+    if (f.toolbar && region(f.toolbar.value, "Toolbar", f.toolbar.inherited)) commands(f.toolbar.value.items, 2);
+    if (f.ribbon && region(f.ribbon.value, "Ribbon", f.ribbon.inherited)) {
       for (const tab of f.ribbon.value.tabs) {
-        out.push({ id: tab.span.start, key: String(tab.span.start), depth: 2, kind: "Tab", text: tab.title, removable: true });
+        out.push({ ...keyed(tab), depth: 2, kind: "Tab", text: tab.title, removable: true });
         for (const group of tab.groups) {
-          out.push({ id: group.span.start, key: String(group.span.start), depth: 3, kind: "Group", text: group.title, removable: true });
+          out.push({ ...keyed(group), depth: 3, kind: "Group", text: group.title, removable: true });
           commands(group.items, 4);
         }
       }
     }
-    for (const shown of [f.left, f.right]) {
-      if (shown && region(shown.value.span.start, "Sidebar", shown.inherited, shown.value.props.side)) walk(shown.value.widgets, 2);
+    for (const side of [f.left, f.right]) {
+      if (side && region(side.value, "Sidebar", side.inherited, side.value.props.side)) walk(side.value.widgets, 2);
     }
-    if (f.footer && region(f.footer.value.span.start, "Footer", f.footer.inherited)) {
+    if (f.footer && region(f.footer.value, "Footer", f.footer.inherited)) {
       const status = f.footer.value.statusSpan;
-      if (status) out.push({ id: status.start, key: String(status.start), depth: 2, kind: "Status", text: f.footer.value.status ?? "", removable: false });
+      if (status) out.push({ ...keyed({ span: status }), depth: 2, kind: "Status", text: f.footer.value.status ?? "", removable: false });
       walk(f.footer.value.widgets, 2);
     }
     walk(page.widgets, 1);
@@ -130,7 +137,8 @@
     class="danger"
     disabled={!picked?.removable}
     onclick={() => {
-      if (picked?.id != null) onedit({ op: "remove", item: picked.id });
+      const placed = placeOf(preview, picked?.id ?? null);
+      if (picked?.id != null && placed) onedit({ op: "remove", item: placed.at }, picked.id);
       pageDesigner.selected = null;
     }}>Remove</button
   >

@@ -1,7 +1,7 @@
 //! A spin box's range set from code: `levelBox.min` and `levelBox.max`, read
 //! as the line wrote them until code sets them, on every stack.
 
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const APP: &str = "module m
 
@@ -19,7 +19,7 @@ code Main
 ";
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("m.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("m.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]

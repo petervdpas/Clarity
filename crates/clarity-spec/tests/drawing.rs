@@ -5,7 +5,7 @@ use clarity_spec::code::StmtKind;
 use clarity_spec::model::CanvasUnits;
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::{Event, widget_line};
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const DIAL: &str = "module dial
 
@@ -31,7 +31,7 @@ code Main
 ";
 
 fn problems(source: &str) -> Vec<(Severity, String)> {
-    load_sources([("dial.clarity", source)]).diagnostics.into_iter().map(|d| (d.severity, d.message)).collect()
+    load_converted([("dial.clarity", source)]).diagnostics.into_iter().map(|d| (d.severity, d.message)).collect()
 }
 
 fn errors(source: &str) -> Vec<String> {

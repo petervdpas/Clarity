@@ -16,7 +16,7 @@ use serde_json::{Map, Value};
 use crate::code::{TypeRef, TypeRefKind};
 use crate::diagnostic::Diagnostic;
 use crate::model::{
-    Command, CommandKind, DataKind, Footer, Frame, Menu, Page, PageKind, Ribbon, RibbonGroup, RibbonTab, Sidebar, Toolbar, TreeLevel, TreeSelect, Widget, WidgetPage, WindowSize,
+    App, Command, CommandKind, DataDecl, DataKind, Footer, Frame, Ident, Menu, Page, PageKind, Ribbon, RibbonGroup, RibbonTab, Sidebar, Toolbar, TreeLevel, TreeSelect, Widget, WidgetPage, WindowSize,
 };
 use crate::span::Span;
 use crate::widgets::{self, WidgetKind};
@@ -120,19 +120,7 @@ pub fn page_root(page: &Page, module: &str) -> String {
 /// designer's, or the source).
 pub fn page_body(page: &Page, marks: &Marks) -> String {
     let mut body = String::new();
-    for data in page.data.iter().filter(|d| !d.made) {
-        let mut attributes = attribute("name", &Value::String(data.name.name.clone()));
-        let (ty, default) = match &data.of {
-            DataKind::Record { entity } => (entity.name.clone(), None),
-            DataKind::List { entity } => (format!("list<{}>", entity.name), None),
-            DataKind::Value { ty, default } => (type_text(ty), default.as_ref().map(widgets::literal_text)),
-        };
-        attributes.push_str(&attribute("type", &Value::String(ty)));
-        if let Some(default) = default {
-            attributes.push_str(&attribute("default", &Value::String(default)));
-        }
-        let _ = writeln!(body, "  <Data{attributes} />");
-    }
+    data_elements(&page.data, &mut body);
     for tell in &page.tells {
         let params: Vec<String> = tell.params.iter().map(|p| format!("{}: {}", p.name.name, type_text(&p.ty))).collect();
         let message = if params.is_empty() { tell.name.name.clone() } else { format!("{}({})", tell.name.name, params.join(", ")) };
@@ -143,6 +131,61 @@ pub fn page_body(page: &Page, marks: &Marks) -> String {
         part(widget, 1, &mut body, marks);
     }
     body
+}
+
+/// A `<Data>` element for each data item a page or the app declares (not
+/// those the project made itself).
+fn data_elements(data: &[DataDecl], out: &mut String) {
+    for data in data.iter().filter(|d| !d.made) {
+        let mut attributes = attribute("name", &Value::String(data.name.name.clone()));
+        let (ty, default) = match &data.of {
+            DataKind::Record { entity } => (entity.name.clone(), None),
+            DataKind::List { entity } => (format!("list<{}>", entity.name), None),
+            DataKind::Value { ty, default } => (type_text(ty), default.as_ref().map(widgets::literal_text)),
+        };
+        attributes.push_str(&attribute("type", &Value::String(ty)));
+        if let Some(default) = default {
+            attributes.push_str(&attribute("default", &Value::String(default)));
+        }
+        let _ = writeln!(out, "  <Data{attributes} />");
+    }
+}
+
+/// The root element of the app's file.
+pub const APP_ROOT: &str = "App";
+
+/// The app as its own `.cxaml` file, `design/<App>.cxaml`: the root names
+/// its module and name (`class="shop.Shop"`; its code is the block
+/// `code Shop` of module `shop`), then its title, main window, splash and
+/// handlers; inside, its data and its frame.
+pub fn app_source(app: &App, module: &str) -> String {
+    let class = if module.is_empty() { app.name.name.clone() } else { format!("{module}.{}", app.name.name) };
+    let mut root = attribute("class", &Value::String(class));
+    if let Some(title) = &app.title {
+        root.push_str(&attribute("title", &Value::String(title.clone())));
+    }
+    if let Some(main) = &app.main {
+        root.push_str(&attribute("main", &Value::String(main.name.clone())));
+    }
+    if let Some(splash) = &app.splash {
+        root.push_str(&attribute("splash", &Value::String(splash.name.clone())));
+    }
+    if let Some(ms) = app.splash_for {
+        root.push_str(&attribute("splashFor", &Value::String(seconds_text(ms))));
+    }
+    for h in &app.handlers {
+        root.push_str(&attribute(&format!("on{}", h.event.keyword()), &Value::String(widgets::handler_call(h))));
+    }
+    let mut body = String::new();
+    data_elements(&app.data, &mut body);
+    frame_elements(&app.frame, 1, &mut body, &Marks::SOURCE);
+    format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<{APP_ROOT}{root}>\n{body}</{APP_ROOT}>\n")
+}
+
+/// Milliseconds as seconds, as a person writes them: `2`, `1.5`, `0.25`.
+fn seconds_text(ms: u32) -> String {
+    let text = format!("{:.3}", f64::from(ms) / 1000.0);
+    text.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
 /// A type as Clarity writes it: `integer`, `Customer`, `list<Order>`.
@@ -366,7 +409,7 @@ fn command_element(command: &Command, depth: usize, out: &mut String, marks: &Ma
 
 /// The element of a container's page: a tab, step, section or pane; a line
 /// of a window's content is `<View name="X">` in the source.
-fn page_element_name(kind: WidgetKind) -> &'static str {
+pub fn page_element_name(kind: WidgetKind) -> &'static str {
     match kind {
         WidgetKind::Steps => "Step",
         WidgetKind::Accordion => "Section",
@@ -505,7 +548,7 @@ pub fn attribute(word: &str, value: &Value) -> String {
 /// the file's, for the diagnostics. Each part's span is its element's place
 /// in the file.
 pub fn read_page(text: &str, path: &str) -> (Option<Page>, Vec<Diagnostic>) {
-    let mut reading = Reading { path, diagnostics: Vec::new() };
+    let mut reading = Reading { diagnostics: Vec::new() };
     let page = match xml::read(text) {
         Ok(root) => reading.page(&root),
         Err(d) => {
@@ -519,19 +562,33 @@ pub fn read_page(text: &str, path: &str) -> (Option<Page>, Vec<Diagnostic>) {
     (page, reading.diagnostics)
 }
 
-struct Reading<'a> {
-    path: &'a str,
+/// The app in its `.cxaml` file (`<App class="shop.Shop">`), or what is
+/// wrong with it, where; `path` is the file's, for the diagnostics.
+pub fn read_app(text: &str, path: &str) -> (Option<App>, Vec<Diagnostic>) {
+    let mut reading = Reading { diagnostics: Vec::new() };
+    let app = match xml::read(text) {
+        Ok(root) => reading.app(&root),
+        Err(d) => {
+            reading.diagnostics.push(d);
+            None
+        }
+    };
+    for d in &mut reading.diagnostics {
+        d.path = path.to_string();
+    }
+    (app, reading.diagnostics)
+}
+
+/// Whether a `.cxaml` file is the app's: its root is `<App>`.
+pub fn is_app_markup(markup: &str) -> bool {
+    xml::read(markup).is_ok_and(|root| root.name == APP_ROOT)
+}
+
+struct Reading {
     diagnostics: Vec<Diagnostic>,
 }
 
-/// A line of the page written in Clarity, read by Clarity's own parser, and
-/// the element it came from, whose span its diagnostics and spans take.
-struct Line {
-    text: String,
-    span: Span,
-}
-
-impl Reading<'_> {
+impl Reading {
     fn error(&mut self, message: impl Into<String>, span: Span) {
         self.diagnostics.push(Diagnostic::error(message, span));
     }
@@ -551,26 +608,27 @@ impl Reading<'_> {
         };
         let name = crate::xml::Attribute { name: "name".into(), value: page_name.to_string(), span: class.span };
         let name = &name;
-        // What Clarity's parser reads: the data, the tells, what a dialog gives and the page's handlers.
-        let gives = root.get("gives").map(|g| format!(" gives {g}")).unwrap_or_default();
-        let mut lines = vec![Line { text: format!("page {}: {}{gives}", name.value, kind_word(kind)), span: root.span }];
-        for a in root.attributes.iter().filter(|a| a.name.starts_with("on") && a.name.len() > 2) {
-            lines.push(Line { text: format!("    on {}: {}", &a.name[2..], a.value), span: a.span });
-        }
-        for child in &root.children {
-            match child.name.as_str() {
-                "Data" => {
-                    let default = child.get("default").map(|d| format!(", default {d}")).unwrap_or_default();
-                    lines.push(Line { text: format!("    data {}: {}{default}", child.get("name").unwrap_or(""), child.get("type").unwrap_or("")), span: child.span });
-                }
-                "Tells" => lines.push(Line { text: format!("    tells {}", child.get("message").unwrap_or("")), span: child.span }),
-                _ => {}
-            }
-        }
-        let parsed = self.parsed(&lines)?;
-        let mut page = parsed.pages.into_iter().next()?;
-        page.span = root.span;
-        page.name.span = name.span;
+        // What a dialog gives, its handlers, its data and tells: each value read where it is, by Clarity's own rules.
+        let gives = root.attribute("gives").and_then(|a| self.read(crate::parser::type_value(&a.value, a.span)));
+        let handlers = self.owner_events(root, &widgets::WINDOW_EVENTS, |e| format!("a window has the events open, close and return, not {e}"));
+        let data = self.data(root);
+        let tells = root.children.iter().filter(|c| c.name == "Tells").filter_map(|c| self.tells(c)).collect();
+        let mut page = Page {
+            name: Ident { name: name.value.clone(), span: name.span },
+            kind,
+            title: None,
+            size: None,
+            style: None,
+            data,
+            columns: crate::model::DEFAULT_PAGE_COLUMNS,
+            cell: None,
+            widgets: Vec::new(),
+            frame: Frame::default(),
+            handlers,
+            gives,
+            tells,
+            span: root.span,
+        };
         page.title = root.get("title").map(str::to_string);
         page.size = match (root.get("width"), root.get("height")) {
             (Some(w), Some(h)) => match (w.parse(), h.parse()) {
@@ -611,6 +669,65 @@ impl Reading<'_> {
         Some(page)
     }
 
+    fn app(&mut self, root: &Element) -> Option<App> {
+        if root.name != APP_ROOT {
+            self.error(format!("the app's file starts with <App>, not <{}>", root.name), root.span);
+            return None;
+        }
+        let Some(class) = root.attribute("class") else {
+            self.error("<App> names its module and the app, as in class=\"shop.Shop\"", root.span);
+            return None;
+        };
+        let Some((_, app_name)) = class.value.rsplit_once('.').filter(|(m, n)| widgets::is_identifier(m) && widgets::is_identifier(n)) else {
+            self.error(format!("class=\"{}\" is a module and the app's name, as in class=\"shop.Shop\"", class.value), class.span);
+            return None;
+        };
+        const ROOT_WORDS: [&str; 5] = ["class", "title", "main", "splash", "splashFor"];
+        for a in root.attributes.iter().filter(|a| !ROOT_WORDS.contains(&a.name.as_str()) && !(a.name.starts_with("on") && a.name.len() > 2)) {
+            self.error(format!("<App> has no '{}'", a.name), a.span);
+        }
+        // The app's handlers and data: each value read where it is, by Clarity's own rules.
+        let handlers = self.owner_events(root, &widgets::APP_EVENTS, |e| format!("the app has the event start, not {e}"));
+        let data = self.data(root);
+        let mut app = App {
+            name: Ident { name: app_name.to_string(), span: class.span },
+            title: None,
+            main: None,
+            splash: None,
+            splash_for: None,
+            data,
+            frame: Frame::default(),
+            handlers,
+            span: root.span,
+        };
+        app.title = root.get("title").map(str::to_string);
+        let ident = |a: &xml::Attribute| Ident { name: a.value.clone(), span: a.span };
+        app.main = root.attribute("main").map(ident);
+        app.splash = root.attribute("splash").map(ident);
+        if let Some(a) = root.attribute("splashFor") {
+            match a.value.parse::<f64>() {
+                Ok(seconds) if (0.1..=30.0).contains(&seconds) => app.splash_for = Some((seconds * 1000.0).round() as u32),
+                _ => self.error(format!("splashFor is how many seconds the splash shows at least, from 0.1 to 30, not '{}'", a.value), a.span),
+            }
+        }
+        for child in &root.children {
+            match child.name.as_str() {
+                "Data" => {}
+                "Menu" => app.frame.menu = Some(self.menu(child)),
+                "Toolbar" => app.frame.toolbar = Some(Toolbar { name: child.get("name").map(str::to_string), items: self.commands(&child.children), span: child.span }),
+                "Ribbon" => app.frame.ribbon = Some(self.ribbon(child)),
+                "Sidebar" => {
+                    if let Some(sidebar) = self.sidebar(child) {
+                        app.frame.sidebars.push(sidebar);
+                    }
+                }
+                "Footer" => app.frame.footer = Some(self.footer(child)),
+                other => self.error(format!("<{other}> is not in an app: it holds <Data>, <Menu>, <Toolbar>, <Ribbon>, <Sidebar> and <Footer>"), child.span),
+            }
+        }
+        Some(app)
+    }
+
     fn number(&mut self, element: &Element, name: &str) -> Option<u32> {
         let a = element.attribute(name)?;
         match a.value.parse() {
@@ -622,27 +739,59 @@ impl Reading<'_> {
         }
     }
 
-    /// The page of `lines`, read by Clarity's parser; its spans and diagnostics are put on the elements.
-    fn parsed(&mut self, lines: &[Line]) -> Option<crate::model::SpecFile> {
-        // A module line first, which every file of Clarity starts with; the page's lines from line 2.
-        let text: String = std::iter::once(format!("module {SYNTHETIC_MODULE}\n")).chain(lines.iter().map(|l| l.text.clone() + "\n")).collect();
-        let (mut file, diagnostics) = crate::parser::parse(&text, self.path);
-        let at = |span: Span| lines.get(span.line.saturating_sub(2) as usize).map_or(lines[0].span, |l| l.span);
-        for mut d in diagnostics {
-            d.span = at(d.span);
-            self.diagnostics.push(d);
-        }
-        for page in &mut file.pages {
-            for data in &mut page.data {
-                data.span = at(data.span);
-                data.name.span = data.span;
+    /// What a reading of a value gives; its error is the file's.
+    fn read<T>(&mut self, result: Result<T, Diagnostic>) -> Option<T> {
+        result.map_err(|d| self.diagnostics.push(d)).ok()
+    }
+
+    /// The owner's own events (`onopen="windowOpened"`), each among `allowed`.
+    fn owner_events(&mut self, root: &Element, allowed: &[widgets::Event], refused: impl Fn(&str) -> String) -> Vec<crate::model::Handler> {
+        let mut out = Vec::new();
+        for a in root.attributes.iter().filter(|a| a.name.starts_with("on") && a.name.len() > 2) {
+            let word = &a.name[2..];
+            let Some(event) = widgets::Event::by_keyword(word).filter(|e| allowed.contains(e)) else {
+                self.error(refused(word), a.span);
+                continue;
+            };
+            if !widgets::is_identifier(&a.value) {
+                self.error(format!("'{}' is not a handler's name", a.value), a.span);
+                continue;
             }
-            for tell in &mut page.tells {
-                tell.span = at(tell.span);
-                tell.name.span = tell.span;
+            out.push(crate::model::Handler { event, handler: a.value.clone(), args: Vec::new() });
+        }
+        out
+    }
+
+    /// The owner's data: `<Data name="customer" type="Customer" />`, each where it is.
+    fn data(&mut self, root: &Element) -> Vec<DataDecl> {
+        let mut out = Vec::new();
+        for child in root.children.iter().filter(|c| c.name == "Data") {
+            let (Some(name), Some(ty)) = (child.attribute("name"), child.attribute("type")) else {
+                self.error("<Data> has a name and a type, as in <Data name=\"customer\" type=\"Customer\" />", child.span);
+                continue;
+            };
+            if !widgets::is_identifier(&name.value) {
+                self.error(format!("'{}' is not a data name", name.value), name.span);
+                continue;
+            }
+            let ident = Ident { name: name.value.clone(), span: child.span };
+            let default = child.attribute("default").map(|d| (d.value.as_str(), d.span));
+            if let Some(decl) = self.read(crate::parser::data_value(ident, (&ty.value, ty.span), default, child.span)) {
+                out.push(decl);
             }
         }
-        Some(file)
+        out
+    }
+
+    /// What a view tells its window: `<Tells message="saved(name: text)" />`.
+    fn tells(&mut self, child: &Element) -> Option<crate::code::PartMessage> {
+        let Some(message) = child.attribute("message") else {
+            self.error("<Tells> names a message, as in <Tells message=\"saved\" />", child.span);
+            return None;
+        };
+        let mut tell = self.read(crate::parser::tells_value(&message.value, message.span, child.span))?;
+        tell.name.span = child.span;
+        Some(tell)
     }
 
     fn menu(&mut self, element: &Element) -> Menu {
@@ -747,7 +896,7 @@ impl Reading<'_> {
         props.width = self.number(element, "span").unwrap_or(1);
         props.height = self.number(element, "rows").unwrap_or(1);
         for a in handlers {
-            match handler_of(&a.name[2..], &a.value) {
+            match handler_of(&a.name[2..], &a.value, a.span) {
                 Ok(h) => props.handlers.push(h),
                 Err(message) => self.error(message, a.span),
             }
@@ -810,18 +959,6 @@ impl Reading<'_> {
 }
 
 /// The module of the lines the reader has Clarity's parser read.
-const SYNTHETIC_MODULE: &str = "cxaml";
-
-/// The page kind as Clarity writes it: `window`, `view`.
-fn kind_word(kind: PageKind) -> &'static str {
-    match kind {
-        PageKind::Window => "window",
-        PageKind::Dialog => "dialog",
-        PageKind::View => "view",
-        PageKind::Splash => "splash",
-        PageKind::Toolbox => "toolbox",
-    }
-}
 
 /// The value `text` gives `field` of a `T`: as text, else as JSON, else as
 /// a list of names (`title, kind`); the first a `T` takes.
@@ -839,7 +976,7 @@ fn accepted<T: DeserializeOwned>(fields: &Map<String, Value>, field: &str, text:
 }
 
 /// `digit(7)` on `click`: the handler and the values it is run with.
-fn handler_of(event: &str, call: &str) -> Result<crate::model::Handler, String> {
+fn handler_of(event: &str, call: &str, at: Span) -> Result<crate::model::Handler, String> {
     let event_kind = widgets::Event::by_keyword(event).ok_or_else(|| format!("'{event}' is not an event a part has"))?;
     let (name, args) = match call.find('(') {
         Some(open) => {
@@ -851,16 +988,9 @@ fn handler_of(event: &str, call: &str) -> Result<crate::model::Handler, String> 
     if !widgets::is_identifier(name) {
         return Err(format!("'{name}' is not a handler's name"));
     }
-    let args = if args.trim().is_empty() {
-        Vec::new()
-    } else {
-        // The values as Clarity reads them, through a line of its own.
-        let (file, diagnostics) = crate::parser::parse(&format!("module {SYNTHETIC_MODULE}\npage P: window\n    button at 1,1 span 1 on click: h({args})\n"), "");
-        if let Some(d) = diagnostics.first() {
-            return Err(d.message.clone());
-        }
-        file.pages.first().and_then(|p| p.widgets.first()).and_then(|w| w.props.handlers.first()).map(|h| h.args.clone()).unwrap_or_default()
-    };
+    // The values as Clarity reads them, where they are in the markup.
+    let offset = call.find('(').map_or(0, |open| open as u32 + 1);
+    let args = crate::parser::literals_value(args, Span { start: at.start + offset, col: at.col + offset, ..at }).map_err(|d| d.message)?;
     Ok(crate::model::Handler { event: event_kind, handler: name.to_string(), args })
 }
 
@@ -898,6 +1028,8 @@ pub fn page_files(dir: &std::path::Path, _modules: &[std::path::PathBuf], replac
             out.push(path.to_path_buf());
         }
     }
+    // A file replaced by nothing is left out: a window, view or app being removed.
+    out.retain(|p| !replaced.iter().any(|(path, text)| path == p && text.is_empty()));
     out.sort();
     Ok(out)
 }
@@ -918,10 +1050,21 @@ fn module_name(text: &str) -> Option<&str> {
 /// root names (`class="desk.Desk"`), using what that module uses.
 pub fn page_file(path: &str, text: &str, modules: &[crate::model::SpecFile]) -> (Option<crate::model::SpecFile>, Vec<Diagnostic>) {
     let module = class_of(text).map(|(m, _)| m).unwrap_or_default();
-    let (page, mut diagnostics) = read_page(text, path);
-    let Some(page) = page else { return (None, diagnostics) };
+    // The app's file holds the app; any other, a page.
+    let (page, app, mut diagnostics) = if is_app_markup(text) {
+        let (app, d) = read_app(text, path);
+        (None, app, d)
+    } else {
+        let (page, d) = read_page(text, path);
+        (page, None, d)
+    };
+    let (name, span) = match (&page, &app) {
+        (Some(p), _) => (p.name.name.clone(), p.span),
+        (None, Some(a)) => (a.name.name.clone(), a.span),
+        (None, None) => return (None, diagnostics),
+    };
     let Some(owner) = modules.iter().find(|f| f.module.as_ref().is_some_and(|m| m.name == module)) else {
-        let mut d = Diagnostic::error(format!("class=\"{module}.{}\" names the module '{module}', which the project has none of", page.name.name), page.span);
+        let mut d = Diagnostic::error(format!("class=\"{module}.{name}\" names the module '{module}', which the project has none of"), span);
         d.path = path.to_string();
         diagnostics.push(d);
         return (None, diagnostics);
@@ -930,38 +1073,83 @@ pub fn page_file(path: &str, text: &str, modules: &[crate::model::SpecFile]) -> 
     file.version = crate::content_version(text);
     file.uses = owner.uses.clone();
     file.source = owner.source.clone();
-    file.pages.push(page);
+    file.pages.extend(page);
+    file.apps.extend(app);
     (Some(file), diagnostics)
 }
 
-/// The files a project's `.clarity` files become with their pages moved
-/// into `.cxaml` (docs/CXAML-SOURCE-PLAN.md): each page block, with the
-/// comment above it, leaves its file for `design/<Page>.cxaml`.
+/// The files a project's `.clarity` files become with their pages and app
+/// moved into `.cxaml` (docs/CXAML-SOURCE-PLAN.md): each page block and the
+/// app block, with the comment above it, leaves its file for
+/// `design/<Page>.cxaml` or `design/<App>.cxaml`.
 /// Gives the changed `.clarity` files and the new `.cxaml` files, or what
 /// stops a file moving (a file that does not parse).
 pub fn moved_out(files: &[(String, String)]) -> Result<Vec<(String, String)>, String> {
     moved_out_only(files, None)
 }
 
-/// `moved_out` for the pages named in `only` (all when none): a window the
-/// designer adds goes into its own file, the rest of its module as it was.
+/// `moved_out` for the pages and app named in `only` (all when none): a
+/// window the designer adds goes into its own file, the rest of its module
+/// as it was.
 pub fn moved_out_only(files: &[(String, String)], only: Option<&[String]>) -> Result<Vec<(String, String)>, String> {
+    moved(files, only, true)
+}
+
+/// `moved_out` of what the parser read, also from a module it found errors
+/// in: for tests that start from text written the old way, wrong on purpose
+/// (`clarity_spec::converted`). A person's files are moved only when they
+/// read clean (`moved_out`).
+pub fn moved_out_as_read(files: &[(String, String)]) -> Result<Vec<(String, String)>, String> {
+    moved(files, None, false)
+}
+
+/// Whether `line` is in the block of Clarity that starts at line `start`
+/// (both from 1): up to the next line written at the left edge.
+fn in_block(text: &str, start: u32, line: u32) -> bool {
+    if line < start {
+        return false;
+    }
+    let lines: Vec<&str> = text.lines().collect();
+    let end = (start as usize..lines.len()).find(|&i| {
+        let l = lines[i];
+        !l.trim().is_empty() && !l.starts_with(char::is_whitespace) && !l.trim_start().starts_with("//")
+    });
+    end.is_none_or(|end| (line as usize) <= end)
+}
+
+fn moved(files: &[(String, String)], only: Option<&[String]>, clean: bool) -> Result<Vec<(String, String)>, String> {
     let mut out = Vec::new();
     for (path, text) in files {
         let (file, diagnostics) = crate::parser::parse(text, path);
-        if let Some(d) = diagnostics.iter().find(|d| d.severity == crate::diagnostic::Severity::Error) {
+        let error = diagnostics.iter().find(|d| d.severity == crate::diagnostic::Severity::Error);
+        if clean && let Some(d) = error {
             return Err(format!("{path}:{}: {}", d.span.line, d.message));
         }
-        let moving: Vec<&Page> = file.pages.iter().filter(|p| only.is_none_or(|names| names.contains(&p.name.name))).collect();
-        if moving.is_empty() {
+        // What the parser read of a page with an error in it is not the page: it stays as written.
+        let starts: Vec<u32> = file.pages.iter().map(|p| p.span.line).chain(file.apps.iter().map(|a| a.span.line)).collect();
+        if diagnostics.iter().any(|d| d.severity == crate::diagnostic::Severity::Error && starts.iter().any(|&start| in_block(text, start, d.span.line))) {
+            continue;
+        }
+        let pages: Vec<&Page> = file.pages.iter().filter(|p| only.is_none_or(|names| names.contains(&p.name.name))).collect();
+        let apps: Vec<&App> = file.apps.iter().filter(|a| only.is_none_or(|names| names.contains(&a.name.name))).collect();
+        if pages.is_empty() && apps.is_empty() {
             continue;
         }
         let module = file.module.as_ref().map(|m| m.name.clone()).ok_or_else(|| format!("{path} declares no module"))?;
+        // Each block that moves: the line it starts on, its name and its markup.
+        let moving: Vec<(u32, &str, String)> = pages
+            .iter()
+            .map(|p| (p.span.line, p.name.name.as_str(), page_source(p, &module)))
+            .chain(apps.iter().map(|a| (a.span.line, a.name.name.as_str(), app_source(a, &module))))
+            .collect();
+        if let Some(app) = apps.iter().find(|a| file.pages.iter().any(|p| p.name.name == a.name.name)) {
+            return Err(format!("{path}: the app and a window are both called {}, and each needs design/{}; rename one", app.name.name, file_name(&app.name.name)));
+        }
         let folder = design_folder(std::path::Path::new(path).parent().unwrap_or(std::path::Path::new("")));
         let lines: Vec<&str> = text.split('\n').collect();
         let mut gone = vec![false; lines.len()];
-        for page in moving {
-            let first = page.span.line as usize - 1;
+        for (line, name, mut markup) in moving {
+            let first = line as usize - 1;
             // The block: the page's line and every line after it until the next line at the left edge.
             let mut last = first;
             for (i, line) in lines.iter().enumerate().skip(first + 1) {
@@ -981,13 +1169,12 @@ pub fn moved_out_only(files: &[(String, String)], only: Option<&[String]>) -> Re
             for flag in &mut gone[top..=last] {
                 *flag = true;
             }
-            let mut markup = page_source(page, &module);
             if !comment.is_empty() {
                 let note = format!("<!-- {} -->\n", comment.join("\n     ").replace("--", "- -"));
                 let at = markup.find('\n').map_or(0, |n| n + 1);
                 markup.insert_str(at, &note);
             }
-            out.push((folder.join(file_name(&page.name.name)).display().to_string(), markup));
+            out.push((folder.join(file_name(name)).display().to_string(), markup));
         }
         // What is left, with no more than one blank line in a row.
         let mut kept = String::new();
@@ -1013,7 +1200,7 @@ pub fn moved_out_only(files: &[(String, String)], only: Option<&[String]>) -> Re
     Ok(out)
 }
 
-/// The project with each window's and view's own file (`.cxaml`) folded
+/// The project with each window's, view's and the app's own file (`.cxaml`) folded
 /// into its module's file of Clarity: one file per module, as the
 /// generators read a module, which need no places in files.
 pub fn folded(project: &crate::Project) -> crate::Project {
@@ -1022,7 +1209,10 @@ pub fn folded(project: &crate::Project) -> crate::Project {
     for page_file in pages {
         let module = page_file.module.as_ref().map(|m| m.name.clone());
         match files.iter_mut().find(|f| f.module.as_ref().map(|m| m.name.clone()) == module) {
-            Some(owner) => owner.pages.extend(page_file.pages),
+            Some(owner) => {
+                owner.pages.extend(page_file.pages);
+                owner.apps.extend(page_file.apps);
+            }
             None => files.push(page_file),
         }
     }
@@ -1031,257 +1221,7 @@ pub fn folded(project: &crate::Project) -> crate::Project {
 }
 
 // ---------------------------------------------------------------------------
-// A page as Clarity writes it
-
-/// A page as the block Clarity writes for it (`page Board: window` and its
-/// lines). The designer's edits are made on this text, as they are on a
-/// page in a file of Clarity, and the page goes back into its `.cxaml`.
-pub fn page_block(page: &Page) -> String {
-    use crate::lexer::text_token;
-    let mut out = String::new();
-    let gives = page.gives.as_ref().map(|g| format!(" gives {}", type_text(g))).unwrap_or_default();
-    let _ = writeln!(out, "page {}: {}{gives}", page.name.name, kind_word(page.kind));
-    if let Some(title) = &page.title {
-        let _ = writeln!(out, "    title {}", text_token(title));
-    }
-    if let Some(size) = page.size {
-        let _ = writeln!(out, "    size {} x {}", size.width, size.height);
-    }
-    if let Some(style) = &page.style {
-        let _ = writeln!(out, "    style {style}");
-    }
-    if page.columns != crate::model::DEFAULT_PAGE_COLUMNS || page.cell.is_some() {
-        let rows = page.cell.map(|c| format!(" rows {c}")).unwrap_or_default();
-        let _ = writeln!(out, "    grid {} columns{rows}", page.columns);
-    }
-    for data in page.data.iter().filter(|d| !d.made) {
-        let of = match &data.of {
-            DataKind::Record { entity } => entity.name.clone(),
-            DataKind::List { entity } => format!("list<{}>", entity.name),
-            DataKind::Value { ty, default } => type_text(ty) + &default.as_ref().map(|d| format!(", default {}", widgets::literal_text(d))).unwrap_or_default(),
-        };
-        let _ = writeln!(out, "    data {}: {of}", data.name.name);
-    }
-    for tell in &page.tells {
-        let params: Vec<String> = tell.params.iter().map(|p| format!("{}: {}", p.name.name, type_text(&p.ty))).collect();
-        let params = if params.is_empty() { String::new() } else { format!("({})", params.join(", ")) };
-        let _ = writeln!(out, "    tells {}{params}", tell.name.name);
-    }
-    for h in &page.handlers {
-        let _ = writeln!(out, "    on {}: {}", h.event.keyword(), widgets::handler_call(h));
-    }
-    let frame = &page.frame;
-    if let Some(menu) = &frame.menu {
-        menu_block(menu, 1, &mut out);
-    }
-    if let Some(toolbar) = &frame.toolbar {
-        let _ = writeln!(out, "    toolbar{}", toolbar.name.as_ref().map(|n| format!(" name {n}")).unwrap_or_default());
-        commands_block(&toolbar.items, 2, &mut out);
-    }
-    if let Some(ribbon) = &frame.ribbon {
-        let mut line = "    ribbon".to_string();
-        if let Some(name) = &ribbon.name {
-            let _ = write!(line, " name {name}");
-        }
-        if ribbon.collapsible {
-            line.push_str(" collapsible");
-        }
-        if ribbon.collapsed {
-            line.push_str(" collapsed");
-        }
-        let _ = writeln!(out, "{line}");
-        for tab in &ribbon.tabs {
-            let _ = writeln!(out, "        tab {}{}", text_token(&tab.title), tab.name.as_ref().map(|n| format!(" name {n}")).unwrap_or_default());
-            for group in &tab.groups {
-                let _ = writeln!(out, "            group {}{}", text_token(&group.title), group.name.as_ref().map(|n| format!(" name {n}")).unwrap_or_default());
-                commands_block(&group.items, 4, &mut out);
-            }
-        }
-    }
-    for sidebar in &frame.sidebars {
-        let _ = writeln!(out, "    {}", crate::frame::sidebar_line(&sidebar.props));
-        for widget in &sidebar.widgets {
-            widget_block(widget, 2, &mut out);
-        }
-    }
-    if let Some(footer) = &frame.footer {
-        let _ = writeln!(out, "    footer");
-        if let Some(status) = &footer.status {
-            let _ = writeln!(out, "        status {}", text_token(status));
-        }
-        for widget in &footer.widgets {
-            widget_block(widget, 2, &mut out);
-        }
-    }
-    for widget in &page.widgets {
-        widget_block(widget, 1, &mut out);
-    }
-    out
-}
-
-fn menu_block(menu: &Menu, depth: usize, out: &mut String) {
-    let _ = writeln!(out, "{}menu{}", "    ".repeat(depth), menu.name.as_ref().map(|n| format!(" name {n}")).unwrap_or_default());
-    commands_block(&menu.items, depth + 1, out);
-}
-
-fn commands_block(items: &[Command], depth: usize, out: &mut String) {
-    for item in items {
-        let _ = writeln!(out, "{}{}", "    ".repeat(depth), crate::frame::command_line(&item.props));
-        commands_block(&item.items, depth + 1, out);
-    }
-}
-
-fn widget_block(widget: &Widget, depth: usize, out: &mut String) {
-    use crate::lexer::text_token;
-    let pad = "    ".repeat(depth);
-    let _ = writeln!(out, "{pad}{}", widgets::widget_line(&widget.props));
-    if let Some(menu) = &widget.menu {
-        menu_block(menu, depth + 1, out);
-    }
-    for level in &widget.levels {
-        level_block(level, depth + 1, out);
-    }
-    for select in &widget.selects {
-        let _ = writeln!(out, "{pad}    on select {}: {}", select.entity, select.handler);
-    }
-    for child in &widget.children {
-        widget_block(child, depth + 1, out);
-    }
-    let keyword = match widget.props.kind {
-        WidgetKind::Steps => "step",
-        WidgetKind::Accordion => "section",
-        WidgetKind::Splitter => "pane",
-        WidgetKind::Content => "view",
-        _ => "tab",
-    };
-    for page in &widget.pages {
-        let mut line = format!("{pad}    {keyword}");
-        if let Some(title) = &page.title {
-            let _ = write!(line, " {}", text_token(title));
-        }
-        if let Some(color) = &page.color {
-            let shown = if color.starts_with('#') { crate::lexer::quote(color) } else { color.clone() };
-            let _ = write!(line, " color {shown}");
-        }
-        if let Some(view) = &page.view {
-            let _ = if keyword == "view" { write!(line, " {view}") } else { write!(line, " view {view}") };
-        }
-        for tell in &page.tells {
-            let _ = write!(line, " on {}: {}", tell.tell, tell.handler);
-        }
-        if keyword == "pane" {
-            if let Some(columns) = page.columns {
-                let _ = write!(line, " span {columns}");
-            }
-        }
-        let _ = writeln!(out, "{line}");
-        for child in &page.children {
-            widget_block(child, depth + 2, out);
-        }
-    }
-}
-
-fn level_block(level: &TreeLevel, depth: usize, out: &mut String) {
-    use crate::lexer::text_token;
-    let pad = "    ".repeat(depth);
-    let mut line = match (&level.group, &level.entity) {
-        (Some(group), _) => format!("{pad}group {}", text_token(group)),
-        (None, entity) => format!("{pad}level {}", entity.as_deref().unwrap_or("")),
-    };
-    if let Some(under) = &level.under {
-        let _ = write!(line, " under {under}");
-    }
-    if let Some(show) = &level.show {
-        let shown = if widgets::is_identifier(show) { show.clone() } else { text_token(show) };
-        let _ = write!(line, " show {shown}");
-    }
-    if let Some(order) = &level.order {
-        let _ = write!(line, " order by {order}{}", if level.descending { " desc" } else { "" });
-    }
-    let _ = writeln!(out, "{line}");
-    for inner in &level.levels {
-        level_block(inner, depth + 1, out);
-    }
-}
-
-// ---------------------------------------------------------------------------
 // The designer's edits
-
-/// Where each thing of a page is, in one order for every page: the page,
-/// its data and tells, its frame, then each part with what it holds. Two
-/// pages of the same shape (one read from `.cxaml`, one from its text of
-/// Clarity) give lists that match place by place.
-fn places(page: &Page) -> Vec<u32> {
-    let mut out = vec![page.span.start];
-    out.extend(page.data.iter().filter(|d| !d.made).map(|d| d.span.start));
-    out.extend(page.tells.iter().map(|t| t.span.start));
-    fn commands(items: &[Command], out: &mut Vec<u32>) {
-        for c in items {
-            out.push(c.span.start);
-            commands(&c.items, out);
-        }
-    }
-    fn parts(widgets: &[Widget], out: &mut Vec<u32>) {
-        for w in widgets {
-            out.push(w.span.start);
-            if let Some(menu) = &w.menu {
-                out.push(menu.span.start);
-                commands(&menu.items, out);
-            }
-            fn levels(all: &[TreeLevel], out: &mut Vec<u32>) {
-                for l in all {
-                    out.push(l.span.start);
-                    levels(&l.levels, out);
-                }
-            }
-            levels(&w.levels, out);
-            out.extend(w.selects.iter().map(|s| s.span.start));
-            parts(&w.children, out);
-            for p in &w.pages {
-                out.push(p.span.start);
-                parts(&p.children, out);
-            }
-        }
-    }
-    let frame = &page.frame;
-    if let Some(menu) = &frame.menu {
-        out.push(menu.span.start);
-        commands(&menu.items, &mut out);
-    }
-    if let Some(toolbar) = &frame.toolbar {
-        out.push(toolbar.span.start);
-        commands(&toolbar.items, &mut out);
-    }
-    if let Some(ribbon) = &frame.ribbon {
-        out.push(ribbon.span.start);
-        for tab in &ribbon.tabs {
-            out.push(tab.span.start);
-            for group in &tab.groups {
-                out.push(group.span.start);
-                commands(&group.items, &mut out);
-            }
-        }
-    }
-    for sidebar in &frame.sidebars {
-        out.push(sidebar.span.start);
-        parts(&sidebar.widgets, &mut out);
-    }
-    if let Some(footer) = &frame.footer {
-        out.push(footer.span.start);
-        parts(&footer.widgets, &mut out);
-    }
-    parts(&page.widgets, &mut out);
-    out
-}
-
-/// One page read from text of Clarity (a module line, then its block).
-fn block_page(text: &str) -> Result<crate::model::SpecFile, crate::edit::EditError> {
-    let (file, diagnostics) = crate::parser::parse(text, "");
-    if let Some(d) = diagnostics.iter().find(|d| d.severity == crate::diagnostic::Severity::Error) {
-        return Err(crate::edit::EditError(d.message.clone()));
-    }
-    Ok(file)
-}
 
 /// The comments before a markup's root element, kept when the page is written again.
 fn leading_comments(markup: &str) -> String {
@@ -1304,43 +1244,75 @@ fn leading_comments(markup: &str) -> String {
     out
 }
 
-/// An edit of the designer on a window's or view's `.cxaml`: made on the
-/// page's text of Clarity, as on a page in a file of Clarity, and the page
-/// written back as markup, in the module its root names;
-/// `project`, when given, lets edits build on the rest (templates, keys).
-pub fn apply(project: Option<&crate::Project>, markup: &str, edit: &crate::edit::Edit) -> crate::edit::EditResult<crate::edit::EditOutcome> {
-    use crate::edit::EditError;
-    let module = class_of(markup).map(|(m, _)| m).unwrap_or_default();
-    let (page, diagnostics) = read_page(markup, "");
-    let page = page.ok_or_else(|| EditError(diagnostics.first().map_or("the window's file cannot be read".to_string(), |d| d.message.clone())))?;
-    let text = format!("module {module}\n{}", page_block(&page));
-    let block = block_page(&text)?;
-    let shown = block.pages.first().ok_or_else(|| EditError("the window's file holds no page".into()))?;
-    let (from, to) = (places(&page), places(shown));
-    let at = |item: u32| from.iter().position(|p| *p == item).and_then(|i| to.get(i).copied()).unwrap_or(item);
-    let edit = crate::edit::with_items(edit, &at)?;
-    let outcome = match project {
-        Some(project) => crate::edit::apply_in(project, &text, &edit)?,
-        None => crate::edit::apply(&text, &edit)?,
+/// An edit of the designer on a window's, view's or app's `.cxaml`: the
+/// file is read, the edit made on what it holds (`design_edit`) and the file
+/// written again, keeping the comments before its root; `project`, when
+/// given, lets edits build on the rest (a field's type) and makes the texts
+/// they write keys. The focus is where the thing the edit produced or
+/// changed starts in the file as written.
+/// What a design file holds, read from its markup: a window's or view's
+/// page, or the app.
+/// A file read with an error is refused: what the reader passed over would
+/// be lost if the file were written again.
+pub fn read_designed(markup: &str, path: &str) -> Result<crate::design_edit::Designed, String> {
+    use crate::design_edit::Designed;
+    let (designed, diagnostics) = if is_app_markup(markup) {
+        let (app, diagnostics) = read_app(markup, path);
+        (app.map(Designed::App), diagnostics)
+    } else {
+        let (page, diagnostics) = read_page(markup, path);
+        (page.map(Designed::Page), diagnostics)
     };
-    let edited = block_page(&outcome.text)?;
-    let others = edited.entities.len() + edited.enums.len() + edited.records.len() + edited.apps.len() + edited.code.len() + edited.functions.len();
-    if edited.pages.len() != 1 || others > 0 {
-        return Err(EditError("this change belongs in the module's file of Clarity, not in a window's .cxaml".into()));
+    match (designed, diagnostics.iter().find(|d| d.severity == crate::diagnostic::Severity::Error)) {
+        (Some(designed), None) => Ok(designed),
+        (_, Some(d)) => Err(format!("{path}:{}: {}; fix the file first", d.span.line, d.message)),
+        (None, None) => Err(format!("{path} cannot be read")),
     }
-    let new_page = &edited.pages[0];
-    let written = with_comments(markup, page_source(new_page, &module));
-    // The focus: the same thing in the markup as written.
-    let focus = match outcome.focus {
-        Some(focus) => {
-            let (read, _) = read_page(&written, "");
-            let (block_places, markup_places) = (places(new_page), read.map(|p| places(&p)).unwrap_or_default());
-            let index = block_places.iter().enumerate().filter(|(_, p)| **p <= focus).max_by_key(|(_, p)| **p).map(|(i, _)| i);
-            index.and_then(|i| markup_places.get(i).copied())
+}
+
+/// The design file `markup` written again with what it holds now, keeping
+/// the comments before its root.
+pub fn written_again(markup: &str, designed: &crate::design_edit::Designed) -> String {
+    let module = class_of(markup).map(|(m, _)| m).unwrap_or_default();
+    let source = match designed {
+        crate::design_edit::Designed::Page(page) => page_source(page, &module),
+        crate::design_edit::Designed::App(app) => app_source(app, &module),
+    };
+    with_comments(markup, source)
+}
+
+pub fn apply(project: Option<&crate::Project>, markup: &str, edit: &crate::edit::Edit) -> crate::edit::EditResult<crate::edit::EditOutcome> {
+    use crate::design_edit::Designed;
+    use crate::edit::EditError;
+    let read = |markup: &str| -> crate::edit::EditResult<Designed> { read_designed(markup, "").map_err(EditError) };
+    let keys_of = |designed: &Designed| match designed {
+        Designed::Page(page) => crate::design_keys::page_keys("", page),
+        Designed::App(app) => crate::design_keys::app_keys("", app),
+    };
+    let mut designed = read(markup)?;
+    let focus = crate::design_edit::apply(&mut designed, edit, project)?;
+    // What the edit produced, by its key, to find again in the file as written.
+    let focus_key = focus.and_then(|at| keys_of(&designed).into_iter().find(|(start, _)| *start == at).map(|(_, key)| key));
+    let mut written = written_again(markup, &designed);
+    // A text people read that the edit wrote (a caption typed for a new part) becomes a key, beside the project's.
+    let mut keys = Vec::new();
+    if let Some(project) = project
+        && written != markup
+    {
+        let default = crate::translations::default_language(project);
+        let existing = project.translations.get(&default).cloned().unwrap_or_default();
+        let mut keyed = read(&written)?;
+        let made = crate::keyed::key_designed(&mut keyed, &default, &existing);
+        if !made.is_empty() {
+            written = written_again(&written, &keyed);
+            keys = made;
         }
+    }
+    let focus = match focus_key {
+        Some(key) => keys_of(&read(&written)?).into_iter().find(|(_, k)| *k == key).map(|(start, _)| start),
         None => None,
     };
-    Ok(crate::edit::EditOutcome { text: written, focus, keys: outcome.keys })
+    Ok(crate::edit::EditOutcome { text: written, focus, keys })
 }
 
 /// The module's file of Clarity that a window's or view's `.cxaml` belongs
@@ -1354,41 +1326,6 @@ pub fn module_file(page_file: &std::path::Path) -> Option<std::path::PathBuf> {
     files.into_iter().find(|p| std::fs::read_to_string(p).ok().as_deref().and_then(module_name) == Some(module.as_str()))
 }
 
-/// How many bits of a designer's item are the place in a file: the parts of
-/// a view drawn in a window's content, from the view's own file, are told
-/// apart from the window's by the file's number above them
-/// (`design_item`). Only the designer's layer and its edits see these numbers.
-pub const DESIGN_PLACE_BITS: u32 = 24;
-
-/// The designer's item for `start` in the project's file number `file`,
-/// for a view's parts drawn in a window of another file.
-pub fn design_item(file: usize, start: u32) -> u32 {
-    ((file as u32 + 1) << DESIGN_PLACE_BITS) | start
-}
-
-/// The parts of a view, drawn in another file's window: each place moved
-/// to its designer's item in file number `file`.
-pub fn design_items(widgets: &mut [Widget], file: usize) {
-    fn commands(items: &mut [Command], file: usize) {
-        for c in items {
-            c.span.start = design_item(file, c.span.start);
-            commands(&mut c.items, file);
-        }
-    }
-    for w in widgets {
-        w.span.start = design_item(file, w.span.start);
-        if let Some(menu) = &mut w.menu {
-            menu.span.start = design_item(file, menu.span.start);
-            commands(&mut menu.items, file);
-        }
-        design_items(&mut w.children, file);
-        for page in &mut w.pages {
-            page.span.start = design_item(file, page.span.start);
-            design_items(&mut page.children, file);
-        }
-    }
-}
-
 /// `source` with the comments `markup` had before its root element.
 fn with_comments(markup: &str, source: String) -> String {
     let comments = leading_comments(markup);
@@ -1396,15 +1333,6 @@ fn with_comments(markup: &str, source: String) -> String {
         Some(n) if !comments.is_empty() => format!("{}{}{}", &source[..=n], comments, &source[n + 1..]),
         _ => source,
     }
-}
-
-/// A `.cxaml` written again from its page's text of Clarity (`block`, a
-/// module line and the page), keeping the comments it had.
-pub fn rewritten(markup: &str, block: &str) -> crate::edit::EditResult<String> {
-    let file = block_page(block)?;
-    let page = file.pages.first().ok_or_else(|| crate::edit::EditError("the window's file holds no page".into()))?;
-    let module = class_of(markup).map(|(m, _)| m).unwrap_or_default();
-    Ok(with_comments(markup, page_source(page, &module)))
 }
 
 /// The folder of a project's windows and views, beside its modules, as an
@@ -1422,31 +1350,16 @@ pub fn project_dir_of(page_file: &std::path::Path) -> Option<&std::path::Path> {
     (design.file_name()? == DESIGN_DIR).then(|| design.parent()).flatten()
 }
 
-/// A module's file of Clarity with its windows and views from `design/`
-/// written in as page blocks: the module as one text, as it was before its
-/// pages had files of their own.
-pub fn module_text_with_pages(module_file: &std::path::Path) -> std::io::Result<String> {
-    let mut text = std::fs::read_to_string(module_file)?;
-    let module = module_name(&text).unwrap_or("").to_string();
-    let dir = module_file.parent().unwrap_or(std::path::Path::new(""));
-    for path in page_files(dir, &[], &[])? {
-        let markup = std::fs::read_to_string(&path)?;
-        if class_of(&markup).is_some_and(|(m, _)| m == module) {
-            if let (Some(page), _) = read_page(&markup, &path.display().to_string()) {
-                text.push('\n');
-                text.push_str(&page_block(&page));
-            }
-        }
-    }
-    Ok(text)
-}
-
 /// What the Problems list says of a page still written in a module's file:
 /// the start of each such message, which its fix (Move pages into design)
 /// is found by.
 pub const PAGE_LEFT_IN_MODULE: &str = "is written in this module's file; a window or view has a file of its own";
 
-/// A page block left in a module's file of Clarity, each an error: a
+/// What the Problems list says of the app still written in a module's
+/// file, which the same fix (Move pages into design) moves.
+pub const APP_LEFT_IN_MODULE: &str = "is written in this module's file; the app has a file of its own";
+
+/// A page or app block left in a module's file of Clarity, each an error: a
 /// window or view has its own `.cxaml` in `design/`, where Move pages into
 /// design, in Problems (or `clarity convert-pages`), puts it.
 pub fn pages_left_in_modules(project: &crate::Project) -> Vec<Diagnostic> {
@@ -1455,9 +1368,13 @@ pub fn pages_left_in_modules(project: &crate::Project) -> Vec<Diagnostic> {
         .iter()
         .filter(|f| !is_page_file(&f.path))
         .flat_map(|f| {
-            f.pages.iter().map(move |p| {
+            let pages = f.pages.iter().map(move |p| {
                 Diagnostic::error(format!("{} {PAGE_LEFT_IN_MODULE}, design/{}: Move pages into design, in Problems, moves it", p.name.name, file_name(&p.name.name)), p.name.span).in_file(&f.path)
-            })
+            });
+            let apps = f.apps.iter().map(move |a| {
+                Diagnostic::error(format!("{} {APP_LEFT_IN_MODULE}, design/{}: Move pages into design, in Problems, moves it", a.name.name, file_name(&a.name.name)), a.name.span).in_file(&f.path)
+            });
+            pages.chain(apps).collect::<Vec<_>>()
         })
         .collect()
 }
@@ -1479,31 +1396,85 @@ pub fn write_with_pages_moved_out(path: &std::path::Path, text: &str) -> std::io
     Ok(())
 }
 
-/// Make texts keys over a project whose windows and views are in `.cxaml`
-/// (`pages`, each a path and its markup) beside its modules: each page joins
-/// as its text of Clarity and comes back as markup, its texts made keys as
-/// the modules' are. The result lists the modules and then the pages, each
-/// by its own path.
+/// Make texts keys over a project whose windows, views and app are in
+/// `.cxaml` (`pages`, each a path and its markup) beside its modules: each
+/// page's and app's texts are made keys on its model, after the modules',
+/// and its markup is written again. The result lists the modules and then
+/// the pages, each by its own path; a page that cannot be read is left out.
 pub fn make_keys_with_pages(modules: &[(&str, &str)], pages: &[(&str, &str)], translations: &[(&str, &str)], default: &str) -> crate::keyed::Keyed {
-    // Each page as a module of its own text, under a name of its own so it is read as Clarity.
-    let blocks: Vec<(String, String)> = pages
-        .iter()
-        .filter_map(|(path, markup)| {
-            let module = class_of(markup).map(|(m, _)| m).unwrap_or_default();
-            let (page, _) = read_page(markup, path);
-            page.map(|p| (format!("{path}.{}", crate::SPEC_EXTENSION), format!("module {module}\n{}", page_block(&p))))
-        })
-        .collect();
-    let mut all: Vec<(&str, &str)> = modules.to_vec();
-    all.extend(blocks.iter().map(|(p, t)| (p.as_str(), t.as_str())));
-    let mut keyed = crate::keyed::make_keys(&all, translations, default);
-    for (path, text) in &mut keyed.modules {
-        let Some(original) = path.strip_suffix(&format!(".{}", crate::SPEC_EXTENSION)).filter(|p| is_page_file(p)) else { continue };
-        let Some((_, markup)) = pages.iter().find(|(p, _)| *p == original) else { continue };
-        if let Ok(written) = rewritten(markup, text) {
-            *text = written;
-        }
-        *path = original.to_string();
+    let read: Vec<(&str, &str, crate::design_edit::Designed)> = pages.iter().filter_map(|(path, markup)| read_designed(markup, path).ok().map(|d| (*path, *markup, d))).collect();
+    let (places, mut designed): (Vec<(&str, &str)>, Vec<crate::design_edit::Designed>) = read.into_iter().map(|(p, m, d)| ((p, m), d)).unzip();
+    let mut keyed = crate::keyed::make_keys_designed(modules, &mut designed, translations, default, &std::collections::BTreeMap::new());
+    for ((path, markup), designed) in places.iter().zip(&designed) {
+        keyed.modules.push((path.to_string(), written_again(markup, designed)));
     }
     keyed
+}
+
+
+// ---------------------------------------------------------------------------
+// New windows, views and the app
+
+/// What an edit that adds a window, view, splash, toolbox or the app makes:
+/// the module's text with the code they start with, each new file in
+/// `design/` with its markup, and the keys their texts were made.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Added {
+    pub module: String,
+    pub files: Vec<(std::path::PathBuf, String)>,
+    pub keys: Vec<(String, String)>,
+}
+
+/// The files `edit` adds beside the module at `module_path` (its text
+/// `module_text`), when it is an edit that adds a window (`AddWindow`), a
+/// page (`AddPage`) or the app (`AddApp`); none for another edit.
+pub fn added(project: &crate::Project, module_path: &std::path::Path, module_text: &str, edit: &crate::edit::Edit) -> Option<Result<Added, String>> {
+    use crate::edit::Edit;
+    let made = match edit {
+        Edit::AddWindow { name, template } => crate::templates::new_window(project, name, template),
+        Edit::AddPage { name, kind } => crate::templates::new_page(project, name, *kind),
+        Edit::AddApp { name } => crate::templates::new_app(project, name),
+        _ => return None,
+    };
+    Some(made.and_then(|made| {
+        let module = module_name(module_text).ok_or_else(|| format!("{} names no module", module_path.display()))?;
+        let folder = design_folder(module_path.parent().unwrap_or(std::path::Path::new("")));
+        // Texts people read become keys, beside the project's and each other's.
+        let default = crate::translations::default_language(project);
+        let mut existing = project.translations.get(&default).cloned().unwrap_or_default();
+        let mut keys = Vec::new();
+        let mut files = Vec::new();
+        for mut designed in made.designed {
+            let made_keys = crate::keyed::key_designed(&mut designed, &default, &existing);
+            existing.extend(made_keys.iter().cloned());
+            keys.extend(made_keys);
+            let (name, markup) = match &designed {
+                crate::design_edit::Designed::Page(page) => (page.name.name.clone(), page_source(page, module)),
+                crate::design_edit::Designed::App(app) => (app.name.name.clone(), app_source(app, module)),
+            };
+            let path = folder.join(file_name(&name));
+            if path.exists() {
+                return Err(format!("{} is there already", path.display()));
+            }
+            files.push((path, markup));
+        }
+        let mut text = module_text.to_string();
+        for code in &made.code {
+            text = crate::source::append_decl(&text, code).map_err(|e| e.0)?;
+        }
+        Ok(Added { module: text, files, keys })
+    }))
+}
+
+/// What removing the window, view or app of the design file `markup` does
+/// to its module's text (`module_text`): its code block goes with it. The
+/// design file itself is deleted. None when `item` is not where the file's
+/// window, view or app starts.
+pub fn removed(markup: &str, item: u32, module_text: &str) -> Option<Result<String, String>> {
+    let designed = read_designed(markup, "").ok()?;
+    if designed.start() != item {
+        return None;
+    }
+    let owner = class_of(markup).map(|(_, name)| name).unwrap_or_default();
+    Some(crate::code::edit::set_code(module_text, &owner, "").map_err(|e| e.0))
 }

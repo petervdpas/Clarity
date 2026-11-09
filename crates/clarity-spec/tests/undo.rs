@@ -1,7 +1,7 @@
 //! Undo and redo (DESIGN 5.29): built-in targets, as `quit` is, for a menu
 //! item, a toolbar button or a button in a window.
 
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const APP: &str = "module m
 
@@ -16,7 +16,7 @@ page Main: window
 ";
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("m.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("m.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]
@@ -30,7 +30,7 @@ fn undo_and_redo_are_built_in_targets() {
 #[test]
 fn why_an_undo_was_refused_is_a_clarity_word() {
     assert_eq!(clarity_spec::translations::UNDO_KEYS, [("undoChangedSince", "This was changed since, so it cannot be taken back")]);
-    let project = load_sources([("m.clarity", APP)]);
+    let project = load_converted([("m.clarity", APP)]);
     let keys: Vec<String> = clarity_spec::translations::keys(&project).into_iter().map(|k| k.key).collect();
     assert!(keys.contains(&"undoChangedSince".to_string()), "{keys:?}");
 }
@@ -53,8 +53,8 @@ page Main: window
 #[test]
 fn no_undo_is_a_part_option_of_the_parts_the_person_edits() {
     assert!(errors(OPTIONS).is_empty(), "{:#?}", errors(OPTIONS));
-    let project = load_sources([("m.clarity", OPTIONS)]);
-    let widgets = &project.files[0].pages[0].widgets;
+    let project = load_converted([("m.clarity", OPTIONS)]);
+    let widgets = &project.pages().nth(0).unwrap().widgets;
     let no_undo: Vec<(&str, bool)> = widgets.iter().map(|w| (w.props.name.as_deref().unwrap(), w.props.no_undo)).collect();
     assert_eq!(no_undo, [("drawing", true), ("shapeGrid", true), ("pinBox", true), ("noteBox", false)]);
     // The designer writes it back as it is written.
@@ -81,9 +81,9 @@ page Main: window
     textbox name pinBox at 1,8 span 2 no undo
     button \"Go\" name goButton at 3,8 span 2
 ";
-    let project = load_sources([("m.clarity", source)]);
+    let project = load_converted([("m.clarity", source)]);
     assert!(errors(source).is_empty(), "{:#?}", errors(source));
-    let widgets = &project.files[0].pages[0].widgets;
+    let widgets = &project.pages().nth(0).unwrap().widgets;
     let scope = |name: &str| clarity_spec::widgets::undo_scope(widgets, name);
     assert_eq!(scope("nameBox").as_deref(), Some("customerForm"));
     assert_eq!(scope("drawing").as_deref(), Some("drawing"));
@@ -107,8 +107,8 @@ page Main: window
     image name photo at 7,1 span 3 rows 3 bind album.cover no undo
 ";
     assert!(errors(source).is_empty(), "{:#?}", errors(source));
-    let project = load_sources([("m.clarity", source)]);
-    let widgets = &project.files[0].pages[0].widgets;
+    let project = load_converted([("m.clarity", source)]);
+    let widgets = &project.pages().nth(0).unwrap().widgets;
     assert_eq!(widgets[0].children[0].props.undo_scope.as_deref(), Some("albumForm"));
     assert_eq!(widgets[1].props.undo_scope, None);
     // Worked out, never written back.
@@ -127,8 +127,8 @@ page Main: window
     text name mainText at 1,1 span 6
 ";
     assert!(errors(source).is_empty(), "{:#?}", errors(source));
-    let project = load_sources([("m.clarity", source)]);
-    let side = &project.files[0].pages[0].frame.sidebars[0].widgets[0];
+    let project = load_converted([("m.clarity", source)]);
+    let side = &project.pages().nth(0).unwrap().frame.sidebars[0].widgets[0];
     assert_eq!(side.props.undo_scope.as_deref(), Some("noteBox"));
 }
 
@@ -137,7 +137,7 @@ page Main: window
 #[test]
 fn why_a_save_was_refused_for_a_required_field_is_a_clarity_word() {
     assert_eq!(clarity_spec::translations::REQUIRED_KEYS, [("fieldRequired", "{field} is required")]);
-    let keys_of = |source: &str| -> Vec<String> { clarity_spec::translations::keys(&load_sources([("m.clarity", source)])).into_iter().map(|k| k.key).collect() };
+    let keys_of = |source: &str| -> Vec<String> { clarity_spec::translations::keys(&load_converted([("m.clarity", source)])).into_iter().map(|k| k.key).collect() };
     let with = keys_of("module m\n\nentity Customer\n    name: text, required, label \"Name\"\n");
     assert!(with.contains(&"fieldRequired".to_string()), "{with:?}");
     let without = keys_of("module m\n\nentity Customer\n    name: text, label \"Name\"\n");
@@ -158,7 +158,7 @@ page Main: window
     Gauge name gauge at 1,1 span 4 rows 2 bind level
 ";
     assert!(errors(source).is_empty(), "{:#?}", errors(source));
-    let project = load_sources([("m.clarity", source)]);
-    let widgets = &project.files[0].pages[0].widgets;
+    let project = load_converted([("m.clarity", source)]);
+    let widgets = &project.pages().nth(0).unwrap().widgets;
     assert_eq!(widgets[0].props.undo_scope.as_deref(), Some("gauge"));
 }

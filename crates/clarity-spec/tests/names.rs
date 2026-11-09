@@ -3,10 +3,10 @@
 //! them into each stack's own style.
 
 use clarity_spec::names::{camel_case, is_camel_case};
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("game.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("game.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 fn assert_has(messages: &[String], needle: &str) {
@@ -169,12 +169,16 @@ fn menu_items_are_named_after_their_captions() {
         .replace("item \"Game\" name gameMenu", "item \"Game\"")
         .replace("item \"New game\" name newGameItem key", "item \"New game\" key")
         .replace("button \"New\" name newButton on", "button \"New\" on");
-    let named = clarity_spec::edit::apply(&unnamed, &clarity_spec::edit::Edit::NameParts).unwrap().text;
-    assert!(named.contains("        item \"Game\" name gameItem\n"), "{named}");
-    assert!(named.contains("            item \"New game\" name newGameItem key \"Ctrl+N\""), "{named}");
-    assert!(named.contains("        button \"New\" name newButton on click"), "{named}");
-    assert!(named.contains("            separator\n"), "{named}");
-    assert!(errors(&named).is_empty(), "{:#?}", errors(&named));
+    let mut files = clarity_spec::converted([("game.clarity", unnamed.as_str())]);
+    let app = files.iter().position(|(p, _)| p.ends_with("design/Game.cxaml")).expect("the app's file");
+    let named = clarity_spec::cxaml::apply(None, &files[app].1, &clarity_spec::edit::Edit::NameParts).unwrap().text;
+    assert!(named.contains("    <Item caption=\"Game\" name=\"gameItem\">\n"), "{named}");
+    assert!(named.contains("      <Item caption=\"New game\" name=\"newGameItem\" key=\"Ctrl+N\""), "{named}");
+    assert!(named.contains("    <Item kind=\"button\" caption=\"New\" name=\"newButton\" onclick="), "{named}");
+    assert!(named.contains("      <Item kind=\"separator\" />\n"), "{named}");
+    files[app].1 = named;
+    let found: Vec<String> = clarity_spec::load_sources(files.iter().map(|(p, t)| (p.as_str(), t.as_str()))).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect();
+    assert!(found.is_empty(), "{found:#?}");
     let snake = MENU.replace("name newGame key", "name new_game key");
     assert!(clarity_spec::names::camel_names(&snake).contains("item \"New game\" name newGameItem key"));
 }
@@ -246,50 +250,64 @@ entity Customer
     vatNumber: text(20)
 ";
 
+/// The line of the window's file that starts with `start`, its indent left out.
 fn part_line(text: &str, start: &str) -> String {
     text.lines().find(|l| l.trim_start().starts_with(start)).unwrap_or_else(|| panic!("no {start} in {text}")).trim().to_string()
+}
+
+/// The window Card of FORM, in its own file as a project holds it.
+fn card() -> String {
+    clarity_spec::converted([("m.clarity", FORM)]).into_iter().find(|(p, _)| p.ends_with("design/Card.cxaml")).map(|(_, t)| t).expect("the window's file")
 }
 
 /// Placing a part names it after what it shows; one with nothing to go by is numbered.
 #[test]
 fn a_placed_part_is_named_after_what_it_shows() {
-    use clarity_spec::edit::{Edit, apply};
+    use clarity_spec::cxaml::{apply, read_page};
+    use clarity_spec::edit::Edit;
     use clarity_spec::widgets::WidgetKind;
-    let page = FORM.find("page Card").unwrap() as u32;
+    let markup = card();
+    let page = read_page(&markup, "").0.expect("the page").span.start;
     let create = |kind, bind: Option<&str>| Edit::CreateWidget { container: page, kind, col: 1, row: 5, width: None, caption: None, bind: bind.map(String::from), part: None, height: None };
-    let text = apply(FORM, &create(WidgetKind::Table, Some("orders"))).unwrap().text;
-    assert!(part_line(&text, "table").contains("name ordersTable "), "{text}");
-    let text = apply(FORM, &create(WidgetKind::Button, None)).unwrap().text;
-    assert!(text.contains("button \"Button\" name button1 at 1,5"), "{text}");
+    let text = apply(None, &markup, &create(WidgetKind::Table, Some("orders"))).unwrap().text;
+    assert!(part_line(&text, "<Table").starts_with("<Table name=\"ordersTable\" "), "{text}");
+    // A new button with its kind's own caption, written only when it differs.
+    let text = apply(None, &markup, &create(WidgetKind::Button, None)).unwrap().text;
+    assert!(text.contains("<Button name=\"button1\" at=\"1,5\" span=\"2\" />"), "{text}");
 }
 
 /// A part that still has its numbered name takes a better one once it knows
 /// its purpose, unless code goes by the number.
 #[test]
 fn a_numbered_part_takes_its_name_when_it_knows_its_purpose() {
-    use clarity_spec::edit::{Edit, apply};
-    use clarity_spec::parser::parse;
-    let (file, _) = parse(FORM, "m.clarity");
-    let widgets = &file.pages[0].widgets;
+    use clarity_spec::cxaml::{apply, read_page};
+    use clarity_spec::edit::Edit;
+    let markup = card();
+    let page = read_page(&markup, "").0.expect("the page");
+    let widgets = &page.widgets;
     let update = |name: &str| {
         let widget = widgets.iter().find(|w| w.props.name.as_deref() == Some(name)).unwrap();
         let mut props = widget.props.clone();
         props.for_part = Some("vatNumber".into());
         Edit::UpdateWidget { item: widget.span.start, container: None, props }
     };
-    let text = apply(FORM, &update("label1")).unwrap().text;
-    assert_eq!(part_line(&text, "label \"VAT"), "label \"VAT number\" name vatNumberLabel at 1,1 span 3 for vatNumber");
-    // `label2` is what the code changes, so it keeps its name.
-    let text = apply(FORM, &update("label2")).unwrap().text;
-    assert_eq!(part_line(&text, "label \"Used"), "label \"Used\" name label2 at 1,1 span 3 for vatNumber".replace("1,1", "1,2"));
+    // The project is the module with its code, as the designer has it.
+    let project = clarity_spec::load_converted([("m.clarity", FORM)]);
+    let text = apply(Some(&project), &markup, &update("label1")).unwrap().text;
+    assert_eq!(part_line(&text, "<Label name=\"vatNumberLabel\""), "<Label name=\"vatNumberLabel\" at=\"1,1\" span=\"3\" caption=\"@vatNumberLabel\" for=\"vatNumber\" />");
+    // `label2` is what the code changes (`label2.caption = ...` in the module), so it keeps its name.
+    let text = apply(Some(&project), &markup, &update("label2")).unwrap().text;
+    assert!(text.contains("<Label name=\"label2\" at=\"1,2\" span=\"3\" "), "{text}");
+    assert!(part_line(&text, "<Label name=\"label2\"").ends_with(" for=\"vatNumber\" />"), "{text}");
 }
 
 /// Name them names an unnamed part after its purpose too.
 #[test]
 fn name_them_names_a_part_after_its_purpose() {
-    use clarity_spec::edit::{Edit, apply};
-    let text = apply(FORM, &Edit::NameParts).unwrap().text;
-    assert!(text.contains("button \"Add line\" name addLine at 1,3 span 2"), "{text}");
+    use clarity_spec::cxaml::apply;
+    use clarity_spec::edit::Edit;
+    let text = apply(None, &card(), &Edit::NameParts).unwrap().text;
+    assert!(text.contains("<Button name=\"addLine\" at=\"1,3\" span=\"2\" caption=\"Add line\" />"), "{text}");
 }
 
 /// Every other name is camelCase too: fields, settings, data, functions,

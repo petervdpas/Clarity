@@ -11,7 +11,10 @@
 
 use std::collections::BTreeMap;
 
+use crate::design_edit::Designed;
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
+use crate::model::{App, Command, CommandKind, Frame, Literal, Page, Widget, WidgetProps};
+use crate::widgets::WidgetKind;
 use crate::translations::{UNDO_KEYS, TEXT_EDIT_KEYS, CALENDAR_KEYS, REQUIRED_KEYS, CLI_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, ZOOM_KEYS, CANVAS_TOOL_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, SIDEBAR_KEYS, SLIDEOUT_KEYS, TABLE_ROW_KEYS, OPEN_ROW_KEYS, MARKDOWN_MEMO_KEYS, DIVISION_KEYS, TOOLBOX_KEYS, PAINT_TOOLBOX_KEYS, DIAGRAM_TOOL_KEYS, RUNTIME_ERROR_KEYS, ENGINE_ERROR_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
@@ -50,6 +53,15 @@ pub fn make_keys(modules: &[(&str, &str)], translations: &[(&str, &str)], defaul
 /// default values: a new text that says the same as one of them takes its
 /// key, another gets a key of its own. Only the new keys are in the result.
 pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)], default: &str, existing: &BTreeMap<String, String>) -> Keyed {
+    make_keys_designed(modules, &mut [], translations, default, existing)
+}
+
+/// Like `make_keys_beside`, with the pages and apps of design files
+/// (`.cxaml`) beside the modules: each text people read on them becomes a
+/// key on the model itself, named as a page's text is in a module, after
+/// the modules' keys and in the order of `designed`. Their markup is the
+/// caller's to write again (`page_source`, `app_source`).
+pub fn make_keys_designed(modules: &[(&str, &str)], designed: &mut [Designed], translations: &[(&str, &str)], default: &str, existing: &BTreeMap<String, String>) -> Keyed {
     let mut maker = Maker::default();
     for (key, value) in existing {
         maker.keys.insert(key.clone(), Made { text: value.clone(), was: value.clone(), slots: Vec::new() });
@@ -62,38 +74,53 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
         maker.read = places.iter().filter(|(p, _)| p == path).map(|(_, at)| *at).collect();
         rewritten.push((path.to_string(), maker.module(text)));
     }
+    maker.read = Vec::new();
+    for one in designed.iter_mut() {
+        match one {
+            Designed::Page(page) => maker.page(page),
+            Designed::App(app) => maker.app(app),
+        }
+    }
+    let designs = Designs(&*designed);
     // Clarity's own words; an image part bound to a picture has its own, and a wizard.
-    let pictures = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("image ") && l.contains(" bind ")));
-    let wizards = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("steps ")));
-    let files = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("file ") && l.contains(" bind ")));
-    let paged = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("table ") && l.split_whitespace().any(|w| w == "page")));
-    let trees = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("tree ") || l.trim_start().starts_with("treetable ")));
-    let tags = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("tags ") && l.contains(" bind ")));
+    let pictures = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("image ") && l.contains(" bind "))) || designs.part(|p| p.kind == WidgetKind::Image && p.bind.is_some());
+    let wizards = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("steps "))) || designs.part(|p| p.kind == WidgetKind::Steps);
+    let files = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("file ") && l.contains(" bind "))) || designs.part(|p| p.kind == WidgetKind::File && p.bind.is_some());
+    let paged = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("table ") && l.split_whitespace().any(|w| w == "page"))) || designs.part(|p| p.kind == WidgetKind::Table && p.page.is_some());
+    let trees = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("tree ") || l.trim_start().starts_with("treetable "))) || designs.part(|p| matches!(p.kind, WidgetKind::Tree | WidgetKind::TreeTable));
+    let tags = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("tags ") && l.contains(" bind "))) || designs.part(|p| p.kind == WidgetKind::Tags && p.bind.is_some());
     let commands = modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("command ")));
     // A date input, or a date field a table cell opens the calendar for.
-    let dates = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("date ") || (l.starts_with("    ") && l.contains(':') && l.split([':', ',', ' ']).any(|w| w == "date" || w == "datetime"))));
+    let dates = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("date ") || (l.starts_with("    ") && l.contains(':') && l.split([':', ',', ' ']).any(|w| w == "date" || w == "datetime"))))
+        || designs.part(|p| p.kind == WidgetKind::Date)
+        || designs.data(|d| matches!(&d.of, crate::model::DataKind::Value { ty, .. } if matches!(ty.kind, crate::code::TypeRefKind::Date | crate::code::TypeRefKind::DateTime)));
     // Only the project file says which database connects with a secret: a
     // secret setting or an `on unconnected` may mean it does.
-    let passwords = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("password ")));
-    let unconnected = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim() == "on unconnected" || l.trim_start().starts_with("on unconnected:") || (l.starts_with("    ") && l.contains(": secret"))));
+    let passwords = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("password "))) || designs.part(|p| p.kind == WidgetKind::Password);
+    let unconnected = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim() == "on unconnected" || l.trim_start().starts_with("on unconnected:") || (l.starts_with("    ") && l.contains(": secret"))))
+        || designs.apps().any(|a| a.handlers.iter().any(|h| h.event == crate::widgets::Event::Unconnected));
     // The pickers of the click targets `language` and `theme` have a heading.
     // The settings' own `language` and `theme` are labeled with the same words.
     let clicks_to = |target: &str| {
         modules.iter().any(|(_, text)| {
             text.lines().any(|l| l.split_whitespace().collect::<Vec<_>>().windows(2).any(|w| w == ["->", target]) || (l.starts_with(' ') && l.trim() == target))
-        })
+        }) || designs.part(|p| p.on_click.as_deref() == Some(target))
+            || designs.command(|c| c.on_click.as_deref() == Some(target))
     };
+    let pages = modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("page "))) || designs.pages().next().is_some();
+    let canvas = |test: &dyn Fn(&crate::model::WidgetProps) -> bool| designs.part(|p| p.kind == WidgetKind::Canvas && test(p));
+    let drawn = |p: &crate::model::WidgetProps| matches!(p.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector));
     let own = RENDERER_KEYS
         .iter()
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("page "))) { UNDO_KEYS.as_slice() } else { &[] })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("page "))) { TEXT_EDIT_KEYS.as_slice() } else { &[] })
-        .chain(if dates && modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("page "))) { CALENDAR_KEYS.as_slice() } else { &[] })
+        .chain(if pages { UNDO_KEYS.as_slice() } else { &[] })
+        .chain(if pages { TEXT_EDIT_KEYS.as_slice() } else { &[] })
+        .chain(if dates && pages { CALENDAR_KEYS.as_slice() } else { &[] })
         .chain(if pictures { PICTURE_KEYS.as_slice() } else { &[] })
         .chain(if wizards { STEP_KEYS.as_slice() } else { &[] })
         .chain(if files { FILE_KEYS.as_slice() } else { &[] })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("folder "))) { FOLDER_KEYS.as_slice() } else { &[] })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && l.split_whitespace().any(|w| w == "zoom"))) { ZOOM_KEYS.as_slice() } else { &[] })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && l.split_whitespace().collect::<Vec<_>>().windows(2).any(|w| w[0] == "mode" && matches!(w[1], "paint" | "vector")))) { CANVAS_TOOL_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("folder "))) || designs.part(|p| p.kind == WidgetKind::Folder) { FOLDER_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && l.split_whitespace().any(|w| w == "zoom"))) || canvas(&|p| p.zoom) { ZOOM_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && l.split_whitespace().collect::<Vec<_>>().windows(2).any(|w| w[0] == "mode" && matches!(w[1], "paint" | "vector")))) || canvas(&drawn) { CANVAS_TOOL_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("uses ") && l.split([' ', ',']).any(|w| w == "progress"))) { PROGRESS_KEYS.as_slice() } else { &[] })
         .chain(if tags { TAGS_KEYS.as_slice() } else { &[] })
         .chain(if paged { PAGE_KEYS.as_slice() } else { &[] })
@@ -107,21 +134,24 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim() == "beside the screen")) { SCREEN_ENGINE_KEYS.as_slice() } else { &[] })
         // A field line with `required` (an option of a command is no field).
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("    ") && !l.trim_start().starts_with("option ") && l.contains(':') && l.split([',', ' ']).any(|w| w == "required"))) { REQUIRED_KEYS.as_slice() } else { &[] })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("sidebar ") && l.split_whitespace().any(|w| w == "collapsible" || w == "maximizable"))) { SIDEBAR_KEYS.as_slice() } else { &[] })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("slideout "))) { SLIDEOUT_KEYS.as_slice() } else { &[] })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| (l.trim_start().starts_with("table ") || l.trim_start().starts_with("treetable ")) && l.split_whitespace().any(|w| w == "add" || w == "remove"))) { TABLE_ROW_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("sidebar ") && l.split_whitespace().any(|w| w == "collapsible" || w == "maximizable"))) || designs.frames().any(|f| f.sidebars.iter().any(|s| s.props.collapsible || s.props.maximizable)) { SIDEBAR_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("slideout "))) || designs.part(|p| p.kind == WidgetKind::Slideout) { SLIDEOUT_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| (l.trim_start().starts_with("table ") || l.trim_start().starts_with("treetable ")) && l.split_whitespace().any(|w| w == "add" || w == "remove"))) || designs.part(|p| matches!(p.kind, WidgetKind::Table | WidgetKind::TreeTable) && (p.add || p.remove)) { TABLE_ROW_KEYS.as_slice() } else { &[] })
         // Rows that open something say so (`on open`), and a canvas's toolbox has its words.
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| ["table ", "treetable ", "list ", "tree "].iter().any(|k| l.trim_start().starts_with(k)) && l.contains("on open:"))) { OPEN_ROW_KEYS.as_slice() } else { &[] })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("memo ") && l.split_whitespace().any(|w| w == "markdown"))) { MARKDOWN_MEMO_KEYS.as_slice() } else { &[] })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && l.split_whitespace().any(|w| w == "toolbox"))) { TOOLBOX_KEYS.as_slice() } else { &[] })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && l.split_whitespace().any(|w| w == "toolbox") && l.split_whitespace().collect::<Vec<_>>().windows(2).any(|w| w[0] == "mode" && matches!(w[1], "paint" | "vector")))) { PAINT_TOOLBOX_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| ["table ", "treetable ", "list ", "tree "].iter().any(|k| l.trim_start().starts_with(k)) && l.contains("on open:")))
+            || designs.part(|p| matches!(p.kind, WidgetKind::Table | WidgetKind::TreeTable | WidgetKind::List | WidgetKind::Tree) && p.handlers.iter().any(|h| h.event == crate::widgets::Event::Open))
+        { OPEN_ROW_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("memo ") && l.split_whitespace().any(|w| w == "markdown"))) || designs.part(|p| p.kind == WidgetKind::Memo && p.markdown) { MARKDOWN_MEMO_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && l.split_whitespace().any(|w| w == "toolbox"))) || canvas(&|p| p.toolbox.is_some()) { TOOLBOX_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && l.split_whitespace().any(|w| w == "toolbox") && l.split_whitespace().collect::<Vec<_>>().windows(2).any(|w| w[0] == "mode" && matches!(w[1], "paint" | "vector")))) || canvas(&|p| p.toolbox.is_some() && drawn(p)) { PAINT_TOOLBOX_KEYS.as_slice() } else { &[] })
         .chain({
-            let canvas = |test: &dyn Fn(&str) -> bool| modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && test(l)));
-            let diagrams = canvas(&|l| l.contains("mode objects") && l.contains("on connect:"));
-            let paints = canvas(&|l| l.contains("mode paint") || l.contains("mode vector"));
+            let lines = |test: &dyn Fn(&str) -> bool| modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("canvas ") && test(l)));
+            let diagrams = lines(&|l| l.contains("mode objects") && l.contains("on connect:"))
+                || canvas(&|p| p.mode == Some(crate::model::CanvasMode::Objects) && p.handlers.iter().any(|h| h.event == crate::widgets::Event::Connect));
+            let paints = lines(&|l| l.contains("mode paint") || l.contains("mode vector")) || canvas(&drawn);
             if diagrams && paints { &DIAGRAM_TOOL_KEYS[..1] } else if diagrams { DIAGRAM_TOOL_KEYS.as_slice() } else { &[] }
         })
-        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("page "))) { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
+        .chain(if pages { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("engine "))) { ENGINE_ERROR_KEYS.as_slice() } else { &[] })
         // Code that divides whole numbers can say a division by zero failed.
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| !l.trim_start().starts_with("//") && (l.contains(" div ") || l.contains(" mod ")))) { DIVISION_KEYS.as_slice() } else { &[] });
@@ -424,6 +454,235 @@ impl Maker {
     }
 }
 
+/// The texts of a page or the app, on its model: each text people read that
+/// is no key yet gets one, named as `window_line` names it in a module, in
+/// the order a page's lines are written.
+impl Maker {
+    /// `text` as key `base`, when it is a text people read and no key yet.
+    fn text(&mut self, text: &mut String, base: &str) {
+        if is_key(text) || !has_letters(text) {
+            return;
+        }
+        let key = self.add(base, text, text, Vec::new());
+        *text = format!("@{key}");
+    }
+
+    fn optional(&mut self, text: &mut Option<String>, base: &str) {
+        if let Some(text) = text {
+            self.text(text, base);
+        }
+    }
+
+    /// A text value a data item starts with (`default "Hello"`).
+    fn defaults(&mut self, data: &mut [crate::model::DataDecl], owner: &str) {
+        for data in data.iter_mut().filter(|d| !d.made) {
+            if let crate::model::DataKind::Value { default: Some(Literal::Str(text)), .. } = &mut data.of {
+                self.text(text, &crate::names::camel_case(&format!("{owner} {}", data.name.name)));
+            }
+        }
+    }
+
+    fn page(&mut self, page: &mut Page) {
+        let owner = lower(&page.name.name);
+        self.optional(&mut page.title, &format!("{owner}Title"));
+        self.defaults(&mut page.data, &owner);
+        self.frame(&mut page.frame, &owner);
+        for widget in &mut page.widgets {
+            self.widget(widget, &owner);
+        }
+    }
+
+    fn app(&mut self, app: &mut App) {
+        let owner = lower(&app.name.name);
+        self.optional(&mut app.title, &format!("{owner}Title"));
+        self.defaults(&mut app.data, &owner);
+        self.frame(&mut app.frame, &owner);
+    }
+
+    fn frame(&mut self, frame: &mut Frame, owner: &str) {
+        if let Some(menu) = &mut frame.menu {
+            self.commands(&mut menu.items);
+        }
+        if let Some(toolbar) = &mut frame.toolbar {
+            self.commands(&mut toolbar.items);
+        }
+        if let Some(ribbon) = &mut frame.ribbon {
+            for tab in &mut ribbon.tabs {
+                let base = tab.name.clone().unwrap_or_else(|| format!("{owner}{}Tab", upper(&words_key(&tab.title, &[]))));
+                self.text(&mut tab.title, &base);
+                for group in &mut tab.groups {
+                    // A group without a name is named as a tab is.
+                    let base = group.name.clone().unwrap_or_else(|| format!("{owner}{}Tab", upper(&words_key(&group.title, &[]))));
+                    self.text(&mut group.title, &base);
+                    self.commands(&mut group.items);
+                }
+            }
+        }
+        for sidebar in &mut frame.sidebars {
+            for widget in &mut sidebar.widgets {
+                self.widget(widget, owner);
+            }
+        }
+        if let Some(footer) = &mut frame.footer {
+            self.optional(&mut footer.status, &format!("{owner}Status"));
+            for widget in &mut footer.widgets {
+                self.widget(widget, owner);
+            }
+        }
+    }
+
+    /// Menu items and toolbar and ribbon buttons: an item is named after
+    /// itself or its caption, a button as a part's caption is.
+    fn commands(&mut self, items: &mut [Command]) {
+        for item in items {
+            let props = &mut item.props;
+            let base = match props.kind {
+                CommandKind::Item => props.name.clone().unwrap_or_else(|| format!("{}Item", words_key(props.caption.as_deref().unwrap_or(""), &[]))),
+                CommandKind::Button => format!("{}Caption", props.name.clone().unwrap_or_else(|| "button".into())),
+                CommandKind::Separator => String::new(),
+            };
+            if props.kind != CommandKind::Separator {
+                self.optional(&mut props.caption, &base);
+            }
+            self.commands(&mut item.items);
+        }
+    }
+
+    fn widget(&mut self, widget: &mut Widget, owner: &str) {
+        self.part(&mut widget.props);
+        if let Some(menu) = &mut widget.menu {
+            self.commands(&mut menu.items);
+        }
+        self.levels(&mut widget.levels, owner);
+        for child in &mut widget.children {
+            self.widget(child, owner);
+        }
+        let word = match widget.props.kind {
+            WidgetKind::Steps => Some("Step"),
+            WidgetKind::Accordion => Some("Section"),
+            WidgetKind::Splitter | WidgetKind::Content => None,
+            _ => Some("Tab"),
+        };
+        for page in &mut widget.pages {
+            if let (Some(word), Some(title)) = (word, &mut page.title) {
+                let base = format!("{owner}{}{word}", upper(&words_key(title, &[])));
+                self.text(title, &base);
+            }
+            for child in &mut page.children {
+                self.widget(child, owner);
+            }
+        }
+    }
+
+    /// A tree's group headings, each named as a tab is, level by level.
+    fn levels(&mut self, levels: &mut [crate::model::TreeLevel], owner: &str) {
+        for level in levels {
+            if let Some(group) = &mut level.group {
+                let base = format!("{owner}{}Tab", upper(&words_key(group, &[])));
+                self.text(group, &base);
+            }
+            self.levels(&mut level.levels, owner);
+        }
+    }
+
+    /// A part's own texts: its caption (a label's or help's named after the
+    /// input it is for), placeholder and tooltip; a custom part's text
+    /// properties each by its name.
+    fn part(&mut self, props: &mut WidgetProps) {
+        match props.kind {
+            // Neither has a place on a line where a text could be read.
+            WidgetKind::Timer | WidgetKind::Sound => {}
+            // An icon part's first word is the icon's name, no text people read.
+            WidgetKind::Icon => {
+                let part = props.name.clone().unwrap_or_else(|| "icon".into());
+                self.optional(&mut props.tooltip, &format!("{part}Tooltip"));
+            }
+            WidgetKind::Custom => {
+                let part = props.name.clone().unwrap_or_else(|| crate::names::camel_case(props.part.as_deref().unwrap_or("")));
+                for (name, value) in props.values.iter_mut() {
+                    if let Literal::Str(text) = value {
+                        self.text(text, &format!("{part}{}", upper(name)));
+                    }
+                }
+                self.optional(&mut props.placeholder, &format!("{part}Placeholder"));
+                self.optional(&mut props.tooltip, &format!("{part}Tooltip"));
+            }
+            kind => {
+                let part = props.name.clone().unwrap_or_else(|| crate::widgets::keyword(kind).to_string());
+                let base = match (kind, &props.for_part) {
+                    (WidgetKind::Label, Some(input)) => format!("{input}Label"),
+                    (WidgetKind::Help, Some(input)) => format!("{input}Help"),
+                    _ => format!("{part}Caption"),
+                };
+                // A chart's first word is its kind, which stands where a caption would.
+                if !(kind == WidgetKind::Chart && props.chart.is_some()) {
+                    self.optional(&mut props.caption, &base);
+                }
+                self.optional(&mut props.placeholder, &format!("{part}Placeholder"));
+                self.optional(&mut props.tooltip, &format!("{part}Tooltip"));
+            }
+        }
+    }
+}
+
+/// Whether a text is a key already: `@` and a key's name.
+fn is_key(text: &str) -> bool {
+    text.strip_prefix('@').is_some_and(|k| !k.is_empty() && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+}
+
+/// The pages and apps of design files, asked what they hold.
+struct Designs<'a>(&'a [Designed]);
+
+impl Designs<'_> {
+    fn pages(&self) -> impl Iterator<Item = &Page> {
+        self.0.iter().filter_map(|d| match d {
+            Designed::Page(p) => Some(p),
+            Designed::App(_) => None,
+        })
+    }
+
+    fn apps(&self) -> impl Iterator<Item = &App> {
+        self.0.iter().filter_map(|d| match d {
+            Designed::App(a) => Some(a),
+            Designed::Page(_) => None,
+        })
+    }
+
+    fn frames(&self) -> impl Iterator<Item = &Frame> {
+        self.pages().map(|p| &p.frame).chain(self.apps().map(|a| &a.frame))
+    }
+
+    /// Whether any part, anywhere on a page or in a frame, is so.
+    fn part(&self, test: impl Fn(&WidgetProps) -> bool) -> bool {
+        fn any(widgets: &[Widget], test: &dyn Fn(&WidgetProps) -> bool) -> bool {
+            widgets.iter().any(|w| test(&w.props) || any(&w.children, test) || w.pages.iter().any(|p| any(&p.children, test)))
+        }
+        let in_frame = |f: &Frame| f.sidebars.iter().any(|s| any(&s.widgets, &test)) || f.footer.as_ref().is_some_and(|ft| any(&ft.widgets, &test));
+        self.pages().any(|p| any(&p.widgets, &test)) || self.frames().any(in_frame)
+    }
+
+    /// Whether any menu item or toolbar or ribbon button is so.
+    fn command(&self, test: impl Fn(&crate::model::CommandProps) -> bool) -> bool {
+        fn any(items: &[Command], test: &dyn Fn(&crate::model::CommandProps) -> bool) -> bool {
+            items.iter().any(|c| test(&c.props) || any(&c.items, test))
+        }
+        fn menus(widgets: &[Widget], test: &dyn Fn(&crate::model::CommandProps) -> bool) -> bool {
+            widgets.iter().any(|w| w.menu.as_ref().is_some_and(|m| any(&m.items, test)) || menus(&w.children, test) || w.pages.iter().any(|p| menus(&p.children, test)))
+        }
+        let in_frame = |f: &Frame| {
+            f.menu.as_ref().is_some_and(|m| any(&m.items, &test))
+                || f.toolbar.as_ref().is_some_and(|t| any(&t.items, &test))
+                || f.ribbon.as_ref().is_some_and(|r| r.tabs.iter().any(|t| t.groups.iter().any(|g| any(&g.items, &test))))
+        };
+        self.frames().any(in_frame) || self.pages().any(|p| menus(&p.widgets, &test))
+    }
+
+    /// Whether any data item of a page or the app is so.
+    fn data(&self, test: impl Fn(&crate::model::DataDecl) -> bool) -> bool {
+        self.pages().flat_map(|p| &p.data).chain(self.apps().flat_map(|a| &a.data)).any(test)
+    }
+}
+
 /// The block a top-level line starts, and its name.
 fn top(tokens: &[Token]) -> (Block, String) {
     let name = match tokens[0].text.as_str() {
@@ -562,7 +821,8 @@ pub fn plan_keys(dir: &std::path::Path, default: &str, keys: &[(String, String)]
 pub fn load_keyed<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>, translations: &[(&str, &str)], default: &str) -> crate::Project {
     let sources: Vec<(&str, &str)> = sources.into_iter().collect();
     let made = make_keys(&sources, translations, default);
-    let mut project = crate::load_sources(made.modules.iter().map(|(p, t)| (p.as_str(), t.as_str())));
+    // Texts written the old way: their page and app blocks go into `.cxaml` files first.
+    let mut project = crate::load_converted(made.modules.iter().map(|(p, t)| (p.as_str(), t.as_str())));
     project.locale.language = Some(default.to_string());
     let files: Vec<(String, String)> = made.languages.keys().map(|l| (format!("translations/{l}.clarity"), made.language_file(l))).collect();
     crate::translations::attach(&mut project, files.iter().map(|(p, t)| (p.as_str(), t.as_str())));
@@ -577,6 +837,15 @@ pub fn key_module(path: &str, text: &str, default: &str, existing: &BTreeMap<Str
     let made = make_keys_beside(&[(path, text)], &[], default, existing);
     let keys = made.order.iter().map(|k| (k.clone(), made.languages[default][k].clone())).collect();
     (made.modules.into_iter().next().map(|(_, t)| t).unwrap_or_default(), keys)
+}
+
+/// A page's or the app's texts people read made keys on its model, beside
+/// the keys the project has (`existing`, by their default values): what an
+/// edit wrote as text comes back as keys, with the new keys and their
+/// values. A text that says the same as an existing key takes it.
+pub fn key_designed(designed: &mut Designed, default: &str, existing: &BTreeMap<String, String>) -> Vec<(String, String)> {
+    let made = make_keys_designed(&[], std::slice::from_mut(designed), &[], default, existing);
+    made.order.iter().map(|k| (k.clone(), made.languages[default][k].clone())).collect()
 }
 
 /// A module's text with key `from` named `to` wherever design and code name

@@ -3,7 +3,8 @@
 //! Clarity's own; `on next` runs before moving on and `on finish` on the
 //! last step; code reads and sets `wizard.step`, from 1.
 
-use clarity_spec::edit::{Edit, apply};
+use clarity_spec::cxaml::{apply, read_page};
+use clarity_spec::edit::Edit;
 use clarity_spec::keyed::load_keyed;
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::{self, ContainerKind, Event, WidgetKind};
@@ -93,12 +94,19 @@ fn a_wizard_has_at_least_two_steps_and_steps_are_its_own() {
 
 #[test]
 fn the_designer_adds_a_wizard_with_two_steps_and_adds_steps_to_it() {
-    let at = |needle: &str| SHOP.find(needle).unwrap() as u32;
-    let outcome = apply(SHOP, &Edit::AddTab { item: at("steps name wizard"), title: "Confirm".into() }).unwrap();
-    assert!(outcome.text.contains("        step \"Confirm\"\n"), "{}", outcome.text);
-    let page = SHOP.find("page NewOrder").unwrap() as u32;
+    let markup = design(SHOP, "NewOrder");
+    let at = markup.find("<Steps name=\"wizard\"").unwrap() as u32;
+    let outcome = apply(None, &markup, &Edit::AddTab { item: at, title: "Confirm".into() }).unwrap();
+    assert!(outcome.text.contains("    <Step title=\"Confirm\" />\n  </Steps>"), "{}", outcome.text);
+    let page = read_page(&markup, "").0.expect("the page").span.start;
     let props = widgets::new_props(WidgetKind::Steps, 1, 12);
-    let outcome = apply(SHOP, &Edit::PlaceWidget { container: page, props }).unwrap();
-    assert!(outcome.text.contains("    steps "), "{}", outcome.text);
-    assert!(outcome.text.contains("        step \"Step 1\"\n        step \"Step 2\"\n"), "{}", outcome.text);
+    let outcome = apply(None, &markup, &Edit::PlaceWidget { container: page, props }).unwrap();
+    assert!(outcome.text.contains("  <Steps "), "{}", outcome.text);
+    assert!(outcome.text.contains("    <Step title=\"Step 1\" />\n    <Step title=\"Step 2\" />\n"), "{}", outcome.text);
+}
+
+/// The window `page` of `module`, in its own file as a project holds it.
+fn design(module: &str, page: &str) -> String {
+    let file = format!("design/{page}.cxaml");
+    clarity_spec::converted([("shop.clarity", module)]).into_iter().find(|(p, _)| p.ends_with(&file)).map(|(_, t)| t).expect("the page's file")
 }

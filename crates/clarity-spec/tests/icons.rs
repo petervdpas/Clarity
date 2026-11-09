@@ -66,7 +66,7 @@ fn the_checker_knows_every_icon_and_an_icons_name_is_no_key() {
     let project = load_keyed([("shop.clarity", text.as_str())], &[], "en");
     let en = &project.translations["en"];
     assert!(!en.values().any(|v| v == "triangle-alert"), "{en:?}");
-    assert!(project.files[0].pages[0].widgets[1].props.icon.as_deref() == Some("triangle-alert"));
+    assert!(project.pages().nth(0).unwrap().widgets[1].props.icon.as_deref() == Some("triangle-alert"));
 }
 
 #[test]

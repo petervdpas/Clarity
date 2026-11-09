@@ -3,7 +3,7 @@
 
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::{Category, WidgetKind, info as widget_info, widget_line};
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const CALC: &str = "module calc
 
@@ -14,7 +14,7 @@ page Main: window
 ";
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("calc.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("calc.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]

@@ -300,10 +300,6 @@ engine Fleet
         bombCarry = 0
         newFleet()
 
-app Invaders
-    title @invadersTitle
-    main Play
-
 code PlayView
     handler startGame
         score = 0

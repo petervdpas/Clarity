@@ -50,4 +50,10 @@ screenEngines: Array<ScreenEngine>,
 /**
  * Every icon's name, for the designer to offer.
  */
-iconNames: Array<string>, };
+iconNames: Array<string>, 
+/**
+ * What the designer calls each thing of every window, view and app: its
+ * key (`design/Main.cxaml#Main/saveButton`, see `design_keys`), by its
+ * file's path and where it starts there.
+ */
+designKeys: { [key in string]: { [key in number]: string } }, };

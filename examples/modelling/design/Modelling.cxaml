@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<App class="modelling.Modelling" title="@modellingTitle" main="Workspace">
+  <Menu name="mainMenu">
+    <Item caption="@viewMenu" name="viewMenu">
+      <Item caption="@languageCaption" name="languageItem" opens="language" />
+      <Item caption="@themeCaption" name="themeItem" opens="theme" />
+    </Item>
+  </Menu>
+</App>

@@ -4,7 +4,7 @@
 
 use clarity_gen::generate;
 use clarity_project::{Backend, Settings, SourceKind, Ui, starter};
-use clarity_spec::load_sources;
+use clarity_spec::load_converted;
 
 const SHOP: &str = "module shop
 
@@ -17,7 +17,7 @@ page Card: window
 ";
 
 fn readme(settings: &Settings) -> String {
-    let project = load_sources([("shop.clarity", SHOP)]);
+    let project = load_converted([("shop.clarity", SHOP)]);
     let files = generate(&project, settings).unwrap_or_else(|e| panic!("{e:#?}"));
     files.into_iter().find(|f| f.path == "README.md").expect("a README.md").text
 }
@@ -143,7 +143,7 @@ fn a_sqlite_file_is_kept_in_the_persons_data_folder() {
     let written = unbuilt.datasources[0].url.clone();
     let settings = clarity_project::build_settings(&dir, &unbuilt);
     assert_eq!("data:shop/shop.db", settings.datasources[0].url);
-    let mut project = load_sources([("shop.clarity", SHOP)]);
+    let mut project = load_converted([("shop.clarity", SHOP)]);
     let mut source = clarity_spec::SourceRef::sql(&unbuilt.datasources[0].name);
     source.address = written.clone();
     project.sources.push(source);

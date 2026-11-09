@@ -11,7 +11,7 @@ fn page(first: &str, second: &str) -> String {
 }
 
 fn errors(source: &str) -> Vec<String> {
-    let project = load_in([("m.clarity", source)], [], &[]);
+    let project = load_in(clarity_spec::converted([("m.clarity", source)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &[]);
     project.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.clone()).collect()
 }
 
@@ -46,16 +46,21 @@ fn only_the_first_pane_of_a_splitter_side_by_side_has_a_width_and_leaves_room() 
     assert!(errors(&vertical).iter().any(|m| m.contains("side by side")), "{:#?}", errors(&vertical));
 }
 
-/// The designer sets a pane's width (its Width field): `pane span 4`, or back to `pane`.
+/// The designer sets a pane's width (its Width field): `span="4"` on the
+/// pane in the window's file, or back to none.
 #[test]
 fn the_designer_sets_the_first_pane_s_width() {
-    let source = page("pane", "pane");
-    let (file, _) = clarity_spec::parser::parse(&source, "m.clarity");
-    let pane = file.pages[0].widgets[0].pages[0].span.start;
-    let out = clarity_spec::edit::apply(&source, &clarity_spec::edit::Edit::SetPaneSpan { target: pane, columns: Some(4) }).unwrap();
-    assert!(out.text.contains("        pane span 4\n            text name a"), "{}", out.text);
-    let (file, _) = clarity_spec::parser::parse(&out.text, "m.clarity");
-    let pane = file.pages[0].widgets[0].pages[0].span.start;
-    let back = clarity_spec::edit::apply(&out.text, &clarity_spec::edit::Edit::SetPaneSpan { target: pane, columns: None }).unwrap();
-    assert_eq!(back.text, source);
+    use clarity_spec::edit::Edit;
+    let markup = design(&page("pane", "pane"), "Main");
+    let pane = |markup: &str| clarity_spec::cxaml::read_page(markup, "").0.expect("the page").widgets[0].pages[0].span.start;
+    let out = clarity_spec::cxaml::apply(None, &markup, &Edit::SetPaneSpan { target: pane(&markup), columns: Some(4) }).unwrap();
+    assert!(out.text.contains("    <Pane span=\"4\">\n      <Text name=\"a\""), "{}", out.text);
+    let back = clarity_spec::cxaml::apply(None, &out.text, &Edit::SetPaneSpan { target: pane(&out.text), columns: None }).unwrap();
+    assert_eq!(back.text, markup);
+}
+
+/// The window `page` of `module`, in its own file as a project holds it.
+fn design(module: &str, page: &str) -> String {
+    let file = format!("design/{page}.cxaml");
+    clarity_spec::converted([("m.clarity", module)]).into_iter().find(|(p, _)| p.ends_with(&file)).map(|(_, t)| t).expect("the page's file")
 }

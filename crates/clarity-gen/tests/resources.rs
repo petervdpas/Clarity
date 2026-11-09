@@ -5,7 +5,7 @@
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Ui, starter};
 use clarity_spec::resources::{self, ResourceFile};
-use clarity_spec::{Project, load_sources};
+use clarity_spec::{Project, load_converted};
 
 const HOME: &str = "module shop
 
@@ -25,7 +25,7 @@ const LOGO: [u8; 4] = [0x89, b'P', b'N', b'G'];
 
 /// The resources, and the keys that point each language at one of them.
 fn project() -> Project {
-    let mut project = load_sources([("shop.clarity", HOME)]);
+    let mut project = load_converted([("shop.clarity", HOME)]);
     project.translations.insert("en".into(), Default::default());
     project.translations.insert("nl".into(), Default::default());
     for (language, rules, banner) in [("en", "rules-en.md", "banner-en.png"), ("nl", "rules-nl.md", "banner-nl.png")] {
@@ -117,7 +117,7 @@ fn rust_on_clarity_ui_embeds_the_resources() {
 /// A project without resources carries no folder for them.
 #[test]
 fn no_resources_no_folder() {
-    let project = load_sources([("shop.clarity", "module shop\n\nentity Customer\n    name: text(80)\n\npage Home: window\n    label \"Hi\" name label1 at 1,1 span 2\n")]);
+    let project = load_converted([("shop.clarity", "module shop\n\nentity Customer\n    name: text(80)\n\npage Home: window\n    label \"Hi\" name label1 at 1,1 span 2\n")]);
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = Backend::Csharp;
     settings.stack.ui = Ui::Clarity;
@@ -129,7 +129,7 @@ fn no_resources_no_folder() {
 #[test]
 fn the_browser_files_carry_an_svg_as_it_is() {
     let source = "module art\n\napp Art\n    main Gallery\n\npage Gallery: window\n    image name logo at 1,1 span 3 rows 3 source \"logo.svg\"\n";
-    let mut project = clarity_spec::load_sources([("art.clarity", source)]);
+    let mut project = clarity_spec::load_converted([("art.clarity", source)]);
     let svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><circle cx=\"5\" cy=\"5\" r=\"4\"/></svg>".to_vec();
     clarity_spec::resources::attach(&mut project, vec![clarity_spec::resources::ResourceFile { name: "logo.svg".into(), bytes: svg }]);
     let site = clarity_gen::web_browser::site(&project, &clarity_project::starter("Art", "art"));

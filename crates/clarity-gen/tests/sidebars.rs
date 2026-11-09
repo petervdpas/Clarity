@@ -4,7 +4,7 @@
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Ui, starter};
-use clarity_spec::load_sources;
+use clarity_spec::load_converted;
 
 const SHOP: &str = "module shop
 
@@ -22,7 +22,7 @@ code Main
 ";
 
 fn files(backend: Backend, ui: Ui) -> Vec<OutFile> {
-    let project = load_sources([("shop.clarity", SHOP)]);
+    let project = load_converted([("shop.clarity", SHOP)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = backend;

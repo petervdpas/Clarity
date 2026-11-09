@@ -4,7 +4,7 @@
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, FileStore, Ui, starter};
-use clarity_spec::{Project, load_sources};
+use clarity_spec::{Project, load_converted};
 
 const CATALOG: &str = "module catalog
 
@@ -37,7 +37,7 @@ page Catalog: window
 ";
 
 fn project() -> Project {
-    let mut project = load_sources([("catalog.clarity", CATALOG)]);
+    let mut project = load_converted([("catalog.clarity", CATALOG)]);
     clarity_spec::attach_stores(&mut project, vec!["photos".into()]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     project

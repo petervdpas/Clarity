@@ -2,7 +2,7 @@
 //! from 1, as it does a ribbon's: a workspace opens the tab of what was
 //! chosen in its tree.
 
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const SHOP: &str = "module shop
 
@@ -24,7 +24,7 @@ code Work
 ";
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("shop.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("shop.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]

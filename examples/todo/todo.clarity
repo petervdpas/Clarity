@@ -15,29 +15,6 @@ settings
     theme
     showDone: bool, default true, label @settingsShowDoneLabel
 
-app Todo
-    title @todoTitle
-    main Main
-    splash Welcome for 2.5 seconds
-    on start: loading
-    menu name mainMenu
-        item @fileItem name fileItem
-            item @usersItem name usersItem on click -> Users
-            separator
-            item @languageItem name languageItem on click -> language
-            item @themeItem name themeItem on click -> theme
-            item @preferencesItem name preferencesItem on click -> Preferences
-            separator
-            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
-    // A ribbon the person folds to its tabs with a double click.
-    ribbon name mainRibbon collapsible
-        tab @homeTab name homeTab
-            group @peopleGroup name peopleGroup
-                button @usersButtonCaption name usersButton icon "list" large on click -> Users
-            group @settingsGroup name settingsGroup
-                button @languageButtonCaption name languageButton icon "languages" large on click -> language
-                button @themeButtonCaption name themeButton large on click -> theme
-
 code Main
     handler windowOpened
         showTasks()

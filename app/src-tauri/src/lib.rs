@@ -32,6 +32,9 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use clarity_project::{Catalog, ProjectFile, Settings, Stack};
+// Writing files and new projects, shared with the MCP server (crates/clarity-tools).
+use clarity_tools::files::{FileChange, is_spec_file, write_atomically};
+use clarity_tools::new_project::write_new_project;
 use clarity_spec::Preview;
 use clarity_spec::edit::{self, Edit};
 use clarity_spec::rename::RenameKind;
@@ -64,27 +67,6 @@ struct WatchState {
     open: Mutex<Option<OpenProject>>,
 }
 
-/// One file's text before and after a change. A file that did not exist
-/// before has no text, and undoing its change removes it.
-#[derive(Debug)]
-struct FileChange {
-    file: PathBuf,
-    /// The text before; None when the change made the file.
-    before: Option<String>,
-    /// The text after; None when the change took the file away.
-    after: Option<String>,
-}
-
-impl FileChange {
-    /// Makes the change: writes the text after, or takes the file away.
-    fn make(&self) -> Result<(), String> {
-        match &self.after {
-            Some(text) => write_atomically(&self.file, text),
-            None => std::fs::remove_file(&self.file).map_err(|err| format!("cannot remove {}: {err}", self.file.display())),
-        }
-    }
-}
-
 /// One applied change: an edit of one file, or a rename across several.
 /// It is undone and redone as a whole.
 struct Change(Vec<FileChange>);
@@ -115,11 +97,6 @@ fn load(dir: &Path) -> Result<Preview, String> {
     let project = clarity_project::load_modules(dir)
         .map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     Ok(Preview::new(project))
-}
-
-fn is_spec_file(path: &Path) -> bool {
-    path.extension()
-        .is_some_and(|ext| ext == clarity_spec::SPEC_EXTENSION)
 }
 
 /// True for events that change a module of `dir` or the project file.
@@ -277,35 +254,61 @@ fn apply_edit(
 
     let read_err = |err: std::io::Error| format!("cannot read {}: {err}", dir.display());
     let before = clarity_project::load_modules(&dir).map_err(read_err)?;
-    // A window's or view's own file: the page's edits change its markup;
-    // what belongs in the module (its code, entities) goes to the module's file.
+    // A window's, view's or app's own file: the edit is made on what it holds and the file written;
+    // what belongs in the module (the handlers a wiring writes, code) goes to the module's file.
     // Its whole markup typed in the Design text replaces the file, checked as any edit.
-    let typed = match &edit {
-        edit::Edit::ReplaceDecl { text, .. } if is_page_file(&file) => Some(text.clone()),
-        _ => None,
-    };
-    let (file, source) = if typed.is_none() && is_page_file(&file) && edit::with_items(&edit, &|i| i).is_err() {
-        let module = code_file_of(file)?;
-        let text = std::fs::read_to_string(&module).map_err(|err| format!("cannot read {}: {err}", module.display()))?;
-        (module, text)
-    } else {
-        (file, source)
-    };
-    let outcome = if let Some(text) = typed {
-        edit::EditOutcome { text, focus: None, keys: Vec::new() }
-    } else if is_page_file(&file) {
-        clarity_spec::cxaml::apply(Some(&before), &source, &edit).map_err(|err| err.to_string())?
-    } else {
-        edit::apply_in(&before, &source, &edit).map_err(|err| err.to_string())?
-    };
-    // A window or view the edit added goes into a .cxaml file of its own (docs/CXAML-SOURCE-PLAN.md).
-    let (outcome, new_pages) = with_new_pages_moved_out(&file, &source, outcome)?;
-    if outcome.text != source {
+    let mut outcomes: Vec<(PathBuf, String, edit::EditOutcome)> = Vec::new();
+    let mut added_files: Vec<(PathBuf, String)> = Vec::new();
+    match &edit {
+        edit::Edit::ReplaceDecl { text, .. } if is_page_file(&file) => {
+            outcomes.push((file.clone(), source.clone(), edit::EditOutcome { text: text.clone(), focus: None, keys: Vec::new() }));
+        }
+        // Removing a window, view or app itself: its file goes, and its code in the module with it.
+        edit::Edit::Remove { item } if is_page_file(&file) && clarity_spec::cxaml::read_designed(&source, "").is_ok_and(|d| d.start() == *item) => {
+            let module = code_file_of(file.clone())?;
+            let text = std::fs::read_to_string(&module).map_err(|err| format!("cannot read {}: {err}", module.display()))?;
+            let without = clarity_spec::cxaml::removed(&source, *item, &text).expect("the file's own window")?;
+            outcomes.push((file.clone(), source.clone(), edit::EditOutcome { text: String::new(), focus: None, keys: Vec::new() }));
+            outcomes.push((module, text, edit::EditOutcome { text: without, focus: None, keys: Vec::new() }));
+        }
+        _ if is_page_file(&file) => {
+            let (design, code) = clarity_spec::design_edit::split(&edit);
+            if let Some(design) = design {
+                let outcome = clarity_spec::cxaml::apply(Some(&before), &source, &design).map_err(|err| err.to_string())?;
+                outcomes.push((file.clone(), source.clone(), outcome));
+            }
+            if let Some(code) = code {
+                let module = code_file_of(file.clone())?;
+                let text = std::fs::read_to_string(&module).map_err(|err| format!("cannot read {}: {err}", module.display()))?;
+                let outcome = edit::apply_in(&before, &text, &code).map_err(|err| err.to_string())?;
+                outcomes.push((module, text, outcome));
+            }
+        }
+        _ => match clarity_spec::cxaml::added(&before, &file, &source, &edit) {
+            // A new window, view or app is files of its own in design/; the code it starts with goes in the module.
+            Some(added) => {
+                let added = added?;
+                added_files = added.files;
+                outcomes.push((file.clone(), source.clone(), edit::EditOutcome { text: added.module, focus: None, keys: added.keys }));
+            }
+            None => {
+                let outcome = edit::apply_in(&before, &source, &edit).map_err(|err| err.to_string())?;
+                outcomes.push((file.clone(), source.clone(), outcome));
+            }
+        },
+    }
+    // What the edit focuses: in the file it was asked of.
+    let focus = outcomes.first().and_then(|(path, _, o)| (*path == file).then_some(o.focus).flatten());
+    // A window, view or app the edit added: its own .cxaml files (docs/CXAML-SOURCE-PLAN.md).
+    let new_pages = added_files;
+    let changed: Vec<&(PathBuf, String, edit::EditOutcome)> = outcomes.iter().filter(|(_, before_text, o)| o.text != *before_text).collect();
+    if !changed.is_empty() || !new_pages.is_empty() {
         // A text the edit wrote became a key: every language file gets it,
         // the default language with its text.
         let default = clarity_spec::translations::default_language(&before);
-        let languages = clarity_spec::keyed::plan_keys(&dir, &default, &outcome.keys).map_err(read_err)?;
-        let mut replaced: Vec<(&Path, &str)> = vec![(file.as_path(), outcome.text.as_str())];
+        let keys: Vec<(String, String)> = changed.iter().flat_map(|(_, _, o)| o.keys.clone()).collect();
+        let languages = clarity_spec::keyed::plan_keys(&dir, &default, &keys).map_err(read_err)?;
+        let mut replaced: Vec<(&Path, &str)> = changed.iter().map(|(path, _, o)| (path.as_path(), o.text.as_str())).collect();
         replaced.extend(new_pages.iter().map(|(path, text)| (path.as_path(), text.as_str())));
         replaced.extend(languages.iter().map(|(path, _, after)| (path.as_path(), after.as_str())));
         // The checker decides what is valid: an edit that adds an error
@@ -314,12 +317,17 @@ fn apply_edit(
         if let Some(error) = clarity_spec::new_error(&before, &after) {
             return Err(error.message.clone());
         }
-        write_atomically(&file, &outcome.text)?;
-        let mut changes = vec![FileChange {
-            file: file.clone(),
-            before: Some(source),
-            after: Some(outcome.text),
-        }];
+        let mut changes = Vec::new();
+        for (path, before_text, outcome) in &changed {
+            // A design file written as nothing is removed: its window, view or app is gone.
+            if outcome.text.is_empty() && is_page_file(path) {
+                std::fs::remove_file(path).map_err(|err| format!("cannot remove {}: {err}", path.display()))?;
+                changes.push(FileChange { file: path.clone(), before: Some(before_text.clone()), after: None });
+                continue;
+            }
+            write_atomically(path, &outcome.text)?;
+            changes.push(FileChange { file: path.clone(), before: Some(before_text.clone()), after: Some(outcome.text.clone()) });
+        }
         for (path, text) in new_pages {
             if path.exists() {
                 return Err(format!("{} is there already", path.display()));
@@ -341,34 +349,8 @@ fn apply_edit(
     }
     Ok(EditApplied {
         preview: load(&dir)?,
-        focus: outcome.focus,
+        focus,
     })
-}
-
-/// The pages an edit of a module's file added, each moved into its own
-/// `.cxaml` beside it: the module's text without them, and the new files.
-fn with_new_pages_moved_out(file: &Path, before: &str, outcome: edit::EditOutcome) -> Result<(edit::EditOutcome, Vec<(PathBuf, String)>), String> {
-    if is_page_file(file) {
-        return Ok((outcome, Vec::new()));
-    }
-    let names = |text: &str| clarity_spec::parser::parse(text, "").0.pages.into_iter().map(|p| p.name.name).collect::<Vec<_>>();
-    let old = names(before);
-    let added: Vec<String> = names(&outcome.text).into_iter().filter(|n| !old.contains(n)).collect();
-    if added.is_empty() {
-        return Ok((outcome, Vec::new()));
-    }
-    let shown = file.display().to_string();
-    let moved = clarity_spec::cxaml::moved_out_only(&[(shown.clone(), outcome.text.clone())], Some(&added))?;
-    let mut text = outcome.text.clone();
-    let mut pages = Vec::new();
-    for (path, written) in moved {
-        if path == shown {
-            text = written;
-        } else {
-            pages.push((PathBuf::from(path), written));
-        }
-    }
-    Ok((edit::EditOutcome { text, focus: None, keys: outcome.keys }, pages))
 }
 
 /// Moves every page still written in a module's file into its own `.cxaml`
@@ -850,87 +832,6 @@ fn new_project(
     open_file(&file.display().to_string(), app, &state, &history)
 }
 
-/// What a new project keeps out of version control: the generated application.
-const GITIGNORE: &str = "# Generated by Clarity, and the build tools' output; rebuilt from the .clarity files.\nout/\n# The application's records while you develop it.\ndata/\n";
-
-/// Writes a new project: the project file (with `.clarity` added when it is
-/// missing) and its folder, which must not exist yet or be empty. Returns
-/// the project file.
-fn write_new_project(path: &Path, stack: Stack) -> Result<PathBuf, String> {
-    let file = if is_spec_file(path) { path.to_path_buf() } else { path.with_extension(clarity_spec::SPEC_EXTENSION) };
-    let dir = clarity_project::module_dir(&file);
-    if file.exists() {
-        return Err(format!("{} already exists; open it instead", file.display()));
-    }
-    let occupied = std::fs::read_dir(&dir).map(|mut entries| entries.next().is_some()).unwrap_or(false);
-    if occupied {
-        return Err(format!("the folder {} is not empty; choose another name", dir.display()));
-    }
-    let stem = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-    let (module, app_name) = project_names(&stem);
-    let settings = Settings {
-        stack,
-        ..clarity_project::starter(&app_name, &module)
-    };
-    // Check before writing anything, so a refused stack leaves no files.
-    if let Some(problem) = clarity_project::validate(&settings).into_iter().next() {
-        return Err(problem);
-    }
-    let project = clarity_project::write(None, &settings)?;
-    let title = clarity_project::title(&settings);
-    let module_text = format!(
-        "module {module}\n\napp {app_name}\n    title \"{title}\"\n    main Main\n\npage Main: window\n    title \"Main\"\n"
-    );
-    // Its texts by key, with the default language's file giving their values.
-    let language = settings.language.clone().unwrap_or_else(|| "en".to_string());
-    let module_file = format!("{module}.clarity");
-    let keyed = clarity_spec::keyed::make_keys(&[(module_file.as_str(), module_text.as_str())], &[], &language);
-    let failed = |err: std::io::Error| format!("cannot write the project: {err}");
-    std::fs::create_dir_all(dir.join(clarity_spec::translations::TRANSLATIONS_DIR)).map_err(failed)?;
-    // The main window goes into design/Main.cxaml, as every window has a file of its own.
-    clarity_spec::cxaml::write_with_pages_moved_out(&dir.join(&module_file), &keyed.modules[0].1).map_err(failed)?;
-    std::fs::write(dir.join(clarity_spec::translations::TRANSLATIONS_DIR).join(format!("{language}.clarity")), keyed.language_file(&language)).map_err(failed)?;
-    std::fs::write(dir.join(".gitignore"), GITIGNORE).map_err(failed)?;
-    std::fs::write(&file, project).map_err(failed)?;
-    Ok(file)
-}
-
-/// A module name (`my_shop`) and an app name (`MyShop`) from a folder name.
-fn project_names(folder: &str) -> (String, String) {
-    let words: Vec<String> = folder
-        .split(|c: char| !c.is_ascii_alphanumeric())
-        .filter(|w| !w.is_empty())
-        .map(str::to_lowercase)
-        .collect();
-    let words = if words.is_empty() { vec!["app".to_string()] } else { words };
-    let mut module = words.join("_");
-    if module.starts_with(|c: char| c.is_ascii_digit()) {
-        module.insert_str(0, "app_");
-    }
-    let app = words
-        .iter()
-        .map(|w| {
-            let mut chars = w.chars();
-            chars.next().map(|c| c.to_uppercase().chain(chars).collect::<String>()).unwrap_or_default()
-        })
-        .collect::<String>();
-    let app = if app.starts_with(|c: char| c.is_ascii_digit()) { format!("App{app}") } else { app };
-    (module, app)
-}
-
-/// Writes through a temporary file and a rename, so readers (including the
-/// watcher and other editors) never see a half-written spec.
-fn write_atomically(file: &Path, text: &str) -> Result<(), String> {
-    let mut tmp = file.as_os_str().to_owned();
-    tmp.push(".tmp");
-    let tmp = PathBuf::from(tmp);
-    std::fs::write(&tmp, text).map_err(|err| format!("cannot write {}: {err}", tmp.display()))?;
-    std::fs::rename(&tmp, file).map_err(|err| {
-        let _ = std::fs::remove_file(&tmp);
-        format!("cannot replace {}: {err}", file.display())
-    })
-}
-
 /// The project file given on the command line or in CLARITY_PROJECT.
 #[tauri::command]
 fn initial_project() -> Option<String> {
@@ -1171,58 +1072,12 @@ mod tests {
         assert_eq!(window_title("Clarity", "0.1.0", Some("")), "Clarity (development)");
     }
 
-    #[test]
-    fn a_new_project_is_a_file_with_its_folder() {
-        let base = std::env::temp_dir().join(format!("clarity-new-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        // The extension is added when the dialog leaves it out.
-        let file = write_new_project(&base.join("my-shop"), csharp()).unwrap();
-        assert_eq!(file, base.join("my-shop.clarity"));
-        let dir = base.join("my-shop");
-        assert!(dir.join("my_shop.clarity").exists());
-        let project = clarity_project::load_modules(&dir).unwrap();
-        assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
-        assert_eq!(project.apps().next().unwrap().name.name, "MyShop");
-        let loaded = clarity_project::load(&file);
-        assert!(loaded.problems.is_empty(), "{:?}", loaded.problems);
-        let settings = loaded.settings.unwrap();
-        assert_eq!(settings.name, "MyShop");
-        assert_eq!(clarity_project::title(&settings), "My shop");
-        assert_eq!(settings.stack, csharp());
-        assert_eq!(settings.datasources[0].url, "data/my_shop.db");
-        assert!(std::fs::read_to_string(dir.join(".gitignore")).unwrap().contains("out/"));
-        assert!(write_new_project(&file, csharp()).unwrap_err().contains("already exists"));
-
-        // A folder that already holds something is not taken over.
-        std::fs::create_dir_all(base.join("taken")).unwrap();
-        std::fs::write(base.join("taken/notes.txt"), "mine").unwrap();
-        assert!(write_new_project(&base.join("taken.clarity"), csharp()).unwrap_err().contains("not empty"));
-        std::fs::remove_dir_all(&base).unwrap();
-    }
-
     fn csharp() -> Stack {
         Stack {
             backend: Backend::Csharp,
             ui: Ui::Clarity,
             targets: vec![Target::Desktop],
         }
-    }
-
-    #[test]
-    fn a_refused_stack_writes_no_files() {
-        let base = std::env::temp_dir().join(format!("clarity-refused-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        // Every language draws with Clarity.UI: the shared web screen is refused.
-        let stack = Stack {
-            backend: Backend::Go,
-            ui: Ui::Webview,
-            ..csharp()
-        };
-        assert!(write_new_project(&base.join("shop.clarity"), stack).unwrap_err().contains("Clarity.UI"));
-        assert_eq!(std::fs::read_dir(&base).unwrap().count(), 0);
-        std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]
@@ -1264,14 +1119,6 @@ mod tests {
         assert!(after.contains("    stack csharp desktop\n"), "{after}");
         assert!(change.before.is_some());
         std::fs::remove_dir_all(&base).unwrap();
-    }
-
-    #[test]
-    fn names_a_project_after_its_file() {
-        assert_eq!(project_names("my-shop"), ("my_shop".into(), "MyShop".into()));
-        assert_eq!(project_names("Shop"), ("shop".into(), "Shop".into()));
-        assert_eq!(project_names("2026 plan"), ("app_2026_plan".into(), "App2026Plan".into()));
-        assert_eq!(project_names("--"), ("app".into(), "App".into()));
     }
 
     #[test]

@@ -2,7 +2,7 @@ use clarity_spec::code::{BinaryOp, ExprKind, MessageLevel, StmtKind};
 use clarity_spec::model::Literal;
 use clarity_spec::widgets::widget_line;
 use clarity_spec::parser::parse;
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const BASE: &str = "module shop
 
@@ -63,7 +63,7 @@ code Orders
 /// All problems of BASE plus `code`, as (severity, message).
 fn problems(code: &str) -> Vec<(Severity, String)> {
     let source = format!("{BASE}{code}");
-    load_sources([("shop.clarity", source.as_str())])
+    load_converted([("shop.clarity", source.as_str())])
         .diagnostics
         .into_iter()
         .map(|d| (d.severity, d.message))
@@ -309,7 +309,7 @@ fn a_part_and_data_may_not_share_a_name() {
         BASE.replace("textbox name vatNumber", "textbox name customer")
             .replace("vatNumber.visible", "customer.visible")
     );
-    let errors: Vec<String> = load_sources([("shop.clarity", source.as_str())])
+    let errors: Vec<String> = load_converted([("shop.clarity", source.as_str())])
         .diagnostics
         .into_iter()
         .filter(|d| d.severity == Severity::Error)
@@ -369,12 +369,12 @@ fn a_button_can_close_its_window() {
         "    button \"Save\" name save at 1,3 span 2 on click: saveClicked\n    button \"Close\" name button1 at 3,3 span 2 on click -> close\n    button \"Quit\" name button2 at 5,3 span 2 on click -> quit\n",
     );
     let source = format!("{base}{CODE}");
-    let problems: Vec<String> = load_sources([("shop.clarity", source.as_str())]).diagnostics.into_iter().map(|d| d.message).collect();
+    let problems: Vec<String> = load_converted([("shop.clarity", source.as_str())]).diagnostics.into_iter().map(|d| d.message).collect();
     assert!(problems.is_empty(), "{problems:#?}");
     // Language and theme pick in a menu or a toolbar.
     let base = BASE.replace("    button \"Save\" name save at 1,3 span 2 on click: saveClicked\n", "    button \"Save\" name save at 1,3 span 2 on click: saveClicked\n    button \"Theme\" name button3 at 3,3 span 2 on click -> theme\n");
     let source = format!("{base}{CODE}");
-    let problems: Vec<String> = load_sources([("shop.clarity", source.as_str())]).diagnostics.into_iter().map(|d| d.message).collect();
+    let problems: Vec<String> = load_converted([("shop.clarity", source.as_str())]).diagnostics.into_iter().map(|d| d.message).collect();
     assert_eq!(problems, ["'theme' picks in a menu or a toolbar; a button can close its window or quit"]);
 }
 
@@ -386,7 +386,7 @@ fn a_button_can_open_the_keys_window() {
         "    button \"Save\" name save at 1,3 span 2 on click: saveClicked\n    button \"Keys\" name keysButton at 3,3 span 2 on click -> keys\n",
     );
     let source = format!("{base}{CODE}");
-    let problems: Vec<String> = load_sources([("shop.clarity", source.as_str())]).diagnostics.into_iter().map(|d| d.message).collect();
+    let problems: Vec<String> = load_converted([("shop.clarity", source.as_str())]).diagnostics.into_iter().map(|d| d.message).collect();
     assert!(problems.is_empty(), "{problems:#?}");
 }
 
@@ -411,14 +411,14 @@ code Pad
 fn a_click_passes_values_to_its_handler() {
     assert_eq!(problems(&format!("{CODE}{PAD}")), [], "the pad is fine");
 
-    let file = load_sources([("shop.clarity", format!("{BASE}{CODE}{PAD}").as_str())]).files.remove(0);
-    let pad = file.pages.iter().find(|p| p.name.name == "Pad").unwrap();
+    let project = load_converted([("shop.clarity", format!("{BASE}{CODE}{PAD}").as_str())]);
+    let pad = project.pages().find(|p| p.name.name == "Pad").unwrap();
     let hi = &pad.widgets[2].props.handlers[0];
     assert_eq!(hi.handler, "say");
     assert_eq!(hi.args, [Literal::Str("hi".into()), Literal::Bool(true), Literal::Ident("Business".into())]);
     // The designer writes the line back with its values.
     assert!(widget_line(&pad.widgets[2].props).ends_with("on click: say(\"hi\", true, Business)"), "{}", widget_line(&pad.widgets[2].props));
-    let code = file.code.iter().find(|b| b.name.name == "Pad").unwrap();
+    let code = project.files[0].code.iter().find(|b| b.name.name == "Pad").unwrap();
     assert_eq!(code.handlers[0].params.len(), 1);
     assert_eq!(code.handlers[0].params[0].name.name, "d");
 }
@@ -460,7 +460,7 @@ fn handlers_change_a_windows_plain_values() {
     assert_ne!(base, BASE);
     let errors = |body: &str| -> Vec<String> {
         let source = format!("{base}{}", form(body));
-        load_sources([("shop.clarity", source.as_str())])
+        load_converted([("shop.clarity", source.as_str())])
             .diagnostics
             .into_iter()
             .filter(|d| d.severity == Severity::Error)

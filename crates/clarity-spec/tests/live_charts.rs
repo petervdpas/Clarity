@@ -6,7 +6,7 @@
 
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::{Event, WidgetKind, widget_line};
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const WATCH: &str = "module watch
 
@@ -27,7 +27,7 @@ code Monitor
 ";
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("watch.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("watch.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 fn with(old: &str, new: &str) -> String {

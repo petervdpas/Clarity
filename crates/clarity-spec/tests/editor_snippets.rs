@@ -2,7 +2,7 @@
 //! are Clarity: each one, with its placeholders filled as offered, reads
 //! without an error of the language.
 
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 /// A snippet's body with every placeholder as it is offered: `${1:name}`
 /// is `name`, `${2|app,window|}` is `app`, `$1` repeats what 1 is, and a
@@ -58,7 +58,7 @@ fn every_snippet_is_clarity() {
             "code" => ("m.clarity", format!("module m\n\npage CustomerCard: window\n\n{text}\n")),
             _ => ("m.clarity", format!("module m\n\n{text}\n")),
         };
-        let errors: Vec<String> = load_sources([(path, source.as_str())])
+        let errors: Vec<String> = load_converted([(path, source.as_str())])
             .diagnostics
             .into_iter()
             .filter(|d| d.severity == Severity::Error && !d.message.contains("translation") && !d.message.contains("key"))

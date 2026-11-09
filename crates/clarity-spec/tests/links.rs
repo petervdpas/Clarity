@@ -1,6 +1,6 @@
 //! `link chapter: toChapter`: a table column whose cells are links that run a handler.
 
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const DESK: &str = "module m
 
@@ -21,15 +21,15 @@ code Desk
 ";
 
 fn diagnostics(text: &str) -> Vec<(Severity, String)> {
-    load_sources([("m.clarity", text)]).diagnostics.into_iter().map(|d| (d.severity, d.message)).collect()
+    load_converted([("m.clarity", text)]).diagnostics.into_iter().map(|d| (d.severity, d.message)).collect()
 }
 
 #[test]
 fn a_link_column_runs_its_handler() {
     let all = diagnostics(DESK);
     assert!(all.iter().all(|(s, _)| *s != Severity::Error), "{all:#?}");
-    let project = load_sources([("m.clarity", DESK)]);
-    let table = &project.files[0].pages[0].widgets[0];
+    let project = load_converted([("m.clarity", DESK)]);
+    let table = &project.pages().nth(0).unwrap().widgets[0];
     assert_eq!(table.props.links[0].handler, "toChapter");
     assert!(clarity_spec::widgets::widget_line(&table.props).contains("link chapter: toChapter"));
     let e = diagnostics(&DESK.replace("link chapter: toChapter", "link other: toChapter"));
@@ -63,8 +63,8 @@ code Desk
 fn a_list_takes_rows_dragged_from_another_part() {
     let all = diagnostics(FILING);
     assert!(all.iter().all(|(s, _)| *s != Severity::Error), "{all:#?}");
-    let project = load_sources([("m.clarity", FILING)]);
-    let list = &project.files[0].pages[0].widgets[1];
+    let project = load_converted([("m.clarity", FILING)]);
+    let list = &project.pages().nth(0).unwrap().widgets[1];
     assert_eq!((list.props.drops[0].from.as_str(), list.props.drops[0].handler.as_str()), ("fragmentList", "fileFragment"));
     assert!(clarity_spec::widgets::widget_line(&list.props).contains("on drop from fragmentList: fileFragment"));
     let e = diagnostics(&FILING.replace("on drop from fragmentList", "on drop from nowhere"));

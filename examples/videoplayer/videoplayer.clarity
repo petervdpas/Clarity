@@ -9,10 +9,6 @@ record Clip
 settings
     videoFolder: folder, label @videoFolderSetting
 
-app Videoplayer
-    title @videoplayerTitle
-    main Main
-
 code Main
     handler windowOpened
         screen.volume(volume)

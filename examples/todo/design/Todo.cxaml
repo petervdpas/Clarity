@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<App class="todo.Todo" title="@todoTitle" main="Main" splash="Welcome" splashFor="2.5" onstart="loading">
+  <Menu name="mainMenu">
+    <Item caption="@fileItem" name="fileItem">
+      <Item caption="@usersItem" name="usersItem" opens="Users" />
+      <Item kind="separator" />
+      <Item caption="@languageItem" name="languageItem" opens="language" />
+      <Item caption="@themeItem" name="themeItem" opens="theme" />
+      <Item caption="@preferencesItem" name="preferencesItem" opens="Preferences" />
+      <Item kind="separator" />
+      <Item caption="@quitItem" name="quitItem" key="Ctrl+Q" opens="quit" />
+    </Item>
+  </Menu>
+  <Ribbon name="mainRibbon" collapsible="true">
+    <Tab title="@homeTab" name="homeTab">
+      <Group title="@peopleGroup" name="peopleGroup">
+        <Item kind="button" caption="@usersButtonCaption" name="usersButton" icon="list" large="true" opens="Users" />
+      </Group>
+      <Group title="@settingsGroup" name="settingsGroup">
+        <Item kind="button" caption="@languageButtonCaption" name="languageButton" icon="languages" large="true" opens="language" />
+        <Item kind="button" caption="@themeButtonCaption" name="themeButton" large="true" opens="theme" />
+      </Group>
+    </Tab>
+  </Ribbon>
+</App>

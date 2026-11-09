@@ -28,7 +28,7 @@ fn every_backend_queries_on_a_records_id() {
         let mut settings = starter("Board", "board");
         settings.stack.backend = backend;
         settings.stack.ui = ui;
-        let project = clarity_spec::load_in([("board.clarity", SOURCE)], [("0001.clarity", FIRST)], &clarity_project::source_refs(&settings));
+        let project = clarity_spec::load_in(clarity_spec::converted([("board.clarity", SOURCE)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", FIRST)], &clarity_project::source_refs(&settings));
         let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
         assert!(errors.is_empty(), "{errors:#?}");
         let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{backend:?}: {e:#?}"));

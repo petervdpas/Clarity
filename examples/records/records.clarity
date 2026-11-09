@@ -3,33 +3,6 @@ module records
 use music
 use loans
 
-// The application frame, shared by every window.
-app Records
-    title @recordsTitle
-    main AlbumBrowse
-    menu name mainMenu
-        item @fileItem name fileItem
-            item @albumsItem name albumsItem key "Ctrl+1" on click -> AlbumBrowse
-            separator
-            item @settingsItem name settingsItem on click -> Preferences
-            item @languageItem name languageItem on click -> language
-            item @themeItem name themeItem on click -> theme
-            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
-        item @collectionItem name collectionItem
-            item @artistsItem name artistsItem on click -> ArtistBrowse
-            item @genresItem name genresItem on click -> GenreBrowse
-            item @overviewItem name overviewItem on click -> CollectionOverview
-        item @loansItem name loansItem
-            item @onLoanItem name onLoanItem on click -> LoanBrowse
-            item @friendsItem name friendsItem on click -> FriendBrowse
-    toolbar name mainToolbar
-        button @albums2Caption name albums2 on click -> AlbumBrowse
-        button @artists2Caption name artists2 on click -> ArtistBrowse
-        separator
-        button @onLoan2Caption name onLoan2 on click -> LoanBrowse
-    footer
-        status @recordsStatus
-
 // What each person sets for themselves: where exports and backups go.
 settings
     exportsFolder: folder, default "exports", label @exportsFolderSetting

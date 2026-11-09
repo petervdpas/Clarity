@@ -4,7 +4,7 @@
 
 use clarity_spec::code::{ExprKind, StmtKind, TypeRefKind};
 use clarity_spec::parser::parse;
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const SHOP: &str = "module shop
 
@@ -33,7 +33,7 @@ code Orders
 ";
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("shop.clarity", source)]).diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.clone()).collect()
+    load_converted([("shop.clarity", source)]).diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.clone()).collect()
 }
 
 fn with(old: &str, new: &str) -> String {

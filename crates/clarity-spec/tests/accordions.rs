@@ -3,7 +3,8 @@
 //! `part.open` (from 1, 0 for none); a scroll box's parts may stand below
 //! its rows and scroll into view.
 
-use clarity_spec::edit::{Edit, apply};
+use clarity_spec::cxaml::{apply, read_page};
+use clarity_spec::edit::Edit;
 use clarity_spec::keyed::load_keyed;
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::{self, ContainerKind, Event, WidgetKind};
@@ -83,10 +84,17 @@ fn an_accordion_needs_a_section_and_the_designer_adds_them() {
         .replace("        section \"Shipping\"\n            text name shippingText at 1,1 span 6 rows 2 bind customer.shipping\n", "")
         .replace("        section \"Returns\"\n            text name returnsText at 1,1 span 6 rows 2 bind customer.returns\n", "");
     assert!(errors(&none, CODE).iter().any(|m| m.contains("an accordion needs at least one 'section'")), "{:#?}", errors(&none, CODE));
-    let at = SHOP.find("accordion name faq").unwrap() as u32;
-    let outcome = apply(SHOP, &Edit::AddTab { item: at, title: "Payment".into() }).unwrap();
-    assert!(outcome.text.contains("        section \"Payment\"\n"), "{}", outcome.text);
-    let page = SHOP.find("page Help").unwrap() as u32;
-    let outcome = apply(SHOP, &Edit::PlaceWidget { container: page, props: widgets::new_props(WidgetKind::Accordion, 1, 12) }).unwrap();
-    assert!(outcome.text.contains("        section \"Section 1\"\n        section \"Section 2\"\n"), "{}", outcome.text);
+    let markup = design(SHOP, "Help");
+    let at = markup.find("<Accordion name=\"faq\"").unwrap() as u32;
+    let outcome = apply(None, &markup, &Edit::AddTab { item: at, title: "Payment".into() }).unwrap();
+    assert!(outcome.text.contains("    <Section title=\"Payment\" />\n  </Accordion>"), "{}", outcome.text);
+    let page = read_page(&markup, "").0.expect("the page").span.start;
+    let outcome = apply(None, &markup, &Edit::PlaceWidget { container: page, props: widgets::new_props(WidgetKind::Accordion, 1, 12) }).unwrap();
+    assert!(outcome.text.contains("    <Section title=\"Section 1\" />\n    <Section title=\"Section 2\" />\n"), "{}", outcome.text);
+}
+
+/// The window `page` of `module`, in its own file as a project holds it.
+fn design(module: &str, page: &str) -> String {
+    let file = format!("design/{page}.cxaml");
+    clarity_spec::converted([("shop.clarity", module)]).into_iter().find(|(p, _)| p.ends_with(&file)).map(|(_, t)| t).expect("the page's file")
 }

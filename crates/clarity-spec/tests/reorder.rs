@@ -5,7 +5,7 @@
 //! rows stay where the data has them.
 
 use clarity_spec::widgets::{self, Event, WidgetKind};
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const APP: &str = "module m
 
@@ -39,7 +39,7 @@ code Main
 ";
 
 fn diagnostics(source: &str, severity: Severity) -> Vec<String> {
-    load_sources([("m.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == severity).map(|d| d.message).collect()
+    load_converted([("m.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == severity).map(|d| d.message).collect()
 }
 
 fn errors(source: &str) -> Vec<String> {
@@ -50,8 +50,8 @@ fn errors(source: &str) -> Vec<String> {
 fn a_list_a_table_a_tree_and_a_tree_table_reorder_as_an_option() {
     assert!(errors(APP).is_empty(), "{:#?}", errors(APP));
     assert!(diagnostics(APP, Severity::Warning).is_empty(), "{:#?}", diagnostics(APP, Severity::Warning));
-    let project = load_sources([("m.clarity", APP)]);
-    let widgets = &project.files[0].pages[0].widgets;
+    let project = load_converted([("m.clarity", APP)]);
+    let widgets = &project.pages().nth(0).unwrap().widgets;
     for w in widgets {
         assert_eq!(w.props.reorder.as_deref(), Some("position"), "{:?}", w.props.name);
         assert_eq!(w.props.handlers[0].event, Event::Reorder);
@@ -65,8 +65,8 @@ fn a_list_a_table_a_tree_and_a_tree_table_reorder_as_an_option() {
     assert_eq!(Event::by_keyword("reorder"), Some(Event::Reorder));
     // Without the option the rows stay where the data has them.
     let plain = APP.replace(" reorder by position on reorder: moved", "").replace(" reorder by position on reorder: folderMoved", "");
-    let project = load_sources([("m.clarity", plain.as_str())]);
-    assert!(project.files[0].pages[0].widgets.iter().all(|w| w.props.reorder.is_none()));
+    let project = load_converted([("m.clarity", plain.as_str())]);
+    assert!(project.pages().nth(0).unwrap().widgets.iter().all(|w| w.props.reorder.is_none()));
 }
 
 #[test]
@@ -97,17 +97,17 @@ fn reordering_without_a_handler_is_a_warning() {
 /// A reorder is an edit: Ctrl+Z takes it back, unless the part says `no undo`.
 #[test]
 fn a_reorder_is_an_edit_with_its_undo() {
-    let project = load_sources([("m.clarity", APP)]);
-    let widgets = &project.files[0].pages[0].widgets;
+    let project = load_converted([("m.clarity", APP)]);
+    let widgets = &project.pages().nth(0).unwrap().widgets;
     assert_eq!(widgets[0].props.undo_scope.as_deref(), Some("taskList"));
     assert_eq!(widgets[2].props.undo_scope.as_deref(), Some("folderTree"));
     let off = APP.replace("show title reorder by position on reorder: moved", "show title reorder by position no undo on reorder: moved");
     assert!(errors(&off).is_empty(), "{:#?}", errors(&off));
-    let project = load_sources([("m.clarity", off.as_str())]);
-    assert_eq!(project.files[0].pages[0].widgets[0].props.undo_scope, None);
+    let project = load_converted([("m.clarity", off.as_str())]);
+    assert_eq!(project.pages().nth(0).unwrap().widgets[0].props.undo_scope, None);
     // A list that does not reorder only selects: it has no undo.
-    let plain = load_sources([("m.clarity", APP.replace(" reorder by position on reorder: moved", "").as_str())]);
-    assert_eq!(plain.files[0].pages[0].widgets[0].props.undo_scope, None);
+    let plain = load_converted([("m.clarity", APP.replace(" reorder by position on reorder: moved", "").as_str())]);
+    assert_eq!(plain.pages().nth(0).unwrap().widgets[0].props.undo_scope, None);
 }
 
 #[test]

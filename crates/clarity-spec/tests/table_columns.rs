@@ -4,7 +4,7 @@
 
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::{self, WidgetKind};
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const MUSIC: &str = "module music
 
@@ -24,7 +24,7 @@ fn with(part: &str) -> String {
 
 fn errors(part: &str) -> Vec<String> {
     let text = with(part);
-    load_sources([("music.clarity", text.as_str())])
+    load_converted([("music.clarity", text.as_str())])
         .diagnostics
         .into_iter()
         .filter(|d| d.severity == Severity::Error)

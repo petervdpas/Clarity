@@ -5,7 +5,7 @@
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Ui, starter};
-use clarity_spec::{Project, load_sources};
+use clarity_spec::{Project, load_converted};
 
 const API: &str = "module api
 
@@ -36,7 +36,7 @@ page Main: window
 ";
 
 fn project(source: &str) -> Project {
-    let project = load_sources([("api.clarity", source)]);
+    let project = load_converted([("api.clarity", source)]);
     assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
     project
 }

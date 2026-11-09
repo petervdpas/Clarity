@@ -3,7 +3,7 @@
 
 use clarity_spec::code::{DataEvent, FunctionKind, StmtKind};
 use clarity_spec::rename::{RenameKind, rename};
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 const SALES: &str = "module sales
 
@@ -49,12 +49,12 @@ fn errors(project: &Project) -> Vec<String> {
 
 fn with_events(events: &str) -> Project {
     let text = SALES.split("code Order").next().unwrap().to_string() + "code Order\n" + events;
-    load_sources([("sales.clarity", text.as_str())])
+    load_converted([("sales.clarity", text.as_str())])
 }
 
 #[test]
 fn an_entity_has_data_events() {
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = load_converted([("sales.clarity", SALES)]);
     assert!(errors(&project).is_empty(), "{:#?}", project.diagnostics);
     let block = &project.files[0].code[0];
     let events: Vec<DataEvent> = block.events.iter().map(|e| e.event).collect();
@@ -112,7 +112,7 @@ fn refuse_needs_a_value() {
 #[test]
 fn events_belong_to_entities() {
     let text = SALES.to_string() + "\npage Orders: window\n    title \"Orders\"\n\ncode Orders\n    before save\n        return\n\ncode Nothing\n    handler x\n        return\n";
-    let project = load_sources([("sales.clarity", text.as_str())]);
+    let project = load_converted([("sales.clarity", text.as_str())]);
     assert_eq!(
         errors(&project),
         [
@@ -124,12 +124,12 @@ fn events_belong_to_entities() {
 
 #[test]
 fn renaming_an_entity_renames_its_events() {
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = load_converted([("sales.clarity", SALES)]);
     let changed = rename(&project, |_| Some(SALES.to_string()), RenameKind::Entity, "Order", "Purchase").unwrap();
     let text = &changed[0].text;
     assert!(text.contains("code Purchase\n    before save\n        if purchase.total < 0\n"), "{text}");
     assert!(text.contains("purchase.number = \"ORD-\" + purchase.number"), "{text}");
     assert!(!text.contains("order."), "{text}");
-    let renamed = load_sources([("sales.clarity", text.as_str())]);
+    let renamed = load_converted([("sales.clarity", text.as_str())]);
     assert!(errors(&renamed).is_empty(), "{:#?}", renamed.diagnostics);
 }

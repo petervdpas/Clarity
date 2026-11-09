@@ -1,9 +1,9 @@
 //! docs/LANGUAGE.md is the language reference, so its examples must be
-//! valid Clarity: every snippet parses, and the complete example checks
-//! clean.
+//! valid Clarity: every snippet parses, and the complete example (its
+//! module and the `.cxaml` files of its windows) checks clean.
 
 use clarity_spec::parser::parse;
-use clarity_spec::{Severity, load_sources, widgets};
+use clarity_spec::{Severity, load_converted, widgets};
 
 const DOC: &str = include_str!("../../../docs/LANGUAGE.md");
 
@@ -76,11 +76,25 @@ fn the_complete_example_checks_clean() {
         .into_iter()
         .find(|b| b.starts_with("module customers\n"))
         .expect("section 11 has the customers module");
-    let project = load_sources([("customers.clarity", example.as_str())]);
+    // Its app, windows and views are the `.cxaml` blocks of module customers,
+    // each a file of its own in design/, named after what its root's class names.
+    let pages: Vec<(String, String)> = blocks().into_iter().filter_map(|b| page_file(&b, "customers")).collect();
+    assert_eq!(pages.len(), 5, "section 11 shows the app, two windows and their two views");
+    let mut sources = vec![("customers.clarity", example.as_str())];
+    sources.extend(pages.iter().map(|(path, text)| (path.as_str(), text.as_str())));
+    let project = load_converted(sources);
     let problems: Vec<_> = project
         .diagnostics
         .iter()
         .map(|d| (d.severity, &d.message))
         .collect();
     assert!(problems.is_empty(), "{problems:#?}");
+}
+
+/// A `.cxaml` block whose root's class is a page or the app of `module`, as
+/// the file it would be: `design/CustomerBrowse.cxaml` for `class="customers.CustomerBrowse"`.
+fn page_file(block: &str, module: &str) -> Option<(String, String)> {
+    let class = block.split("class=\"").nth(1)?.split('"').next()?;
+    let page = class.strip_prefix(module)?.strip_prefix('.')?;
+    Some((format!("design/{page}.cxaml"), block.to_string()))
 }

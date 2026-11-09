@@ -110,7 +110,7 @@ int main(void) {
 #[test]
 #[ignore]
 fn an_engine_answers_in_the_generated_application_in_c() {
-    let mut project = clarity_spec::load_sources([("shop.clarity", ENGINE_SHOP)]);
+    let mut project = clarity_spec::load_converted([("shop.clarity", ENGINE_SHOP)]);
     clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes: TEST_ENGINE.to_vec() }]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = clarity_project::starter("Shop", "shop");

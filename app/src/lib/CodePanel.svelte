@@ -29,6 +29,7 @@
     file,
     owner,
     item,
+    selected,
     onapplied,
     onclose,
   }: {
@@ -40,6 +41,8 @@
     owner: string;
     /** Where its declaration starts in the file. */
     item: number;
+    /** Where the picked part starts in the file; null for none. */
+    selected: number | null;
     onapplied: (preview: Preview) => void;
     onclose: () => void;
   } = $props();
@@ -51,7 +54,6 @@
 
   /** Whose code shows: the picked part's handlers, or the window's own events'. */
   const scope = $derived.by((): { label: string; roots: string[] } | null => {
-    const selected = pageDesigner.selected;
     const element = selected === null ? null : findFrameElement(page.frame, selected, page.widgets);
     if (element?.kind === "command") {
       const c = element.command.props;

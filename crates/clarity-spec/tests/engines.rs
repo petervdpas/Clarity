@@ -5,7 +5,7 @@
 use clarity_spec::code::TypeRefKind;
 use clarity_spec::engines::{self, EngineFile};
 use clarity_spec::parser::parse;
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 const TEST_ENGINE: &[u8] = include_bytes!("../../../conformance/engines/test.wasm");
 
@@ -34,7 +34,7 @@ function sized(lines: list<Line>) -> Size
 ";
 
 fn project(source: &str, files: Vec<EngineFile>) -> Project {
-    let mut project = load_sources([("shop.clarity", source)]);
+    let mut project = load_converted([("shop.clarity", source)]);
     engines::attach(&mut project, files);
     project
 }

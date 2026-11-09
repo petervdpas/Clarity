@@ -17,7 +17,7 @@ How to make applications with Clarity, one topic per page. Start with [What Clar
 
 - [Windows](design.windows.md): How a window is declared and designed: its kind, its data and events, the snap grid, and how one window opens another.
 - [Parts](design.parts.md): The parts you place on a window, grouped as the Parts palette shows them, with what each binds to and its events, and the properties panel.
-- [The app and its frame](design.frame.md): The `app` block: the main window, the frame every window shares (menu, toolbar, ribbon, sidebars, footer), keys, and the built-in click targets.
+- [The app and its frame](design.frame.md): The app's file: the main window, the frame every window shares (menu, toolbar, ribbon, sidebars, footer), keys, and the built-in click targets.
 - [Custom parts](design.custom-parts.md): How to put a part on a window that an outside library draws, such as a game scene drawn with Bevy, written in your project's own language.
 - [Sound](design.sound.md): How a window plays sound files, tones and melodies with the sound part, on every stack.
 - [Video](design.video.md): How a window plays a video with the video part, on every stack.

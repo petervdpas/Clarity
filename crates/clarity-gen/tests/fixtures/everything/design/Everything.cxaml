@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<App class="everything.Everything" title="@everything" main="Albums">
+  <Data name="recent" type="list&lt;Friend&gt;" />
+  <Data name="current" type="Friend" />
+  <Menu name="mainMenu">
+    <Item caption="@file" name="fileItem">
+      <Item caption="@folders" name="foldersItem" key="Ctrl+F" opens="Folders" />
+      <Item caption="@gallery" name="galleryItem" opens="Gallery" />
+      <Item kind="separator" />
+      <Item caption="@quit" name="quitItem" key="Ctrl+Q" opens="quit" />
+      <Item caption="@undoItem" name="undoItem" key="Ctrl+Z" opens="undo" />
+      <Item caption="@redoItem" name="redoItem" key="Ctrl+Y" opens="redo" />
+    </Item>
+  </Menu>
+  <Toolbar name="mainToolbar">
+    <Item kind="button" caption="@folders" name="foldersButton" icon="folder" opens="Folders" />
+    <Item kind="separator" />
+    <Item kind="button" caption="@gallery" name="galleryButton" opens="Gallery" />
+  </Toolbar>
+  <Ribbon name="mainRibbon" collapsible="true">
+    <Tab title="@home" name="homeTab">
+      <Group title="@goTo" name="goGroup">
+        <Item kind="button" caption="@albums" name="albumsButton" icon="disc" large="true" opens="Albums" />
+        <Item kind="button" caption="@overview" name="overviewButton" icon="list" opens="Overview" />
+      </Group>
+    </Tab>
+  </Ribbon>
+  <Sidebar side="left" name="leftSidebar" width="192">
+    <List name="recentList" at="1,1" span="3" rows="10" bind="recent" show="name" />
+  </Sidebar>
+  <Footer status="@ready" columns="12">
+    <Text name="countText" at="10,1" span="3" bind="current.name" />
+  </Footer>
+</App>

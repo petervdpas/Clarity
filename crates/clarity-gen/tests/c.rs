@@ -5,7 +5,7 @@
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, SourceKind, Ui, starter};
-use clarity_spec::load_sources;
+use clarity_spec::load_converted;
 
 const SALES: &str = "module sales
 
@@ -71,7 +71,7 @@ fn settings() -> Settings {
 }
 
 fn files() -> Vec<OutFile> {
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = load_converted([("sales.clarity", SALES)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"))
 }
@@ -197,7 +197,7 @@ fn the_desktop_carries_its_files_for_clarity_ui() {
 /// themes and the model, put into the program by CMake.
 #[test]
 fn the_page_carries_the_renderer() {
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = load_converted([("sales.clarity", SALES)]);
     let mut settings = settings();
     settings.stack.targets = vec![clarity_project::Target::Web];
     let files = generate(&project, &settings).unwrap();
@@ -212,7 +212,7 @@ fn the_page_carries_the_renderer() {
 
 #[test]
 fn server_databases_come_later() {
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = load_converted([("sales.clarity", SALES)]);
     let mut settings = settings();
     settings.datasources[0].kind = SourceKind::Postgres;
     settings.datasources[0].url = "env:SHOP_DATABASE".into();
@@ -236,7 +236,7 @@ fn the_desktop_window_opens_at_the_main_windows_size() {
     has(&code, "program_model(), db, &windows, 1100, 760};");
     let sized = SALES.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n");
     assert_ne!(sized, SALES);
-    let project = load_sources([("sales.clarity", sized.as_str())]);
+    let project = load_converted([("sales.clarity", sized.as_str())]);
     let code: String = generate(&project, &settings()).unwrap().iter().filter(|f| f.path.ends_with(".c")).map(|f| f.text.clone()).collect();
     has(&code, "program_model(), db, &windows, 640, 480};");
 }
@@ -255,7 +255,7 @@ fn a_click_passes_values_to_its_handler() {
             "    handler digit(d: integer)\n        approveButton.enabled = false\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler refreshClicked\n",
         );
     assert_ne!(source, SALES);
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = load_converted([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let app = file(&files, "src/app.h");
@@ -332,7 +332,7 @@ fn a_window_holds_plain_values() {
 #[test]
 fn round_rounds_through_the_runtime() {
     let source = format!("{SALES}\nfunction rounded(x: decimal) -> decimal\n    return round(x, 2)\n");
-    let project = load_sources([("m.clarity", source.as_str())]);
+    let project = load_converted([("m.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let code: String = files.iter().map(|f| f.text.as_str()).collect();
@@ -362,7 +362,7 @@ code Dial
 #[test]
 fn a_canvas_is_drawn_by_its_draw_handler() {
     let source = format!("{SALES}{DIAL}");
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = load_converted([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let code = file(&files, "src/modules/sales.c");
@@ -381,7 +381,7 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
 /// An application with an engine gets the host and wasm3; one without, neither.
 #[test]
 fn an_engine_brings_its_host_and_wasm3() {
-    let mut project = clarity_spec::load_sources([("shop.clarity", include_str!("../../../conformance/engines/shop.clarity"))]);
+    let mut project = clarity_spec::load_converted([("shop.clarity", include_str!("../../../conformance/engines/shop.clarity"))]);
     let bytes = include_bytes!("../../../conformance/engines/test.wasm").to_vec();
     clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes }]);
     let mut settings = clarity_project::starter("Shop", "shop");
@@ -406,7 +406,7 @@ fn an_engine_brings_its_host_and_wasm3() {
 #[test]
 fn a_click_on_a_canvas_runs_its_handler_with_where() {
     let source = format!("{SALES}{DIAL}").replace("on draw: drawDial\n", "on draw: drawDial on click: dialClicked\n") + "\n    handler dialClicked\n        speed = dial.x + dial.y\n";
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = load_converted([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let code = file(&files, "src/modules/sales.c");
@@ -419,7 +419,7 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
 #[test]
 fn the_web_target_serves_the_renderer() {
     use clarity_project::Target;
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = load_converted([("sales.clarity", SALES)]);
     let main_of = |targets: Vec<Target>| {
         let mut settings = settings();
         settings.stack.targets = targets;
@@ -511,7 +511,7 @@ code Sketch
 
 #[test]
 fn a_canvas_keeps_its_tool_brush_and_ink_and_says_what_is_selected() {
-    let project = load_sources([("m.clarity", CANVASES)]);
+    let project = load_converted([("m.clarity", CANVASES)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let all: String = files.iter().map(|f| f.text.as_str()).collect::<Vec<_>>().join("\n");
@@ -590,7 +590,7 @@ fn a_custom_part_is_a_kind_of_part_of_clarity_ui() {
 #[test]
 fn the_app_s_menu_handlers_run_from_any_window() {
     let source = "module m\n\napp Shop\n    main Desk\n    menu name mainMenu\n        item \"Dutch\" name dutchItem on click: toDutch\n\nsettings\n    language\n\npage Desk: window\n    data note: text\n    button \"Go\" name goButton at 1,1 span 2 on click: go\n\ncode Shop\n    handler toDutch\n        settings.language = \"nl\"\n\ncode Desk\n    handler go\n        note = \"went\"\n";
-    let project = load_sources([("m.clarity", source)]);
+    let project = load_converted([("m.clarity", source)]);
     assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let main = file(&files, "src/main.c");

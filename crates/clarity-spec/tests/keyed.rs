@@ -92,7 +92,7 @@ fn texts_become_keys_with_their_values() {
 #[test]
 fn a_project_made_keyed_checks_clean() {
     let made = keyed::make_keys(&[("shop.clarity", SHOP)], &[("translations/nl.clarity", NL)], "en");
-    let mut project = clarity_spec::load_sources(made.modules.iter().map(|(p, t)| (p.as_str(), t.as_str())));
+    let mut project = clarity_spec::load_converted(made.modules.iter().map(|(p, t)| (p.as_str(), t.as_str())));
     project.locale.language = Some("en".into());
     let files: Vec<(String, String)> = made.languages.keys().map(|l| (format!("translations/{l}.clarity"), made.language_file(l))).collect();
     clarity_spec::translations::attach(&mut project, files.iter().map(|(p, t)| (p.as_str(), t.as_str())));

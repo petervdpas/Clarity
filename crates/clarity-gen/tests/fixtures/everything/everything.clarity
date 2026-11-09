@@ -3,35 +3,6 @@ module everything
 // Every part of Clarity in one project (tests/everything.rs): asks and
 // dialogs from the asks fixture, and below them the parts it has not.
 
-app Everything
-    title @everything
-    main Albums
-    data recent: list<Friend>
-    data current: Friend
-    menu name mainMenu
-        item @file name fileItem
-            item @folders name foldersItem key "Ctrl+F" on click -> Folders
-            item @gallery name galleryItem on click -> Gallery
-            separator
-            item @quit name quitItem key "Ctrl+Q" on click -> quit
-            // Undo and redo take back the focused part's last edit (DESIGN 5.29).
-            item @undoItem name undoItem key "Ctrl+Z" on click -> undo
-            item @redoItem name redoItem key "Ctrl+Y" on click -> redo
-    toolbar name mainToolbar
-        button @folders name foldersButton icon "folder" on click -> Folders
-        separator
-        button @gallery name galleryButton on click -> Gallery
-    ribbon name mainRibbon collapsible
-        tab @home name homeTab
-            group @goTo name goGroup
-                button @albums name albumsButton icon "disc" large on click -> Albums
-                button @overview name overviewButton icon "list" on click -> Overview
-    sidebar left name leftSidebar width 192
-        list name recentList at 1,1 span 3 rows 10 bind recent show name
-    footer
-        status @ready
-        text name countText at 10,1 span 3 bind current.name
-
 // The command-line program, for a stack with the cli target.
 cli Everything
     help @cliHelp

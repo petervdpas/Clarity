@@ -2,11 +2,11 @@
 //! window, `on start` on the app, and the `reload` statement.
 
 use clarity_spec::code::StmtKind;
-use clarity_spec::edit::{Edit, apply};
+use clarity_spec::edit::Edit;
 use clarity_spec::model::Handler;
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::Event;
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const SHOP: &str = "module shop
 
@@ -48,17 +48,20 @@ code Card
 ";
 
 fn problems(source: &str) -> Vec<(Severity, String)> {
-    load_sources([("shop.clarity", source)])
+    load_converted([("shop.clarity", source)])
         .diagnostics
         .into_iter()
         .map(|d| (d.severity, d.message))
         .collect()
 }
 
+/// The errors of `source`. A module with an error in its window or app
+/// stays as written (`converted` moves only what reads clean), so the note
+/// that its pages belong in design/ is left out: these errors are its own.
 fn errors(source: &str) -> Vec<String> {
     problems(source)
         .into_iter()
-        .filter(|(s, _)| *s == Severity::Error)
+        .filter(|(s, m)| *s == Severity::Error && !m.contains(clarity_spec::cxaml::PAGE_LEFT_IN_MODULE) && !m.contains(clarity_spec::cxaml::APP_LEFT_IN_MODULE))
         .map(|(_, m)| m)
         .collect()
 }
@@ -133,60 +136,35 @@ fn reload_takes_the_windows_data() {
     assert_eq!(errors(&in_function), ["'reload' belongs in a handler, not in a function"]);
 }
 
+/// The `.cxaml` the page or app `name` of the shop becomes.
+fn design(name: &str) -> String {
+    let file = format!("design/{name}.cxaml");
+    clarity_spec::converted([("shop/shop.clarity", SHOP)]).into_iter().find(|(p, _)| p.ends_with(&file)).map(|(_, t)| t).unwrap_or_else(|| panic!("no {file}"))
+}
+
 fn offset(text: &str, needle: &str) -> u32 {
     text.find(needle).unwrap() as u32
 }
 
+fn apply(markup: &str, edit: &Edit) -> clarity_spec::edit::EditResult<clarity_spec::edit::EditOutcome> {
+    clarity_spec::cxaml::apply(None, markup, edit)
+}
+
 #[test]
 fn the_designer_wires_and_unwires_window_events() {
-    let page = offset(SHOP, "page Card");
-    let wired = apply(
-        SHOP,
-        &Edit::SetOwnerEvent {
-            owner: page,
-            event: Event::Return,
-            handler: Some("windowReturned".into()),
-        },
-    )
-    .unwrap()
-    .text;
-    assert!(
-        wired.contains("    on close: windowClosed\n    on return: windowReturned\n    button \"Close\" name closeButton"),
-        "{wired}"
-    );
+    let card = design("Card");
+    let page = offset(&card, "<Window");
+    let wired = apply(&card, &Edit::SetOwnerEvent { owner: page, event: Event::Return, handler: Some("windowReturned".into()) }).unwrap().text;
+    assert!(wired.contains("<Window class=\"shop.Card\" onclose=\"windowClosed\" onreturn=\"windowReturned\">\n"), "{wired}");
 
-    let renamed = apply(
-        &wired,
-        &Edit::SetOwnerEvent {
-            owner: page,
-            event: Event::Close,
-            handler: Some("before_closing".into()),
-        },
-    )
-    .unwrap()
-    .text;
-    assert!(renamed.contains("    on close: before_closing\n"), "{renamed}");
+    let renamed = apply(&wired, &Edit::SetOwnerEvent { owner: page, event: Event::Close, handler: Some("before_closing".into()) }).unwrap().text;
+    assert!(renamed.contains(" onclose=\"before_closing\""), "{renamed}");
 
-    let removed = apply(
-        &renamed,
-        &Edit::SetOwnerEvent {
-            owner: page,
-            event: Event::Close,
-            handler: None,
-        },
-    )
-    .unwrap()
-    .text;
-    assert!(!removed.contains("on close"), "{removed}");
+    let removed = apply(&renamed, &Edit::SetOwnerEvent { owner: page, event: Event::Close, handler: None }).unwrap().text;
+    assert!(!removed.contains("onclose"), "{removed}");
 
-    let app = offset(SHOP, "app Shop");
-    let refused = apply(
-        SHOP,
-        &Edit::SetOwnerEvent {
-            owner: app,
-            event: Event::Open,
-            handler: Some("x".into()),
-        },
-    );
+    let shop = design("Shop");
+    let app = offset(&shop, "<App");
+    let refused = apply(&shop, &Edit::SetOwnerEvent { owner: app, event: Event::Open, handler: Some("x".into()) });
     assert!(refused.unwrap_err().to_string().contains("the app has the event start"));
 }

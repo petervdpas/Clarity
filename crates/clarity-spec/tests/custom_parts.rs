@@ -196,7 +196,7 @@ fn a_declaration_is_checked() {
 #[test]
 fn a_text_property_is_shown_text_with_a_key() {
     let p = project(GAME, CODE);
-    let props = &p.files[0].pages[0].widgets[0].props;
+    let props = &p.pages().nth(0).unwrap().widgets[0].props;
     assert_eq!(props.values.get("title"), Some(&Literal::Str("@arenaTitle".into())));
     assert_eq!(props.values.get("speed"), Some(&Literal::Number("5".into())));
 }
@@ -235,22 +235,37 @@ fn a_native_parts_folder_is_read_without_what_its_build_leaves() {
 
 #[test]
 fn the_designer_drops_a_declared_part_and_moves_it() {
-    use clarity_spec::edit::{Edit, apply};
-    let page_at = GAME.find("page Game").unwrap() as u32;
+    use clarity_spec::cxaml::{apply, read_page};
+    use clarity_spec::edit::Edit;
+    // The window as the designer edits it: its own file.
+    let files = clarity_spec::converted([("game.clarity", GAME)]);
+    let (_, markup) = files.iter().find(|(p, _)| p.ends_with("design/Game.cxaml")).expect("the window's file");
+    let page_at = read_page(markup, "").0.expect("the window").span.start;
     let dropped = apply(
-        GAME,
+        None,
+        markup,
         &Edit::CreateWidget { container: page_at, kind: WidgetKind::Custom, col: 1, row: 9, width: Some(8), caption: None, bind: None, part: Some("Arena".into()), height: Some(6) },
     )
-    .unwrap();
-    assert!(dropped.text.contains("    Arena name arena2 at 1,9 span 8 rows 6\n"), "{}", dropped.text);
-    // Moved and given a value in the designer, it keeps its kind and its line.
-    let (file, _) = parse(&dropped.text, "game.clarity");
-    let placed = &file.pages[0].widgets.iter().find(|w| w.props.name.as_deref() == Some("arena2")).unwrap();
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert!(dropped.text.contains("  <Custom name=\"arena2\" at=\"1,9\" span=\"8\" rows=\"6\" part=\"Arena\" />\n"), "{}", dropped.text);
+    // Moved and given a value in the designer, it keeps its kind and its element.
+    let (page, d) = read_page(&dropped.text, "");
+    assert!(d.is_empty(), "{d:#?}");
+    let placed = page.unwrap().widgets.into_iter().find(|w| w.props.name.as_deref() == Some("arena2")).unwrap();
     let mut props = placed.props.clone();
     props.col = 9;
     props.values.insert("speed".into(), Literal::Number("4".into()));
-    let moved = apply(&dropped.text, &Edit::UpdateWidget { item: placed.span.start, container: None, props }).unwrap();
-    assert!(moved.text.contains("    Arena name arena2 at 9,9 span 8 rows 6 speed 4\n"), "{}", moved.text);
+    let moved = apply(None, &dropped.text, &Edit::UpdateWidget { item: placed.span.start, container: None, props }).unwrap_or_else(|e| panic!("{e}"));
+    assert!(
+        moved.text.contains("  <Custom name=\"arena2\" at=\"9,9\" span=\"8\" rows=\"6\" part=\"Arena\" values=\"{&quot;speed&quot;:{&quot;kind&quot;:&quot;number&quot;,&quot;value&quot;:&quot;4&quot;}}\" />\n"),
+        "{}",
+        moved.text
+    );
+    let (page, d) = read_page(&moved.text, "");
+    assert!(d.is_empty(), "{d:#?}");
+    let arena2 = page.unwrap().widgets.into_iter().find(|w| w.props.name.as_deref() == Some("arena2")).unwrap();
+    assert_eq!((arena2.props.kind, arena2.props.part.as_deref(), arena2.props.col), (WidgetKind::Custom, Some("Arena"), 9));
+    assert_eq!(arena2.props.values.get("speed"), Some(&Literal::Number("4".into())));
 }
 
 #[test]
@@ -342,10 +357,10 @@ fn grows_is_written_once_and_alone() {
 #[test]
 fn a_placed_part_grows_as_its_declaration_says() {
     let grown = project(&GAME.replace("    size 8 x 6\n", "    size 8 x 6\n    grows\n"), CODE);
-    assert!(grown.files[0].pages[0].widgets[0].props.grows);
-    assert!(!project(GAME, CODE).files[0].pages[0].widgets[0].props.grows);
+    assert!(grown.pages().nth(0).unwrap().widgets[0].props.grows);
+    assert!(!project(GAME, CODE).pages().nth(0).unwrap().widgets[0].props.grows);
     // The window line stays as written: the option is the declaration's.
-    assert!(!widget_line(&grown.files[0].pages[0].widgets[0].props).contains("grows"));
+    assert!(!widget_line(&grown.pages().nth(0).unwrap().widgets[0].props).contains("grows"));
 }
 
 /// The IDE sets the option: a `grows` line is added to or taken from the

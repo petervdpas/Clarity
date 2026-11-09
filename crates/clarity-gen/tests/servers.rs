@@ -72,7 +72,7 @@ const SECOND: &str = "migration \"Second\"
 
 /// The statements of both steps for a database of `kind`.
 fn steps(kind: SourceKind) -> Vec<Vec<String>> {
-    let project = clarity_spec::load_with_migrations([("shop.clarity", SHOP)], [("0001.clarity", FIRST), ("0002.clarity", SECOND)]);
+    let project = clarity_spec::load_with_migrations(clarity_spec::converted([("shop.clarity", SHOP)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", FIRST), ("0002.clarity", SECOND)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     clarity_gen::migration_sql(&project, "main", kind).unwrap().into_iter().map(|(_, s)| s).collect()
 }
@@ -398,7 +398,7 @@ fn mssql() {
 
 #[test]
 fn unique_text_needs_a_length_where_the_database_asks_for_one() {
-    let project = clarity_spec::load_sources([("shop.clarity", "module shop\n\nentity Note\n    body: text, unique\n")]);
+    let project = clarity_spec::load_converted([("shop.clarity", "module shop\n\nentity Note\n    body: text, unique\n")]);
     assert!(clarity_gen::migration_sql(&project, "main", SourceKind::Postgres).is_ok());
     let errors = clarity_gen::migration_sql(&project, "main", SourceKind::Mysql).unwrap_err();
     assert_eq!(

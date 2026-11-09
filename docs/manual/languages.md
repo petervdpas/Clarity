@@ -19,11 +19,17 @@ The language is a tag such as `"en"` or `"nl-NL"`. The currency is an ISO 4217 c
 
 Every text people read is a key, written with `@`: a title, a caption, a label, a help text, a placeholder, a tooltip, a tab's title, an enum value's label, a menu item, the status text, a message, a refusal, and a caption or an error that code sets.
 
-```clarity
-page CustomerCard: window
-    title @customerCardTitle
-    button @saveCaption name save at 9,12 span 2 on click: saveClick
+In the window's file, `shop/design/CustomerCard.cxaml`, a key is an attribute value that starts with `@`:
 
+```xml
+<Window class="shop.CustomerCard" title="@customerCardTitle">
+  <Button name="save" at="9,12" span="2" caption="@saveCaption" onclick="saveClick" />
+</Window>
+```
+
+And in the module's code, `shop/shop.clarity`:
+
+```clarity
 code CustomerCard
     handler saveClick
         save customer
@@ -59,7 +65,7 @@ translation nl
 - A text people read that is written in quotes is an error that asks for a key. A text without letters, such as a calculator's `"7"` or `"+"`, reads the same in every language and stays as it is.
 - `yes` and `no` are how the screen shows a bool; an image part bound to a picture has `noPicture`, `loadPicture` and `removePicture`. Every project gives them their texts.
 - `showSecret`, `hideSecret` and `copySecret` name the eye and the copy button of a password input.
-- `keysTitle`, `keysEverywhere`, `keysChange`, `keysReset`, `keysResetAll`, `keysClose`, `keysPress`, `keysNone`, `keysTaken`, `keysSwap`, `keysAlso`, `keysTyping`, `keysTab`, `keysEnter` and `keysEscape` are the words of the keys window, in a project that opens it (`on click -> keys`).
+- `keysTitle`, `keysEverywhere`, `keysChange`, `keysReset`, `keysResetAll`, `keysClose`, `keysPress`, `keysNone`, `keysTaken`, `keysSwap`, `keysAlso`, `keysTyping`, `keysTab`, `keysEnter` and `keysEscape` are the words of the keys window, in a project that opens it (`opens="keys"`).
 - `unconnectedNotKept` and `unconnectedFailed` say why the databases did not open: the connection is not set yet, or it did not work, with the database's own message in `{problem}`. A project whose database connects with a secret setting, or that handles `on unconnected`, has them.
 
 ## Slots
@@ -115,8 +121,8 @@ The application shows the language for the locale of the person using it: `nl-BE
 
 To let people choose, give a menu item or a button the click target `language`:
 
-```clarity
-item @languageItem name languageItem on click -> language
+```xml
+<Item caption="@languageItem" name="languageItem" opens="language" />
 ```
 
 It lists the project's languages, each by its own name (Nederlands, Deutsch). The application switches at once and remembers the choice for its next start.

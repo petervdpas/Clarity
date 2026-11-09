@@ -6,7 +6,7 @@
 //! change`, an edit of the canvas ended) and `selected` (what it touched).
 
 use clarity_spec::widgets::{self, Event, WidgetKind, WidgetProperty};
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const APP: &str = "module m
 
@@ -53,7 +53,7 @@ code Sketch
 ";
 
 fn diagnostics(source: &str, severity: Severity) -> Vec<String> {
-    load_sources([("m.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == severity).map(|d| d.message).collect()
+    load_converted([("m.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == severity).map(|d| d.message).collect()
 }
 
 fn errors(source: &str) -> Vec<String> {
@@ -64,16 +64,16 @@ fn errors(source: &str) -> Vec<String> {
 fn one_mode_option_with_shared_parameters() {
     assert!(errors(APP).is_empty(), "{:#?}", errors(APP));
     assert!(diagnostics(APP, Severity::Warning).is_empty(), "{:#?}", diagnostics(APP, Severity::Warning));
-    let project = load_sources([("m.clarity", APP)]);
-    let diagram = &project.files[0].pages[0].widgets[0].props;
+    let project = load_converted([("m.clarity", APP)]);
+    let diagram = &project.pages().nth(0).unwrap().widgets[0].props;
     assert_eq!(diagram.mode.map(|m| m.keyword()), Some("objects"));
     let objects = diagram.objects.as_ref().expect("objects");
     assert_eq!((objects.list.as_str(), objects.x.as_str(), objects.y.as_str()), ("types", "x", "y"));
     assert!(diagram.handlers.iter().any(|h| h.event == Event::Change));
-    let sketch = &project.files[0].pages[1].widgets[0].props;
+    let sketch = &project.pages().nth(1).unwrap().widgets[0].props;
     assert_eq!(sketch.mode.map(|m| m.keyword()), Some("paint"));
     assert_eq!((sketch.tools.clone(), sketch.brush, sketch.ink.as_deref()), (vec!["pen".to_string(), "eraser".to_string()], Some(4), Some("accent")));
-    let drawing = &project.files[0].pages[1].widgets[1].props;
+    let drawing = &project.pages().nth(1).unwrap().widgets[1].props;
     assert_eq!(drawing.mode.map(|m| m.keyword()), Some("vector"));
     // The designer writes them back as they are written.
     assert!(widgets::widget_line(diagram).contains("mode objects types at x, y"), "{}", widgets::widget_line(diagram));
@@ -84,8 +84,8 @@ fn one_mode_option_with_shared_parameters() {
     }
     assert!(widgets::has_event(WidgetKind::Canvas, Event::Change));
     // A canvas without a mode is drawn by code, as before.
-    let plain = load_sources([("m.clarity", APP.replace(" mode objects types at x, y on draw: drawTypes on change: typeMoved", " on draw: drawTypes").replace("    handler typeMoved\n        save diagram.selected\n", "").replace("            diagram.object(t, t.x, t.y, 260, 120)\n", "").as_str())]);
-    assert!(plain.files[0].pages[0].widgets[0].props.mode.is_none());
+    let plain = load_converted([("m.clarity", APP.replace(" mode objects types at x, y on draw: drawTypes on change: typeMoved", " on draw: drawTypes").replace("    handler typeMoved\n        save diagram.selected\n", "").replace("            diagram.object(t, t.x, t.y, 260, 120)\n", "").as_str())]);
+    assert!(plain.pages().nth(0).unwrap().widgets[0].props.mode.is_none());
 }
 
 #[test]

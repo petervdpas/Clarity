@@ -4,7 +4,7 @@
 
 use clarity_spec::code::{ExprKind, StmtKind};
 use clarity_spec::parser::parse;
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 const CATALOG: &str = "module catalog
 
@@ -51,7 +51,7 @@ code Catalog
 ";
 
 fn load(source: &str, stores: &[&str]) -> Project {
-    let mut project = load_sources([("catalog.clarity", source)]);
+    let mut project = load_converted([("catalog.clarity", source)]);
     clarity_spec::attach_stores(&mut project, stores.iter().map(|s| s.to_string()).collect());
     project
 }

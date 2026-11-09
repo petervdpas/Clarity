@@ -65,3 +65,126 @@ Open:
   shop's is `counter`; the Design text of a `.cxaml` is colored as markup; a
   page block left in a module's file is an error with the fix Move pages into
   design, under Problems; Make texts keys reaches the `.cxaml` files.
+
+## Next: no translator between design and code (proposed 2026-11-09, not built)
+
+What the user said (verbatim), after hearing that a page is edited through a
+temporary block of Clarity with positions translated back and forth, and
+designer items carry a file number packed into their bits:
+
+- "how would you improve it? dont make it, tell it"
+- "would it improve (more stabile) the relation between clarity code and the views (design)"
+- "you mean remove the translator between them... that might enable debugging design too?"
+- "yes, add those to the debugger plan... but that are consequences of the change"
+
+The change as proposed (to confirm with the user before building):
+
+1. A part is known by its file and name everywhere (`design/Gallery.cxaml#saveButton`):
+   the designer item, the code and the running app use the same key. This
+   replaces `(file + 1) << 24 | offset`. A part without a name falls back to
+   its element path, or `.cxaml` requires a name.
+2. A designer edit changes the page's model ("move saveButton to 3,2") and the
+   writer writes the file; no temporary block, no position mapping. The
+   writer already writes every example back byte for byte.
+3. `<Data>`, `<Tells>` and handler attributes are read by Clarity's type and
+   name parsers on the attribute value itself, at its place in the file,
+   instead of through a synthetic `module cxaml`.
+4. Page blocks leave the language: one way to write a window.
+
+The round-trip tests guard every step. Debugging the design follows from
+step 1; see DEBUGGER-PLAN.md, "Debugging the design".
+
+### Step 1 as built (2026-11-09)
+
+- `clarity_spec::design_keys` gives every thing of a window, view or app
+  its key: the file from the project's folder, `#`, then a path from the
+  page's or app's name. A named thing is `Main/saveButton` wherever it
+  stands (moving it keeps its key); one without a name is its element and
+  number under what holds it (`Main/mainTabs/Tab[2]`); data and tells go
+  by name in brackets (`Main/Data[orders]`); a footer's status is
+  `Main/Footer[1]/Status`. Unnamed things keep a path rather than `.cxaml`
+  requiring a name: every part of the examples already has one, only tabs,
+  panes, levels, selects, sections and tells do not.
+- The designer's markup writes keys as `designItem`; `designShown` and the
+  preview's `pages=` go by key. `Preview.designKeys` gives the IDE each
+  file's keys by place.
+- The IDE picks, drags and drops by key; `placeOf(key)` gives the file,
+  page and place an edit is made in, so the view's file changes when a
+  view's part is edited in a window. `DESIGN_PLACE_BITS`, `design_item`,
+  `designItem()` and `routedEdit` are gone.
+- Edits still name places in a file; step 2 makes them name the model.
+
+### Step 2: edits on the model (started 2026-11-09)
+
+Asked whether the app (its frame of menus, toolbars, sidebars and footer,
+written in the module's file) stays text or moves beside the windows, the
+user chose: "App to design/ too (Recommended)", the option that read: "The
+app gets its own design/App.cxaml (<App class="todo.Todo">) like windows.
+Every designed thing is then edited on the model; the text engine keeps
+only entities, enums and code. One frame editor."
+
+- The app moves to `design/<App>.cxaml` with `<App class="module.App">`:
+  read, written, loaded and converted as windows are; an app block left in
+  a module is an error, as a page block is.
+- `clarity_spec::design_edit` makes each designer edit on the page's or
+  app's model; `cxaml::apply` reads the file, edits the model and writes
+  it. No temporary block, no places matched up. The focus comes back as
+  the edited thing's key.
+- Edits still name the thing by where it starts in the file it was read
+  from; the model read from the file has those places, so nothing is
+  translated.
+- Built: the app's file (reader, writer, loader, converter, every example
+  and fixture converted, Problems' fix, New app), `design_edit` and the new
+  `cxaml::apply`, the IDE splitting a wiring between the `.cxaml` and the
+  module. Tests: clarity-spec `design_edit` compares 7764 edits on every
+  example's windows, views and apps with the old path through the text, and
+  the same with the project (keys made, fields placed); they match.
+- Kept until step 4 (page blocks leave the language): the old path,
+  `apply_through_block`, as the comparison's reference; and the keys an edit
+  makes are still found through the page's block (`key_module`), as Make
+  texts keys finds them.
+### Step 3: page blocks leave the language (decided 2026-11-09)
+
+Asked how far page blocks go (433 of them in 172 test files, and the
+converter reads them to migrate old projects), the user chose: "Only the
+converter reads (Recommended)", the option that read: "A page block is an
+error everywhere, in-memory sources too; only the converter still reads
+one, so old projects migrate. Tests load their pages through a helper that
+converts them to .cxaml first (one call each), and new tests write .cxaml.
+The internal translator (keys, rename, edits' old path) goes."
+
+Built (2026-11-09):
+
+- A page or app block left in a module is an error in every load, in-memory
+  sources too. `clarity_spec::converted` and `load_converted` move old-form
+  blocks into `.cxaml` in memory for tests (a module with an error inside a
+  page block stays as written); `clarity convert-pages` and Move pages into
+  design are the only readers of page blocks for people's projects.
+- The reader reads `<Data>`, `<Tells>`, root events, `gives` and handler
+  arguments in place by Clarity's rules (`parser::data_value` and friends);
+  no synthetic `module cxaml`, errors point at the attribute's value.
+- Texts become keys on the model (`keyed::make_keys_designed`,
+  `key_designed`), renames work on the model (`cxaml::read_designed`,
+  `written_again`); a file read with an error is refused, not written back.
+- Gone: `apply_through_block`, `make_keys_with_pages_through_blocks`,
+  `page_block`, `app_block`, `rewritten`, `block_page`, `places`,
+  `module_text_with_pages`, `edit::with_items`. The comparisons became tests
+  of the new paths (every edit on every example reads back clean; every
+  example's texts become keys again).
+- Bugs the move exposed, fixed: the window-handler clash check and
+  `code::edit::set_code` looked for a window in its module's file.
+- Cleanup after step 3 (user: "do the cleanup first", 2026-11-09), built:
+  templates build the window and view as models (`templates::new_window`,
+  `new_page`, `new_app`); New window, New view, the splash, the toolbox and
+  New app write their `.cxaml` files at once (`cxaml::added`, the IDE's
+  apply_edit), and their code goes into the module; deleting a window
+  deletes its file and its code block (`cxaml::removed`, one undo step); a
+  new project is written from the same models. The text engine (`edit.rs`)
+  keeps only a module's own edits (entities, fields, enums, variants, uses,
+  code); a window's edit on a module's text says `IN_DESIGN_FILE`. Its tests
+  of window edits moved to `cxaml::apply` on markup; the old-form fixtures
+  (tests/fixtures/old-pages) are read only by tests of the parser and the
+  converter. `trees.rs` builds a tree's rows data itself.
+- Open: the writer's `none="surface"` (and `orientation`, `measure`) comes
+  from comparing with a new part's props rather than with what an empty
+  attribute reads as; to look at after this step.

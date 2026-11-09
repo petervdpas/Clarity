@@ -964,8 +964,6 @@ fn parse_page_setting(node: &Node, page: &mut Page, grid_seen: &mut bool) -> Par
 /// after the `data` keyword. A name is a record here; once every file is
 /// read, one that names an enum becomes a plain value (`resolve_data`).
 fn parse_data(cursor: &mut Cursor, span: Span) -> ParseResult<DataDecl> {
-    use crate::code::TypeRefKind;
-    use crate::model::DataKind;
     let name = cursor.expect_ident("a data name")?;
     cursor.expect(
         TokenKind::Colon,
@@ -980,6 +978,14 @@ fn parse_data(cursor: &mut Cursor, span: Span) -> ParseResult<DataDecl> {
     } else {
         None
     };
+    data_decl(name, ty, default, span)
+}
+
+/// A window's or app's data of `name`, of type `ty`, starting at `default`:
+/// a record, a list of records or a plain value, by the type.
+fn data_decl(name: Ident, ty: crate::code::TypeRef, default: Option<Literal>, span: Span) -> ParseResult<DataDecl> {
+    use crate::code::TypeRefKind;
+    use crate::model::DataKind;
     let of = match ty.kind {
         // A list of values is a plain value of the window, starting empty (DESIGN 5.26).
         TypeRefKind::List { ref item } if crate::code::parse::is_type_word(item) => {
@@ -1016,6 +1022,82 @@ fn parse_data(cursor: &mut Cursor, span: Span) -> ParseResult<DataDecl> {
         _ => DataKind::Value { ty, default },
     };
     Ok(DataDecl { name, of, made: false, span })
+}
+
+// ---------------------------------------------------------------------------
+// Values written in a design file's attributes (DESIGN 5.33): read by the
+// rules Clarity's own lines are read by, each where it is in the markup.
+
+/// `text`, an attribute's value at `at`, as one line of Clarity there: each
+/// token where it is in the markup.
+fn value_line(text: &str, at: Span) -> ParseResult<Line> {
+    let (lines, diagnostics) = crate::lexer::lex(text);
+    let place = |span: Span| {
+        let start = (at.start + span.start).min(at.end);
+        Span { start, end: (at.start + span.end).min(at.end), line: at.line, col: at.col + span.start }
+    };
+    if let Some(d) = diagnostics.into_iter().next() {
+        return Err(Diagnostic::error(d.message, place(d.span)));
+    }
+    let mut lines = lines.into_iter();
+    let mut line = lines.next().unwrap_or(Line { indent: 0, tokens: Vec::new(), span: Span::default() });
+    if lines.next().is_some() {
+        return Err(Diagnostic::error("a value is written on one line", at));
+    }
+    for token in &mut line.tokens {
+        token.span = place(token.span);
+    }
+    line.span = at;
+    Ok(line)
+}
+
+/// A type written in an attribute: `Customer`, `list<Order>`, `decimal`.
+pub(crate) fn type_value(text: &str, at: Span) -> ParseResult<crate::code::TypeRef> {
+    let line = value_line(text, at)?;
+    let mut cursor = Cursor::new(&line);
+    let ty = crate::code::parse::parse_type_ref(&mut cursor)?;
+    cursor.expect_end()?;
+    Ok(ty)
+}
+
+/// A value written in an attribute, as Clarity writes one: `80`, `true`, `"text"`, `Business`.
+pub(crate) fn literal_value(text: &str, at: Span) -> ParseResult<Literal> {
+    let line = value_line(text, at)?;
+    let mut cursor = Cursor::new(&line);
+    let value = parse_literal(&mut cursor)?;
+    cursor.expect_end()?;
+    Ok(value)
+}
+
+/// The values a handler runs with, as in `digit(7, true)`: what is between the brackets.
+pub(crate) fn literals_value(text: &str, at: Span) -> ParseResult<Vec<Literal>> {
+    let line = value_line(text, at)?;
+    let mut cursor = Cursor::new(&line);
+    let mut out = Vec::new();
+    while cursor.peek().is_some() {
+        out.push(parse_literal(&mut cursor)?);
+        if cursor.peek().is_some() {
+            cursor.expect(TokenKind::Comma, "',' between values")?;
+        }
+    }
+    Ok(out)
+}
+
+/// A window's or app's data: `<Data name="customer" type="Customer" default="...">`.
+pub(crate) fn data_value(name: Ident, ty: (&str, Span), default: Option<(&str, Span)>, span: Span) -> ParseResult<DataDecl> {
+    let ty = type_value(ty.0, ty.1)?;
+    let default = default.map(|(text, at)| literal_value(text, at)).transpose()?;
+    data_decl(name, ty, default, span)
+}
+
+/// What a view tells its window: `<Tells message="saved(name: text)" />`.
+pub(crate) fn tells_value(text: &str, at: Span, span: Span) -> ParseResult<crate::code::PartMessage> {
+    let line = value_line(text, at)?;
+    let mut cursor = Cursor::new(&line);
+    let name = cursor.expect_ident("a tell's name, as in saved(name: text)")?;
+    let params = if cursor.eat(TokenKind::LParen) { crate::code::parse::parse_params(&mut cursor)? } else { Vec::new() };
+    cursor.expect_end()?;
+    Ok(crate::code::PartMessage { name, params, span })
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The application frame: shared by every window that has no region of its own. -->
+<App class="shop.Shop" title="@shopTitle" main="CustomerCard">
+  <Menu name="mainMenu">
+    <Item caption="@fileItem" name="fileItem">
+      <Item caption="@customerCardItem" name="customerCardItem" key="Ctrl+K" opens="CustomerCard" />
+      <Item kind="separator" />
+      <Item caption="@languageItem" name="languageItem" opens="language" />
+      <Item caption="@themeItem" name="themeItem" opens="theme" />
+      <Item caption="@quitItem" name="quitItem" key="Ctrl+Q" opens="quit" />
+    </Item>
+    <Item caption="@customersItem" name="customersItem">
+      <Item caption="@allCustomersItem" name="allCustomersItem" opens="CustomerBrowse" />
+    </Item>
+    <Item caption="@ordersItem" name="ordersItem">
+      <Item caption="@allOrdersItem" name="allOrdersItem" opens="OrderBrowse" />
+      <Item caption="@salesDashboardItem" name="salesDashboardItem" opens="SalesDashboard" newWindow="true" />
+    </Item>
+  </Menu>
+  <Toolbar name="mainToolbar">
+    <Item kind="button" caption="@customers2Caption" name="customers2" icon="users" opens="CustomerBrowse" />
+    <Item kind="button" caption="@orders2Caption" name="orders2" icon="shopping-cart" opens="OrderBrowse" />
+    <Item kind="button" caption="@dashboard2Caption" name="dashboard2" icon="chart-column" opens="SalesDashboard" />
+    <Item kind="separator" />
+    <Item kind="button" caption="@cardButtonCaption" name="cardButton" icon="credit-card" opens="CustomerCard" />
+  </Toolbar>
+  <Footer status="@shopStatus" columns="12" />
+</App>

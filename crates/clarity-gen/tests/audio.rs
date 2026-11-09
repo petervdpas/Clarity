@@ -20,7 +20,7 @@ fn settings(stack: &str) -> clarity_project::Settings {
 }
 
 fn generated(stack: &str, song: &str) -> Vec<clarity_gen::OutFile> {
-    let mut project = clarity_spec::load_sources([("player.clarity", PLAYER.replace("SONG", song).as_str())]);
+    let mut project = clarity_spec::load_converted([("player.clarity", PLAYER.replace("SONG", song).as_str())]);
     resources::attach(&mut project, vec![ResourceFile { name: song.to_string(), bytes: vec![1, 2, 3] }]);
     assert!(!project.has_errors(), "{:?}", project.diagnostics);
     clarity_gen::generate(&project, &settings(stack)).unwrap_or_else(|e| panic!("{e:#?}"))
@@ -114,7 +114,7 @@ code Main
 #[test]
 fn code_reads_what_a_sound_plays_on_every_stack() {
     for stack in ["rust desktop", "csharp desktop", "go desktop", "c desktop", "cpp desktop"] {
-        let project = clarity_spec::load_sources([("player.clarity", READS)]);
+        let project = clarity_spec::load_converted([("player.clarity", READS)]);
         assert!(!project.has_errors(), "{:?}", project.diagnostics);
         let code = all_code(&clarity_gen::generate(&project, &settings(stack)).unwrap_or_else(|e| panic!("{stack}: {e:#?}")));
         for read in ["\"position\"", "\"length\"", "\"playing\"", "\"paused\"", "\"file\"", "\"problem\"", "\"title\"", "\"artist\"", "\"album\"", "\"track\""] {
@@ -151,7 +151,7 @@ code Main
 #[test]
 fn code_reads_what_a_video_plays_on_every_stack() {
     for stack in ["rust desktop", "csharp desktop", "go desktop", "c desktop", "cpp desktop"] {
-        let project = clarity_spec::load_sources([("player.clarity", FILM)]);
+        let project = clarity_spec::load_converted([("player.clarity", FILM)]);
         assert!(!project.has_errors(), "{:?}", project.diagnostics);
         let code = all_code(&clarity_gen::generate(&project, &settings(stack)).unwrap_or_else(|e| panic!("{stack}: {e:#?}")));
         for read in ["\"position\"", "\"length\"", "\"playing\"", "\"paused\"", "\"file\"", "\"problem\""] {
@@ -164,7 +164,7 @@ fn code_reads_what_a_video_plays_on_every_stack() {
 /// Clarity.Video and Clarity.Audio linked beside Clarity.UI's library and handed over.
 #[test]
 fn rust_links_clarity_video_and_uses_it() {
-    let project = clarity_spec::load_sources([("player.clarity", FILM)]);
+    let project = clarity_spec::load_converted([("player.clarity", FILM)]);
     let files = clarity_gen::generate(&project, &settings("rust desktop")).unwrap();
     assert!(file(&files, "build.rs").contains("&[\"clarity_ui\", \"clarity_audio\", \"clarity_video\"]"));
     let main = file(&files, "src/main.rs");
@@ -173,7 +173,7 @@ fn rust_links_clarity_video_and_uses_it() {
 
 #[test]
 fn every_desktop_stack_carries_clarity_video_and_audio_for_a_video() {
-    let project = clarity_spec::load_sources([("player.clarity", FILM)]);
+    let project = clarity_spec::load_converted([("player.clarity", FILM)]);
     let made = |stack: &str| clarity_gen::generate(&project, &settings(stack)).unwrap();
     let cs = made("csharp desktop");
     assert!(file(&cs, "Player.csproj").contains("<PackageReference Include=\"Clarity.Video\"") && file(&cs, "Player.csproj").contains("<PackageReference Include=\"Clarity.Audio\""));
@@ -199,7 +199,7 @@ fn a_codec_library_the_project_adds_is_carried_and_added() {
     let extension = if cfg!(windows) { "dll" } else if cfg!(target_os = "macos") { "dylib" } else { "so" };
     let file = format!("libgrey.{extension}");
     std::fs::write(folder.join(&file), b"a codec").unwrap();
-    let project = clarity_spec::load_sources([("player.clarity", FILM)]);
+    let project = clarity_spec::load_converted([("player.clarity", FILM)]);
     for stack in ["rust desktop", "csharp desktop", "go desktop", "c desktop", "cpp desktop"] {
         let text = format!("project Player\n    stack {stack}\n    codec grey from \"libgrey\"\n");
         let settings = clarity_project::build_settings(&folder, &clarity_project::parse(&text).unwrap());
@@ -241,7 +241,7 @@ code Main
 /// Records in the order they were stored: `order by n.id`, on every stack.
 #[test]
 fn records_order_by_their_id_on_every_stack() {
-    let project = clarity_spec::load_sources([("notes.clarity", NOTES)]);
+    let project = clarity_spec::load_converted([("notes.clarity", NOTES)]);
     assert!(!project.has_errors(), "{:?}", project.diagnostics);
     for stack in ["rust desktop", "csharp desktop", "go desktop", "c desktop", "cpp desktop"] {
         let text = format!("project Notes\n    stack {stack}\n    datasource main sqlite \"data/notes.db\"\n");

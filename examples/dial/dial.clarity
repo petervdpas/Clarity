@@ -6,10 +6,6 @@ engine Gauge from "gauge.wasm"
     function angle(speed: integer, maximum: integer) -> integer
     function zone(speed: integer) -> text
 
-app Dial
-    title @dialTitle
-    main Main
-
 code MainView
     // The needle turns from 210 degrees at 0 km/h to -30 at 200, and
     // warns as it gets fast.

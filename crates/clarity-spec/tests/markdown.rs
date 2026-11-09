@@ -5,7 +5,7 @@
 
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::{BindTarget, Category, WidgetKind, info as widget_info, widget_line};
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const GAME: &str = "module game
 
@@ -16,7 +16,7 @@ page Main: window
 ";
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("game.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("game.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]

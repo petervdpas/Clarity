@@ -93,16 +93,6 @@ engine Board
                         square = at
         return square
 
-app Noughts
-    title @noughtsTitle
-    main Game
-    menu name mainMenu
-        item @gameItem name gameItem
-            item @anotherWindowItem name anotherWindowItem on click -> Game in new window
-            item @preferencesItem name preferencesItem on click -> Preferences
-            separator
-            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
-
 // What each person sets for themselves, kept on their machine.
 settings
     language

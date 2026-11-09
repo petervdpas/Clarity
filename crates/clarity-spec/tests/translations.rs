@@ -4,7 +4,7 @@
 
 use clarity_spec::model::Locale;
 use clarity_spec::translations;
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 const SHOP: &str = "module shop
 
@@ -71,7 +71,7 @@ translation nl
 ";
 
 fn project_with(files: &[(&str, &str)]) -> Project {
-    let mut project = load_sources([("shop.clarity", SHOP)]);
+    let mut project = load_converted([("shop.clarity", SHOP)]);
     project.locale = Locale { language: Some("en".into()), currency: None };
     translations::attach(&mut project, files.iter().copied());
     project
@@ -142,7 +142,7 @@ fn a_value_is_text_or_a_resource() {
     assert_eq!(translations::set(Some(&pointed), "nl", "gameRules", "Spelregels"), "translation nl\n    gameRules \"Spelregels\"\n");
 
     // The project keeps the resource each language points at, apart from its texts.
-    let mut project = load_sources([("shop.clarity", SHOP)]);
+    let mut project = load_converted([("shop.clarity", SHOP)]);
     project.locale = Locale { language: Some("en".into()), currency: None };
     let en = format!("{EN}    gameRules resource \"rules-en.md\"\n");
     let nl = format!("{NL}    gameRules resource \"rules-nl.md\"\n");
@@ -185,7 +185,7 @@ fn the_languages_table_has_a_column_per_language_the_default_first() {
 #[test]
 fn the_languages_table_knows_the_keys_that_point_at_resources() {
     let source = format!("{SHOP}\npage Rules: window\n    title @cardTitle\n    markdown @gameRules name rulesText at 1,1 span 6 rows 6\n    image @bannerPicture name banner at 1,7 span 6 rows 2\n");
-    let mut project = load_sources([("shop.clarity", source.as_str())]);
+    let mut project = load_converted([("shop.clarity", source.as_str())]);
     project.locale = Locale { language: Some("en".into()), currency: None };
     let en = format!("{EN}    gameRules resource \"rules-en.md\"\n    bannerPicture resource \"banner.png\"\n");
     let nl = format!("{NL}    gameRules resource \"rules-nl.md\"\n    bannerPicture \"\"\n");
@@ -212,7 +212,7 @@ fn a_text_without_letters_needs_no_key() {
     assert!(translations::has_letters("C"));
     assert!(!translations::has_letters("{name}"));
     let calc = "module calc\n\npage Calc: window\n    button \"7\" name seven at 1,1\n";
-    let mut project = load_sources([("calc.clarity", calc)]);
+    let mut project = load_converted([("calc.clarity", calc)]);
     translations::attach(&mut project, [("translations/en.clarity", "translation en\n    yes \"Yes\"\n    no \"No\"\n    ok \"OK\"\n    cancel \"Cancel\"\n    dismiss \"Dismiss\"\n    undoChangedSince \"This was changed since, so it cannot be taken back\"\n    cutText \"Cut\"\n    copyText \"Copy\"\n    pasteText \"Paste\"\n    selectAllText \"Select all\"\n    itemOutsideList \"There is no item {position} in a list of {count}\"\n    recordNotThere \"There is no {table} with id {id}\"\n    recordStillUsed \"This {table} is still used by other records\"\n")]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
 }
@@ -220,7 +220,7 @@ fn a_text_without_letters_needs_no_key() {
 #[test]
 fn a_menu_item_can_switch_the_language() {
     let text = SHOP.replace("            item @quitItem name quitItem on click -> quit", "            item @languageItem name languageItem on click -> language");
-    let project = load_sources([("shop.clarity", text.as_str())]);
+    let project = load_converted([("shop.clarity", text.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     assert!(clarity_spec::Preview::new(project).commands.contains(&"language".to_string()));
 }
@@ -246,7 +246,7 @@ fn every_example_is_complete_in_every_language() {
 /// a failed call: every language file gives them (frame-1, runtime errors).
 #[test]
 fn sidebars_windows_and_engines_bring_their_own_words() {
-    let keys = |source: &str| -> Vec<String> { translations::keys(&load_sources([("a.clarity", source)])).into_iter().map(|u| u.key).collect() };
+    let keys = |source: &str| -> Vec<String> { translations::keys(&load_converted([("a.clarity", source)])).into_iter().map(|u| u.key).collect() };
     let window = "module m\n\npage Main: window\n    button \"Go\" name go at 1,1\n";
     let folded = "module m\n\napp A\n    main Main\n    sidebar left name nav width 240 collapsible\n\npage Main: window\n    button \"Go\" name go at 1,1\n";
     let engine = "module m\n\nengine Count\n    function one() -> integer\n        return 1\n";

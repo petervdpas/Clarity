@@ -2,25 +2,6 @@ module writing
 
 use books
 
-app Novel
-    title @novelTitle
-    main Bookcase
-    menu name mainMenu
-        item @languageMenu name languageMenu
-            item @englishItem name englishItem on click: toEnglish
-            item @dutchItem name dutchItem on click: toDutch
-            item @germanItem name germanItem on click: toGerman
-        item @goMenu name goMenu
-            item @backItem name backItem key "Alt+Left" on click -> back
-            item @forwardItem name forwardItem key "Alt+Right" on click -> forward
-        item @themeMenu name themeMenu
-            item @themePaper name paperItem on click: toPaper
-            item @themeNight name nightItem on click: toNight
-            item @themeSepia name sepiaItem on click: toSepia
-            item @themeInk name inkItem on click: toInk
-    footer
-        status @novelStatus
-
 // Each person's language and theme, kept on their machine.
 settings
     language

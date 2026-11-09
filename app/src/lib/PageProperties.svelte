@@ -31,6 +31,7 @@
   let {
     preview,
     page,
+    selected,
     onedit,
     onapplied,
     app = null,
@@ -38,7 +39,10 @@
     onsavesettings = null,
   }: {
     preview: Preview;
+    /** The window, view or app (as a page) of what is picked. */
     page: Page;
+    /** Where what is picked starts in the page's file; null for the page itself. */
+    selected: number | null;
     onedit: (edit: Edit) => void;
     /** Takes the project after a text's value or key changed in the language files. */
     onapplied: (preview: Preview) => void;
@@ -49,7 +53,6 @@
     onsavesettings?: ((settings: Settings) => void) | null;
   } = $props();
 
-  const selected = $derived(pageDesigner.selected);
   const location = $derived(selected === null ? null : locateWidget(preview, page, selected));
   /** The styles a part can take: those of the project's theme. */
   const styles = $derived(themeStyles(preview));

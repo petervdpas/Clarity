@@ -1,6 +1,6 @@
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Settings, starter};
-use clarity_spec::load_sources;
+use clarity_spec::load_converted;
 
 const SALES: &str = "module sales
 
@@ -84,7 +84,7 @@ fn shop() -> Settings {
 }
 
 fn files() -> Vec<OutFile> {
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = load_converted([("sales.clarity", SALES)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     generate(&project, &shop()).unwrap()
 }
@@ -193,7 +193,7 @@ fn functions_and_actions_become_rust_functions() {
 
 #[test]
 fn refuses_a_project_with_errors() {
-    let project = load_sources([("sales.clarity", "module sales\n\nentity A\n    b: Nope\n")]);
+    let project = load_converted([("sales.clarity", "module sales\n\nentity A\n    b: Nope\n")]);
     let errors = generate(&project, &shop()).unwrap_err();
     assert!(errors[0].contains("fix the errors"), "{errors:?}");
 }
@@ -238,7 +238,7 @@ fn the_backend_translates_in_the_language_the_screen_picked() {
     assert!(main.contains("    clarity_runtime::i18n::load(MODEL);\n"), "{main}");
     let mut web = shop();
     web.stack.targets = vec![clarity_project::Target::Web];
-    let web = generate(&load_sources([("sales.clarity", SALES)]), &web).unwrap();
+    let web = generate(&load_converted([("sales.clarity", SALES)]), &web).unwrap();
     // The browser's commands, set_language among them, go to the program through the runtime's wire.
     assert!(file(&web, "src/main.rs").contains("clarity_runtime::wire::answer(&app, command, args)"), "{}", file(&web, "src/main.rs"));
 }
@@ -340,7 +340,7 @@ const SECOND_STEP: &str = "migration \"Tidy up\"
 #[test]
 fn every_migration_step_becomes_sql() {
     let project = clarity_spec::load_with_migrations(
-        [("sales.clarity", SALES)],
+        clarity_spec::converted([("sales.clarity", SALES)]).iter().map(|(p, t)| (p.as_str(), t.as_str())),
         [("0001.clarity", FIRST_STEP), ("0002.clarity", SECOND_STEP)],
     );
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
@@ -361,7 +361,7 @@ fn every_migration_step_becomes_sql() {
 
 #[test]
 fn changes_without_a_step_are_not_generated() {
-    let project = clarity_spec::load_with_migrations([("sales.clarity", SALES)], [("0001.clarity", FIRST_STEP)]);
+    let project = clarity_spec::load_with_migrations(clarity_spec::converted([("sales.clarity", SALES)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", FIRST_STEP)]);
     let errors = generate(&project, &shop()).unwrap_err();
     assert!(errors[0].contains("not in a migration yet"), "{errors:?}");
     assert!(errors[0].contains("rename") || errors[0].contains("remove field Customer.limit"), "{errors:?}");
@@ -374,7 +374,7 @@ fn each_data_source_gets_its_own_database() {
     use clarity_spec::SourceRef;
     let erp = "module erp\nuse sales\nsource erp\n\nentity Invoice\n    number: text(20)\n    customer: ref Customer\n";
     let project = clarity_spec::load_in(
-        [("sales.clarity", SALES), ("erp.clarity", erp)],
+        clarity_spec::converted([("sales.clarity", SALES), ("erp.clarity", erp)]).iter().map(|(p, t)| (p.as_str(), t.as_str())),
         std::iter::empty(),
         &[SourceRef::sql("main"), SourceRef::sql("erp")],
     );
@@ -384,7 +384,7 @@ fn each_data_source_gets_its_own_database() {
     // Without steps yet, generating is refused for both.
     assert_eq!(generate(&project, &settings).unwrap_err().len(), 2);
 
-    let project = clarity_spec::load_sources([("sales.clarity", SALES), ("erp.clarity", erp)]);
+    let project = clarity_spec::load_converted([("sales.clarity", SALES), ("erp.clarity", erp)]);
     let mut project = project;
     project.sources = vec![SourceRef::sql("main"), SourceRef::sql("erp")];
     let files = generate(&project, &settings).unwrap();
@@ -403,7 +403,7 @@ fn an_external_source_is_opened_but_never_migrated() {
     use clarity_project::{DataSource, SourceKind};
     use clarity_spec::SourceRef;
     let erp = "module erp\nuse sales\nsource erp\n\nentity Invoice\n    table \"tblInvoice\"\n    key \"InvoiceID\"\n    number: text(20), column \"InvNo\"\n    total: money\n\nfunction big(limit: money) -> list<Invoice>\n    return find i in Invoice where i.number contains \"INV\" and i.total > limit order by i.number\n";
-    let mut project = load_sources([("sales.clarity", SALES), ("erp.clarity", erp)]);
+    let mut project = load_converted([("sales.clarity", SALES), ("erp.clarity", erp)]);
     project.sources = vec![SourceRef::sql("main"), SourceRef::sql("erp").external()];
     let mut settings = shop();
     settings.datasources.push(DataSource {
@@ -442,7 +442,7 @@ fn a_taken_over_database_keeps_its_names() {
     let baseline = "migration \"Taken over\" baseline\n    add entity Invoice\n        table \"tblInvoice\"\n        key \"InvoiceID\"\n        number: text(20), unique, column \"InvNo\"\n        total: money\n";
     let remap = "migration \"Tidy names\"\n    map table Invoice to \"invoices\"\n    map column Invoice.number to \"InvoiceNumber\"\n";
     let project = clarity_spec::load_in(
-        [("start.clarity", start), ("erp.clarity", erp)],
+        clarity_spec::converted([("start.clarity", start), ("erp.clarity", erp)]).iter().map(|(p, t)| (p.as_str(), t.as_str())),
         [("migrations/erp/0001.clarity", baseline), ("migrations/erp/0002.clarity", remap)],
         &[SourceRef::sql("main"), SourceRef::sql("erp")],
     );
@@ -472,7 +472,7 @@ code Order
     after delete
         refuse \"Deleted {order.number}\"
 ";
-    let project = load_sources([("sales.clarity", text.as_str())]);
+    let project = load_converted([("sales.clarity", text.as_str())]);
     assert!(!project.has_errors(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap();
     let sales = file(&files, "src/modules/sales.rs");
@@ -491,7 +491,7 @@ code Order
 
 #[test]
 fn the_renderer_gets_the_language_and_currency() {
-    let mut project = load_sources([("sales.clarity", SALES)]);
+    let mut project = load_converted([("sales.clarity", SALES)]);
     project.locale.language = Some("nl-NL".into());
     project.locale.currency = Some("EUR".into());
     let files = generate(&project, &shop()).unwrap();
@@ -507,7 +507,7 @@ action check(order: Order, rate: decimal)
     if order.total > 1000
         refuse \"{order.number} of {order.total} is {order.status} at {rate}, for a customer since {order.customer.since}\"
 ";
-    let project = load_sources([("sales.clarity", text.as_str())]);
+    let project = load_converted([("sales.clarity", text.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap();
     let sales = file(&files, "src/modules/sales.rs");
@@ -535,7 +535,7 @@ fn a_refusal_reaches_the_screen_with_its_slots() {
 
 #[test]
 fn the_application_carries_its_translations() {
-    let mut project = load_sources([("sales.clarity", SALES)]);
+    let mut project = load_converted([("sales.clarity", SALES)]);
     project.translations.insert("nl".into(), [("Order".to_string(), "Bestelling".to_string())].into());
     let files = generate(&project, &shop()).unwrap();
     let model = file(&files, "src/model.json");
@@ -545,7 +545,7 @@ fn the_application_carries_its_translations() {
 #[test]
 fn the_application_carries_its_theme() {
     let text = SALES.to_string() + "\ntheme Shop\n    color accent \"#1f6f5c\"\n    style primary background accent\n";
-    let mut project = load_sources([("sales.clarity", text.as_str())]);
+    let mut project = load_converted([("sales.clarity", text.as_str())]);
     clarity_spec::themes::use_themes(&mut project, &["Shop"]);
     let files = generate(&project, &shop()).unwrap();
     let model = file(&files, "src/model.json");
@@ -559,7 +559,7 @@ fn the_application_carries_its_theme() {
 fn a_window_opens_at_its_size() {
     assert!(program(&files()).contains("    width: 1100.0,\n    height: 760.0,\n"));
     let sized = SALES.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n");
-    let project = load_sources([("sales.clarity", sized.as_str())]);
+    let project = load_converted([("sales.clarity", sized.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let main = program(&generate(&project, &shop()).unwrap());
     assert!(main.contains("    width: 640.0,\n    height: 480.0,\n"), "{main}");
@@ -569,7 +569,7 @@ fn a_window_opens_at_its_size() {
 #[test]
 fn a_record_s_id_reads_as_its_id() {
     let source = format!("{SALES}\nfunction same(order: Order, other: Order) -> bool\n    return order.id == other.id\n");
-    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("Ok((order.id == other.id))"), "{sales}");
 }
@@ -581,7 +581,7 @@ fn the_selected_row_is_a_record_in_any_expression() {
         "        open OrderForm with order = grid.selected\n",
         "        approve(grid.selected)\n        message \"{grid.selected.number} of {grid.selected.customer.name} is approved\"\n        open OrderForm with order = grid.selected\n",
     );
-    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("approve(db, &mut ui.selected(\"grid\", &w.orders)?)?;"), "{sales}");
     assert!(sales.contains("ui.selected(\"grid\", &w.orders)?.number"), "{sales}");
@@ -591,7 +591,7 @@ fn the_selected_row_is_a_record_in_any_expression() {
 #[test]
 fn a_reference_field_takes_a_record() {
     let source = format!("{SALES}\naction assign(order: Order, customer: Customer)\n    effects db.write\n    order.customer = customer\n    save order\n");
-    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("order.customer = Some(customer.id);"), "{sales}");
 }
@@ -600,7 +600,7 @@ fn a_reference_field_takes_a_record() {
 #[test]
 fn none_is_an_empty_option() {
     let source = format!("{SALES}\nfunction unplaced(order: Order) -> bool\n    return order.customer == none or order.customer.since != none\n\naction clear(order: Order, customer: Customer)\n    effects db.write\n    customer.since = none\n    order.customer = none\n    save order\n\nfunction withoutCustomer() -> list<Order>\n    return find o in Order where o.customer == none\n");
-    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
     for line in ["order.customer.is_none()", "!db.load::<Customer>(order.customer)?.since.is_none()", "customer.since = None;", "order.customer = None;", "Cond::is_none(\"customer\")"] {
         assert!(sales.contains(line), "{line} not in {sales}");
@@ -611,7 +611,7 @@ fn none_is_an_empty_option() {
 #[test]
 fn today_reads_the_clock() {
     let source = format!("{SALES}\naction stamp(customer: Customer)\n    effects db.write\n    if customer.since == none or customer.since > today()\n        customer.since = today()\n    save customer\n");
-    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("customer.since = Some(clarity_runtime::today());"), "{sales}");
     assert!(sales.contains("(customer.since > Some(clarity_runtime::today()))"), "{sales}");
@@ -623,7 +623,7 @@ fn an_unbound_checkbox_is_checked_in_the_window_state() {
     let source = SALES
         .replace("    textbox name numberFilter at 1,7 span 4 on change: filterChanged\n", "    textbox name numberFilter at 1,7 span 4 on change: filterChanged\n    checkbox \"Only mine\" name mine at 5,7 span 3\n")
         .replace("            numberFilter.text = \"\"\n", "            numberFilter.text = \"\"\n        if mine.checked\n            mine.checked = false\n");
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = load_converted([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
@@ -636,7 +636,7 @@ const MUSIC: &str = "module music\n\nentity Track\n    title: text(80)\n    leng
 /// A duration is whole seconds; its slot shows it as 3:45 (X2).
 #[test]
 fn a_duration_is_seconds_with_its_own_slot() {
-    let project = load_sources([("music.clarity", MUSIC)]);
+    let project = load_converted([("music.clarity", MUSIC)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let music = file(&files, "src/modules/music.rs");
@@ -652,7 +652,7 @@ fn a_query_goes_through_a_reference() {
     let source = format!(
         "{SALES}\nfunction ofCustomers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.creditLimit > 10 order by o.customer.name desc, o.customer.creditLimit\n"
     );
-    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
     for expected in [
         ".filter(Cond::through(\"customer\", \"customer\", \"id\", Cond::contains(\"name\", &name)).and(Cond::through(\"customer\", \"customer\", \"id\", Cond::number(\"credit_limit\", Op::Gt, ",
@@ -667,7 +667,7 @@ fn a_query_goes_through_a_reference() {
 #[test]
 fn a_loop_changes_and_saves_its_records() {
     let source = format!("{SALES}\naction approveAll(orders: list<Order>)\n    effects db.write\n    let found = orders\n    for order in found\n        order.status = Approved\n        save order\n    for order in found\n        let n = order.number\n");
-    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = generate(&load_converted([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("for order in found.iter_mut() {"), "{sales}");
     assert!(sales.contains("for order in found.iter() {"), "{sales}");
@@ -694,7 +694,7 @@ fn the_selected_row_is_saved_and_deleted_as_it_is() {
         "    handler gridOpened\n",
         "    handler gridChanged\n        save grid.selected\n        delete grid.selected\n\n    handler gridOpened\n",
     );
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = load_converted([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
@@ -715,7 +715,7 @@ fn a_click_passes_values_to_its_handler() {
             "    handler orderSubmitted\n",
             "    handler digit(d: integer)\n        numberFilter.text = \"\"\n\n    handler scale(by: decimal, word: text, loud: bool)\n        digit(3)\n\n    handler mark(status: OrderStatus)\n        digit(1)\n\n    handler orderSubmitted\n",
         );
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = load_converted([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
@@ -793,7 +793,7 @@ fn a_window_holds_plain_values() {
 #[test]
 fn round_rounds_through_the_runtime() {
     let source = format!("{SALES}\nfunction rounded(x: decimal) -> decimal\n    return round(x, 2)\n");
-    let project = load_sources([("m.clarity", source.as_str())]);
+    let project = load_converted([("m.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let code: String = files.iter().map(|f| f.text.as_str()).collect();
@@ -823,7 +823,7 @@ code Dial
 #[test]
 fn a_canvas_is_drawn_by_its_draw_handler() {
     let source = format!("{SALES}{DIAL}");
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = load_converted([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
@@ -842,7 +842,7 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
 #[test]
 fn a_click_on_a_canvas_runs_its_handler_with_where() {
     let source = format!("{SALES}{DIAL}").replace("on draw: drawDial\n", "on draw: drawDial on click: dialClicked\n") + "\n    handler dialClicked\n        speed = dial.x + dial.y\n";
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = load_converted([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
@@ -855,7 +855,7 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
 #[test]
 fn the_web_target_serves_the_browser_files_and_the_wire() {
     use clarity_project::Target;
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = load_converted([("sales.clarity", SALES)]);
     let main_of = |targets: Vec<Target>| {
         let mut settings = shop();
         settings.stack.targets = targets;
@@ -896,7 +896,7 @@ fn the_web_target_serves_the_browser_files_and_the_wire() {
 #[test]
 fn the_runtime_decides_what_the_persons_action_does() {
     use clarity_project::Target;
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = load_converted([("sales.clarity", SALES)]);
     let main = program(&files());
     for (command, readonly, call) in [
         ("reorder_event", true, "clarity_runtime::reorder::event(db, state, &part, &list, &by, parent.as_deref(), &moved, scope.as_deref(), |state| handled(db, state, handler.as_deref()), |state| drawn(db, state))"),
@@ -965,7 +965,7 @@ code Board
         sketch.brush = sketch.brush + plain.brush
         sketch.ink = plain.ink + plain.tool
 ";
-    let project = load_sources([("board.clarity", source)]);
+    let project = load_converted([("board.clarity", source)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let board = file(&files, "src/modules/board.rs");
@@ -1016,7 +1016,7 @@ action widest(boxes: list<Box>) -> integer
     return most
 ";
     // A window to start with: these come after the shop's own module.
-    let project = load_sources([("sales.clarity", SALES), ("boxes.clarity", source)]);
+    let project = load_converted([("sales.clarity", SALES), ("boxes.clarity", source)]);
     assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap();
     let code: String = files.iter().filter(|f| f.path.ends_with(".rs")).map(|f| f.text.as_str()).collect();
@@ -1050,7 +1050,7 @@ code Tally
     handler add(n: integer)
         total = total + n
 ";
-    let project = load_sources([("sales.clarity", SALES), ("tally.clarity", source)]);
+    let project = load_converted([("sales.clarity", SALES), ("tally.clarity", source)]);
     assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap();
     let code: String = files.iter().filter(|f| f.path.ends_with(".rs")).map(|f| f.text.as_str()).collect();

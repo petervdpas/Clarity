@@ -4,7 +4,7 @@
 
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::{self, Event, WidgetKind};
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const TODO: &str = "module todo
 
@@ -37,7 +37,7 @@ code Main
 
 fn messages(text: &str, severity: Severity) -> Vec<String> {
     let text = format!("{text}{CODE}");
-    load_sources([("todo.clarity", text.as_str())])
+    load_converted([("todo.clarity", text.as_str())])
         .diagnostics
         .into_iter()
         .filter(|d| d.severity == severity)

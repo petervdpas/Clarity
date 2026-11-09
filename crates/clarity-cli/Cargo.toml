@@ -16,5 +16,7 @@ clarity-runtime = { path = "../../runtimes/rust" }
 clarity-project.workspace = true
 clarity-db.workspace = true
 clarity-gen = { path = "../clarity-gen" }
+# `clarity gen` generates as the agents' generate tool does.
+clarity-tools.workspace = true
 serde_json.workspace = true
 clap = { version = "4", features = ["derive"] }

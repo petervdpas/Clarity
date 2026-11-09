@@ -9,14 +9,6 @@ settings
     // The folder of the adapter-fcdmapi repository, whose DbContext and mappers name the tables.
     adapterFolder: folder, label @adapterFolderLabel
 
-app Modelling
-    title @modellingTitle
-    main Workspace
-    menu name mainMenu
-        item @viewMenu name viewMenu
-            item @languageCaption name languageItem on click -> language
-            item @themeCaption name themeItem on click -> theme
-
 // Writes the C# of the data objects and enums as the fcdm repository has
 // it; its source is in engines/fcdm.
 engine Fcdm from "fcdm.wasm"

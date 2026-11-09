@@ -14,20 +14,17 @@ use ts_rs::TS;
 
 use crate::diagnostic::Severity;
 use crate::dictionary::{FieldSpec, validate_field};
-use crate::frame::{self, RegionKind, command_line, new_command, validate_command};
-use crate::lexer::{Token, TokenKind, lex, quote, text_token};
+use crate::frame::{self, RegionKind};
+use crate::lexer::{Token, TokenKind, lex, text_token};
 use crate::model::{
     Project,
-    CommandKind, CommandProps, MAX_PAGE_COLUMNS, PageKind, Side, WidgetProps,
+    CommandKind, CommandProps, PageKind, Side, WidgetProps,
 };
 use crate::parser::{
     is_app_setting, is_page_setting, is_region_line, parse, starts_with_keyword,
 };
-use crate::templates::{self, PageTemplate};
-use crate::widgets::{
-    self, APP_EVENTS, ContainerKind, Event, WINDOW_EVENTS, WidgetKind, is_identifier, new_props, validate_props,
-    widget_line,
-};
+use crate::templates::PageTemplate;
+use crate::widgets::{self, ContainerKind, Event, WidgetKind, is_identifier};
 
 /// Indentation added for a new nesting level when no sibling shows the
 /// indentation already in use.
@@ -249,6 +246,9 @@ impl std::error::Error for EditError {}
 
 pub type EditResult<T> = Result<T, EditError>;
 
+/// What an edit of a window, view or app says when it is made on a module's text.
+pub const IN_DESIGN_FILE: &str = "this change belongs in the window's, view's or app's own .cxaml file, not in a module's file of Clarity";
+
 fn fail<T>(message: impl Into<String>) -> EditResult<T> {
     Err(EditError(message.into()))
 }
@@ -335,18 +335,9 @@ fn apply_with(source: &str, edit: &Edit, project: Option<&Project>) -> EditResul
     Ok(EditOutcome { text, focus, keys: Vec::new() })
 }
 
-fn apply_layout(source: &str, edit: &Edit, project: Option<&Project>) -> EditResult<(String, Option<u32>)> {
+fn apply_layout(source: &str, edit: &Edit, _project: Option<&Project>) -> EditResult<(String, Option<u32>)> {
     let mut doc = Doc::read(source);
-    let focus = match (edit, project) {
-        (Edit::AddWindow { name, template }, Some(project)) => doc.add_window(project, name, template)?,
-        (Edit::PlaceField { container, col, row, room, bind }, Some(project)) => {
-            doc.place_field(project, *container, *col, *row, *room, bind)?
-        }
-        (Edit::AddWindow { .. } | Edit::PlaceField { .. }, None) => {
-            return fail("this edit needs the whole project");
-        }
-        _ => doc.apply(edit)?,
-    };
+    let focus = doc.apply(edit)?;
     Ok(doc.write(focus))
 }
 
@@ -407,27 +398,7 @@ impl LNode {
         self.text = text;
     }
 
-    fn reindent(&mut self, indent: usize) {
-        let delta = indent as isize - self.indent as isize;
-        self.shift(delta);
-    }
 
-    fn shift(&mut self, delta: isize) {
-        if delta == 0 {
-            return;
-        }
-        self.indent = self.indent.saturating_add_signed(delta);
-        self.raw_indent = None;
-        for trivia in &mut self.leading {
-            if !trivia.text.is_empty() {
-                trivia.indent = trivia.indent.saturating_add_signed(delta);
-                trivia.raw_indent = None;
-            }
-        }
-        for child in &mut self.children {
-            child.shift(delta);
-        }
-    }
 
     fn child_indent(&self) -> usize {
         self.children
@@ -476,29 +447,7 @@ enum Kind {
 }
 
 impl Kind {
-    /// Containers whose children are widgets on a grid.
-    fn is_widget_container(self) -> bool {
-        matches!(
-            self,
-            Kind::Page
-                | Kind::Widget(Some(ContainerKind::Plain))
-                | Kind::WidgetTab
-                | Kind::Pane
-                | Kind::Region(RegionKind::Sidebar)
-                | Kind::Region(RegionKind::Footer)
-        )
-    }
 
-    /// Elements that hold commands.
-    fn is_command_parent(self) -> bool {
-        matches!(
-            self,
-            Kind::Region(RegionKind::Menu)
-                | Kind::Region(RegionKind::Toolbar)
-                | Kind::Command
-                | Kind::RibbonGroup
-        )
-    }
 }
 
 fn widget_kind(node: &LNode) -> Kind {
@@ -845,96 +794,18 @@ impl Doc {
 
     // -- edits ------------------------------------------------------------
 
+    /// An edit of a module's text: its entities, enums and the modules it
+    /// uses. What a window, view or app holds is edited in its own `.cxaml`
+    /// (`cxaml::apply`); a new one is files of its own (`cxaml::added`).
     fn apply(&mut self, edit: &Edit) -> EditResult<Option<u32>> {
         match edit {
             Edit::Remove { item } => self.remove(*item),
-            Edit::SetTitle { target, title } => self.set_title(*target, title),
-            Edit::SetPaneSpan { target, columns } => {
-                let (path, _) = self.find(*target, "a pane", |k| k == Kind::Pane)?;
-                let line = columns.map_or_else(|| "pane".to_string(), |n| format!("pane span {n}"));
-                set_line_keeping_comment(self.node_mut(&path), line);
-                Ok(Some(*target))
-            }
-            Edit::SetPageView { target, view } => {
-                let (path, _) = self.find(*target, "a view line of content", |k| k == Kind::WidgetTab)?;
-                let mut line = PageLine::of(self.node(&path));
-                // A view shows only in content: a tab, step or section names none.
-                if !line.head.is_empty() {
-                    return fail("a view shows only in content; put a content in it");
-                }
-                if view.as_deref().is_none_or(|v| v.trim().is_empty()) {
-                    return fail("a view line of content names a view; remove the line instead");
-                }
-                line.view = view.as_deref().map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
-                set_line_keeping_comment(self.node_mut(&path), line.written());
-                Ok(Some(*target))
-            }
-            Edit::SetPageColor { target, color } => {
-                let (path, _) = self.find(*target, "a section", |k| k == Kind::WidgetTab)?;
-                let mut line = PageLine::of(self.node(&path));
-                if !line.head.starts_with("section ") {
-                    return fail("only an accordion's section has a color");
-                }
-                line.color = match color.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
-                    Some(c) if c.starts_with('#') => Some(text_token(c)),
-                    Some(c) => Some(c.to_string()),
-                    None => None,
-                };
-                set_line_keeping_comment(self.node_mut(&path), line.written());
-                Ok(Some(*target))
-            }
-            Edit::PlaceWidget { container, props } => self.place_widget(*container, props),
-            Edit::CreateWidget {
-                container,
-                kind,
-                col,
-                row,
-                width,
-                caption,
-                bind,
-                part,
-                height,
-            } => {
-                let mut props = new_props(*kind, *col, *row);
-                if let Some(width) = width {
-                    props.width = *width;
-                }
-                if let Some(height) = height {
-                    props.height = *height;
-                }
-                props.part = part.clone();
-                if caption.is_some() {
-                    props.caption = caption.clone();
-                }
-                props.bind = bind.clone();
-                self.place_widget(*container, &props)
-            }
             Edit::Batch { edits } => {
                 let mut focus = None;
                 for edit in edits {
                     focus = self.apply(edit)?.or(focus);
                 }
                 Ok(focus)
-            }
-            Edit::UpdateWidget {
-                item,
-                container,
-                props,
-            } => self.update_widget(*item, *container, props),
-            Edit::AddTab { item, title } => self.add_tab(*item, title),
-            Edit::AddMenu { item } => self.add_menu(*item),
-            Edit::AddData {
-                page,
-                name,
-                entity,
-                list,
-            } => self.add_data(*page, name, entity, *list),
-            Edit::SetGrid { page, columns, rows } => self.set_grid(*page, *columns, *rows),
-            Edit::SetSize { page, width, height } => self.set_size(*page, *width, *height),
-            Edit::SetPageStyle { page, style } => self.set_page_style(*page, style),
-            Edit::AddPage { name, kind } => self.add_page(name, *kind),
-            Edit::AddWindow { .. } | Edit::PlaceField { .. } => {
-                fail("this edit needs the whole project and cannot be part of a batch")
             }
             Edit::AddEntity { name } => self.add_declaration("entity", name, "name: text(80)"),
             Edit::AddEnum { name } => self.add_declaration("enum", name, "First"),
@@ -943,1218 +814,85 @@ impl Doc {
             Edit::AddVariant { owner, name, label } => self.add_variant(*owner, name, label.as_deref()),
             Edit::UpdateVariant { item, name, label } => self.update_variant(*item, name, label.as_deref()),
             Edit::SetUses { uses } => self.set_uses(uses),
-            Edit::NameParts => self.name_parts(),
-            Edit::AddApp { name } => self.add_app(name),
-            Edit::SetMain { app, main } => self.set_main(*app, main),
-            Edit::SetSplash { app, splash, ms } => self.set_splash(*app, splash, *ms),
-            Edit::SetOwnerEvent { owner, event, handler } => self.set_owner_event(*owner, *event, handler.as_deref()),
-            Edit::AddRegion {
-                owner,
-                region,
-                side,
-            } => self.add_region(*owner, *region, *side),
-            Edit::UpdateSidebar { item, props } => self.update_sidebar(*item, props),
-            Edit::UpdateSidebars => self.update_sidebars(),
-            Edit::UpdateRibbon { item, name, collapsible, collapsed } => self.update_ribbon(*item, name.as_deref(), *collapsible, *collapsed),
-            Edit::SetName { item, name } => self.set_name(*item, name),
-            Edit::AddFrameItem {
-                parent,
-                item,
-                caption,
-            } => self.add_frame_item(*parent, *item, caption.clone()),
-            Edit::UpdateCommand { item, props } => self.update_command(*item, props),
             Edit::MoveSibling { item, delta } => self.move_sibling(*item, *delta),
             Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::AddHandlerWith { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::SetPartGrows { .. } | Edit::CamelNames => {
                 fail("text edits cannot be nested in a batch inside a batch")
             }
+            Edit::AddWindow { .. } | Edit::AddPage { .. } | Edit::AddApp { .. } => fail("a new window, view or app is a file of its own in design/; add it with cxaml::added"),
+            _ => fail(IN_DESIGN_FILE),
         }
     }
 
 
 
 
+    /// Removes an entity, field, enum, variant, engine or theme of the module.
     fn remove(&mut self, item: u32) -> EditResult<Option<u32>> {
-        let (path, _) = self
-            .find(
-                item,
-                "a window, app, entity, field, enum, variant, engine, theme, widget, tab, region, command or data declaration",
-                |k| {
-                    matches!(
-                        k,
-                        Kind::Page
-                            | Kind::App
-                            | Kind::Entity
-                            | Kind::Field
-                            | Kind::Enum
-                            | Kind::Variant
-                            | Kind::Engine
-                            | Kind::Theme
-                            | Kind::Widget(_)
-                            | Kind::WidgetTab
-                            | Kind::Region(_)
-                            | Kind::Command
-                            | Kind::RibbonTab
-                            | Kind::RibbonGroup
-                    )
-                },
-            )
-            .or_else(|err| {
-                // `data` lines are page settings; other settings stay.
-                match self.path_of(item) {
-                    Some(path)
-                        if matches!(self.kind(&path), Kind::PageSetting | Kind::AppSetting)
-                            && starts_with_keyword(
-                                &self.node(&path).tokens,
-                                "data",
-                                Some(TokenKind::Ident),
-                            ) =>
-                    {
-                        Ok((path, Kind::PageSetting))
-                    }
-                    _ => Err(err),
-                }
-            })?;
+        let (path, _) = self.find(item, "an entity, field, enum, variant, engine or theme", |k| {
+            matches!(k, Kind::Entity | Kind::Field | Kind::Enum | Kind::Variant | Kind::Engine | Kind::Theme)
+        })?;
         self.take(&path);
         Ok(None)
     }
 
 
 
-    fn set_title(&mut self, target: u32, title: &str) -> EditResult<Option<u32>> {
-        let (path, kind) = self.find(target, "a page, app, tab or status", |k| {
-            matches!(
-                k,
-                Kind::Page
-                    | Kind::App
-                    | Kind::WidgetTab
-                    | Kind::RibbonTab
-                    | Kind::RibbonGroup
-                    | Kind::FooterStatus
-            )
-        })?;
-        let title = title.trim();
 
-        if matches!(kind, Kind::Page | Kind::App) {
-            let existing = self
-                .node(&path)
-                .children
-                .iter()
-                .position(|c| starts_with_keyword(&c.tokens, "title", Some(TokenKind::Str)));
-            match (existing, title.is_empty()) {
-                (Some(index), true) => {
-                    self.node_mut(&path).children.remove(index);
-                }
-                (Some(index), false) => {
-                    replace_token(&mut self.node_mut(&path).children[index], 1, &text_token(title));
-                }
-                (None, true) => {}
-                (None, false) => {
-                    let indent = self.node(&path).child_indent();
-                    let line = self.fresh_node(indent, format!("title {}", text_token(title)));
-                    self.node_mut(&path).children.insert(0, line);
-                }
-            }
-            return Ok(Some(target));
-        }
-
-        if title.is_empty() {
-            return fail("a tab or status needs a title");
-        }
-        replace_token(self.node_mut(&path), 1, &text_token(title));
-        Ok(Some(target))
-    }
-
-}
-
-/// The line of a tab, step or section, in its pieces: its keyword and
-/// title as written (a key or a text), its color as written, the view it
-/// shows and what it hears of the view (`on saved: recipeSaved`).
-struct PageLine {
-    head: String,
-    color: Option<String>,
-    view: Option<String>,
-    heard: Option<String>,
-}
-
-impl PageLine {
-    fn of(node: &LNode) -> PageLine {
-        let text = |i: usize| node.tokens.get(i).map(|t| node.text[t.span.start as usize..t.span.end as usize].to_string());
-        let heard = node.tokens.iter().position(|t| t.text == "on").map(|at| node.text[node.tokens[at].span.start as usize..node.tokens.last().map_or(0, |t| t.span.end as usize)].to_string());
-        // `view OrderEditor` of a window's content: the line is the view it shows, no head of its own.
-        if node.tokens.first().is_some_and(|t| t.text == "view") {
-            return PageLine { head: String::new(), color: None, view: text(1), heard };
-        }
-        let head: Vec<String> = (0..2).filter_map(text).collect();
-        let after = |word: &str| node.tokens.iter().position(|t| t.text == word).and_then(|at| text(at + 1));
-        PageLine { head: head.join(" "), color: after("color"), view: after("view"), heard }
-    }
-
-    fn written(&self) -> String {
-        if self.head.is_empty() {
-            let view = self.view.clone().unwrap_or_default();
-            return match &self.heard {
-                Some(heard) => format!("view {view} {heard}"),
-                None => format!("view {view}"),
-            };
-        }
-        let mut line = self.head.clone();
-        if let Some(color) = &self.color {
-            line = format!("{line} color {color}");
-        }
-        if let Some(view) = &self.view {
-            line = format!("{line} view {view}");
-        }
-        if let Some(heard) = &self.heard {
-            line = format!("{line} {heard}");
-        }
-        line
-    }
 }
 
 impl Doc {
     // -- pages ------------------------------------------------------------
 
-    fn widget_container(&self, id: u32) -> EditResult<Vec<usize>> {
-        let (path, _) = self.find(id, "a page, panel, tab or pane", Kind::is_widget_container)?;
-        Ok(path)
-    }
-
-    /// Places a field of the window's data with the parts that go with it
-    /// (see `templates::field_parts`); the input is named after the field.
-    fn place_field(
-        &mut self,
-        project: &Project,
-        container: u32,
-        col: u32,
-        row: u32,
-        room: u32,
-        bind: &str,
-    ) -> EditResult<Option<u32>> {
-        let path = self.widget_container(container)?;
-        let Some((data, field_name)) = bind.split_once('.') else {
-            return fail(format!("'{bind}' is not a field, use data.field"));
-        };
-        // The data declaration of the window: `data customer: Customer`.
-        let entity = self.nodes[path[0]]
-            .children
-            .iter()
-            .map(|n| &n.tokens)
-            .find(|t| t.len() >= 4 && t[0].text == "data" && t[1].text == data)
-            .map(|t| t[3].text.clone());
-        let Some(entity) = entity else {
-            return fail(format!("the window has no data '{data}'"));
-        };
-        let field = project
-            .entity(&entity)
-            .and_then(|e| e.field(field_name))
-            .ok_or_else(|| EditError(format!("'{entity}' has no field '{field_name}'")))?;
-        // The input is named after its field, in camelCase like every part name.
-        let base = crate::names::camel_case(field_name);
-        let input_name = if self.used_names(path[0]).iter().any(|n| *n == base) {
-            self.free_name(path[0], &base)
-        } else {
-            base
-        };
-        let parts = templates::field_parts(field, data, &input_name, col, row, room.max(1));
-        let mut focus = None;
-        for props in &parts {
-            let id = self.place_widget(container, props)?;
-            focus = focus.or(id);
-        }
-        Ok(focus)
-    }
-
-    fn name_parts(&mut self) -> EditResult<Option<u32>> {
-        fn name_in(node: &mut LNode, kind: Kind, used: &mut Vec<String>) {
-            for child in &mut node.children {
-                let child_kind = child_kind(kind, child);
-                let named = child.tokens.windows(2).any(|w| w[0].kind == TokenKind::Ident && w[0].text == "name" && w[1].kind == TokenKind::Ident);
-                if matches!(child_kind, Kind::Widget(_)) && !named {
-                    // Before `at`; a popover or slide-out, which has none, after its keyword and caption.
-                    let off_grid = child.tokens.first().filter(|t| t.text == "popover" || t.text == "slideout").map(|first| {
-                        let caption = child.tokens.get(1).filter(|t| matches!(t.kind, TokenKind::Str | TokenKind::Key));
-                        caption.unwrap_or(first).span.end as usize + 1
-                    });
-                    let at = child
-                        .tokens
-                        .windows(2)
-                        .find(|w| w[0].kind == TokenKind::Ident && w[0].text == "at" && w[1].kind == TokenKind::Number)
-                        .map(|w| w[0].span.start as usize)
-                        .or_else(|| off_grid.filter(|end| *end <= child.text.len()));
-                    if let (Some(at), Some(keyword)) = (at, child.tokens.first().map(|t| t.text.clone())) {
-                        // After its purpose when the line says it, else numbered.
-                        let name = match props_of_line(&child.tokens).as_ref().and_then(crate::names::suggested_name) {
-                            Some(base) if !used.contains(&base) => base,
-                            Some(base) => (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists"),
-                            None => (1..).map(|n| format!("{keyword}{n}")).find(|n| !used.contains(n)).expect("an unused name exists"),
-                        };
-                        let text = format!("{}name {name} {}", &child.text[..at], &child.text[at..]);
-                        used.push(name);
-                        child.set_text(text);
-                    }
-                }
-                // A ribbon is `mainRibbon`, a tab and a group are named after their titles: `homeTab`, `clipboardGroup`.
-                let ribbon_base = match child_kind {
-                    Kind::Region(RegionKind::Ribbon) => Some("mainRibbon".to_string()),
-                    Kind::Region(RegionKind::Menu) => Some("mainMenu".to_string()),
-                    Kind::Region(RegionKind::Toolbar) => Some("mainToolbar".to_string()),
-                    Kind::RibbonTab | Kind::RibbonGroup => {
-                        let title = child.tokens.get(1).filter(|t| t.kind == TokenKind::Str).map(|t| t.text.clone()).unwrap_or_default();
-                        Some(ribbon_part_base(&title, if child_kind == Kind::RibbonTab { "Tab" } else { "Group" }))
-                    }
-                    _ => None,
-                };
-                if let Some(base) = ribbon_base.filter(|_| !named) {
-                    let name = if used.contains(&base) { (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists") } else { base };
-                    let at = child.tokens.last().map(|t| t.span.end as usize).unwrap_or(child.text.len());
-                    let text = format!("{} name {name}{}", &child.text[..at], &child.text[at..]);
-                    used.push(name);
-                    child.set_text(text);
-                }
-                // A sidebar is named after its side: `leftSidebar`.
-                if child_kind == Kind::Region(RegionKind::Sidebar) && !named && child.tokens.len() > 1 {
-                    let base = format!("{}Sidebar", child.tokens[1].text);
-                    let name = if used.contains(&base) { (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists") } else { base };
-                    let at = child.tokens[1].span.end as usize;
-                    let text = format!("{} name {name}{}", &child.text[..at], &child.text[at..]);
-                    used.push(name);
-                    child.set_text(text);
-                }
-                // A menu item or button is named after its caption and kind: "New game" is `newGameItem`.
-                if child_kind == Kind::Command && !named && child.tokens.first().is_some_and(|t| t.text != "separator") {
-                    let caption = child.tokens.get(1).filter(|t| t.kind == TokenKind::Str);
-                    let base = crate::names::command_name(caption.map(|t| t.text.as_str()), &child.tokens[0].text);
-                    let name = if used.contains(&base) { (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists") } else { base };
-                    let at = caption.unwrap_or(&child.tokens[0]).span.end as usize;
-                    let text = format!("{} name {name}{}", &child.text[..at], &child.text[at..]);
-                    used.push(name);
-                    child.set_text(text);
-                }
-                name_in(child, child_kind, used);
-            }
-        }
-        for top in 0..self.nodes.len() {
-            let kind = top_kind(&self.nodes[top]);
-            if !matches!(kind, Kind::Page | Kind::App) {
-                continue;
-            }
-            let mut used = self.used_names(top);
-            name_in(&mut self.nodes[top], kind, &mut used);
-        }
-        Ok(None)
-    }
-
-    /// Part names used in the top-level block (window or app) at index `top`.
-    fn used_names(&self, top: usize) -> Vec<String> {
-        fn collect(node: &LNode, out: &mut Vec<String>) {
-            let tokens = &node.tokens;
-            for (i, t) in tokens.iter().enumerate() {
-                if t.kind == TokenKind::Ident && t.text == "name"
-                    && let Some(next) = tokens.get(i + 1)
-                    && next.kind == TokenKind::Ident
-                {
-                    out.push(next.text.clone());
-                }
-            }
-            for child in &node.children {
-                collect(child, out);
-            }
-        }
-        let mut used = Vec::new();
-        collect(&self.nodes[top], &mut used);
-        used
-    }
-
-    /// A name after its purpose for a part that still has its numbered name
-    /// (`label1`), when it knows its purpose and nothing else in its window
-    /// or its code goes by the number.
-    fn better_name(&self, top: usize, props: &WidgetProps) -> Option<String> {
-        let name = props.name.as_deref()?;
-        let kind = widgets::name_base(props);
-        let numbered = name.strip_prefix(kind.as_str()).is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()));
-        if !numbered || self.mentions(top, name) {
-            return None;
-        }
-        // A name already numbered from what it would be named after stays.
-        let base = crate::names::suggested_name(props)?;
-        if name.strip_prefix(base.as_str()).is_some_and(|n| n.chars().all(|c| c.is_ascii_digit())) {
-            return None;
-        }
-        Some(self.free(top, &base))
-    }
-
-    /// Whether anything in the block `top`, or in the code block of the same
-    /// name, mentions `name` other than where a part is named it.
-    fn mentions(&self, top: usize, name: &str) -> bool {
-        fn walk(node: &LNode, name: &str) -> bool {
-            let said = node.tokens.iter().enumerate().any(|(i, t)| {
-                t.kind == TokenKind::Ident && t.text == name && !(i > 0 && node.tokens[i - 1].text == "name")
-            });
-            said || node.children.iter().any(|c| walk(c, name))
-        }
-        let owner = self.nodes[top].tokens.get(1).map(|t| t.text.clone()).unwrap_or_default();
-        self.nodes.iter().enumerate().any(|(i, node)| {
-            let code = node.tokens.first().is_some_and(|t| t.text == "code") && node.tokens.get(1).is_some_and(|t| t.text == owner);
-            (i == top || code) && walk(node, name)
-        })
-    }
-
-    /// The first `{base}{n}` not yet used as a part name in the top-level
-    /// block `top`.
-    fn free_name(&self, top: usize, base: &str) -> String {
-        let used = self.used_names(top);
-        (1..)
-            .map(|n| format!("{base}{n}"))
-            .find(|name| !used.contains(name))
-            .expect("an unused name exists")
-    }
-
-    /// Inserts a widget node into a container, keeping widget lines in
-    /// reading order (by row, then column).
-    fn insert_widget(&mut self, container: &[usize], mut node: LNode, at: (u32, u32)) {
-        let target = self.node_mut(container);
-        node.reindent(target.child_indent());
-        let position = target
-            .children
-            .iter()
-            .position(|c| widget_position(c).is_some_and(|p| p > at))
-            .unwrap_or(target.children.len());
-        target.children.insert(position, node);
-    }
-
-    /// A new widget node, with the child blocks its container kind needs.
-    fn widget_node(&mut self, props: &WidgetProps) -> LNode {
-        let mut node = self.fresh_node(0, widget_line(props));
-        match widgets::container(props.kind) {
-            Some(ContainerKind::Tabs) => {
-                let tab = self.fresh_node(INDENT_STEP, format!("tab {}", quote("Tab 1")));
-                node.children.push(tab);
-            }
-            Some(ContainerKind::Steps) => {
-                for n in 1..=2 {
-                    let step = self.fresh_node(INDENT_STEP, format!("step {}", quote(&format!("Step {n}"))));
-                    node.children.push(step);
-                }
-            }
-            Some(ContainerKind::Accordion) => {
-                for n in 1..=2 {
-                    let section = self.fresh_node(INDENT_STEP, format!("section {}", quote(&format!("Section {n}"))));
-                    node.children.push(section);
-                }
-            }
-            Some(ContainerKind::Splitter) => {
-                for _ in 0..2 {
-                    let pane = self.fresh_node(INDENT_STEP, "pane".to_string());
-                    node.children.push(pane);
-                }
-            }
-            _ => {}
-        }
-        node
-    }
-
-    fn place_widget(&mut self, container: u32, props: &WidgetProps) -> EditResult<Option<u32>> {
-        validate_props(props).map_err(EditError)?;
-        let path = self.widget_container(container)?;
-        // A new part gets a name, after what it shows when it says, else like `button3`, so events can be wired.
-        let mut props = props.clone();
-        if props.name.is_none() {
-            props.name = Some(match crate::names::suggested_name(&props) {
-                Some(base) => self.free(path[0], &base),
-                None => self.free_name(path[0], &widgets::name_base(&props)),
-            });
-        }
-        let node = self.widget_node(&props);
-        let id = node.id;
-        self.insert_widget(&path, node, (props.row, props.col));
-        Ok(Some(id))
-    }
-
-    fn update_widget(
-        &mut self,
-        item: u32,
-        container: Option<u32>,
-        props: &WidgetProps,
-    ) -> EditResult<Option<u32>> {
-        validate_props(props).map_err(EditError)?;
-        let (path, _) = self.find(item, "a widget", |k| matches!(k, Kind::Widget(_)))?;
-        // Every part has a name: one written without gets one now, like a new part.
-        let named;
-        let props = if props.name.is_none() {
-            let mut with = props.clone();
-            with.name = Some(self.free_name(path[0], &widgets::name_base(props)));
-            named = with;
-            &named
-        } else if let Some(better) = self.better_name(path[0], props) {
-            // A numbered part takes a name after its purpose once it knows it.
-            let mut with = props.clone();
-            with.name = Some(better);
-            named = with;
-            &named
-        } else {
-            props
-        };
-        let current = self.node(&path).tokens[0].text.clone();
-        if current != widgets::written_word(props) {
-            return fail(format!(
-                "a {current} cannot be turned into a {}",
-                widgets::written_word(props)
-            ));
-        }
-        let parent = self.node(&path[..path.len() - 1]).id;
-        let target = container.unwrap_or(parent);
-        let target_path = self.widget_container(target)?;
-        if target_path.starts_with(&path) {
-            return fail("a widget cannot be moved into itself");
-        }
-
-        let mut node = self.take(&path);
-        let rest_start = node.tokens.last().map(|t| t.span.end as usize).unwrap_or(0);
-        let rest = node.text[rest_start..].to_string();
-        node.set_text(widget_line(props) + &rest);
-        // Detaching may shift sibling indexes, so find the container again.
-        let target_path = self.widget_container(target)?;
-        self.insert_widget(&target_path, node, (props.row, props.col));
-        Ok(Some(item))
-    }
-
-    /// A tab of a tabs part, or a step of a wizard.
-    fn add_tab(&mut self, item: u32, title: &str) -> EditResult<Option<u32>> {
-        let (path, kind) = self.find(item, "a tabs or steps widget", |k| {
-            matches!(k, Kind::Widget(Some(ContainerKind::Tabs | ContainerKind::Steps | ContainerKind::Accordion | ContainerKind::Content)))
-        })?;
-        let title = title.trim();
-        if title.is_empty() {
-            return fail("a tab or step needs a title");
-        }
-        // A window's content gets a view by its name: `view OrderEditor`.
-        if kind == Kind::Widget(Some(ContainerKind::Content)) {
-            if !crate::widgets::is_identifier(title) {
-                return fail(format!("'{title}' is not the name of a view"));
-            }
-            let indent = self.node(&path).child_indent();
-            let line = self.fresh_node(indent, format!("view {title}"));
-            let id = line.id;
-            self.node_mut(&path).children.push(line);
-            return Ok(Some(id));
-        }
-        let keyword = match kind {
-            Kind::Widget(Some(ContainerKind::Steps)) => "step",
-            Kind::Widget(Some(ContainerKind::Accordion)) => "section",
-            _ => "tab",
-        };
-        let indent = self.node(&path).child_indent();
-        let tab = self.fresh_node(indent, format!("{keyword} {}", text_token(title)));
-        let id = tab.id;
-        self.node_mut(&path).children.push(tab);
-        Ok(Some(id))
-    }
-
-    /// A `menu` block first under the part, with one named item to start from.
-    fn add_menu(&mut self, item: u32) -> EditResult<Option<u32>> {
-        let (path, _) = self.find(item, "a part", |k| matches!(k, Kind::Widget(_)))?;
-        if self.node(&path).children.iter().any(|c| starts_with_keyword(&c.tokens, "menu", None)) {
-            return fail("the part has a menu already");
-        }
-        let used = self.used_names(path[0]);
-        let name = std::iter::once("firstItem".to_string())
-            .chain((2..).map(|n| format!("firstItem{n}")))
-            .find(|n| !used.contains(n))
-            .expect("an unused name exists");
-        let indent = self.node(&path).child_indent();
-        let mut menu = self.fresh_node(indent, "menu".to_string());
-        let first = self.fresh_node(indent + INDENT_STEP, format!("item \"First item\" name {name}"));
-        let id = first.id;
-        menu.children.push(first);
-        self.node_mut(&path).children.insert(0, menu);
-        Ok(Some(id))
-    }
-
-    /// Index after the last page setting, where new settings go.
-    fn settings_end(&self, page: &[usize]) -> usize {
-        let node = self.node(page);
-        node.children
-            .iter()
-            .rposition(|c| child_kind(Kind::Page, c) == Kind::PageSetting)
-            .map(|i| i + 1)
-            .unwrap_or(0)
-    }
-
-    fn add_data(
-        &mut self,
-        page: u32,
-        name: &str,
-        entity: &str,
-        list: bool,
-    ) -> EditResult<Option<u32>> {
-        let (path, owner) = self.find(page, "a page or app", |k| {
-            matches!(k, Kind::Page | Kind::App)
-        })?;
-        if !is_identifier(name) {
-            return fail(format!("'{name}' is not a valid data name"));
-        }
-        if !is_identifier(entity) {
-            return fail(format!("'{entity}' is not a valid entity name"));
-        }
-        let text = if list {
-            format!("data {name}: list<{entity}>")
-        } else {
-            format!("data {name}: {entity}")
-        };
-        let indent = self.node(&path).child_indent();
-        let line = self.fresh_node(indent, text);
-        let id = line.id;
-        let index = self.owner_settings_end(&path, owner);
-        self.node_mut(&path).children.insert(index, line);
-        Ok(Some(id))
-    }
-
-    fn set_grid(&mut self, page: u32, columns: u32, rows: Option<u32>) -> EditResult<Option<u32>> {
-        let (path, _) = self.find(page, "a page", |k| k == Kind::Page)?;
-        if columns == 0 || columns > MAX_PAGE_COLUMNS {
-            return fail(format!("a page grid has 1 to {MAX_PAGE_COLUMNS} columns"));
-        }
-        let (least, most) = crate::layout::CELL_HEIGHTS;
-        if let Some(rows) = rows
-            && !(least..=most).contains(&rows)
-        {
-            return fail(format!("a page's rows are {least} to {most} pixels high"));
-        }
-        let text = match rows {
-            Some(rows) => format!("grid {columns} columns rows {rows}"),
-            None => format!("grid {columns} columns"),
-        };
-        let existing = self
-            .node(&path)
-            .children
-            .iter()
-            .position(|c| starts_with_keyword(&c.tokens, "grid", Some(TokenKind::Number)));
-        match existing {
-            Some(index) => {
-                let node = &mut self.node_mut(&path).children[index];
-                let rest_start = node.tokens.last().map(|t| t.span.end as usize).unwrap_or(0);
-                let rest = node.text[rest_start..].to_string();
-                node.set_text(text + &rest);
-            }
-            None => {
-                let indent = self.node(&path).child_indent();
-                let line = self.fresh_node(indent, text);
-                let index = self.settings_end(&path);
-                self.node_mut(&path).children.insert(index, line);
-            }
-        }
-        Ok(Some(page))
-    }
-
-    fn set_size(&mut self, page: u32, width: Option<u32>, height: Option<u32>) -> EditResult<Option<u32>> {
-        let (path, _) = self.find(page, "a page", |k| k == Kind::Page)?;
-        let existing = self.node(&path).children.iter().position(|c| starts_with_keyword(&c.tokens, "size", Some(TokenKind::Number)));
-        let Some((width, height)) = width.zip(height) else {
-            // The standard size: the line goes.
-            if let Some(index) = existing {
-                self.node_mut(&path).children.remove(index);
-            }
-            return Ok(Some(page));
-        };
-        if !crate::layout::window_size_fits(width, height) {
-            return fail(crate::layout::window_size_problem());
-        }
-        let text = format!("size {width} x {height}");
-        match existing {
-            Some(index) => self.node_mut(&path).children[index].set_text(text),
-            None => {
-                let indent = self.node(&path).child_indent();
-                let line = self.fresh_node(indent, text);
-                let index = self.settings_end(&path);
-                self.node_mut(&path).children.insert(index, line);
-            }
-        }
-        Ok(Some(page))
-    }
-
-    fn set_page_style(&mut self, page: u32, style: &str) -> EditResult<Option<u32>> {
-        let (path, _) = self.find(page, "a page", |k| k == Kind::Page)?;
-        let style = style.trim();
-        if !style.is_empty() && !is_identifier(style) {
-            return fail(format!("'{style}' is not a style name"));
-        }
-        let existing = self.node(&path).children.iter().position(|c| c.tokens.len() == 2 && starts_with_keyword(&c.tokens, "style", Some(TokenKind::Ident)));
-        if style.is_empty() {
-            if let Some(index) = existing {
-                self.node_mut(&path).children.remove(index);
-            }
-            return Ok(Some(page));
-        }
-        let text = format!("style {style}");
-        match existing {
-            Some(index) => self.node_mut(&path).children[index].set_text(text),
-            None => {
-                let indent = self.node(&path).child_indent();
-                let line = self.fresh_node(indent, text);
-                let index = self.settings_end(&path);
-                self.node_mut(&path).children.insert(index, line);
-            }
-        }
-        Ok(Some(page))
-    }
-
-    fn check_new_name(&self, name: &str) -> EditResult<()> {
-        if !is_identifier(name) {
-            return fail(format!("'{name}' is not a valid window name"));
-        }
-        let taken = self
-            .nodes
-            .iter()
-            .any(|n| n.tokens.get(1).is_some_and(|t| t.text == name) && n.tokens.len() > 1);
-        if taken {
-            return fail(format!("'{name}' is already declared in this file"));
-        }
-        Ok(())
-    }
-
-    fn add_window(
-        &mut self,
-        project: &Project,
-        name: &str,
-        template: &PageTemplate,
-    ) -> EditResult<Option<u32>> {
-        // A blank window shows an empty view in its content, as every window does.
-        if *template == PageTemplate::Blank {
-            self.check_new_name(name)?;
-            self.check_new_name(&format!("{name}View"))?;
-            let page = templates::page_from_template(project, name, template).map_err(EditError)?;
-            return self.add_blocks(templates::in_content(name, &page, None));
-        }
-        if *template == PageTemplate::View {
-            return self.add_page(name, PageKind::View);
-        }
-        if *template == PageTemplate::Splash {
-            return self.add_splash(name);
-        }
-        self.check_new_name(name)?;
-        let text = templates::page_from_template(project, name, template).map_err(EditError)?;
-        let code = templates::code_from_template(project, name, template).map_err(EditError)?;
-        // A window shows its parts in a view in its content (DESIGN 5.33); a dialog holds them.
-        if text.lines().next().is_some_and(|l| l.ends_with(": window")) {
-            self.check_new_name(&format!("{name}View"))?;
-            return self.add_blocks(templates::in_content(name, &text, code.as_deref()));
-        }
-        self.add_blocks(std::iter::once(text).chain(code).collect())
-    }
-
-    /// Adds top-level blocks made from text, each after a blank line; the first is what the designer selects.
-    fn add_blocks(&mut self, blocks: Vec<String>) -> EditResult<Option<u32>> {
-        let mut id = None;
-        for text in blocks {
-            let mut node = self.adopt(&text)?;
-            node.leading.push(Trivia {
-                indent: 0,
-                raw_indent: None,
-                text: String::new(),
-            });
-            // The window is what the designer selects; its code follows it.
-            id = id.or(Some(node.id));
-            self.nodes.push(node);
-        }
-        Ok(id)
-    }
 
 
-    /// Reads generated text as one top-level node with fresh ids, so it
-    /// cannot be confused with nodes of the file.
-    fn adopt(&mut self, text: &str) -> EditResult<LNode> {
-        fn renumber(node: &mut LNode, next: &mut u32) {
-            node.id = *next;
-            *next -= 1;
-            for child in &mut node.children {
-                renumber(child, next);
-            }
-        }
-        let mut doc = Doc::read(text);
-        if doc.nodes.len() != 1 {
-            return fail("a template must produce one block");
-        }
-        let mut node = doc.nodes.remove(0);
-        renumber(&mut node, &mut self.next_id);
-        Ok(node)
-    }
 
-    fn add_page(&mut self, name: &str, kind: PageKind) -> EditResult<Option<u32>> {
-        self.check_new_name(name)?;
-        let kind = kind.word();
-        let mut page = self.fresh_node(0, format!("page {name}: {kind}"));
-        page.leading.push(Trivia {
-            indent: 0,
-            raw_indent: None,
-            text: String::new(),
-        });
-        let title = self.fresh_node(
-            INDENT_STEP,
-            format!("title {}", quote(&crate::model::default_label(name))),
-        );
-        page.children.push(title);
-        let id = page.id;
-        self.nodes.push(page);
-        Ok(Some(id))
-    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 }
 
 impl Doc {
     // -- apps and frame regions -------------------------------------------
 
-    fn add_app(&mut self, name: &str) -> EditResult<Option<u32>> {
-        if !is_identifier(name) {
-            return fail(format!("'{name}' is not a valid app name"));
-        }
-        if self.nodes.iter().any(|n| top_kind(n) == Kind::App) {
-            return fail("this file already has an app");
-        }
-        let mut app = self.fresh_node(0, format!("app {name}"));
-        app.leading.push(Trivia {
-            indent: 0,
-            raw_indent: None,
-            text: String::new(),
-        });
-        let title = self.fresh_node(
-            INDENT_STEP,
-            format!("title {}", quote(&crate::model::default_label(name))),
-        );
-        app.children.push(title);
-        let id = app.id;
-        self.nodes.push(app);
-        Ok(Some(id))
-    }
-
-    fn set_main(&mut self, app: u32, main: &str) -> EditResult<Option<u32>> {
-        let (path, _) = self.find(app, "an app", |k| k == Kind::App)?;
-        let main = main.trim();
-        if !main.is_empty() && !is_identifier(main) {
-            return fail(format!("'{main}' is not a valid window name"));
-        }
-        let existing = self
-            .node(&path)
-            .children
-            .iter()
-            .position(|c| starts_with_keyword(&c.tokens, "main", Some(TokenKind::Ident)));
-        match (existing, main.is_empty()) {
-            (Some(index), true) => {
-                self.node_mut(&path).children.remove(index);
-            }
-            (Some(index), false) => {
-                replace_token(&mut self.node_mut(&path).children[index], 1, main)
-            }
-            (None, true) => {}
-            (None, false) => {
-                let indent = self.node(&path).child_indent();
-                let line = self.fresh_node(indent, format!("main {main}"));
-                let index = self.owner_settings_end(&path, Kind::App);
-                self.node_mut(&path).children.insert(index, line);
-            }
-        }
-        Ok(Some(app))
-    }
-
-    fn set_splash(&mut self, app: u32, splash: &str, ms: Option<u32>) -> EditResult<Option<u32>> {
-        let (path, _) = self.find(app, "an app", |k| k == Kind::App)?;
-        let splash = splash.trim();
-        if !splash.is_empty() && !is_identifier(splash) {
-            return fail(format!("'{splash}' is not a valid page name"));
-        }
-        if let Some(ms) = ms
-            && !(100..=30_000).contains(&ms)
-        {
-            return fail("a splash shows from 0.1 to 30 seconds");
-        }
-        let existing = self.node(&path).children.iter().position(|c| starts_with_keyword(&c.tokens, "splash", Some(TokenKind::Ident)));
-        if let Some(index) = existing {
-            self.node_mut(&path).children.remove(index);
-        }
-        if splash.is_empty() {
-            return Ok(Some(app));
-        }
-        // Seconds as a person writes them: 2, 1.5, 0.25.
-        let line = match ms {
-            Some(ms) => format!("splash {splash} for {} seconds", format!("{}.{:03}", ms / 1000, ms % 1000).trim_end_matches('0').trim_end_matches('.')),
-            None => format!("splash {splash}"),
-        };
-        let indent = self.node(&path).child_indent();
-        let node = self.fresh_node(indent, line);
-        let index = existing.unwrap_or_else(|| self.owner_settings_end(&path, Kind::App));
-        self.node_mut(&path).children.insert(index, node);
-        Ok(Some(app))
-    }
-
-    /// A splash page: sized as a splash is, its name and a status that code sets as the app starts.
-    fn add_splash(&mut self, name: &str) -> EditResult<Option<u32>> {
-        let id = self.add_page(name, PageKind::Splash)?;
-        let key = crate::names::camel_case(name);
-        let page = self.nodes.last_mut().expect("the page just added");
-        page.children.truncate(0);
-        let lines = ["size 480 x 280".to_string(), format!("heading @{key}Title name titleHeading at 1,2 span 12"), format!("label @{key}Starting name status at 1,5 span 12")];
-        for line in lines {
-            let node = self.fresh_node(INDENT_STEP, line);
-            self.nodes.last_mut().expect("the page just added").children.push(node);
-        }
-        Ok(id)
-    }
-
-    fn set_owner_event(&mut self, owner: u32, event: Event, handler: Option<&str>) -> EditResult<Option<u32>> {
-        let (path, kind) = self.find(owner, "a window or the app", |k| matches!(k, Kind::Page | Kind::App))?;
-        let allowed: &[Event] = if kind == Kind::App { &APP_EVENTS } else { &WINDOW_EVENTS };
-        if !allowed.contains(&event) {
-            return fail(if kind == Kind::App {
-                format!("the app has the event start, not {}", event.keyword())
-            } else {
-                format!("a window has the events open, close and return, not {}", event.keyword())
-            });
-        }
-        let handler = handler.map(str::trim).filter(|h| !h.is_empty());
-        if let Some(h) = handler
-            && !is_identifier(h)
-        {
-            return fail(format!("'{h}' is not a valid handler name"));
-        }
-        let existing = self.node(&path).children.iter().position(|c| {
-            starts_with_keyword(&c.tokens, "on", Some(TokenKind::Ident))
-                && c.tokens.get(1).is_some_and(|t| t.text == event.keyword())
-        });
-        let text = handler.map(|h| format!("on {}: {h}", event.keyword()));
-        match (existing, text) {
-            (Some(index), None) => {
-                self.node_mut(&path).children.remove(index);
-            }
-            (Some(index), Some(_)) => {
-                if let Some(h) = handler {
-                    replace_token(&mut self.node_mut(&path).children[index], 3, h);
-                }
-            }
-            (None, None) => {}
-            (None, Some(text)) => {
-                let indent = self.node(&path).child_indent();
-                let line = self.fresh_node(indent, text);
-                let index = self.owner_settings_end(&path, kind);
-                self.node_mut(&path).children.insert(index, line);
-            }
-        }
-        Ok(Some(owner))
-    }
-
-    /// Index after the settings of a page or app.
-    fn owner_settings_end(&self, path: &[usize], owner: Kind) -> usize {
-        self.node(path)
-            .children
-            .iter()
-            .rposition(|c| matches!(child_kind(owner, c), Kind::PageSetting | Kind::AppSetting))
-            .map(|i| i + 1)
-            .unwrap_or(0)
-    }
-
-    fn region_line(&self, top: usize, region: RegionKind, side: Option<Side>) -> String {
-        match region {
-            RegionKind::Sidebar => {
-                let side = side.unwrap_or(Side::Left);
-                frame::sidebar_line(&frame::new_sidebar(side, Some(self.sidebar_name(top, side))))
-            }
-            RegionKind::Ribbon => format!("ribbon name {}", self.free(top, "mainRibbon")),
-            RegionKind::Menu => format!("menu name {}", self.free(top, "mainMenu")),
-            RegionKind::Toolbar => format!("toolbar name {}", self.free(top, "mainToolbar")),
-            other => frame::keyword(other).to_string(),
-        }
-    }
-
-    /// `base`, or `base2`, `base3`... whichever no part of the block `top` has.
-    fn free(&self, top: usize, base: &str) -> String {
-        let used = self.used_names(top);
-        if used.iter().any(|u| u == base) { (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists") } else { base.to_string() }
-    }
-
-    /// The first free name for a sidebar on `side`: `leftSidebar`.
-    fn sidebar_name(&self, top: usize, side: Side) -> String {
-        let base = format!("{}Sidebar", frame::side_keyword(side));
-        let used = self.used_names(top);
-        if used.contains(&base) { (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists") } else { base }
-    }
-
-    fn add_region(
-        &mut self,
-        owner: u32,
-        region: RegionKind,
-        side: Option<Side>,
-    ) -> EditResult<Option<u32>> {
-        let (path, owner_kind) = self.find(owner, "a page or app", |k| {
-            matches!(k, Kind::Page | Kind::App)
-        })?;
-        if region != RegionKind::Sidebar && side.is_some() {
-            return fail("only a sidebar has a side");
-        }
-        let side = (region == RegionKind::Sidebar).then(|| side.unwrap_or(Side::Left));
-        let taken = self.node(&path).children.iter().any(|c| {
-            child_kind(owner_kind, c) == Kind::Region(region)
-                && (side.is_none() || sidebar_side(c) == side)
-        });
-        if taken {
-            let what = match side {
-                Some(s) => format!("a {} sidebar", frame::side_keyword(s)),
-                None => format!("a {}", frame::keyword(region)),
-            };
-            return fail(format!("this window already has {what}"));
-        }
-
-        let indent = self.node(&path).child_indent();
-        let line = self.region_line(path[0], region, side);
-        let mut node = self.fresh_node(indent, line);
-        let inner = indent + INDENT_STEP;
-        // Starter content, so the new region shows up and is ready to edit.
-        match region {
-            RegionKind::Menu => {
-                let mut file = self.fresh_node(
-                    inner,
-                    command_line(&new_command(CommandKind::Item, Some("File".into()))),
-                );
-                let mut quit = new_command(CommandKind::Item, Some("Quit".into()));
-                quit.on_click = Some("quit".into());
-                let quit = self.fresh_node(inner + INDENT_STEP, command_line(&quit));
-                file.children.push(quit);
-                node.children.push(file);
-            }
-            RegionKind::Toolbar => {
-                let button = self.fresh_node(
-                    inner,
-                    command_line(&new_command(CommandKind::Button, Some("Button".into()))),
-                );
-                node.children.push(button);
-            }
-            RegionKind::Ribbon => {
-                let tab_name = self.free(path[0], "homeTab");
-                let group_name = self.free(path[0], "actionsGroup");
-                let mut tab = self.fresh_node(inner, format!("tab {} name {tab_name}", quote("Home")));
-                let mut group = self.fresh_node(inner + INDENT_STEP, format!("group {} name {group_name}", quote("Actions")));
-                let mut props = new_command(CommandKind::Button, Some("Button".into()));
-                props.name = Some(self.command_name(path[0], &props));
-                let button = self.fresh_node(inner + 2 * INDENT_STEP, command_line(&props));
-                group.children.push(button);
-                tab.children.push(group);
-                node.children.push(tab);
-            }
-            RegionKind::Footer => {
-                let status = self.fresh_node(inner, format!("status {}", quote("Ready")));
-                node.children.push(status);
-            }
-            RegionKind::Sidebar => {}
-        }
-        let id = node.id;
-
-        // Regions follow the settings, in catalog order, before the widgets.
-        let order = frame::order(region);
-        let children = &self.node(&path).children;
-        let index = children
-            .iter()
-            .rposition(|c| match child_kind(owner_kind, c) {
-                Kind::PageSetting | Kind::AppSetting => true,
-                Kind::Region(r) => frame::order(r) <= order,
-                _ => false,
-            })
-            .map(|i| i + 1)
-            .unwrap_or(0);
-        self.node_mut(&path).children.insert(index, node);
-        Ok(Some(id))
-    }
-
-    fn update_sidebar(&mut self, item: u32, props: &crate::model::SidebarProps) -> EditResult<Option<u32>> {
-        let (path, _) = self.find(item, "a sidebar", |k| k == Kind::Region(RegionKind::Sidebar))?;
-        let parent = &path[..path.len() - 1];
-        let clash = self.node(parent).children.iter().any(|c| {
-            c.id != item && starts_with_keyword(&c.tokens, "sidebar", Some(TokenKind::Ident)) && sidebar_side(c) == Some(props.side)
-        });
-        if clash {
-            return fail(format!("there is already a {} sidebar", frame::side_keyword(props.side)));
-        }
-        let mut props = props.clone();
-        if props.name.is_none() {
-            props.name = Some(self.sidebar_name(path[0], props.side));
-        }
-        let node = self.node_mut(&path);
-        let rest_start = node.tokens.last().map(|t| t.span.end as usize).unwrap_or(0);
-        let rest = node.text[rest_start..].to_string();
-        node.set_text(frame::sidebar_line(&props) + &rest);
-        Ok(Some(item))
-    }
-
-    fn update_ribbon(&mut self, item: u32, name: Option<&str>, collapsible: bool, collapsed: bool) -> EditResult<Option<u32>> {
-        let (path, _) = self.find(item, "a ribbon", |k| k == Kind::Region(RegionKind::Ribbon))?;
-        let name = match name {
-            Some(n) => n.to_string(),
-            None => self.free(path[0], "mainRibbon"),
-        };
-        let mut line = format!("ribbon name {name}");
-        if collapsible {
-            line.push_str(if collapsed { " collapsible collapsed" } else { " collapsible" });
-        }
-        let node = self.node_mut(&path);
-        let rest_start = node.tokens.last().map(|t| t.span.end as usize).unwrap_or(0);
-        let rest = node.text[rest_start..].to_string();
-        node.set_text(line + &rest);
-        Ok(Some(item))
-    }
-
-    fn set_name(&mut self, item: u32, name: &str) -> EditResult<Option<u32>> {
-        if !crate::names::is_camel_case(name) {
-            return fail(crate::names::camel_case_problem("part", name));
-        }
-        let (path, _) = self.find(item, "a menu, a toolbar, or a ribbon tab or group", |k| {
-            matches!(k, Kind::RibbonTab | Kind::RibbonGroup | Kind::Region(RegionKind::Menu) | Kind::Region(RegionKind::Toolbar))
-        })?;
-        let node = self.node_mut(&path);
-        let at = node.tokens.windows(2).position(|w| w[0].text == "name" && w[1].kind == TokenKind::Ident);
-        let text = match at {
-            Some(i) => {
-                let t = &node.tokens[i + 1];
-                format!("{}{name}{}", &node.text[..t.span.start as usize], &node.text[t.span.end as usize..])
-            }
-            None => {
-                let end = node.tokens.last().map(|t| t.span.end as usize).unwrap_or(node.text.len());
-                format!("{} name {name}{}", &node.text[..end], &node.text[end..])
-            }
-        };
-        node.set_text(text);
-        Ok(Some(item))
-    }
-
-    fn update_sidebars(&mut self) -> EditResult<Option<u32>> {
-        for top in 0..self.nodes.len() {
-            if !matches!(top_kind(&self.nodes[top]), Kind::Page | Kind::App) {
-                continue;
-            }
-            let mut used = self.used_names(top);
-            for child in &mut self.nodes[top].children {
-                if !starts_with_keyword(&child.tokens, "sidebar", Some(TokenKind::Ident)) {
-                    continue;
-                }
-                let Some(mut props) = sidebar_props_of(&child.tokens) else { continue };
-                if props.name.is_none() {
-                    let base = format!("{}Sidebar", frame::side_keyword(props.side));
-                    let name = if used.contains(&base) { (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists") } else { base };
-                    used.push(name.clone());
-                    props.name = Some(name);
-                }
-                let rest_start = child.tokens.last().map(|t| t.span.end as usize).unwrap_or(0);
-                let rest = child.text[rest_start..].to_string();
-                child.set_text(frame::sidebar_line(&props) + &rest);
-            }
-        }
-        Ok(None)
-    }
 
 
-    fn add_frame_item(
-        &mut self,
-        parent: u32,
-        item: FrameItem,
-        caption: Option<String>,
-    ) -> EditResult<Option<u32>> {
-        let (path, kind) = self.find(parent, "a menu, toolbar, ribbon or part of one", |k| {
-            k.is_command_parent() || matches!(k, Kind::Region(RegionKind::Ribbon) | Kind::RibbonTab)
-        })?;
-        let caption = caption
-            .map(|c| c.trim().to_string())
-            .filter(|c| !c.is_empty());
-        let text = match (kind, item) {
-            (
-                Kind::Region(RegionKind::Menu) | Kind::Command,
-                FrameItem::Item | FrameItem::Separator,
-            )
-            | (
-                Kind::Region(RegionKind::Toolbar) | Kind::RibbonGroup,
-                FrameItem::Button | FrameItem::Separator,
-            ) => {
-                let command = match item {
-                    FrameItem::Item => CommandKind::Item,
-                    FrameItem::Button => CommandKind::Button,
-                    _ => CommandKind::Separator,
-                };
-                let caption = match command {
-                    CommandKind::Separator => None,
-                    CommandKind::Item => caption.or(Some("Item".into())),
-                    CommandKind::Button => caption.or(Some("Button".into())),
-                };
-                let mut props = new_command(command, caption);
-                // A new item or button is named after its caption, like a new part.
-                if command != CommandKind::Separator {
-                    props.name = Some(self.command_name(path[0], &props));
-                }
-                validate_command(&props).map_err(EditError)?;
-                command_line(&props)
-            }
-            (Kind::Region(RegionKind::Ribbon), FrameItem::Tab) => {
-                let title = caption.as_deref().unwrap_or("Tab");
-                format!("tab {} name {}", text_token(title), self.free(path[0], &ribbon_part_base(title, "Tab")))
-            }
-            (Kind::RibbonTab, FrameItem::Group) => {
-                let title = caption.as_deref().unwrap_or("Group");
-                format!("group {} name {}", text_token(title), self.free(path[0], &ribbon_part_base(title, "Group")))
-            }
-            _ => return fail("that cannot go there"),
-        };
-        if kind == Kind::Command && !command_keyword_is(self.node(&path), &[CommandKind::Item]) {
-            return fail("only a menu item can hold a submenu");
-        }
-        let indent = self.node(&path).child_indent();
-        let node = self.fresh_node(indent, text);
-        let id = node.id;
-        self.node_mut(&path).children.push(node);
-        Ok(Some(id))
-    }
 
-    /// The first free name for a command after its caption and kind: "New game" is `newGameItem`.
-    fn command_name(&self, top: usize, props: &CommandProps) -> String {
-        let base = crate::names::command_name(props.caption.as_deref(), frame::command_keyword(props.kind));
-        let used = self.used_names(top);
-        if used.contains(&base) { (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists") } else { base }
-    }
 
-    fn update_command(&mut self, item: u32, props: &CommandProps) -> EditResult<Option<u32>> {
-        validate_command(props).map_err(EditError)?;
-        let (path, _) = self.find(item, "a menu item, button or separator", |k| {
-            k == Kind::Command
-        })?;
-        // Every item and button has a name: one written without gets one now.
-        let named;
-        let props = if props.name.is_none() && props.kind != CommandKind::Separator {
-            let mut with = props.clone();
-            with.name = Some(self.command_name(path[0], props));
-            named = with;
-            &named
-        } else {
-            props
-        };
-        let node = self.node_mut(&path);
-        let current = node.tokens[0].text.clone();
-        if current != frame::command_keyword(props.kind) {
-            return fail(format!(
-                "a {current} cannot be turned into a {}",
-                frame::command_keyword(props.kind)
-            ));
-        }
-        let rest_start = node.tokens.last().map(|t| t.span.end as usize).unwrap_or(0);
-        let rest = node.text[rest_start..].to_string();
-        node.set_text(command_line(props) + &rest);
-        Ok(Some(item))
-    }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     fn move_sibling(&mut self, item: u32, delta: i32) -> EditResult<Option<u32>> {
         let (path, kind) =
-            self.find(item, "a field, variant, command, ribbon tab, ribbon group or region", |k| {
-                matches!(
-                    k,
-                    Kind::Field
-                        | Kind::Variant
-                        | Kind::Command
-                        | Kind::RibbonTab
-                        | Kind::RibbonGroup
-                        | Kind::Region(_)
-                )
-            })?;
+            self.find(item, "a field or variant", |k| matches!(k, Kind::Field | Kind::Variant))?;
         if delta != -1 && delta != 1 {
             return fail("move by one place at a time");
         }
@@ -2184,65 +922,9 @@ impl Doc {
     }
 }
 
-/// A ribbon tab's or group's name after its title and kind: `homeTab`, `clipboardGroup`.
-fn ribbon_part_base(title: &str, kind: &str) -> String {
-    let title = crate::names::camel_case(title);
-    if title.is_empty() { kind.to_lowercase() } else { format!("{title}{kind}") }
-}
 
-/// What a sidebar's line says, read from its tokens, the old `span` form
-/// (columns, now pixels) included; none when it is no sidebar line.
-fn sidebar_props_of(tokens: &[crate::lexer::Token]) -> Option<crate::model::SidebarProps> {
-    let side = match tokens.get(1).map(|t| t.text.as_str()) {
-        Some("left") => Side::Left,
-        Some("right") => Side::Right,
-        _ => return None,
-    };
-    let mut props = frame::new_sidebar(side, None);
-    let number = |i: usize| tokens.get(i).and_then(|t| t.text.parse::<u32>().ok());
-    let mut i = 2;
-    while i < tokens.len() {
-        match tokens[i].text.as_str() {
-            "name" => props.name = tokens.get(i + 1).map(|t| t.text.clone()),
-            "width" => props.width = number(i + 1).unwrap_or(props.width),
-            "min" => props.min = number(i + 1),
-            "max" => props.max = number(i + 1),
-            "grid" => props.columns = number(i + 1).unwrap_or(props.columns),
-            "span" => {
-                if let Some(columns) = number(i + 1) {
-                    props.columns = columns;
-                    props.width = columns * crate::layout::SIDEBAR_COLUMN;
-                }
-            }
-            "resizable" => props.resizable = true,
-            "collapsible" => props.collapsible = true,
-            "collapsed" => props.collapsed = true,
-            "maximizable" => props.maximizable = true,
-            _ => {}
-        }
-        i += 1;
-    }
-    Some(props)
-}
 
-fn sidebar_side(node: &LNode) -> Option<Side> {
-    match node.tokens.get(1).map(|t| t.text.as_str()) {
-        Some("left") => Some(Side::Left),
-        Some("right") => Some(Side::Right),
-        _ => None,
-    }
-}
 
-/// The `at column,row` of a widget line, as (row, column) for ordering.
-fn widget_position(node: &LNode) -> Option<(u32, u32)> {
-    let tokens = &node.tokens;
-    let at = tokens
-        .iter()
-        .position(|t| t.kind == TokenKind::Ident && t.text == "at")?;
-    let col = tokens.get(at + 1)?.text.parse().ok()?;
-    let row = tokens.get(at + 3)?.text.parse().ok()?;
-    Some((row, col))
-}
 
 /// Nests a flat run of nodes by indentation, like the parser does.
 fn nest(iter: &mut std::iter::Peekable<impl Iterator<Item = LNode>>, indent: usize) -> Vec<LNode> {
@@ -2259,20 +941,24 @@ fn nest(iter: &mut std::iter::Peekable<impl Iterator<Item = LNode>>, indent: usi
     nodes
 }
 
-fn replace_token(node: &mut LNode, index: usize, replacement: &str) {
-    let Some(token) = node.tokens.get(index) else {
-        return;
-    };
-    let (start, end) = (token.span.start as usize, token.span.end as usize);
-    let text = format!("{}{replacement}{}", &node.text[..start], &node.text[end..]);
-    node.set_text(text);
-}
 
 impl Doc {
     // -- data dictionary ----------------------------------------------------
 
     /// Adds `entity Name` or `enum Name` with one first line, after the
     /// last data declaration (or after `module` and `use`).
+    /// Whether `name` is free for a new declaration of the module's file.
+    fn check_new_name(&self, name: &str) -> EditResult<()> {
+        if !is_identifier(name) {
+            return fail(format!("'{name}' is not a valid name"));
+        }
+        let taken = self.nodes.iter().any(|n| n.tokens.get(1).is_some_and(|t| t.text == name) && n.tokens.len() > 1);
+        if taken {
+            return fail(format!("'{name}' is already declared in this file"));
+        }
+        Ok(())
+    }
+
     fn add_declaration(&mut self, keyword: &str, name: &str, first: &str) -> EditResult<Option<u32>> {
         self.check_new_name(name)?;
         let mut node = self.fresh_node(0, format!("{keyword} {name}"));
@@ -2391,67 +1077,4 @@ fn set_line_keeping_comment(node: &mut LNode, line: String) {
     node.set_text(line + &rest);
 }
 
-/// What a part's line says of its purpose, enough to name it: its kind,
-/// caption, `for`, `bind` and `source`.
-fn props_of_line(tokens: &[Token]) -> Option<WidgetProps> {
-    let first = tokens.first()?;
-    let kind = widgets::by_keyword(&first.text).or_else(|| custom_word(first))?;
-    let mut props = widgets::new_props(kind, 1, 1);
-    if kind == WidgetKind::Custom {
-        props.part = Some(first.text.clone());
-    }
-    props.caption = match tokens.get(1) {
-        Some(t) if t.kind == TokenKind::Str => Some(t.text.clone()),
-        Some(t) if t.kind == TokenKind::Key => Some(format!("@{}", t.text.trim_start_matches('@'))),
-        _ => None,
-    };
-    let after = |word: &str| tokens.iter().position(|t| t.kind == TokenKind::Ident && t.text == word).map(|i| i + 1);
-    props.for_part = after("for").and_then(|i| tokens.get(i)).filter(|t| t.kind == TokenKind::Ident).map(|t| t.text.clone());
-    props.source = after("source").and_then(|i| tokens.get(i)).filter(|t| t.kind == TokenKind::Str).map(|t| t.text.clone());
-    props.bind = after("bind").map(|i| {
-        tokens[i..].iter().take_while(|t| t.kind == TokenKind::Ident || t.kind == TokenKind::Dot).map(|t| t.text.as_str()).collect::<String>()
-    }).filter(|b| !b.is_empty());
-    Some(props)
-}
 
-/// `edit` with each place in the file it names (a part, a page, a region,
-/// a command) put through `at`: for an edit of a window's or view's own
-/// file (`.cxaml`), made on the page's text of Clarity. An edit of what a
-/// module's own file holds (entities, code, apps, new windows) has no
-/// place there and is refused.
-pub fn with_items(edit: &Edit, at: &dyn Fn(u32) -> u32) -> EditResult<Edit> {
-    use Edit::*;
-    Ok(match edit.clone() {
-        Remove { item } => Remove { item: at(item) },
-        SetTitle { target, title } => SetTitle { target: at(target), title },
-        SetPaneSpan { target, columns } => SetPaneSpan { target: at(target), columns },
-        SetPageView { target, view } => SetPageView { target: at(target), view },
-        SetPageColor { target, color } => SetPageColor { target: at(target), color },
-        PlaceWidget { container, props } => PlaceWidget { container: at(container), props },
-        CreateWidget { container, kind, col, row, width, caption, bind, part, height } => CreateWidget { container: at(container), kind, col, row, width, caption, bind, part, height },
-        Batch { edits } => Batch { edits: edits.iter().map(|e| with_items(e, at)).collect::<EditResult<_>>()? },
-        UpdateWidget { item, container, props } => UpdateWidget { item: at(item), container: container.map(at), props },
-        AddTab { item, title } => AddTab { item: at(item), title },
-        AddMenu { item } => AddMenu { item: at(item) },
-        AddData { page, name, entity, list } => AddData { page: at(page), name, entity, list },
-        SetGrid { page, columns, rows } => SetGrid { page: at(page), columns, rows },
-        SetSize { page, width, height } => SetSize { page: at(page), width, height },
-        SetPageStyle { page, style } => SetPageStyle { page: at(page), style },
-        PlaceField { container, col, row, room, bind } => PlaceField { container: at(container), col, row, room, bind },
-        SetOwnerEvent { owner, event, handler } => SetOwnerEvent { owner: at(owner), event, handler },
-        AddRegion { owner, region, side } => AddRegion { owner: at(owner), region, side },
-        UpdateSidebar { item, props } => UpdateSidebar { item: at(item), props },
-        UpdateRibbon { item, name, collapsible, collapsed } => UpdateRibbon { item: at(item), name, collapsible, collapsed },
-        SetName { item, name } => SetName { item: at(item), name },
-        AddFrameItem { parent, item, caption } => AddFrameItem { parent: at(parent), item, caption },
-        UpdateCommand { item, props } => UpdateCommand { item: at(item), props },
-        MoveSibling { item, delta } => MoveSibling { item: at(item), delta },
-        SetPartGrows { item, grows } => SetPartGrows { item: at(item), grows },
-        NameParts => NameParts,
-        CamelNames => CamelNames,
-        UpdateSidebars => UpdateSidebars,
-        AddPage { .. } | AddWindow { .. } | AddEntity { .. } | AddEnum { .. } | AddField { .. } | UpdateField { .. } | AddVariant { .. } | UpdateVariant { .. } | SetUses { .. } | AddApp { .. } | SetMain { .. } | SetSplash { .. } | SetCode { .. } | AddHandler { .. } | AddHandlerWith { .. } | ReplaceDecl { .. } | AppendDecl { .. } => {
-            return fail("this change belongs in the module's file of Clarity, not in a window's .cxaml");
-        }
-    })
-}

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use clarity_gen::{generate, rust_local_patch};
 use clarity_project::{Backend, Settings, Ui, starter};
-use clarity_spec::load_sources;
+use clarity_spec::load_converted;
 
 fn runtime() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/rust").canonicalize().unwrap()
@@ -62,7 +62,7 @@ fn generating_with_clarity_runtime_set_writes_the_patch() {
     let mut settings: Settings = starter("Shop", "shop");
     settings.stack.backend = Backend::Rust;
     settings.stack.ui = Ui::Clarity;
-    let project = load_sources([("shop.clarity", "module shop\n\nentity Customer\n    name: text(80)\n\npage Card: window\n    title \"Card\"\n    data customer: Customer\n")]);
+    let project = load_converted([("shop.clarity", "module shop\n\nentity Customer\n    name: text(80)\n\npage Card: window\n    title \"Card\"\n    data customer: Customer\n")]);
     // SAFETY: no other thread of this test binary reads or writes the environment.
     unsafe { std::env::remove_var("CLARITY_RUNTIME") };
     let plain = generate(&project, &settings).unwrap();

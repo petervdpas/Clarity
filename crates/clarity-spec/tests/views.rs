@@ -48,8 +48,8 @@ fn has(text: &str, words: &str) {
 #[test]
 fn a_window_shows_a_view_in_content_and_its_code_reaches_the_views_parts_and_data() {
     assert!(errors(MODEL).is_empty(), "{:#?}", errors(MODEL));
-    let file = &project(MODEL).files[0];
-    let content = &file.pages[0].widgets[1].children[0];
+    let project = project(MODEL);
+    let content = &project.pages().nth(0).unwrap().widgets[1].children[0];
     assert_eq!(content.pages[0].view.as_deref(), Some("ClassEditor"));
 }
 
@@ -144,10 +144,11 @@ code Notes
 #[test]
 fn a_view_tells_its_window_which_hears_it_on_its_line_of_content() {
     assert!(errors(TELLING).is_empty(), "{:#?}", errors(TELLING));
-    let file = &project(TELLING).files[0];
-    assert_eq!(file.pages[1].tells[0].name.name, "saved");
-    assert_eq!(file.pages[0].widgets[0].children[0].pages[0].tells[0].handler, "classSaved");
-    assert_eq!(file.pages[0].widgets[1].pages[0].children[0].pages[0].tells[0].handler, "notesNoted");
+    let project = project(TELLING);
+    let pages: Vec<_> = project.pages().collect();
+    assert_eq!(pages[1].tells[0].name.name, "saved");
+    assert_eq!(pages[0].widgets[0].children[0].pages[0].tells[0].handler, "classSaved");
+    assert_eq!(pages[0].widgets[1].pages[0].children[0].pages[0].tells[0].handler, "notesNoted");
 }
 
 #[test]
@@ -202,6 +203,6 @@ page Editor: view
 ";
     assert!(errors(text).is_empty(), "{:#?}", errors(text));
     let placed = clarity_spec::views::placed(&project(text));
-    let content = &placed.files[0].pages[0].widgets[0];
+    let content = &placed.pages().nth(0).unwrap().widgets[0];
     assert_eq!(Some(12), content.pages[0].columns, "the view's line");
 }

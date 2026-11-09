@@ -24,7 +24,7 @@ fn web_files(backend: Backend) -> Vec<OutFile> {
 }
 
 fn generated_with(settings: Settings) -> Vec<OutFile> {
-    let mut project = clarity_spec::load_in([("play.clarity", include_str!("../../../conformance/engines/play.clarity"))], [], &clarity_project::source_refs(&settings));
+    let mut project = clarity_spec::load_in(clarity_spec::converted([("play.clarity", include_str!("../../../conformance/engines/play.clarity"))]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &clarity_project::source_refs(&settings));
     let bytes = include_bytes!("../../../conformance/engines/screen.wasm").to_vec();
     clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "screen.wasm".into(), bytes }]);
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
@@ -91,7 +91,7 @@ fn a_clarity_engine_beside_the_screen_is_carried_compiled() {
         let mut settings: clarity_project::Settings = clarity_project::starter("Sky", "sky");
         settings.stack.backend = backend;
         settings.stack.ui = ui;
-        let project = clarity_spec::load_in([("sky.clarity", source.as_str())], [], &clarity_project::source_refs(&settings));
+        let project = clarity_spec::load_in(clarity_spec::converted([("sky.clarity", source.as_str())]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &clarity_project::source_refs(&settings));
         let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
         assert!(errors.is_empty(), "{errors:#?}");
         generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"))

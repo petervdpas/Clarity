@@ -1,6 +1,6 @@
 # Your first project
 
-A short walk from an empty folder to a running application: a task entity, a window with a form and a table, Preview and Run.
+A short walk from an empty folder to a running application: a task entity, a window whose view holds a form and a table, Preview and Run.
 
 ## 1. Create the project
 
@@ -8,17 +8,31 @@ On the **Project** tab, click **New**. Choose where the project file goes and gi
 
 The New project dialog asks for the stack: a backend, a UI and one or more targets. The Build tools row says whether this machine has what the stack needs. Click **Create project**.
 
-Clarity writes three things: the project file, a first module `tasks/tasks.clarity`, and a `.gitignore` that keeps the generated `out/` and `data/` folders out of version control. The module holds an app and its main window:
+Clarity writes the project file, a first module `tasks/tasks.clarity`, the app, the main window and the view it shows in `tasks/design`, the translations, and a `.gitignore` that keeps the generated `out/` and `data/` folders out of version control. The module starts as one line, `module tasks`; entities and code go there. The app is `tasks/design/Tasks.cxaml`, which names the main window:
 
-```clarity
-module tasks
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<App class="tasks.Tasks" title="@tasksTitle" main="Main">
+</App>
+```
 
-app Tasks
-    title @tasksTitle
-    main Main
+The main window is a file of its own, `tasks/design/Main.cxaml`; its `class` says it is the window `Main` of module `tasks`. Its content shows the view `MainView`, where the window's parts go:
 
-page Main: window
-    title @mainTitle
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="tasks.Main" title="@mainTitle">
+  <Content name="main" at="1,1" span="12">
+    <View name="MainView" />
+  </Content>
+</Window>
+```
+
+The view starts empty, in `tasks/design/MainView.cxaml`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<View class="tasks.MainView">
+</View>
 ```
 
 The project file has one SQLite database, `main`, in `data/tasks.db`. See [The project file](project.file.md).
@@ -29,36 +43,39 @@ In the project tree, under Data, click **+ New entity** and call it `Task`. The 
 
 A new entity needs a migration step before the application can be built. Click **Settings** on the Project tab; under Migrations, click **Create step 1**. See [Migrations](data.migrations.md).
 
-## 3. Design the window
+## 3. Design the view
 
-Open `Main` from the tree and go to the **Design** tab. On the right, under The window, add two pieces of data: `task` of entity `Task`, and `tasks` of entity `Task` with list ticked.
+Open `MainView` from the tree and go to the **Design** tab. On the right, under The window, add two pieces of data: `task` of entity `Task`, and `tasks` of entity `Task` with list ticked.
 
-In the sidebar's Parts tab, drag a **Form** from Containers onto the window and bind it to `task`. The Parts tab now lists the fields of `task`: drag Title and Done into the form, and each arrives as a label and a bound input. Drag **Table of tasks** below the form, and tick its columns. Drag a **Button**, caption it `Add`, name it `add` and tick "Enter clicks it". Under Events, click **Wire** next to click. Clarity writes an empty handler `addClick` and opens the Code panel at it. Fill it in and click **Save**:
+In the sidebar's Parts tab, drag a **Form** from Containers onto the view and bind it to `task`. The Parts tab now lists the fields of `task`: drag Title and Done into the form, and each arrives as a label and a bound input. Drag **Table of tasks** below the form, and tick its columns. Drag a **Button**, caption it `Add`, name it `add` and tick "Enter clicks it". Under Events, click **Wire** next to click. Clarity writes an empty handler `addClick` into the module's file and opens the Code panel at it. Fill it in and click **Save**:
 
 ```clarity
-code Main
+code MainView
     handler addClick
         save task
         reload tasks
         task = new Task
 ```
 
-The window is now text like this; see [Windows](design.windows.md) and [Parts](design.parts.md):
+The designer has written the view into `tasks/design/MainView.cxaml`, which now reads like this; see [Windows](design.windows.md) and [Parts](design.parts.md):
 
-```clarity
-page Main: window
-    title @mainTitle
-    data task: Task
-    data tasks: list<Task>
-
-    form name form1 at 1,1 span 12 rows 2 bind task
-        label @titleLabel name label1 at 1,1 span 3 for title
-        textbox name title at 4,1 span 6 bind task.title
-        label @doneLabel name label2 at 1,2 span 3 for done
-        checkbox name done at 4,2 span 3 bind task.done
-    button @addButtonCaption name addButton at 11,3 span 2 default on click: addClick
-    table name table1 at 1,4 span 12 rows 6 bind tasks columns title, done
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<View class="tasks.MainView">
+  <Data name="task" type="Task" />
+  <Data name="tasks" type="list&lt;Task&gt;" />
+  <Form name="form1" at="1,1" span="12" rows="2" bind="task">
+    <Label name="label1" at="1,1" span="3" caption="@titleLabel" for="title" />
+    <Textbox name="title" at="4,1" span="6" bind="task.title" />
+    <Label name="label2" at="1,2" span="3" caption="@doneLabel" for="done" />
+    <Checkbox name="done" at="4,2" span="3" bind="task.done" />
+  </Form>
+  <Button name="addButton" at="11,3" span="2" caption="@addButtonCaption" default="true" onclick="addClick" />
+  <Table name="table1" at="1,4" span="12" rows="6" bind="tasks" columns="title, done" />
+</View>
 ```
+
+The view's code stays in the module, `tasks/tasks.clarity`, in the `code MainView` block above. `Main` shows the view and its parts, so Preview and Run show them in the main window.
 
 ## 4. Preview and Run
 

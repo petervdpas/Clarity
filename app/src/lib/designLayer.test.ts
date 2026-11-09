@@ -9,6 +9,8 @@ import type { Widget } from "@clarity/ui/generated/Widget.ts";
 import type { Frame } from "@clarity/ui/generated/Frame.ts";
 
 const span = (start: number) => ({ start, end: start + 1, line: 1, col: 1 });
+// Keyed by place, as a key is opaque to the layer.
+const byPlace = (thing: { span: { start: number } }) => String(thing.span.start);
 
 function widget(start: number, kind: string, children: Widget[] = [], pages: { start: number; children: Widget[] }[] = []): Widget {
   return {
@@ -42,29 +44,29 @@ const layout = {
   ],
 };
 
-test("a part shows once, by its item, and only when the design has it", () => {
-  const layer = layerOf(layout, page);
+test("a part shows once, by its key, and only when the design has it", () => {
+  const layer = layerOf(layout, page, byPlace);
   assert.deepEqual(
     layer.parts.map((p) => [p.item, p.box.x, p.box.y]),
     [
-      [20, 12, 12],
-      [40, 20, 60],
+      ["20", 12, 12],
+      ["40", 20, 60],
     ],
   );
 });
 
 test("each grid knows the containers it lies in, so a part is never dropped into itself", () => {
-  const layer = layerOf(layout, page);
-  const by = (item: number) => layer.grids.find((g) => g.item === item);
-  assert.deepEqual(by(10)?.inside, []);
-  assert.deepEqual(by(30)?.inside, [30]);
-  assert.deepEqual(by(60)?.inside, [50]);
+  const layer = layerOf(layout, page, byPlace);
+  const by = (item: string) => layer.grids.find((g) => g.item === item);
+  assert.deepEqual(by("10")?.inside, []);
+  assert.deepEqual(by("30")?.inside, ["30"]);
+  assert.deepEqual(by("60")?.inside, ["50"]);
   assert.equal(layer.grids.length, 3, "a grid of no design item is left out");
-  assert.deepEqual(heldBy(tabs), [50, 60, 80, 70]);
+  assert.deepEqual(heldBy(tabs, byPlace), ["50", "60", "80", "70"]);
 });
 
 test("cells and a drop place follow the rows as Clarity.UI laid them out", () => {
-  const grid = layerOf(layout, page).grids[0];
+  const grid = layerOf(layout, page, byPlace).grids[0];
   const cells = cellsOf(grid);
   assert.equal(cells.length, 36);
   const column = (876 - 8 * 11) / 12;
@@ -77,7 +79,7 @@ test("cells and a drop place follow the rows as Clarity.UI laid them out", () =>
 
 test("below the last part the cells go on to the bottom of the grid, at the row height given", () => {
   // A page's own exact grid: 10 pixel rows, no gaps, the window 290 high and its parts reaching 230.
-  const grid = { item: 1, columns: 2, gap: 0, box: { x: 0, y: 0, width: 20, height: 290 }, rows: Array(23).fill(10), inside: [] };
+  const grid = { item: "1", columns: 2, gap: 0, box: { x: 0, y: 0, width: 20, height: 290 }, rows: Array(23).fill(10), inside: [] };
   assert.equal(cellsOf(grid).length, 2 * 23, "without a row height, only the rows laid out");
   const cells = cellsOf(grid, 10);
   assert.equal(cells.length, 2 * 29, "290 pixels of 10 pixel rows");
@@ -85,7 +87,7 @@ test("below the last part the cells go on to the bottom of the grid, at the row 
 });
 
 test("past the last row, a drop place follows the project's row height", () => {
-  const grid = layerOf(layout, page).grids[0];
+  const grid = layerOf(layout, page, byPlace).grids[0];
   assert.equal(placeIn(grid, { col: 1, row: 5, width: 1, height: 2 }, 30).y, 36 + 8 + 116 + 8 + 36 + 8 + 30 + 8);
   assert.equal(placeIn(grid, { col: 1, row: 5, width: 1, height: 2 }, 30).height, 30 + 8 + 30);
 });
@@ -99,7 +101,7 @@ test("a drop place is where every Clarity.UI lays a part out", () => {
   const kept = file.cases.filter((c) => c.parts.length > 0 && !c.parts.some((p) => p.grows || p.bottom));
   assert.ok(kept.some((c) => (c.row_height ?? file.row_height) !== 36), "a case at another row height");
   for (const c of kept) {
-    const grid = { item: 1, columns: c.columns, gap: c.gap, box: { x: 0, y: 0, width: c.width, height: 0 }, rows: [], inside: [] };
+    const grid = { item: "1", columns: c.columns, gap: c.gap, box: { x: 0, y: 0, width: c.width, height: 0 }, rows: [], inside: [] };
     c.parts.forEach((p, i) => {
       const box = placeIn(grid, p, c.row_height ?? file.row_height);
       const want = c.gives.boxes[i];
@@ -112,7 +114,7 @@ test("a frame's buttons are known by the window's own frame or its app's, a cont
   const command = (start: number, items: unknown[] = []) => ({ props: {}, items, span: span(start) });
   const framed = { ...page, frame: { menu: { name: null, items: [command(200, [command(210)])], span: span(199) }, toolbar: null, ribbon: null, sidebars: [], footer: null } } as unknown as Page;
   const app = { menu: null, toolbar: { name: null, items: [command(300)], span: span(299) }, ribbon: null, sidebars: [], footer: null } as unknown as Frame;
-  assert.deepEqual(commandsOf(framed.frame), [200, 210]);
+  assert.deepEqual(commandsOf(framed.frame, byPlace), ["200", "210"]);
   const laid = {
     parts: [
       { item: "200", name: "fileItem", kind: "command", at: [0, 0, 40, 20] as [number, number, number, number] },
@@ -122,18 +124,18 @@ test("a frame's buttons are known by the window's own frame or its app's, a cont
     ],
     grids: [],
   };
-  const layer = layerOf(laid, framed, app);
+  const layer = layerOf(laid, framed, byPlace, new Set(commandsOf(app, byPlace)));
   assert.deepEqual(
     layer.parts.map((p) => [p.item, p.kind, p.own]),
     [
-      [200, "command", true],
-      [300, "command", false],
-      [50, "tabs", true],
+      ["200", "command", true],
+      ["300", "command", false],
+      ["50", "tabs", true],
     ],
   );
   assert.deepEqual(layer.parts[2].pages, [
-    { item: 60, title: "One", box: { x: 0, y: 40, width: 60, height: 24 } },
-    { item: 80, title: "Two", box: null },
+    { item: "60", title: "One", box: { x: 0, y: 40, width: 60, height: 24 } },
+    { item: "80", title: "Two", box: null },
   ]);
 });
 
@@ -142,8 +144,8 @@ test("the IDE's language is the drawing's choice", () => {
   assert.deepEqual(chosenOf(null, "en"), { language: "en" });
   assert.deepEqual(chosenOf("nl", "en"), { language: "nl" });
   assert.equal(
-    filesAddress("http://x/s/", { window: "Main" }, true, 4, { pages: { 50: 1, 70: 0 }, draft: true, open: ["pick"] }),
-    "http://x/s/files.json?window=Main&design=1&pages=50.1,70.0&draft=1&open=pick&revision=4",
+    filesAddress("http://x/s/", { window: "Main" }, true, 4, { pages: { "design/Main.cxaml#Main/tabs": 1, "design/Main.cxaml#Main/steps": 0 }, draft: true, open: ["pick"] }),
+    "http://x/s/files.json?window=Main&design=1&pages=design%2FMain.cxaml%23Main%2Ftabs.1,design%2FMain.cxaml%23Main%2Fsteps.0&draft=1&open=pick&revision=4",
   );
 });
 
@@ -189,7 +191,7 @@ test("a line of a window's content is named by the view it shows", () => {
     parts: [{ item: "50", name: "main", kind: "content", at: [0, 0, 300, 200] as [number, number, number, number], pages: [{ item: "60", title: null, at: null }, { item: "80", title: null, at: null }] }],
     grids: [],
   };
-  const layer = layerOf(laid, shown);
+  const layer = layerOf(laid, shown, byPlace);
   assert.deepEqual(layer.parts[0].pages.map((p) => p.title), ["StartView", "ProjectEditor"]);
 });
 
@@ -198,8 +200,8 @@ test("the grid of a line of a window's content is its view's, so the view's part
   content.pages[0].view = "TotalView";
   const shown = { ...page, widgets: [content] } as unknown as Page;
   const laid = { parts: [], grids: [{ item: "60", columns: 12, gap: 8, at: [0, 0, 300, 200] as [number, number, number, number], rows: [36, 36] }] };
-  assert.equal(layerOf(laid, shown, null, new Map([[60, 900]])).grids[0].item, 900);
-  assert.equal(layerOf(laid, shown).grids[0].item, 60, "a line without a view in the file keeps its own");
+  assert.equal(layerOf(laid, shown, byPlace, new Set(), new Map([["60", "design/TotalView.cxaml#TotalView"]])).grids[0].item, "design/TotalView.cxaml#TotalView");
+  assert.equal(layerOf(laid, shown, byPlace).grids[0].item, "60", "a line without a view in the file keeps its own");
 });
 
 test("a resize follows how far the handle moved, in whole cells, not the cell under the pointer", () => {

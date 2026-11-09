@@ -6,10 +6,12 @@ How an application shows fixed pictures from the resources folder, keeps picture
 
 The `resources` folder of the module folder holds the application's fixed pictures, such as a logo, beside its Markdown files (see [Parts](design.parts.md)). An image part shows one by its file name, given as its `source` (the **Source** property in the designer):
 
-```clarity
-// records/resources/logo.png
-page AlbumBrowse: window
-    image name collectionLogo at 12,1 span 1 rows 1 source "logo.png"
+In the window's file, `records/design/AlbumBrowse.cxaml`, with the picture in `records/resources/logo.png`:
+
+```xml
+<Window class="records.AlbumBrowse" title="@albumBrowseTitle">
+  <Image name="collectionLogo" at="12,1" span="1" rows="1" source="logo.png" />
+</Window>
 ```
 
 The picture must be in the `resources` folder; a name that is not there is an error that lists the pictures that are. A picture is a `.png`, `.jpg`, `.gif`, `.bmp` or `.webp` file. Every generated application carries the folder, and the designer shows the pictures again when the folder changes. A picture keeps its proportions inside its part.
@@ -28,8 +30,8 @@ entity Artist
 
 An image part bound to the field shows it, or its `noPicture` text while there is none. While the pointer is on it, it offers a button to load a picture from a file and one to remove it.
 
-```clarity
-image name cover at 1,1 span 4 rows 6 bind album.cover
+```xml
+<Image name="cover" at="1,1" span="4" rows="6" bind="album.cover" />
 ```
 
 A table or list does not show a picture column. Reading records never carries their pictures; the screen fetches each one when it shows it. Any file that is not a picture is refused.
@@ -55,12 +57,19 @@ filestore scans "setting:scansFolder"
 
 A folder setting is a setting of type `folder`, shown in a settings window by a folder part: the path, and a button that opens the system's folder picker (in a browser the path is typed). Until the person chooses a folder, the store is in the setting's `default`, and a relative folder is in the folder of the person's settings file. A folder chosen while the application runs is used at once for the next file.
 
+The setting is in the module's file:
+
 ```clarity
 settings
     scansFolder: folder, default "scans", label @scansFolderSetting
+```
 
-page Preferences: dialog
-    folder name scansBox at 1,1 span 6 bind settings.scansFolder
+The folder part is in the dialog's file, `design/Preferences.cxaml`:
+
+```xml
+<Dialog class="records.Preferences" title="@preferencesTitle">
+  <Folder name="scansBox" at="1,1" span="6" bind="settings.scansFolder" />
+</Dialog>
 ```
 
 You can also manage them in the **File stores** section of **Settings** on the Project tab. In the entity editor, the **Store** column of an image field picks **database** or one of the stores.

@@ -69,7 +69,7 @@
   import type { SpecFile } from "@clarity/ui/generated/SpecFile.ts";
   import { pageDesigner } from "./lib/pageDesignerStore.svelte";
   import { findApp } from "@clarity/ui/screen/frame.ts";
-  import { appAsPage, findPage, windowSize } from "@clarity/ui/screen/pages.ts";
+  import { appAsPage, findPage, placeOf, windowSize } from "@clarity/ui/screen/pages.ts";
   import ShownWindow from "./lib/ShownWindow.svelte";
   import VaultSide from "./lib/VaultSide.svelte";
   import VaultView from "./lib/VaultView.svelte";
@@ -1025,17 +1025,20 @@
   async function deletePicked() {
     if (!file) return;
     actionError = null;
-    let item = pageDesigner.selected;
+    // The picked part, in its own file: a view's part shown in a window is the view's.
+    const picked = preview ? placeOf(preview, pageDesigner.selected) : null;
+    let item = picked?.at ?? null;
+    let targetFile = picked?.file ?? file;
     if (item === null) {
       const target = openApp ?? page ?? entity ?? enumDecl;
       if (!target) return;
       const noun = openApp ? "the app" : page ? "the window" : entity ? "the entity" : "the enum";
       if (!(await dialogs.confirm({ text: `Delete ${noun} ${target.name.name}?`, action: "Delete", danger: true }))) return;
       item = target.span.start;
-      if (item === null) return;
+      targetFile = file;
     }
     try {
-      const result = await applyEdit(file, { op: "remove", item });
+      const result = await applyEdit(targetFile, { op: "remove", item });
       pageDesigner.selected = null;
       applyPreview(result.preview);
     } catch (err) {

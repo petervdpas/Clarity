@@ -7,18 +7,29 @@
   // dragged, the window's edges it docks to. A container's headers switch
   // the page it shows, a table's header edges size its columns, and a
   // frame's buttons are picked. The drawing below takes no input.
-  import type { Frame } from "@clarity/ui/generated/Frame.ts";
-  import type { Page } from "@clarity/ui/generated/Page.ts";
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
   import { gapOf, rowAt } from "@clarity/ui/screen/grid.ts";
-  import { contentViews, locateWidget, widgetInfo, withProps } from "@clarity/ui/screen/pages.ts";
+  import { contentViews, locateKey, widgetInfo, withProps, type DesignKey, type ShownPage } from "@clarity/ui/screen/pages.ts";
   import type { Layout } from "./clarityWindow";
   import { cellsOf, layerOf, placeIn, type LayerGrid, type LayerPart } from "./designLayer";
   import { pageDesigner } from "./pageDesignerStore.svelte";
 
-  let { layout, page, preview, appFrame = null }: { layout: Layout | null; page: Page; preview: Preview; appFrame?: Frame | null } = $props();
+  let {
+    layout,
+    shown,
+    preview,
+    appCommands = new Set(),
+  }: {
+    layout: Layout | null;
+    /** The window as designed, with the key of each thing it shows. */
+    shown: ShownPage;
+    preview: Preview;
+    /** The keys of the app's frame buttons the window shows, which are designed in the app. */
+    appCommands?: Set<DesignKey>;
+  } = $props();
 
-  const layer = $derived(layout ? layerOf(layout, page, appFrame, contentViews(preview, page)) : { parts: [], grids: [] });
+  const page = $derived(shown.page);
+  const layer = $derived(layout ? layerOf(layout, page, shown.keyOf, appCommands, contentViews(preview, shown)) : { parts: [], grids: [] });
   const DOCKS = ["top", "bottom", "left", "right"] as const;
 
   /** How high a row of a grid is when it holds nothing: on a page with its own cells (`grid 56 columns rows 10`) every grid's, else the project's. */
@@ -31,8 +42,8 @@
   }
 
   /** The grid a part lies in, by the design. */
-  function containerOf(part: LayerPart): number | null {
-    return locateWidget(preview, page, part.item)?.container.offset ?? null;
+  function containerOf(part: LayerPart): DesignKey | null {
+    return locateKey(preview, shown, part.item)?.container.key ?? null;
   }
 
   /** A header of a container: it shows that page, and the page is picked. */
@@ -52,7 +63,7 @@
 
   /** The edge of a table's column header, dragged: the column's width, written into the part. */
   function pressColumn(e: PointerEvent, part: LayerPart, field: string, width: number) {
-    const found = locateWidget(preview, page, part.item);
+    const found = locateKey(preview, shown, part.item);
     if (!found || e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
@@ -70,17 +81,17 @@
       sizing = null;
       if (!done || done.width === Math.round(width)) return;
       const p = found.widget.props;
-      pageDesigner.edit({ op: "updateWidget", item: part.item, container: null, props: withProps(p, { widths: { ...p.widths, [field]: done.width } }) });
+      pageDesigner.edit({ op: "updateWidget", item: found.widget.span.start, container: null, props: withProps(p, { widths: { ...p.widths, [field]: done.width } }) }, part.item);
     };
     handle.addEventListener("pointermove", move);
     handle.addEventListener("pointerup", up);
   }
 
   /** A column's width while its edge is dragged. */
-  let sizing = $state<{ item: number; field: string; width: number } | null>(null);
+  let sizing = $state<{ item: DesignKey; field: string; width: number } | null>(null);
 
   function pressMove(e: PointerEvent, part: LayerPart) {
-    const found = locateWidget(preview, page, part.item);
+    const found = locateKey(preview, shown, part.item);
     const pick = () => (pageDesigner.selected = part.item);
     // A label of a form's label column is the form's, and a part of a sidebar or footer is picked only.
     if (!found || found.widget.props.made) {
@@ -92,7 +103,7 @@
     const el = e.currentTarget as HTMLElement;
     const rect = el.getBoundingClientRect();
     // The row grabbed, counted in the grid's own rows: some are taller than others.
-    const grid = el.parentElement?.querySelector<HTMLElement>(`[data-grid="${found.container.offset}"]`);
+    const grid = found.container.key === null ? null : el.parentElement?.querySelector<HTMLElement>(`[data-grid="${CSS.escape(found.container.key)}"]`);
     const gap = grid ? gapOf(grid) : 0;
     const cellWidth = (rect.width - gap * (p.width - 1)) / p.width;
     const gridRect = grid?.getBoundingClientRect();
@@ -101,11 +112,11 @@
       dc: Math.min(p.width - 1, Math.max(0, Math.floor((e.clientX - rect.left) / (cellWidth + gap)))),
       dr: Math.min(p.height - 1, Math.max(0, row - p.row)),
     };
-    pageDesigner.press(e, { kind: "move", item: part.item, from: found.container.offset, props: p, grab, label: widgetInfo(preview, p.kind).name }, pick);
+    pageDesigner.press(e, { kind: "move", item: part.item, from: found.container.key ?? "", props: p, grab, label: widgetInfo(preview, p.kind).name }, pick);
   }
 
   function pressResize(e: PointerEvent, part: LayerPart) {
-    const found = locateWidget(preview, page, part.item);
+    const found = locateKey(preview, shown, part.item);
     designLog("resize press on item", part.item, found ? `found ${found.widget.props.kind} ${found.widget.props.width}x${found.widget.props.height}` : "NOT FOUND in the page");
     if (!found) return;
     const p = found.widget.props;
@@ -121,7 +132,7 @@
       data-columns={grid.columns}
       data-row-height={rowHeightOf(grid)}
       data-gap={grid.gap}
-      data-inside={grid.inside.join(" ")}
+      data-inside={JSON.stringify(grid.inside)}
       style="{where(grid.box)} grid-template-rows: {grid.rows.map((r) => `${r}px`).join(' ')}; row-gap: {grid.gap}px;"
     >
       {#if pageDesigner.showGrid}

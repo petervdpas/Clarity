@@ -77,7 +77,7 @@
       <span>Start from</span>
       <select bind:value={start}>
         <option value="blank">Blank window</option>
-        <option value="view">Blank view (shown in a slide-out)</option>
+        <option value="view">Blank view (shown in a content)</option>
         <option value="splash">Splash screen (shows while the app starts)</option>
         <option value="toolbox">Toolbox (the tools a canvas shows, designed as a view)</option>
         {#if hasSettings}<option value="settings">Settings window</option>{/if}

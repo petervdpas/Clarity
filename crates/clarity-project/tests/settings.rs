@@ -716,7 +716,7 @@ fn the_project_says_whether_people_set_the_keys() {
 #[test]
 fn the_keys_window_opens_where_the_project_allows_it() {
     let module = "module shop\n\napp Shop\n    main Card\n    menu name mainMenu\n        item \"Keys\" name keysItem on click -> keys\n\npage Card: window\n    title \"Card\"\n";
-    let project = clarity_spec::load_sources([("shop.clarity", module)]);
+    let project = clarity_spec::load_converted([("shop.clarity", module)]);
     // A built-in target: no warning about an unknown window.
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let problems = |editable: bool| -> Vec<String> {

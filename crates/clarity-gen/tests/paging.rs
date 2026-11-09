@@ -29,7 +29,7 @@ page Main: window
 fn project() -> Project {
     let paging = Paging { kind: PagingKind::Page, param: "page".into(), size_param: "per_page".into(), size: 100, next: String::new(), items: "data".into() };
     let shop = SourceRef { paging: Some(paging), ..SourceRef::web("shop").at("https://shop.example.com/api", Some(("bearer", "env:SHOP_TOKEN"))) };
-    let project = load_in([("api.clarity", API), ("screen.clarity", SCREEN)], [], &[SourceRef::sql("main"), shop]);
+    let project = load_in(clarity_spec::converted([("api.clarity", API), ("screen.clarity", SCREEN)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [], &[SourceRef::sql("main"), shop]);
     let errors: Vec<_> = project.diagnostics.iter().filter(|d| d.severity == Severity::Error).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     project

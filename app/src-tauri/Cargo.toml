@@ -19,6 +19,8 @@ clarity-project.workspace = true
 clarity-db.workspace = true
 clarity-vault.workspace = true
 clarity-agent.workspace = true
+# The tools the agent designs and generates with, shared with the MCP server.
+clarity-tools.workspace = true
 clarity-gen = { path = "../../crates/clarity-gen" }
 serde.workspace = true
 serde_json.workspace = true

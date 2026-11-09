@@ -26,7 +26,7 @@ code Monitor
 ";
 
 fn project() -> clarity_spec::Project {
-    let p = clarity_spec::load_sources([("watch.clarity", WATCH)]);
+    let p = clarity_spec::load_converted([("watch.clarity", WATCH)]);
     assert!(!p.has_errors(), "{:?}", p.diagnostics);
     p
 }

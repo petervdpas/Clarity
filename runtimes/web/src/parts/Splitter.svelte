@@ -59,6 +59,33 @@
 
   .splitter:hover,
   .splitter:active {
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  /* A grip in the middle, always seen, so the bar is found without hovering. */
+  .splitter::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 2px;
+    background: var(--border-strong, #999);
+    transition: background 120ms;
+  }
+
+  .splitter.x::after {
+    width: 3px;
+    height: 36px;
+  }
+
+  .splitter.y::after {
+    width: 36px;
+    height: 3px;
+  }
+
+  .splitter:hover::after,
+  .splitter:active::after {
     background: var(--accent);
   }
 

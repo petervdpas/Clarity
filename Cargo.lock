@@ -1193,6 +1193,7 @@ dependencies = [
  "clarity-project",
  "clarity-runtime",
  "clarity-spec",
+ "clarity-tools",
  "serde_json",
 ]
 
@@ -1266,6 +1267,7 @@ dependencies = [
  "clarity-gen",
  "clarity-project",
  "clarity-spec",
+ "clarity-tools",
  "clarity-vault",
  "notify",
  "reqwest",
@@ -1326,6 +1328,18 @@ dependencies = [
  "serde",
  "serde_json",
  "ts-rs",
+]
+
+[[package]]
+name = "clarity-tools"
+version = "0.1.0"
+dependencies = [
+ "clarity-agent",
+ "clarity-gen",
+ "clarity-project",
+ "clarity-spec",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

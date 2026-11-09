@@ -36,17 +36,14 @@ pub fn code_text(source: &str, owner: &str) -> String {
         .collect()
 }
 
-fn owner_exists(source: &str, owner: &str) -> bool {
-    let (file, _) = parse(source, "");
-    file.pages.iter().any(|p| p.name.name == owner) || file.apps.iter().any(|a| a.name.name == owner)
-}
-
 /// Replaces `owner`'s code with `text` (as `code_text` gives it), adds the
 /// block at the end of the file when there is none, and removes it when
 /// `text` is empty.
 pub fn set_code(source: &str, owner: &str, text: &str) -> EditResult<String> {
-    if !owner_exists(source, owner) {
-        return fail(format!("there is no window or app '{owner}' in this file"));
+    // A window or app has a file of its own beside the module that holds its
+    // code; whether `owner` is one, the project's check says.
+    if !crate::widgets::is_identifier(owner) {
+        return fail(format!("'{owner}' is not the name of a window or app"));
     }
     if text.lines().any(|l| l.starts_with(|c: char| c.is_whitespace()) && l.contains('\t')) {
         return fail("tabs are not allowed for indentation, use spaces");

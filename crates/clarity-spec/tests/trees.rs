@@ -6,7 +6,7 @@
 
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::{self, WidgetKind};
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const FILES: &str = "module files
 
@@ -30,7 +30,7 @@ code Files
 
 fn errors(page: &str) -> Vec<String> {
     let text = format!("{page}{CODE}");
-    load_sources([("files.clarity", text.as_str())]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("files.clarity", text.as_str())]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn a_tree_has_clarity_s_own_words() {
 
 #[test]
 fn sample_records_of_a_tree_form_one_for_the_designer() {
-    let p = load_sources([("files.clarity", FILES)]);
+    let p = load_converted([("files.clarity", FILES)]);
     let rows = &clarity_spec::sample::sample_data(&p)["Folder"];
     let name = |i: usize| rows[i]["name"].clone();
     assert!(rows[0]["parent"].is_null() && rows[1]["parent"].is_null(), "two rows at the top");
@@ -103,7 +103,7 @@ code Files
 ";
 
 fn node_errors(page: &str) -> Vec<String> {
-    load_sources([("files.clarity", page)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("files.clarity", page)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]

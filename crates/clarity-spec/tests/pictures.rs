@@ -2,7 +2,7 @@
 //! or, with `store`, as files in a file store of the project settings.
 
 use clarity_spec::model::FieldType;
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 const MUSIC: &str = "module music
 
@@ -24,7 +24,7 @@ code AlbumForm
 ";
 
 fn load(source: &str, stores: Option<&[&str]>) -> Project {
-    let mut project = load_sources([("music.clarity", source)]);
+    let mut project = load_converted([("music.clarity", source)]);
     if let Some(stores) = stores {
         clarity_spec::attach_stores(&mut project, stores.iter().map(|s| s.to_string()).collect());
     }

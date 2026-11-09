@@ -194,7 +194,7 @@ pub fn lowered(project: &Project) -> Project {
                     text.push_str(&format!("    {}: ref {e}\n", ref_field(e)));
                 }
                 let window = out.files[f].pages[p].name.name.clone();
-                text.push_str(&format!("\npage {window}: window\n    data {name}Rows: list<{row}>\n\ncode {window}\n    handler {}\n        let rows: list<{row}> = []\n", load_handler(&name)));
+                text.push_str(&format!("\ncode {window}\n    handler {}\n        let rows: list<{row}> = []\n", load_handler(&name)));
                 let mut lines = Vec::new();
                 let mut groups = 0;
                 load_lines(&out, &row, &levels, None, "\"\"", "rows", 0, &mut groups, &mut lines);
@@ -205,9 +205,9 @@ pub fn lowered(project: &Project) -> Project {
                 }
                 let (made, _) = crate::parser::parse(&text, &out.files[f].path);
                 out.files[f].records.extend(made.records);
-                if let Some(data) = made.pages.first().map(|pg| pg.data.clone()) {
-                    out.files[f].pages[p].data.extend(data);
-                }
+                // The window's rows of the tree: `<name>Rows`, a list of the row record.
+                let ident = |name: String| crate::model::Ident { name, span: crate::span::Span::default() };
+                out.files[f].pages[p].data.push(crate::model::DataDecl { name: ident(format!("{name}Rows")), of: crate::model::DataKind::List { entity: ident(row.clone()) }, made: false, span: crate::span::Span::default() });
                 let handlers = made.code.into_iter().flat_map(|c| c.handlers).collect::<Vec<_>>();
                 // The rows load when the window opens: its open handler loads them first.
                 let page = &mut out.files[f].pages[p];

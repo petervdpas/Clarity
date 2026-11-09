@@ -27,10 +27,6 @@ entity Step
     position: integer, label @stepPositionLabel
     instruction: text(400), label @stepInstructionLabel
 
-app Kitchen
-    title @kitchenTitle
-    main Cookbook
-
 code Cookbook
     handler kitchenOpened
         clock.enabled = false

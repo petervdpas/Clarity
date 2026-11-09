@@ -17,7 +17,7 @@ fn settings(backend: Backend) -> clarity_project::Settings {
 }
 
 fn project() -> clarity_spec::Project {
-    let project = clarity_spec::load_sources([("shop/shop.clarity", FIXTURE)]);
+    let project = clarity_spec::load_converted([("shop/shop.clarity", FIXTURE)]);
     let errors: Vec<String> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.clone()).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     project

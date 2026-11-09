@@ -2,7 +2,7 @@
 //! clipboard once the handler has run, for the person to paste anywhere.
 
 use clarity_spec::code::StmtKind;
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const PAGE: &str = "module notes
 
@@ -18,12 +18,12 @@ code Output
 ";
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("notes.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("notes.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]
 fn copy_puts_text_on_the_clipboard() {
-    let project = load_sources([("notes.clarity", PAGE)]);
+    let project = load_converted([("notes.clarity", PAGE)]);
     assert!(errors(PAGE).is_empty(), "{:#?}", errors(PAGE));
     let body = &project.files[0].code[0].handlers[0].body;
     assert!(matches!(&body[0].kind, StmtKind::Copy { .. }), "{:?}", body[0].kind);

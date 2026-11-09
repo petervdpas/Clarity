@@ -44,8 +44,8 @@ export type StartOptions = { files: string; server: string; resources: string; i
 /** The person's choices the drawing starts with, over the kept ones: the IDE's language. */
 export type Chosen = { language?: string };
 
-/** What the designer shows of the design beyond the saved window: the page each container shows, the draft, the popovers open. */
-export type Showing = { pages?: Record<number, number>; draft?: boolean; open?: string[] };
+/** What the drawing shows beyond the saved window: the page each container shows, by its key; the draft; the popovers open. */
+export type Showing = { pages?: Record<string, number>; draft?: boolean; open?: string[] };
 
 /**
  * The language the IDE shows a window in, as the drawing's choice: the
@@ -90,7 +90,7 @@ export function pageScript(base: string): Promise<NonNullable<Window["ClarityUiP
 export function filesAddress(base: string, shown: Shown, design: boolean, revision: number, showing: Showing = {}): string {
   const what = "app" in shown ? `app=${encodeURIComponent(shown.app)}` : `window=${encodeURIComponent(shown.window)}`;
   const pages = Object.entries(showing.pages ?? {})
-    .map(([item, page]) => `${item}.${page}`)
+    .map(([key, page]) => `${encodeURIComponent(key)}.${page}`)
     .join(",");
   const more = [pages ? `&pages=${pages}` : "", showing.draft ? "&draft=1" : "", showing.open?.length ? `&open=${showing.open.map(encodeURIComponent).join(",")}` : ""].join("");
   return `${base}files.json?${what}&design=${design ? 1 : 0}${more}&revision=${revision}`;

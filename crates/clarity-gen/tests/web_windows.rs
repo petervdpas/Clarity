@@ -260,10 +260,16 @@ fn the_designer_draws_markup_that_says_where_each_part_is_written() {
     let main = project.pages().find(|p| p.name.name == "MainView").unwrap();
     let designed = files(&preview::files_json(&project, "Todo", &Shown::Window("MainView".into()), true, &Default::default()));
     let markup = designed["windows"]["MainView"].as_str().unwrap();
-    assert!(markup.contains(&format!("<View class=\"todo.MainView\" designItem=\"{}\">", main.span.start)), "{markup}");
-    let grid = main.widgets.iter().find(|w| w.props.name.as_deref() == Some("grid")).unwrap();
+    // Each thing by its file and name, not by where it is written.
+    assert!(markup.contains("<View class=\"todo.MainView\" designItem=\"design/MainView.cxaml#MainView\">"), "{markup}");
     let line = markup.lines().find(|l| l.contains("<Table name=\"grid\"")).expect("the task table");
-    assert!(line.contains("onadd=\"addClicked\"") && line.contains(&format!("designItem=\"{}\"", grid.span.start)), "{line}");
+    assert!(line.contains("onadd=\"addClicked\"") && line.contains("designItem=\"design/MainView.cxaml#MainView/grid\""), "{line}");
+    // The window shows the view in its content: the view's parts keep their own file's keys.
+    let window = files(&preview::files_json(&project, "Todo", &Shown::Window("Main".into()), true, &Default::default()));
+    let window = window["windows"]["Main"].as_str().unwrap();
+    assert!(window.contains("designItem=\"design/Main.cxaml#Main/main\""), "{window}");
+    assert!(window.lines().any(|l| l.contains("<Table name=\"grid\"") && l.contains("designItem=\"design/MainView.cxaml#MainView/grid\"")), "{window}");
+    assert!(!main.widgets.is_empty());
     // The app's menu items too.
     assert!(designed["apps"]["Todo"].as_str().unwrap().contains("designItem="));
     // The preview's markup is the program's own: no design items.
@@ -278,9 +284,9 @@ fn the_designer_draws_markup_that_says_where_each_part_is_written() {
 #[test]
 fn an_app_is_designed_as_an_empty_window_in_its_frame() {
     let (_, project) = todo();
-    let app = project.apps().next().unwrap();
+    assert!(project.apps().next().is_some());
     let designed = files(&preview::files_json(&project, "Todo", &Shown::App("Todo".into()), true, &Default::default()));
-    assert_eq!(designed["windows"]["Todo"], json!(format!("<Window name=\"Todo\" designItem=\"{}\" />\n", app.span.start)));
+    assert_eq!(designed["windows"]["Todo"], json!("<Window name=\"Todo\" designItem=\"design/Todo.cxaml#Todo\" />\n"));
     let program = PreviewProgram::new(project, "Todo");
     assert_eq!(program.answer("started", &json!({})), json!({ "value": { "main": "Todo" } }));
     assert!(program.answer("open_window", &json!({ "window": "Todo", "with": {} }))["value"]["state"]["window"] == json!("Todo"));
@@ -533,12 +539,17 @@ fn the_designer_shows_the_page_it_switched_to_and_opens_the_popover_picked() {
     // A container with pages, wherever the example has one.
     let page = project.pages().find(|p| p.widgets.iter().any(|w| !w.pages.is_empty())).expect("a window with tabs, steps or sections");
     let container = page.widgets.iter().find(|w| !w.pages.is_empty()).unwrap();
-    let query = preview::query_of(&format!("window={}&pages={}.1,bad", page.name.name, container.span.start));
+    let file = project.files.iter().find(|f| f.pages.iter().any(|p| std::ptr::eq(p, page))).unwrap();
+    let key = clarity_spec::design_keys::project_keys(&project)[&file.path][&container.span.start].clone();
+    assert!(key.starts_with(&format!("design/{}.cxaml#{}/", page.name.name, page.name.name)), "{key}");
+    // The IDE names the container by its key, encoded as a query's value.
+    let encoded = key.replace('#', "%23").replace('/', "%2F");
+    let query = preview::query_of(&format!("window={}&pages={encoded}.1,bad", page.name.name));
     let showing = preview::showing_of(&query);
-    assert_eq!(showing, [(container.span.start, 1)].into_iter().collect());
+    assert_eq!(showing, [(key.clone(), 1)].into_iter().collect());
     let designed = files(&preview::files_json(&project, "Records", &Shown::Window(page.name.name.clone()), true, &showing));
     let markup = designed["windows"][&page.name.name].as_str().unwrap();
-    assert!(markup.contains(&format!("designItem=\"{}\" designShown=\"2\"", container.span.start)), "{markup}");
+    assert!(markup.contains(&format!("designItem=\"{key}\" designShown=\"2\"")), "{markup}");
     // A popover picked shows open: its state says so when its window opens.
     let program = PreviewProgram::new(project.clone(), &page.name.name).opening(vec!["nowhere".into()]);
     let opened = program.answer("open_window", &json!({ "window": page.name.name }));

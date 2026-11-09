@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The application frame, shared by every window. -->
+<App class="records.Records" title="@recordsTitle" main="AlbumBrowse">
+  <Menu name="mainMenu">
+    <Item caption="@fileItem" name="fileItem">
+      <Item caption="@albumsItem" name="albumsItem" key="Ctrl+1" opens="AlbumBrowse" />
+      <Item kind="separator" />
+      <Item caption="@settingsItem" name="settingsItem" opens="Preferences" />
+      <Item caption="@languageItem" name="languageItem" opens="language" />
+      <Item caption="@themeItem" name="themeItem" opens="theme" />
+      <Item caption="@quitItem" name="quitItem" key="Ctrl+Q" opens="quit" />
+    </Item>
+    <Item caption="@collectionItem" name="collectionItem">
+      <Item caption="@artistsItem" name="artistsItem" opens="ArtistBrowse" />
+      <Item caption="@genresItem" name="genresItem" opens="GenreBrowse" />
+      <Item caption="@overviewItem" name="overviewItem" opens="CollectionOverview" />
+    </Item>
+    <Item caption="@loansItem" name="loansItem">
+      <Item caption="@onLoanItem" name="onLoanItem" opens="LoanBrowse" />
+      <Item caption="@friendsItem" name="friendsItem" opens="FriendBrowse" />
+    </Item>
+  </Menu>
+  <Toolbar name="mainToolbar">
+    <Item kind="button" caption="@albums2Caption" name="albums2" opens="AlbumBrowse" />
+    <Item kind="button" caption="@artists2Caption" name="artists2" opens="ArtistBrowse" />
+    <Item kind="separator" />
+    <Item kind="button" caption="@onLoan2Caption" name="onLoan2" opens="LoanBrowse" />
+  </Toolbar>
+  <Footer status="@recordsStatus" columns="12" />
+</App>

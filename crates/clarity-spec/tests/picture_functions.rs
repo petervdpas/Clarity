@@ -1,7 +1,7 @@
 //! The picture functions of code (docs/IMAGE-PLAN.md, conformance/picture-functions.json):
 //! typed by the checker, a project's own function of the same name taking its place.
 
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const DESK: &str = "module desk
 
@@ -29,7 +29,7 @@ code Desk
 ";
 
 fn errors(text: &str) -> Vec<String> {
-    load_sources([("desk.clarity", text)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("desk.clarity", text)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]

@@ -95,10 +95,6 @@ engine Board
                         square = at
         return square
 
-app Noughts
-    title @noughtsTitle
-    main Game
-
 code Game
     // A click on a square plays it: three columns and three rows of 100.
     handler boardClicked

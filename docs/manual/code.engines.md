@@ -280,11 +280,6 @@ engine Screen from "screen.wasm"
     tells finished(time: integer)
     hears start(level: integer)
 
-page Play: window
-    data best: integer
-    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Screen on finished: gameOver
-    button "Start" name go at 1,11 span 2 on click: startGame
-
 code Play
     handler gameOver(time: integer)
         best = time
@@ -292,6 +287,18 @@ code Play
     handler startGame
         sky.start(2)
 ```
+
+The engine and the code are in the module's file. The canvas that runs the engine is in the window's file, `design/Play.cxaml`:
+
+```xml
+<Window class="game.Play" title="@playTitle">
+  <Data name="best" type="integer" />
+  <Canvas name="sky" at="1,1" span="12" rows="10" units="{&quot;height&quot;:100,&quot;width&quot;:160}" runs="Screen" tells="[{&quot;handler&quot;:&quot;gameOver&quot;,&quot;tell&quot;:&quot;finished&quot;}]" />
+  <Button name="go" at="1,11" span="2" caption="@startCaption" onclick="startGame" />
+</Window>
+```
+
+The canvas's `units` (160 by 100) and its `tells` (the tell `finished` runs the handler `gameOver`) are written as the designer writes them.
 
 - **In the designer** a canvas's **Engine** field picks the engine it runs, from those beside the screen, and its **Tells** wire the engine's tells to handlers.
 - **`beside the screen`** says where it runs. Code does not call it, so it has no `function` lines, and no `state` line: every canvas that `runs` it has an instance of its own, from when its window opens until it closes.

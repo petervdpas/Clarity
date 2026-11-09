@@ -4,7 +4,7 @@
 
 use clarity_spec::resources::{self, ResourceFile};
 use clarity_spec::widgets::{WidgetKind, widget_line};
-use clarity_spec::{Project, Severity, load_sources};
+use clarity_spec::{Project, Severity, load_converted};
 
 const SCREEN: &str = "module m
 
@@ -35,7 +35,7 @@ code Screen
 ";
 
 fn with_files(source: &str, names: &[&str]) -> Project {
-    let mut project = load_sources([("m.clarity", source)]);
+    let mut project = load_converted([("m.clarity", source)]);
     resources::attach(&mut project, names.iter().map(|n| ResourceFile { name: n.to_string(), bytes: vec![0, 0, 0, 24] }).collect());
     project
 }
@@ -48,7 +48,7 @@ fn errors(project: &Project) -> Vec<String> {
 fn code_plays_pauses_seeks_and_reads_a_video() {
     let project = with_files(SCREEN, &["intro.mp4"]);
     assert_eq!(errors(&project), Vec::<String>::new());
-    let film = &project.files[0].pages[0].widgets[0].props;
+    let film = &project.pages().nth(0).unwrap().widgets[0].props;
     assert_eq!(film.kind, WidgetKind::Video);
     assert_eq!(film.source.as_deref(), Some("intro.mp4"));
     assert_eq!(widget_line(film), "video name film at 1,1 span 8 rows 6 source \"intro.mp4\" volume 80 on end: filmEnded on fail: filmFailed");

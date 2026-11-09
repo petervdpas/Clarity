@@ -53,7 +53,7 @@ fn migrations_add_rename_and_remove_a_files_name_with_it() {
     let first = "migration \"First\"\n    add entity Product\n        name: text(80)\n        manual: file\n";
     let second = "migration \"Files\"\n    rename field Product.manual to guide\n    add field Product.sheet: file\n";
     let third = "migration \"Tidy\"\n    remove field Product.guide\n";
-    let project = clarity_spec::load_with_migrations([("shop.clarity", module)], [("0001.clarity", first), ("0002.clarity", second), ("0003.clarity", third)]);
+    let project = clarity_spec::load_with_migrations(clarity_spec::converted([("shop.clarity", module)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("0001.clarity", first), ("0002.clarity", second), ("0003.clarity", third)]);
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     let mut settings: Settings = starter("Shop", "shop");

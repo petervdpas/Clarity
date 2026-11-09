@@ -6,11 +6,16 @@ How a window plays sound files, tones and melodies with the sound part, on every
 
 A sound is heard, not seen: it stands on a window without a place in its grid, and the designer keeps it in a tray under the window. Drag **Sound** from the Media group of the palette onto the window, then pick it in the tray to set it in the inspector.
 
-```clarity
-page Table: window
-    sound name rattle source "roll.wav" volume 80
-    sound name fanfare
+In the window's file, `design/Table.cxaml`:
+
+```xml
+<Window class="dice.Table" title="@tableTitle">
+  <Sound name="rattle" at="1,1" span="1" source="roll.wav" volume="80" />
+  <Sound name="fanfare" at="1,1" span="1" />
+</Window>
 ```
+
+A sound keeps the `at` and `span` the designer gives it, but takes no room in the grid.
 
 - **Source**: a sound file of the resources folder, `.wav`, `.mp3`, `.flac` or `.ogg` (the formats every stack plays). Add one under Resources with **+ New resource**, Sound; its view plays it.
 - **Volume**: 0 to 100, 100 unless set.

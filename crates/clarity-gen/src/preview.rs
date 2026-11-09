@@ -54,7 +54,7 @@ impl Shown {
 /// it, which is the app itself in the design.
 /// `showing` gives each tabs, steps or accordion part (by its item) the page
 /// the designer switched to, from 0.
-pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, showing: &BTreeMap<u32, usize>) -> String {
+pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, showing: &BTreeMap<String, usize>) -> String {
     let size = match shown {
         Shown::Window(name) => crate::window_size(project, name),
         Shown::App(_) => (clarity_spec::layout::WINDOW_WIDTH, clarity_spec::layout::WINDOW_HEIGHT),
@@ -62,6 +62,8 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
     // The preview shows each view in its window's part; the designer shows the part as written, empty.
     // Texts that show the app's version carry it, as in the program.
     let filled = clarity_spec::translations::with_app_slots(project);
+    // The designer's markup marks each thing with its key: each gets a number of its own to look it up by.
+    let (filled, keys) = if design { clarity_spec::design_keys::numbered(&filled) } else { (filled, BTreeMap::new()) };
     let project = &filled;
     // The designer draws a window as it looks: each view in its content (designed in place
     // when it stands in the window's file), and a tree of levels as the tree of its rows.
@@ -75,7 +77,7 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
         app.splash_for = None;
     }
     let write = || crate::web_browser::files_json_as(&placed, title, size);
-    let text = if design { crate::web_windows::designed_showing(showing, write) } else { write() };
+    let text = if design { crate::web_windows::designed_showing(&keys, showing, write) } else { write() };
     // A view is no window of a program, but the designer and preview draw it on its own as one.
     let view = match shown {
         Shown::Window(name) => project.pages().find(|p| p.name.name == *name && p.kind == clarity_spec::model::PageKind::View),
@@ -85,7 +87,7 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
         let Ok(mut files) = serde_json::from_str::<Value>(&text) else { return text };
         let module = project.files.iter().find(|f| f.pages.iter().any(|p| std::ptr::eq(p, view))).and_then(|f| f.module.as_ref()).map_or("", |m| m.name.as_str());
         let write = || crate::web_windows::window_markup_in(view, module, project.row_height);
-        let markup = if design { crate::web_windows::designed_showing(showing, write) } else { write() };
+        let markup = if design { crate::web_windows::designed_showing(&keys, showing, write) } else { write() };
         if let Some(windows) = files.get_mut("windows").and_then(Value::as_object_mut) {
             windows.insert(view.name.name.clone(), Value::String(markup));
         }
@@ -93,7 +95,7 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
     }
     let Shown::App(name) = shown else { return text };
     let Ok(mut files) = serde_json::from_str::<Value>(&text) else { return text };
-    let item = project.apps().find(|a| a.name.name == *name).filter(|_| design).map(|a| format!(" designItem=\"{}\"", a.span.start)).unwrap_or_default();
+    let item = project.apps().find(|a| a.name.name == *name).and_then(|a| keys.get(&a.span.start)).map(|key| format!(" designItem=\"{}\"", escaped(key))).unwrap_or_default();
     if let Some(windows) = files.get_mut("windows").and_then(Value::as_object_mut) {
         let rows = crate::web_windows::row_height_attribute(project.row_height);
         windows.insert(name.clone(), Value::String(format!("<Window name=\"{}\"{rows}{item} />\n", escaped(name))));
@@ -102,44 +104,35 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
 }
 
 /// Fills each content of `placed` with the parts of the views it lists, so
-/// the window is designed as it looks: a view of the window's own file
-/// keeps its places; one of its own file (a `.cxaml`) has its parts' places
-/// as designer's items of that file (`cxaml::design_items`), so an edit of
-/// one changes the view's file.
+/// the window is designed as it looks. The parts keep the numbers of their
+/// own file's things (`design_keys::numbered`), so the designer's markup
+/// names them by their view's keys and an edit of one changes the view.
 fn show_views_in_content(placed: &mut Project, project: &Project) {
-    fn fill(widgets: &mut [clarity_spec::model::Widget], project: &Project, own: &str, depth: usize) {
+    fn fill(widgets: &mut [clarity_spec::model::Widget], project: &Project, depth: usize) {
         for w in widgets {
             if w.props.kind == clarity_spec::widgets::WidgetKind::Content && depth < 8 {
                 for page in &mut w.pages {
-                    let found = page.view.as_deref().and_then(|v| {
-                        project.files.iter().enumerate().find_map(|(i, f)| f.pages.iter().find(|p| p.name.name == v && p.kind == clarity_spec::model::PageKind::View).map(|p| (i, f.path.as_str(), p)))
-                    });
-                    if let Some((index, path, view)) = found
+                    let found = page.view.as_deref().and_then(|v| project.pages().find(|p| p.name.name == v && p.kind == clarity_spec::model::PageKind::View));
+                    if let Some(view) = found
                         && page.children.is_empty()
                     {
                         let mut parts = clarity_spec::trees::lowered_widgets(project, &view.widgets);
-                        if path != own {
-                            clarity_spec::cxaml::design_items(&mut parts, index);
-                        }
-                        fill(&mut parts, project, own, depth + 1);
+                        fill(&mut parts, project, depth + 1);
                         page.children = parts;
                         page.columns.get_or_insert(view.columns);
                     }
                 }
             }
-            fill(&mut w.children, project, own, depth);
+            fill(&mut w.children, project, depth);
             for page in &mut w.pages {
-                fill(&mut page.children, project, own, depth);
+                fill(&mut page.children, project, depth);
             }
         }
     }
-    for file in &mut placed.files {
-        let own = file.path.clone();
-        for page in &mut file.pages {
-            fill(&mut page.widgets, project, &own, 0);
-            for sidebar in &mut page.frame.sidebars {
-                fill(&mut sidebar.widgets, project, &own, 0);
-            }
+    for page in placed.files.iter_mut().flat_map(|f| f.pages.iter_mut()) {
+        fill(&mut page.widgets, project, 0);
+        for sidebar in &mut page.frame.sidebars {
+            fill(&mut sidebar.widgets, project, 0);
         }
     }
 }
@@ -148,9 +141,9 @@ fn escaped(text: &str) -> String {
     text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
-/// `pages=50.1,70.0` (a container's item and the page it shows, from 0) as a map.
-pub fn showing_of(query: &BTreeMap<String, String>) -> BTreeMap<u32, usize> {
-    query.get("pages").map(|pages| pages.split(',').filter_map(|pair| pair.split_once('.')).filter_map(|(item, page)| Some((item.trim().parse().ok()?, page.trim().parse().ok()?))).collect()).unwrap_or_default()
+/// `pages=design/Main.cxaml#Main/tabs.1` (a container's key and the page it shows, from 0, by commas) as a map.
+pub fn showing_of(query: &BTreeMap<String, String>) -> BTreeMap<String, usize> {
+    query.get("pages").map(|pages| pages.split(',').filter_map(|pair| pair.rsplit_once('.')).filter_map(|(item, page)| Some((item.trim().to_string(), page.trim().parse().ok()?))).collect()).unwrap_or_default()
 }
 
 /// The number the next window that opens gets.

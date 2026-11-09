@@ -17,7 +17,7 @@ fn a_project_without_entities_needs_no_data_source() {
         settings.stack.backend = backend;
         settings.stack.ui = ui;
         settings.datasources.clear();
-        let project = clarity_spec::load_in([("plain.clarity", SOURCE)], [] as [(&str, &str); 0], &clarity_project::source_refs(&settings));
+        let project = clarity_spec::load_in(clarity_spec::converted([("plain.clarity", SOURCE)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [] as [(&str, &str); 0], &clarity_project::source_refs(&settings));
         let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
         assert!(errors.is_empty(), "{errors:#?}");
         generate(&project, &settings).unwrap_or_else(|e| panic!("{backend:?}: {e:#?}"));
@@ -29,7 +29,7 @@ fn a_project_with_entities_still_needs_one() {
     let mut settings = starter("Plain", "plain");
     settings.datasources.clear();
     let source = format!("{SOURCE}\nentity Note\n    text: text(80)\n");
-    let project = clarity_spec::load_in([("plain.clarity", source.as_str())], [] as [(&str, &str); 0], &clarity_project::source_refs(&settings));
+    let project = clarity_spec::load_in(clarity_spec::converted([("plain.clarity", source.as_str())]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [] as [(&str, &str); 0], &clarity_project::source_refs(&settings));
     let errors = generate(&project, &settings).err().expect("no data source for the entities");
     assert!(errors.iter().any(|e| e.contains("data source")), "{errors:#?}");
 }

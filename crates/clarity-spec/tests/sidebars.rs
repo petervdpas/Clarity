@@ -3,11 +3,12 @@
 //! resize it between its min and max, fold it to a button and back, and let
 //! it fill the window; code reads and sets `collapsed` and `maximized`.
 
-use clarity_spec::edit::{Edit, apply};
+use clarity_spec::cxaml::apply;
+use clarity_spec::edit::Edit;
 use clarity_spec::frame::sidebar_line;
 use clarity_spec::model::Side;
 use clarity_spec::parser::parse;
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const WINDOW: &str = "module m
 
@@ -26,7 +27,7 @@ code Main
 ";
 
 fn errors(source: &str) -> Vec<String> {
-    load_sources([("m.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("m.clarity", source)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 fn assert_has(messages: &[String], needle: &str) {
@@ -70,14 +71,23 @@ fn a_sidebar_is_checked() {
     assert_has(&errors(&WINDOW.replace("maximizable grid", "grid").replace("        if nav.maximized\n            nav.maximized = false\n", "        nav.maximized = true\n")), "sidebar 'nav' has no property 'maximized'");
 }
 
-/// The old sidebar, `span 3` columns wide, is now pixels: an error, with a
-/// fix that writes it in the new way and names it.
+/// The old sidebar, `span 3` columns wide, is now pixels: an error. Read,
+/// it is that many pixels wide already, without a name; Update the
+/// sidebars names it in the window's `.cxaml`.
 #[test]
 fn an_old_sidebar_is_written_anew() {
     let old = "module m\n\npage Main: window\n    sidebar left span 3\n        text name navText at 1,1 span 3\n";
     assert_has(&errors(old), "a sidebar's width is in pixels now; Update the sidebars, in Problems, writes it so");
-    let new = apply(old, &Edit::UpdateSidebars).unwrap().text;
-    // Three columns is the default grid, so the line leaves it out.
-    assert!(new.contains("    sidebar left name leftSidebar width 192\n        text name navText"), "{new}");
-    assert!(errors(&new).is_empty(), "{:#?}", errors(&new));
+    let (file, _) = parse(old, "m.clarity");
+    let read = &file.pages[0].frame.sidebars[0].props;
+    assert_eq!((read.width, read.columns, read.name.as_deref()), (192, 3, None));
+    // The window as its file holds it, the sidebar unnamed.
+    let markup = clarity_spec::cxaml::page_source(&file.pages[0], "m");
+    assert!(markup.contains("  <Sidebar side=\"left\" width=\"192\">\n"), "{markup}");
+    let new = apply(None, &markup, &Edit::UpdateSidebars).unwrap().text;
+    // Three columns is the default grid, so the element leaves it out.
+    assert!(new.contains("  <Sidebar side=\"left\" name=\"leftSidebar\" width=\"192\">\n    <Text name=\"navText\""), "{new}");
+    let project = clarity_spec::load_sources([("m/m.clarity", "module m\n"), ("m/design/Main.cxaml", new.as_str())]);
+    let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.as_str()).collect();
+    assert!(errors.is_empty(), "{errors:#?}");
 }

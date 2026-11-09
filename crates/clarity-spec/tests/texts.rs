@@ -1,7 +1,7 @@
 //! The text functions of code (conformance/texts.json): typed by the checker,
 //! a project's own function of the same name taking its place.
 
-use clarity_spec::{Severity, load_sources};
+use clarity_spec::{Severity, load_converted};
 
 const WRITER: &str = "module writer
 
@@ -25,7 +25,7 @@ code Desk
 ";
 
 fn errors(text: &str) -> Vec<String> {
-    load_sources([("writer.clarity", text)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+    load_converted([("writer.clarity", text)]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
 }
 
 #[test]

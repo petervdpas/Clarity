@@ -3,7 +3,7 @@
 //! frame commands and named buttons, with the keys the design gives them.
 
 use clarity_spec::shortcuts::{KeyCommand, KeyLayer, KeyPlace, catalog};
-use clarity_spec::load_sources;
+use clarity_spec::load_converted;
 
 const SHOP: &str = "module shop
 
@@ -53,7 +53,7 @@ fn command(id: &str, name: &str, caption: &str, keys: &[&str]) -> KeyCommand {
 
 #[test]
 fn every_named_command_that_does_something_is_listed_by_where_it_is_active() {
-    let project = load_sources([("shop.clarity", SHOP)]);
+    let project = load_converted([("shop.clarity", SHOP)]);
     let errors: Vec<_> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     assert_eq!(
@@ -90,7 +90,7 @@ fn every_named_command_that_does_something_is_listed_by_where_it_is_active() {
 #[test]
 fn the_keys_window_has_clarity_s_own_words() {
     let words: Vec<String> = clarity_spec::translations::KEYS_WINDOW_KEYS.iter().map(|(k, _)| k.to_string()).collect();
-    let keys_of = |source: &str| -> Vec<String> { clarity_spec::translations::keys(&load_sources([("shop.clarity", source)])).into_iter().map(|k| k.key).collect() };
+    let keys_of = |source: &str| -> Vec<String> { clarity_spec::translations::keys(&load_converted([("shop.clarity", source)])).into_iter().map(|k| k.key).collect() };
     let with = keys_of(SHOP);
     assert!(words.iter().all(|w| with.contains(w)), "{with:?}");
     let without = keys_of(&SHOP.replace("            item \"Keys\" name keysItem on click -> keys\n", ""));
@@ -104,7 +104,7 @@ fn the_keys_window_has_clarity_s_own_words() {
 #[test]
 fn toolbar_and_ribbon_commands_say_where_they_live() {
     use clarity_spec::shortcuts::places;
-    let project = load_sources([("shop.clarity", SHOP)]);
+    let project = load_converted([("shop.clarity", SHOP)]);
     let places = places(&project);
     let of = |id: &str| places.iter().find(|(i, _)| i == id).map(|(_, p)| p.clone());
     assert_eq!(of("copyButton"), Some(KeyPlace::Ribbon { tab: "Home".into(), group: "Edit".into() }));
@@ -117,7 +117,7 @@ fn toolbar_and_ribbon_commands_say_where_they_live() {
 /// window reads it: `"toolbar"`, or the ribbon's tab and group; none for the others.
 #[test]
 fn the_catalog_writes_each_command_s_place_for_the_keys_window() {
-    let project = load_sources([("shop.clarity", SHOP)]);
+    let project = load_converted([("shop.clarity", SHOP)]);
     let written = serde_json::to_value(catalog(&project)).unwrap();
     assert_eq!(written[0]["commands"][3]["place"], serde_json::json!({"tab": "Home", "group": "Edit"}));
     assert_eq!(written[1]["commands"][0]["place"], serde_json::json!("toolbar"));

@@ -37,7 +37,7 @@ fn files(backend: Backend, server: &str) -> Vec<clarity_gen::OutFile> {
     ];
     // Order lives in the database and has its step; Item lives in the web API and needs none.
     let step = "migration \"Orders\"\n    add entity Order\n        number: text(20)\n        total: money\n        lines: integer\n        paid: bool\n        kind: Kind\n        placed: date\n        tags: list<text>\n";
-    let project = clarity_spec::load_in([("calls/calls.clarity", FIXTURE), ("calls/store.clarity", STORE)], [("migrations/main/0001.clarity", step)], &sources);
+    let project = clarity_spec::load_in(clarity_spec::converted([("calls/calls.clarity", FIXTURE), ("calls/store.clarity", STORE)]).iter().map(|(p, t)| (p.as_str(), t.as_str())), [("migrations/main/0001.clarity", step)], &sources);
     let errors: Vec<String> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.clone()).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     let mut settings = clarity_project::parse("project Calls\n    stack rust cli\n    datasource main sqlite \"data/calls.db\"\n").unwrap();

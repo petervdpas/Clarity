@@ -887,7 +887,8 @@ fn write_new_project(path: &Path, stack: Stack) -> Result<PathBuf, String> {
     let keyed = clarity_spec::keyed::make_keys(&[(module_file.as_str(), module_text.as_str())], &[], &language);
     let failed = |err: std::io::Error| format!("cannot write the project: {err}");
     std::fs::create_dir_all(dir.join(clarity_spec::translations::TRANSLATIONS_DIR)).map_err(failed)?;
-    std::fs::write(dir.join(&module_file), &keyed.modules[0].1).map_err(failed)?;
+    // The main window goes into design/Main.cxaml, as every window has a file of its own.
+    clarity_spec::cxaml::write_with_pages_moved_out(&dir.join(&module_file), &keyed.modules[0].1).map_err(failed)?;
     std::fs::write(dir.join(clarity_spec::translations::TRANSLATIONS_DIR).join(format!("{language}.clarity")), keyed.language_file(&language)).map_err(failed)?;
     std::fs::write(dir.join(".gitignore"), GITIGNORE).map_err(failed)?;
     std::fs::write(&file, project).map_err(failed)?;

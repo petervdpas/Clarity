@@ -901,7 +901,7 @@ fn a_project_s_language_is_its_default_language_for_the_translations() {
     let dir = root.join("boek");
     std::fs::create_dir_all(dir.join("translations")).unwrap();
     std::fs::write(root.join("boek.clarity"), "project Boek\n    stack go desktop\n    language \"nl\"\n").unwrap();
-    std::fs::write(dir.join("boek.clarity"), "module boek\n\npage Main: window\n    title @mainTitle\n    label @hello name helloLabel at 1,1 span 4\n").unwrap();
+    clarity_spec::cxaml::write_with_pages_moved_out(&dir.join("boek.clarity"), "module boek\n\npage Main: window\n    title @mainTitle\n    label @hello name helloLabel at 1,1 span 4\n").unwrap();
     std::fs::write(dir.join("translations/nl.clarity"), "translation nl\n    mainTitle \"Boek\"\n    hello \"Hallo\"\n").unwrap();
     let project = clarity_project::load_modules(&dir).unwrap();
     let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();

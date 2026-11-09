@@ -177,7 +177,7 @@ fn project(name: &str, description: &str, project: &str) -> PathBuf {
     std::fs::create_dir_all(root.join("forms/apis")).unwrap();
     std::fs::write(root.join("forms.clarity"), project).unwrap();
     std::fs::write(root.join("forms/apis/forms.yaml"), description).unwrap();
-    std::fs::write(root.join("forms/screen.clarity"), SCREEN).unwrap();
+    clarity_spec::cxaml::write_with_pages_moved_out(&root.join("forms/screen.clarity"), SCREEN).unwrap();
     std::fs::create_dir_all(root.join("forms/translations")).unwrap();
     std::fs::write(root.join("forms/translations/en.clarity"), "translation en\n    loadCaption \"Load\"\n").unwrap();
     root.join("forms.clarity")

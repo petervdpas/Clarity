@@ -43,7 +43,7 @@ fn a_version_is_major_minor_patch() {
 
 fn with_code(name: &str, line: &str, module: &str, english: &str) -> std::path::PathBuf {
     let dir = project(name, line);
-    std::fs::write(dir.join("shop.clarity"), module).unwrap();
+    clarity_spec::cxaml::write_with_pages_moved_out(&dir.join("shop.clarity"), module).unwrap();
     std::fs::create_dir_all(dir.join("translations")).unwrap();
     std::fs::write(dir.join("translations/en.clarity"), english).unwrap();
     dir

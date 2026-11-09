@@ -184,6 +184,9 @@ page Folders: window
     button @folders name detailsButton at 1,19 span 2 on click -> folderDetails
     slideout @folders name folderDetails width 360 min 300 max 700 resizable pinnable span 6 rows 4 on open: folderPicked
         label @folders name folderLabel at 1,1 span 6
+        // A view shows only in a window's content (DESIGN 5.33).
+        content name overviewContent at 1,2 span 6 rows 3
+            view Overview
 
 page PickFriend: dialog gives Friend
     on open: loadFriends

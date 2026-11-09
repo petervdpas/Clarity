@@ -77,6 +77,8 @@ const KEYWORDS: &[&str] = &[
     "reorder",
     // Canvas modes (DESIGN 5.31): `mode objects ... | paint | vector`, `tools`, `brush`, `ink`.
     "mode", "objects", "paint", "vector", "tools", "brush", "ink",
+    // A tree's levels (DESIGN 5.33): `level Domain under project show name`.
+    "level", "under",
 ];
 
 /// Clarity's own types.

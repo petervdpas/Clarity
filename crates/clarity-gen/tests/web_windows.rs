@@ -11,16 +11,18 @@ fn calculator() -> clarity_spec::Project {
 
 #[test]
 fn the_calculator_s_window_is_markup_in_clarity_s_words() {
-    let project = calculator();
+    // The window shows its keypad in its content: placed, the view's parts are the window's.
+    let project = clarity_spec::views::placed(&calculator());
     let page = project.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == "Main").unwrap();
     let markup = clarity_gen::web_windows::window_markup(page);
     for line in [
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
         "<Window name=\"Main\" columns=\"4\">",
-        "  <Display name=\"screen\" at=\"1,1\" span=\"4\" rows=\"2\" bind=\"shown\" digits=\"12\" style=\"display\" />",
-        "  <Button name=\"clearKey\" at=\"1,3\" span=\"1\" caption=\"@clearKeyCaption\" key=\"Escape\" onclick=\"clear\" />",
-        "  <Button name=\"digit7\" at=\"1,4\" span=\"1\" caption=\"7\" key=\"7\" onclick=\"digit(7)\" />",
-        "  <Button name=\"equalsKey\" at=\"4,7\" span=\"1\" caption=\"=\" style=\"equals\" key=\"=\" default=\"true\" onclick=\"equals\" />",
+        "  <Content name=\"main\" at=\"1,1\" span=\"4\" rows=\"7\">",
+        "      <Display name=\"screen\" at=\"1,1\" span=\"4\" rows=\"2\" bind=\"shown\" digits=\"12\" style=\"display\" />",
+        "      <Button name=\"clearKey\" at=\"1,3\" span=\"1\" caption=\"@clearKeyCaption\" key=\"Escape\" onclick=\"clear\" />",
+        "      <Button name=\"digit7\" at=\"1,4\" span=\"1\" caption=\"7\" key=\"7\" onclick=\"digit(7)\" />",
+        "      <Button name=\"equalsKey\" at=\"4,7\" span=\"1\" caption=\"=\" style=\"equals\" key=\"=\" default=\"true\" onclick=\"equals\" />",
         "</Window>",
     ] {
         assert!(markup.contains(line), "{line}\nin\n{markup}");
@@ -253,10 +255,11 @@ fn files(text: &str) -> Value {
 #[test]
 fn the_designer_draws_markup_that_says_where_each_part_is_written() {
     let (_, project) = todo();
-    let main = project.pages().find(|p| p.name.name == "Main").unwrap();
-    let designed = files(&preview::files_json(&project, "Todo", &Shown::Window("Main".into()), true, &Default::default()));
-    let markup = designed["windows"]["Main"].as_str().unwrap();
-    assert!(markup.contains(&format!("<Window name=\"Main\" designItem=\"{}\">", main.span.start)), "{markup}");
+    // The task table stands in the view the window's content shows; the designer draws that view.
+    let main = project.pages().find(|p| p.name.name == "MainView").unwrap();
+    let designed = files(&preview::files_json(&project, "Todo", &Shown::Window("MainView".into()), true, &Default::default()));
+    let markup = designed["windows"]["MainView"].as_str().unwrap();
+    assert!(markup.contains(&format!("<Window name=\"MainView\" designItem=\"{}\">", main.span.start)), "{markup}");
     let grid = main.widgets.iter().find(|w| w.props.name.as_deref() == Some("grid")).unwrap();
     let line = markup.lines().find(|l| l.contains("<Table name=\"grid\"")).expect("the task table");
     assert!(line.contains("onadd=\"addClicked\"") && line.contains(&format!("designItem=\"{}\"", grid.span.start)), "{line}");

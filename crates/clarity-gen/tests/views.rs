@@ -104,3 +104,18 @@ fn content_shows_its_views_and_swaps_them_on_every_stack() {
     }
 }
 
+
+/// Content has no look of its own, so the designer draws each view in it as
+/// it looks: the view's parts show, without design items (they are designed
+/// in the view), and the content and its lines can be picked.
+#[test]
+fn the_designer_shows_the_views_in_a_windows_content() {
+    use clarity_gen::preview::{files_json, Shown};
+    let project = clarity_spec::keyed::load_keyed([("model.clarity", SWAPPED)], &[], "en");
+    let designed: serde_json::Value = serde_json::from_str(&files_json(&project, "Model", &Shown::Window("Workspace".into()), true, &Default::default())).unwrap();
+    let markup = designed["windows"]["Workspace"].as_str().expect("the window's markup");
+    let content = markup.lines().find(|l| l.contains("<Content name=\"main\"")).expect("the content");
+    assert!(content.contains("designItem="), "{content}");
+    let save = markup.lines().find(|l| l.contains("name=\"saveButton\"")).expect("the view's part shows in the content");
+    assert!(!save.contains("designItem="), "{save}");
+}

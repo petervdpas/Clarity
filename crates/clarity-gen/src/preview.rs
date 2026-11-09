@@ -64,6 +64,10 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
     let filled = clarity_spec::translations::with_app_slots(project);
     let project = &filled;
     let mut placed = if design { project.clone() } else { clarity_spec::views::placed(project) };
+    // Content has no look of its own, so the designer draws each view in it as it looks; its parts are designed in the view.
+    if design {
+        show_views_in_content(&mut placed, project);
+    }
     // The window picked shows, not the app's start: no splash stands in for it (Run shows the splash).
     for app in placed.files.iter_mut().flat_map(|f| f.apps.iter_mut()) {
         app.splash = None;
@@ -93,6 +97,51 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
         windows.insert(name.clone(), Value::String(format!("<Window name=\"{}\"{rows}{item} />\n", escaped(name))));
     }
     files.to_string() + "\n"
+}
+
+/// Fills each content of `placed` with the parts of the views it lists, as
+/// shown only: they carry no design item, since they are designed in their view.
+fn show_views_in_content(placed: &mut Project, project: &Project) {
+    fn shown_only(widgets: &mut [clarity_spec::model::Widget]) {
+        for w in widgets {
+            w.span.start = crate::web_windows::SHOWN_ONLY;
+            shown_only(&mut w.children);
+            for page in &mut w.pages {
+                page.span.start = crate::web_windows::SHOWN_ONLY;
+                shown_only(&mut page.children);
+            }
+        }
+    }
+    fn fill(widgets: &mut [clarity_spec::model::Widget], project: &Project, depth: usize) {
+        for w in widgets {
+            if w.props.kind == clarity_spec::widgets::WidgetKind::Content && depth < 8 {
+                for page in &mut w.pages {
+                    let view = page.view.as_deref().and_then(|v| clarity_spec::views::find(project.files.iter(), v));
+                    if let Some(view) = view
+                        && page.children.is_empty()
+                    {
+                        let mut parts = view.widgets.clone();
+                        fill(&mut parts, project, depth + 1);
+                        shown_only(&mut parts);
+                        page.children = parts;
+                        page.columns.get_or_insert(view.columns);
+                    }
+                }
+            }
+            fill(&mut w.children, project, depth);
+            for page in &mut w.pages {
+                fill(&mut page.children, project, depth);
+            }
+        }
+    }
+    for file in &mut placed.files {
+        for page in &mut file.pages {
+            fill(&mut page.widgets, project, 0);
+            for sidebar in &mut page.frame.sidebars {
+                fill(&mut sidebar.widgets, project, 0);
+            }
+        }
+    }
 }
 
 fn escaped(text: &str) -> String {

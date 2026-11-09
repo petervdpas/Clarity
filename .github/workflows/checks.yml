@@ -12,10 +12,27 @@ name: Checks
 # runtime's published sums, which are recorded after the Go tag is pushed
 # (writes_a_go_module_on_the_runtime_module).
 
+# Run by hand (Actions, Run workflow), it can run one part only, to check a
+# fix of what failed without waiting for the rest: one job, given test
+# targets of the workspace, or one example. A push always runs everything.
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "What to run: everything, or one part"
+        type: choice
+        options: [all, workspace, go, c-cpp, csharp, examples]
+        default: all
+      tests:
+        description: "Workspace only: cargo test arguments, as -p clarity-gen --test everything (empty: every test)"
+        type: string
+        default: ""
+      example:
+        description: "Examples only: one example's name, as modelling (empty: every example)"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -38,6 +55,7 @@ jobs:
   # Clarity.UI's library for Go, C, C++ and C#, as the release packs it: the folder CLARITY_UI names.
   library:
     name: Clarity.UI library
+    if: ${{ !inputs.only || contains(fromJSON('["all", "c-cpp", "csharp", "examples"]'), inputs.only) }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -66,6 +84,7 @@ jobs:
   # Clarity.UI's browser files, which the web examples serve.
   browser:
     name: Clarity.UI browser files
+    if: ${{ !inputs.only || inputs.only == 'all' || inputs.only == 'examples' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -92,6 +111,7 @@ jobs:
   # Every crate's tests, and the IDE's renderer: checked, tested and built (the IDE's crate embeds it).
   workspace:
     name: Workspace and renderer
+    if: ${{ !inputs.only || inputs.only == 'all' || inputs.only == 'workspace' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -116,19 +136,28 @@ jobs:
         working-directory: app
         run: npm run check
       - name: Test the renderer
+        if: ${{ !inputs.tests }}
         working-directory: app
         run: npm test
       - name: Build the renderer
         working-directory: app
         run: npm run build
       - name: Test the workspace
+        env:
+          TESTS: ${{ inputs.tests }}
         run: |
           # The C header's test links the library itself, which cargo test does not build.
           cargo build -p clarity-ui-ffi
-          cargo test --workspace --no-fail-fast -- --skip writes_a_go_module_on_the_runtime_module
+          if [ -n "$TESTS" ]; then
+            # Run by hand with given test targets: those alone.
+            cargo test --no-fail-fast $TESTS
+          else
+            cargo test --workspace --no-fail-fast -- --skip writes_a_go_module_on_the_runtime_module
+          fi
 
   go:
     name: Go runtime
+    if: ${{ !inputs.only || inputs.only == 'all' || inputs.only == 'go' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -143,6 +172,7 @@ jobs:
   c-cpp:
     name: C and C++ runtimes
     needs: [library]
+    if: ${{ !inputs.only || inputs.only == 'all' || inputs.only == 'c-cpp' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -170,6 +200,7 @@ jobs:
   csharp:
     name: C# runtime
     needs: [library]
+    if: ${{ !inputs.only || inputs.only == 'all' || inputs.only == 'csharp' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -202,11 +233,13 @@ jobs:
   examples:
     name: Example ${{ matrix.example }}
     needs: [library, browser]
+    if: ${{ !inputs.only || inputs.only == 'all' || inputs.only == 'examples' }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        example: [calculator, dial, invaders, kitchen, ledger, modelling, mp3player, noughts, novel, orbs, pills, records, shop, stock, todo, videoplayer, walker, waves]
+        # Run by hand with one example's name: that one alone.
+        example: ${{ fromJSON(inputs.example && format('["{0}"]', inputs.example) || '["calculator", "dial", "invaders", "kitchen", "ledger", "modelling", "mp3player", "noughts", "novel", "orbs", "pills", "records", "shop", "stock", "todo", "videoplayer", "walker", "waves"]') }}
     env:
       # Debug builds only, as on the laptop's routine checks.
       CLARITY_EXAMPLES_QUICK: "1"

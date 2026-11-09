@@ -70,8 +70,12 @@ pub fn designed_showing<R>(showing: &std::collections::BTreeMap<u32, usize>, wri
 
 /// ` designItem="start"` while the designer's markup is written, else nothing.
 fn design_item(span: &clarity_spec::Span) -> String {
-    if DESIGNED.with(|d| d.get()) { format!(" designItem=\"{}\"", span.start) } else { String::new() }
+    if DESIGNED.with(|d| d.get()) && span.start != SHOWN_ONLY { format!(" designItem=\"{}\"", span.start) } else { String::new() }
 }
+
+/// The start of a part's span that the designer shows but does not design
+/// there: a view's parts drawn in a window's content, designed in the view.
+pub const SHOWN_ONLY: u32 = u32::MAX;
 
 /// The windows and dialogs of the project as markup, one file each.
 pub fn window_files(project: &Project) -> Vec<OutFile> {

@@ -11,6 +11,7 @@ pub mod generate;
 pub mod manual;
 pub mod new_project;
 pub mod parts;
+pub mod steps;
 
 use std::path::{Path, PathBuf};
 
@@ -133,17 +134,15 @@ from a package. Both are written in the project's own language: C or C++ (`nativ
 (`go`), C# (`nuget`, `dll`); never another stack's. Read the manual topics design.custom-parts and code.libraries \
 first. The overview lists their folders and files: read and write those files by their paths (like \
 parts/Arena/src/lib.rs). The file Clarity writes from the declaration (src/clarity.rs, clarity.go, the clarity \
-folder's header, the .g.cs half) is read only: change the declaration and the file follows. Read that file before \
-you write the library's own file, and write exactly the functions it names, with its names and types. In C#, \
+folder's header, the .g.cs half) is read only: change the declaration and the file follows. Read it first and \
+write exactly the functions it names, with its names and types. In C#, \
 `libraries/Player/Player.g.cs` declares `namespace ClarityLibraries;` and `public static partial class Player` with \
 a `public static partial` method per function in PascalCase (`isPlaying` is `IsPlaying`, an `integer` is `long`); \
-`Player.cs` is the other half: the same namespace and class, and each method again as `public static partial`, with \
-its body. Go writes each function in PascalCase in the library's package, Rust as the snake_case methods of the \
+`Player.cs` repeats the namespace, the class and each method as `public static partial`, with its body. Go writes each function in PascalCase in the library's package, Rust as the snake_case methods of the \
 trait in src/clarity.rs, C and C++ as the header declares them. Build one on its own with the build tool's part to \
-see its compiler's errors. A sound (`sound name rattle source \"roll.wav\"`, see \
-design.sound) plays sound files of the resources, tones and melodies; it has no place in the window. Sound files you \
-cannot write; use those the overview lists. It plays music files too (`music.play(path)`, pause, seek, `on end`, \
-what it plays; design.sound), so music needs no library of its own.
+see its compiler's errors. A sound (`sound name rattle source \"roll.wav\"`) plays sound and music files of the \
+resources, tones and melodies (`music.play(path)`, `on end`, design.sound); it has no place in the window, and \
+music needs no library of its own. Sound files you cannot write; use those the overview lists.
 - Lay windows out to use the full width of their grid: inputs and tables reach the last column, labels sit left of \
 their inputs, buttons sit together at the bottom right.
 - Data is designed in a diagram first. When asked for new or changed data (\"an order system with customers and \
@@ -155,13 +154,13 @@ asks for that one. In an ERD write Clarity's types (`text(80)`, `money`, `email`
 and other modifiers or a decimal's full type in the comment (`\"required\"`, `\"decimal(10, 2), computed\"`). \
 In a class diagram put each class in the namespace of its module (`namespace music {{`), the module's functions on a \
 `<<module>>` class of the module's name outside the namespaces; the designer draws each module as a frame around its \
-classes. Draw what a module's functions use (the engines they call, the entities they take, find or make) as a uses \
-arrow from the module's class (`music ..> Images`); it is drawn only and Apply ignores it.
-- After adding or changing entities, write a migration step with migrate, so the database follows.
-- Read the generated code with read_generated. The generated code is not edited: fix the project, or say what in \
-Clarity needs fixing.
-- When asked what Clarity can do, which stacks support something, or what is planned, read the manual or the design \
-document (design tool, its Stacks and Roadmap sections) rather than guess; never promise what is not built.
+classes. Draw what a module's functions use as a uses arrow from the module's class (`music ..> Images`); Apply \
+ignores it.
+- Entity changes go into a migration step by themselves. Rename an entity, enum or field with the rename tool: a name \
+written over is a drop and an add, which loses the data.
+- Read generated code with read_generated and never edit it: fix the project, or say what in Clarity needs fixing.
+- When asked what Clarity can do or plans, read the manual or the design tool (Stacks, Roadmap) rather than guess; \
+never promise what is not built.
 - Read only what the task needs: every page you read is sent again with each later message.
 - You execute nothing yourself.\n{host}- Say briefly what you did when you finish. Write plain, short sentences.
 - Write in Clarity's house style, in what you say and in what you write into the project (comments, texts, Markdown): \
@@ -284,6 +283,57 @@ impl ProjectTools {
         Ok(self.part_folders()?.iter().any(|f| f.own.as_ref().is_some_and(|own| path == format!("{}/{own}", f.folder))))
     }
 
+    /// Puts what the data model changed into the agent's migration step
+    /// (crate::steps): the sentence that says so, or nothing.
+    fn follow(&mut self, renames: &[clarity_spec::migrate::Rename]) -> Result<String, String> {
+        let (file, dir) = self.open()?.clone();
+        let followed = crate::steps::follow(&file, &dir, renames)?;
+        self.written.extend(followed.written);
+        Ok(if followed.said.is_empty() { String::new() } else { format!("{}\n", followed.said) })
+    }
+
+    /// Renames an entity, an enum or a field of an entity or record across
+    /// the project, through the checked model; the step records the rename,
+    /// so a stored table or column keeps its data.
+    fn rename(&mut self, input: &Value) -> Result<String, String> {
+        use clarity_spec::rename::{RenameKind, rename, rename_field};
+        let (_, dir) = self.open()?.clone();
+        let text = |key: &str| input[key].as_str().unwrap_or_default().trim().to_string();
+        let (kind, from, to) = (text("kind"), text("from"), text("to"));
+        let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read the project: {err}"))?;
+        if project.diagnostics.iter().any(|d| d.severity == Severity::Error) {
+            return Err("fix the errors first: a rename follows the checked model".into());
+        }
+        let at = |path: &str| if Path::new(path).is_absolute() { PathBuf::from(path) } else { dir.join(path) };
+        let source = |path: &str| std::fs::read_to_string(at(path)).ok();
+        let (changed, renamed, what) = match kind.as_str() {
+            "entity" => (rename(&project, source, RenameKind::Entity, &from, &to)?, Some(clarity_spec::migrate::Rename { entity: None, from: from.clone(), to: to.clone() }), format!("entity {from}")),
+            "enum" => (rename(&project, source, RenameKind::Enum, &from, &to)?, None, format!("enum {from}")),
+            "field" => {
+                let entity = text("entity");
+                if entity.is_empty() {
+                    return Err("a field is renamed in its entity: give entity, like Customer".into());
+                }
+                let renamed = Some(clarity_spec::migrate::Rename { entity: Some(entity.clone()), from: from.clone(), to: to.clone() });
+                (rename_field(&project, source, &entity, &from, &to)?, renamed, format!("field {entity}.{from}"))
+            }
+            _ => return Err("kind is entity, enum or field".into()),
+        };
+        if changed.is_empty() {
+            return Ok(format!("Nothing to rename: {what} is called {to} already."));
+        }
+        let mut paths = Vec::new();
+        for file in changed {
+            let path = at(&file.path);
+            let before = std::fs::read_to_string(&path).ok();
+            write_atomically(&path, &file.text)?;
+            paths.push(clarity_project::slashed(path.strip_prefix(&dir).unwrap_or(&path)));
+            self.written.push(Written { file: path, before, after: file.text });
+        }
+        let step = self.follow(&renamed.into_iter().collect::<Vec<_>>())?;
+        Ok(format!("Renamed {what} to {to} in {}. {step}{}", listed(&paths.iter().map(String::as_str).collect::<Vec<_>>()), self.problems()?))
+    }
+
     /// The project's problems, as `file:line:col: error: message` lines.
     pub fn problems(&self) -> Result<String, String> {
         let (_, dir) = self.open()?;
@@ -380,7 +430,8 @@ impl ProjectTools {
         let text = if text.ends_with('\n') { text.to_string() } else { format!("{text}\n") };
         write_atomically(&file, &text)?;
         self.written.push(Written { file, before, after: text });
-        Ok(format!("Wrote {path}. {}", self.problems()?))
+        let step = self.follow(&[])?;
+        Ok(format!("Wrote {path}. {step}{}", self.problems()?))
     }
 
     /// What a web API's description offers, and what the project picks
@@ -437,7 +488,7 @@ impl ProjectTools {
         let text = clarity_project::write(Some(&old), &settings)?;
         self.write("project", &text)?;
         let warnings = clarity_project::refresh_apis(&file)?;
-        let mut out = format!("Picked; Clarity wrote apis/{source}.clarity. ");
+        let mut out = format!("Picked; Clarity wrote apis/{source}.clarity. {}", self.follow(&[])?);
         for w in warnings {
             out.push_str(&format!("Warning: {w}. "));
         }
@@ -514,7 +565,8 @@ impl ProjectTools {
                 self.written.push(Written { file: change.file, before: change.before, after });
             }
         }
-        Ok(format!("Applied {} proposals. {}", numbers.len(), self.problems()?))
+        let step = self.follow(&[])?;
+        Ok(format!("Applied {} proposals. {step}{}", numbers.len(), self.problems()?))
     }
 
     /// Writes what the data dictionary changed since the last migration step
@@ -527,12 +579,12 @@ impl ProjectTools {
         }
         let first = clarity_project::load(&file).settings.and_then(|s| s.datasources.first().map(|d| d.name.clone())).unwrap_or_else(|| "main".into());
         let source = input["source"].as_str().filter(|s| !s.trim().is_empty()).map(String::from).unwrap_or(first);
-        let renames = clarity_spec::migrate::proposed_renames(&project, &source);
-        let ops = clarity_spec::migrate::pending(&project, &source, &renames);
+        // Never a guessed rename: the agent renames with the rename tool, whose step records it.
+        let ops = clarity_spec::migrate::pending(&project, &source, &[]);
         if ops.is_empty() {
             return Ok(format!("Nothing to migrate in {source}: every change is in a step already."));
         }
-        let title = input["title"].as_str().filter(|t| !t.trim().is_empty()).unwrap_or("Changes by the agent");
+        let title = input["title"].as_str().filter(|t| !t.trim().is_empty()).unwrap_or(crate::steps::AGENT_STEP);
         let path = clarity_spec::write_step(&dir, &source, title.trim(), &ops).map_err(|err| format!("cannot write the step: {err}"))?;
         let text = std::fs::read_to_string(&path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
         self.written.push(Written { file: path.clone(), before: None, after: text.clone() });
@@ -600,7 +652,8 @@ impl ProjectTools {
         let dir = clarity_project::module_dir(&file);
         self.project = Some((file.clone(), dir));
         self.made = Some(file.clone());
-        Ok(format!("Made the project {}; it is the open project now.\n\n{}", file.display(), self.overview()?))
+        // Only what was made: whether and when it opens is the host's to say.
+        Ok(format!("Made the project {}.\n\n{}", file.display(), self.overview()?))
     }
 }
 
@@ -690,6 +743,19 @@ impl Tools for ProjectTools {
                 "Writes the changes of the data dictionary since the last migration step as the next step, so the database follows. Use it after adding or changing entities, when check warns that they are not in a migration yet.",
                 schema(json!({ "title": { "type": "string", "description": "What the step does, like \"Tasks\"." }, "source": { "type": "string", "description": "The data source; the first one by default." } }), &[]),
             ),
+            tool(
+                "rename",
+                "Renames an entity, an enum, or a field of an entity or record, everywhere the project names it: modules, windows, views and translations. The migration step records the rename, so a stored table or column keeps its data. Rename with this tool, never by writing the new name over the old one.",
+                schema(
+                    json!({
+                        "kind": { "type": "string", "enum": ["entity", "enum", "field"], "description": "What is renamed." },
+                        "entity": { "type": "string", "description": "For a field: the entity or record it belongs to, like Customer." },
+                        "from": { "type": "string", "description": "The name now." },
+                        "to": { "type": "string", "description": "The new name." }
+                    }),
+                    &["kind", "from", "to"],
+                ),
+            ),
             tool("parts", "The parts a window can hold, with their properties, sizes and events, as JSON.", schema(json!({}), &[])),
             tool(
                 "manual",
@@ -776,6 +842,7 @@ impl Tools for ProjectTools {
             "reference" => section(LANGUAGE, "language reference", &text("section")),
             "new_project" => self.new_project(input),
             "migrate" => self.migrate(input),
+            "rename" => self.rename(input),
             "read_generated" => self.generated(&text("path")),
             "generate" => self.open().and_then(|(file, _)| crate::generate::generate(file, None).map(|lines| lines.join("\n")).map_err(|why| why.join("\n"))),
             "diagram_view" => self.diagram_view(),
@@ -854,6 +921,63 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
+    /// The agent's model changes go into its migration step by themselves
+    /// (docs/MCP-PLAN.md): folded while no database has applied the step, a
+    /// new step after; a rename only as the rename tool asked, never guessed.
+    #[test]
+    fn model_changes_go_into_the_agent_s_steps() {
+        let (root, file, dir) = project("steps");
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        let steps = || -> Vec<String> {
+            let mut names: Vec<String> = std::fs::read_dir(dir.join("migrations/main")).map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default();
+            names.sort();
+            names
+        };
+        let latest = || std::fs::read_to_string(dir.join("migrations/main").join(steps().last().unwrap())).unwrap();
+        let before = steps().len();
+        let en = tools.call("read_file", &json!({"path": "translations/en.clarity"})).text;
+        let keys = format!("{}\n    taskTitle \"Title\"\n    taskDone \"Done\"\n    fieldRequired \"{{field}} is required\"\n", en.trim_end());
+        assert!(!tools.call("write_file", &json!({"path": "translations/en.clarity", "text": keys})).is_error);
+
+        // A new entity: a new step.
+        let task = "module tasks\n\nentity Task\n    title: text(120), required, label @taskTitle\n";
+        let wrote = tools.call("write_file", &json!({"path": "tasks.clarity", "text": task}));
+        assert!(wrote.text.contains("Wrote the step") && wrote.text.contains("No errors"), "{}", wrote.text);
+        assert_eq!(steps().len(), before + 1);
+        assert!(latest().contains("add entity Task") && latest().contains(crate::steps::AGENT_STEP), "{}", latest());
+
+        // No database has applied it: a rename folds in, and the step adds the entity as it is now.
+        let renamed = tools.call("rename", &json!({"kind": "field", "entity": "Task", "from": "title", "to": "name"}));
+        assert!(!renamed.is_error && renamed.text.contains("Folded into the step"), "{}", renamed.text);
+        assert_eq!(steps().len(), before + 1, "still one step");
+        assert!(latest().contains("name") && !latest().contains("title:") && !latest().contains("rename"), "{}", latest());
+        assert!(std::fs::read_to_string(dir.join("tasks.clarity")).unwrap().contains("    name: text(120)"));
+
+        // A database applied every step: the next rename is a step of its own, which keeps the column's data.
+        let settings = clarity_project::load(&file).settings.unwrap();
+        let db = clarity_project::sqlite_path(&dir, &settings.datasources[0]);
+        std::fs::create_dir_all(db.parent().unwrap()).unwrap();
+        rusqlite::Connection::open(&db).unwrap().execute_batch(&format!("CREATE TABLE clarity_schema (version INTEGER NOT NULL); INSERT INTO clarity_schema VALUES ({});", steps().len())).unwrap();
+        let again = tools.call("rename", &json!({"kind": "field", "entity": "Task", "from": "name", "to": "label"}));
+        assert!(!again.is_error && again.text.contains("Wrote the step"), "{}", again.text);
+        assert_eq!(steps().len(), before + 2);
+        assert!(latest().contains("rename field Task.name to label"), "{}", latest());
+
+        // A name written over is not guessed to be a rename: a drop and an add.
+        rusqlite::Connection::open(&db).unwrap().execute_batch(&format!("INSERT INTO clarity_schema VALUES ({});", steps().len())).unwrap();
+        let task = "module tasks\n\nentity Task\n    caption: text(120), required, label @taskTitle\n";
+        let over = tools.call("write_file", &json!({"path": "tasks.clarity", "text": task}));
+        assert!(over.text.contains("Wrote the step"), "{}", over.text);
+        assert!(!latest().contains("rename") && latest().contains("caption") && latest().contains("label"), "{}", latest());
+
+        // A project with errors gets no step until it checks clean.
+        let count = steps().len();
+        let broken = tools.call("write_file", &json!({"path": "tasks.clarity", "text": "module tasks\n\nentity Task\n    caption: nonsense\n    done: bool, label @taskDone\n"}));
+        assert!(broken.text.contains("error(s)") && !broken.text.contains("step"), "{}", broken.text);
+        assert_eq!(steps().len(), count);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
     #[test]
     fn the_tools_read_write_and_check_the_project() {
         let (root, file, dir) = project("tools");
@@ -877,10 +1001,10 @@ mod tests {
         let with_key = format!("{}\n    taskTitle \"Title\"\n    fieldRequired \"{{field}} is required\"\n", en.text.trim_end());
         assert!(!tools.call("write_file", &json!({"path": "translations/en.clarity", "text": with_key})).is_error);
         let fixed = tools.call("write_file", &json!({"path": "tasks.clarity", "text": "module tasks\n\nentity Task\n    title: text(120), required, label @taskTitle"}));
-        assert!(fixed.text.contains("No errors") && fixed.text.contains("not in a migration yet"), "{}", fixed.text);
-        // A migration step takes the warning away.
+        // The new entity goes into the agent's migration step at once, so nothing warns that it is in none.
+        assert!(fixed.text.contains("Wrote the step migrations/main/") && fixed.text.contains("add entity Task") && fixed.text.ends_with("No problems."), "{}", fixed.text);
         let step = tools.call("migrate", &json!({"title": "Tasks"}));
-        assert!(!step.is_error && step.text.contains("add entity Task") && step.text.ends_with("No problems."), "{}", step.text);
+        assert!(!step.is_error && step.text.starts_with("Nothing to migrate"), "{}", step.text);
         assert_eq!(std::fs::read_to_string(dir.join("tasks.clarity")).unwrap(), "module tasks\n\nentity Task\n    title: text(120), required, label @taskTitle\n");
 
         // Paths stay inside the project.
@@ -1153,7 +1277,7 @@ mod tests {
             "api", "check", "design", "diagram_proposals", "diagram_view", "manual", "parts", "project_overview", "read_file", "read_generated",
             "reference",
             // Writing project files, checked at once and undone with one Undo.
-            "apply_diagram", "migrate", "new_project", "pick_api", "write_diagram", "write_file",
+            "apply_diagram", "migrate", "new_project", "pick_api", "rename", "write_diagram", "write_file",
             // Writing the generated source tree for the stack, as `clarity gen` does; it builds nothing.
             "generate",
         ]

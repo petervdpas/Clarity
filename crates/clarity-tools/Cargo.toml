@@ -8,7 +8,11 @@ license.workspace = true
 [dependencies]
 clarity-spec.workspace = true
 clarity-project.workspace = true
+clarity-db.workspace = true
 clarity-agent.workspace = true
 clarity-gen = { path = "../clarity-gen" }
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+rusqlite = { version = "0.40", features = ["bundled"] }

@@ -6,6 +6,7 @@
 pub mod engines;
 mod file;
 pub mod folders;
+pub mod ide;
 pub mod openapi;
 
 use std::path::{Path, PathBuf};

@@ -10,6 +10,8 @@ use crate::model::{DataDecl, FieldType, Ident, Project, SpecFile};
 use crate::span::Span;
 use crate::widgets::is_identifier;
 
+pub use crate::field_rename::rename_field;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]

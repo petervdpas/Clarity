@@ -242,7 +242,14 @@ impl Tools for IdeTools {
                 self.shown_diagram = Some(shown.clone());
                 format!("Opening diagrams/{shown} in Clarity.")
             }),
-            _ => return self.core.call(name, input),
+            _ => {
+                let mut result = self.core.call(name, input);
+                // The IDE opens a project its agent made, and the turn goes on with it.
+                if name == "new_project" && !result.is_error {
+                    result.text.push_str("\n\nIt is the project the tools work on now, and it opens in Clarity when this turn ends.");
+                }
+                return result;
+            }
         };
         match result {
             Ok(text) => ToolResult { text, is_error: false },
@@ -515,7 +522,7 @@ mod tests {
             "api", "build_output", "check", "design", "diagram_proposals", "diagram_view", "manual", "parts", "project_overview", "read_file",
             "read_generated", "reference",
             // Writing project files, checked at once and undone with one Undo.
-            "apply_diagram", "migrate", "new_project", "pick_api", "write_diagram", "write_file",
+            "apply_diagram", "migrate", "new_project", "pick_api", "rename", "write_diagram", "write_file",
             // Writing the generated source tree, as `clarity gen` does; it builds nothing.
             "generate",
             // Showing a window in Preview or a diagram, which draw without running anything.

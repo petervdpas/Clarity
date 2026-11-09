@@ -68,6 +68,26 @@ pub fn read_sqlite(path: &Path) -> Result<LiveSchema, String> {
     read(&conn).map_err(|err| format!("cannot read {}: {err}", path.display()))
 }
 
+/// How many migration steps an SQLite database has applied, as its
+/// `clarity_schema` records them, without changing it: 0 when the file or
+/// the table is not there yet.
+pub fn applied_steps(path: &Path) -> Result<usize, String> {
+    if !path.exists() {
+        return Ok(0);
+    }
+    let flags = rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let conn = rusqlite::Connection::open_with_flags(path, flags).map_err(|err| format!("cannot open {}: {err}", path.display()))?;
+    let there: bool = conn
+        .query_row("SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = 'clarity_schema'", [], |row| row.get(0))
+        .map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+    if !there {
+        return Ok(0);
+    }
+    let version: Option<i64> =
+        conn.query_row("SELECT MAX(version) FROM clarity_schema", [], |row| row.get(0)).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+    Ok(version.unwrap_or(0).max(0) as usize)
+}
+
 fn read(conn: &rusqlite::Connection) -> rusqlite::Result<LiveSchema> {
     let mut names: Vec<String> = conn
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != 'clarity_schema'")?

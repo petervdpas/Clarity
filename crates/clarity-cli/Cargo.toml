@@ -18,5 +18,7 @@ clarity-db.workspace = true
 clarity-gen = { path = "../clarity-gen" }
 # `clarity gen` generates as the agents' generate tool does.
 clarity-tools.workspace = true
+# `clarity mcp` serves those tools to an AI agent over MCP.
+clarity-mcp.workspace = true
 serde_json.workspace = true
 clap = { version = "4", features = ["derive"] }

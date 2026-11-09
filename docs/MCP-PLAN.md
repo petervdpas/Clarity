@@ -1,6 +1,6 @@
 # Clarity as an MCP server
 
-A plan, worked out with the user 2026-11-09; nothing is built yet.
+A plan, worked out with the user 2026-11-09. Steps 1 to 6 are built (2026-11-09); step 7, the questionnaire, is next.
 
 ## Goal
 
@@ -63,12 +63,14 @@ Agreed 2026-11-09 (user: "agree"), interleaved with the `.cxaml` refactor ("Next
 3. The `.cxaml` refactor (CXAML-SOURCE-PLAN.md), so renames and pages work on the model.
 4. The `rename` tool (fields added to `rename.rs`, on model renames), automatic folded steps without guessed renames.
 5. `crates/clarity-mcp`: stdio server, tool list from the shared tools minus the left-out ones, a test that lists every offered tool (like `no_tool_executes_anything`).
-6. `clarity mcp` in the CLI; the IDE records its open project (one key, read-modify-write); manual page `ai.mcp.md` with setup for Claude Code, Codex and Copilot (i18n'd manual like the rest).
+6. `clarity mcp` in the CLI; the IDE records its open project (one key, read-modify-write); manual page `ai.mcp.md` with setup for Claude Code, Codex and Copilot (in English, as the whole manual is).
 7. The questionnaire tool and Clarity's form (a `.cxaml` page, so after the refactor). Where it falls beside the clarity-pdf crate (REPORT-PLAN.md) is the user's choice.
 
-## Open questions
+## Decided at their step
 
-At their step, for the user:
+Asked 2026-11-09, after v0.34.0:
 
-- The protocol: the `rmcp` crate (a new dependency) or a small JSON-RPC over stdio of Clarity's own.
-- The form: the CLI links Clarity.UI, or `clarity mcp` starts a separate form program.
+- The protocol: the user first chose "Own JSON-RPC (Recommended)", then asked "I know what I chose, but isnt using standards better?" and, told tokio is already in the workspace through the IDE, said "tokio is already in eh". So `clarity-mcp` uses `rmcp`, the official Rust MCP SDK, over stdio.
+- The form: the user chose "Separate form program (Recommended)". `clarity mcp` starts a small program on Clarity.UI and waits for its answers; the CLI links no UI library.
+- Folding steps: the user chose "Local DB check (Recommended)". The agent's latest step is folded while the source's local SQLite file is missing or has applied fewer steps (`clarity_schema.version`); for a server database, which cannot be seen, every change gets a new step.
+- Which agents: the user chose "Both agents (Recommended)". Automatic steps and the `rename` tool work the same for the IDE's agent and through `clarity mcp`.

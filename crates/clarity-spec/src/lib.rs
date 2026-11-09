@@ -31,6 +31,7 @@ pub mod names;
 pub mod native;
 pub mod parser;
 pub mod rename;
+mod field_rename;
 pub mod sample;
 pub mod shortcuts;
 pub mod source;

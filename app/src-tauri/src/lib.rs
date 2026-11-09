@@ -221,6 +221,10 @@ fn open_file(path: &str, app: AppHandle, state: &WatchState, history: &HistorySt
     let _ = clarity_project::refresh_apis(&file);
     let preview = load(&dir)?;
     let watcher = watch(&file, &dir, app)?;
+    // `clarity mcp` works on the project open here (docs/MCP-PLAN.md).
+    if let Err(err) = clarity_project::ide::set_open_project(&file) {
+        logging::line(&err);
+    }
     *state.open.held().map_err(|_| "watch state is poisoned")? = Some(OpenProject {
         file,
         dir,
@@ -912,12 +916,18 @@ pub fn run() {
                 });
                 window.set_title(&title)?;
                 // The manual's window closes with Clarity's; its own close only hides it.
+                // Its project closes with it too, so `clarity mcp` no longer works on it.
                 let app = app.handle().clone();
                 window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::Destroyed = event
-                        && let Some(manual) = app.get_webview_window("manual")
-                    {
-                        manual.destroy().ok();
+                    if let tauri::WindowEvent::Destroyed = event {
+                        if let Some(manual) = app.get_webview_window("manual") {
+                            manual.destroy().ok();
+                        }
+                        if let Ok(file) = project_file_of(&app.state::<WatchState>())
+                            && let Err(err) = clarity_project::ide::close_project(&file)
+                        {
+                            logging::line(&err);
+                        }
                     }
                 });
             }

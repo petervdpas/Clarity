@@ -406,7 +406,8 @@ fn renames_pages_and_widget_tabs() {
 
 #[test]
 fn edits_keep_the_example_page_valid() {
-    let source = include_str!("../../../examples/shop/desk.clarity");
+    let desk = shop("counter");
+    let source = desk.as_str();
     let mut props = new_props(WidgetKind::Number, 8, 3);
     props.bind = Some("customer.creditLimit".into());
     props.width = 2;
@@ -418,8 +419,10 @@ fn edits_keep_the_example_page_valid() {
             props,
         },
     );
-    let customers = include_str!("../../../examples/shop/customers.clarity");
-    let sales = include_str!("../../../examples/shop/sales.clarity");
+    let customers = shop("customers");
+    let customers = customers.as_str();
+    let sales = shop("sales");
+    let sales = sales.as_str();
     let project = clarity_spec::load_sources([
         ("customers.clarity", customers),
         ("sales.clarity", sales),
@@ -519,13 +522,14 @@ fn applies_a_batch_as_one_edit() {
 
 #[test]
 fn no_op_edit_round_trips_exactly() {
+    let (desk, customers, sales) = (shop("counter"), shop("customers"), shop("sales"));
     let sources = [
         PAGE,
         "module m\r\npage P: window\r\n    title \"T\"\r\n    label \"A\" at 1,1 // c\r\n",
         "module m\n\n\n   \npage P: window\n\t\n    title \"T\"",
-        include_str!("../../../examples/shop/desk.clarity"),
-        include_str!("../../../examples/shop/customers.clarity"),
-        include_str!("../../../examples/shop/sales.clarity"),
+        desk.as_str(),
+        customers.as_str(),
+        sales.as_str(),
     ];
     // Every edit rewrites the whole file from the line tree, so an edit that
     // changes nothing must give back the input byte for byte.
@@ -649,4 +653,11 @@ fn updating_a_widget_sticks_it_to_the_bottom() {
     props.bottom = true;
     let (text, _) = edit(PAGE, Edit::UpdateWidget { item: at(PAGE, "textbox"), container: None, props });
     assert!(text.contains("    textbox name textbox1 at 3,2 span 6 bottom bind c.name // the name\n"), "{text}");
+}
+
+/// A module of the shop example with its windows and views from design/
+/// written in as page blocks: the rich page the edits are tried on.
+fn shop(module: &str) -> String {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../examples/shop/{module}.clarity"));
+    clarity_spec::cxaml::module_text_with_pages(&path).unwrap()
 }

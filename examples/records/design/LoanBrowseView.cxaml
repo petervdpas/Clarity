@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window LoanBrowse shows: its parts, data and code. -->
+<View class="loans.LoanBrowseView">
+  <Data name="loans" type="list&lt;Loan&gt;" />
+  <Heading name="loansHeading" at="1,1" span="6" caption="@loansHeadingCaption" />
+  <Checkbox name="showReturned" at="9,1" span="4" caption="@showReturnedCaption" onchange="windowReturned" />
+  <Table name="loanGrid" at="1,2" span="12" rows="8" bind="loans" columns="album, friend, lentOn, returnedOn" sortable="true" add="true" remove="true" confirm="true" onadd="lendClicked" onremove="removeClicked" onopen="openClicked" />
+  <Button name="friends" at="1,10" span="2" caption="@friendsCaption" opens="FriendBrowse" />
+  <Button name="backButton" at="11,10" span="2" caption="@backButtonCaption" onclick="backClicked" />
+</View>

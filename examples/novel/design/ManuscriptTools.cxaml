@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the chapter text's toolbox puts in where the writer is: Ctrl+Space or
+     a right-click in the text calls it up at the caret. -->
+<Toolbox class="writing.ManuscriptTools" columns="3">
+  <Tool name="insertResearchTool" at="1,1" span="1" tooltip="@insertResearchTip" icon="book-open" onclick="insertResearch" />
+  <Tool name="insertFragmentTool" at="2,1" span="1" tooltip="@insertFragmentTip" icon="sticky-note" onclick="insertFragment" />
+  <Tool name="insertDialogueTool" at="3,1" span="1" tooltip="@insertDialogueTip" icon="messages-square" onclick="insertDialogue" />
+</Toolbox>

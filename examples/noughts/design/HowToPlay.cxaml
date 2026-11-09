@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The rules: a Markdown file of the resources per language, which
+     @gameRules points at. -->
+<View class="noughts.HowToPlay">
+  <Markdown name="rulesText" at="1,1" span="12" rows="12" caption="@gameRules" />
+</View>

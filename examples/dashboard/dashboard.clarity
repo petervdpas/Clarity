@@ -1,0 +1,26 @@
+module dashboard
+
+app Dashboard
+    title @dashboardTitle
+    main Board
+
+// A sale of a product.
+entity Sale
+    product: text(80), required, label @saleProductLabel
+    amount: decimal(10, 2), label @saleAmountLabel
+    sold: date, label @saleSoldLabel
+
+// A product and how many are in stock.
+entity Product
+    name: text(80), required, label @productNameLabel
+    stock: integer, label @productStockLabel
+
+code Board
+    handler boardOpened
+        chartSales = find s in Sale order by s.product
+        sales = find s in Sale order by s.sold desc
+        products = find p in Product order by p.name
+        low = find p in Product where p.stock < 10 order by p.stock
+        total = 0
+        for s in sales
+            total = total + s.amount

@@ -34,6 +34,7 @@ pub fn report_panics(app: tauri::AppHandle) {
             .or_else(|| info.payload().downcast_ref::<&str>().map(|s| s.to_string()))
             .unwrap_or_else(|| "a command stopped".to_string());
         let place = info.location().map(|l| format!(" ({}:{})", l.file(), l.line())).unwrap_or_default();
+        crate::logging::line(&format!("[panic] {message}{place}"));
         if let Some(app) = APP.get() {
             let _ = app.emit("clarity-panic", format!("{message}{place}"));
         }

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- All characters of the book: the list at the left, the chosen character at
+     the right and the chapters they appear in. -->
+<View class="writing.CharactersPart">
+  <Data name="characterBook" type="Book" />
+  <Data name="characters" type="list&lt;Character&gt;" />
+  <Data name="character" type="Character" />
+  <Data name="appearances" type="list&lt;Appearance&gt;" />
+  <Data name="pickedAppearance" type="Appearance" />
+  <Data name="characterChoice" type="list&lt;Chapter&gt;" />
+  <Data name="characterCurrent" type="Chapter" />
+  <Tells message="jumpTo(position: integer)" />
+  <Splitter name="characterSplitter" at="1,1" span="12" rows="15">
+    <Pane span="3">
+      <List name="characterList" at="1,1" span="3" rows="13" bind="characters" show="name, role" cards="true" onselect="characterChosen" />
+      <Button name="newCharacterButton" at="1,14" span="3" caption="@newCharacter" icon="plus" onclick="addCharacter" />
+      <Button name="removeCharacterButton" at="1,15" span="3" caption="@removeCharacterCaption" icon="trash" onclick="removeCharacter" />
+    </Pane>
+    <Pane>
+      <Textbox name="characterNameBox" at="1,1" span="6" bind="character.name" placeholder="@characterNamePlaceholder" />
+      <Textbox name="characterRoleBox" at="1,2" span="6" bind="character.role" placeholder="@characterRolePlaceholder" />
+      <Memo name="characterDescriptionBox" at="1,3" span="6" rows="13" bind="character.description" placeholder="@characterDescriptionPlaceholder" />
+      <Button name="saveCharacterButton" at="7,1" span="3" caption="@saveCaption" icon="save" default="true" onclick="saveCharacter" />
+      <Label name="appearsInLabel" at="7,2" span="3" caption="@appearsInLabel" />
+      <Table name="appearanceTable" at="7,3" span="3" rows="11" bind="appearances" columns="chapter" links="[{&quot;column&quot;:&quot;chapter&quot;,&quot;handler&quot;:&quot;characterToChapter&quot;}]" add="true" remove="true" confirm="true" onadd="addAppearance" onremove="removeAppearance" onopen="characterToChapter" onselect="rememberPickedAppearance" />
+      <Button name="characterToChapterButton" at="7,14" span="3" caption="@toChapterCaption" tooltip="@toChapterTip" icon="square-arrow-out-up-right" onclick="characterToChapter" />
+      <Button name="characterInChapterButton" at="7,15" span="3" caption="@inChapterCaption" tooltip="@inChapterTip" icon="link" onclick="characterInChapter" />
+    </Pane>
+  </Splitter>
+</View>

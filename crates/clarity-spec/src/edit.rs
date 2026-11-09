@@ -2413,3 +2413,45 @@ fn props_of_line(tokens: &[Token]) -> Option<WidgetProps> {
     }).filter(|b| !b.is_empty());
     Some(props)
 }
+
+/// `edit` with each place in the file it names (a part, a page, a region,
+/// a command) put through `at`: for an edit of a window's or view's own
+/// file (`.cxaml`), made on the page's text of Clarity. An edit of what a
+/// module's own file holds (entities, code, apps, new windows) has no
+/// place there and is refused.
+pub fn with_items(edit: &Edit, at: &dyn Fn(u32) -> u32) -> EditResult<Edit> {
+    use Edit::*;
+    Ok(match edit.clone() {
+        Remove { item } => Remove { item: at(item) },
+        SetTitle { target, title } => SetTitle { target: at(target), title },
+        SetPaneSpan { target, columns } => SetPaneSpan { target: at(target), columns },
+        SetPageView { target, view } => SetPageView { target: at(target), view },
+        SetPageColor { target, color } => SetPageColor { target: at(target), color },
+        PlaceWidget { container, props } => PlaceWidget { container: at(container), props },
+        CreateWidget { container, kind, col, row, width, caption, bind, part, height } => CreateWidget { container: at(container), kind, col, row, width, caption, bind, part, height },
+        Batch { edits } => Batch { edits: edits.iter().map(|e| with_items(e, at)).collect::<EditResult<_>>()? },
+        UpdateWidget { item, container, props } => UpdateWidget { item: at(item), container: container.map(at), props },
+        AddTab { item, title } => AddTab { item: at(item), title },
+        AddMenu { item } => AddMenu { item: at(item) },
+        AddData { page, name, entity, list } => AddData { page: at(page), name, entity, list },
+        SetGrid { page, columns, rows } => SetGrid { page: at(page), columns, rows },
+        SetSize { page, width, height } => SetSize { page: at(page), width, height },
+        SetPageStyle { page, style } => SetPageStyle { page: at(page), style },
+        PlaceField { container, col, row, room, bind } => PlaceField { container: at(container), col, row, room, bind },
+        SetOwnerEvent { owner, event, handler } => SetOwnerEvent { owner: at(owner), event, handler },
+        AddRegion { owner, region, side } => AddRegion { owner: at(owner), region, side },
+        UpdateSidebar { item, props } => UpdateSidebar { item: at(item), props },
+        UpdateRibbon { item, name, collapsible, collapsed } => UpdateRibbon { item: at(item), name, collapsible, collapsed },
+        SetName { item, name } => SetName { item: at(item), name },
+        AddFrameItem { parent, item, caption } => AddFrameItem { parent: at(parent), item, caption },
+        UpdateCommand { item, props } => UpdateCommand { item: at(item), props },
+        MoveSibling { item, delta } => MoveSibling { item: at(item), delta },
+        SetPartGrows { item, grows } => SetPartGrows { item: at(item), grows },
+        NameParts => NameParts,
+        CamelNames => CamelNames,
+        UpdateSidebars => UpdateSidebars,
+        AddPage { .. } | AddWindow { .. } | AddEntity { .. } | AddEnum { .. } | AddField { .. } | UpdateField { .. } | AddVariant { .. } | UpdateVariant { .. } | SetUses { .. } | AddApp { .. } | SetMain { .. } | SetSplash { .. } | SetCode { .. } | AddHandler { .. } | AddHandlerWith { .. } | ReplaceDecl { .. } | AppendDecl { .. } => {
+            return fail("this change belongs in the module's file of Clarity, not in a window's .cxaml");
+        }
+    })
+}

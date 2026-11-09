@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- All research of the book: the list at the left, the text at the right and
+     where it is used. -->
+<View class="writing.ResearchPart">
+  <Data name="researchBook" type="Book" />
+  <Data name="researches" type="list&lt;Research&gt;" />
+  <Data name="research" type="Research" />
+  <Data name="researchPlaces" type="list&lt;ResearchPlace&gt;" />
+  <Data name="pickedResearchPlace" type="ResearchPlace" />
+  <Data name="researchChoice" type="list&lt;Chapter&gt;" />
+  <Data name="researchCurrent" type="Chapter" />
+  <Tells message="jumpTo(position: integer)" />
+  <Splitter name="researchSplitter" at="1,1" span="12" rows="15">
+    <Pane span="3">
+      <Textbox name="researchSearchBox" at="1,1" span="3" placeholder="@researchSearchPlaceholder" onchange="filterResearch" />
+      <List name="researchList" at="1,2" span="3" rows="12" bind="researches" show="title" onselect="researchChosen" />
+      <Button name="newResearchButton" at="1,14" span="3" caption="@newResearch" icon="plus" onclick="addResearch" />
+      <Button name="removeResearchButton" at="1,15" span="3" caption="@removeResearchCaption" icon="trash" onclick="removeResearch" />
+    </Pane>
+    <Pane>
+      <Textbox name="researchTitleBox" at="1,1" span="6" bind="research.title" placeholder="@researchTitlePlaceholder" />
+      <Textbox name="researchLinkBox" at="1,2" span="6" bind="research.link" placeholder="@linkPlaceholder" />
+      <Memo name="researchTextBox" at="1,3" span="6" rows="13" bind="research.text" markdown="true" placeholder="@researchPlaceholder" />
+      <Button name="saveResearchButton" at="7,1" span="3" caption="@saveCaption" icon="save" default="true" onclick="saveResearch" />
+      <Label name="usedInLabel" at="7,2" span="3" caption="@usedInLabel" />
+      <Table name="researchPlaceTable" at="7,3" span="3" rows="11" bind="researchPlaces" columns="chapter" links="[{&quot;column&quot;:&quot;chapter&quot;,&quot;handler&quot;:&quot;researchToChapter&quot;}]" add="true" remove="true" confirm="true" onadd="addResearchPlace" onremove="removeResearchPlace" onopen="researchToChapter" onselect="rememberPickedResearchPlace" />
+      <Button name="toChapterButton" at="7,14" span="3" caption="@toChapterCaption" tooltip="@toChapterTip" icon="square-arrow-out-up-right" onclick="researchToChapter" />
+      <Button name="inChapterButton" at="7,15" span="3" caption="@inChapterCaption" tooltip="@inChapterTip" icon="link" onclick="researchInChapter" />
+    </Pane>
+  </Splitter>
+</View>

@@ -39,6 +39,13 @@ enum Command {
         /// The project file, like shop.clarity.
         project: PathBuf,
     },
+    /// Move each window and view out of the project's .clarity files into a
+    /// .cxaml file of its own, in a folder named after its module
+    /// (docs/CXAML-SOURCE-PLAN.md).
+    ConvertPages {
+        /// The project file, like shop.clarity.
+        project: PathBuf,
+    },
     /// Write the changes in the data dictionary that no migration covers
     /// yet as the next step in the project's migrations folder.
     Migrate {
@@ -197,6 +204,7 @@ fn main() -> ExitCode {
         },
         Command::Gen { project, out } => generate(&project, out.as_deref()),
         Command::Parts { project } => parts(&project),
+        Command::ConvertPages { project } => convert_pages(&project),
         Command::Migrate {
             project,
             check,
@@ -523,6 +531,70 @@ fn model(dir: &std::path::Path, samples: bool) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Moves every page block into its `.cxaml` file; refuses to write over a
+/// `.cxaml` that is there already, and says whether the project still loads.
+fn convert_pages(project_file: &std::path::Path) -> ExitCode {
+    let dir = if project_file.is_file() { clarity_project::module_dir(project_file) } else { project_file.to_path_buf() };
+    let before = match load(project_file) {
+        Ok(project) => project,
+        Err(code) => return code,
+    };
+    let paths = match clarity_spec::spec_files(&dir) {
+        Ok(paths) => paths,
+        Err(err) => {
+            eprintln!("clarity: cannot read {}: {err}", dir.display());
+            return ExitCode::from(2);
+        }
+    };
+    let mut files = Vec::new();
+    for path in &paths {
+        match std::fs::read_to_string(path) {
+            Ok(text) => files.push((path.display().to_string(), text)),
+            Err(err) => {
+                eprintln!("clarity: cannot read {}: {err}", path.display());
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let moved = match clarity_spec::cxaml::moved_out(&files) {
+        Ok(moved) => moved,
+        Err(why) => {
+            eprintln!("clarity: {why}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Some((path, _)) = moved.iter().find(|(p, _)| clarity_spec::cxaml::is_page_file(p) && std::path::Path::new(p).exists()) {
+        eprintln!("clarity: {path} is there already; nothing was moved");
+        return ExitCode::FAILURE;
+    }
+    let pages = moved.iter().filter(|(p, _)| clarity_spec::cxaml::is_page_file(p)).count();
+    for (path, text) in &moved {
+        let path = std::path::Path::new(path);
+        if let Some(folder) = path.parent() {
+            if let Err(err) = std::fs::create_dir_all(folder) {
+                eprintln!("clarity: cannot make {}: {err}", folder.display());
+                return ExitCode::from(2);
+            }
+        }
+        if let Err(err) = std::fs::write(path, text) {
+            eprintln!("clarity: cannot write {}: {err}", path.display());
+            return ExitCode::from(2);
+        }
+    }
+    eprintln!("{pages} window(s) and view(s) moved into .cxaml files");
+    // The project as it loads now: the same errors as before, no new ones.
+    let after = match load(project_file) {
+        Ok(project) => project,
+        Err(code) => return code,
+    };
+    let errors = |p: &clarity_spec::Project| p.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.clone()).collect::<Vec<_>>();
+    let new: Vec<String> = errors(&after).into_iter().filter(|e| !errors(&before).contains(e)).collect();
+    for e in &new {
+        eprintln!("clarity: new error: {e}");
+    }
+    if new.is_empty() { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 }
 
 fn migrate(project_file: &std::path::Path, check: bool, title: Option<String>, no_renames: bool, allow_data_loss: bool) -> ExitCode {

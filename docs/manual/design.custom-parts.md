@@ -45,4 +45,4 @@ Pick the part under Custom parts in the project tree. Its view shows what the wi
 
 Every Build and Run of the program builds the part in with it. On every stack the part draws on the canvas Clarity.UI gives it, in its place on the window; the `orbs` example (C++) shows one.
 
-On Clarity.UI (Rust and C#) a part is no native window: it is a control of Clarity.UI and draws on the window's own surface, in its place, through the trait Clarity writes for it (in Rust, `GaugePart` in the crate's `src/clarity.rs`). It takes the pointer, the wheel, keys and the focus as any part does, and menus and dialogs lie over it. See [Rust](stacks.rust.md#custom-parts) for the Rust trait; the `dice` example (Rust with Bevy) shows one.
+On Clarity.UI (Rust and C#) a part is no native window: it is a control of Clarity.UI and draws on the window's own surface, in its place, through the trait Clarity writes for it (in Rust, `GaugePart` in the crate's `src/clarity.rs`). It takes the pointer, the wheel, keys and the focus as any part does, and menus and dialogs lie over it. See [Rust](stacks.rust.md#custom-parts) for the Rust trait.

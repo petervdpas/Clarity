@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- One track, in a dialog over the album. -->
+<Dialog class="music.TrackDialog" title="@trackDialogTitle">
+  <Data name="album" type="Album" />
+  <Data name="track" type="Track" />
+  <Label name="numberLabel" at="1,1" span="3" caption="@numberLabel" for="number" />
+  <Number name="number" at="4,1" span="2" bind="track.number" />
+  <Label name="titleLabel" at="1,2" span="3" caption="@titleLabel" for="title" />
+  <Textbox name="title" at="4,2" span="9" bind="track.title" />
+  <Label name="lengthLabel" at="1,3" span="3" caption="@lengthLabel" for="length" />
+  <Number name="length" at="4,3" span="3" bind="track.length" placeholder="3:45" />
+  <Button name="saveTrack" at="9,5" span="2" caption="@saveCaption" style="primary" default="true" onclick="saveClicked" />
+  <Button name="cancelTrack" at="11,5" span="2" caption="@cancelCaption" opens="close" cancel="true" />
+</Dialog>

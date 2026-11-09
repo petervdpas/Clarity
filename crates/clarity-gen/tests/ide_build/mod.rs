@@ -124,8 +124,8 @@ fn with_browser_files(mut programs: Vec<clarity_gen::Program>) -> Vec<clarity_ge
 }
 
 /// The target folder a Rust program in `dir` builds into: one shared by
-/// every run, and for a program with custom parts (dice's Bevy) the one
-/// whose game engine is built already.
+/// every run, and for a program with custom parts the one whose
+/// libraries are built already.
 fn rust_target(dir: &Path) -> PathBuf {
     if dir.join("parts").is_dir() { repo().join("target/g8c-shared") } else { repo().join("target/generated/ide-build-target") }
 }

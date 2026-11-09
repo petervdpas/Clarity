@@ -2,7 +2,7 @@
   "name": "clarity-designer",
   "displayName": "Clarity Designer",
   "description": "Colors, snippets and a file icon for Clarity files (.clarity): the language of the Clarity designer.",
-  "version": "0.1.37",
+  "version": "0.1.38",
   "publisher": "petervdpas",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -50,6 +50,12 @@
           "light": "./images/file.svg",
           "dark": "./images/file.svg"
         }
+      },
+      {
+        "id": "xml",
+        "extensions": [
+          ".cxaml"
+        ]
       }
     ],
     "grammars": [

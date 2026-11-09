@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The products of which fewer than ten are left. -->
+<View class="dashboard.LowStock">
+  <Data name="low" type="list&lt;Product&gt;" />
+  <Heading name="lowHeading" at="1,1" span="12" caption="@lowHeading" />
+  <List name="lowList" at="1,2" span="12" rows="6" bind="low" show="name" />
+</View>

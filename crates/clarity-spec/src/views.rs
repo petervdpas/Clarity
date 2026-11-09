@@ -101,7 +101,7 @@ pub fn shown_in<'a>(files: &'a [SpecFile], page: &'a Page) -> Vec<&'a Page> {
 /// draws a view on its own from the project as written.
 pub fn placed(project: &Project) -> Project {
     // A tree of several kinds of records is a tree of its rows once its window holds what its views show.
-    crate::trees::lowered(&placed_views(project))
+    crate::trees::lowered(&placed_views(&crate::cxaml::folded(project)))
 }
 
 fn placed_views(project: &Project) -> Project {

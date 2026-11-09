@@ -331,3 +331,83 @@ pub fn textmate_grammar() -> serde_json::Value {
 fn regex_escape(word: &str) -> String {
     word.chars().flat_map(|c| if c.is_ascii_alphanumeric() || c == '_' { vec![c] } else { vec!['\\', c] }).collect()
 }
+
+/// A window's or view's `.cxaml` in colored pieces, with the same kinds as
+/// Clarity's own: an element's name as a word of the language (a part's kind
+/// as a type, as Clarity colors `Order`), an attribute's name as a name, its
+/// value as a text, a key (`@saveCaption`), a number or `true` and `false` as
+/// such, `{slots}` inside a text, and comments.
+pub fn highlight_markup(source: &str) -> Vec<Piece> {
+    let mut pieces = Vec::new();
+    for (index, text) in source.split('\n').enumerate() {
+        let line = index as u32 + 1;
+        let column = |byte: usize| text[..byte.min(text.len())].encode_utf16().count() as u32;
+        let mut push = |from: usize, to: usize, kind: PieceKind| {
+            if to > from {
+                pieces.push(Piece { line, from: column(from), to: column(to), kind });
+            }
+        };
+        let bytes = text.as_bytes();
+        let mut i = 0;
+        let mut in_tag = false;
+        while i < bytes.len() {
+            let rest = &text[i..];
+            if rest.starts_with("<!--") || (!in_tag && rest.trim_start().is_empty()) {
+                if rest.starts_with("<!--") {
+                    let end = rest.find("-->").map_or(text.len(), |e| i + e + 3);
+                    push(i, end, PieceKind::Comment);
+                    i = end;
+                    continue;
+                }
+            }
+            match bytes[i] {
+                b'<' => {
+                    in_tag = true;
+                    let start = i + 1 + usize::from(rest[1..].starts_with('/') || rest[1..].starts_with('?'));
+                    let len = text[start..].find(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':' || c == '.')).unwrap_or(text.len() - start);
+                    let name = &text[start..start + len];
+                    let kind = if name.chars().next().is_some_and(char::is_uppercase) { PieceKind::Type } else { PieceKind::Keyword };
+                    push(start, start + len, kind);
+                    i = start + len;
+                }
+                b'>' => {
+                    in_tag = false;
+                    i += 1;
+                }
+                b'"' | b'\'' if in_tag => {
+                    let quote = bytes[i] as char;
+                    let end = text[i + 1..].find(quote).map_or(text.len(), |e| i + 1 + e + 1);
+                    let inner = &text[i + 1..end.saturating_sub(1).max(i + 1)];
+                    let kind = if inner.starts_with('@') && inner.len() > 1 && inner[1..].chars().all(|c| c.is_alphanumeric() || c == '_') {
+                        PieceKind::Key
+                    } else if inner == "true" || inner == "false" {
+                        PieceKind::Literal
+                    } else if !inner.is_empty() && inner.chars().all(|c| c.is_ascii_digit() || c == ',' || c == '.') {
+                        PieceKind::Number
+                    } else {
+                        PieceKind::Text
+                    };
+                    push(i, end, kind);
+                    // A slot inside a text: `{customer.name}`.
+                    if kind == PieceKind::Text {
+                        let mut at = i + 1;
+                        while let Some(open) = text[at..end].find('{') {
+                            let Some(close) = text[at + open..end].find('}') else { break };
+                            let (from, to) = (at + open, at + open + close + 1);
+                            push(from, to, PieceKind::Slot);
+                            at = to;
+                        }
+                    }
+                    i = end;
+                }
+                c if in_tag && (c as char).is_alphabetic() => {
+                    let len = rest.find(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':' || c == '-')).unwrap_or(rest.len());
+                    push(i, i + len, PieceKind::Name);
+                    i += len;
+                }
+                _ => i += 1,
+            }
+        }
+    }
+    pieces
+}

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A widget-first page: placed on a 12-column snap grid. -->
+<Window class="counter.CustomerCard" title="@customerCardTitle">
+  <Content name="main" at="1,1" span="12" rows="13">
+    <View name="CustomerCardView" />
+  </Content>
+</Window>

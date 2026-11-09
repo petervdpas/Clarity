@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The collection, with the album opened (a double click or Enter) in the
+     editor that slides out from the right; the table adds and removes albums. -->
+<Window class="music.AlbumBrowse" title="@albumBrowseTitle" onopen="filterChanged" onreturn="windowReturned">
+  <Content name="main" at="1,1" span="12" rows="11">
+    <View name="AlbumBrowseView" />
+  </Content>
+  <Slideout name="albumSlide" at="1,1" span="12" rows="11" caption="@albumSlideout" resizable="true" slideWidth="980" pinnable="true" max="1400" min="700">
+    <Content name="albumSlideContent" at="1,1" span="12" rows="11">
+      <View name="AlbumEditor" onsaved="filterChanged" />
+    </Content>
+  </Slideout>
+</Window>

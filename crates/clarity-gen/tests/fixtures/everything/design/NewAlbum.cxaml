@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Dialog class="everything.NewAlbum" gives="Album">
+  <Data name="album" type="Album" />
+  <Steps name="wizard" at="1,1" span="12" rows="8" onnext="checkStep" onfinish="done">
+    <Step title="@title">
+      <Textbox name="titleBox" at="1,1" span="6" bind="album.title" />
+    </Step>
+    <Step title="@copies">
+      <Number name="copiesBox" at="1,1" span="4" bind="album.copies" />
+    </Step>
+    <Step title="@format">
+      <Dropdown name="formatBox" at="1,1" span="4" bind="album.format" />
+    </Step>
+  </Steps>
+</Dialog>

@@ -351,6 +351,36 @@ pub fn repository_browser(repo: &Path) -> Option<PathBuf> {
     browser_complete(&folder).then_some(folder)
 }
 
+/// The newest change of the files a source folder holds, inside it however deep.
+fn newest_in(folder: &Path) -> Option<std::time::SystemTime> {
+    let mut newest = None;
+    let Ok(entries) = std::fs::read_dir(folder) else { return None };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let when = if path.is_dir() { newest_in(&path) } else { entry.metadata().and_then(|m| m.modified()).ok() };
+        if when > newest {
+            newest = when;
+        }
+    }
+    newest
+}
+
+/// The sources Clarity.UI's browser files are built from, in Clarity's repository.
+pub const BROWSER_SOURCES: [&str; 5] = ["runtimes/rust-ui/src", "runtimes/rust-ui/catalog", "runtimes/rust-ui-browser/src", "runtimes/rust-ui-browser/js", "runtimes/rust/src"];
+
+/// Why the browser files Clarity's repository built are behind its source:
+/// what changed in Clarity.UI since they were built does not show in the
+/// IDE's design and preview until they are built again. None while they are
+/// as new as the source (or are not built, which `repository_browser` says).
+pub fn stale_browser(repo: &Path) -> Option<String> {
+    let built = repo.join("target").join("clarity-ui-browser").join("clarity-ui.wasm");
+    let built_at = std::fs::metadata(&built).and_then(|m| m.modified()).ok()?;
+    let newest = BROWSER_SOURCES.iter().filter_map(|s| newest_in(&repo.join(s))).max()?;
+    (newest > built_at).then(|| {
+        "Clarity.UI's browser files are older than its source, so the design and preview do not show what changed since. Rebuild them (runtimes/rust-ui-browser/build.sh)?".to_string()
+    })
+}
+
 /// The folder Clarity's repository makes of the library it built (a
 /// Clarity run from source, which has no installer's folder):
 /// `<repo>/target/clarity-ui`, with the header from runtimes/rust-ui-ffi

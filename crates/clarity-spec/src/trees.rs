@@ -251,3 +251,88 @@ pub fn lowered(project: &Project) -> Project {
     }
     out
 }
+
+/// Rows a tree of levels shows where there is no data, in the designer and
+/// the preview: two records of each level under the first record of the
+/// level around it, a group's heading over its rows, each label the entity's
+/// name and number. Each row as the tree's record holds it: key, parent, label, kind.
+pub fn sample_rows(project: &Project, levels: &[TreeLevel]) -> Vec<serde_json::Map<String, serde_json::Value>> {
+    fn row(key: &str, parent: &str, label: &str, kind: &str) -> serde_json::Map<String, serde_json::Value> {
+        let mut r = serde_json::Map::new();
+        r.insert("key".into(), key.into());
+        r.insert("parent".into(), parent.into());
+        r.insert("label".into(), label.into());
+        r.insert("kind".into(), kind.into());
+        r
+    }
+    fn walk(project: &Project, levels: &[TreeLevel], parent: &str, depth: usize, out: &mut Vec<serde_json::Map<String, serde_json::Value>>) {
+        if depth > 6 {
+            return;
+        }
+        for level in levels {
+            if let Some(heading) = &level.group {
+                let key = format!("{parent}/{}", heading.trim_start_matches('@'));
+                let mut inner = Vec::new();
+                walk(project, &level.levels, &key, depth, &mut inner);
+                if !inner.is_empty() {
+                    let text = key_text(project, heading.trim_start_matches('@'));
+                    out.push(row(&key, parent, if text.is_empty() { heading } else { &text }, ""));
+                    out.extend(inner);
+                }
+                continue;
+            }
+            let Some(entity) = &level.entity else { continue };
+            for n in 1..=2 {
+                let key = format!("{parent}/{entity}{n}");
+                out.push(row(&key, parent, &format!("{entity} {n}"), entity));
+                // The levels inside show under the first record only, so the sample stays short.
+                if n == 1 {
+                    walk(project, &level.levels, &key, depth + 1, out);
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(project, levels, "", 0, &mut out);
+    // The top's rows stand under no row.
+    for r in &mut out {
+        if r.get("parent").and_then(|p| p.as_str()) == Some("") {
+            r.insert("parent".into(), "".into());
+        }
+    }
+    out
+}
+
+/// The sample rows of every tree of levels in the project, by the data that holds them (`modelTreeRows`).
+pub fn sample_data(project: &Project) -> std::collections::BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>> {
+    let mut out = std::collections::BTreeMap::new();
+    fn walk(project: &Project, widgets: &[Widget], out: &mut std::collections::BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>>) {
+        for w in widgets {
+            if w.props.kind == WidgetKind::Tree
+                && !w.levels.is_empty()
+                && let Some(name) = &w.props.name
+            {
+                out.insert(format!("{name}Rows"), sample_rows(project, &w.levels));
+            }
+            walk(project, &w.children, out);
+            for page in &w.pages {
+                walk(project, &page.children, out);
+            }
+        }
+    }
+    for page in project.pages() {
+        walk(project, &page.widgets, &mut out);
+        for sidebar in &page.frame.sidebars {
+            walk(project, &sidebar.widgets, &mut out);
+        }
+    }
+    out
+}
+
+/// `widgets` with each tree of levels as the tree of its rows, as `lowered` makes it, for showing them.
+pub fn lowered_widgets(_project: &Project, widgets: &[Widget]) -> Vec<Widget> {
+    let mut out = widgets.to_vec();
+    let mut found = Vec::new();
+    take_trees(&mut out, &mut found);
+    out
+}

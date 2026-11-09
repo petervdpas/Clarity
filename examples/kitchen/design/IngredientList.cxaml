@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What goes into the recipe, in order; Add and the trash edit the list. -->
+<View class="kitchen.IngredientList">
+  <Data name="ingredientsOf" type="Recipe" />
+  <Data name="ingredients" type="list&lt;Ingredient&gt;" />
+  <Table name="ingredientTable" at="1,1" span="8" rows="13" bind="ingredients" columns="name, amount" edit="name, amount" widths="{&quot;amount&quot;:200,&quot;name&quot;:300}" add="true" remove="true" confirm="true" reorder="position" onadd="addIngredient" onremove="removeIngredient" onchange="ingredientChanged" onreorder="ingredientsMoved" />
+</View>

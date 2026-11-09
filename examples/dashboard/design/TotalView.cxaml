@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What all sales bring in. -->
+<View class="dashboard.TotalView">
+  <Data name="total" type="decimal" />
+  <Heading name="totalHeading" at="1,1" span="12" caption="@totalHeading" />
+  <Display name="totalBox" at="1,2" span="12" rows="3" bind="total" digits="9" />
+</View>

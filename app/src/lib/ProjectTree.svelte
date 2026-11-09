@@ -80,12 +80,12 @@
   const files = $derived(preview.project.files);
   /** Windows in file order, the main window first. */
   const windows = $derived.by(() => {
-    const all = files.flatMap((f) => f.pages.filter((page) => page.kind !== "view").map((page) => ({ page, module: f.module?.name ?? "" })));
+    const all = files.flatMap((f) => f.pages.filter((page) => page.kind !== "view" && page.kind !== "toolbox").map((page) => ({ page, module: f.module?.name ?? "" })));
     const main = app?.main?.name;
     return all.toSorted((a, b) => Number(b.page.name.name === main) - Number(a.page.name.name === main));
   });
-  /** Views in file order: pages a window's slide-out shows. */
-  const views = $derived(files.flatMap((f) => f.pages.filter((page) => page.kind === "view").map((page) => ({ page, module: f.module?.name ?? "" }))));
+  /** Views in file order: pages a window's content shows; a toolbox, which a canvas shows, is one too. */
+  const views = $derived(files.flatMap((f) => f.pages.filter((page) => page.kind === "view" || page.kind === "toolbox").map((page) => ({ page, module: f.module?.name ?? "" }))));
   const entities = $derived(files.flatMap((f) => f.entities.filter((e) => !e.settings).map((entity) => ({ entity, module: f.module?.name ?? "" }))));
   const enums = $derived(files.flatMap((f) => f.enums.map((decl) => ({ decl, module: f.module?.name ?? "" }))));
   const themes = $derived(files.flatMap((f) => f.themes.map((theme) => ({ theme, module: f.module?.name ?? "" }))));
@@ -173,11 +173,12 @@
       <button
         class="row"
         class:current={is("window", page.name.name)}
-        title="{page.name.name} in module {module}: shown in a window's slide-out"
+        title={page.kind === "toolbox" ? `${page.name.name} in module ${module}: the tools of a canvas` : `${page.name.name} in module ${module}: shown in a window's content`}
         onclick={() => onwindow(page)}
         oncontextmenu={(e) => menu(e, { kind: "window", name: page.name.name })}
       >
         {page.name.name}
+        {#if page.kind === "toolbox"}<span class="note">toolbox</span>{/if}
       </button>
     {:else}
       <p class="empty">No views yet.</p>

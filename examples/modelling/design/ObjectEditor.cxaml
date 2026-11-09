@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A version of a data object: what it is, its properties in order with all
+     they say, and the C# class and interface the engine writes for it. It
+     tells the window when it saved. -->
+<View class="modelling.ObjectEditor" columns="8">
+  <Data name="editedObject" type="DataObject" />
+  <Data name="editedVersion" type="ClassDefinition" />
+  <Data name="properties" type="list&lt;Property&gt;" />
+  <Data name="picked" type="Property" />
+  <Data name="classText" type="text" />
+  <Data name="interfaceText" type="text" />
+  <Data name="apiUses" type="list&lt;ApiUse&gt;" />
+  <Tells message="saved" />
+  <Tabs name="objectTabs" at="1,1" span="8" rows="14">
+    <Tab title="@objectTab">
+      <Label name="objectNameLabel" at="1,1" span="2" caption="@objectNameCaption" for="objectNameBox" />
+      <Textbox name="objectNameBox" at="3,1" span="3" bind="editedObject.name" placeholder="@objectNamePlaceholder" />
+      <Dropdown name="objectKindBox" at="6,1" span="2" bind="editedObject.kind" />
+      <Checkbox name="objectKeyedBox" at="8,1" span="1" caption="@objectKeyedLabel" bind="editedObject.keyed" />
+      <Label name="objectSummaryLabel" at="1,2" span="2" caption="@objectSummaryCaption" for="objectSummaryBox" />
+      <Memo name="objectSummaryBox" at="3,2" span="6" rows="2" bind="editedObject.summary" placeholder="@objectSummaryPlaceholder" />
+      <Label name="versionNumberLabel" at="1,4" span="2" caption="@versionNumberCaption" for="versionNumberBox" />
+      <Spinbox name="versionNumberBox" at="3,4" span="2" bind="editedVersion.number" max="99" min="1" />
+      <Textbox name="versionObsoleteBox" at="5,4" span="4" bind="editedVersion.obsolete" placeholder="@obsoletePlaceholder" />
+      <Table name="propertyTable" at="1,5" span="8" rows="5" bind="properties" columns="name, kind, nullable" edit="name, kind, nullable" widths="{&quot;kind&quot;:170,&quot;name&quot;:200}" add="true" remove="true" confirm="true" reorder="position" onadd="addPropertyClicked" onremove="removePropertyClicked" onchange="propertyChanged" onreorder="propertiesMoved" onselect="propertyPicked" />
+      <Label name="targetLabel" at="1,11" span="2" caption="@targetCaption" for="targetBox" />
+      <Dropdown name="targetBox" at="3,11" span="3" bind="picked.target" placeholder="@targetPlaceholder" onchange="pickedChanged" />
+      <Dropdown name="choiceBox" at="6,11" span="3" bind="picked.choice" placeholder="@choicePlaceholder" onchange="pickedChanged" />
+      <Label name="initialLabel" at="1,12" span="2" caption="@initialCaption" for="initialBox" />
+      <Textbox name="initialBox" at="3,12" span="2" bind="picked.initial" placeholder="@initialPlaceholder" onleave="pickedChanged" />
+      <Textbox name="computedBox" at="5,12" span="4" bind="picked.computed" placeholder="@computedPlaceholder" onleave="pickedChanged" />
+      <Textbox name="propertyObsoleteBox" at="3,13" span="6" bind="picked.obsolete" placeholder="@obsoletePlaceholder" onleave="pickedChanged" />
+      <Button name="newVersionButton" at="1,14" span="3" caption="@newVersionCaption" icon="plus" onclick="newVersionClicked" />
+      <Button name="saveObjectButton" at="7,14" span="2" caption="@saveObjectCaption" default="true" onclick="saveObjectClicked" />
+    </Tab>
+    <Tab title="@classTab">
+      <Memo name="classBox" at="1,1" span="8" rows="13" bind="classText" code="csharp" copy="true" readonly="true" />
+    </Tab>
+    <Tab title="@interfaceTab">
+      <Memo name="interfaceBox" at="1,1" span="8" rows="13" bind="interfaceText" code="csharp" copy="true" readonly="true" />
+    </Tab>
+    <Tab title="@tablesTab">
+      <Table name="apiUseGrid" at="1,1" span="8" rows="13" bind="apiUses" columns="version, table, apis" widths="{&quot;apis&quot;:280,&quot;table&quot;:280,&quot;version&quot;:90}" striped="true" />
+    </Tab>
+  </Tabs>
+</View>

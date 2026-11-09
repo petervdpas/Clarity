@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window Items shows: its parts, data and code. -->
+<View class="stock.ItemsView">
+  <Data name="items" type="list&lt;Item&gt;" />
+  <Table name="grid" at="1,1" span="12" rows="10" bind="items" columns="name, count, low" edit="name, count, low" resizable="true" sortable="true" add="true" remove="true" confirm="true" onadd="addClicked" onremove="deleteClicked" onchange="itemChanged" />
+</View>

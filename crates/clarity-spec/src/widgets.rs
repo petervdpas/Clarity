@@ -1721,7 +1721,7 @@ pub fn widget_line(props: &WidgetProps) -> String {
         }
     } else if props.kind == WidgetKind::Slideout {
         // A slide-out has none either: it comes in from its side, this wide (or high).
-        if let Some(side) = props.side.filter(|s| *s != crate::model::SlideSide::Right) {
+        if let Some(side) = props.side {
             parts.push(format!("side {}", side.keyword()));
         }
         if let Some(part) = &props.beside {
@@ -1890,7 +1890,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
         parts.push(format!("brush {brush}"));
     }
     if let Some(ink) = &props.ink {
-        parts.push(format!("ink {ink}"));
+        // A color of the theme as its name, any other as a string: `ink accent`, `ink "#8a5a2b"`.
+        let shown = if is_identifier(ink) { ink.clone() } else { crate::lexer::quote(ink) };
+        parts.push(format!("ink {shown}"));
     }
     if let Some(page) = props.page {
         parts.push(format!("page {page}"));

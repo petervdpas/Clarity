@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A book's cover, painted with the tools of a paint program's toolbox. -->
+<Window class="writing.CoverDesk" title="@coverTitle" width="1100" height="860">
+  <Content name="main" at="1,1" span="12" rows="16">
+    <View name="CoverDeskView" />
+  </Content>
+</Window>

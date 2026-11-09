@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The rounds played, the most orbs first. -->
+<View class="orbs.BestScores">
+  <Data name="scores" type="list&lt;Score&gt;" />
+  <Table name="best" at="1,1" span="6" rows="12" bind="scores" columns="player, points, played" order="{&quot;desc&quot;:true,&quot;field&quot;:&quot;points&quot;}" />
+</View>

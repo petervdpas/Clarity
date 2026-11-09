@@ -46,29 +46,6 @@ app Walker
         button @languageCaption name languageButton icon "languages" on click -> language
         button @themeCaption name themeButton on click -> theme
 
-page Field: window
-    title @fieldTitle
-    size 820 x 520
-    on open: fieldOpened
-
-    content name main at 1,1 span 12 rows 10
-        view FieldView
-
-// What the window Field shows: its parts, data and code.
-page FieldView: view
-    data x: integer, default 10
-    data step: integer, default 1
-    data heading: integer, default 1
-
-    canvas name field at 1,1 span 12 rows 8 units 200 x 100 on draw: drawField
-    button @walkCaption name walkButton at 1,9 span 2 on click: walkClicked
-    button @stopCaption name stopButton at 3,9 span 2 on click: stopClicked
-    label @speedLabel name speedLabel at 5,9 span 2 for speedSlider
-    slider name speedSlider at 7,9 span 6 bind settings.speed min 1 max 6 step 1
-    label @walkerNameLabel name walkerNameLabel at 1,10 span 2 for walkerNameBox
-    textbox name walkerNameBox at 3,10 span 10 bind settings.walkerName placeholder @walkerNamePlaceholder
-    timer name clock every 0.1 on tick: stepped
-
 code Field
     handler fieldOpened
         clock.enabled = false

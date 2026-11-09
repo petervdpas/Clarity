@@ -8,6 +8,7 @@ Colors, snippets and a file icon for Clarity files (`.clarity`), the language of
 - **Editing**: `//` comments a line out (Ctrl+/), brackets and quotes close themselves, and a block line (`page`, `handler`, `if`, ...) indents the next.
 - **Snippets**: `page`, `entity`, `enum`, `code`, `handler`, `function`, `if`, `for`, `engine` (an engine written in Clarity) and `translation` (a language file).
 - **A file icon** for `.clarity` files.
+- **Windows and views**: a project's `.cxaml` files (in its `design` folder) open as XML, colored and folded.
 
 ```clarity
 engine Dice

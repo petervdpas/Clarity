@@ -198,26 +198,6 @@ app Pills
     title @pillsTitle
     main Play
 
-page Play: window
-    title @playTitle
-    size 760 x 600
-
-    content name main at 1,1 span 12 rows 11
-        view PlayView
-
-// What the window Play shows: its parts, data and code.
-page PlayView: view
-    data score: integer
-    data balls: integer, default 3
-
-    canvas name field at 1,1 span 9 rows 10 units 160 x 100 runs Breaker on hit: hit on lost: lost on over: over
-    label @scoreLabel name scoreLabel at 10,1 span 3
-    display name scoreShown at 10,2 span 3 rows 2 bind score digits 3
-    label @ballsLabel name ballsLabel at 10,4 span 3
-    display name ballsShown at 10,5 span 3 rows 2 bind balls digits 1
-    button @startCaption name startButton at 10,7 span 3 on click: startGame
-    label @howLabel name howLabel at 1,11 span 12
-
 code PlayView
     handler startGame
         score = 0

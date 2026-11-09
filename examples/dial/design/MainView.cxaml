@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window Main shows: its parts, data and code. -->
+<View class="dial.MainView">
+  <Data name="speed" type="integer" default="80" />
+  <Canvas name="dial" at="1,1" span="12" rows="7" none="surface" ondraw="drawDial" />
+  <Button name="slower" at="1,8" span="6" caption="@slowerCaption" key="-" onclick="change(-10)" />
+  <Button name="faster" at="7,8" span="6" caption="@fasterCaption" key="+" onclick="change(10)" />
+  <Slider name="speedSlider" at="1,9" span="12" bind="speed" max="200" min="0" step="10" onchange="speedSet" />
+</View>

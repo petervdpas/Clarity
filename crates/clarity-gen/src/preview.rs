@@ -63,8 +63,9 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
     // Texts that show the app's version carry it, as in the program.
     let filled = clarity_spec::translations::with_app_slots(project);
     let project = &filled;
-    let mut placed = if design { project.clone() } else { clarity_spec::views::placed(project) };
-    // Content has no look of its own, so the designer draws each view in it as it looks; its parts are designed in the view.
+    // The designer draws a window as it looks: each view in its content (designed in place
+    // when it stands in the window's file), and a tree of levels as the tree of its rows.
+    let mut placed = if design { clarity_spec::trees::lowered(project) } else { clarity_spec::views::placed(project) };
     if design {
         show_views_in_content(&mut placed, project);
     }
@@ -82,7 +83,8 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
     };
     if let Some(view) = view {
         let Ok(mut files) = serde_json::from_str::<Value>(&text) else { return text };
-        let write = || crate::web_windows::window_markup_rows(view, project.row_height);
+        let module = project.files.iter().find(|f| f.pages.iter().any(|p| std::ptr::eq(p, view))).and_then(|f| f.module.as_ref()).map_or("", |m| m.name.as_str());
+        let write = || crate::web_windows::window_markup_in(view, module, project.row_height);
         let markup = if design { crate::web_windows::designed_showing(showing, write) } else { write() };
         if let Some(windows) = files.get_mut("windows").and_then(Value::as_object_mut) {
             windows.insert(view.name.name.clone(), Value::String(markup));
@@ -99,46 +101,44 @@ pub fn files_json(project: &Project, title: &str, shown: &Shown, design: bool, s
     files.to_string() + "\n"
 }
 
-/// Fills each content of `placed` with the parts of the views it lists, as
-/// shown only: they carry no design item, since they are designed in their view.
+/// Fills each content of `placed` with the parts of the views it lists, so
+/// the window is designed as it looks: a view of the window's own file
+/// keeps its places; one of its own file (a `.cxaml`) has its parts' places
+/// as designer's items of that file (`cxaml::design_items`), so an edit of
+/// one changes the view's file.
 fn show_views_in_content(placed: &mut Project, project: &Project) {
-    fn shown_only(widgets: &mut [clarity_spec::model::Widget]) {
-        for w in widgets {
-            w.span.start = crate::web_windows::SHOWN_ONLY;
-            shown_only(&mut w.children);
-            for page in &mut w.pages {
-                page.span.start = crate::web_windows::SHOWN_ONLY;
-                shown_only(&mut page.children);
-            }
-        }
-    }
-    fn fill(widgets: &mut [clarity_spec::model::Widget], project: &Project, depth: usize) {
+    fn fill(widgets: &mut [clarity_spec::model::Widget], project: &Project, own: &str, depth: usize) {
         for w in widgets {
             if w.props.kind == clarity_spec::widgets::WidgetKind::Content && depth < 8 {
                 for page in &mut w.pages {
-                    let view = page.view.as_deref().and_then(|v| clarity_spec::views::find(project.files.iter(), v));
-                    if let Some(view) = view
+                    let found = page.view.as_deref().and_then(|v| {
+                        project.files.iter().enumerate().find_map(|(i, f)| f.pages.iter().find(|p| p.name.name == v && p.kind == clarity_spec::model::PageKind::View).map(|p| (i, f.path.as_str(), p)))
+                    });
+                    if let Some((index, path, view)) = found
                         && page.children.is_empty()
                     {
-                        let mut parts = view.widgets.clone();
-                        fill(&mut parts, project, depth + 1);
-                        shown_only(&mut parts);
+                        let mut parts = clarity_spec::trees::lowered_widgets(project, &view.widgets);
+                        if path != own {
+                            clarity_spec::cxaml::design_items(&mut parts, index);
+                        }
+                        fill(&mut parts, project, own, depth + 1);
                         page.children = parts;
                         page.columns.get_or_insert(view.columns);
                     }
                 }
             }
-            fill(&mut w.children, project, depth);
+            fill(&mut w.children, project, own, depth);
             for page in &mut w.pages {
-                fill(&mut page.children, project, depth);
+                fill(&mut page.children, project, own, depth);
             }
         }
     }
     for file in &mut placed.files {
+        let own = file.path.clone();
         for page in &mut file.pages {
-            fill(&mut page.widgets, project, 0);
+            fill(&mut page.widgets, project, &own, 0);
             for sidebar in &mut page.frame.sidebars {
-                fill(&mut sidebar.widgets, project, 0);
+                fill(&mut sidebar.widgets, project, &own, 0);
             }
         }
     }
@@ -160,6 +160,8 @@ static NEXT_INSTANCE: AtomicU64 = AtomicU64::new(1);
 pub struct PreviewProgram {
     project: Project,
     samples: BTreeMap<String, Vec<Row>>,
+    /// The rows each tree of levels shows, by the data that holds them.
+    tree_rows: BTreeMap<String, Vec<Map<String, Value>>>,
     displays: BTreeMap<String, Vec<String>>,
     main: String,
     /// The popovers shown open, by name: the one picked in the designer.
@@ -169,6 +171,7 @@ pub struct PreviewProgram {
 impl PreviewProgram {
     /// The program of `project`, starting with the window `main`.
     pub fn new(project: Project, main: &str) -> PreviewProgram {
+        let tree_rows = clarity_spec::trees::sample_data(&project);
         let mut placed = clarity_spec::views::placed(&project);
         // A view the designer shows on its own is its window here, with its own code.
         for (file, own) in project.files.iter().zip(placed.files.iter_mut()) {
@@ -180,7 +183,7 @@ impl PreviewProgram {
         let project = placed;
         let samples = clarity_spec::sample::sample_data(&project);
         let displays = clarity_spec::sample::display_values(&project);
-        PreviewProgram { project, samples, displays, main: main.to_string(), open: Vec::new() }
+        PreviewProgram { project, samples, tree_rows, displays, main: main.to_string(), open: Vec::new() }
     }
 
     /// The popovers named in `open` show open in their windows, as the designer shows the one picked.
@@ -252,6 +255,11 @@ impl PreviewProgram {
         for decl in decls {
             let name = decl.name.name.clone();
             if data.contains_key(&name) {
+                continue;
+            }
+            // A tree of levels shows sample rows of its levels.
+            if let Some(rows) = self.tree_rows.get(&name) {
+                data.insert(name, Value::Array(rows.iter().cloned().map(Value::Object).collect()));
                 continue;
             }
             let value = match &decl.of {

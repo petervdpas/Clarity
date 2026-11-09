@@ -58,6 +58,7 @@ pub fn rename(
 
     let mut changed = Vec::new();
     for file in &project.files {
+        let original_path = file.path.clone();
         let this = file.module.as_ref().map(|m| m.name.as_str());
         let sees = this == module || file.uses.iter().any(|u| Some(u.name.as_str()) == module);
         if !sees {
@@ -71,6 +72,20 @@ pub fn rename(
         if taken {
             return Err(format!("'{new}' is already declared in module '{}'", this.unwrap_or("")));
         }
+        let Some(text) = source(&file.path) else {
+            return Err(format!("cannot read {}", file.path));
+        };
+        // A window's or view's own file (`.cxaml`) is renamed in its page's
+        // text of Clarity, and written back as markup.
+        let (text, block) = if crate::cxaml::is_page_file(&file.path) {
+            let (page, _) = crate::cxaml::read_page(&text, &file.path);
+            let Some(page) = page else { return Err(format!("cannot read {}", file.path)) };
+            let block = format!("module {}\n{}", this.unwrap_or("m"), crate::cxaml::page_block(&page));
+            (block.clone(), Some((crate::parser::parse(&block, "").0, text)))
+        } else {
+            (text, None)
+        };
+        let file = block.as_ref().map_or(file, |(parsed, _)| parsed);
         // Each place to change: where it is, what it says now, and what it
         // says after.
         let mut spans: Vec<(usize, usize, String, String)> = references(file, kind, old)
@@ -97,19 +112,22 @@ pub fn rename(
         if spans.is_empty() {
             continue;
         }
-        let Some(mut text) = source(&file.path) else {
-            return Err(format!("cannot read {}", file.path));
-        };
+        let mut text = text;
         spans.sort_unstable();
         spans.dedup();
+        let path = block.as_ref().map_or(file.path.clone(), |_| String::new());
         for (start, end, was, now) in spans.into_iter().rev() {
             if text.get(start..end) != Some(was.as_str()) {
-                return Err(format!("{} changed while renaming; try again", file.path));
+                return Err(format!("{path} changed while renaming; try again"));
             }
             text.replace_range(start..end, &now);
         }
+        let text = match block {
+            Some((_, markup)) => crate::cxaml::rewritten(&markup, &text).map_err(|e| e.0)?,
+            None => text,
+        };
         changed.push(Renamed {
-            path: file.path.clone(),
+            path: original_path.clone(),
             text,
         });
     }

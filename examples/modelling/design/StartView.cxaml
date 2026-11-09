@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the middle shows before anything is picked. -->
+<View class="modelling.StartView" columns="8">
+  <Heading name="startHeading" at="1,1" span="8" caption="@workspaceTitle" />
+  <Label name="pickInTree" at="1,2" span="8" caption="@pickInTree" />
+</View>

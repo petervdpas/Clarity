@@ -204,7 +204,7 @@ fn the_page_carries_the_renderer() {
     has(file(&files, "browser/index.html"), "<canvas id=\"clarity-ui\"></canvas>");
     let carried = file(&files, "browser/clarity/files.json");
     has(carried, "\"windows\":{\"OrderForm\":\"<?xml");
-    has(carried, "<Window name=\\\"OrderForm\\\">");
+    has(carried, "<Window class=\\\"sales.OrderForm\\\"");
     has(carried, "\"themes\":{");
     has(file(&files, "CMakeLists.txt"), "clarity_carry(shop\n  BROWSER browser)");
     assert!(!files.iter().any(|f| f.path.starts_with("windows/") || f.path.starts_with("ui/")), "the windows go in files.json alone");

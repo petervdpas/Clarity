@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window Main shows: its parts, data and code. -->
+<View class="videoplayer.MainView">
+  <Data name="clips" type="list&lt;Clip&gt;" />
+  <Data name="current" type="integer" />
+  <Data name="volume" type="integer" default="80" />
+  <Data name="played" type="decimal" />
+  <Data name="chosen" type="text" />
+  <Data name="shown" type="text" />
+  <Video name="screen" at="1,2" span="8" rows="9" source="welcome.mp4" volume="80" onend="clipEnded" onfail="clipFailed" />
+  <Timer name="ticker" at="1,1" span="1" every="0.5" ontick="tickerTicked" />
+  <Label name="folderLabel" at="1,1" span="2" caption="@folderLabel" for="videoFolderBox" />
+  <Folder name="videoFolderBox" at="3,1" span="10" bind="settings.videoFolder" onchange="folderChanged" />
+  <Table name="clipTable" at="9,2" span="4" rows="9" bind="clips" columns="title" resizable="true" sortable="true" onselect="clipSelected" onopen="playClicked" />
+  <Slider name="progressSlider" at="1,11" span="12" bind="played" max="1000" min="0" onchange="progressMoved" />
+  <Text name="shownText" at="1,12" span="4" bind="shown" />
+  <Label name="volumeLabel" at="5,12" span="1" caption="@volumeLabel" for="volumeSlider" />
+  <Slider name="volumeSlider" at="6,12" span="2" bind="volume" max="100" min="0" onchange="volumeChanged" />
+  <Button name="previousClip" at="8,12" span="1" caption="@previousCaption" onclick="previousClicked" />
+  <Button name="playClip" at="9,12" span="1" caption="@playCaption" default="true" onclick="playClicked" />
+  <Button name="pauseClip" at="10,12" span="1" caption="@pauseCaption" onclick="pauseClicked" />
+  <Button name="stopClip" at="11,12" span="1" caption="@stopCaption" onclick="stopClicked" />
+  <Button name="nextClip" at="12,12" span="1" caption="@nextCaption" onclick="nextClicked" />
+</View>

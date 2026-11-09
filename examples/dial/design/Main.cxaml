@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="dial.Main" title="@mainTitle" width="360" height="400">
+  <Content name="main" at="1,1" span="12" rows="9">
+    <View name="MainView" />
+  </Content>
+</Window>

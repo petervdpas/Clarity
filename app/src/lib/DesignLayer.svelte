@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { designLog } from "./designLog";
   // The designer's layer over the window Clarity.UI draws (DESIGN 8.1): a
   // box over each part, where the library drew it, to pick, move, size and
   // open the code of; each grid, to drop new parts and fields into, with
@@ -10,14 +11,14 @@
   import type { Page } from "@clarity/ui/generated/Page.ts";
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
   import { gapOf, rowAt } from "@clarity/ui/screen/grid.ts";
-  import { locateWidget, widgetInfo, withProps } from "@clarity/ui/screen/pages.ts";
+  import { contentViews, locateWidget, widgetInfo, withProps } from "@clarity/ui/screen/pages.ts";
   import type { Layout } from "./clarityWindow";
   import { cellsOf, layerOf, placeIn, type LayerGrid, type LayerPart } from "./designLayer";
   import { pageDesigner } from "./pageDesignerStore.svelte";
 
   let { layout, page, preview, appFrame = null }: { layout: Layout | null; page: Page; preview: Preview; appFrame?: Frame | null } = $props();
 
-  const layer = $derived(layout ? layerOf(layout, page, appFrame) : { parts: [], grids: [] });
+  const layer = $derived(layout ? layerOf(layout, page, appFrame, contentViews(preview, page)) : { parts: [], grids: [] });
   const DOCKS = ["top", "bottom", "left", "right"] as const;
 
   /** How high a row of a grid is when it holds nothing: on a page with its own cells (`grid 56 columns rows 10`) every grid's, else the project's. */
@@ -105,6 +106,7 @@
 
   function pressResize(e: PointerEvent, part: LayerPart) {
     const found = locateWidget(preview, page, part.item);
+    designLog("resize press on item", part.item, found ? `found ${found.widget.props.kind} ${found.widget.props.width}x${found.widget.props.height}` : "NOT FOUND in the page");
     if (!found) return;
     const p = found.widget.props;
     pageDesigner.press(e, { kind: "resize", item: part.item, props: p, label: `${p.width} x ${p.height}` }, () => (pageDesigner.selected = part.item));
@@ -154,6 +156,7 @@
     {:else}
     <div
       class="part"
+      class:content={part.kind === "content"}
       class:selected
       class:lifted={pageDesigner.drag?.kind === "move" && pageDesigner.drag.item === part.item}
       data-widget={part.item}
@@ -167,7 +170,12 @@
         pageDesigner.openPartCode(part.item);
       }}
     >
-      <span class="tag">{widgetInfo(preview, part.kind as never)?.name ?? part.kind}</span>
+      {#if part.kind === "content"}
+        <!-- Content has no look of its own: the designer marks it, and names the view it shows. -->
+        <span class="tag content-tag">content {part.name ?? ""}: {part.pages[pageDesigner.activeTabs[part.item] ?? 0]?.title ?? ""}</span>
+      {:else}
+        <span class="tag">{widgetInfo(preview, part.kind as never)?.name ?? part.kind}</span>
+      {/if}
       {#if selected}
         <div class="resize" role="presentation" title="Drag to resize" onpointerdown={(e) => pressResize(e, part)}></div>
       {/if}
@@ -186,8 +194,8 @@
         ></div>
       {/if}
     {/each}
-    {#if part.kind === "steps" && part.pages.length > 1}
-      <!-- A wizard's steps have no header to press: the designer gives each a button of its own. -->
+    {#if (part.kind === "steps" || part.kind === "content") && part.pages.length > 1}
+      <!-- A wizard's steps and a content's views have no header to press: the designer gives each a button of its own. -->
       <div class="page-chips" style="left: {part.box.x + part.box.width}px; top: {part.box.y}px;">
         {#each part.pages as shownPage, index (shownPage.item)}
           <button
@@ -195,7 +203,7 @@
             data-tab-switch="{part.item}:{index}"
             data-page={shownPage.item}
             title={shownPage.title ?? `Step ${index + 1}`}
-            onpointerdown={(e) => pressPage(e, part, index)}>{index + 1}</button
+            onpointerdown={(e) => pressPage(e, part, index)}>{part.kind === "content" ? (shownPage.title ?? index + 1) : index + 1}</button
           >
         {/each}
       </div>
@@ -263,6 +271,23 @@
 
   .part.selected {
     outline: 2px solid var(--code-keyword, var(--accent));
+  }
+
+  /* A window's content draws nothing itself: the designer always shows where it is. */
+  .part.content {
+    outline: 1px dashed color-mix(in srgb, var(--code-keyword, var(--accent)) 70%, transparent);
+    outline-offset: -1px;
+  }
+
+  .part.content.selected {
+    outline: 2px dashed var(--code-keyword, var(--accent));
+  }
+
+  .part.content .content-tag {
+    display: block;
+    top: 0;
+    border-radius: 0 0 3px 0;
+    opacity: 0.85;
   }
 
   .part.lifted {

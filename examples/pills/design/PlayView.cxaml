@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window Play shows: its parts, data and code. -->
+<View class="pills.PlayView">
+  <Data name="score" type="integer" />
+  <Data name="balls" type="integer" default="3" />
+  <Canvas name="field" at="1,1" span="9" rows="10" units="{&quot;height&quot;:100,&quot;width&quot;:160}" runs="Breaker" tells="[{&quot;handler&quot;:&quot;hit&quot;,&quot;tell&quot;:&quot;hit&quot;},{&quot;handler&quot;:&quot;lost&quot;,&quot;tell&quot;:&quot;lost&quot;},{&quot;handler&quot;:&quot;over&quot;,&quot;tell&quot;:&quot;over&quot;}]" none="surface" />
+  <Label name="scoreLabel" at="10,1" span="3" caption="@scoreLabel" />
+  <Display name="scoreShown" at="10,2" span="3" rows="2" bind="score" digits="3" />
+  <Label name="ballsLabel" at="10,4" span="3" caption="@ballsLabel" />
+  <Display name="ballsShown" at="10,5" span="3" rows="2" bind="balls" digits="1" />
+  <Button name="startButton" at="10,7" span="3" caption="@startCaption" onclick="startGame" />
+  <Label name="howLabel" at="1,11" span="12" caption="@howLabel" />
+</View>

@@ -10,23 +10,6 @@ app Dial
     title @dialTitle
     main Main
 
-page Main: window
-    title @mainTitle
-    size 360 x 400
-
-    content name main at 1,1 span 12 rows 9
-        view MainView
-
-// What the window Main shows: its parts, data and code.
-page MainView: view
-    data speed: integer, default 80
-
-    canvas name dial at 1,1 span 12 rows 7 on draw: drawDial
-    button @slowerCaption name slower at 1,8 span 6 key "-" on click: change(-10)
-    button @fasterCaption name faster at 7,8 span 6 key "+" on click: change(10)
-    // Or the speed set at once, in steps of 10.
-    slider name speedSlider at 1,9 span 12 bind speed min 0 max 200 step 10 on change: speedSet
-
 code MainView
     // The needle turns from 210 degrees at 0 km/h to -30 at 200, and
     // warns as it gets fast.

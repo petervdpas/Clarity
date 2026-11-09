@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A table of the adapter: its class, the blueprint it is filled from, its
+     columns, and the views API versions make on it, with their names, roles,
+     relations and enum columns. It tells the window when it saved. -->
+<View class="modelling.TableEditor" columns="8">
+  <Data name="editedTable" type="AdapterTable" />
+  <Data name="columns" type="list&lt;AdapterColumn&gt;" />
+  <Data name="blueprintPick" type="VersionPick" />
+  <Data name="tableViews" type="list&lt;ApiView&gt;" />
+  <Data name="pickedView" type="ApiView" />
+  <Data name="addTo" type="ApiPick" />
+  <Data name="rolesText" type="text" />
+  <Data name="relations" type="list&lt;ApiRelation&gt;" />
+  <Data name="apiEnums" type="list&lt;ApiEnum&gt;" />
+  <Tells message="saved" />
+  <Tabs name="tableTabs" at="1,1" span="8" rows="14">
+    <Tab title="@tableTab">
+      <Label name="tableNameCaption" at="1,1" span="2" caption="@tableNameLabel" for="tableNameBox" />
+      <Textbox name="tableNameBox" at="3,1" span="4" bind="editedTable.name" />
+      <Button name="saveTableButton" at="7,1" span="2" caption="@saveTableCaption" default="true" onclick="saveTableClicked" />
+      <Label name="tableClassCaption" at="1,2" span="2" caption="@tableClassLabel" for="tableClassBox" />
+      <Textbox name="tableClassBox" at="3,2" span="2" bind="editedTable.className" />
+      <Textbox name="tableNamespaceBox" at="5,2" span="4" bind="editedTable.namespace" placeholder="@tableNamespaceLabel" />
+      <Label name="blueprintCaption" at="1,3" span="2" caption="@tableBlueprintLabel" for="blueprintObjectBox" />
+      <Dropdown name="blueprintObjectBox" at="3,3" span="4" bind="blueprintPick.object" placeholder="@noBlueprintPlaceholder" onchange="blueprintChanged" />
+      <Spinbox name="blueprintNumberBox" at="7,3" span="2" bind="blueprintPick.number" max="99" min="1" onchange="blueprintChanged" />
+      <Table name="columnTable" at="1,4" span="8" rows="10" bind="columns" columns="name, kind, nullable" edit="name, kind, nullable" widths="{&quot;kind&quot;:170,&quot;name&quot;:260}" add="true" remove="true" confirm="true" reorder="position" onadd="addColumnClicked" onremove="removeColumnClicked" onchange="columnChanged" onreorder="columnsMoved" />
+    </Tab>
+    <Tab title="@viewsTab">
+      <Dropdown name="addToBox" at="1,1" span="4" bind="addTo.api" placeholder="@addToPlaceholder" />
+      <Button name="addViewButton" at="5,1" span="2" caption="@addViewCaption" icon="plus" onclick="addViewClicked" />
+      <Table name="tableViewTable" at="1,2" span="8" rows="4" bind="tableViews" columns="api, entity" widths="{&quot;api&quot;:120,&quot;entity&quot;:280}" remove="true" confirm="true" onremove="removeTableViewClicked" onselect="viewPicked" />
+      <Label name="viewEntityLabel" at="1,6" span="2" caption="@apiEntityNameLabel" for="viewEntityBox" />
+      <Textbox name="viewEntityBox" at="3,6" span="3" bind="pickedView.entity" onleave="pickedViewChanged" />
+      <Textbox name="viewClassBox" at="6,6" span="3" bind="pickedView.className" placeholder="@apiEntityClassLabel" onleave="pickedViewChanged" />
+      <Label name="rolesLabel" at="1,7" span="2" caption="@apiEntityRolesLabel" for="rolesBox" />
+      <Textbox name="rolesBox" at="3,7" span="6" bind="rolesText" placeholder="@rolesPlaceholder" onleave="rolesChanged" />
+      <Label name="viewPropertyLabel" at="1,8" span="2" caption="@apiEntityPropertyLabel" for="viewPropertyBox" />
+      <Textbox name="viewPropertyBox" at="3,8" span="3" bind="pickedView.propertyName" onleave="pickedViewChanged" />
+      <Textbox name="viewPluralBox" at="6,8" span="3" bind="pickedView.propertyPluralName" placeholder="@apiEntityPluralLabel" onleave="pickedViewChanged" />
+      <Label name="viewColumnsLabel" at="1,9" span="2" caption="@apiEntityViewLabel" for="viewColumnsBox" />
+      <Textbox name="viewColumnsBox" at="3,9" span="3" bind="pickedView.viewProperties" onleave="pickedViewChanged" />
+      <Textbox name="viewKeyBox" at="6,9" span="3" bind="pickedView.primaryKey" placeholder="@apiEntityKeyLabel" onleave="pickedViewChanged" />
+    </Tab>
+    <Tab title="@apiRelationsTab">
+      <Label name="relationsLabel" at="1,1" span="8" caption="@relationsCaption" />
+      <Table name="relationTable" at="1,2" span="8" rows="6" bind="relations" columns="kind, foreignEntity, foreignKey, propertyName, omitProperty" edit="kind, foreignEntity, foreignKey, propertyName, omitProperty" widths="{&quot;foreignEntity&quot;:190,&quot;foreignKey&quot;:170,&quot;kind&quot;:150,&quot;propertyName&quot;:150}" add="true" remove="true" confirm="true" reorder="position" onadd="addRelationClicked" onremove="removeRelationClicked" onchange="relationChanged" onreorder="relationsMoved" />
+      <Label name="enumColumnsLabel" at="1,8" span="8" caption="@enumColumnsCaption" />
+      <Table name="apiEnumTable" at="1,9" span="8" rows="5" bind="apiEnums" columns="propertyName, propertyType, sourcePath" edit="propertyName, propertyType, sourcePath" widths="{&quot;propertyName&quot;:200,&quot;propertyType&quot;:200,&quot;sourcePath&quot;:260}" add="true" remove="true" confirm="true" reorder="position" onadd="addApiEnumClicked" onremove="removeApiEnumClicked" onchange="apiEnumChanged" onreorder="apiEnumsMoved" />
+    </Tab>
+  </Tabs>
+</View>

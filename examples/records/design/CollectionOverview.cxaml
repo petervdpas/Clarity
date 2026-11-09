@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The collection at a glance: what it is on, when it is from, where the money went. -->
+<Window class="music.CollectionOverview" title="@collectionOverviewTitle" onopen="overviewOpened" onreturn="overviewOpened">
+  <Content name="main" at="1,1" span="12" rows="14">
+    <View name="CollectionOverviewView" />
+  </Content>
+</Window>

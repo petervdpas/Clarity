@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="waves.Water" title="@waterTitle" width="980" height="640">
+  <Content name="main" at="1,1" span="12" rows="12">
+    <View name="WaterView" />
+  </Content>
+  <Slideout name="keptPanel" at="1,1" span="6" rows="12" caption="@keptSlideout" resizable="true" slideWidth="360" pinnable="true" max="700" min="260">
+    <Content name="keptPanelContent" at="1,1" span="6" rows="12">
+      <View name="KeptSwells" />
+    </Content>
+  </Slideout>
+</Window>

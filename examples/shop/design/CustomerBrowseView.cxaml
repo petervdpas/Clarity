@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window CustomerBrowse shows: its parts, data and code. -->
+<View class="customers.CustomerBrowseView">
+  <Data name="customers" type="list&lt;Customer&gt;" />
+  <Label name="searchLabel" at="1,1" span="2" caption="@searchLabel" for="searchBox" />
+  <Textbox name="searchBox" at="3,1" span="10" placeholder="@searchPlaceholder" onchange="filterChanged" />
+  <Table name="grid" at="1,2" span="12" rows="9" bind="customers" columns="name, email, kind, creditLimit, active, tags" sortable="true" add="true" remove="true" confirm="true" page="20" onadd="newClicked" onremove="removeClicked" onopen="openClicked" />
+</View>

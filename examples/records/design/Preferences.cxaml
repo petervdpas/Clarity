@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Dialog class="records.Preferences" title="@preferencesTitle">
+  <Label name="exportsFolderLabel" at="1,1" span="3" caption="@exportsFolderSetting" for="exportsFolder" />
+  <Folder name="exportsFolder" at="4,1" span="9" bind="settings.exportsFolder" />
+  <Help name="exportsFolderHelp" at="4,2" span="9" caption="@exportsFolderHelp" for="exportsFolder" />
+  <Button name="closePreferences" at="11,4" span="2" caption="@closeCaption" opens="close" default="true" cancel="true" />
+</Dialog>

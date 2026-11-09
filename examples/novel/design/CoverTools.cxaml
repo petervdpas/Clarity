@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The cover's tools, designed as a toolbox: what a book cover needs. -->
+<Toolbox class="writing.CoverTools" columns="4">
+  <ToolGroup name="selectGroup" at="1,1" span="1">
+    <Tool name="selectTool" at="1,1" span="1" does="select" />
+    <Tool name="ellipseSelectTool" at="1,1" span="1" does="ellipseSelect" />
+    <Tool name="lassoTool" at="1,1" span="1" does="lasso" />
+  </ToolGroup>
+  <ToolGroup name="drawGroup" at="2,1" span="1">
+    <Tool name="penTool" at="1,1" span="1" does="pen" />
+    <Tool name="pencilTool" at="1,1" span="1" does="pencil" />
+    <Tool name="sprayTool" at="1,1" span="1" does="spray" />
+  </ToolGroup>
+  <Tool name="eraserTool" at="3,1" span="1" does="eraser" />
+  <Tool name="fillTool" at="4,1" span="1" does="fill" />
+  <Tool name="pickerTool" at="1,2" span="1" does="picker" />
+  <ToolGroup name="shapeGroup" at="2,2" span="1">
+    <Tool name="lineTool" at="1,1" span="1" does="line" />
+    <Tool name="rectTool" at="1,1" span="1" does="rect" />
+    <Tool name="ellipseTool" at="1,1" span="1" does="ellipse" />
+  </ToolGroup>
+  <Tool name="zoomInTool" at="3,2" span="1" does="zoomIn" />
+  <Tool name="zoomOutTool" at="4,2" span="1" does="zoomOut" />
+  <Tool name="rotateTool" at="1,3" span="1" does="rotate" />
+  <Tool name="flipAcrossTool" at="2,3" span="1" does="flipAcross" />
+  <Tool name="flipDownTool" at="3,3" span="1" does="flipDown" />
+  <Tool name="cropTool" at="4,3" span="1" does="crop" />
+  <ToolSize name="sizeOption" at="1,4" span="4" />
+  <ToolOpacity name="opacityOption" at="1,5" span="4" />
+  <ToolColors name="colorOption" at="1,6" span="2" />
+  <Tool name="importTool" at="3,6" span="1" does="import" />
+  <Tool name="exportTool" at="4,6" span="1" does="export" />
+</Toolbox>

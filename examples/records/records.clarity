@@ -34,13 +34,6 @@ app Records
 settings
     exportsFolder: folder, default "exports", label @exportsFolderSetting
 
-page Preferences: dialog
-    title @preferencesTitle
-    label @exportsFolderSetting name exportsFolderLabel at 1,1 span 3 for exportsFolder
-    folder name exportsFolder at 4,1 span 9 bind settings.exportsFolder
-    help @exportsFolderHelp name exportsFolderHelp at 4,2 span 9 for exportsFolder
-    button @closeCaption name closePreferences at 11,4 span 2 default cancel on click -> close
-
 // Grey and square, like a desktop program of 2003.
 theme Classic
     title @classicTheme

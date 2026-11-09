@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A book on the desk: its content shows one part of the book at a time,
+     chapters, research, characters, fragments or dialogues, picked by the
+     buttons above it. -->
+<Window class="writing.Desk" title="@deskTitle" width="1400" height="860" onopen="deskOpened">
+  <Data name="book" type="Book" />
+  <Data name="chapter" type="Chapter" />
+  <Label name="deskHeading" at="1,1" span="10" caption="@deskTitle" />
+  <Button name="backButton" at="11,1" span="2" caption="@backCaption" opens="close" icon="arrow-left" cancel="true" />
+  <Button name="chaptersButton" at="1,2" span="2" caption="@chaptersSection" onclick="showChapters" />
+  <Button name="researchButton" at="3,2" span="2" caption="@researchSection" onclick="showResearch" />
+  <Button name="charactersButton" at="5,2" span="2" caption="@charactersSection" onclick="showCharacters" />
+  <Button name="fragmentsButton" at="7,2" span="2" caption="@fragmentsSection" onclick="showFragments" />
+  <Button name="dialoguesButton" at="9,2" span="2" caption="@dialoguesSection" onclick="showDialogues" />
+  <Content name="parts" at="1,3" span="12" rows="14">
+    <View name="ChaptersPart" onchosen="chapterChosen" ontoResearch="toResearch" ontoCharacter="toCharacter" ontoFragment="toFragment" ontoDialogue="toDialogue" />
+    <View name="ResearchPart" onjumpTo="jumpTo" />
+    <View name="CharactersPart" onjumpTo="jumpTo" />
+    <View name="FragmentsPart" onjumpTo="jumpTo" />
+    <View name="DialoguesPart" onjumpTo="jumpTo" />
+  </Content>
+</Window>

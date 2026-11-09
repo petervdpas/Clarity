@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The books: the list at the left, the chosen book at the right. Opening one
+     goes to its writing desk. -->
+<Window class="writing.Bookcase" title="@novelTitle" width="1400" height="860" onopen="caseOpened" onreturn="caseReturned">
+  <Content name="main" at="1,1" span="12" rows="15">
+    <View name="BookcaseView" />
+  </Content>
+</Window>

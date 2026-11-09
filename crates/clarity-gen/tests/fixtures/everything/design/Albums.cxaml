@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="everything.Albums">
+  <Data name="album" type="Album" />
+  <Data name="friends" type="list&lt;Friend&gt;" />
+  <Data name="pal" type="Friend" />
+  <Button name="deleteButton" at="1,1" span="2" caption="@delete" onclick="deleteClicked" />
+  <Button name="lendButton" at="3,1" span="2" caption="@lend" onclick="lendClicked" />
+  <Button name="copiesButton" at="5,1" span="2" caption="@copies" onclick="copiesClicked" />
+  <Button name="formatButton" at="7,1" span="2" caption="@format" onclick="formatClicked" />
+  <Button name="pickButton" at="9,1" span="2" caption="@pick" onclick="pickClicked" />
+  <Button name="newButton" at="11,1" span="2" caption="@new" onclick="newClicked" />
+  <Separator name="line" at="1,2" span="12" />
+  <Link name="lucideLink" at="1,3" span="2" caption="@lucide" to="https://lucide.dev" />
+  <Link name="siteLink" at="3,3" span="3" bind="album.site" none="caption" />
+  <Badge name="copiesBadge" at="6,3" span="1" bind="album.copies" none="caption" />
+  <Progress name="copiesBar" at="7,3" span="3" bind="album.copies" max="10" />
+  <Busy name="lendingBusy" at="10,3" span="3" caption="@lending" />
+  <Toggle name="favouriteToggle" at="1,4" span="2" caption="@favourite" bind="album.favourite" icon="star" onchange="favouriteChanged" />
+  <Buttons name="sideButtons" at="3,4" span="2">
+    <Toggle name="leftToggle" at="1,1" span="1" icon="text-align-start" none="caption" onchange="leftChanged" />
+    <Toggle name="rightToggle" at="2,1" span="1" icon="text-align-end" none="caption" />
+  </Buttons>
+  <Button name="saveButton" at="5,4" span="2" caption="@save" split="true" onclick="favouriteChanged">
+    <Menu>
+      <Item caption="@saveACopy" name="saveCopyItem" onclick="newClicked" />
+    </Menu>
+  </Button>
+  <Accordion name="notesAccordion" at="1,5" span="6" rows="4" onchange="favouriteChanged">
+    <Section title="@title">
+      <Text name="titleText" at="1,1" span="6" bind="album.title" />
+    </Section>
+    <Section title="@site">
+      <Text name="siteText" at="1,1" span="6" bind="album.site" />
+    </Section>
+  </Accordion>
+  <Form name="albumForm" at="1,9" span="12" rows="2" bind="album" labels="3">
+    <Textbox name="albumTitleBox" at="4,1" span="9" bind="album.title" />
+    <Number name="albumCopiesBox" at="4,2" span="3" bind="album.copies" />
+  </Form>
+  <Scroll name="moreScroll" at="7,5" span="6" rows="2">
+    <Textbox name="titleBox" at="1,1" span="6" bind="album.title" />
+    <Number name="copiesBox" at="1,4" span="3" bind="album.copies" />
+  </Scroll>
+  <Slider name="ratingSlider" at="1,11" span="6" bind="album.rating" step="0.5" onchange="favouriteChanged" />
+  <Spinbox name="copiesSpin" at="7,11" span="3" bind="album.copies" max="99" min="0" />
+  <Color name="tintBox" at="10,11" span="3" bind="album.tint" onchange="favouriteChanged" />
+  <Switch name="toolbarSwitch" at="1,12" span="3" bind="settings.showToolbar" none="caption" />
+  <Dropdown name="languageBox" at="4,12" span="3" bind="settings.language" />
+  <Dropdown name="favouriteFriendBox" at="7,12" span="4" bind="settings.favouriteFriend" />
+  <File name="bookletBox" at="1,13" span="8" bind="album.booklet" onchange="bookletChanged" />
+  <Tags name="tagsBox" at="1,14" span="6" bind="album.tags" onchange="tagsChanged" />
+  <Tags name="formatsBox" at="7,14" span="6" bind="album.formats" />
+  <Tags name="playsBox" at="1,15" span="6" bind="album.plays" />
+  <Dropdown name="lentToBox" at="7,15" span="6" bind="album.lentTo" show="name, city" search="true" onchange="tagsChanged" />
+  <Dropdown name="cityBox" at="1,16" span="4" bind="pal.city" typed="true" onchange="tagsChanged" />
+  <Dropdown name="palBox" at="5,16" span="4" bind="album.lentTo" search="true" />
+</Window>

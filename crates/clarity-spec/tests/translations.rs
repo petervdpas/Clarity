@@ -156,7 +156,7 @@ fn a_project_folder_brings_its_languages() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../target/clarity-translations-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("translations")).unwrap();
-    std::fs::write(dir.join("shop.clarity"), SHOP).unwrap();
+    clarity_spec::cxaml::write_with_pages_moved_out(&dir.join("shop.clarity"), SHOP).unwrap();
     std::fs::write(dir.join("translations/en.clarity"), EN).unwrap();
     std::fs::write(dir.join("translations/nl.clarity"), NL).unwrap();
     let project = clarity_spec::load_dir(&dir).unwrap();

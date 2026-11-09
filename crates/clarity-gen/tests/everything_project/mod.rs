@@ -59,6 +59,12 @@ pub fn prepare(name: &str, stack: &str) -> (PathBuf, clarity_spec::Project, clar
         text = text.lines().filter(|l| !l.trim_start().starts_with("Gauge name gauge")).collect::<Vec<_>>().join("\n") + "\n";
         let handlers = text.find("    handler gaugeChanged").unwrap();
         text.truncate(handlers);
+        // The part is placed in the gallery's own file (design/Gallery.cxaml).
+        let gallery = root.join("everything/design/Gallery.cxaml");
+        let markup = std::fs::read_to_string(&gallery).unwrap();
+        let kept: Vec<&str> = markup.lines().filter(|l| !l.trim_start().starts_with("<Custom name=\"gauge\"")).collect();
+        assert!(kept.len() < markup.lines().count(), "the gallery places the gauge");
+        std::fs::write(&gallery, kept.join("\n") + "\n").unwrap();
     }
     std::fs::write(&module, text).unwrap();
     let dir = clarity_project::module_dir(&file);

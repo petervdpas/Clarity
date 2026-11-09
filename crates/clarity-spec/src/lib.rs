@@ -2,6 +2,7 @@
 
 pub mod check;
 pub mod colors;
+pub mod cxaml;
 pub mod dates;
 pub mod code;
 pub mod diagnostic;
@@ -36,6 +37,7 @@ pub mod templates;
 pub mod trees;
 pub mod views;
 pub mod widgets;
+pub mod xml;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -63,9 +65,21 @@ pub fn content_version(text: &str) -> String {
 pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -> Project {
     let mut files = Vec::new();
     let mut diagnostics = Vec::new();
+    let mut markup = Vec::new();
     for (path, text) in sources {
+        if cxaml::is_page_file(path) {
+            markup.push((path, text));
+            continue;
+        }
         let (file, file_diagnostics) = parser::parse(text, path);
         files.push(file);
+        diagnostics.extend(file_diagnostics);
+    }
+    // Windows and views in `.cxaml` (docs/CXAML-SOURCE-PLAN.md): each its own
+    // file of the module its folder is named after.
+    for (path, text) in markup {
+        let (file, file_diagnostics) = cxaml::page_file(path, text, &files);
+        files.extend(file);
         diagnostics.extend(file_diagnostics);
     }
     resolve_data(&mut files);
@@ -614,7 +628,9 @@ pub fn load_dir_with_files_in(dir: &Path, replaced: &[(&Path, &str)], sources: &
 /// (English when it names none).
 pub fn load_dir_for(dir: &Path, replaced: &[(&Path, &str)], sources: &[SourceRef], language: Option<&str>) -> std::io::Result<Project> {
     let mut files = Vec::new();
-    for p in spec_files(dir)? {
+    let mut paths = spec_files(dir)?;
+    paths.extend(cxaml::page_files(dir, &paths, replaced)?);
+    for p in paths {
         let content = match replaced.iter().find(|(path, _)| *path == p) {
             Some((_, text)) => text.to_string(),
             None => std::fs::read_to_string(&p)?,
@@ -627,6 +643,8 @@ pub fn load_dir_for(dir: &Path, replaced: &[(&Path, &str)], sources: &[SourceRef
         steps.iter().map(|(p, t)| (p.as_str(), t.as_str())),
         sources,
     );
+    // A window or view has a file of its own (docs/CXAML-SOURCE-PLAN.md); one still written in a module's file is moved there.
+    project.diagnostics.extend(cxaml::pages_left_in_modules(&project));
     let translations = translation_sources(dir, replaced)?;
     if let Some(language) = language {
         project.locale.language = Some(language.to_string());

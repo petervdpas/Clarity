@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { cellsOf, commandsOf, grown, heldBy, layerOf, nudged, placeIn } from "./designLayer.ts";
+import { cellsOf, commandsOf, grown, heldBy, layerOf, nudged, placeIn, resizedBy, resizedTo } from "./designLayer.ts";
 import { chosenOf, filesAddress, startOptions } from "./clarityWindow.ts";
 import type { Page } from "@clarity/ui/generated/Page.ts";
 import type { Widget } from "@clarity/ui/generated/Widget.ts";
@@ -178,4 +178,35 @@ test("shift and an arrow key resize a part one cell, never below one or out of i
   assert.equal(grown({ ...at, height: 1 }, 12, "ArrowUp"), null);
   assert.equal(grown({ ...at, col: 9 }, 12, "ArrowRight"), null, "its last column on the grid's last");
   assert.equal(grown(at, 12, "Tab"), null);
+});
+
+test("a line of a window's content is named by the view it shows", () => {
+  const content = widget(50, "content", [], [{ start: 60, children: [] }, { start: 80, children: [] }]);
+  content.pages[0].view = "StartView";
+  content.pages[1].view = "ProjectEditor";
+  const shown = { ...page, widgets: [content] } as unknown as Page;
+  const laid = {
+    parts: [{ item: "50", name: "main", kind: "content", at: [0, 0, 300, 200] as [number, number, number, number], pages: [{ item: "60", title: null, at: null }, { item: "80", title: null, at: null }] }],
+    grids: [],
+  };
+  const layer = layerOf(laid, shown);
+  assert.deepEqual(layer.parts[0].pages.map((p) => p.title), ["StartView", "ProjectEditor"]);
+});
+
+test("the grid of a line of a window's content is its view's, so the view's parts resize and move on it", () => {
+  const content = widget(50, "content", [], [{ start: 60, children: [] }]);
+  content.pages[0].view = "TotalView";
+  const shown = { ...page, widgets: [content] } as unknown as Page;
+  const laid = { parts: [], grids: [{ item: "60", columns: 12, gap: 8, at: [0, 0, 300, 200] as [number, number, number, number], rows: [36, 36] }] };
+  assert.equal(layerOf(laid, shown, null, new Map([[60, 900]])).grids[0].item, 900);
+  assert.equal(layerOf(laid, shown).grids[0].item, 60, "a line without a view in the file keeps its own");
+});
+
+test("a resize follows how far the handle moved, in whole cells, not the cell under the pointer", () => {
+  assert.deepEqual(resizedBy({ x: 100, y: 100 }, { x: 104, y: 107 }, 60, 40), { columns: 0, rows: 0 }, "a small move at the start keeps the size");
+  assert.deepEqual(resizedBy({ x: 100, y: 100 }, { x: 40, y: 190 }, 60, 40), { columns: -1, rows: 2 });
+  const at = { col: 1, width: 4, height: 7 };
+  assert.deepEqual(resizedTo(at, { columns: 0, rows: 2 }, 12), { width: 4, height: 9 }, "past the last row");
+  assert.deepEqual(resizedTo(at, { columns: -9, rows: -9 }, 12), { width: 1, height: 1 });
+  assert.deepEqual(resizedTo(at, { columns: 20, rows: 0 }, 12), { width: 12, height: 7 }, "not past the last column");
 });

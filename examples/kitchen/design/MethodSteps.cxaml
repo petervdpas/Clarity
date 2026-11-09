@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The method: the steps in order (drag one to move it), and below them the
+     whole text of the step picked. -->
+<View class="kitchen.MethodSteps">
+  <Data name="stepsOf" type="Recipe" />
+  <Data name="steps" type="list&lt;Step&gt;" />
+  <Data name="step" type="Step" />
+  <Table name="stepTable" at="1,1" span="8" rows="7" bind="steps" columns="position, instruction" widths="{&quot;instruction&quot;:500,&quot;position&quot;:60}" add="true" remove="true" confirm="true" reorder="position" onadd="addStep" onremove="removeStep" onselect="stepPicked" onreorder="stepsMoved" />
+  <Label name="stepTextLabel" at="1,9" span="8" caption="@stepTextLabel" for="stepTextBox" />
+  <Memo name="stepTextBox" at="1,10" span="8" rows="4" bind="step.instruction" placeholder="@stepTextPlaceholder" />
+  <Button name="saveStepButton" at="7,14" span="2" caption="@saveStepCaption" onclick="saveStep" />
+</View>

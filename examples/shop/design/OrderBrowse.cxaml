@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The orders, with the one opened (a double click or Enter) in the editor
+     that slides out from the right; the table adds and removes them. -->
+<Window class="sales.OrderBrowse" title="@orderBrowseTitle" onopen="filterChanged" onreturn="filterChanged">
+  <Content name="main" at="1,1" span="12" rows="10">
+    <View name="OrderBrowseView" />
+  </Content>
+  <Slideout name="orderSlide" at="1,1" span="12" rows="11" caption="@orderSlideout" resizable="true" slideWidth="820" pinnable="true" max="1200" min="600">
+    <Content name="orderSlideContent" at="1,1" span="12" rows="11">
+      <View name="OrderEditor" onsaved="filterChanged" />
+    </Content>
+  </Slideout>
+</Window>

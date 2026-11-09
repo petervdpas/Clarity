@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window Play shows: its parts, data and code. -->
+<View class="orbs.PlayView">
+  <Data name="player" type="text" default="@defaultPlayer" />
+  <Data name="caught" type="integer" />
+  <Data name="speed" type="integer" default="3" />
+  <Custom name="orbField" at="1,1" span="8" rows="12" part="OrbField" values="{&quot;speed&quot;:{&quot;kind&quot;:&quot;number&quot;,&quot;value&quot;:&quot;3&quot;}}" tells="[{&quot;handler&quot;:&quot;orbCaught&quot;,&quot;tell&quot;:&quot;caught&quot;},{&quot;handler&quot;:&quot;roundOver&quot;,&quot;tell&quot;:&quot;finished&quot;}]" />
+  <Label name="playerLabel" at="9,1" span="4" caption="@playerLabel" for="playerBox" />
+  <Textbox name="playerBox" at="9,2" span="4" bind="player" />
+  <Label name="speedLabel" at="9,3" span="4" caption="@speedLabel" for="speedSlider" />
+  <Slider name="speedSlider" at="9,4" span="4" bind="speed" max="10" min="1" onchange="speedChanged" />
+  <Label name="caughtLabel" at="9,5" span="4" caption="@caughtLabel" />
+  <Display name="caughtShown" at="9,6" span="4" rows="2" bind="caught" digits="4" />
+  <Button name="again" at="9,8" span="4" caption="@againCaption" onclick="againClicked" />
+</View>

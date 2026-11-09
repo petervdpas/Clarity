@@ -34,8 +34,21 @@ export function resized(start: { width: number; height: number }, edge: WindowEd
 }
 
 /** The size a window opens at: its own (`size 320 x 460`), or the standard one. */
-export function windowSize(page: { size: { width: number; height: number } | null }): { width: number; height: number } {
-  return page.size ?? { width: WINDOW_WIDTH, height: WINDOW_HEIGHT };
+/** How wide a column of a toolbox page is shown (layout.rs TOOLBOX_COLUMN). */
+export const TOOLBOX_COLUMN = 44;
+/** What the window around a page takes beyond its grid (layout.rs PAGE_CHROME). */
+export const PAGE_CHROME = { width: 24, height: 84 };
+
+/** The size a page is drawn at: its own, a toolbox's as large as its tools (layout.rs toolbox_size), else a window's. */
+export function windowSize(page: { size: { width: number; height: number } | null; kind?: string; columns?: number; widgets?: { props: { row: number; height: number } }[] }): { width: number; height: number } {
+  if (page.size) return page.size;
+  if (page.kind === "toolbox") {
+    const columns = Math.max(1, page.columns ?? 1);
+    const rows = Math.max(1, ...(page.widgets ?? []).map((w) => w.props.row + Math.max(1, w.props.height) - 1));
+    const width = PAGE_CHROME.width + columns * TOOLBOX_COLUMN + (columns - 1) * GAP;
+    return { width: Math.max(220, width), height: PAGE_CHROME.height + rows * ROW_HEIGHT + (rows - 1) * GAP };
+  }
+  return { width: WINDOW_WIDTH, height: WINDOW_HEIGHT };
 }
 export const CONTENT_PADDING = 12;
 /** The width of one column of a popover's grid (layout.rs POPOVER_COLUMN): it does not follow the window's. */
@@ -97,7 +110,9 @@ export function resizeEdits(widget: Widget, width: number, height: number): Edit
 
 function scaleInside(widget: Widget, from: number, to: number, edits: Edit[]) {
   if (from === to) return;
-  for (const child of [...widget.children, ...widget.pages.flatMap((p) => p.children)]) {
+  // A window's content shows views, which keep their own grids: resizing it leaves their parts as they are.
+  const pages = widget.props.kind === "content" ? [] : widget.pages;
+  for (const child of [...widget.children, ...pages.flatMap((p) => p.children)]) {
     const { col, width } = scaledColumns(child.props.col, child.props.width, from, to);
     if (col === child.props.col && width === child.props.width) continue;
     edits.push({ op: "updateWidget", item: child.span.start, container: null, props: { ...child.props, col, width } });

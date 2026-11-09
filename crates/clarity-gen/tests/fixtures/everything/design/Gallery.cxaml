@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The parts the pages above have not: text, pictures, sound, drawing,
+     time and a custom part. -->
+<Window class="everything.Gallery" title="@gallery" onopen="galleryOpened">
+  <Data name="album" type="Album" />
+  <Data name="albums" type="list&lt;Album&gt;" />
+  <Data name="shown" type="decimal" />
+  <Data name="load" type="decimal" />
+  <Data name="readings" type="list&lt;decimal&gt;" />
+  <Data name="speed" type="integer" />
+  <Data name="needle" type="list&lt;integer&gt;" />
+  <Heading name="galleryHeading" at="1,1" span="6" caption="@gallery" />
+  <Image name="logo" at="7,1" span="1" source="logo.svg" />
+  <Image name="banner" at="8,1" span="2" caption="@bannerPicture" />
+  <Help name="notesHelp" at="10,1" span="3" for="notesMemo" />
+  <Splitter name="gallerySplitter" at="1,2" span="12" rows="8">
+    <Pane>
+      <Panel name="albumPanel" at="1,1" span="12" rows="7" caption="@album">
+        <Memo name="notesMemo" at="1,1" span="12" rows="3" bind="album.notes" />
+        <Radio name="formatRadio" at="1,4" span="6" rows="2" bind="album.format" orientation="vertical" />
+        <Date name="releasedOn" at="7,4" span="6" bind="album.released" />
+        <Number name="priceBox" at="1,6" span="4" bind="album.price" />
+        <Number name="lengthBox" at="5,6" span="4" bind="album.length" placeholder="@length345" />
+        <Textbox name="contactBox" at="9,6" span="4" bind="album.contact" noUndo="true" />
+      </Panel>
+    </Pane>
+    <Pane>
+      <Tabs name="galleryTabs" at="1,1" span="12" rows="7">
+        <Tab title="@albums">
+          <List name="albumList" at="1,1" span="12" rows="6" bind="albums" reorder="position" show="title, copies" onopen="albumPicked" onreorder="albumsMoved" />
+        </Tab>
+        <Tab title="@cover">
+          <Image name="coverImage" at="1,1" span="12" rows="6" bind="album.cover" />
+        </Tab>
+        <Tab title="@about">
+          <Markdown name="aboutText" at="1,1" span="12" rows="6" source="about.md" />
+        </Tab>
+      </Tabs>
+    </Pane>
+  </Splitter>
+  <Display name="screen" at="1,10" span="4" bind="shown" digits="10" />
+  <Trend name="loadTrend" at="5,10" span="4" rows="2" bind="load" max="100" points="30" />
+  <Chart name="history" at="9,10" span="4" rows="2" bind="readings" chart="line" max="100" points="30" none="measure" />
+  <Canvas name="dial" at="1,12" span="6" rows="4" units="{&quot;height&quot;:100,&quot;width&quot;:200}" zoom="true" grid="10" snap="true" background="panel" dotSize="3" dotColor="muted" none="surface" ondraw="drawDial" onbend="dialBent" ondrag="dialDragged" ondrop="dialDropped" />
+  <Custom name="gauge" at="7,12" span="4" rows="3" bind="speed" part="Gauge" values="{&quot;speed&quot;:{&quot;kind&quot;:&quot;number&quot;,&quot;value&quot;:&quot;5&quot;},&quot;title&quot;:{&quot;kind&quot;:&quot;str&quot;,&quot;value&quot;:&quot;@speed&quot;}}" tells="[{&quot;handler&quot;:&quot;gaugeReached&quot;,&quot;tell&quot;:&quot;reached&quot;}]" onchange="gaugeChanged" />
+  <Password name="tokenBox" at="1,16" span="6" bind="settings.apiToken" />
+  <Folder name="scansBox" at="1,17" span="6" bind="settings.scansFolder" />
+  <Button name="playButton" at="7,16" span="2" caption="@play" onclick="playClicked" />
+  <Button name="planButton" at="7,17" span="2" caption="@plan" onclick="planClicked" />
+  <Canvas name="board" at="1,18" span="4" rows="3" mode="objects" objects="{&quot;list&quot;:&quot;albums&quot;,&quot;x&quot;:&quot;copies&quot;,&quot;y&quot;:&quot;position&quot;}" units="{&quot;height&quot;:600,&quot;width&quot;:1000}" grid="20" snap="true" none="surface" ondraw="drawBoard" onchange="albumPlaced" />
+  <Canvas name="sketch" at="5,18" span="4" rows="3" bind="album.cover" mode="paint" tools="pen, eraser" toolbox="popup" toolboxPage="SketchTools" brush="4" ink="accent" none="surface" onchange="sketched" />
+  <Canvas name="drawing" at="9,18" span="4" rows="3" bind="album.notes" mode="vector" grid="10" snap="true" none="surface" onchange="sketched" />
+  <Sound name="ding" at="1,1" span="1" source="ding.wav" volume="80" />
+  <Video name="clipView" at="1,21" span="6" rows="4" source="clip.mp4" volume="60" onend="sampled" />
+  <Timer name="clock" at="1,1" span="1" every="1" ontick="sampled" />
+</Window>

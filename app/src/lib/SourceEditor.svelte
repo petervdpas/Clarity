@@ -3,6 +3,8 @@
   export const OPENS_CLARITY_BLOCK = /^\s*(handler|if|else|for|function|action|engine|page|app|code|entity|enum|tabs|tab|panel|splitter|pane|menu|toolbar|ribbon|group|sidebar|footer|item)\b/;
   /** Lines of Rust (or another braced language) that open a block: ending in an open brace or bracket. */
   export const OPENS_BRACED_BLOCK = /[{([]\s*$/;
+  /** Markup lines that open an element whose children follow: `<Content ...>`, not `<Label ... />` or a closing tag. */
+  export const OPENS_MARKUP_ELEMENT = /^\s*<[A-Za-z][^>]*[^/]>\s*$/;
 </script>
 
 <script lang="ts">
@@ -56,7 +58,7 @@
     /** Whether errors keep the text from being saved: true for Clarity, which must be valid; false for a compiler's errors, which saving and building fix. */
     errorsBlockSave?: boolean;
     /** How the text is colored: Clarity as the lexer reads it, Rust, or not at all. */
-    language?: "clarity" | "rust" | "plain";
+    language?: "clarity" | "cxaml" | "rust" | "plain";
     /** Shown to read, not to change: no Save, Revert or problems. */
     readonly?: boolean;
     /** Without its Save and Revert bar: the view around it saves and reverts. Its problems stay. */
@@ -153,13 +155,14 @@
     return builder.finish();
   }
 
-  // Color Clarity while it is typed, as the backend's lexer reads it.
+  // Color Clarity while it is typed, as the backend's lexer reads it; a window's .cxaml as markup.
   $effect(() => {
     const draft = text;
-    if (language !== "clarity") return;
+    if (language !== "clarity" && language !== "cxaml") return;
+    const markup = language === "cxaml";
     const timer = setTimeout(async () => {
       try {
-        const pieces = await invoke<Piece[]>("highlight", { text: draft });
+        const pieces = await invoke<Piece[]>("highlight", { text: draft, markup });
         if (view && view.state.doc.toString() === draft) view.dispatch({ effects: painted.of(marksOf(view.state, pieces)) });
       } catch {
         // Without the backend the text stays plain.

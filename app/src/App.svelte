@@ -39,7 +39,7 @@
   import NewLanguageDialog from "./lib/NewLanguageDialog.svelte";
   import { languageChoice } from "@clarity/ui/screen/i18n.svelte.ts";
   import { languageName } from "@clarity/ui/screen/translate.ts";
-  import { fixOf } from "./lib/codeParts";
+  import { fixOf, type FixCommand } from "./lib/codeParts";
   import { engineProblems, recordBuilt } from "./lib/engineBuilds.svelte";
   import type { EngineBuilt } from "@clarity/ui/generated/EngineBuilt.ts";
   import ModuleView from "./lib/ModuleView.svelte";
@@ -1136,7 +1136,7 @@
   }
 
   /** A fix for the whole project, by its command (Make texts keys). */
-  async function runFix(command: "make_texts_keys") {
+  async function runFix(command: FixCommand) {
     actionError = null;
     try {
       applyPreview(await invoke<Preview>(command));
@@ -1151,6 +1151,16 @@
 
   // An error nothing caught shows in the error bar, and so does a panic in the backend.
   onMount(() => catchUncaught((text) => (actionError = text)));
+  // Run from its repository, Clarity says when Clarity.UI's browser files are behind its source:
+  // the design and preview draw with them, and would not show what changed.
+  onMount(() => {
+    void (async () => {
+      const stale = await invoke<string | null>("browser_files_stale").catch(() => null);
+      if (stale && (await dialogs.confirm({ text: stale, title: "Clarity.UI's browser files", action: "Rebuild" }))) {
+        await invoke("rebuild_browser_files").catch((e) => (actionError = String(e)));
+      }
+    })();
+  });
   onMount(() => {
     const stop = listen<string>("clarity-panic", (event) => (actionError = event.payload));
     return () => void stop.then((unlisten) => unlisten());
@@ -1551,7 +1561,7 @@
                     {#if "edit" in fix}
                       <button class="fix" title="For every such problem in {fileName(d.path)}" onclick={() => applyFix(d.path, fix.edit)}>{fix.label}</button>
                     {:else}
-                      <button class="fix" title="For every text in the project" onclick={() => runFix(fix.command)}>{fix.label}</button>
+                      <button class="fix" title={fix.command === "move_pages_out" ? "For every page in the project" : "For every text in the project"} onclick={() => runFix(fix.command)}>{fix.label}</button>
                     {/if}
                   {/if}
                 </li>

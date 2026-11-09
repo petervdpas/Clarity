@@ -178,7 +178,7 @@ fn a_project_folder_without_resources_still_checks_its_pictures() {
     let dir = std::env::temp_dir().join(format!("clarity-no-resources-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("shop.clarity"), HOME).unwrap();
+    clarity_spec::cxaml::write_with_pages_moved_out(&dir.join("shop.clarity"), HOME).unwrap();
     let project = clarity_spec::load_dir(&dir).unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
     assert_eq!(errors(&project), ["image 'logo.png' is not in the resources folder, which has no pictures yet"]);
@@ -190,7 +190,7 @@ fn a_project_folder_brings_its_resources() {
     let dir = std::env::temp_dir().join(format!("clarity-resources-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join(resources::RESOURCES_DIR)).unwrap();
-    std::fs::write(dir.join("shop.clarity"), HOME).unwrap();
+    clarity_spec::cxaml::write_with_pages_moved_out(&dir.join("shop.clarity"), HOME).unwrap();
     std::fs::write(dir.join("resources/logo.png"), [1, 2, 3]).unwrap();
     std::fs::write(dir.join("resources/notes.md"), "Notes").unwrap();
     std::fs::write(dir.join("resources/.hidden"), [0]).unwrap();

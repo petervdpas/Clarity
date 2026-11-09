@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="noughts.Game" title="@gameTitle" width="405" height="510">
+  <Content name="main" at="1,1" span="12" rows="10">
+    <View name="GameView" />
+  </Content>
+  <Slideout name="help" at="1,1" span="12" rows="12" caption="@helpHeadingCaption" resizable="true" side="left" slideWidth="320" pinnable="true" max="480" min="240">
+    <Content name="helpContent" at="1,1" span="12" rows="12">
+      <View name="HowToPlay" />
+    </Content>
+  </Slideout>
+</Window>

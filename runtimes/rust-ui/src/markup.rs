@@ -26,7 +26,12 @@ const PART_WORDS: [(&str, &str); 4] = [("key", "shortcut"), ("taborder", "tabOrd
 const COMMAND_WORDS: [(&str, &str); 3] = [("key", "shortcut"), ("opens", "onClick"), ("onclick", "handler")];
 
 /// The elements in a part that are its pages, and the kind each is.
-const PAGE_KINDS: [(&str, &str); 4] = [("Tab", "tab"), ("Step", "step"), ("Section", "section"), ("Pane", "pane")];
+// A content's page is the view it shows (`<View name="TotalView">`), its parts inside.
+const PAGE_KINDS: [(&str, &str); 5] = [("Tab", "tab"), ("Step", "step"), ("Section", "section"), ("Pane", "pane"), ("View", "tab")];
+
+/// What a window's source says that is not drawn: its data and what it
+/// tells (the program's), and a tree's levels (worked out into its rows).
+const NOT_DRAWN: [&str; 4] = ["Data", "Tells", "Level", "Select"];
 
 /// The elements of a window that are its frame's regions.
 const REGIONS: [&str; 5] = ["Menu", "Toolbar", "Ribbon", "Sidebar", "Footer"];
@@ -319,7 +324,7 @@ pub fn read(markup: &str) -> Result<WindowSpec, MarkupError> {
     for element in &root.children {
         if REGIONS.contains(&element.name.as_str()) {
             frame.push(element.clone());
-        } else {
+        } else if !NOT_DRAWN.contains(&element.name.as_str()) {
             parts.push(part_of(element)?);
         }
     }
@@ -327,7 +332,9 @@ pub fn read(markup: &str) -> Result<WindowSpec, MarkupError> {
     let look = WindowLook::of(&root);
     let style = root.attribute("style").map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
     let cell = root.attribute("cell").and_then(|c| c.trim().parse::<f64>().ok()).filter(|c| c.is_finite()).map(|c| c.clamp(crate::grid::CELL_HEIGHTS.0, crate::grid::CELL_HEIGHTS.1));
-    Ok(WindowSpec { frame, parts, name: root.attribute("name").map(str::to_string), columns, item: root.attribute(DESIGN_ITEM).map(str::to_string), row_height: cell.unwrap_or(row_height), look, style, cell })
+    // Its name: the page's in its class (`class="desk.Desk"`, as Avalonia's x:Class), or as an older window wrote it.
+    let name = root.attribute("class").map(|c| c.rsplit_once('.').map_or(c, |(_, n)| n).to_string()).or_else(|| root.attribute("name").map(str::to_string));
+    Ok(WindowSpec { frame, parts, name, columns, item: root.attribute(DESIGN_ITEM).map(str::to_string), row_height: cell.unwrap_or(row_height), look, style, cell })
 }
 
 /// An app's frame as its markup writes it: its regions.
@@ -397,6 +404,8 @@ pub fn part_of(element: &XmlElement) -> Result<PartSpec, MarkupError> {
     for child in &element.children {
         if child.name == "Menu" {
             menu = Some(menu_of(child));
+        } else if NOT_DRAWN.contains(&child.name.as_str()) {
+            continue;
         } else if let Some((_, page)) = PAGE_KINDS.iter().find(|(tag, _)| *tag == child.name) {
             pages.push(PageSpec {
                 kind: page.to_string(),

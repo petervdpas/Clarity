@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The diagram's tools: select and drag, draw a line (on the class diagram a
+     held object or an enum choice, on the ERD a business key), zoom, place a
+     new data object, and arrange the boxes. Which show is set by the diagram's
+     kind (kindPicked). -->
+<Toolbox class="modelling.DiagramTools" columns="2">
+  <Tool name="selectTool" at="1,1" span="1" does="select" tooltip="@selectToolTip" icon="mouse-pointer-2" />
+  <Tool name="connectTool" at="2,1" span="1" does="connect" tooltip="@connectToolTip" icon="spline" />
+  <Tool name="zoomInTool" at="1,2" span="1" does="zoomIn" icon="zoom-in" />
+  <Tool name="zoomOutTool" at="2,2" span="1" does="zoomOut" icon="zoom-out" />
+  <Tool name="newObjectTool" at="1,3" span="1" tooltip="@newObjectToolTip" icon="plus" onclick="newObjectToolClicked" />
+  <Tool name="arrangeTool" at="2,3" span="1" tooltip="@arrangeCaption" icon="layout-grid" onclick="arrangeClicked" />
+</Toolbox>

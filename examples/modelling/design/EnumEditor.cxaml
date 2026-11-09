@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An enum of a domain: its values with their numbers, and its C#. -->
+<View class="modelling.EnumEditor" columns="6">
+  <Data name="editedEnum" type="EnumType" />
+  <Data name="values" type="list&lt;EnumValue&gt;" />
+  <Data name="enumText" type="text" />
+  <Tells message="saved" />
+  <Tabs name="enumTabs" at="1,1" span="6" rows="12">
+    <Tab title="@enumTab">
+      <Label name="enumNameLabel" at="1,1" span="2" caption="@enumNameCaption" for="enumNameBox" />
+      <Textbox name="enumNameBox" at="3,1" span="4" bind="editedEnum.name" placeholder="@enumNamePlaceholder" />
+      <Memo name="enumSummaryBox" at="1,2" span="6" rows="2" bind="editedEnum.summary" placeholder="@enumSummaryPlaceholder" />
+      <Table name="valueTable" at="1,4" span="6" rows="7" bind="values" columns="name, number" edit="name, number" widths="{&quot;name&quot;:220,&quot;number&quot;:90}" add="true" remove="true" confirm="true" reorder="position" onadd="addValueClicked" onremove="removeValueClicked" onchange="valueChanged" onreorder="valuesMoved" />
+      <Button name="saveEnumButton" at="5,11" span="2" caption="@saveEnumCaption" default="true" onclick="saveEnumClicked" />
+    </Tab>
+    <Tab title="@enumCodeTab">
+      <Memo name="enumCodeBox" at="1,1" span="6" rows="11" bind="enumText" code="csharp" copy="true" readonly="true" />
+    </Tab>
+  </Tabs>
+</View>

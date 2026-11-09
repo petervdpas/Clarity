@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The customers, with the one opened (a double click or Enter) in the
+     editor that slides out from the right; the table adds and removes them. -->
+<Window class="customers.CustomerBrowse" title="@customerBrowseTitle" onopen="filterChanged" onreturn="filterChanged">
+  <Content name="main" at="1,1" span="12" rows="10">
+    <View name="CustomerBrowseView" />
+  </Content>
+  <Slideout name="customerPanel" at="1,1" span="12" rows="9" caption="@customerSlideout" resizable="true" slideWidth="760" pinnable="true" max="1200" min="520">
+    <Content name="customerPanelContent" at="1,1" span="12" rows="9">
+      <View name="CustomerEditor" onsaved="filterChanged" />
+    </Content>
+  </Slideout>
+</Window>

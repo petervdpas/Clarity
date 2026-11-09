@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window SalesDashboard shows: its parts, data and code. -->
+<View class="sales.SalesDashboardView">
+  <Data name="orders" type="list&lt;Order&gt;" />
+  <Heading name="ordersByStatusHeading" at="1,1" span="6" caption="@ordersByStatusHeading" />
+  <Heading name="salesPerDayHeading" at="7,1" span="6" caption="@salesPerDayHeading" />
+  <Chart name="statusChart" at="1,2" span="6" rows="6" bind="orders" by="status" />
+  <Chart name="salesChart" at="7,2" span="6" rows="6" bind="orders" chart="line" by="orderedOn" measure="{&quot;field&quot;:&quot;total&quot;,&quot;kind&quot;:&quot;sum&quot;}" />
+  <Heading name="salesPerCustomerHeading" at="1,8" span="12" caption="@salesPerCustomerHeading" />
+  <Chart name="customerChart" at="1,9" span="12" rows="6" bind="orders" chart="pie" by="customer" measure="{&quot;field&quot;:&quot;total&quot;,&quot;kind&quot;:&quot;sum&quot;}" />
+</View>

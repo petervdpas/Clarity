@@ -45,57 +45,6 @@ function calculate(a: decimal, op: Operation, b: decimal) -> decimal
         return a / b
     return b
 
-page Main: window
-    title @mainTitle
-    size 320 x 370
-    grid 4 columns
-
-    content name main at 1,1 span 4 rows 7
-        view Keypad
-
-// The keypad: the display and the keys.
-page Keypad: view
-    data shown: decimal
-    data entry: decimal
-    data total: decimal
-    data pending: Operation
-    data factor: decimal, default 1
-    data fresh: bool, default true
-    data digits: integer
-    grid 4 columns
-
-    display name screen at 1,1 span 4 rows 2 bind shown digits 12 style display
-    button @clearKeyCaption name clearKey at 1,3 span 1 key "Escape" on click: clear
-    button "+/-" name signKey at 2,3 span 1 on click: changeSign
-    button "%" name percentKey at 3,3 span 1 on click: percent
-    button "÷" name divideKey at 4,3 span 1 style operator key "/" on click: operation(Divide)
-    button "7" name digit7 at 1,4 span 1 key "7" on click: digit(7)
-    button "8" name digit8 at 2,4 span 1 key "8" on click: digit(8)
-    button "9" name digit9 at 3,4 span 1 key "9" on click: digit(9)
-    button "×" name multiplyKey at 4,4 span 1 style operator key "*" on click: operation(Multiply)
-    button "4" name digit4 at 1,5 span 1 key "4" on click: digit(4)
-    button "5" name digit5 at 2,5 span 1 key "5" on click: digit(5)
-    button "6" name digit6 at 3,5 span 1 key "6" on click: digit(6)
-    button "−" name subtractKey at 4,5 span 1 style operator key "-" on click: operation(Subtract)
-    button "1" name digit1 at 1,6 span 1 key "1" on click: digit(1)
-    button "2" name digit2 at 2,6 span 1 key "2" on click: digit(2)
-    button "3" name digit3 at 3,6 span 1 key "3" on click: digit(3)
-    button "+" name addKey at 4,6 span 1 style operator key "+" on click: operation(Add)
-    button "0" name digit0 at 1,7 span 2 key "0" on click: digit(0)
-    button "." name pointKey at 3,7 span 1 key "." on click: point
-    button "=" name equalsKey at 4,7 span 1 style equals key "=" default on click: equals
-
-page Preferences: dialog
-    title @preferencesTitle
-    size 320 x 200
-    grid 4 columns
-
-    form name settingsForm at 1,1 span 4 rows 3 bind settings labels 2
-        dropdown name languageBox at 3,1 span 2 bind settings.language
-        dropdown name themeBox at 3,2 span 2 bind settings.theme
-        spinbox name decimalsBox at 3,3 span 2 bind settings.decimals
-    button @closeButtonCaption name closeButton at 3,5 span 2 cancel on click -> close
-
 code Keypad
     handler digit(d: integer)
         if fresh

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Dialog class="everything.PickFriend" gives="Friend" onopen="loadFriends">
+  <Data name="friends" type="list&lt;Friend&gt;" />
+  <Data name="onlyNamed" type="bool" />
+  <Table name="grid" at="1,1" span="12" rows="6" bind="friends" columns="name" reorder="position" page="20" onreorder="friendsMoved">
+    <Menu>
+      <Item caption="@pick" name="pickItem" icon="user-check" onclick="picked" />
+      <Item kind="separator" />
+      <Item caption="@filter" name="filterItem" opens="filters" />
+    </Menu>
+  </Table>
+  <Button name="okButton" at="1,7" span="2" caption="@ok" icon="check" onclick="picked" />
+  <Button name="filterButton" at="3,7" span="2" caption="@filter" opens="filters" />
+  <Icon name="friendsIcon" at="6,7" span="1" icon="users" />
+  <Popover name="filters" at="1,1" span="4" for="filterButton">
+    <Checkbox name="namedBox" at="1,1" span="4" caption="@onlyNamed" bind="onlyNamed" onchange="refilter" />
+  </Popover>
+</Dialog>

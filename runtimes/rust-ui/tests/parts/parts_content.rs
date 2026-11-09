@@ -31,3 +31,21 @@ fn content_shows_the_view_code_picks_and_nothing_of_its_own() {
     let part = content(&screen);
     assert!(part.pages()[1].is_shown() && !part.pages()[0].is_shown());
 }
+
+/// A content is only a container: it fills the rows it spans, even when its
+/// view holds nothing that grows, as a table beside it does.
+#[test]
+fn content_fills_its_rows_as_the_parts_beside_it_do() {
+    const BOARD: &str = r#"<Content name="total" at="1,1" span="6" rows="6">
+  <Tab columns="12"><Label name="sum" at="1,1" span="12" caption="Total" /></Tab>
+</Content>
+<Memo name="notes" at="7,1" span="6" rows="6" />"#;
+    let host = TestHost::new();
+    let mut screen = window_of(BOARD, host);
+    screen.resize(808.0, 700.0, 1.0);
+    let content = content(&screen).node().bounds;
+    let memo = clarity_ui::element::find_type::<clarity_ui::parts::text_box::TextBoxPart>(screen.root(), |_| true).map(|m| m.node().bounds);
+    let memo = memo.expect("the memo is on the screen");
+    assert!(memo.height > 6.0 * 36.0 + 5.0 * 8.0 + 1.0, "the memo grows with the window: {}", memo.height);
+    assert_eq!(content.height, memo.height, "the content fills its rows as the memo does");
+}

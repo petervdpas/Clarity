@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The diagrams of a domain at one of its versions: its data objects as they
+     are in that version, with their properties and lines, or the tables the
+     adapter keeps them in, with their keys. -->
+<View class="modelling.DiagramCanvas">
+  <Data name="kind" type="DiagramKind" />
+  <Data name="currentDomain" type="Domain" />
+  <Data name="adding" type="bool" />
+  <Data name="level" type="integer" default="1" />
+  <Data name="shown" type="list&lt;ClassDefinition&gt;" />
+  <Data name="boxes" type="list&lt;DiagramBox&gt;" />
+  <Data name="enumValues" type="list&lt;EnumValue&gt;" />
+  <Data name="members" type="list&lt;Property&gt;" />
+  <Data name="erdTables" type="list&lt;AdapterTable&gt;" />
+  <Tells message="levelChanged" />
+  <Tells message="arranged" />
+  <Tells message="added" />
+  <Radio name="diagramKindRadio" at="1,1" span="5" bind="kind" onchange="kindPicked" />
+  <Label name="levelLabel" at="9,1" span="2" caption="@levelCaption" for="levelBox" style="trailing" />
+  <Spinbox name="levelBox" at="11,1" span="2" bind="level" max="99" min="1" onchange="levelPicked" />
+  <Canvas name="diagramCanvas" at="1,2" span="12" rows="8" mode="objects" objects="{&quot;list&quot;:&quot;boxes&quot;,&quot;x&quot;:&quot;x&quot;,&quot;y&quot;:&quot;y&quot;}" tools="select, connect" toolbox="popup" toolboxPage="DiagramTools" units="{&quot;height&quot;:3000,&quot;width&quot;:4000}" zoom="true" grid="20" snap="true" background="panel" none="surface" ondraw="drawDiagram" onchange="boxMoved" onbend="lineBent" onconnect="linesDrawn" onclick="paperClicked" />
+</View>

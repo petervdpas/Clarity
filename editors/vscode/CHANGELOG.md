@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.38
+
+- Opens a window's or view's `.cxaml` file (in a project's `design` folder) as XML, colored and folded as VS Code colors XML.
+
 ## 0.1.35
 
 - Colors the toolbox words (`toolbox`, `tool`, `toolgroup`, `toolsize`, `toolopacity`, `toolcolors`, `toollayers`, `does`) and the other new ones of this round.

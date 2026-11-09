@@ -99,11 +99,16 @@ pub(crate) fn main_window(project: &Project) -> Option<String> {
 /// The size the window `name` opens at, in pixels: its own (`size 320 x
 /// 460`), or the standard size every stack shares.
 pub(crate) fn window_size(project: &Project, name: &str) -> (u32, u32) {
-    project
-        .pages()
-        .find(|p| p.name.name == name)
-        .and_then(|p| p.size)
-        .map_or((clarity_spec::layout::WINDOW_WIDTH, clarity_spec::layout::WINDOW_HEIGHT), |s| (s.width, s.height))
+    let page = project.pages().find(|p| p.name.name == name);
+    if let Some(size) = page.and_then(|p| p.size) {
+        return (size.width, size.height);
+    }
+    // A toolbox is drawn as large as its tools, not as a window.
+    if let Some(page) = page.filter(|p| p.kind == clarity_spec::model::PageKind::Toolbox) {
+        let rows = page.widgets.iter().map(|w| w.props.row + w.props.height.max(1) - 1).max().unwrap_or(1);
+        return clarity_spec::layout::toolbox_size(page.columns, rows);
+    }
+    (clarity_spec::layout::WINDOW_WIDTH, clarity_spec::layout::WINDOW_HEIGHT)
 }
 
 /// Every engine the project declares (DESIGN 5.11).
@@ -858,7 +863,8 @@ pub fn generate_cli(project: &Project, settings: &Settings) -> Result<Vec<OutFil
     }
     check_stores(project, settings)?;
     check_web_secrets(project)?;
-    let project = &compile_engines(with_resource_texts(&consts::inlined(&calls::filled(project))), settings)?;
+    // One file per module, its windows' own files (`.cxaml`) folded in, as the generators read a module.
+    let project = &compile_engines(with_resource_texts(&consts::inlined(&calls::filled(&clarity_spec::cxaml::folded(project)))), settings)?;
     match settings.stack.backend {
         Backend::Rust => rust::generate_cli(project, settings),
         Backend::Go => go::generate_cli(project, settings),

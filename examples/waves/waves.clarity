@@ -16,37 +16,6 @@ part WaveField
     hears calm
     size 8 x 10
 
-page Water: window
-    title @waterTitle
-    size 980 x 640
-
-    content name main at 1,1 span 12 rows 12
-        view WaterView
-    slideout @keptSlideout name keptPanel width 360 resizable min 260 max 700 pinnable span 6 rows 12
-        content name keptPanelContent at 1,1 span 6 rows 12
-            view KeptSwells
-
-// What the window Water shows: its parts, data and code.
-page WaterView: view
-    data speed: integer, default 4
-    data sources: integer, default 3
-    data highest: integer
-
-    WaveField name waveField at 1,1 span 8 rows 12 speed 4 sources 3 on swelled: waterSwelled
-    label @speedLabel name speedLabel for speedSlider at 9,1 span 4
-    slider name speedSlider at 9,2 span 4 bind speed min 1 max 10 on change: speedChanged
-    label @sourcesLabel name sourcesLabel for sourcesSlider at 9,3 span 4
-    slider name sourcesSlider at 9,4 span 4 bind sources min 1 max 5 on change: sourcesChanged
-    label @highestLabel name highestLabel at 9,5 span 4
-    display name highestShown at 9,6 span 4 rows 2 bind highest digits 3
-    button @calmCaption name calm at 9,8 span 4 on click: calmClicked
-
-// The swells seen, the highest first.
-page KeptSwells: view
-    data swells: list<Swell>
-
-    table name kept at 1,1 span 6 rows 12 bind swells columns height, seen order by height desc
-
 code WaterView
     handler waterSwelled(height: integer)
         highest = height

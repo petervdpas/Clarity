@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="invaders.Play" title="@playTitle" width="780" height="640">
+  <Content name="main" at="1,1" span="12" rows="12">
+    <View name="PlayView" />
+  </Content>
+</Window>

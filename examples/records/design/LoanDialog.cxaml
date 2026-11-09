@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Dialog class="loans.LoanDialog" title="@loanDialogTitle" onopen="dialogOpened">
+  <Data name="loan" type="Loan" />
+  <Label name="albumLabel" at="1,1" span="3" caption="@albumLabel" for="album" />
+  <Dropdown name="album" at="4,1" span="9" bind="loan.album" show="title, year" search="true" />
+  <Label name="friendLabel" at="1,2" span="3" caption="@friendLabel" for="friend" />
+  <Dropdown name="friend" at="4,2" span="9" bind="loan.friend" show="name, phone" search="true" />
+  <Label name="lentOnLabel" at="1,3" span="3" caption="@lentOnLabel" for="lentOn" />
+  <Date name="lentOn" at="4,3" span="4" bind="loan.lentOn" />
+  <Label name="returnedOnLabel" at="1,4" span="3" caption="@returnedOnLabel" for="returnedOn" />
+  <Date name="returnedOn" at="4,4" span="4" bind="loan.returnedOn" />
+  <Help name="returnedOnHelp" at="8,4" span="5" for="returnedOn" />
+  <Button name="saveLoan" at="9,6" span="2" caption="@saveCaption" style="primary" default="true" onclick="saveClicked" />
+  <Button name="cancelLoan" at="11,6" span="2" caption="@cancelCaption" opens="close" cancel="true" />
+</Dialog>

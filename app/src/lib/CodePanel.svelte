@@ -10,7 +10,7 @@
   import { tr } from "@clarity/ui/screen/model.ts";
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy } from "svelte";
-  import SourceEditor from "./SourceEditor.svelte";
+  import SourceEditor, { OPENS_CLARITY_BLOCK, OPENS_MARKUP_ELEMENT } from "./SourceEditor.svelte";
   import { applyEdit } from "./applyEdit";
   import type { CodeView } from "@clarity/ui/generated/CodeView.ts";
   import type { DeclTrial } from "@clarity/ui/generated/DeclTrial.ts";
@@ -166,6 +166,8 @@
       load={loadDesign}
       check={checkDesign}
       save={saveDesign}
+      language={file.path.endsWith(".cxaml") ? "cxaml" : "clarity"}
+      opensBlock={file.path.endsWith(".cxaml") ? OPENS_MARKUP_ELEMENT : OPENS_CLARITY_BLOCK}
       {reloadKey}
       ondirty={(dirty) => !dirty && (pageDesigner.draft = null)}
       {onclose}

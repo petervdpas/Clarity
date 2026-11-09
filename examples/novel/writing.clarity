@@ -1,0 +1,966 @@
+module writing
+
+use books
+
+app Novel
+    title @novelTitle
+    main Bookcase
+    menu name mainMenu
+        item @languageMenu name languageMenu
+            item @englishItem name englishItem on click: toEnglish
+            item @dutchItem name dutchItem on click: toDutch
+            item @germanItem name germanItem on click: toGerman
+        item @goMenu name goMenu
+            item @backItem name backItem key "Alt+Left" on click -> back
+            item @forwardItem name forwardItem key "Alt+Right" on click -> forward
+        item @themeMenu name themeMenu
+            item @themePaper name paperItem on click: toPaper
+            item @themeNight name nightItem on click: toNight
+            item @themeSepia name sepiaItem on click: toSepia
+            item @themeInk name inkItem on click: toInk
+    footer
+        status @novelStatus
+
+// Each person's language and theme, kept on their machine.
+settings
+    language
+    theme
+
+// The menu: each language by its own name, and each theme.
+code Novel
+    handler toEnglish
+        settings.language = "en"
+
+    handler toDutch
+        settings.language = "nl"
+
+    handler toGerman
+        settings.language = "de"
+
+    handler toPaper
+        settings.theme = "Paper"
+
+    handler toNight
+        settings.theme = "Night"
+
+    handler toSepia
+        settings.theme = "Sepia"
+
+    handler toInk
+        settings.theme = "Ink"
+
+code Bookcase
+    handler caseOpened
+        loadBooks()
+        book = new Book
+
+    handler caseReturned
+        loadBooks()
+
+code BookcaseView
+    handler loadBooks
+        books = find b in Book order by b.title
+
+    handler bookChosen
+        book = bookTable.selected
+
+    // A new book gets a title that does not exist yet: New book, New book 2, ...
+    handler addBook
+        book = new Book
+        book.title = @newBook
+        let number = count(books) + 1
+        if count(books) > 0
+            book.title = @newBookNumbered(number = number)
+        for b in find b in Book where b.title == book.title
+            number = number + 1
+            book.title = @newBookNumbered(number = number)
+        save book
+        loadBooks()
+
+    // A book goes with everything that belongs to it.
+    handler removeBook
+        delete bookTable.selected
+        book = new Book
+        loadBooks()
+
+    handler saveBook
+        save book
+        loadBooks()
+
+    handler openBook
+        if book.id == 0
+            return
+        open Desk with book = book
+
+    // The cover of the chosen book; a book not saved yet has none to keep.
+    handler openCover
+        if book.id == 0
+            return
+        open CoverDesk with book = book
+
+    handler exportBook
+        if book.id == 0
+            return
+        exportManuscript(book)
+        message @exported(title = book.title)
+
+code CoverDeskView
+    handler coverPainted
+        save book
+
+code Desk
+    handler deskOpened
+        parts.swap(ChaptersPart)
+        forBook = book
+        researchBook = book
+        characterBook = book
+        fragmentBook = book
+        balloonBook = book
+        loadChapters()
+        researches = find r in Research where r.book == book order by r.title
+        research = new Research
+        characters = find c in Character where c.book == book order by c.name
+        character = new Character
+        fragments = find f in Fragment where f.book == book order by f.heading
+        fragment = new Fragment
+        balloons = find t in TrialBalloon where t.book == book order by t.title
+        balloon = new TrialBalloon
+        balloonCast = find c in Character where c.book == book order by c.name
+        // A list nothing loaded yet holds every record: start them empty.
+        researchPlaces = find p in ResearchPlace where p.research == research
+        appearances = find a in Appearance where a.character == character
+        fragmentPlaces = find p in FragmentPlace where p.fragment == fragment
+        lines = find x in Line where x.balloon == balloon
+        participants = find x in Participation where x.balloon == balloon
+        balloonPlaces = find x in BalloonPlace where x.balloon == balloon
+        chapter = new Chapter
+        for c in chapters
+            if c.position == book.last
+                chapter = c
+                chapterList.selected = c
+        showChapter()
+
+    handler loadChapters
+        chapters = find c in Chapter where c.book == book order by c.position
+        researchChoice = chapters
+        characterChoice = chapters
+        fragmentChoice = chapters
+        balloonChoice = chapters
+
+    // The chosen chapter: its properties, its text and its research.
+    handler showChapter
+        let kept = chapter.id != 0
+        chosen = chapter
+        manuscript = new Manuscript
+        manuscript.chapter = chapter
+        for m in find m in Manuscript where m.chapter == chapter
+            manuscript = m
+        manuscriptBox.enabled = kept
+        saveChapterButton.enabled = kept
+        wordsLabel.caption = @wordCount(count = manuscript.words)
+        chapterHeading.caption = @noChapter
+        researchCurrent = chapter
+        characterCurrent = chapter
+        fragmentCurrent = chapter
+        balloonCurrent = chapter
+        researchPool = find r in Research where r.book == book order by r.title
+        let linked: list<Research> = []
+        for p in find p in ResearchPlace where p.chapter == chapter order by p.research.title
+            linked = linked + [p.research]
+        chapterResearch = linked
+        characterPool = find c in Character where c.book == book order by c.name
+        let cast: list<Character> = []
+        for a in find a in Appearance where a.chapter == chapter order by a.character.name
+            cast = cast + [a.character]
+        chapterCharacters = cast
+        fragmentPool = find f in Fragment where f.book == book order by f.heading
+        let bits: list<Fragment> = []
+        for p in find p in FragmentPlace where p.chapter == chapter order by p.fragment.position
+            bits = bits + [p.fragment]
+        chapterFragments = bits
+        dialoguePool = find t in TrialBalloon where t.book == book order by t.title
+        let talks: list<TrialBalloon> = []
+        for p in find p in BalloonPlace where p.chapter == chapter order by p.balloon.title
+            talks = talks + [p.balloon]
+        chapterDialogues = talks
+        chapterDialogueTable.enabled = kept
+        researchTable.enabled = kept
+        chapterCharacterTable.enabled = kept
+        chapterFragmentTable.enabled = kept
+        inChapterButton.enabled = kept
+        characterInChapterButton.enabled = kept
+        fragmentInChapterButton.enabled = kept
+        balloonInChapterButton.enabled = kept
+        deskHeading.caption = @deskHeadingBook(book = book.title)
+        if kept
+            deskHeading.caption = @deskHeadingChapter(book = book.title, number = chapter.number, title = chapter.title)
+            chapterHeading.caption = @chapterHeading(number = chapter.number, title = chapter.title)
+            inChapterButton.caption = @inChapter(number = chapter.number, title = chapter.title)
+            characterInChapterButton.caption = @inChapter(number = chapter.number, title = chapter.title)
+            fragmentInChapterButton.caption = @inChapter(number = chapter.number, title = chapter.title)
+            balloonInChapterButton.caption = @inChapter(number = chapter.number, title = chapter.title)
+
+    // Chapters chose, made, saved or removed a chapter.
+    handler chapterChosen
+        chapter = chosen
+        if chapter.id != 0
+            book.last = chapter.position
+            save book
+        loadChapters()
+        if chapter.id != 0
+            chapterList.selected = chapter
+        showChapter()
+
+    // Research jumped to a chapter: choose it in Chapters.
+    handler jumpTo(position: integer)
+        for c in chapters
+            if c.position == position
+                chapter = c
+                chapterList.selected = c
+        book.last = position
+        save book
+        showChapter()
+        parts.swap(ChaptersPart)
+        message @jumpedTo(number = chapter.number, title = chapter.title)
+
+    // Chapters jumped to a piece of research: choose it in Research.
+    handler toResearch(title: text)
+        researches = find r in Research where r.book == book order by r.title
+        for r in researches
+            if r.title == title
+                research = r
+                researchList.selected = r
+        researchPlaces = find p in ResearchPlace where p.research == research order by p.chapter.position
+        parts.swap(ResearchPart)
+        message @jumpedToResearch(title = title)
+
+    // Chapters jumped to a character: choose it in Characters.
+    handler toCharacter(name: text)
+        characters = find c in Character where c.book == book order by c.name
+        for c in characters
+            if c.name == name
+                character = c
+                characterList.selected = c
+        appearances = find a in Appearance where a.character == character order by a.chapter.position
+        parts.swap(CharactersPart)
+        message @jumpedToCharacter(name = name)
+
+    // Chapters jumped to a fragment: choose it in Fragments.
+    handler toFragment(fragmentId: integer)
+        fragmentSearchBox.text = ""
+        fragments = find f in Fragment where f.book == book order by f.heading
+        for f in fragments
+            if f.id == fragmentId
+                fragment = f
+                fragmentList.selected = f
+        fragmentPlaces = find p in FragmentPlace where p.fragment == fragment order by p.chapter.position
+        parts.swap(FragmentsPart)
+        message @jumpedToFragment(heading = fragment.heading)
+
+    // Chapters jumped to a dialogue: choose it in Dialogues.
+    handler toDialogue(dialogueId: integer)
+        balloons = find t in TrialBalloon where t.book == book order by t.title
+        for t in balloons
+            if t.id == dialogueId
+                balloon = t
+                balloonList.selected = t
+        lines = find x in Line where x.balloon == balloon order by x.position
+        participants = find x in Participation where x.balloon == balloon order by x.character.name
+        balloonPlaces = find x in BalloonPlace where x.balloon == balloon order by x.chapter.position
+        parts.swap(DialoguesPart)
+        message @jumpedToDialogue(title = balloon.title)
+
+    handler showChapters
+        parts.swap(ChaptersPart)
+
+    handler showResearch
+        parts.swap(ResearchPart)
+
+    handler showCharacters
+        parts.swap(CharactersPart)
+
+    handler showFragments
+        parts.swap(FragmentsPart)
+
+    handler showDialogues
+        parts.swap(DialoguesPart)
+
+code ChaptersPart
+    handler loadList
+        chapters = find c in Chapter where c.book == forBook order by c.position
+
+    handler loadResearch
+        let linked: list<Research> = []
+        for p in find p in ResearchPlace where p.chapter == chosen order by p.research.title
+            linked = linked + [p.research]
+        chapterResearch = linked
+
+    handler chapterClicked
+        chosen = chapterList.selected
+        tell chosen()
+
+    handler addChapter
+        let c = new Chapter
+        c.book = forBook
+        c.position = count(chapters)
+        c.number = count(chapters)
+        c.title = @newChapter
+        save c
+        loadList()
+        chapterList.selected = c
+        chosen = c
+        tell chosen()
+
+    handler removeChapter
+        if chosen.id == 0
+            return
+        ask @removeChapterAsk(title = chosen.title) yes @removeRow no @keepRow then chapterRemoved
+
+    handler chapterRemoved
+        delete chosen
+        chosen = new Chapter
+        loadList()
+        tell chosen()
+
+    // After a drag every number follows from its place, the first being 0.
+    handler chaptersMoved
+        for c in chapters
+            c.number = c.position
+            save c
+        chosen = chapterList.selected
+        tell chosen()
+
+    // Saves the properties and the text, and counts the words.
+    handler saveChapter
+        if chosen.id == 0
+            return
+        manuscript.chapter = chosen
+        manuscript.words = count(words(manuscript.text))
+        save manuscript
+        chosen.words = manuscript.words
+        save chosen
+        wordsLabel.caption = @wordCount(count = manuscript.words)
+        loadList()
+        chapterList.selected = chosen
+        tell chosen()
+
+    handler linkResearch
+        if chosen.id == 0
+            return
+        ask @whichResearch for Research from researchPool then researchPicked
+
+    handler researchPicked(r: Research)
+        for p in find p in ResearchPlace where p.research == r and p.chapter == chosen
+            return
+        let p = new ResearchPlace
+        p.research = r
+        p.chapter = chosen
+        save p
+        loadResearch()
+
+    // Takes the research out of this chapter; the research itself stays.
+    handler unlinkResearch
+        let gone = researchTable.selected
+        for p in find p in ResearchPlace where p.research == gone and p.chapter == chosen
+            delete p
+        loadResearch()
+
+    // To the chosen research, in the Research section.
+    handler openResearch
+        if count(chapterResearch) == 0
+            return
+        let x = chapterResearch[1]
+        for y in chapterResearch
+            if y.id == pickedResearch.id
+                x = y
+        tell toResearch(x.title)
+
+    handler rememberPickedResearch
+        pickedResearch = researchTable.selected
+
+    handler loadChapterCharacters
+        let cast: list<Character> = []
+        for a in find a in Appearance where a.chapter == chosen order by a.character.name
+            cast = cast + [a.character]
+        chapterCharacters = cast
+
+    handler linkCharacter
+        if chosen.id == 0
+            return
+        ask @whichCharacter for Character from characterPool then characterPicked
+
+    handler characterPicked(c: Character)
+        for a in find a in Appearance where a.character == c and a.chapter == chosen
+            return
+        let a = new Appearance
+        a.character = c
+        a.chapter = chosen
+        save a
+        loadChapterCharacters()
+
+    // Takes the character out of this chapter; the character itself stays.
+    handler unlinkCharacter
+        let gone = chapterCharacterTable.selected
+        for a in find a in Appearance where a.character == gone and a.chapter == chosen
+            delete a
+        loadChapterCharacters()
+
+    // To the chosen character, in the Characters section.
+    handler openCharacter
+        if count(chapterCharacters) == 0
+            return
+        let x = chapterCharacters[1]
+        for y in chapterCharacters
+            if y.id == pickedCharacter.id
+                x = y
+        tell toCharacter(x.name)
+
+    handler rememberPickedCharacter
+        pickedCharacter = chapterCharacterTable.selected
+
+    handler loadChapterFragments
+        let bits: list<Fragment> = []
+        for p in find p in FragmentPlace where p.chapter == chosen order by p.fragment.position
+            bits = bits + [p.fragment]
+        chapterFragments = bits
+
+    handler linkFragment
+        if chosen.id == 0
+            return
+        ask @whichFragment for Fragment from fragmentPool then fragmentPicked
+
+    handler fragmentPicked(f: Fragment)
+        for p in find p in FragmentPlace where p.fragment == f and p.chapter == chosen
+            return
+        let p = new FragmentPlace
+        p.fragment = f
+        p.chapter = chosen
+        save p
+        loadChapterFragments()
+
+    // Takes the fragment out of this chapter; the fragment itself stays.
+    handler unlinkFragment
+        let gone = chapterFragmentTable.selected
+        for p in find p in FragmentPlace where p.fragment == gone and p.chapter == chosen
+            delete p
+        loadChapterFragments()
+
+    // To the chosen fragment, in the Fragments section.
+    handler openFragment
+        if count(chapterFragments) == 0
+            return
+        let x = chapterFragments[1]
+        for y in chapterFragments
+            if y.id == pickedFragment.id
+                x = y
+        tell toFragment(x.id)
+
+    handler rememberPickedFragment
+        pickedFragment = chapterFragmentTable.selected
+
+    handler loadChapterDialogues
+        let talks: list<TrialBalloon> = []
+        for p in find p in BalloonPlace where p.chapter == chosen order by p.balloon.title
+            talks = talks + [p.balloon]
+        chapterDialogues = talks
+
+    handler linkDialogue
+        if chosen.id == 0
+            return
+        ask @whichDialogue for TrialBalloon from dialoguePool then dialoguePicked
+
+    handler dialoguePicked(t: TrialBalloon)
+        for p in find p in BalloonPlace where p.balloon == t and p.chapter == chosen
+            return
+        let p = new BalloonPlace
+        p.balloon = t
+        p.chapter = chosen
+        save p
+        loadChapterDialogues()
+
+    // Takes the dialogue out of this chapter; the dialogue itself stays.
+    handler unlinkDialogue
+        let gone = chapterDialogueTable.selected
+        for p in find p in BalloonPlace where p.balloon == gone and p.chapter == chosen
+            delete p
+        loadChapterDialogues()
+
+    // To the chosen dialogue, in the Dialogues section.
+    handler openDialogue
+        if count(chapterDialogues) == 0
+            return
+        let x = chapterDialogues[1]
+        for y in chapterDialogues
+            if y.id == pickedDialogue.id
+                x = y
+        tell toDialogue(x.id)
+
+    handler rememberPickedDialogue
+        pickedDialogue = chapterDialogueTable.selected
+
+    // The toolbox of the chapter text: each tool puts the chosen item in at
+    // the caret and links it to the chapter, when it was not yet.
+    handler insertResearch
+        if chosen.id == 0
+            return
+        ask @insertWhichResearch for Research from researchPool then researchInserted
+
+    // The research's text, with a link back to it, followed from the preview.
+    handler researchInserted(r: Research)
+        manuscriptBox.insert(r.text + "\n\n[" + r.title + "](clarity:research/{r.id})")
+        researchPicked(r)
+
+    handler insertFragment
+        if chosen.id == 0
+            return
+        ask @insertWhichFragment for Fragment from fragmentPool then fragmentInserted
+
+    // The fragment's text, with a link back to it.
+    handler fragmentInserted(f: Fragment)
+        manuscriptBox.insert(f.text + "\n\n[" + f.heading + "](clarity:fragment/{f.id})")
+        fragmentPicked(f)
+
+    handler insertDialogue
+        if chosen.id == 0
+            return
+        ask @insertWhichDialogue for TrialBalloon from dialoguePool then dialogueInserted
+
+    // The lines as prose, with a link back to the dialogue: spoken aloud
+    // between quotes, thought in italics, a line without a speaker (a
+    // direction) as it is.
+    handler dialogueInserted(t: TrialBalloon)
+        let written = ""
+        for l in find l in Line where l.balloon == t order by l.position
+            if l.text != ""
+                if l.character == none
+                    written = written + l.text
+                else
+                    if t.voice == InThought
+                        written = written + l.character.name + ": *" + l.text + "*"
+                    else
+                        written = written + l.character.name + ": \"" + l.text + "\""
+                written = written + "\n\n"
+        manuscriptBox.insert(written + "[" + t.title + "](clarity:dialogue/{t.id})")
+        dialoguePicked(t)
+
+    // A link in the preview clicked: to that research, fragment or dialogue.
+    handler manuscriptLinkFollowed
+        let link = manuscriptBox.link
+        for r in researchPool
+            if link == "clarity:research/{r.id}"
+                tell toResearch(r.title)
+        for f in fragmentPool
+            if link == "clarity:fragment/{f.id}"
+                tell toFragment(f.id)
+        for t in dialoguePool
+            if link == "clarity:dialogue/{t.id}"
+                tell toDialogue(t.id)
+
+code ResearchPart
+    handler filterResearch
+        researches = find r in Research where r.book == researchBook and r matches researchSearchBox.text order by r.title
+
+    handler researchChosen
+        research = researchList.selected
+        loadResearchPlaces()
+
+    handler addResearch
+        let r = new Research
+        r.book = researchBook
+        r.title = @newResearch
+        save r
+        filterResearch()
+        research = r
+        researchList.selected = r
+        loadResearchPlaces()
+
+    // Saves the form; filled in with nothing chosen, it makes a new one.
+    handler saveResearch
+        if research.id == 0
+            research.book = researchBook
+        save research
+        filterResearch()
+        researchList.selected = research
+        loadResearchPlaces()
+
+    handler loadResearchPlaces
+        researchPlaces = find p in ResearchPlace where p.research == research order by p.chapter.position
+
+    handler addResearchPlace
+        if research.id == 0
+            return
+        ask @whichChapter for Chapter from researchChoice then researchPlacePicked
+
+    handler researchPlacePicked(c: Chapter)
+        for p in find p in ResearchPlace where p.research == research and p.chapter == c
+            return
+        let p = new ResearchPlace
+        p.research = research
+        p.chapter = c
+        save p
+        loadResearchPlaces()
+
+    handler researchInChapter
+        if research.id == 0 or researchCurrent.id == 0
+            return
+        researchPlacePicked(researchCurrent)
+        message @linked(number = researchCurrent.number, title = researchCurrent.title)
+
+    handler removeResearchPlace
+        delete researchPlaceTable.selected
+        loadResearchPlaces()
+
+    // To the chosen chapter of Used in, or the first when none is chosen.
+    handler rememberPickedResearchPlace
+        pickedResearchPlace = researchPlaceTable.selected
+
+    handler researchToChapter
+        if count(researchPlaces) == 0
+            message @usedNowhere
+            return
+        let p = researchPlaces[1]
+        for y in researchPlaces
+            if y.id == pickedResearchPlace.id
+                p = y
+        tell jumpTo(p.chapter.position)
+
+    // Research used in a chapter goes only once its links are gone.
+    handler removeResearch
+        if research.id == 0
+            return
+        let used = find p in ResearchPlace where p.research == research
+        if count(used) > 0
+            message warning @stillUsed(count = count(used))
+            return
+        ask @removeResearchAsk yes @removeRow no @keepRow then researchRemoved
+
+    handler researchRemoved
+        delete research
+        research = new Research
+        filterResearch()
+        loadResearchPlaces()
+
+code CharactersPart
+    handler loadCharacters
+        characters = find c in Character where c.book == characterBook order by c.name
+
+    handler characterChosen
+        character = characterList.selected
+        loadAppearances()
+
+    handler addCharacter
+        let c = new Character
+        c.book = characterBook
+        c.name = @newCharacter
+        save c
+        loadCharacters()
+        character = c
+        characterList.selected = c
+        loadAppearances()
+
+    // Saves the form; filled in with nothing chosen, it makes a new one.
+    handler saveCharacter
+        if character.id == 0
+            character.book = characterBook
+        save character
+        loadCharacters()
+        characterList.selected = character
+        loadAppearances()
+
+    handler loadAppearances
+        appearances = find a in Appearance where a.character == character order by a.chapter.position
+
+    handler addAppearance
+        if character.id == 0
+            return
+        ask @whichChapter for Chapter from characterChoice then appearancePicked
+
+    handler appearancePicked(c: Chapter)
+        for a in find a in Appearance where a.character == character and a.chapter == c
+            return
+        let a = new Appearance
+        a.character = character
+        a.chapter = c
+        save a
+        loadAppearances()
+
+    handler characterInChapter
+        if character.id == 0 or characterCurrent.id == 0
+            return
+        appearancePicked(characterCurrent)
+        message @linked(number = characterCurrent.number, title = characterCurrent.title)
+
+    handler removeAppearance
+        delete appearanceTable.selected
+        loadAppearances()
+
+    // To the chosen chapter they appear in, or the first when none is chosen.
+    handler rememberPickedAppearance
+        pickedAppearance = appearanceTable.selected
+
+    handler characterToChapter
+        if count(appearances) == 0
+            message @usedNowhere
+            return
+        let a = appearances[1]
+        for y in appearances
+            if y.id == pickedAppearance.id
+                a = y
+        tell jumpTo(a.chapter.position)
+
+    // A character who appears in a chapter goes only once those links are gone.
+    handler removeCharacter
+        if character.id == 0
+            return
+        let used = find a in Appearance where a.character == character
+        if count(used) > 0
+            message warning @stillUsed(count = count(used))
+            return
+        ask @removeCharacterAsk(name = character.name) yes @removeRow no @keepRow then characterRemoved
+
+    handler characterRemoved
+        delete character
+        character = new Character
+        loadCharacters()
+        loadAppearances()
+
+code FragmentsPart
+    handler filterFragments
+        fragments = find f in Fragment where f.book == fragmentBook and f matches fragmentSearchBox.text order by f.heading
+
+    handler fragmentChosen
+        fragment = fragmentList.selected
+        loadFragmentPlaces()
+
+    handler addFragment
+        let f = new Fragment
+        f.book = fragmentBook
+        f.heading = @newFragment
+        f.text = @newFragment
+        save f
+        filterFragments()
+        fragment = f
+        fragmentList.selected = f
+        loadFragmentPlaces()
+
+    // Saves the form; filled in with nothing chosen, it makes a new one.
+    handler saveFragment
+        if fragment.id == 0
+            fragment.book = fragmentBook
+        save fragment
+        filterFragments()
+        fragmentList.selected = fragment
+        loadFragmentPlaces()
+
+    handler loadFragmentPlaces
+        fragmentPlaces = find p in FragmentPlace where p.fragment == fragment order by p.chapter.position
+
+    handler addFragmentPlace
+        if fragment.id == 0
+            return
+        ask @whichChapter for Chapter from fragmentChoice then fragmentPlacePicked
+
+    handler fragmentPlacePicked(c: Chapter)
+        for p in find p in FragmentPlace where p.fragment == fragment and p.chapter == c
+            return
+        let p = new FragmentPlace
+        p.fragment = fragment
+        p.chapter = c
+        save p
+        loadFragmentPlaces()
+
+    handler fragmentInChapter
+        if fragment.id == 0 or fragmentCurrent.id == 0
+            return
+        fragmentPlacePicked(fragmentCurrent)
+        message @linked(number = fragmentCurrent.number, title = fragmentCurrent.title)
+
+    handler removeFragmentPlace
+        delete fragmentPlaceTable.selected
+        loadFragmentPlaces()
+
+    // To the chosen chapter of Used in, or the first when none is chosen.
+    handler rememberPickedFragmentPlace
+        pickedFragmentPlace = fragmentPlaceTable.selected
+
+    handler fragmentToChapter
+        if count(fragmentPlaces) == 0
+            message @usedNowhere
+            return
+        let p = fragmentPlaces[1]
+        for y in fragmentPlaces
+            if y.id == pickedFragmentPlace.id
+                p = y
+        tell jumpTo(p.chapter.position)
+
+    // A fragment used in a chapter goes only once its links are gone.
+    handler removeFragment
+        if fragment.id == 0
+            return
+        let used = find p in FragmentPlace where p.fragment == fragment
+        if count(used) > 0
+            message warning @stillUsed(count = count(used))
+            return
+        ask @removeFragmentAsk yes @removeRow no @keepRow then fragmentRemoved
+
+    handler fragmentRemoved
+        delete fragment
+        fragment = new Fragment
+        filterFragments()
+        loadFragmentPlaces()
+
+code DialoguesPart
+    handler loadBalloons
+        balloons = find t in TrialBalloon where t.book == balloonBook order by t.title
+
+    handler balloonChosen
+        balloon = balloonList.selected
+        loadBalloon()
+
+    // The lines, who takes part and where the chosen dialogue is used.
+    handler loadBalloon
+        lines = find x in Line where x.balloon == balloon order by x.position
+        participants = find x in Participation where x.balloon == balloon order by x.character.name
+        balloonPlaces = find x in BalloonPlace where x.balloon == balloon order by x.chapter.position
+        balloonCast = find c in Character where c.book == balloonBook order by c.name
+
+    handler addBalloon
+        let t = new TrialBalloon
+        t.book = balloonBook
+        t.title = @newDialogue
+        save t
+        loadBalloons()
+        balloon = t
+        balloonList.selected = t
+        loadBalloon()
+
+    // A dialogue typed in but not saved yet is saved first, so it can get
+    // participants, lines and chapters.
+    handler keepNew
+        if balloon.id == 0 and balloon.title != ""
+            saveBalloon()
+
+    // Saves the form; filled in with nothing chosen, it makes a new one.
+    handler saveBalloon
+        if balloon.id == 0
+            balloon.book = balloonBook
+        save balloon
+        loadBalloons()
+        balloonList.selected = balloon
+        loadBalloon()
+
+    // A line by the chosen participant, or a direction when nobody is chosen.
+    handler addLine
+        keepNew()
+        if balloon.id == 0 or lineBox.text == ""
+            return
+        let l = new Line
+        l.balloon = balloon
+        l.text = lineBox.text
+        l.position = count(lines)
+        for y in participants
+            if y.id == speaker.id
+                l.character = y.character
+        save l
+        lineBox.text = ""
+        lines = find x in Line where x.balloon == balloon order by x.position
+
+    // The participant chosen speaks the next line.
+    handler rememberSpeaker
+        speaker = participantTable.selected
+
+    handler rememberLine
+        pickedLine = lineList.selected
+
+    handler removeLine
+        let found = false
+        for y in lines
+            if y.id == pickedLine.id
+                found = true
+        if not found
+            return
+        ask @removeLineAsk yes @removeRow no @keepRow then lineRemoved
+
+    handler lineRemoved
+        delete pickedLine
+        pickedLine = new Line
+        lines = find x in Line where x.balloon == balloon order by x.position
+
+    handler linesMoved
+        for l in lines
+            save l
+
+    handler addParticipant
+        keepNew()
+        if balloon.id == 0
+            return
+        ask @whichParticipant for Character from balloonCast then participantPicked
+
+    handler participantPicked(c: Character)
+        for p in find p in Participation where p.balloon == balloon and p.character == c
+            return
+        let p = new Participation
+        p.balloon = balloon
+        p.character = c
+        save p
+        participants = find x in Participation where x.balloon == balloon order by x.character.name
+
+    handler removeParticipant
+        delete participantTable.selected
+        participants = find x in Participation where x.balloon == balloon order by x.character.name
+
+    handler addBalloonPlace
+        keepNew()
+        if balloon.id == 0
+            return
+        ask @whichChapter for Chapter from balloonChoice then balloonPlacePicked
+
+    handler balloonPlacePicked(c: Chapter)
+        for p in find p in BalloonPlace where p.balloon == balloon and p.chapter == c
+            return
+        let p = new BalloonPlace
+        p.balloon = balloon
+        p.chapter = c
+        save p
+        balloonPlaces = find x in BalloonPlace where x.balloon == balloon order by x.chapter.position
+
+    handler balloonInChapter
+        keepNew()
+        if balloon.id == 0 or balloonCurrent.id == 0
+            return
+        balloonPlacePicked(balloonCurrent)
+        message @linked(number = balloonCurrent.number, title = balloonCurrent.title)
+
+    handler removeBalloonPlace
+        delete balloonPlaceTable.selected
+        balloonPlaces = find x in BalloonPlace where x.balloon == balloon order by x.chapter.position
+
+    // To the chosen chapter of Used in, or the first when none is chosen.
+    handler rememberPickedBalloonPlace
+        pickedBalloonPlace = balloonPlaceTable.selected
+
+    handler balloonToChapter
+        if count(balloonPlaces) == 0
+            message @usedNowhere
+            return
+        let p = balloonPlaces[1]
+        for y in balloonPlaces
+            if y.id == pickedBalloonPlace.id
+                p = y
+        tell jumpTo(p.chapter.position)
+
+    // A dialogue used in a chapter goes only once its links are gone.
+    handler removeBalloon
+        if balloon.id == 0
+            return
+        let used = find p in BalloonPlace where p.balloon == balloon
+        if count(used) > 0
+            message warning @stillUsed(count = count(used))
+            return
+        ask @removeDialogueAsk(title = balloon.title) yes @removeRow no @keepRow then balloonRemoved
+
+    handler balloonRemoved
+        delete balloon
+        balloon = new TrialBalloon
+        loadBalloons()
+        loadBalloon()

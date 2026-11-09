@@ -81,9 +81,11 @@ export function commandsOf(frame: Frame | null | undefined): number[] {
  * design has (an item it knows), each part once (the first drawn), and each
  * grid with the parts it lies inside, so a part is never dropped into itself.
  * A frame's buttons are known by the window's own frame, or else by its
- * app's (`appFrame`), whose buttons are designed in the app.
+ * app's (`appFrame`), whose buttons are designed in the app. The grid of a
+ * line of a window's content is its view's (`views`, line to view), as the
+ * view's parts lie in the view.
  */
-export function layerOf(layout: Layout, page: Page, appFrame: Frame | null = null): { parts: LayerPart[]; grids: LayerGrid[] } {
+export function layerOf(layout: Layout, page: Page, appFrame: Frame | null = null, views: Map<number, number> = new Map()): { parts: LayerPart[]; grids: LayerGrid[] } {
   const known = partsOf(page);
   const own = new Set(commandsOf(page.frame));
   const app = new Set(commandsOf(appFrame));
@@ -95,9 +97,12 @@ export function layerOf(layout: Layout, page: Page, appFrame: Frame | null = nul
     if (item === null || seen.has(item)) continue;
     if (command ? !own.has(item) && !app.has(item) : !known.has(item)) continue;
     seen.add(item);
+    // A line of a window's content has no title: it is named by the view it shows.
+    const lines = known.get(item)?.pages ?? [];
     const pages = (laid.pages ?? []).flatMap((p) => {
       const at = itemOf(p.item);
-      return at === null ? [] : [{ item: at, title: p.title, box: p.at ? boxOf(p.at) : null }];
+      const view = lines.find((l) => l.span.start === at)?.view ?? null;
+      return at === null ? [] : [{ item: at, title: p.title ?? view, box: p.at ? boxOf(p.at) : null }];
     });
     const columns = (laid.columns ?? []).map((c) => ({ field: c.field, box: boxOf(c.at) }));
     parts.push({ item, name: laid.name, kind: laid.kind, box: boxOf(laid.at), own: command ? own.has(item) : true, pages, columns });
@@ -110,7 +115,8 @@ export function layerOf(layout: Layout, page: Page, appFrame: Frame | null = nul
   for (const laid of layout.grids) {
     const item = itemOf(laid.item);
     if (item === null) continue;
-    grids.push({ item, columns: laid.columns, gap: laid.gap, box: boxOf(laid.at), rows: laid.rows, inside: within.get(item) ?? [] });
+    const named = views.get(item) ?? item;
+    grids.push({ item: named, columns: laid.columns, gap: laid.gap, box: boxOf(laid.at), rows: laid.rows, inside: within.get(item) ?? within.get(named) ?? [] });
   }
   return { parts, grids };
 }
@@ -163,4 +169,14 @@ export function grown(at: { col: number; width: number; height: number }, column
   const height = at.height + by[1];
   if (width < 1 || height < 1 || at.col + width - 1 > columns) return null;
   return { width, height };
+}
+
+/** The cells a resize handle moved: the pointer's move from `from` to `to`, rounded to whole columns and rows. */
+export function resizedBy(from: { x: number; y: number }, to: { x: number; y: number }, column: number, row: number): { columns: number; rows: number } {
+  return { columns: Math.round((to.x - from.x) / column), rows: Math.round((to.y - from.y) / row) };
+}
+
+/** A part's size after its handle moved `by` cells: at least one cell, and not past its grid's last column. */
+export function resizedTo(at: { col: number; width: number; height: number }, by: { columns: number; rows: number }, columns: number): { width: number; height: number } {
+  return { width: Math.min(columns - at.col + 1, Math.max(1, at.width + by.columns)), height: Math.max(1, at.height + by.rows) };
 }

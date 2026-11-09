@@ -51,7 +51,7 @@ fn every_stack_carries_the_splash_and_its_status() {
         // As an Avalonia splash Window says it in its own XAML: its size, no
         // system decorations, centred on the screen, fixed, on top, not in the taskbar.
         let welcome = files.iter().find(|f| f.path.to_lowercase().ends_with("windows/welcome.cxaml")).unwrap_or_else(|| panic!("{stack}: the splash page is a window the program carries"));
-        assert!(welcome.text.contains(r#"<Window name="Welcome" columns="56" cell="10" style="splashBack" width="560" height="290" decorations="none" startup="centerScreen" resizable="false" topmost="true" taskbar="false" frame="none">"#), "{stack}: {}", welcome.text);
+        assert!(welcome.text.contains(r#"<Splash class="todo.Welcome" width="560" height="290" columns="56" cell="10" style="splashBack" decorations="none" startup="centerScreen" resizable="false" topmost="true" taskbar="false" frame="none">"#), "{stack}: {}", welcome.text);
         // And as Avalonia's App starts it: the app names its splash.
         let app = files.iter().find(|f| f.path.to_lowercase().ends_with("apps/todo.cxaml")).unwrap_or_else(|| panic!("{stack}: no app markup"));
         assert!(app.text.contains(r#"<App name="Todo" title="@todoTitle" splash="Welcome" splashFor="2.5">"#), "{stack}: {}", app.text);

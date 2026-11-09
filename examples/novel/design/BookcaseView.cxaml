@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window Bookcase shows: its parts, data and code. -->
+<View class="writing.BookcaseView">
+  <Data name="books" type="list&lt;Book&gt;" />
+  <Data name="book" type="Book" />
+  <Splitter name="caseSplitter" at="1,1" span="12" rows="15">
+    <Pane span="5">
+      <Table name="bookTable" at="1,1" span="5" rows="15" bind="books" columns="title, form, author" widths="{&quot;form&quot;:110}" sortable="true" add="true" remove="true" confirm="true" onadd="addBook" onremove="removeBook" onselect="bookChosen" onopen="openBook" />
+    </Pane>
+    <Pane>
+      <Label name="bookTitleLabel" at="1,1" span="2" caption="@bookTitleLabel" for="bookTitleBox" />
+      <Textbox name="bookTitleBox" at="3,1" span="5" bind="book.title" placeholder="@bookTitlePlaceholder" />
+      <Label name="bookSubtitleLabel" at="1,2" span="2" caption="@bookSubtitleLabel" for="bookSubtitleBox" />
+      <Textbox name="bookSubtitleBox" at="3,2" span="5" bind="book.subtitle" />
+      <Label name="bookAuthorLabel" at="1,3" span="2" caption="@bookAuthorLabel" for="bookAuthorBox" />
+      <Textbox name="bookAuthorBox" at="3,3" span="5" bind="book.author" />
+      <Label name="bookLanguageLabel" at="1,4" span="2" caption="@bookLanguageLabel" for="bookLanguageBox" />
+      <Textbox name="bookLanguageBox" at="3,4" span="2" bind="book.languageCode" />
+      <Label name="bookFormLabel" at="5,4" span="1" caption="@bookFormLabel" for="bookFormBox" />
+      <Dropdown name="bookFormBox" at="6,4" span="2" bind="book.form" />
+      <Label name="bookNoteLabel" at="1,5" span="2" caption="@bookNoteLabel" for="bookNoteBox" />
+      <Memo name="bookNoteBox" at="3,5" span="5" rows="10" bind="book.note" placeholder="@bookNotePlaceholder" />
+      <Button name="exportButton" at="1,15" span="2" caption="@exportCaption" icon="file-down" onclick="exportBook" />
+      <Button name="coverButton" at="3,15" span="1" caption="@coverCaption" icon="palette" onclick="openCover" />
+      <Button name="saveBookButton" at="4,15" span="2" caption="@saveCaption" icon="save" onclick="saveBook" />
+      <Button name="openBookButton" at="6,15" span="2" caption="@openCaption" icon="book-open" default="true" onclick="openBook" />
+    </Pane>
+  </Splitter>
+</View>

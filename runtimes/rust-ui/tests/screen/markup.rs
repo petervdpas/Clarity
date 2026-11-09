@@ -193,3 +193,33 @@ fn a_part_that_code_hides_takes_no_pointer() {
     host.set_state("cpu", |s| s.visible = Some(false));
     assert_ne!(Some(label), screen.at(20.0, 10.0));
 }
+
+/// A window in the source's own dialect (docs/CXAML-SOURCE-PLAN.md): the root
+/// names it in its class, its data and tells are the program's, a content's
+/// page is the view it shows with the view's parts inside, and a tree's
+/// levels are worked out into its rows.
+#[test]
+fn a_window_in_the_source_dialect_reads_as_the_window_it_is() {
+    let window = markup::read(
+        r#"<Window class="dashboard.Board" title="@boardTitle" width="1200" height="760" onopen="boardOpened">
+  <Data name="total" type="decimal" />
+  <Tells message="saved" />
+  <Content name="totalSquare" at="1,8" span="4" rows="7">
+    <View name="TotalView" columns="12">
+      <Display name="totalBox" at="1,2" span="12" rows="3" bind="total" digits="9" />
+    </View>
+  </Content>
+  <Tree name="modelTree" at="5,1" span="4" rows="7" bind="modelTreeRows">
+    <Level entity="Project" show="name" />
+  </Tree>
+</Window>"#,
+    )
+    .unwrap();
+    assert_eq!(window.name.as_deref(), Some("Board"));
+    assert_eq!(window.parts.len(), 2, "the data and tells are not parts");
+    let content = &window.parts[0];
+    assert_eq!(content.pages.len(), 1);
+    assert_eq!(content.pages[0].grid, Some(12));
+    assert_eq!(content.pages[0].children[0].kind, "display");
+    assert!(window.parts[1].children.is_empty(), "a tree's levels are no parts");
+}

@@ -72,3 +72,19 @@ pub const BUTTON_SIDES: u32 = 3;
 
 /// The space beside an input's text, as a multiple of the theme's `padding`.
 pub const INPUT_SIDES: u32 = 2;
+
+/// How wide a column of a toolbox page is shown, about a tool button with its room.
+pub const TOOLBOX_COLUMN: u32 = 44;
+/// What the window around a page takes beyond its grid: its padding, title and menu.
+pub const PAGE_CHROME: (u32, u32) = (24, 84);
+
+/// The size a toolbox page is drawn at on its own (the designer, the
+/// preview): as wide as its columns of tools and as high as its rows, not a
+/// window's size, as a canvas shows it as a small panel. At least room for its title.
+pub fn toolbox_size(columns: u32, rows: u32) -> (u32, u32) {
+    let columns = columns.max(1);
+    let rows = rows.max(1);
+    let width = PAGE_CHROME.0 + columns * TOOLBOX_COLUMN + (columns - 1) * GAP;
+    let height = PAGE_CHROME.1 + rows * ROW_HEIGHT + (rows - 1) * GAP;
+    (width.max(220), height)
+}

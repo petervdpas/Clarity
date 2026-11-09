@@ -441,7 +441,7 @@ fn the_web_target_serves_the_renderer() {
     for path in ["browser/index.html", "browser/clarity/files.json"] {
         assert!(files.iter().any(|f| f.path == path), "{path}");
     }
-    has(file(&files, "browser/clarity/files.json"), "<Window name=\\\"OrderForm\\\">");
+    has(file(&files, "browser/clarity/files.json"), "<Window class=\\\"sales.OrderForm\\\"");
     // No Svelte screen: nothing of ui/, no page of the old screen.
     assert!(!files.iter().any(|f| f.path.starts_with("ui/")), "no ui/ on the web alone");
     has(file(&files, "src/page.cpp"), "const std::string& facts() {");

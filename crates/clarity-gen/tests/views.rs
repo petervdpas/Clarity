@@ -99,15 +99,15 @@ fn content_shows_its_views_and_swaps_them_on_every_stack() {
         let at = code.find("<Content name=\"main\"").unwrap_or_else(|| panic!("{backend:?} has no content"));
         let inside = &code[at..at + code[at..].find("</Content>").unwrap_or_else(|| panic!("{backend:?}: the content holds nothing"))];
         assert!(inside.contains("name=\"saveButton\"") && inside.contains("name=\"otherLabel\""), "{backend:?}: {inside}");
-        assert!(inside.contains("<Tab columns=\"12\""), "{backend:?}: {inside}");
+        assert!(inside.contains("<View name=\"ClassEditor\" columns=\"12\""), "{backend:?}: {inside}");
         assert!(code.lines().any(|l| l.contains(swap) && l.to_lowercase().contains("main") && l.contains('2')), "{backend:?} opens no second page with {swap}");
     }
 }
 
 
-/// Content has no look of its own, so the designer draws each view in it as
-/// it looks: the view's parts show, without design items (they are designed
-/// in the view), and the content and its lines can be picked.
+/// The designer draws a window as it looks: each view in its content, its
+/// parts designed in place (the view stands in the window's file, so an
+/// edit of a part changes the view), and the content can be picked too.
 #[test]
 fn the_designer_shows_the_views_in_a_windows_content() {
     use clarity_gen::preview::{files_json, Shown};
@@ -117,5 +117,20 @@ fn the_designer_shows_the_views_in_a_windows_content() {
     let content = markup.lines().find(|l| l.contains("<Content name=\"main\"")).expect("the content");
     assert!(content.contains("designItem="), "{content}");
     let save = markup.lines().find(|l| l.contains("name=\"saveButton\"")).expect("the view's part shows in the content");
-    assert!(!save.contains("designItem="), "{save}");
+    assert!(save.contains("designItem="), "{save}");
+}
+
+/// A tree of levels has no list of its own until the program loads it, so
+/// the designer and the preview show it with sample rows of its levels.
+#[test]
+fn the_designer_and_preview_show_a_tree_of_levels_with_sample_rows() {
+    use clarity_gen::preview::{files_json, PreviewProgram, Shown};
+    let source = "module m\n\nentity Project\n    name: text\n\nentity Domain\n    project: ref Project\n    name: text\n\npage Main: window\n    tree name modelTree at 1,1 span 4 rows 8\n        level Project show name\n            level Domain under project show name\n";
+    let project = clarity_spec::keyed::load_keyed([("m.clarity", source)], &[], "en");
+    let designed: serde_json::Value = serde_json::from_str(&files_json(&project, "M", &Shown::Window("Main".into()), true, &Default::default())).unwrap();
+    let tree = designed["windows"]["Main"].as_str().unwrap().lines().find(|l| l.contains("<Tree name=\"modelTree\"")).unwrap().to_string();
+    assert!(tree.contains("bind=\"modelTreeRows\"") && tree.contains("designItem="), "{tree}");
+    let data = PreviewProgram::new(project, "Main").window_data("Main");
+    let labels: Vec<&str> = data["modelTreeRows"].as_array().unwrap().iter().map(|r| r["label"].as_str().unwrap()).collect();
+    assert_eq!(labels, ["Project 1", "Domain 1", "Domain 2", "Project 2"]);
 }

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An event of a domain's messages project: what it is, the data object it
+     carries (a base event) or its fields, why it needs a review, and the C#
+     the engine writes for it. It tells the window when it saved. -->
+<View class="modelling.EventEditor" columns="8">
+  <Data name="editedEvent" type="EventDefinition" />
+  <Data name="fields" type="list&lt;EventField&gt;" />
+  <Data name="pickedField" type="EventField" />
+  <Data name="carriedPick" type="VersionPick" />
+  <Data name="heldPick" type="VersionPick" />
+  <Data name="eventText" type="text" />
+  <Tells message="saved" />
+  <Tabs name="eventTabs" at="1,1" span="8" rows="14">
+    <Tab title="@eventTab">
+      <Label name="eventNameLabel" at="1,1" span="2" caption="@eventNameCaption" for="eventNameBox" />
+      <Textbox name="eventNameBox" at="3,1" span="4" bind="editedEvent.name" placeholder="@eventNamePlaceholder" />
+      <Spinbox name="eventNumberBox" at="7,1" span="2" bind="editedEvent.number" max="99" min="1" />
+      <Label name="eventNamespaceLabel" at="1,2" span="2" caption="@eventNamespaceCaption" for="eventNamespaceBox" />
+      <Textbox name="eventNamespaceBox" at="3,2" span="6" bind="editedEvent.namespace" placeholder="@eventNamespacePlaceholder" />
+      <Label name="eventKindLabel" at="1,3" span="2" caption="@eventKindCaption" for="eventKindBox" />
+      <Dropdown name="eventKindBox" at="3,3" span="2" bind="editedEvent.kind" onchange="eventShapeChanged" />
+      <Checkbox name="eventBaseBox" at="5,3" span="2" caption="@eventBaseLabel" bind="editedEvent.base" onchange="eventShapeChanged" />
+      <Checkbox name="eventLegacyBox" at="7,3" span="2" caption="@eventLegacyLabel" bind="editedEvent.legacy" />
+      <Panel name="carriesPanel" at="1,4" span="8" none="caption">
+        <Label name="eventCarriesLabel" at="1,1" span="2" caption="@eventCarriesCaption" for="carriedObjectBox" />
+        <Dropdown name="carriedObjectBox" at="3,1" span="4" bind="carriedPick.object" placeholder="@carriedPlaceholder" onchange="carriedChanged" />
+        <Spinbox name="carriedNumberBox" at="7,1" span="2" bind="carriedPick.number" max="99" min="1" onchange="carriedChanged" />
+      </Panel>
+      <Label name="eventObsoleteLabel" at="1,5" span="2" caption="@eventObsoleteCaption" for="eventObsoleteBox" />
+      <Textbox name="eventObsoleteBox" at="3,5" span="6" bind="editedEvent.obsolete" placeholder="@obsoletePlaceholder" />
+      <Label name="eventReviewLabel" at="1,6" span="2" caption="@reviewLabel" for="eventReviewBox" />
+      <Textbox name="eventReviewBox" at="3,6" span="4" bind="editedEvent.review" placeholder="@reviewPlaceholder" readonly="true" />
+      <Button name="eventReviewedButton" at="7,6" span="2" caption="@reviewedCaption" icon="check" onclick="eventReviewedClicked" />
+      <Panel name="fieldsPanel" at="1,7" span="8" rows="6" none="caption">
+        <Table name="fieldTable" at="1,1" span="8" rows="4" bind="fields" columns="name, kind, nullable, list, access" edit="name, kind, nullable, list, access" widths="{&quot;access&quot;:110,&quot;kind&quot;:150,&quot;list&quot;:110,&quot;name&quot;:180}" add="true" remove="true" confirm="true" reorder="position" onadd="addFieldClicked" onremove="removeFieldClicked" onchange="fieldChanged" onreorder="fieldsMoved" onselect="fieldPicked" />
+        <Label name="heldLabel" at="1,5" span="2" caption="@eventFieldHoldsLabel" for="heldObjectBox" />
+        <Dropdown name="heldObjectBox" at="3,5" span="4" bind="heldPick.object" placeholder="@heldPlaceholder" onchange="heldChanged" />
+        <Spinbox name="heldNumberBox" at="7,5" span="2" bind="heldPick.number" max="99" min="1" onchange="heldChanged" />
+        <Label name="keyOfLabel" at="1,6" span="2" caption="@eventFieldKeyOfLabel" for="keyOfBox" />
+        <Dropdown name="keyOfBox" at="3,6" span="3" bind="pickedField.keyOf" placeholder="@keyOfPlaceholder" onchange="pickedFieldChanged" />
+        <Textbox name="fieldObsoleteBox" at="6,6" span="3" bind="pickedField.obsolete" placeholder="@obsoletePlaceholder" onleave="pickedFieldChanged" />
+      </Panel>
+      <Button name="saveEventButton" at="7,13" span="2" caption="@saveEventCaption" default="true" onclick="saveEventClicked" />
+    </Tab>
+    <Tab title="@eventCodeTab">
+      <Memo name="eventCodeBox" at="1,1" span="8" rows="13" bind="eventText" code="csharp" copy="true" readonly="true" />
+    </Tab>
+  </Tabs>
+</View>

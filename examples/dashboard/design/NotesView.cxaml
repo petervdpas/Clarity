@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Notes for the day. -->
+<View class="dashboard.NotesView">
+  <Data name="notes" type="text" />
+  <Heading name="notesHeading" at="1,1" span="12" caption="@notesHeading" />
+  <Memo name="notesBox" at="1,2" span="12" rows="6" bind="notes" placeholder="@notesPlaceholder" />
+</View>

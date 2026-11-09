@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="loans.LoanBrowse" title="@loanBrowseTitle" onopen="windowReturned" onreturn="windowReturned">
+  <Content name="main" at="1,1" span="12" rows="10">
+    <View name="LoanBrowseView" />
+  </Content>
+</Window>

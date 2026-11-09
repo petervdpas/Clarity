@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window OrderBrowse shows: its parts, data and code. -->
+<View class="sales.OrderBrowseView">
+  <Data name="orders" type="list&lt;Order&gt;" />
+  <Label name="numberFilterLabel" at="1,1" span="2" caption="@numberFilterLabel" for="numberFilter" />
+  <Textbox name="numberFilter" at="3,1" span="4" placeholder="@numberFilterPlaceholder" onchange="filterChanged" />
+  <Table name="ordersTable" at="1,2" span="12" rows="9" bind="orders" columns="number, customer, orderedOn, status, total" sortable="true" add="true" remove="true" confirm="true" order="{&quot;desc&quot;:true,&quot;field&quot;:&quot;orderedOn&quot;}" page="20" onadd="newOrderClicked" onremove="removeOrderClicked" onopen="openOrderClicked" />
+</View>

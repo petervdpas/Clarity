@@ -69,6 +69,9 @@ test("resizing a panel scales what is inside it, all in one batch of edits", () 
 test("a window opens at its own size, or at the standard one", () => {
   assert.deepEqual(windowSize({ size: { width: 320, height: 460 } }), { width: 320, height: 460 });
   assert.deepEqual(windowSize({ size: null }), { width: 1100, height: 760 });
+  // A toolbox is as large as its tools: two columns of three rows.
+  const tool = (row: number) => ({ props: { row, height: 1 } });
+  assert.deepEqual(windowSize({ size: null, kind: "toolbox", columns: 2, widgets: [tool(1), tool(2), tool(3)] }), { width: 220, height: 84 + 3 * 36 + 2 * 8 });
 });
 
 test("dragging a window's edge sizes it in whole pixels, within the sizes a window may have", () => {
@@ -90,4 +93,11 @@ test("on a page's own exact grid the cells have no gaps between them", () => {
   assert.equal(rowIn(tracks, 9, 10, 0), 1);
   assert.equal(rowIn(tracks, 10, 10, 0), 2);
   assert.equal(rowIn(tracks, 35, 10, 0), 4, "past the rows laid out, more of the same height");
+});
+
+test("resizing a window's content leaves its views' parts alone: they keep their own grids", () => {
+  const part = { props: { kind: "button", col: 1, width: 12 }, children: [], pages: [], span: { start: 90 } };
+  const content = { props: { kind: "content", col: 1, width: 4, height: 7 }, children: [], pages: [{ children: [part] }], span: { start: 50 } };
+  const edits = resizeEdits(content as never, 6, 7);
+  assert.deepEqual(edits.map((e) => (e as { item: number }).item), [50]);
 });

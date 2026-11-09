@@ -3,6 +3,8 @@
 // list, a widget being moved, or a widget being resized. While dragging, the
 // pointer is translated into a cell of the innermost grid under it.
 
+import { designLog } from "./designLog";
+import { resizedBy, resizedTo } from "./designLayer";
 import type { Edit } from "@clarity/ui/generated/Edit.ts";
 import type { Dock } from "@clarity/ui/generated/Dock.ts";
 import type { Preview } from "@clarity/ui/generated/Preview.ts";
@@ -133,6 +135,7 @@ class PageDesigner {
     if (pending && !this.drag) {
       if (Math.hypot(e.clientX - pending.x, e.clientY - pending.y) < DRAG_THRESHOLD) return;
       this.drag = pending.source;
+      this.#from = { x: pending.x, y: pending.y };
       this.error = null;
     }
     if (!this.drag) return;
@@ -150,6 +153,7 @@ class PageDesigner {
     const hover = this.hover;
     const dock = this.dock;
     this.cancel();
+    if (drag?.kind === "resize") designLog("resize released", hover ? `at ${hover.width}x${hover.height}` : "with no placement, nothing happens");
     if (drag?.kind === "region") {
       if (dock) this.#ondock?.(drag.region, dock);
     } else if (drag && hover) this.#ondrop?.(drag, hover);
@@ -179,7 +183,8 @@ class PageDesigner {
       // A resize stays in the widget's own container, which its box on the design layer names.
       const widget = this.#canvas.querySelector<HTMLElement>(`[data-widget="${source.item}"]`);
       const container = widget?.dataset.container;
-      return container ? this.#canvas.querySelector<HTMLElement>(`[data-grid="${container}"]`) : null;
+      const grid = container ? this.#canvas.querySelector<HTMLElement>(`[data-grid="${container}"]`) : null;
+      return grid;
     }
     const moving = source.kind === "move" ? String(source.item) : null;
     // The innermost grid under the pointer: the layer lays them out over each other, the inner ones last.
@@ -193,6 +198,9 @@ class PageDesigner {
     }
     return null;
   }
+
+  /** Where the pointer was pressed for the drag under way. */
+  #from = { x: 0, y: 0 };
 
   #placement(x: number, y: number, source: PageDragSource): Placement | null {
     if (source.kind === "region") return null;
@@ -208,14 +216,11 @@ class PageDesigner {
 
     if (source.kind === "resize") {
       const p = source.props;
-      return {
-        container,
-        columns,
-        col: p.col,
-        row: p.row,
-        width: Math.min(columns - p.col + 1, Math.max(1, cellCol - p.col + 1)),
-        height: Math.max(1, cellRow - p.row + 1),
-      };
+      // As many cells as the pointer moved from where the handle was pressed, so the
+      // drawn outline and the grid's cells need not line up, and a part may grow past the last row.
+      const rows = grid.style.gridTemplateRows.split(" ").filter((r) => r.trim()).length || 1;
+      const by = resizedBy(this.#from, { x, y }, colWidth + gap, rect.height / rows);
+      return { container, columns, col: p.col, row: p.row, ...resizedTo(p, by, columns) };
     }
 
     const size =

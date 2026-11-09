@@ -127,8 +127,9 @@ page P: dialog
 
 #[test]
 fn widget_lines_round_trip() {
-    let source = include_str!("../../../examples/shop/desk.clarity");
-    let (file, _) = parse(source, "desk.clarity");
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/shop/counter.clarity");
+    let source = clarity_spec::cxaml::module_text_with_pages(&path).unwrap();
+    let (file, _) = parse(&source, "desk.clarity");
     for widget in all_widgets(&file.pages[0].widgets) {
         let line = widget_line(&widget.props);
         let (reparsed, diags) = parse(&format!("module m\npage X: view\n    {line}\n"), "x");

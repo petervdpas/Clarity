@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window Main shows: its parts, data and code. -->
+<View class="mp3player.MainView">
+  <Data name="tracks" type="list&lt;Track&gt;" />
+  <Data name="current" type="integer" />
+  <Data name="volume" type="integer" default="80" />
+  <Data name="played" type="decimal" />
+  <Data name="nowPlaying" type="text" />
+  <Data name="chosen" type="text" />
+  <Sound name="music" at="1,1" span="1" volume="80" onend="songEnded" onfail="songFailed" />
+  <Timer name="ticker" at="1,1" span="1" every="0.5" ontick="tickerTicked" />
+  <Label name="folderLabel" at="1,1" span="2" caption="@folderLabel" for="musicFolderBox" />
+  <Folder name="musicFolderBox" at="3,1" span="10" bind="settings.musicFolder" onchange="folderChanged" />
+  <Table name="trackTable" at="1,2" span="12" rows="9" bind="tracks" columns="title" resizable="true" sortable="true" onselect="trackSelected" onopen="playClicked" />
+  <Text name="nowPlayingText" at="1,11" span="12" bind="nowPlaying" />
+  <Slider name="progressSlider" at="1,12" span="12" bind="played" max="1000" min="0" onchange="progressMoved" />
+  <Label name="volumeLabel" at="1,13" span="1" caption="@volumeLabel" for="volumeSlider" />
+  <Slider name="volumeSlider" at="2,13" span="3" bind="volume" max="100" min="0" onchange="volumeChanged" />
+  <Button name="previousTrack" at="5,13" span="2" caption="@previousCaption" onclick="previousClicked" />
+  <Button name="playTrack" at="7,13" span="2" caption="@playCaption" default="true" onclick="playClicked" />
+  <Button name="pauseTrack" at="9,13" span="1" caption="@pauseCaption" onclick="pauseClicked" />
+  <Button name="stopTrack" at="10,13" span="1" caption="@stopCaption" onclick="stopClicked" />
+  <Button name="nextTrack" at="11,13" span="2" caption="@nextCaption" onclick="nextClicked" />
+</View>

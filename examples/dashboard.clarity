@@ -1,0 +1,9 @@
+// Dashboard: one window of six squares, each a content showing a view of
+// its own: sales as a chart and as a table, the stock, the total, notes and
+// the products running low. Its module is in the dashboard folder next to this file.
+project Dashboard
+    title "Dashboard"
+    stack rust desktop
+    output "out"
+    language "en"
+    datasource main sqlite "data/dashboard.db"

@@ -21,7 +21,7 @@ fn every_example_is_here() {
     assert_eq!(found, EXAMPLES, "an example without a build test here, or a test without its example");
 }
 
-const EXAMPLES: [&str; 19] = ["calculator", "dial", "dice", "invaders", "kitchen", "ledger", "modelling", "mp3player", "noughts", "novel", "orbs", "pills", "records", "shop", "stock", "todo", "videoplayer", "walker", "waves"];
+const EXAMPLES: [&str; 19] = ["calculator", "dashboard", "dial", "invaders", "kitchen", "ledger", "modelling", "mp3player", "noughts", "novel", "orbs", "pills", "records", "shop", "stock", "todo", "videoplayer", "walker", "waves"];
 
 #[test]
 #[ignore = "builds the calculator example (go desktop); run with --ignored, one at a time"]
@@ -30,15 +30,15 @@ fn the_calculator_example_builds_without_warnings() {
 }
 
 #[test]
-#[ignore = "builds the dial example (go desktop); run with --ignored, one at a time"]
-fn the_dial_example_builds_without_warnings() {
-    builds_without_warnings("dial");
+#[ignore = "builds the dashboard example (rust desktop); run with --ignored, one at a time"]
+fn the_dashboard_example_builds_without_warnings() {
+    builds_without_warnings("dashboard");
 }
 
 #[test]
-#[ignore = "builds the dice example (rust desktop); run with --ignored, one at a time"]
-fn the_dice_example_builds_without_warnings() {
-    builds_without_warnings("dice");
+#[ignore = "builds the dial example (go desktop); run with --ignored, one at a time"]
+fn the_dial_example_builds_without_warnings() {
+    builds_without_warnings("dial");
 }
 
 #[test]

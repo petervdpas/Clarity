@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { designLog } from "./designLog";
   import { onMount, untrack } from "svelte";
   import { commandAction, commandHandler, eventHandler, freePartName, handlerName, wireCommand, wireEvent } from "./codeParts";
   import ShownWindow from "./ShownWindow.svelte";
@@ -39,6 +40,8 @@
     findPage,
     locateInnerPage,
     locateWidget,
+    withViewsShown,
+    routedEdit,
     allParts,
     pageData,
     widgetForField,
@@ -97,14 +100,15 @@
   const preview = $derived(pageDesigner.draft ?? savedPreview);
   // The canvas shows the project's theme, as the application will.
   const area = $derived(themeArea(themeOf(preview)));
+  // A window's content shows its views' parts, designed in place (withViewsShown).
   const page = $derived.by(() => {
     const draft = pageDesigner.draft;
-    if (!draft) return savedPage;
+    if (!draft) return withViewsShown(preview, savedPage);
     if (app) {
       const draftApp = findApp(draft);
       return draftApp ? appAsPage(draftApp) : savedPage;
     }
-    return findPage(draft, savedPage.name.name) ?? savedPage;
+    return withViewsShown(preview, findPage(draft, savedPage.name.name) ?? savedPage);
   });
 
   // The inspector on the right: the picked part's (or the window's)
@@ -197,9 +201,11 @@
     pageDesigner.saving = true;
     pageDesigner.error = null;
     try {
-      const result = await applyEdit(file, edit);
+      // A view's part drawn in this window changes the view's own file.
+      const routed = routedEdit(preview, file, edit);
+      const result = await applyEdit(routed.file, routed.edit);
       onapplied(result.preview);
-      pageDesigner.selected = result.focus;
+      pageDesigner.selected = result.focus === null ? null : routed.base + result.focus;
     } catch (err) {
       pageDesigner.error = String(err);
     } finally {
@@ -309,7 +315,8 @@
       }
       case "resize": {
         const p = source.props;
-        if (at.width === p.width && at.height === p.height) return;
+        designLog("resize drop", `${p.width}x${p.height} -> ${at.width}x${at.height}`);
+        if (at.width === p.width && at.height === p.height) return designLog("resize drop: same size, no edit");
         // A container's parts scale across with it, in the same edit.
         const found = locateWidget(preview, page, source.item);
         const edits = found

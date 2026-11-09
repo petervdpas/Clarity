@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The sales per product as bars. -->
+<View class="dashboard.SalesChart">
+  <Data name="chartSales" type="list&lt;Sale&gt;" />
+  <Heading name="salesChartHeading" at="1,1" span="12" caption="@salesChartHeading" />
+  <Chart name="salesChart" at="1,2" span="12" rows="6" bind="chartSales" by="product" measure="{&quot;field&quot;:&quot;amount&quot;,&quot;kind&quot;:&quot;sum&quot;}" />
+</View>

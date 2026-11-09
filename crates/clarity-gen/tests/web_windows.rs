@@ -17,7 +17,7 @@ fn the_calculator_s_window_is_markup_in_clarity_s_words() {
     let markup = clarity_gen::web_windows::window_markup(page);
     for line in [
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
-        "<Window name=\"Main\" columns=\"4\">",
+        "<Window class=\"Main\" title=\"@mainTitle\" width=\"320\" height=\"370\" columns=\"4\">",
         "  <Content name=\"main\" at=\"1,1\" span=\"4\" rows=\"7\">",
         "      <Display name=\"screen\" at=\"1,1\" span=\"4\" rows=\"2\" bind=\"shown\" digits=\"12\" style=\"display\" />",
         "      <Button name=\"clearKey\" at=\"1,3\" span=\"1\" caption=\"@clearKeyCaption\" key=\"Escape\" onclick=\"clear\" />",
@@ -114,9 +114,9 @@ fn a_window_s_columns_are_on_its_root_when_not_twelve() {
     let (file, diagnostics) = clarity_spec::parser::parse(source, "m.clarity");
     assert!(diagnostics.is_empty(), "{diagnostics:#?}");
     let six = clarity_gen::web_windows::window_markup(&file.pages[0]);
-    assert!(six.contains("<Window name=\"Main\" columns=\"6\">"), "{six}");
+    assert!(six.contains("<Window class=\"Main\" columns=\"6\">"), "{six}");
     let twelve = clarity_gen::web_windows::window_markup(&file.pages[1]);
-    assert!(twelve.contains("<Window name=\"Other\">"), "{twelve}");
+    assert!(twelve.contains("<Window class=\"Other\">"), "{twelve}");
 }
 
 /// The project's row height (`row height 30`) is on every window's root,
@@ -133,12 +133,13 @@ fn a_project_s_row_height_is_on_every_window_s_root() {
     let files_written = clarity_gen::web_windows::window_files(&project);
     assert!(!files_written.is_empty());
     for file in &files_written {
-        let root = file.text.lines().find(|l| l.starts_with("<Window ")).unwrap();
+        let root = file.text.lines().find(|l| l.starts_with('<') && !l.starts_with("<?") && !l.starts_with("<!--")).unwrap();
         // A page with its own exact grid (the splash) says its cells instead.
         assert!(root.contains(" rowHeight=\"30\"") || root.contains(" cell=\""), "{root}");
     }
     let designed = files(&preview::files_json(&project, "Todo", &Shown::Window("Main".into()), true, &Default::default()));
-    assert!(designed["windows"]["Main"].as_str().unwrap().contains("<Window name=\"Main\" rowHeight=\"30\" designItem="), "{designed}");
+    let main = designed["windows"]["Main"].as_str().unwrap();
+    assert!(main.lines().any(|l| l.starts_with("<Window class=\"todo.Main\"") && l.contains(" rowHeight=\"30\" designItem=")), "{designed}");
     let app = files(&preview::files_json(&project, "Todo", &Shown::App("Todo".into()), true, &Default::default()));
     assert!(app["windows"]["Todo"].as_str().unwrap().starts_with("<Window name=\"Todo\" rowHeight=\"30\" designItem="), "{app}");
 }
@@ -185,7 +186,7 @@ fn a_web_program_s_browser_files_carry_the_page_and_what_the_library_draws_from(
     assert_eq!(json["title"], "Calc <one>");
     let windows: Vec<&String> = json["windows"].as_object().unwrap().keys().collect();
     assert_eq!(windows, ["Main", "Preferences"]);
-    assert!(json["windows"]["Main"].as_str().unwrap().contains("<Window name=\"Main\" columns=\"4\">"));
+    assert!(json["windows"]["Main"].as_str().unwrap().contains("<Window class=\"calculator.Main\" title=\"@mainTitle\" width=\"320\" height=\"370\" columns=\"4\">"));
     assert!(json["model"].is_object(), "the model is JSON: {}", json["model"]);
     assert!(json["width"].as_u64().unwrap() > 0 && json["height"].as_u64().unwrap() > 0);
     // The light theme before the dark, as the desktop programs carry them.
@@ -259,7 +260,7 @@ fn the_designer_draws_markup_that_says_where_each_part_is_written() {
     let main = project.pages().find(|p| p.name.name == "MainView").unwrap();
     let designed = files(&preview::files_json(&project, "Todo", &Shown::Window("MainView".into()), true, &Default::default()));
     let markup = designed["windows"]["MainView"].as_str().unwrap();
-    assert!(markup.contains(&format!("<Window name=\"MainView\" designItem=\"{}\">", main.span.start)), "{markup}");
+    assert!(markup.contains(&format!("<View class=\"todo.MainView\" designItem=\"{}\">", main.span.start)), "{markup}");
     let grid = main.widgets.iter().find(|w| w.props.name.as_deref() == Some("grid")).unwrap();
     let line = markup.lines().find(|l| l.contains("<Table name=\"grid\"")).expect("the task table");
     assert!(line.contains("onadd=\"addClicked\"") && line.contains(&format!("designItem=\"{}\"", grid.span.start)), "{line}");
@@ -567,7 +568,7 @@ fn a_striped_table_says_so_in_the_markup() {
     let (file, diagnostics) = clarity_spec::parser::parse(source, "m.clarity");
     assert!(diagnostics.is_empty(), "{diagnostics:#?}");
     let markup = clarity_gen::web_windows::window_markup(&file.pages[0]);
-    let line = |name: &str| markup.lines().find(|l| l.contains(&format!("name=\"{name}\""))).unwrap_or_default().to_string();
+    let line = |name: &str| markup.lines().find(|l| l.contains(&format!("<Table name=\"{name}\""))).unwrap_or_default().to_string();
     assert!(line("orders").contains(" striped=\"true\""), "{markup}");
     assert!(!line("plain").contains("striped"), "{markup}");
 }

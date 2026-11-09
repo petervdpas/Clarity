@@ -180,7 +180,8 @@ impl<'a> Checker<'a> {
     fn collect(&mut self) {
         let files = self.files;
         for (file_index, file) in files.iter().enumerate() {
-            if let Some(module) = &file.module {
+            // A window's or view's own file (`.cxaml`) is part of its folder's module, not a module of its own.
+            if let Some(module) = file.module.as_ref().filter(|_| !crate::cxaml::is_page_file(&file.path)) {
                 if let Some(&other) = self.modules.get(module.name.as_str()) {
                     let other_path = files[other].path.clone();
                     self.error(

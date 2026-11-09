@@ -49,4 +49,4 @@ Pick the sound in the tray and wire **On end** (a song played to its end, to pla
 
 A source that is no WAV (`.mp3`, `.flac`, `.ogg`) is a song too. On the desktop songs play through Clarity.Audio, a library beside Clarity.UI that reads the file as it plays; Clarity adds it to a program whose sound parts play songs, on every stack, and leaves it out of one that plays only WAV files, tones and melodies. A song that repeats starts again at its end. In a browser the page plays the songs of the resources itself; a file of the computer's disk cannot play there.
 
-The `dice` example rattles when the dice are thrown and plays a fanfare when every die shows six. The `mp3player` example lists the songs of a music folder the person picks, plays them one after the other with pause, seek and volume, and shows what each song's file says of it.
+The `mp3player` example lists the songs of a music folder the person picks, plays them one after the other with pause, seek and volume, and shows what each song's file says of it.

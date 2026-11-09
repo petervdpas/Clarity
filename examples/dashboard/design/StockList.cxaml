@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The products with their stock. -->
+<View class="dashboard.StockList">
+  <Data name="products" type="list&lt;Product&gt;" />
+  <Heading name="stockHeading" at="1,1" span="12" caption="@stockHeading" />
+  <Table name="stockGrid" at="1,2" span="12" rows="6" bind="products" columns="name, stock" />
+</View>

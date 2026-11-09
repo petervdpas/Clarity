@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<View class="everything.Overview" title="@overview">
+  <Label name="overviewLabel" at="1,1" span="12" caption="@overview" />
+</View>

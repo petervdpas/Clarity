@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The chapters: the list at the left, with the chosen chapter's properties in
+     a slide-out against its right edge, and its text beside it. Chapter 0 is a
+     prologue. -->
+<View class="writing.ChaptersPart">
+  <Data name="forBook" type="Book" />
+  <Data name="chapters" type="list&lt;Chapter&gt;" />
+  <Data name="chosen" type="Chapter" />
+  <Data name="manuscript" type="Manuscript" />
+  <Data name="chapterResearch" type="list&lt;Research&gt;" />
+  <Data name="researchPool" type="list&lt;Research&gt;" />
+  <Data name="chapterCharacters" type="list&lt;Character&gt;" />
+  <Data name="characterPool" type="list&lt;Character&gt;" />
+  <Data name="chapterFragments" type="list&lt;Fragment&gt;" />
+  <Data name="fragmentPool" type="list&lt;Fragment&gt;" />
+  <Data name="chapterDialogues" type="list&lt;TrialBalloon&gt;" />
+  <Data name="pickedDialogue" type="TrialBalloon" />
+  <Data name="pickedFragment" type="Fragment" />
+  <Data name="pickedCharacter" type="Character" />
+  <Data name="pickedResearch" type="Research" />
+  <Data name="dialoguePool" type="list&lt;TrialBalloon&gt;" />
+  <Tells message="chosen" />
+  <Tells message="toResearch(title: text)" />
+  <Tells message="toCharacter(name: text)" />
+  <Tells message="toFragment(fragmentId: integer)" />
+  <Tells message="toDialogue(dialogueId: integer)" />
+  <Splitter name="chapterSplitter" at="1,1" span="12" rows="15">
+    <Pane span="3">
+      <List name="chapterList" at="1,1" span="3" rows="13" bind="chapters" reorder="position" reorderFrom="0" show="number, title" onselect="chapterClicked" onreorder="chaptersMoved" />
+      <Button name="newChapterButton" at="1,14" span="3" caption="@newChapterCaption" icon="plus" onclick="addChapter" />
+      <Button name="removeChapterButton" at="1,15" span="3" caption="@removeChapterCaption" icon="trash" onclick="removeChapter" />
+      <Slideout name="properties" at="1,1" span="6" rows="15" caption="@propertiesCaption" resizable="true" side="right" beside="chapterList" slideWidth="420" pinnable="true" max="720" min="300">
+        <Textbox name="titleBox" at="1,1" span="6" bind="chosen.title" placeholder="@chapterTitlePlaceholder" />
+        <Textbox name="layersBox" at="1,2" span="6" bind="chosen.layers" placeholder="@layersPlaceholder" />
+        <Dropdown name="statusBox" at="1,3" span="6" bind="chosen.status" />
+        <Memo name="summaryBox" at="1,4" span="6" rows="5" bind="chosen.summary" placeholder="@summaryPlaceholder" />
+        <Tabs name="linkTabs" at="1,9" span="6" rows="7">
+          <Tab title="@researchSection">
+            <Table name="researchTable" at="1,1" span="6" rows="5" bind="chapterResearch" columns="title" add="true" remove="true" confirm="true" onadd="linkResearch" onremove="unlinkResearch" onopen="openResearch" onselect="rememberPickedResearch" />
+            <Button name="toResearchButton" at="1,6" span="6" caption="@toResearchCaption" tooltip="@toResearchTip" icon="square-arrow-out-up-right" onclick="openResearch" />
+          </Tab>
+          <Tab title="@charactersSection">
+            <Table name="chapterCharacterTable" at="1,1" span="6" rows="5" bind="chapterCharacters" columns="name, role" add="true" remove="true" confirm="true" onadd="linkCharacter" onremove="unlinkCharacter" onopen="openCharacter" onselect="rememberPickedCharacter" />
+            <Button name="toCharacterButton" at="1,6" span="6" caption="@toCharacterCaption" tooltip="@toCharacterTip" icon="square-arrow-out-up-right" onclick="openCharacter" />
+          </Tab>
+          <Tab title="@fragmentsSection">
+            <Table name="chapterFragmentTable" at="1,1" span="6" rows="5" bind="chapterFragments" columns="heading, kind" add="true" remove="true" confirm="true" onadd="linkFragment" onremove="unlinkFragment" onopen="openFragment" onselect="rememberPickedFragment" />
+            <Button name="toFragmentButton" at="1,6" span="6" caption="@toFragmentCaption" tooltip="@toFragmentTip" icon="square-arrow-out-up-right" onclick="openFragment" />
+          </Tab>
+          <Tab title="@dialoguesSection">
+            <Table name="chapterDialogueTable" at="1,1" span="6" rows="5" bind="chapterDialogues" columns="title" add="true" remove="true" confirm="true" onadd="linkDialogue" onremove="unlinkDialogue" onopen="openDialogue" onselect="rememberPickedDialogue" />
+            <Button name="toDialogueButton" at="1,6" span="6" caption="@toDialogueCaption" tooltip="@toDialogueTip" icon="square-arrow-out-up-right" onclick="openDialogue" />
+          </Tab>
+        </Tabs>
+      </Slideout>
+    </Pane>
+    <Pane>
+      <Label name="chapterHeading" at="1,1" span="9" caption="@deskTitle" />
+      <Memo name="manuscriptBox" at="1,2" span="9" rows="13" bind="manuscript.text" markdown="true" toolbox="caret" toolboxPage="ManuscriptTools" placeholder="@manuscriptPlaceholder" onlink="manuscriptLinkFollowed" />
+      <Label name="wordsLabel" at="1,15" span="6" caption="@deskTitle" />
+      <Button name="saveChapterButton" at="7,15" span="3" caption="@saveCaption" icon="save" default="true" onclick="saveChapter" />
+    </Pane>
+  </Splitter>
+</View>

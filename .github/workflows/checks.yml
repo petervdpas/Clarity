@@ -7,8 +7,7 @@ name: Checks
 # by hand (Actions, Run workflow). Linux only: the release workflows build
 # and test the other systems when a tag is pushed.
 #
-# Left out: the dice example (its Bevy game engine takes longer to build than
-# all the others together), and the Go module test that needs the Go
+# Left out: the Go module test that needs the Go
 # runtime's published sums, which are recorded after the Go tag is pushed
 # (writes_a_go_module_on_the_runtime_module).
 
@@ -239,7 +238,7 @@ jobs:
       fail-fast: false
       matrix:
         # Run by hand with one example's name: that one alone.
-        example: ${{ fromJSON(inputs.example && format('["{0}"]', inputs.example) || '["calculator", "dial", "invaders", "kitchen", "ledger", "modelling", "mp3player", "noughts", "novel", "orbs", "pills", "records", "shop", "stock", "todo", "videoplayer", "walker", "waves"]') }}
+        example: ${{ fromJSON(inputs.example && format('["{0}"]', inputs.example) || '["calculator", "dashboard", "dial", "invaders", "kitchen", "ledger", "modelling", "mp3player", "noughts", "novel", "orbs", "pills", "records", "shop", "stock", "todo", "videoplayer", "walker", "waves"]') }}
     env:
       # Debug builds only, as on the laptop's routine checks.
       CLARITY_EXAMPLES_QUICK: "1"

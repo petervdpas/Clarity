@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The board: six squares in two rows of three, each a content showing its view. -->
+<Window class="dashboard.Board" title="@boardTitle" width="1200" height="760" onopen="boardOpened">
+  <Content name="salesChartSquare" at="1,1" span="4" rows="7">
+    <View name="SalesChart" />
+  </Content>
+  <Content name="salesTableSquare" at="5,1" span="4" rows="7">
+    <View name="SalesTable" />
+  </Content>
+  <Content name="stockSquare" at="9,1" span="4" rows="7">
+    <View name="StockList" />
+  </Content>
+  <Content name="totalSquare" at="1,8" span="4" rows="7">
+    <View name="TotalView" />
+  </Content>
+  <Content name="notesSquare" at="5,8" span="4" rows="7">
+    <View name="NotesView" />
+  </Content>
+  <Content name="lowSquare" at="9,8" span="4" rows="7">
+    <View name="LowStock" />
+  </Content>
+</Window>

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The workspace: the domains in the tree at the left, the domain picked in
+     the middle. A data object's version opens in the object editor and an
+     enum in the enum editor, both sliding out from the right; the domain's
+     diagrams slide up from the footer. -->
+<Window class="modelling.Workspace" title="@workspaceTitle" width="1280" height="800" onopen="workspaceOpened">
+  <Data name="chosen" type="Picked" />
+  <Data name="project" type="Project" />
+  <Sidebar side="left" name="explorer" width="320" min="240" max="720" resizable="true" columns="6">
+    <Button name="newDomainButton" at="1,1" span="3" caption="@newDomainCaption" icon="plus" onclick="newDomainClicked" />
+    <Button name="newObjectButton" at="4,1" span="3" caption="@newObjectCaption" icon="plus" onclick="newObjectClicked" />
+    <Tree name="modelTree" at="1,2" span="6" rows="12">
+      <Level entity="Project" show="name" order="name">
+        <Level entity="Domain" under="project" show="name" order="name">
+          <Level group="@dataObjectsNode">
+            <Level entity="DataObject" under="domain" show="name" order="name">
+              <Level entity="ClassDefinition" under="owner" show="@classNode" order="number" />
+              <Level entity="EventDefinition" under="owner" show="@eventNode" order="number" />
+              <Level entity="AdapterTable" under="owner" show="@tableNode" order="name">
+                <Level entity="ApiView" under="adapterTable" show="@viewNode" order="position" />
+              </Level>
+            </Level>
+          </Level>
+          <Level group="@enumsNode">
+            <Level entity="EnumType" under="domain" show="name" order="name" />
+          </Level>
+        </Level>
+        <Level group="@apiVersionsNode">
+          <Level entity="ApiVersion" under="project" show="@apiNode" order="major" />
+        </Level>
+      </Level>
+      <Select entity="Project" handler="projectPicked" />
+      <Select entity="Domain" handler="domainPicked" />
+      <Select entity="DataObject" handler="objectPicked" />
+      <Select entity="ClassDefinition" handler="classPicked" />
+      <Select entity="EventDefinition" handler="eventPicked" />
+      <Select entity="AdapterTable" handler="tablePicked" />
+      <Select entity="ApiView" handler="apiViewPicked" />
+      <Select entity="EnumType" handler="enumPicked" />
+      <Select entity="ApiVersion" handler="apiPicked" />
+    </Tree>
+    <Button name="newEnumButton" at="1,14" span="3" caption="@newEnumCaption" icon="plus" onclick="newEnumClicked" />
+    <Button name="newEventButton" at="4,14" span="3" caption="@newEventCaption" icon="plus" onclick="newEventClicked" />
+    <Button name="deleteButton" at="1,15" span="3" caption="@deleteCaption" icon="trash" onclick="deleteClicked" />
+    <Button name="newApiButton" at="4,15" span="3" caption="@newApiCaption" icon="plus" onclick="newApiClicked" />
+    <Button name="newProjectButton" at="1,16" span="3" caption="@newProjectCaption" icon="plus" onclick="newProjectClicked" />
+    <Button name="newTableButton" at="4,16" span="3" caption="@newTableCaption" icon="plus" onclick="newTableClicked" />
+  </Sidebar>
+  <Footer status="@workspaceStatus" columns="12" />
+  <Content name="main" at="1,1" span="12" rows="14">
+    <View name="StartView" />
+    <View name="ProjectEditor" onsaved="projectSaved" />
+    <View name="DomainEditor" onsaved="domainSaved" />
+    <View name="ObjectEditor" onsaved="objectSaved" />
+    <View name="EnumEditor" onsaved="enumSaved" />
+    <View name="EventEditor" onsaved="eventSaved" />
+    <View name="TableEditor" onsaved="tableSaved" />
+    <View name="ApiEditor" onsaved="apiSaved" />
+  </Content>
+  <Slideout name="diagramPanel" at="1,1" span="12" rows="9" caption="@diagramSlideout" resizable="true" side="bottom" slideHeight="400" pinnable="true" max="900" min="220">
+    <Content name="diagramPanelContent" at="1,1" span="12" rows="9">
+      <View name="DiagramCanvas" onlevelChanged="loadDiagram" onarranged="loadDiagram" onadded="objectSaved" />
+    </Content>
+  </Slideout>
+</Window>

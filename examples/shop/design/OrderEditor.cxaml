@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An order: its customer and state, its lines, and its total.
+     It tells the window when the order changed, so its list shows it at once. -->
+<View class="sales.OrderEditor">
+  <Data name="order" type="Order" />
+  <Data name="lines" type="list&lt;OrderLine&gt;" />
+  <Tells message="saved" />
+  <Panel name="orderPanel" at="1,1" span="12" rows="4" caption="@orderPanelCaption">
+    <Label name="numberLabel" at="1,1" span="2" caption="@orderNumberLabel" />
+    <Textbox name="orderNumber" at="3,1" span="4" bind="order.number" />
+    <Label name="orderedOnLabel" at="7,1" span="2" caption="@orderOrderedOnLabel" />
+    <Date name="orderedOn" at="9,1" span="3" bind="order.orderedOn" />
+    <Label name="customerLabel" at="1,2" span="3" caption="@orderCustomerLabel" />
+    <Dropdown name="orderCustomer" at="4,2" span="8" bind="order.customer" show="name, email" search="true" />
+    <Label name="statusLabel" at="1,3" span="3" caption="@orderStatusLabel" />
+    <Dropdown name="orderStatus" at="4,3" span="4" bind="order.status" />
+  </Panel>
+  <Table name="linesGrid" at="1,5" span="12" rows="4" bind="lines" columns="product, quantity, price" edit="product, quantity, price" add="true" remove="true" confirm="true" onadd="addLineClicked" onremove="removeLineClicked" onchange="lineChanged" />
+  <Label name="totalLabel" at="7,9" span="2" caption="@orderTotalLabel" />
+  <Number name="orderTotal" at="9,9" span="3" bind="order.total" readonly="true" />
+  <Label name="remarksLabel" at="1,10" span="3" caption="@orderRemarksLabel" />
+  <Textbox name="orderRemarks" at="4,10" span="6" bind="order.remarks" />
+  <Button name="approveButton" at="9,11" span="2" caption="@approveButtonCaption" onclick="approveClicked" />
+  <Button name="saveOrder" at="11,11" span="2" caption="@saveCaption" default="true" onclick="saveOrderClicked" />
+</View>

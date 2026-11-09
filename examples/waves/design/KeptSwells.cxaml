@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The swells seen, the highest first. -->
+<View class="waves.KeptSwells">
+  <Data name="swells" type="list&lt;Swell&gt;" />
+  <Table name="kept" at="1,1" span="6" rows="12" bind="swells" columns="height, seen" order="{&quot;desc&quot;:true,&quot;field&quot;:&quot;height&quot;}" />
+</View>

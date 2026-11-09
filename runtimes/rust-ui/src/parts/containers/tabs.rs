@@ -189,8 +189,10 @@ impl Part for TabsPart {
         &self.base
     }
 
+    /// A window's content always fills the rows it spans, as it is only a
+    /// container: its view keeps its own rows inside. Tabs grow with a page that grows.
     fn grows(&self) -> bool {
-        self.grids().into_iter().any(container::grid_grows)
+        self.plain || self.grids().into_iter().any(container::grid_grows)
     }
 }
 

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="noughts.Game" title="@gameTitle" width="405" height="510">
+  <Data name="status" type="text" default="@gameStatus" />
+  <Canvas name="board" at="1,1" span="12" rows="8" units="{&quot;height&quot;:300,&quot;width&quot;:300}" none="surface" ondraw="drawBoard" onclick="boardClicked" />
+  <Text name="statusText" at="1,9" span="12" bind="status" />
+  <Button name="newGame" at="1,10" span="12" caption="@newGameCaption" onclick="restartClicked" />
+</Window>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A project: its name and what it is. It tells the window when it saved. -->
+<View class="modelling.ProjectEditor" columns="8">
+  <Data name="editedProject" type="Project" />
+  <Tells message="saved" />
+  <Heading name="projectHeading" at="1,1" span="8" caption="@projectHeading" />
+  <Label name="projectNameCaption" at="1,2" span="2" caption="@projectNameLabel" for="projectNameBox" />
+  <Textbox name="projectNameBox" at="3,2" span="5" bind="editedProject.name" />
+  <Label name="projectSummaryCaption" at="1,3" span="2" caption="@projectSummaryLabel" for="projectSummaryBox" />
+  <Memo name="projectSummaryBox" at="3,3" span="5" rows="3" bind="editedProject.summary" />
+  <Button name="saveProjectButton" at="6,6" span="2" caption="@saveProjectCaption" default="true" onclick="saveProjectClicked" />
+</View>

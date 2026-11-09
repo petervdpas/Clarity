@@ -188,7 +188,10 @@ export function freePartName(taken: string[], keyword: string): string {
 }
 
 /** A fix: an edit of the problem's file, or a command for the whole project. */
-export type Fix = { label: string; edit: Edit } | { label: string; command: "make_texts_keys" };
+export type Fix = { label: string; edit: Edit } | { label: string; command: FixCommand };
+
+/** The commands that fix a problem for the whole project. */
+export type FixCommand = "make_texts_keys" | "move_pages_out";
 
 /** The fixes the Problems list offers, by what the checker says (clarity_spec::names,
  *  the part checks and clarity_spec::translations). */
@@ -201,6 +204,8 @@ const FIXES: ({ says: string } & Fix)[] = [
   { says: "shows a text without a key; give it one", label: "Make texts keys", command: "make_texts_keys" },
   { says: "so people read its name; give it a key", label: "Make texts keys", command: "make_texts_keys" },
   { says: "has no file; add translations/", label: "Make texts keys", command: "make_texts_keys" },
+  // clarity_spec::cxaml::PAGE_LEFT_IN_MODULE
+  { says: "is written in this module's file; a window or view has a file of its own", label: "Move pages into design", command: "move_pages_out" },
 ];
 
 /** The fix for a problem the checker reports, for every such problem of its file or the project; null when there is none. */

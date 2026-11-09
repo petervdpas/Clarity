@@ -4,6 +4,7 @@
 mod browser_keys;
 mod fail_safe;
 mod build;
+mod logging;
 mod links;
 mod diagrams;
 mod resources;
@@ -138,6 +139,8 @@ fn changes_project(event: &notify::Event, file: &Path, dir: &Path) -> bool {
         p == file
             || *p == dir.join(clarity_spec::README_FILE)
             || (is_spec_file(p) && (folder == Some(dir) || folder == Some(&dir.join(clarity_spec::MIGRATIONS_DIR))))
+            // A window's or view's own file, in its module's folder (docs/CXAML-SOURCE-PLAN.md).
+            || (clarity_spec::cxaml::is_page_file(&p.to_string_lossy()) && clarity_spec::cxaml::project_dir_of(p) == Some(dir))
             // A web API's description and the module Clarity writes from it (DESIGN 5.23).
             || *p == apis
             || folder == Some(&apis)
@@ -274,13 +277,36 @@ fn apply_edit(
 
     let read_err = |err: std::io::Error| format!("cannot read {}: {err}", dir.display());
     let before = clarity_project::load_modules(&dir).map_err(read_err)?;
-    let outcome = edit::apply_in(&before, &source, &edit).map_err(|err| err.to_string())?;
+    // A window's or view's own file: the page's edits change its markup;
+    // what belongs in the module (its code, entities) goes to the module's file.
+    // Its whole markup typed in the Design text replaces the file, checked as any edit.
+    let typed = match &edit {
+        edit::Edit::ReplaceDecl { text, .. } if is_page_file(&file) => Some(text.clone()),
+        _ => None,
+    };
+    let (file, source) = if typed.is_none() && is_page_file(&file) && edit::with_items(&edit, &|i| i).is_err() {
+        let module = code_file_of(file)?;
+        let text = std::fs::read_to_string(&module).map_err(|err| format!("cannot read {}: {err}", module.display()))?;
+        (module, text)
+    } else {
+        (file, source)
+    };
+    let outcome = if let Some(text) = typed {
+        edit::EditOutcome { text, focus: None, keys: Vec::new() }
+    } else if is_page_file(&file) {
+        clarity_spec::cxaml::apply(Some(&before), &source, &edit).map_err(|err| err.to_string())?
+    } else {
+        edit::apply_in(&before, &source, &edit).map_err(|err| err.to_string())?
+    };
+    // A window or view the edit added goes into a .cxaml file of its own (docs/CXAML-SOURCE-PLAN.md).
+    let (outcome, new_pages) = with_new_pages_moved_out(&file, &source, outcome)?;
     if outcome.text != source {
         // A text the edit wrote became a key: every language file gets it,
         // the default language with its text.
         let default = clarity_spec::translations::default_language(&before);
         let languages = clarity_spec::keyed::plan_keys(&dir, &default, &outcome.keys).map_err(read_err)?;
         let mut replaced: Vec<(&Path, &str)> = vec![(file.as_path(), outcome.text.as_str())];
+        replaced.extend(new_pages.iter().map(|(path, text)| (path.as_path(), text.as_str())));
         replaced.extend(languages.iter().map(|(path, _, after)| (path.as_path(), after.as_str())));
         // The checker decides what is valid: an edit that adds an error
         // anywhere in the project (an overlap, a wrong binding) is refused.
@@ -294,6 +320,16 @@ fn apply_edit(
             before: Some(source),
             after: Some(outcome.text),
         }];
+        for (path, text) in new_pages {
+            if path.exists() {
+                return Err(format!("{} is there already", path.display()));
+            }
+            if let Some(folder) = path.parent() {
+                std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
+            }
+            write_atomically(&path, &text)?;
+            changes.push(FileChange { file: path, before: None, after: Some(text) });
+        }
         for (path, before_text, after_text) in languages {
             if let Some(folder) = path.parent() {
                 std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
@@ -309,6 +345,64 @@ fn apply_edit(
     })
 }
 
+/// The pages an edit of a module's file added, each moved into its own
+/// `.cxaml` beside it: the module's text without them, and the new files.
+fn with_new_pages_moved_out(file: &Path, before: &str, outcome: edit::EditOutcome) -> Result<(edit::EditOutcome, Vec<(PathBuf, String)>), String> {
+    if is_page_file(file) {
+        return Ok((outcome, Vec::new()));
+    }
+    let names = |text: &str| clarity_spec::parser::parse(text, "").0.pages.into_iter().map(|p| p.name.name).collect::<Vec<_>>();
+    let old = names(before);
+    let added: Vec<String> = names(&outcome.text).into_iter().filter(|n| !old.contains(n)).collect();
+    if added.is_empty() {
+        return Ok((outcome, Vec::new()));
+    }
+    let shown = file.display().to_string();
+    let moved = clarity_spec::cxaml::moved_out_only(&[(shown.clone(), outcome.text.clone())], Some(&added))?;
+    let mut text = outcome.text.clone();
+    let mut pages = Vec::new();
+    for (path, written) in moved {
+        if path == shown {
+            text = written;
+        } else {
+            pages.push((PathBuf::from(path), written));
+        }
+    }
+    Ok((edit::EditOutcome { text, focus: None, keys: outcome.keys }, pages))
+}
+
+/// Moves every page still written in a module's file into its own `.cxaml`
+/// in `design/` (docs/CXAML-SOURCE-PLAN.md): Move pages into design, under
+/// Problems, as `clarity convert-pages` does. One change for Undo.
+#[tauri::command]
+fn move_pages_out(state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
+    let dir = open_dir_of(&state)?;
+    let read_err = |err: std::io::Error| format!("cannot read {}: {err}", dir.display());
+    let mut files = Vec::new();
+    for path in clarity_spec::spec_files(&dir).map_err(read_err)? {
+        let text = std::fs::read_to_string(&path).map_err(read_err)?;
+        files.push((path.display().to_string(), text));
+    }
+    let moved = clarity_spec::cxaml::moved_out(&files)?;
+    let mut changes = Vec::new();
+    for (path, after) in moved {
+        let file = PathBuf::from(&path);
+        let before = files.iter().find(|(p, _)| *p == path).map(|(_, t)| t.clone());
+        if before.is_none() && file.exists() {
+            return Err(format!("{} is there already; nothing was moved", file.display()));
+        }
+        if let Some(folder) = file.parent() {
+            std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
+        }
+        changes.push(FileChange { file, before, after: Some(after) });
+    }
+    for change in &changes {
+        change.make()?;
+    }
+    record(&history, changes)?;
+    load(&dir)
+}
+
 /// The code behind of a window or the app, as the code panel shows it.
 #[derive(Serialize, TS)]
 #[ts(export)]
@@ -321,6 +415,8 @@ pub struct CodeView {
 #[tauri::command]
 fn code_text(path: String, owner: String, state: State<WatchState>) -> Result<CodeView, String> {
     let (dir, file) = spec_file_of(&state, &path)?;
+    // The code of a window's .cxaml is in its module's file.
+    let file = code_file_of(file)?;
     let source = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {path}: {err}"))?;
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     Ok(CodeView {
@@ -339,6 +435,8 @@ fn check_code(
     state: State<WatchState>,
 ) -> Result<Vec<clarity_spec::Diagnostic>, String> {
     let (dir, file) = spec_file_of(&state, &path)?;
+    // The code of a window's .cxaml is in its module's file.
+    let file = code_file_of(file)?;
     let source = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {path}: {err}"))?;
     let after = clarity_spec::code::edit::set_code(&source, &owner, &text).map_err(|err| err.to_string())?;
     let project = clarity_project::load_modules_with(&dir, &file, &after)
@@ -353,6 +451,11 @@ fn decl_text(path: String, item: u32, state: State<WatchState>) -> Result<CodeVi
     let (dir, file) = spec_file_of(&state, &path)?;
     let source = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {path}: {err}"))?;
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    // A window's or view's own file is its whole text, its markup.
+    if is_page_file(&file) {
+        let shown = file.display().to_string();
+        return Ok(CodeView { text: source, problems: project.diagnostics.iter().filter(|d| d.path == shown).cloned().collect() });
+    }
     Ok(CodeView {
         text: clarity_spec::source::decl_text(&source, item).map_err(|err| err.to_string())?,
         problems: clarity_spec::source::problems_in_decl(&source, item, &file.display().to_string(), &project.diagnostics),
@@ -371,15 +474,17 @@ pub struct DeclTrial {
 
 /// Clarity text in colored pieces, as the lexer reads it, for the code editors.
 #[tauri::command]
-fn highlight(text: String) -> Vec<clarity_spec::highlight::Piece> {
-    clarity_spec::highlight::highlight(&text)
+fn highlight(text: String, markup: Option<bool>) -> Vec<clarity_spec::highlight::Piece> {
+    // A window's or view's .cxaml is colored as markup.
+    if markup == Some(true) { clarity_spec::highlight::highlight_markup(&text) } else { clarity_spec::highlight::highlight(&text) }
 }
 
 #[tauri::command]
 fn try_decl(path: String, item: u32, text: String, state: State<WatchState>, server: State<PreviewServer>) -> Result<DeclTrial, String> {
     let (dir, file) = spec_file_of(&state, &path)?;
     let source = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {path}: {err}"))?;
-    let after = clarity_spec::source::replace_decl(&source, item, &text).map_err(|err| err.to_string())?;
+    // A window's or view's own file is tried as a whole.
+    let after = if is_page_file(&file) { text.clone() } else { clarity_spec::source::replace_decl(&source, item, &text).map_err(|err| err.to_string())? };
     let project = clarity_project::load_modules_with(&dir, &file, &after)
         .map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     // The design canvas draws the window as this text makes it (DESIGN 8.1).
@@ -444,10 +549,26 @@ fn app_state(app: AppHandle) -> Option<build::AppRunning> {
 fn spec_file_of(state: &WatchState, path: &str) -> Result<(PathBuf, PathBuf), String> {
     let dir = open_dir_of(state)?;
     let file = clarity_project::plain(PathBuf::from(path).canonicalize().map_err(|err| format!("cannot open {path}: {err}"))?);
-    if file.parent() != Some(dir.as_path()) || !is_spec_file(&file) {
+    let module_file = file.parent() == Some(dir.as_path()) && is_spec_file(&file);
+    // A window's or view's own file, in its module's folder.
+    let page_file = is_page_file(&file) && clarity_spec::cxaml::project_dir_of(&file) == Some(dir.as_path());
+    if !module_file && !page_file {
         return Err(format!("{path} is not a spec file of the open directory"));
     }
     Ok((dir, file))
+}
+
+fn is_page_file(path: &Path) -> bool {
+    clarity_spec::cxaml::is_page_file(&path.to_string_lossy())
+}
+
+/// The file whose code blocks a file's pages run: a window's `.cxaml`
+/// runs its module's file of Clarity; a module's file its own.
+fn code_file_of(file: PathBuf) -> Result<PathBuf, String> {
+    if !is_page_file(&file) {
+        return Ok(file);
+    }
+    clarity_spec::cxaml::module_file(&file).ok_or_else(|| format!("{} is in no module's folder", file.display()))
 }
 
 /// Remembers an applied change for Undo; a new change clears Redo.
@@ -480,7 +601,9 @@ fn rename(
     }
     // Check the whole project with every renamed file in place.
     let mut sources = Vec::new();
-    for path in clarity_spec::spec_files(&dir).map_err(read_err)? {
+    let mut paths = clarity_spec::spec_files(&dir).map_err(read_err)?;
+    paths.extend(clarity_spec::cxaml::page_files(&dir, &paths.clone(), &[]).map_err(read_err)?);
+    for path in paths {
         let shown = path.display().to_string();
         let text = match renamed.iter().find(|r| r.path == shown) {
             Some(r) => r.text.clone(),
@@ -543,6 +666,27 @@ fn preview_server(app: AppHandle) -> PreviewServer {
 }
 
 /// Where the preview server serves, ending in `/`.
+/// Clarity's repository, for a Clarity run from its source; none in an installed one.
+fn repository() -> Option<PathBuf> {
+    cfg!(debug_assertions).then(|| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")))
+}
+
+/// Why the design and preview may not show what changed in Clarity.UI: in a
+/// Clarity run from its repository, browser files older than Clarity.UI's
+/// source. None in an installed Clarity, which carries its own.
+#[tauri::command]
+fn browser_files_stale() -> Option<String> {
+    repository().and_then(|repo| clarity_gen::clarity_ui::stale_browser(&repo))
+}
+
+/// Builds Clarity.UI's browser files again from the repository's source, in the Output panel.
+#[tauri::command]
+fn rebuild_browser_files(app: AppHandle) -> Result<(), String> {
+    let repo = repository().ok_or("only a Clarity run from its repository builds Clarity.UI's browser files")?;
+    let steps = vec![vec!["bash".to_string(), "runtimes/rust-ui-browser/build.sh".to_string()]];
+    build::start_part(app, "Clarity.UI's browser files".to_string(), repo, steps, vec![("CARGO_BUILD_JOBS".to_string(), "2".to_string())])
+}
+
 #[tauri::command]
 fn preview_server_address(server: State<PreviewServer>) -> Result<String, String> {
     server.0.as_ref().map(|s| s.address().to_string()).ok_or_else(|| "The preview's server could not start on this machine's loopback address.".to_string())
@@ -830,6 +974,8 @@ pub fn run() {
             // The version alone, as the title says it after the name (which may be more than one word).
             let version = title.strip_prefix(info.name.as_str()).unwrap_or(&title).trim().to_string();
             splash::open(app.handle(), &title, &version);
+            // The log first, when logging is on, so it holds the rest of the start.
+            logging::begin();
             // Fail safe: a panic in a command shows in the IDE.
             fail_safe::report_panics(app.handle().clone());
             // The status bar's meters, and the System page while it is open.
@@ -883,7 +1029,13 @@ pub fn run() {
         .manage(vault::VaultState::default())
         .manage(agent::AgentState::default())
         .invoke_handler(tauri::generate_handler![
+            logging::logging_view,
+            logging::set_logging,
+            logging::open_log_folder,
+            logging::log_line,
             preview_server_address,
+            browser_files_stale,
+            rebuild_browser_files,
             splash::splash_done,
             splash::splash_status,
             manual::manual_topics,
@@ -953,6 +1105,7 @@ pub fn run() {
             translations::set_translation_resource,
             translations::rename_key,
             translations::make_texts_keys,
+            move_pages_out,
             translations::add_language,
             themes::theme_styles,
             themes::theme_starter,

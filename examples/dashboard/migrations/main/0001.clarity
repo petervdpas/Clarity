@@ -1,0 +1,10 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Sales and products"
+    add entity Sale
+        product: text(80)
+        amount: decimal(10, 2)
+        sold: date
+    add entity Product
+        name: text(80)
+        stock: integer

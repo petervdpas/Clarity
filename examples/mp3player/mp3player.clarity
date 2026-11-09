@@ -13,40 +13,6 @@ app Mp3player
     title @mp3playerTitle
     main Main
 
-page Main: window
-    title @mainTitle
-    on open: windowOpened
-
-    content name main at 1,1 span 12 rows 13
-        view MainView
-
-// What the window Main shows: its parts, data and code.
-page MainView: view
-    data tracks: list<Track>
-    data current: integer
-    data volume: integer, default 80
-    data played: decimal
-    data nowPlaying: text
-    data chosen: text
-
-    // The songs play through the sound part: mp3, flac, ogg and wav files of the folder.
-    sound name music volume 80 on end: songEnded on fail: songFailed
-    // Moves the progress bar along while a song plays.
-    timer name ticker every 0.5 on tick: tickerTicked
-
-    label @folderLabel name folderLabel at 1,1 span 2 for musicFolderBox
-    folder name musicFolderBox at 3,1 span 10 bind settings.musicFolder on change: folderChanged
-    table name trackTable at 1,2 span 12 rows 9 bind tracks columns title resizable sortable on select: trackSelected on open: playClicked
-    text name nowPlayingText at 1,11 span 12 bind nowPlaying
-    slider name progressSlider at 1,12 span 12 bind played min 0 max 1000 on change: progressMoved
-    label @volumeLabel name volumeLabel at 1,13 span 1 for volumeSlider
-    slider name volumeSlider at 2,13 span 3 bind volume min 0 max 100 on change: volumeChanged
-    button @previousCaption name previousTrack at 5,13 span 2 on click: previousClicked
-    button @playCaption name playTrack at 7,13 span 2 default on click: playClicked
-    button @pauseCaption name pauseTrack at 9,13 span 1 on click: pauseClicked
-    button @stopCaption name stopTrack at 10,13 span 1 on click: stopClicked
-    button @nextCaption name nextTrack at 11,13 span 2 on click: nextClicked
-
 code Main
     handler windowOpened
         music.volume(volume)

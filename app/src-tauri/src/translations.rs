@@ -159,13 +159,21 @@ pub fn make_texts_keys(state: State<WatchState>, history: State<HistoryState>) -
             .map(|p| std::fs::read_to_string(&p).map(|t| (p.clone(), t)).map_err(|err| format!("cannot read {}: {err}", p.display())))
             .collect()
     };
-    let modules = read_all(&dir)?;
+    let mut modules = read_all(&dir)?;
+    // Each window's and view's .cxaml too (clarity_spec::cxaml::make_keys_with_pages).
+    let module_count = modules.len();
+    for path in clarity_spec::cxaml::page_files(&dir, &[], &[]).map_err(|err| format!("cannot read {}: {err}", dir.display()))? {
+        let markup = std::fs::read_to_string(&path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+        modules.push((path, markup));
+    }
     let folder = dir.join(TRANSLATIONS_DIR);
     let languages = read_all(&folder)?;
     let names = |files: &[(PathBuf, String)]| files.iter().map(|(p, t)| (p.display().to_string(), t.clone())).collect::<Vec<_>>();
     let (module_names, language_names) = (names(&modules), names(&languages));
-    let made = clarity_spec::keyed::make_keys(
+    let (module_names, page_names) = module_names.split_at(module_count);
+    let made = clarity_spec::cxaml::make_keys_with_pages(
         &module_names.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect::<Vec<_>>(),
+        &page_names.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect::<Vec<_>>(),
         &language_names.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect::<Vec<_>>(),
         &default,
     );

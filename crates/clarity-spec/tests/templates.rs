@@ -7,11 +7,11 @@ fn example_dir() -> PathBuf {
     PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/shop"))
 }
 
-/// Adds a window from a template to desk.clarity and loads the project
+/// Adds a window from a template to counter.clarity and loads the project
 /// with the result.
 fn add_window(template: PageTemplate) -> (String, Project) {
     let dir = example_dir();
-    let path = dir.join("desk.clarity");
+    let path = dir.join("counter.clarity");
     let project = load_dir(&dir).unwrap();
     let source = std::fs::read_to_string(&path).unwrap();
     let edit = Edit::AddWindow {
@@ -21,7 +21,11 @@ fn add_window(template: PageTemplate) -> (String, Project) {
     let outcome = apply_in(&project, &source, &edit).unwrap_or_else(|e| panic!("{e}"));
     // The texts the template wrote are keys, which the language files get.
     let languages = clarity_spec::keyed::plan_keys(&dir, "en", &outcome.keys).unwrap();
-    let mut replaced: Vec<(&std::path::Path, &str)> = vec![(path.as_path(), outcome.text.as_str())];
+    // The new window and its view go into design/, as the IDE puts them.
+    let added = ["FreshWindow".to_string(), "FreshWindowView".to_string()];
+    let moved = clarity_spec::cxaml::moved_out_only(&[(path.display().to_string(), outcome.text.clone())], Some(&added)).unwrap();
+    let moved: Vec<(std::path::PathBuf, String)> = moved.into_iter().map(|(p, t)| (std::path::PathBuf::from(p), t)).collect();
+    let mut replaced: Vec<(&std::path::Path, &str)> = moved.iter().map(|(p, t)| (p.as_path(), t.as_str())).collect();
     replaced.extend(languages.iter().map(|(p, _, t)| (p.as_path(), t.as_str())));
     let after = clarity_spec::load_dir_with_files_in(&dir, &replaced, &[]).unwrap();
     (outcome.text, after)
@@ -152,8 +156,9 @@ fn a_browse_window_filters_and_refreshes_when_a_form_closes() {
 
 #[test]
 fn a_dropped_field_brings_its_label_and_help() {
+    // The customer card's view is a window's view in its own file, as the designer edits it.
     let dir = example_dir();
-    let path = dir.join("desk.clarity");
+    let path = dir.join("design/CustomerCardView.cxaml");
     let project = load_dir(&dir).unwrap();
     let source = std::fs::read_to_string(&path).unwrap();
     let page = project
@@ -167,20 +172,20 @@ fn a_dropped_field_brings_its_label_and_help() {
         room: 12,
         bind: "customer.vatNumber".into(),
     };
-    let outcome = apply_in(&project, &source, &edit).unwrap_or_else(|e| panic!("{e}"));
-    assert!(
-        outcome.text.contains(
-            "    label @customerVatNumberLabel name vatNumberLabel at 1,20 span 3 for vatNumber\n    textbox name vatNumber at 4,20 span 4 bind customer.vatNumber\n    help name vatNumberHelp at 8,20 span 5 for vatNumber\n"
-        ),
-        "{}",
-        outcome.text
-    );
+    let placed = |text: &str| -> Vec<(String, u32, u32, u32)> {
+        let (page, d) = clarity_spec::cxaml::read_page(text, "");
+        assert!(d.is_empty(), "{d:#?}");
+        page.unwrap().widgets.iter().filter(|w| w.props.row >= 20).map(|w| (w.props.name.clone().unwrap_or_default(), w.props.col, w.props.row, w.props.width)).collect()
+    };
+    let outcome = clarity_spec::cxaml::apply(Some(&project), &source, &edit).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(placed(&outcome.text), [("vatNumberLabel".to_string(), 1, 20, 3), ("vatNumber".to_string(), 4, 20, 4), ("vatNumberHelp".to_string(), 8, 20, 5)], "{}", outcome.text);
+    assert!(outcome.text.contains("caption=\"@customerVatNumberLabel\""), "{}", outcome.text);
     let after = load_dir_with(&dir, &path, &outcome.text).unwrap();
     assert!(after.diagnostics.is_empty(), "{:#?}", after.diagnostics);
 
     // Dropped again, the input gets a free name and the label follows it.
-    let again = apply_in(&after, &outcome.text, &edit_at(&after, 21)).unwrap_or_else(|e| panic!("{e}"));
-    assert!(again.text.contains("for vatNumber1\n    textbox name vatNumber1 at 4,21"), "{}", again.text);
+    let again = clarity_spec::cxaml::apply(Some(&after), &outcome.text, &edit_at(&after, 21)).unwrap_or_else(|e| panic!("{e}"));
+    assert!(placed(&again.text).iter().any(|(name, _, row, _)| name == "vatNumber1" && *row == 21), "{}", again.text);
 
     // Without room for a label, only the input is placed.
     let narrow = Edit::PlaceField {
@@ -190,8 +195,8 @@ fn a_dropped_field_brings_its_label_and_help() {
         room: 3,
         bind: "customer.since".into(),
     };
-    let outcome = apply_in(&project, &source, &narrow).unwrap_or_else(|e| panic!("{e}"));
-    assert!(outcome.text.contains("\n    date name since at 10,20 span 3 bind customer.since\n"), "{}", outcome.text);
+    let outcome = clarity_spec::cxaml::apply(Some(&project), &source, &narrow).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(placed(&outcome.text), [("since".to_string(), 10, 20, 3)], "{}", outcome.text);
 }
 
 fn edit_at(project: &Project, row: u32) -> Edit {

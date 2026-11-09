@@ -2,13 +2,14 @@
   // Clarity's own settings, kept for the person rather than in a project: a
   // view in the main window with its sections in a sidebar, Display (the
   // theme), Keys (Clarity's shortcut keys), Folders (where projects and apps go), Environment (where each
-  // stack's build tools are), Agent (what it may run) and System (the
+  // stack's build tools are), Agent (what it may run), Logging (a log of what it does) and System (the
   // computer's load, loaded only when it is opened). A choice shows at once.
 
   import { RUNS_CHOICES } from "./agent";
   import EnvironmentSettings from "./EnvironmentSettings.svelte";
   import FoldersSettings from "./FoldersSettings.svelte";
   import KeysSettings from "./KeysSettings.svelte";
+  import LoggingSettings from "./LoggingSettings.svelte";
   import { appSettings, type AppSettingsSection } from "./appSettings.svelte";
   import { agent } from "./agentStore.svelte";
   import { IDE_THEMES, type IdeTheme } from "./ideTheme";
@@ -25,6 +26,7 @@
     { key: "folders", name: "Folders", note: "Where projects and their apps go" },
     { key: "environment", name: "Environment", note: "Where each stack's build tools are" },
     { key: "agent", name: "Agent", note: "What the agent may run" },
+    { key: "logging", name: "Logging", note: "A log of what Clarity does" },
     { key: "system", name: "System", note: "How busy the computer is" },
   ];
 
@@ -84,6 +86,8 @@
       <KeysSettings />
     {:else if section === "folders"}
       <FoldersSettings />
+    {:else if section === "logging"}
+      <LoggingSettings />
     {:else if section === "system"}
       <!-- Loaded when first opened: the graphs cost nothing until someone looks. -->
       {#await import("./SystemSettings.svelte") then page}

@@ -2,7 +2,7 @@ module shop
 
 use customers
 use sales
-use desk
+use counter
 
 // The application frame: shared by every window that has no region of its own.
 app Shop

@@ -1279,6 +1279,11 @@ fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
     for owner in &owners {
         check_defaults(env, owner, out);
     }
+    // A module is its file of Clarity and the windows and views in its folder (`.cxaml`):
+    // its code blocks belong to those pages, and their pages' handlers are in its code.
+    let module = |f: &SpecFile| f.module.as_ref().map(|m| m.name.clone());
+    let siblings: Vec<&SpecFile> = env.visible.iter().copied().filter(|f| !std::ptr::eq(*f, file) && module(f) == module(file)).collect();
+    let page_owners: Vec<Owner> = siblings.iter().filter(|f| crate::cxaml::is_page_file(&f.path)).flat_map(|f| crate::code::check::owners(f, &env.visible)).collect();
     let mut seen: Vec<&str> = Vec::new();
     for block in &file.code {
         let name = block.name.name.as_str();
@@ -1287,7 +1292,7 @@ fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
             continue;
         }
         seen.push(name);
-        if let Some(owner) = owners.iter().find(|o| o.name == name) {
+        if let Some(owner) = owners.iter().chain(page_owners.iter()).find(|o| o.name == name) {
             for event in &block.events {
                 out.push(Diagnostic::error(
                     format!("'{}' belongs in the code of an entity; {name} is a window", event.event.text()),
@@ -1308,7 +1313,7 @@ fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
     // tools may run handlers of the window or view that shows it.
     let toolbox = |name: &str| file.pages.iter().any(|p| p.name.name == name && p.kind == crate::model::PageKind::Toolbox);
     for owner in owners.iter().filter(|o| !toolbox(o.name)) {
-        let block = file.code.iter().find(|b| b.name.name == owner.name);
+        let block = file.code.iter().chain(siblings.iter().flat_map(|f| &f.code)).find(|b| b.name.name == owner.name);
         let mut reported: Vec<&str> = Vec::new();
         for wired in &owner.wired {
             // A view's part may run a handler of the window it shares (or of a view beside it).

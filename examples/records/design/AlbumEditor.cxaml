@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An album: what it is, its tracks, what it cost, its cover and notes. -->
+<View class="music.AlbumEditor">
+  <Data name="album" type="Album" />
+  <Data name="tracks" type="list&lt;Track&gt;" />
+  <Tells message="saved" />
+  <Splitter name="albumSplitter" at="1,1" span="12" rows="10">
+    <Pane>
+      <Panel name="albumPanel" at="1,1" span="12" rows="9" caption="@albumPanelCaption">
+        <Label name="titleLabel" at="1,1" span="3" caption="@titleLabel" for="title" />
+        <Textbox name="title" at="4,1" span="9" bind="album.title" />
+        <Label name="artistLabel" at="1,2" span="3" caption="@artistLabel" for="artist" />
+        <Dropdown name="artist" at="4,2" span="9" bind="album.artist" show="name, country" search="true" />
+        <Label name="genreLabel" at="1,3" span="3" caption="@genreLabel" for="genre" />
+        <Dropdown name="genre" at="4,3" span="9" bind="album.genre" />
+        <Label name="yearLabel" at="1,4" span="3" caption="@yearLabel" for="year" />
+        <Number name="year" at="4,4" span="3" bind="album.year" />
+        <Label name="formatLabel" at="1,5" span="3" caption="@formatLabel" for="format" />
+        <Radio name="format" at="4,5" span="9" rows="3" bind="album.format" orientation="vertical" />
+        <Label name="recordLabelLabel" at="1,8" span="3" caption="@recordLabelLabel" for="recordLabel" />
+        <Dropdown name="recordLabel" at="4,8" span="9" bind="album.recordLabel" typed="true" />
+        <Label name="tagsLabel" at="1,9" span="3" caption="@tagsLabel" for="tags" />
+        <Tags name="tags" at="4,9" span="9" bind="album.tags" />
+      </Panel>
+    </Pane>
+    <Pane>
+      <Tabs name="albumTabs" at="1,1" span="12" rows="9">
+        <Tab title="@albumFormTracksTab">
+          <Table name="trackGrid" at="1,1" span="12" rows="6" bind="tracks" columns="number, title, length" add="true" remove="true" confirm="true" onadd="addTrackClicked" onremove="removeTrackClicked" onopen="trackOpened" />
+          <Label name="length" at="1,7" span="9" none="caption" />
+        </Tab>
+        <Tab title="@albumFormPurchaseTab">
+          <Label name="boughtOnLabel" at="1,1" span="3" caption="@boughtOnLabel" for="boughtOn" />
+          <Date name="boughtOn" at="4,1" span="4" bind="album.boughtOn" />
+          <Label name="priceLabel" at="1,2" span="3" caption="@priceLabel" for="price" />
+          <Number name="price" at="4,2" span="4" bind="album.price" />
+          <Label name="ratingLabel" at="1,3" span="3" caption="@ratingLabel" for="rating" />
+          <Slider name="rating" at="4,3" span="5" bind="album.rating" />
+          <Help name="ratingHelp" at="9,3" span="4" for="rating" />
+          <Label name="bookletLabel" at="1,4" span="3" caption="@bookletLabel" for="booklet" />
+          <File name="booklet" at="4,4" span="9" bind="album.booklet" />
+        </Tab>
+        <Tab title="@albumFormCoverTab">
+          <Image name="cover" at="1,1" span="12" rows="6" bind="album.cover" />
+          <Help name="coverHelp" at="1,7" span="12" for="cover" />
+          <Button name="useAsArtistPhoto" at="9,8" span="4" caption="@useAsArtistPhotoCaption" onclick="useAsArtistPhotoClicked" />
+        </Tab>
+        <Tab title="@albumFormNotesTab">
+          <Memo name="albumNotes" at="1,1" span="12" rows="7" bind="album.notes" />
+        </Tab>
+      </Tabs>
+    </Pane>
+  </Splitter>
+  <Button name="save" at="11,11" span="2" caption="@saveCaption" style="primary" key="Ctrl+S" default="true" onclick="saveClicked" />
+</View>

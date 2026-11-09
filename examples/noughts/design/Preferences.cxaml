@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Dialog class="noughts.Preferences" title="@preferencesTitle" width="360" height="160">
+  <Form name="settingsForm" at="1,1" span="12" bind="settings" labels="4">
+    <Dropdown name="languageBox" at="5,1" span="8" bind="settings.language" />
+  </Form>
+  <Button name="closeButton" at="9,3" span="4" caption="@closeButtonCaption" opens="close" cancel="true" />
+</Dialog>

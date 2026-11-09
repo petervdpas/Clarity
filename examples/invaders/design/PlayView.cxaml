@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window Play shows: its parts, data and code. -->
+<View class="invaders.PlayView">
+  <Data name="score" type="integer" />
+  <Data name="lives" type="integer" default="3" />
+  <Data name="wave" type="integer" default="1" />
+  <Canvas name="field" at="1,1" span="9" rows="11" units="{&quot;height&quot;:120,&quot;width&quot;:160}" runs="Fleet" tells="[{&quot;handler&quot;:&quot;hit&quot;,&quot;tell&quot;:&quot;hit&quot;},{&quot;handler&quot;:&quot;lost&quot;,&quot;tell&quot;:&quot;lost&quot;},{&quot;handler&quot;:&quot;cleared&quot;,&quot;tell&quot;:&quot;cleared&quot;},{&quot;handler&quot;:&quot;over&quot;,&quot;tell&quot;:&quot;over&quot;}]" none="surface" />
+  <Label name="scoreLabel" at="10,1" span="3" caption="@scoreLabel" />
+  <Display name="scoreShown" at="10,2" span="3" rows="2" bind="score" digits="4" />
+  <Label name="livesLabel" at="10,4" span="3" caption="@livesLabel" />
+  <Display name="livesShown" at="10,5" span="3" rows="2" bind="lives" digits="1" />
+  <Label name="waveLabel" at="10,7" span="3" caption="@waveLabel" />
+  <Display name="waveShown" at="10,8" span="3" rows="2" bind="wave" digits="2" />
+  <Button name="startButton" at="10,10" span="3" caption="@startCaption" onclick="startGame" />
+  <Label name="howLabel" at="1,12" span="12" caption="@howLabel" />
+</View>

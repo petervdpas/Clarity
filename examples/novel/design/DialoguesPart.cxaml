@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The dialogues of the book, tried out as a chat or a screenplay: the list at
+     the left; at the right the lines, who takes part and where it is used. The
+     chosen participant speaks the next line; with nobody chosen it is a direction. -->
+<View class="writing.DialoguesPart">
+  <Data name="balloonBook" type="Book" />
+  <Data name="balloons" type="list&lt;TrialBalloon&gt;" />
+  <Data name="balloon" type="TrialBalloon" />
+  <Data name="lines" type="list&lt;Line&gt;" />
+  <Data name="participants" type="list&lt;Participation&gt;" />
+  <Data name="speaker" type="Participation" />
+  <Data name="pickedLine" type="Line" />
+  <Data name="balloonCast" type="list&lt;Character&gt;" />
+  <Data name="balloonPlaces" type="list&lt;BalloonPlace&gt;" />
+  <Data name="pickedBalloonPlace" type="BalloonPlace" />
+  <Data name="balloonChoice" type="list&lt;Chapter&gt;" />
+  <Data name="balloonCurrent" type="Chapter" />
+  <Tells message="jumpTo(position: integer)" />
+  <Splitter name="dialogueSplitter" at="1,1" span="12" rows="15">
+    <Pane span="3">
+      <List name="balloonList" at="1,1" span="3" rows="13" bind="balloons" show="title" onselect="balloonChosen" />
+      <Button name="newDialogueButton" at="1,14" span="3" caption="@newDialogue" icon="plus" onclick="addBalloon" />
+      <Button name="removeDialogueButton" at="1,15" span="3" caption="@removeDialogueCaption" icon="trash" onclick="removeBalloon" />
+    </Pane>
+    <Pane>
+      <Textbox name="balloonTitleBox" at="1,1" span="6" bind="balloon.title" placeholder="@dialogueTitlePlaceholder" />
+      <Memo name="balloonNoteBox" at="1,2" span="6" rows="3" bind="balloon.note" placeholder="@dialogueNotePlaceholder" />
+      <Dropdown name="balloonKindBox" at="1,5" span="3" bind="balloon.kind" />
+      <Dropdown name="balloonVoiceBox" at="4,5" span="3" bind="balloon.voice" />
+      <List name="lineList" at="1,6" span="6" rows="8" bind="lines" reorder="position" reorderFrom="0" show="character, text" cards="true" onreorder="linesMoved" onselect="rememberLine" />
+      <Textbox name="lineBox" at="1,14" span="6" placeholder="@linePlaceholder" onenter="addLine" />
+      <Button name="addLineButton" at="1,15" span="3" caption="@addLineCaption" tooltip="@addLineTip" icon="message-square-plus" onclick="addLine" />
+      <Button name="removeLineButton" at="4,15" span="3" caption="@removeLineCaption" icon="trash" onclick="removeLine" />
+      <Button name="saveDialogueButton" at="7,1" span="3" caption="@saveCaption" icon="save" default="true" onclick="saveBalloon" />
+      <Label name="participantsLabel" at="7,2" span="3" caption="@participantsLabel" />
+      <Table name="participantTable" at="7,3" span="3" rows="5" bind="participants" columns="character" add="true" remove="true" confirm="true" onadd="addParticipant" onremove="removeParticipant" onselect="rememberSpeaker" />
+      <Label name="dialogueUsedInLabel" at="7,8" span="3" caption="@usedInLabel" />
+      <Table name="balloonPlaceTable" at="7,9" span="3" rows="5" bind="balloonPlaces" columns="chapter" links="[{&quot;column&quot;:&quot;chapter&quot;,&quot;handler&quot;:&quot;balloonToChapter&quot;}]" add="true" remove="true" confirm="true" onadd="addBalloonPlace" onremove="removeBalloonPlace" onopen="balloonToChapter" onselect="rememberPickedBalloonPlace" />
+      <Button name="balloonToChapterButton" at="7,14" span="3" caption="@toChapterCaption" tooltip="@toChapterTip" icon="square-arrow-out-up-right" onclick="balloonToChapter" />
+      <Button name="balloonInChapterButton" at="7,15" span="3" caption="@inChapterCaption" tooltip="@inChapterTip" icon="link" onclick="balloonInChapter" />
+    </Pane>
+  </Splitter>
+</View>

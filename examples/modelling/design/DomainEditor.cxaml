@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A domain: its name, what it is, and the packages its data objects and
+     events are published in. It tells the window when it saved. -->
+<View class="modelling.DomainEditor" columns="8">
+  <Data name="domain" type="Domain" />
+  <Tells message="saved" />
+  <Heading name="domainHeading" at="1,1" span="8" caption="@domainHeading" />
+  <Label name="domainNameLabel" at="1,2" span="2" caption="@domainNameCaption" for="domainNameBox" />
+  <Textbox name="domainNameBox" at="3,2" span="5" bind="domain.name" placeholder="@domainNamePlaceholder" />
+  <Label name="domainSummaryLabel" at="1,3" span="2" caption="@domainSummaryCaption" for="domainSummaryBox" />
+  <Memo name="domainSummaryBox" at="3,3" span="5" rows="2" bind="domain.summary" />
+  <Label name="modelPackageLabel" at="1,5" span="2" caption="@modelPackageCaption" for="modelPackageBox" />
+  <Textbox name="modelPackageBox" at="3,5" span="4" bind="domain.modelPackage" placeholder="@modelPackagePlaceholder" />
+  <Textbox name="modelVersionBox" at="7,5" span="1" bind="domain.modelVersion" placeholder="@packageVersionPlaceholder" />
+  <Label name="messagesPackageLabel" at="1,6" span="2" caption="@messagesPackageCaption" for="messagesPackageBox" />
+  <Textbox name="messagesPackageBox" at="3,6" span="4" bind="domain.messagesPackage" placeholder="@messagesPackagePlaceholder" />
+  <Textbox name="messagesVersionBox" at="7,6" span="1" bind="domain.messagesVersion" placeholder="@packageVersionPlaceholder" />
+  <Checkbox name="newtonsoftBox" at="3,7" span="3" caption="@domainNewtonsoftLabel" bind="domain.newtonsoft" />
+  <Button name="saveDomainButton" at="6,7" span="2" caption="@saveDomainCaption" default="true" onclick="saveDomainClicked" />
+</View>

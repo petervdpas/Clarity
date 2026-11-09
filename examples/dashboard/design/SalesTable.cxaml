@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Every sale, the newest first. -->
+<View class="dashboard.SalesTable">
+  <Data name="sales" type="list&lt;Sale&gt;" />
+  <Heading name="salesTableHeading" at="1,1" span="12" caption="@salesTableHeading" />
+  <Table name="salesGrid" at="1,2" span="12" rows="6" bind="sales" columns="sold, product, amount" order="{&quot;desc&quot;:true,&quot;field&quot;:&quot;sold&quot;}" />
+</View>

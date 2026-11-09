@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A recipe's name, course, how many it serves, how long it takes, notes
+     and a photo of the dish. Save stores it and tells the window, which shows it in its list. -->
+<View class="kitchen.RecipeOverview">
+  <Data name="dish" type="Recipe" />
+  <Tells message="saved" />
+  <Label name="dishNameLabel" at="1,1" span="2" caption="@recipeNameLabel" for="dishNameBox" />
+  <Textbox name="dishNameBox" at="3,1" span="6" bind="dish.name" placeholder="@dishNamePlaceholder" />
+  <Label name="dishCourseLabel" at="1,2" span="2" caption="@recipeCourseLabel" for="dishCourseBox" />
+  <Dropdown name="dishCourseBox" at="3,2" span="3" bind="dish.course" placeholder="@dishCoursePlaceholder" />
+  <Label name="dishServesLabel" at="1,3" span="2" caption="@recipeServesLabel" for="dishServesBox" />
+  <Spinbox name="dishServesBox" at="3,3" span="2" bind="dish.serves" max="40" min="1" />
+  <Label name="dishMinutesLabel" at="1,4" span="2" caption="@recipeMinutesLabel" for="dishMinutesBox" />
+  <Spinbox name="dishMinutesBox" at="3,4" span="2" bind="dish.minutes" max="1440" min="0" />
+  <Label name="dishNotesLabel" at="1,5" span="2" caption="@recipeNotesLabel" for="dishNotesBox" />
+  <Memo name="dishNotesBox" at="3,5" span="6" rows="4" bind="dish.notes" placeholder="@dishNotesPlaceholder" />
+  <Label name="dishPhotoLabel" at="1,9" span="2" caption="@recipePhotoLabel" for="dishPhoto" />
+  <Image name="dishPhoto" at="3,9" span="4" rows="5" bind="dish.photo" />
+  <Button name="saveRecipeButton" at="7,14" span="2" caption="@saveRecipeCaption" default="true" onclick="saveDish" />
+</View>

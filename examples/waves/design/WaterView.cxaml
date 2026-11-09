@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What the window Water shows: its parts, data and code. -->
+<View class="waves.WaterView">
+  <Data name="speed" type="integer" default="4" />
+  <Data name="sources" type="integer" default="3" />
+  <Data name="highest" type="integer" />
+  <Custom name="waveField" at="1,1" span="8" rows="12" part="WaveField" values="{&quot;sources&quot;:{&quot;kind&quot;:&quot;number&quot;,&quot;value&quot;:&quot;3&quot;},&quot;speed&quot;:{&quot;kind&quot;:&quot;number&quot;,&quot;value&quot;:&quot;4&quot;}}" tells="[{&quot;handler&quot;:&quot;waterSwelled&quot;,&quot;tell&quot;:&quot;swelled&quot;}]" />
+  <Label name="speedLabel" at="9,1" span="4" caption="@speedLabel" for="speedSlider" />
+  <Slider name="speedSlider" at="9,2" span="4" bind="speed" max="10" min="1" onchange="speedChanged" />
+  <Label name="sourcesLabel" at="9,3" span="4" caption="@sourcesLabel" for="sourcesSlider" />
+  <Slider name="sourcesSlider" at="9,4" span="4" bind="sources" max="5" min="1" onchange="sourcesChanged" />
+  <Label name="highestLabel" at="9,5" span="4" caption="@highestLabel" />
+  <Display name="highestShown" at="9,6" span="4" rows="2" bind="highest" digits="3" />
+  <Button name="calm" at="9,8" span="4" caption="@calmCaption" onclick="calmClicked" />
+</View>

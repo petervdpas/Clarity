@@ -148,3 +148,29 @@ fn a_window_without_an_open_handler_loads_its_tree_too() {
     let window = placed.pages().find(|p| p.name.name == "Main").unwrap();
     assert!(window.handlers.iter().any(|h| h.handler == "modelTreeOpened"));
 }
+
+/// The code a tree is lowered to is parsed from a text of its own, so its
+/// places are not places in the module: they lie past any text, or the
+/// checker's types of the module's own code (keyed by place) are taken by
+/// the tree's, and the generators write a record where a reference is.
+#[test]
+fn the_code_a_tree_is_lowered_to_shares_no_place_with_the_module_s_code() {
+    let project = project(SHOP);
+    let spans = |project: &Project| {
+        let mut spans = std::collections::BTreeSet::new();
+        for code in project.files.iter().flat_map(|f| &f.code) {
+            for handler in &code.handlers {
+                clarity_spec::code::each_expr_in(&handler.body, &mut |e| {
+                    spans.insert((e.span.start, e.span.end));
+                });
+            }
+        }
+        spans
+    };
+    let own = spans(&project);
+    let lowered = spans(&clarity_spec::views::placed(&project));
+    let made: Vec<_> = lowered.difference(&own).collect();
+    assert!(!made.is_empty(), "the tree's code");
+    let end = own.iter().map(|(_, end)| *end).max().unwrap_or(0);
+    assert!(made.iter().all(|(start, _)| *start > end), "{made:?} within the module's text, which ends at {end}");
+}

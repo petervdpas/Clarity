@@ -104,6 +104,27 @@ pub fn placed(project: &Project) -> Project {
     crate::trees::lowered(&placed_views(&crate::cxaml::folded(project)))
 }
 
+/// Where the places of the copies of views' code begin. A view's code joins
+/// each window that shows it, from whichever file it is in, and the checker
+/// keys the types of expressions by place in a file: copies at the places
+/// of their text would take each other's types, or those of the window's
+/// file. Past any text, and before the trees' code (trees::LOWERED).
+const PLACED: u32 = 0x2000_0000;
+
+/// Moves the places of `code`'s expressions on by `by`; gives where the next copy may begin.
+fn moved_on(code: &mut CodeBlock, by: u32) -> u32 {
+    let mut end = 0;
+    let bodies = code.handlers.iter_mut().map(|h| &mut h.body).chain(code.events.iter_mut().map(|e| &mut e.body));
+    for body in bodies {
+        crate::code::each_expr_in_mut(body, &mut |e| {
+            end = end.max(e.span.end);
+            e.span.start += by;
+            e.span.end += by;
+        });
+    }
+    by + end + 1
+}
+
 fn placed_views(project: &Project) -> Project {
     // A toolbox (`page X: toolbox`) is placed as a view is: its parts in the canvas that names it, its code the window's.
     let placeable = |kind: PageKind| matches!(kind, PageKind::View | PageKind::Toolbox);
@@ -111,6 +132,8 @@ fn placed_views(project: &Project) -> Project {
         return project.clone();
     }
     let mut placed = project.clone();
+    // Each copy of a view's code gets places of its own, past any text and past the copies before it.
+    let mut next = PLACED;
     let views: Vec<(Page, Option<CodeBlock>)> = project
         .files
         .iter()
@@ -130,6 +153,7 @@ fn placed_views(project: &Project) -> Project {
                     for handler in &mut code.handlers {
                         heard_as_calls(&mut handler.body, &heard);
                     }
+                    next = moved_on(&mut code, next);
                     added.push((page.name.name.clone(), code));
                 }
             }

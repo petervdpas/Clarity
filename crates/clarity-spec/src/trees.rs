@@ -23,6 +23,20 @@ fn ref_field(entity: &str) -> String {
     format!("of{entity}")
 }
 
+/// Where the places of the code a tree is lowered to begin. That code is
+/// parsed from a text of its own, so its places would fall on the module's
+/// own code, and the checker keys the types of expressions by place: moved
+/// past any text, they take no type of the module's code.
+const LOWERED: u32 = 0x4000_0000;
+
+/// Moves the places of `body`'s expressions on by `by`.
+fn moved_on(body: &mut [Stmt], by: u32) {
+    crate::code::each_expr_in_mut(body, &mut |e| {
+        e.span.start += by;
+        e.span.end += by;
+    });
+}
+
 /// The handlers the generated code adds, by tree.
 fn load_handler(name: &str) -> String {
     format!("{name}Load")
@@ -178,6 +192,8 @@ fn reloads_as_calls(body: &mut [Stmt], tree: &str) {
 /// The project with each tree of levels written as a tree of records (see the module's comment).
 pub fn lowered(project: &Project) -> Project {
     let mut out = project.clone();
+    // Each tree's code gets places of its own, past those of the trees before it.
+    let mut next = LOWERED;
     for f in 0..out.files.len() {
         for p in 0..out.files[f].pages.len() {
             let mut found = Vec::new();
@@ -208,7 +224,14 @@ pub fn lowered(project: &Project) -> Project {
                 // The window's rows of the tree: `<name>Rows`, a list of the row record.
                 let ident = |name: String| crate::model::Ident { name, span: crate::span::Span::default() };
                 out.files[f].pages[p].data.push(crate::model::DataDecl { name: ident(format!("{name}Rows")), of: crate::model::DataKind::List { entity: ident(row.clone()) }, made: false, span: crate::span::Span::default() });
-                let handlers = made.code.into_iter().flat_map(|c| c.handlers).collect::<Vec<_>>();
+                let mut handlers = made.code.into_iter().flat_map(|c| c.handlers).collect::<Vec<_>>();
+                let at = next;
+                next += text.len() as u32 + 1;
+                for h in &mut handlers {
+                    moved_on(&mut h.body, at);
+                }
+                // The call that loads the rows when the window opens is the tree's too.
+                let load_at = crate::span::Span { start: at, end: at, ..crate::span::Span::default() };
                 // The rows load when the window opens: its open handler loads them first.
                 let page = &mut out.files[f].pages[p];
                 let opened = page.handlers.iter().find(|h| h.event == Event::Open).map(|h| h.handler.clone());
@@ -230,15 +253,12 @@ pub fn lowered(project: &Project) -> Project {
                 };
                 let call = |span| Stmt { kind: StmtKind::Call { call: crate::code::Expr { kind: crate::code::ExprKind::Call { function: crate::model::Ident { name: load_handler(&name), span }, args: Vec::new(), named: Vec::new() }, span } }, span };
                 match code.handlers.iter_mut().find(|h| h.name.name == opened) {
-                    Some(h) => {
-                        let span = h.span;
-                        h.body.insert(0, call(span));
-                    }
+                    Some(h) => h.body.insert(0, call(load_at)),
                     None => {
                         let mut h = handlers.iter().find(|h| h.name.name == load_handler(&name)).cloned().expect("the load handler");
                         h.name.name = opened.clone();
                         h.params.clear();
-                        h.body = vec![call(h.span)];
+                        h.body = vec![call(load_at)];
                         code.handlers.push(h);
                     }
                 }

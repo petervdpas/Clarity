@@ -12,6 +12,8 @@ fn the_help_lists_mcp() {
     let own = Command::new(clarity).args(["mcp", "--help"]).output().unwrap();
     assert!(own.status.success());
     assert!(String::from_utf8_lossy(&own.stdout).contains("MCP"));
+    // The IDE starts it for a turn of its chat panel with the turn's file.
+    assert!(String::from_utf8_lossy(&own.stdout).contains("--turn"));
 }
 
 #[test]

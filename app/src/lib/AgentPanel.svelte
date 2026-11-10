@@ -55,6 +55,9 @@
         <option value={agent.connection}>{agent.connection}</option>
       {/each}
     </select>
+    {#if agent.outside.includes(agent.connection) && (agent.needsSignIn || agent.signingIn)}
+      <button onclick={() => agent.signIn()} disabled={agent.running || agent.signingIn} title="Sign in to your own agent program the vendor's way: a browser opens">{agent.signingIn ? "Signing in..." : "Sign in"}</button>
+    {/if}
     <button onclick={() => agent.forget()} disabled={agent.running || agent.items.length === 0} title="Start a new conversation">New</button>
     <button onclick={() => agent.toggle()} title="Hide the agent">&times;</button>
   </header>
@@ -96,8 +99,7 @@
       {/if}
     {:else}
       <p class="empty">
-        Ask for an app, a window or a change. The agent reads and writes the open project, checks every change, and one Undo takes a whole answer back.
-        Its key comes from the connection {agent.connection} in the vault.
+        Ask for an app, a window or a change. The agent reads and writes the open project, checks every change, and one Undo takes a whole answer back. It works through the connection {agent.connection} in the vault: a key for Clarity's own agent, or kind codex or copilot for your own agent program, signed in its own way.
       </p>
     {/each}
     {#if agent.running}<p class="note">Working...</p>{/if}

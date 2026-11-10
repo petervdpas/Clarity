@@ -1,0 +1,17 @@
+[package]
+name = "clarity-acp"
+description = "Clarity as an ACP client: the chat panel talks to the person's own agent program (Codex, Copilot), signed in with its own login"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+# The Agent Client Protocol's own crate (docs/ACP-PLAN.md): the user said "use the crate, standards are better".
+agent-client-protocol = { version = "=3.5.0", features = ["process"] }
+# The version the workspace already has through the IDE.
+tokio = { version = "1.53.3", features = ["rt", "sync"] }
+serde_json.workspace = true
+
+[dev-dependencies]
+tokio = { version = "1.53.3", features = ["rt", "sync", "macros", "time"] }

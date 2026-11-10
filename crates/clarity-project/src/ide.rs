@@ -1,5 +1,6 @@
 //! What the Clarity IDE tells other programs, kept in `ide.json` in
-//! Clarity's own folder: the project it has open. `clarity mcp` reads it on
+//! Clarity's own folder: the project it has open, and whether outside
+//! agents may work on it. `clarity mcp` reads it on
 //! every call, so the agent works on the project open in the IDE and
 //! follows it when the IDE opens another (docs/MCP-PLAN.md, "Which project").
 //!
@@ -90,6 +91,34 @@ pub fn set_open_project_in(file: &Path, project: &Path, ide: &Ide) -> Result<(),
     settings.insert(OPEN_PROJECT.to_string(), Value::String(project.display().to_string()));
     settings.insert(IDE_PID.to_string(), Value::from(ide.pid));
     settings.insert(IDE_STARTED.to_string(), Value::from(ide.started));
+    save(file, &settings)
+}
+
+/// The key holding whether outside agents (through `clarity mcp`) may work
+/// on the project: Clarity's setting "Let outside agents work on my project".
+pub const OUTSIDE_AGENTS: &str = "outsideAgents";
+
+/// Whether outside agents may work on the project. On unless the person
+/// turned it off: adding Clarity to an agent is already their own choice.
+pub fn outside_agents() -> bool {
+    outside_agents_in(&file())
+}
+
+/// Whether `file` lets outside agents in; on when it says nothing.
+pub fn outside_agents_in(file: &Path) -> bool {
+    let settings = std::fs::read_to_string(file).ok().and_then(|text| serde_json::from_str::<Value>(&text).ok());
+    settings.and_then(|s| s.get(OUTSIDE_AGENTS).and_then(Value::as_bool)).unwrap_or(true)
+}
+
+/// Turns outside agents on or off.
+pub fn set_outside_agents(allowed: bool) -> Result<(), String> {
+    set_outside_agents_in(&file(), allowed)
+}
+
+/// Turns outside agents on or off in `file`, keeping its other keys.
+pub fn set_outside_agents_in(file: &Path, allowed: bool) -> Result<(), String> {
+    let mut settings = settings_in(file)?;
+    settings.insert(OUTSIDE_AGENTS.to_string(), Value::Bool(allowed));
     save(file, &settings)
 }
 

@@ -18,6 +18,7 @@ mod apis;
 mod themes;
 mod translations;
 mod vault;
+mod acp;
 mod agent;
 mod manual;
 mod migrations;
@@ -940,6 +941,7 @@ pub fn run() {
         .manage(build::BuildState::default())
         .manage(vault::VaultState::default())
         .manage(agent::AgentState::default())
+        .manage(acp::AcpState::default())
         .invoke_handler(tauri::generate_handler![
             logging::logging_view,
             logging::set_logging,
@@ -1038,6 +1040,10 @@ pub fn run() {
             vault::connection_save,
             vault::connection_remove,
             agent::agent_send,
+            acp::outside_agents,
+            acp::set_outside_agents,
+            acp::agent_activity,
+            acp::agent_sign_in,
             agent::agent_stop,
             agent::agent_answer,
             agent::agent_forget,

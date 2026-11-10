@@ -99,7 +99,12 @@ enum Command {
     /// Serve Clarity's tools to an AI agent over MCP on stdin and stdout, on the
     /// project open in the Clarity IDE (docs/MCP-PLAN.md): it designs and
     /// generates, and never builds or runs. Messages go to stderr.
-    Mcp,
+    Mcp {
+        /// For a turn of the IDE's chat panel: the file where show_window and
+        /// show_diagram write what to show, which the IDE reads when the turn ends.
+        #[arg(long)]
+        turn: Option<PathBuf>,
+    },
     /// Rebuild the base libraries (Clarity.UI, Clarity.Audio, Clarity.Video, Clarity.Image) from the source in Clarity's repository, run inside it: every Go, C, C++ and Rust desktop program Clarity builds then links them, so a change of Clarity.UI is tried in any project.
     Libraries,
 }
@@ -243,7 +248,7 @@ fn main() -> ExitCode {
             }
         }
         // Only the protocol goes to stdout.
-        Command::Mcp => match clarity_mcp::run() {
+        Command::Mcp { turn } => match clarity_mcp::run(turn) {
             Ok(()) => ExitCode::SUCCESS,
             Err(why) => {
                 eprintln!("clarity: {why}");

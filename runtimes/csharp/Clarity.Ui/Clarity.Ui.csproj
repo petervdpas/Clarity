@@ -74,4 +74,10 @@
     </ItemGroup>
     <Warning Condition="'@(ClarityNativePacked)' == '' And '$(Configuration)' == 'Release'" Text="Clarity.Ui is packed without its native library: build runtimes/rust-ui-ffi first (cargo build --release -p clarity-ui-ffi)." />
   </Target>
+  <!-- A library older than its Rust stops the build (../ClarityNative.targets). -->
+  <PropertyGroup>
+    <ClarityNativeCrates>rust-ui;rust-ui-ffi;rust;rust-image;rust-audio;rust-audio-ffi;rust-video;rust-video-ffi</ClarityNativeCrates>
+    <ClarityNativePackage>clarity-ui-ffi</ClarityNativePackage>
+  </PropertyGroup>
+  <Import Project="../ClarityNative.targets" />
 </Project>

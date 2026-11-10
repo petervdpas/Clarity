@@ -262,11 +262,11 @@ impl Tools for IdeTools {
 #[derive(Default)]
 pub struct AgentState {
     conversation: Mutex<Vec<Message>>,
-    running: AtomicBool,
-    stop: Arc<AtomicBool>,
+    pub(crate) running: AtomicBool,
+    pub(crate) stop: Arc<AtomicBool>,
     /// The question waiting for the person's answer, and where the answer goes.
-    asking: Mutex<Option<(u32, Sender<bool>)>>,
-    last_ask: AtomicU32,
+    pub(crate) asking: Mutex<Option<(u32, Sender<bool>)>>,
+    pub(crate) last_ask: AtomicU32,
 }
 
 /// The agent asks the person whether it may do something.
@@ -356,7 +356,7 @@ pub fn agent_answer(id: u32, allowed: bool, agent: State<AgentState>) -> Result<
 }
 
 /// Sent to the screen while a turn runs, and when it ends.
-const AGENT_EVENT: &str = "agent-event";
+pub(crate) const AGENT_EVENT: &str = "agent-event";
 
 /// What the screen does when a turn ends.
 #[derive(Debug, Clone, Serialize, TS)]
@@ -370,6 +370,10 @@ pub struct AgentEnded {
     pub diagram: Option<String>,
     /// Whether files changed, so Undo can take the turn back.
     pub changed: bool,
+    /// Whether the person's own agent program must sign in first: the panel offers Sign in.
+    #[serde(rename = "signIn")]
+    #[ts(rename = "signIn")]
+    pub sign_in: bool,
 }
 
 /// The model of a connection: its kind, address, model, key and length limit.
@@ -428,6 +432,10 @@ fn turn_budget(text: &str) -> Result<Option<u64>, String> {
 /// open project. Returns at once; the turn reports through events.
 #[tauri::command]
 pub fn agent_send(text: String, connection: String, runs: Runs, app: AppHandle, agent: State<AgentState>) -> Result<(), String> {
+    // A connection of kind codex or copilot is the person's own agent program, signed in its own way (docs/ACP-PLAN.md).
+    if let Some(vendor) = crate::acp::vendor_of(&app, &connection) {
+        return crate::acp::send(app, connection, vendor, text);
+    }
     // The key is read before the turn starts, so a locked vault asks for its password first.
     let mut model = model_of(&app, &connection)?;
     let budget = {
@@ -469,7 +477,7 @@ pub fn agent_send(text: String, connection: String, runs: Runs, app: AppHandle, 
             let _ = record(&app.state::<HistoryState>(), changes);
         }
         state.running.store(false, Ordering::SeqCst);
-        let ended = AgentEnded { opened: tools.core.made.map(|f| f.display().to_string()), shown: tools.shown, diagram: tools.shown_diagram, changed };
+        let ended = AgentEnded { opened: tools.core.made.map(|f| f.display().to_string()), shown: tools.shown, diagram: tools.shown_diagram, changed, sign_in: false };
         let _ = app.emit("agent-ended", &ended);
     });
     Ok(())
@@ -477,16 +485,19 @@ pub fn agent_send(text: String, connection: String, runs: Runs, app: AppHandle, 
 
 /// Stops the turn after the step it is in.
 #[tauri::command]
-pub fn agent_stop(agent: State<AgentState>) {
+pub fn agent_stop(app: AppHandle, agent: State<AgentState>) {
     agent.stop.store(true, Ordering::SeqCst);
+    crate::acp::cancel(&app);
 }
 
 /// Forgets the conversation, to start a new one.
 #[tauri::command]
-pub fn agent_forget(agent: State<AgentState>) -> Result<(), String> {
+pub fn agent_forget(app: AppHandle, agent: State<AgentState>) -> Result<(), String> {
     if agent.running.load(Ordering::SeqCst) {
         return Err("the agent is still working; stop it first".into());
     }
+    // An outside agent's program stops; the next message starts a new conversation with it.
+    crate::acp::forget(&app);
     agent.conversation.held().map_err(|_| "the conversation is not available".to_string())?.clear();
     Ok(())
 }

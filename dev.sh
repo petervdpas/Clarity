@@ -31,4 +31,8 @@ cd "$root/app"
 if [ ! -d node_modules ]; then
     npm install
 fi
+# Vite's cache starts empty each time: after many hot reloads it can keep a
+# component without its styles ("failed to load virtual css module"), and the
+# IDE then shows without its layout. Filling it again takes seconds.
+rm -rf node_modules/.vite
 exec npm run tauri dev

@@ -1,10 +1,12 @@
 # Clarity in your own agent
 
-How an AI agent you already use, such as Claude Code, Codex or GitHub Copilot, designs and generates the project open in Clarity through `clarity mcp`, and how to add it to each.
+How an agent you already use (Claude Code, Codex, Copilot) designs the open project through `clarity mcp`, and how to add it.
 
 ## What it is
 
 `clarity mcp` makes Clarity an MCP server: a program your agent starts and talks to through its standard input and output. The agent then works with Clarity's own tools, the ones the [Agent panel](ai.agent.md) uses, under your own subscription to that agent. Clarity needs no connection of its own for it, and the server needs no internet.
+
+To have Codex or GitHub Copilot in Clarity's own Agent panel instead, see [Your own agent in Clarity](ai.your-agent.md).
 
 The agent always works on the project open in Clarity. Open another project there and the agent follows it at its next step. With no project open, the tools tell the agent to ask you to open one; it can still read this manual and make a new project.
 

@@ -129,6 +129,20 @@ export function toolLine(name: string, input: unknown): string {
 
 /** The connections the agent can talk to: those with a `kind` field, and
  *  the one named anthropic, which needs none. Anthropic's comes first. */
+/** The kinds of connection that are the person's own agent program (docs/ACP-PLAN.md). */
+const OUTSIDE_KINDS = ["codex", "copilot"];
+
+/** The connections that are an outside agent: kind codex or copilot, written plainly. They sign in their own way, with no key. */
+export function outsideAgents(rows: ConnectionRow[]): string[] {
+  const kind = (r: ConnectionRow) => r.fields.find(([field]) => field === "kind")?.[1];
+  return rows
+    .filter((r) => {
+      const value = kind(r);
+      return value?.mode === "plain" && OUTSIDE_KINDS.includes(value.value.trim().toLowerCase());
+    })
+    .map((r) => r.name);
+}
+
 export function agentConnections(rows: ConnectionRow[]): string[] {
   const named = (r: ConnectionRow) => r.name.toLowerCase() === "anthropic";
   return rows

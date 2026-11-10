@@ -12,6 +12,7 @@ pub mod manual;
 pub mod new_project;
 pub mod parts;
 pub mod steps;
+pub mod turn;
 
 use std::path::{Path, PathBuf};
 
@@ -103,8 +104,7 @@ manual says what code can do and tells each part (design.sound, for one); use th
 and tell the person why. When the request needs data, design it in a diagram first (below). Then write the windows \
 and their code and fix what each write's check reports. \
 Finish by saying what works and what Clarity cannot do yet; never invent syntax or a part to fill a gap.
-- Before you write Clarity you have not written in this conversation, read the manual topics the task needs with the \
-manual tool, and the exact syntax with the reference tool.
+- Before you write Clarity new to this conversation, check its exact syntax with the reference tool.
 - A project is one project file (path `project`), modules (`.clarity` files, `todo.clarity`: app, entities, \
 enums, themes, code) and windows and views, one `.cxaml` each in design/ (`design/Main.cxaml`, its root naming \
 module and page: `<Window class=\"todo.Main\">`, `<View class=\"todo.Tasks\">`).

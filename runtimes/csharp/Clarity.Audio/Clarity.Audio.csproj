@@ -67,4 +67,10 @@
     </ItemGroup>
     <Warning Condition="'@(ClarityNativePacked)' == '' And '$(Configuration)' == 'Release'" Text="Clarity.Audio is packed without its native library: build runtimes/rust-audio-ffi first (cargo build --release -p clarity-audio-ffi)." />
   </Target>
+  <!-- A library older than its Rust stops the build (../ClarityNative.targets). -->
+  <PropertyGroup>
+    <ClarityNativeCrates>rust-audio;rust-audio-ffi</ClarityNativeCrates>
+    <ClarityNativePackage>clarity-audio-ffi</ClarityNativePackage>
+  </PropertyGroup>
+  <Import Project="../ClarityNative.targets" />
 </Project>

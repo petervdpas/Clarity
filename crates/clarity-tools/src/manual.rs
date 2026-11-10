@@ -7,7 +7,7 @@
 
 /// Every topic, in the order of the manual. A topic file that is not listed
 /// here fails the tests, and so does a listed one that the index leaves out.
-const TOPICS: [(&str, &str); 36] = [
+const TOPICS: [(&str, &str); 37] = [
     ("start.overview", include_str!("../../../docs/manual/start.overview.md")),
     ("start.first-project", include_str!("../../../docs/manual/start.first-project.md")),
     ("project.file", include_str!("../../../docs/manual/project.file.md")),
@@ -42,6 +42,7 @@ const TOPICS: [(&str, &str); 36] = [
     ("ai.agent", include_str!("../../../docs/manual/ai.agent.md")),
     ("ai.connections", include_str!("../../../docs/manual/ai.connections.md")),
     ("ai.mcp", include_str!("../../../docs/manual/ai.mcp.md")),
+    ("ai.your-agent", include_str!("../../../docs/manual/ai.your-agent.md")),
     ("vault", include_str!("../../../docs/manual/vault.md")),
     ("app.keys", include_str!("../../../docs/manual/app.keys.md")),
 ];

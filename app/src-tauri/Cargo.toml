@@ -19,6 +19,9 @@ clarity-project.workspace = true
 clarity-db.workspace = true
 clarity-vault.workspace = true
 clarity-agent.workspace = true
+clarity-acp.workspace = true
+# The version the workspace already has; the outside agent's channels (src/acp.rs).
+tokio = { version = "1.53.3", features = ["sync"] }
 # The tools the agent designs and generates with, shared with the MCP server.
 clarity-tools.workspace = true
 clarity-gen = { path = "../../crates/clarity-gen" }

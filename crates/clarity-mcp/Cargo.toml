@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 clarity-agent.workspace = true
+clarity-spec.workspace = true
 clarity-project.workspace = true
 clarity-tools.workspace = true
 serde_json.workspace = true

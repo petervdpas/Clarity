@@ -83,7 +83,17 @@ code MainView
             startAt(current - 1)
 
     handler volumeChanged
-        music.volume(volume)
+        if not muted
+            music.volume(volume)
+
+    handler muteClicked
+        muted = not muted
+        if muted
+            music.volume(0)
+            muteButton.caption = @unmuteCaption
+        else
+            music.volume(volume)
+            muteButton.caption = @muteCaption
 
     // The progress bar runs from 0 to 1000 over the song; moving it moves the song.
     handler progressMoved

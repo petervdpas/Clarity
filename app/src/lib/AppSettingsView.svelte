@@ -10,6 +10,7 @@
   import FoldersSettings from "./FoldersSettings.svelte";
   import KeysSettings from "./KeysSettings.svelte";
   import LoggingSettings from "./LoggingSettings.svelte";
+  import OutsideAgentsSettings from "./OutsideAgentsSettings.svelte";
   import { appSettings, type AppSettingsSection } from "./appSettings.svelte";
   import { agent } from "./agentStore.svelte";
   import { IDE_THEMES, type IdeTheme } from "./ideTheme";
@@ -25,7 +26,7 @@
     { key: "keys", name: "Keys", note: "Clarity's shortcut keys, as you want them" },
     { key: "folders", name: "Folders", note: "Where projects and their apps go" },
     { key: "environment", name: "Environment", note: "Where each stack's build tools are" },
-    { key: "agent", name: "Agent", note: "What the agent may run" },
+    { key: "agent", name: "Agent", note: "What agents may run, and what outside agents did" },
     { key: "logging", name: "Logging", note: "A log of what Clarity does" },
     { key: "system", name: "System", note: "How busy the computer is" },
   ];
@@ -109,6 +110,7 @@
         {/each}
       </fieldset>
       <p class="muted">The agent runs nothing else: it reads and writes the project, and one Undo takes a whole answer back. A choice holds from the next message.</p>
+      <OutsideAgentsSettings />
     {/if}
   </div>
 </section>

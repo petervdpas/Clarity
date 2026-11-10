@@ -56,9 +56,10 @@ How to make applications with Clarity, one topic per page. Start with [What Clar
 
 ## AI and the vault
 
-- [The agent](ai.agent.md): How the Agent panel works: what the agent can do in your project, taking a turn back, stopping and starting over, what the token line means, and how to ask well.
+- [The agent](ai.agent.md): How the Agent panel works: what the agent can do, taking a turn back, stopping, the token line, and asking well.
 - [Connections for the agent](ai.connections.md): How the agent reaches its model through a connection in Clarity's vault: the fields of an Anthropic connection, keeping the key in the vault, and choosing a connection in the panel.
-- [Clarity in your own agent](ai.mcp.md): How an AI agent you already use, such as Claude Code, Codex or GitHub Copilot, designs and generates the project open in Clarity through `clarity mcp`, and how to add it to each.
+- [Clarity in your own agent](ai.mcp.md): How an agent you already use (Claude Code, Codex, Copilot) designs the open project through `clarity mcp`, and how to add it.
+- [Your own agent in Clarity](ai.your-agent.md): Codex or GitHub Copilot in the Agent panel with your own subscription and no API key: setup, signing in, what it may do.
 - [The vault](vault.md): Clarity's own encrypted store of secrets and its connections: what it keeps, how it locks and unlocks, the Vault tab, and where it lives on disk.
 
 ## Keys

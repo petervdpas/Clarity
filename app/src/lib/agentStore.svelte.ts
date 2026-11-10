@@ -5,7 +5,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { addUsage, agentConnections, applyAnswer, applyAsk, applyEvent, NO_USAGE, type Item } from "./agent";
+import { addUsage, agentConnections, outsideAgents, applyAnswer, applyAsk, applyEvent, NO_USAGE, type Item } from "./agent";
 import { isRuns } from "./agent";
 import type { AgentAnswered } from "@clarity/ui/generated/AgentAnswered.ts";
 import type { Runs } from "@clarity/ui/generated/Runs.ts";
@@ -41,6 +41,12 @@ class AgentStore {
   items = $state<Item[]>([]);
   running = $state(false);
   connections = $state<string[]>([]);
+  /** The connections that are the person's own agent program, which signs in its own way. */
+  outside = $state<string[]>([]);
+  /** Whether Sign in runs. */
+  signingIn = $state(false);
+  /** Whether the agent program said it is not signed in, so the panel offers Sign in. */
+  needsSignIn = $state(false);
   connection = $state(remembered(CONNECTION_KEY) ?? "anthropic");
   /** Whether the agent asks before it runs, may run without asking, or never runs (Clarity's settings). */
   runs = $state<Runs>(((value) => (isRuns(value) ? value : "ask"))(remembered(RUNS_KEY)));
@@ -63,6 +69,7 @@ class AgentStore {
     listen<AgentAnswered>("agent-answered", (e) => (this.items = applyAnswer(this.items, e.payload)));
     listen<AgentEnded>("agent-ended", (e) => {
       this.running = false;
+      this.needsSignIn = e.payload.signIn;
       this.onEnded(e.payload);
     });
   }
@@ -75,9 +82,12 @@ class AgentStore {
 
   async loadConnections() {
     try {
-      this.connections = agentConnections(await invoke<ConnectionRow[]>("connections_list"));
+      const rows = await invoke<ConnectionRow[]>("connections_list");
+      this.connections = agentConnections(rows);
+      this.outside = outsideAgents(rows);
     } catch {
       this.connections = [];
+      this.outside = [];
     }
     if (this.connections.length > 0 && !this.connections.includes(this.connection)) this.pick(this.connections[0]);
   }
@@ -89,6 +99,7 @@ class AgentStore {
 
   pick(connection: string) {
     this.connection = connection;
+    this.needsSignIn = false;
     remember(CONNECTION_KEY, connection);
   }
 
@@ -114,6 +125,21 @@ class AgentStore {
       await invoke("agent_answer", { id, allowed });
     } catch (err) {
       this.items = [...this.items, { kind: "error", text: String(err) }];
+    }
+  }
+
+  /** Signs in to the outside agent the vendor's own way; a browser opens. */
+  async signIn() {
+    if (this.signingIn) return;
+    this.signingIn = true;
+    try {
+      const said = await invoke<string>("agent_sign_in", { connection: this.connection });
+      this.items = [...this.items, { kind: "note", text: said }];
+      this.needsSignIn = false;
+    } catch (err) {
+      this.items = [...this.items, { kind: "error", text: String(err) }];
+    } finally {
+      this.signingIn = false;
     }
   }
 

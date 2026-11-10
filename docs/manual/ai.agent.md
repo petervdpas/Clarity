@@ -1,10 +1,10 @@
 # The agent
 
-How the Agent panel works: what the agent can do in your project, taking a turn back, stopping and starting over, what the token line means, and how to ask well.
+How the Agent panel works: what the agent can do, taking a turn back, stopping, the token line, and asking well.
 
 ## Opening the panel
 
-Click **Agent** at the right of the tab row. The panel sits to the right of every tab and stays open the next time you start Clarity. The box at the top picks the connection the agent talks through; see [Connections](ai.connections.md). Type a request at the bottom and press Enter or **Send**; Shift+Enter starts a new line.
+Click **Agent** at the right of the tab row. The panel sits to the right of every tab and stays open the next time you start Clarity. The box at the top picks the connection the agent talks through; see [Connections](ai.connections.md). It can also be Codex or GitHub Copilot with your own subscription and no API key; see [Your own agent in Clarity](ai.your-agent.md). Type a request at the bottom and press Enter or **Send**; Shift+Enter starts a new line.
 
 ## What the agent can do
 

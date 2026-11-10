@@ -1,6 +1,6 @@
 # Your own agent in Clarity's chat panel
 
-A plan, written 2026-11-09 at the user's request and agreed the same day; nothing is built yet.
+A plan, written 2026-11-09 at the user's request and agreed the same day. Steps 1 to 3, 5 and 6 are built (2026-11-09); step 4's check by hand against the real Codex and Copilot is open, and step 7 waits for Anthropic.
 
 ## Goal
 
@@ -29,11 +29,13 @@ From the vendors' own pages, checked 2026-11-09 (sources below):
 
 Clarity's own agent with an API key stays as it is, as one of the choices.
 
-## Proposed decisions
+## How it is built
 
-These are mine to propose; the user decides them (see Open questions).
-
-- **The IDE serves the tools itself.** The MCP server handed to the agent is served by the running IDE, not a separate `clarity mcp` process. Then every write lands in the IDE's turn record: one Undo takes back the agent's turn, a window it made shows in Preview, and the automatic migration steps work as they do for Clarity's own agent. The tool list is the one `clarity mcp` offers (design and generate only).
+- **A turn is a snapshot of the project.** Outside agents also write files themselves, straight to disk, not only through Clarity's tools. So the IDE takes a snapshot of the project folder's text files when a turn starts (leaving out the output folder, data and build folders) and compares it when the turn ends: one Undo takes back everything the turn changed, however it was written, and the automatic migration step follows the turn's changes once at its end.
+- **Clarity's tools come from `clarity mcp`.** The agent gets `clarity mcp`, started by the IDE with the CLI it ships, as its MCP server. Started by the IDE for a turn, it also offers show a window in Preview and show a diagram: those run nothing, and write what to show into a file the IDE reads when the turn ends, as Clarity's own agent shows at the end of its turn.
+- **Outside agents on and off.** The user asked: "Is it something I turn on and off in the ide settings? Can I monitor it somehow?", and then "yes, add both to the plan and build them". A setting in the IDE, "Let outside agents work on my project", recorded beside the open project. When it is off, `clarity mcp` answers every project tool that Clarity does not allow outside agents now (the manual and references stay open). It is on by default: adding Clarity to an agent is already the person's own choice.
+- **Agent activity.** A list in the IDE showing each tool call as it happens: which program called it (the MCP client's name), the tool, the file, and whether it worked. `clarity mcp` appends each call to a log in Clarity's folder, and the IDE follows that log. The chat panel's turns with Codex and Copilot show in the same list. The log is kept short (the last calls), and it never holds file contents.
+- **The IDE must run.** Asked "if claude or codex need it, should the ide be running?": yes. Through `clarity mcp` an agent works only on the project an IDE that is running has open (docs/MCP-PLAN.md, "Which project"), so the IDE always sees what an agent does.
 - **Nothing executes without the person.** Outside agents bring their own tools, among them running shell commands and editing files directly. Clarity's rule is that its agent runs nothing, and anything that executes asks first. So:
   - Clarity starts each agent in the mode where it must ask before running a command (each vendor has one), and answers every ACP permission request with Clarity's own Allow/Deny dialog (no native dialogs), defaulting to Deny.
   - File reads and writes the agent asks of the client (`fs/read_text_file`, `fs/write_text_file`) are kept inside the project folder and go through the same check and Undo as the write tool; a write elsewhere is refused.
@@ -46,11 +48,12 @@ These are mine to propose; the user decides them (see Open questions).
 ## Order of work
 
 1. ACP client in a crate of its own (`crates/clarity-acp`): start a program, initialize, sign-in state, new session with MCP servers, prompt, stream updates, permission requests, cancel. Tested against a small fake agent program in the tests, so no vendor login is needed in CI.
-2. The IDE serves its tools as an MCP server for the session (in-process, so writes reach the turn record), with the same tool list as `clarity mcp`.
+2. The turn: a snapshot of the project folder and its comparison, as one change for Undo; `clarity mcp` started for a turn offers show a window and show a diagram, written to a file the IDE reads.
 3. The panel: agent picker (Clarity with an API key, Codex, Copilot), Sign in, the conversation from ACP updates, Allow/Deny for permission requests, Undo per turn.
 4. Codex and Copilot, each with its start command, its ask-first mode and its sign-in, checked by hand against the real programs.
-5. Manual page `ai.your-agent.md` (setup, what the agent may do, what it asks).
-6. Claude, once Anthropic's position allows it.
+5. Outside agents on and off (the setting, and `clarity mcp` honouring it) and the agent activity list (the log `clarity mcp` writes, the IDE's list following it).
+6. Manual page `ai.your-agent.md` (setup, what the agent may do, what it asks).
+7. Claude, once Anthropic's position allows it.
 
 ## Decided
 
@@ -59,6 +62,8 @@ These are mine to propose; the user decides them (see Open questions).
   - The outside agent gets `clarity mcp`'s tools plus the IDE's two that run nothing: show a window in Preview and show a diagram.
   - Its own file edits are allowed inside the project folder, checked at once and undone with the turn; a write outside the folder is refused.
   - Claude is not offered as an outside agent until Anthropic's position allows it; until then Claude in the panel is Clarity's own agent with an API key.
+
+- Codex's commands: Codex has no mode that asks before every command; in read-only it runs reading commands inside its own sandbox unasked, and everything else comes to Clarity's Allow/Deny. Asked, the user chose "Accept, read-only sandbox". So Codex starts in read-only (the codex-acp adapter, `INITIAL_AGENT_MODE=read-only`), and the panel says so when Codex is used.
 
 ## Open questions
 

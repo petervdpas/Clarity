@@ -4,7 +4,8 @@
 use std::path::{Path, PathBuf};
 
 use clarity_agent::Tools;
-use clarity_mcp::{ClarityServer, LEFT_OUT, NO_PROJECT};
+use clarity_mcp::{ClarityServer, LEFT_OUT, NOT_ALLOWED, NO_PROJECT, TURN_TOOLS, WHEN_OFF};
+use clarity_tools::turn::{self, Shown};
 use clarity_project::ide::{self, Ide};
 use rmcp::ServiceExt;
 use rmcp::model::CallToolRequestParams;
@@ -112,6 +113,120 @@ async fn a_client_lists_and_calls_the_tools_over_mcp() {
     let text = result.content[0].as_text().unwrap().text.clone();
     assert!(text.contains(&project.display().to_string()), "{text}");
 
+    // The call is in the activity log, under the client's own name.
+    let logged = clarity_project::activity::after(&dir.join("activity.jsonl"), 0);
+    assert_eq!(logged.len(), 1, "{logged:?}");
+    assert_eq!(logged[0].tool, "project_overview");
+    assert!(!logged[0].client.is_empty());
+
     client.cancel().await.unwrap();
     server.await.unwrap();
+}
+
+/// Started by the IDE for a turn of its chat panel, the server also shows a
+/// window and a diagram; plain `clarity mcp` never offers them.
+#[test]
+fn a_turn_adds_the_two_tools_that_show_and_nothing_else() {
+    let dir = scratch("turn-tools");
+    let plain = ClarityServer::with_ide_file(dir.join("ide.json"));
+    assert_eq!(plain.tools().into_iter().map(|t| t.name).collect::<Vec<_>>(), ClarityServer::offered().into_iter().map(|t| t.name).collect::<Vec<_>>());
+    let turn = plain.for_turn(dir.join("shown.jsonl"));
+    let mut expected: Vec<String> = ClarityServer::offered().into_iter().map(|t| t.name).collect();
+    expected.extend(TURN_TOOLS.iter().map(|t| t.to_string()));
+    assert_eq!(turn.tools().into_iter().map(|t| t.name).collect::<Vec<_>>(), expected);
+    assert_eq!(TURN_TOOLS, ["show_window", "show_diagram"]);
+}
+
+#[test]
+fn showing_writes_a_line_for_the_ide_and_runs_nothing() {
+    let dir = scratch("turn-show");
+    let (file, _) = opened(&dir);
+    let shown = dir.join("shown.jsonl");
+    let server = ClarityServer::with_ide_file(file).for_turn(shown.clone());
+    let answer = server.call("show_window", &json!({ "name": "Main" }));
+    assert!(!answer.is_error, "{}", answer.text);
+    assert!(!server.call("write_diagram", &json!({ "name": "billing", "text": "erDiagram\n" })).is_error);
+    let answer = server.call("show_diagram", &json!({ "name": "billing" }));
+    assert!(!answer.is_error, "{}", answer.text);
+    assert_eq!(turn::shown(&shown), vec![Shown::Window("Main".into()), Shown::Diagram("billing.mermaid".into())]);
+}
+
+#[test]
+fn a_window_or_diagram_that_is_not_there_is_refused() {
+    let dir = scratch("turn-missing");
+    let (file, _) = opened(&dir);
+    let shown = dir.join("shown.jsonl");
+    let server = ClarityServer::with_ide_file(file).for_turn(shown.clone());
+    let answer = server.call("show_window", &json!({ "name": "Nowhere" }));
+    assert!(answer.is_error);
+    assert!(answer.text.contains("Main"), "names the windows there are: {}", answer.text);
+    assert!(server.call("show_diagram", &json!({ "name": "missing" })).is_error);
+    assert!(!shown.exists(), "nothing written");
+}
+
+#[test]
+fn showing_needs_an_open_project() {
+    let dir = scratch("turn-none");
+    let server = ClarityServer::with_ide_file(dir.join("ide.json")).for_turn(dir.join("shown.jsonl"));
+    assert_eq!(server.call("show_window", &json!({ "name": "Main" })).text, NO_PROJECT);
+}
+
+#[test]
+fn a_project_made_in_a_turn_opens_when_the_turn_ends() {
+    let dir = scratch("turn-made");
+    let (file, _) = opened(&dir);
+    let shown = dir.join("shown.jsonl");
+    let server = ClarityServer::with_ide_file(file).for_turn(shown.clone());
+    let answer = server.call("new_project", &json!({ "name": "shop", "folder": dir.display().to_string() }));
+    assert!(!answer.is_error, "{}", answer.text);
+    assert!(answer.text.contains("opens in Clarity when this turn ends"), "{}", answer.text);
+    let made = turn::shown(&shown);
+    assert!(matches!(made.as_slice(), [Shown::Project(p)] if p.file_name().unwrap() == "shop.clarity"), "{made:?}");
+}
+
+#[test]
+fn a_project_made_without_a_turn_writes_nothing() {
+    let dir = scratch("plain-made");
+    let (file, _) = opened(&dir);
+    let server = ClarityServer::with_ide_file(file);
+    let answer = server.call("new_project", &json!({ "name": "shop", "folder": dir.display().to_string() }));
+    assert!(!answer.is_error, "{}", answer.text);
+    assert!(!answer.text.contains("when this turn ends"));
+}
+
+#[test]
+fn turned_off_only_the_manual_and_references_answer() {
+    let dir = scratch("off");
+    let (file, _) = opened(&dir);
+    ide::set_outside_agents_in(&file, false).unwrap();
+    let server = ClarityServer::with_ide_file(file.clone()).for_turn(dir.join("shown.jsonl"));
+    for tool in ["project_overview", "read_file", "write_file", "check", "generate", "new_project", "show_window"] {
+        let answer = server.call(tool, &json!({ "path": "todo.clarity", "name": "Main" }));
+        assert!(answer.is_error, "{tool}");
+        assert_eq!(answer.text, NOT_ALLOWED, "{tool}");
+    }
+    for tool in WHEN_OFF {
+        assert_ne!(server.call(tool, &json!({ "topic": "", "section": "" })).text, NOT_ALLOWED, "{tool}");
+    }
+    ide::set_outside_agents_in(&file, true).unwrap();
+    assert!(!server.call("project_overview", &json!({})).is_error);
+}
+
+#[test]
+fn every_call_is_logged_without_what_the_file_holds() {
+    let dir = scratch("logged");
+    let (file, project) = opened(&dir);
+    let module = clarity_project::module_dir(&project).join("todo.clarity");
+    let text = std::fs::read_to_string(&module).unwrap();
+    let server = ClarityServer::with_ide_file(file);
+    assert!(!server.call_from("codex", "read_file", &json!({ "path": "todo.clarity" })).is_error);
+    assert!(server.call_from("copilot", "read_file", &json!({ "path": "nowhere.clarity" })).is_error);
+
+    let logged = clarity_project::activity::after(&dir.join("activity.jsonl"), 0);
+    assert_eq!(logged.len(), 2);
+    assert_eq!((logged[0].client.as_str(), logged[0].tool.as_str(), logged[0].path.as_deref(), logged[0].ok), ("codex", "read_file", Some("todo.clarity"), true));
+    assert_eq!(logged[0].said, format!("{} characters", text.chars().count()));
+    let first_line = text.lines().find(|l| !l.trim().is_empty()).unwrap();
+    assert!(!logged[0].said.contains(first_line.trim()), "no file text in the log");
+    assert_eq!((logged[1].client.as_str(), logged[1].ok), ("copilot", false));
 }

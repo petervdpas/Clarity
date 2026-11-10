@@ -1,0 +1,35 @@
+<!-- What every native package of the C# runtime (Clarity.Ui, Clarity.Audio,
+     Clarity.Video, Clarity.Image) checks before it builds inside Clarity's
+     repository: that the native library it puts next to the output is not
+     older than the Rust it is built from. A library left from before (in
+     target/, or the copy in the package's runtimes/ folder) would otherwise be
+     used without a word, and a program would run on yesterday's Clarity.UI.
+
+     A package names the crates its library is built from, as folders of
+     runtimes/, in ClarityNativeCrates, and its cargo package in
+     ClarityNativePackage, before it imports this file. A published package
+     carries no Rust source, so nothing is checked there. -->
+<Project>
+  <Target Name="ClarityNativeSources">
+    <ItemGroup>
+      <_ClarityNativeCrate Include="$(ClarityNativeCrates)" />
+      <ClarityNativeSource Include="$(MSBuildThisFileDirectory)../%(_ClarityNativeCrate.Identity)/src/**/*.rs" />
+      <ClarityNativeSource Include="$(MSBuildThisFileDirectory)../%(_ClarityNativeCrate.Identity)/Cargo.toml" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Runs only when a source is newer than the library (Inputs and Outputs), and then stops the build. -->
+  <Target Name="ClarityNativeFresh"
+          BeforeTargets="BeforeBuild"
+          DependsOnTargets="ClarityNativeSources"
+          Condition="'$(ClarityNativeOutput)' != '' And '$(ClarityNativeCrates)' != ''"
+          Inputs="@(ClarityNativeSource)"
+          Outputs="$(ClarityNativeOutput)">
+    <PropertyGroup>
+      <_ClarityNativeCargo Condition="'$(ClarityNativeProfile)' == 'release'">cargo build --release -p $(ClarityNativePackage)</_ClarityNativeCargo>
+      <_ClarityNativeCargo Condition="'$(ClarityNativeProfile)' != 'release'">cargo build -p $(ClarityNativePackage)</_ClarityNativeCargo>
+    </PropertyGroup>
+    <Error Condition="'@(ClarityNativeSource)' != ''"
+           Text="$(ClarityNativeOutput) is older than the Rust it is built from ($(ClarityNativeCrates)): build it again in Clarity's folder with `$(_ClarityNativeCargo)`, then build this program again." />
+  </Target>
+</Project>

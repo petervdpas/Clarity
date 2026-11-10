@@ -19,4 +19,8 @@ diagram: string | null,
 /**
  * Whether files changed, so Undo can take the turn back.
  */
-changed: boolean, };
+changed: boolean, 
+/**
+ * Whether the person's own agent program must sign in first: the panel offers Sign in.
+ */
+signIn: boolean, };

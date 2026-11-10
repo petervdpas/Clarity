@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use clarity_project::{out_dir_in, parse, Folders};
+use clarity_project::folders::new_project_in;
 
 const SHOP: &str = "project Shop\n    stack rust desktop\n";
 
@@ -71,4 +72,21 @@ fn a_new_project_name_is_a_file_in_the_projects_folder() {
     assert!(folders.new_project_file("").unwrap_err().contains("name"));
     assert!(folders.new_project_file("a/b").unwrap_err().contains("name"));
     assert!(Folders::default().new_project_file("shop").unwrap_err().contains("projects folder"));
+}
+
+/// The New project dialog's folder: the project's file and its modules'
+/// folder go there, and a name that is taken there is refused before anything is made.
+#[test]
+fn a_new_project_goes_in_the_folder_chosen_unless_its_name_is_taken() {
+    let dir = home("new-in");
+    std::fs::create_dir_all(&dir).unwrap();
+    assert_eq!(new_project_in(&dir, "shop").unwrap(), dir.join("shop.clarity"));
+    std::fs::write(dir.join("taken.clarity"), "").unwrap();
+    assert!(new_project_in(&dir, "taken").unwrap_err().contains("is there already"));
+    std::fs::create_dir_all(dir.join("modules")).unwrap();
+    assert!(new_project_in(&dir, "modules").unwrap_err().contains("is there already"), "its modules' folder is taken");
+    assert!(new_project_in(&dir, "").unwrap_err().contains("name"));
+    assert!(new_project_in(Path::new(""), "shop").unwrap_err().contains("choose the folder"));
+    assert!(new_project_in(Path::new("relative"), "shop").unwrap_err().contains("not a full path"));
+    assert!(new_project_in(&dir.join("taken.clarity"), "shop").unwrap_err().contains("is a file"));
 }

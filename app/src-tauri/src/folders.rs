@@ -64,6 +64,12 @@ pub fn new_project_file(name: String) -> Result<String, String> {
     Ok(Folders::current().new_project_file(&name)?.display().to_string())
 }
 
+/// Where a new project named `name` goes in `folder`, checked: the New project dialog shows it as it is typed.
+#[tauri::command]
+pub fn new_project_path(folder: String, name: String) -> Result<String, String> {
+    Ok(clarity_project::folders::new_project_in(std::path::Path::new(&folder), &name)?.display().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

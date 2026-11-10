@@ -1,10 +1,13 @@
 <script lang="ts">
-  // Asks what a new project is transpiled into before it is created. The
-  // project starts with one SQLite data source; more are added in the
-  // project settings. With a projects folder in Clarity settings it asks
-  // for the name too, and the project goes there; else the file was chosen
-  // before and shows on top.
+  // Asks for a new project before it is created: its name, the folder it
+  // goes in (the projects folder of Clarity settings to start with, chosen
+  // with Browse), and what it is transpiled into. The line under the folder
+  // shows the file it becomes as the name is typed, or why it cannot be (a
+  // name taken there). The project starts with one SQLite data source; more
+  // are added in the project settings.
 
+  import { open as openDialog } from "@tauri-apps/plugin-dialog";
+  import { invoke } from "@clarity/ui/host/backend.ts";
   import Modal from "./Modal.svelte";
   import StackFields from "./StackFields.svelte";
   import type { Catalog } from "@clarity/ui/generated/Catalog.ts";
@@ -12,45 +15,74 @@
 
   let {
     catalog,
-    folder,
+    folder: startFolder,
     error,
-    projects = null,
     onsubmit,
     oncancel,
   }: {
     catalog: Catalog;
+    /** The folder to start in: the projects folder, else the open project's; empty when there is neither. */
     folder: string;
     error: string | null;
-    /** The projects folder of Clarity settings, when the name is asked here. */
-    projects?: string | null;
-    onsubmit: (stack: Stack, name: string) => void;
+    /** The project file chosen, and its stack. */
+    onsubmit: (stack: Stack, file: string) => void;
     oncancel: () => void;
   } = $props();
 
   let name = $state("");
+  let folder = $state("");
   let stack = $state<Stack>({ backend: "rust", ui: "clarity", targets: [] });
+  /** The file the project becomes, or why it cannot be made there. */
+  let target = $state<{ file: string } | { problem: string } | null>(null);
   $effect.pre(() => {
     stack = { ...catalog.starter, targets: [...catalog.starter.targets] };
+    folder = startFolder;
   });
+
+  // Asked again whenever the name or the folder changes; an older answer does not overwrite a newer one.
+  let asked = 0;
+  $effect(() => {
+    const [n, f] = [name, folder];
+    const ask = ++asked;
+    if (!n.trim()) {
+      target = null;
+      return;
+    }
+    invoke<string>("new_project_path", { folder: f, name: n })
+      .then((file) => ask === asked && (target = { file }))
+      .catch((why) => ask === asked && (target = { problem: String(why) }));
+  });
+
+  async function browse() {
+    const picked = await openDialog({ directory: true, title: "The folder the new project goes in", defaultPath: folder || undefined });
+    if (typeof picked === "string") folder = picked;
+  }
 
   function submit(e: SubmitEvent) {
     e.preventDefault();
-    onsubmit(stack, name.trim());
+    if (target && "file" in target) onsubmit(stack, target.file);
   }
 </script>
 
-<Modal title={"New project"} width={400} onclose={oncancel}>
+<Modal title={"New project"} width={560} onclose={oncancel}>
   <form class="dialog" onsubmit={submit}>
-    {#if projects}
-      <p class="folder" title={projects}>In {projects}</p>
-    {:else}
-      <p class="folder" title={folder}>{folder}</p>
-    {/if}
     <div class="form-grid compact">
-      {#if projects}
-        <label class="form-label" for="new-project-name">Name</label>
-        <!-- svelte-ignore a11y_autofocus -->
-        <input id="new-project-name" bind:value={name} placeholder="shop" spellcheck="false" autofocus />
+      <label class="form-label" for="new-project-name">Name</label>
+      <!-- svelte-ignore a11y_autofocus -->
+      <input id="new-project-name" bind:value={name} placeholder="shop" spellcheck="false" autofocus />
+      <label class="form-label" for="new-project-folder">Folder</label>
+      <div class="folder-row">
+        <!-- Chosen with Browse, never typed, so no path is mistyped. -->
+        <input id="new-project-folder" value={folder} readonly placeholder="Choose a folder" title={folder} />
+        <button type="button" onclick={browse}>Browse...</button>
+      </div>
+      <span></span>
+      {#if target && "file" in target}
+        <p class="becomes" title={target.file}>Creates {target.file}</p>
+      {:else if target}
+        <p class="error">{target.problem}</p>
+      {:else}
+        <p class="muted">The project's file goes in this folder, beside a folder of the same name for its modules.</p>
       {/if}
       <StackFields {catalog} {stack} onchange={(next) => (stack = next)} />
     </div>
@@ -58,7 +90,7 @@
     {#if error}<p class="error">{error}</p>{/if}
     <div class="buttons">
       <button type="button" onclick={oncancel}>Cancel</button>
-      <button type="submit" class="primary" disabled={stack.targets.length === 0 || (projects !== null && !name.trim())}>Create project</button>
+      <button type="submit" class="primary" disabled={stack.targets.length === 0 || !(target && "file" in target)}>Create project</button>
     </div>
   </form>
 </Modal>
@@ -81,12 +113,29 @@
     font-size: 12px;
   }
 
-  .folder {
+  .folder-row {
+    display: flex;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .folder-row input {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--mono);
+    cursor: default;
+  }
+
+  .becomes {
     font-family: var(--mono);
     color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .muted {
+    color: var(--text-muted);
   }
 
   .note {

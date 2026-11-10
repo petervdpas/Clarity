@@ -653,7 +653,7 @@ fn a_window_takes_its_targets_after_the_language() {
     let settings = parse("project Shop\n    stack go cli desktop\n").unwrap();
     assert_eq!((settings.stack.ui, settings.stack.targets), (Ui::Clarity, vec![Target::Cli, Target::Desktop]));
     assert_eq!(parse("project Shop\n    stack\n").unwrap_err(), "line 2: write the backend and at least one target, like: stack go desktop");
-    assert!(catalog().targets.iter().any(|t| t.id == Target::Cli && t.label == "Command line"));
+    assert!(catalog().targets.iter().any(|t| t.id == Target::Cli && t.label == "CLI"));
 }
 
 #[test]

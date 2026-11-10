@@ -59,13 +59,46 @@ impl Folders {
         let Some(projects) = &self.projects else {
             return Err("no projects folder is set; choose one in Clarity settings, Folders".to_string());
         };
-        let name = name.trim();
-        let name = name.strip_suffix(".clarity").unwrap_or(name).trim();
-        if name.is_empty() || name.contains(['/', '\\']) || name.starts_with('.') {
-            return Err("give the project a name, like shop".to_string());
-        }
-        Ok(projects.join(format!("{name}.{}", clarity_spec::SPEC_EXTENSION)))
+        project_file_named(projects, name)
     }
+}
+
+/// The project file named `name` in `folder`: `shop` is `<folder>/shop.clarity`.
+fn project_file_named(folder: &Path, name: &str) -> Result<PathBuf, String> {
+    let name = name.trim();
+    let name = name.strip_suffix(".clarity").unwrap_or(name).trim();
+    if name.is_empty() || name.contains(['/', '\\']) || name.starts_with('.') {
+        return Err("give the project a name, like shop".to_string());
+    }
+    Ok(folder.join(format!("{name}.{}", clarity_spec::SPEC_EXTENSION)))
+}
+
+/// Where a new project named `name` goes in `folder`, as the New project
+/// dialog shows it before it is made: its file `<folder>/<name>.clarity`,
+/// beside a folder of the same name for its modules. Refused when the
+/// folder is not one, or that file or folder is there already.
+pub fn new_project_in(folder: &Path, name: &str) -> Result<PathBuf, String> {
+    if folder.as_os_str().is_empty() {
+        return Err("choose the folder the project goes in".to_string());
+    }
+    if !folder.is_absolute() {
+        return Err(format!("{} is not a full path; choose a folder with Browse", folder.display()));
+    }
+    if folder.is_file() {
+        return Err(format!("{} is a file, not a folder", folder.display()));
+    }
+    let file = project_file_named(folder, name)?;
+    let modules = file.with_extension("");
+    if file.exists() {
+        return Err(format!("{} is there already; choose another name or folder", file.display()));
+    }
+    if modules.exists() {
+        return Err(format!("{} is there already; choose another name or folder", modules.display()));
+    }
+    Ok(file)
+}
+
+impl Folders {
 }
 
 /// Where this computer's folders are kept: `folders.json` in Clarity's own folder.

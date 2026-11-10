@@ -5,7 +5,7 @@
   import Guarded from "@clarity/ui/parts/Guarded.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+  import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import { onMount, tick, untrack } from "svelte";
   // The installers' icon, from the same drawing.
   import logo from "../src-tauri/icons/icon.svg";
@@ -153,7 +153,7 @@
   let projectFile = $state<ProjectFile | null>(null);
   /** The folder and the choices, while the New project dialog is open. */
   /** The New dialog: the chosen file, or the projects folder it asks a name for. */
-  let newProjectIn = $state<{ folder: string; projects: string | null; catalog: Catalog } | null>(null);
+  let newProjectIn = $state<{ folder: string; catalog: Catalog } | null>(null);
   let newProjectError = $state<string | null>(null);
   /** Bumped when a settings change is refused, so the editor shows the file again. */
   let settingsRevision = $state(0);
@@ -906,36 +906,21 @@
     if (typeof file === "string") openProject(file);
   }
 
+  /** Asks for a new project, starting in the projects folder of Clarity settings, else the open project's folder. */
   async function newProject() {
-    const projects = await projectsFolder();
-    if (projects) {
-      try {
-        newProjectError = null;
-        newProjectIn = { folder: projects, projects, catalog: await invoke<Catalog>("stack_catalog") };
-      } catch (err) {
-        loadError = String(err);
-      }
-      return;
-    }
-    const chosen = await saveDialog({
-      title: "New project: its file, with a folder of the same name next to it",
-      defaultPath: "project.clarity",
-      filters: PROJECT_FILTER,
-    });
-    if (typeof chosen !== "string") return;
-    const file = chosen.endsWith(".clarity") ? chosen : chosen + ".clarity";
+    const beside = openFile ? openFile.replace(/[\\/][^\\/]*$/, "") : "";
+    const folder = (await projectsFolder()) ?? beside;
     try {
       newProjectError = null;
-      newProjectIn = { folder: file, projects: null, catalog: await invoke<Catalog>("stack_catalog") };
+      newProjectIn = { folder, catalog: await invoke<Catalog>("stack_catalog") };
     } catch (err) {
       loadError = String(err);
     }
   }
 
-  /** Makes the project; with the New dialog asking the name, `file` is that name. */
+  /** Makes the project file `file` the New project dialog chose. */
   async function createProject(file: string, chosen: Stack) {
     try {
-      if (newProjectIn?.projects) file = await invoke<string>("new_project_file", { name: file });
       const result = await invoke<Preview>("new_project", { path: file, stack: chosen });
       newProjectIn = null;
       loadError = null;
@@ -1893,8 +1878,7 @@
       catalog={newProjectIn.catalog}
       folder={newProjectIn.folder}
       error={newProjectError}
-      projects={newProjectIn.projects}
-      onsubmit={(chosen, name) => newProjectIn && createProject(newProjectIn.projects ? name : newProjectIn.folder, chosen)}
+      onsubmit={(chosen, file) => createProject(file, chosen)}
       oncancel={() => (newProjectIn = null)}
     />
   </PartGuard>

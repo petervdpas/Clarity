@@ -994,6 +994,7 @@ pub fn run() {
             folders::folders_view,
             folders::set_folder,
             folders::new_project_file,
+            folders::new_project_path,
             system::machine_facts,
             system::watch_system,
             system::disk_space,

@@ -749,7 +749,7 @@ pub fn catalog() -> Catalog {
         targets: vec![
             Choice { id: Target::Desktop, label: "Desktop" },
             Choice { id: Target::Web, label: "Web" },
-            Choice { id: Target::Cli, label: "Command line" },
+            Choice { id: Target::Cli, label: "CLI" },
         ],
         sources: vec![
             source(SourceKind::Sqlite, "SQLite", "File", "data/app.db", false),

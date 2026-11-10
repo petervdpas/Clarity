@@ -61,6 +61,21 @@
     <button onclick={() => agent.forget()} disabled={agent.running || agent.items.length === 0} title="Start a new conversation">New</button>
     <button onclick={() => agent.toggle()} title="Hide the agent">&times;</button>
   </header>
+  {#if agent.choices.length > 0}
+    <!-- The program's own choices for this chat, safe ones only; New starts on its defaults again. -->
+    <div class="choices" aria-label="Choices for this chat">
+      {#each agent.choices as choice (choice.id)}
+        <label title="{choice.name}: for this chat only">
+          <span>{choice.name}</span>
+          <select value={choice.current} onchange={(e) => agent.choose(choice.id, e.currentTarget.value)} disabled={agent.running}>
+            {#each choice.values as v (v.value)}
+              <option value={v.value}>{v.name}</option>
+            {/each}
+          </select>
+        </label>
+      {/each}
+    </div>
+  {/if}
 
   <div class="items" bind:this={list}>
     {#each agent.items as item, i (i)}
@@ -143,6 +158,24 @@
     gap: 6px;
     padding: 6px 8px;
     border-bottom: 1px solid var(--border);
+  }
+  .choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .choices label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+  .choices select {
+    max-width: 150px;
   }
 
   header strong {

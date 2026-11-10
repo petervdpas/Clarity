@@ -11,7 +11,7 @@ datasource main sqlite "data/shop.db"
 datasource sales postgres "env:SHOP_DATABASE"
 ```
 
-You can also add, change, reorder and remove sources in the **Data sources** section of **Settings** on the Project tab. For SQLite, **Browse...** picks the file.
+You can also add, change, reorder and remove sources in the **Data sources** section of **Settings** on the Project tab. For SQLite, **Browse...** picks the file in Clarity's file browser, or names a new one there.
 
 ## Kinds
 

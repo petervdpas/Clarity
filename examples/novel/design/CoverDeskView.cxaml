@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!-- What the window CoverDesk shows: its parts, data and code. -->
-<View class="writing.CoverDeskView">
-  <Data name="book" type="Book" />
-  <Heading name="coverHeading" at="1,1" span="10" caption="@coverTitle" bind="book.title" />
-  <Button name="coverBackButton" at="11,1" span="2" caption="@backCaption" opens="close" icon="arrow-left" cancel="true" />
-  <Canvas name="coverCanvas" at="1,2" span="12" rows="15" bind="book.cover" mode="paint" toolbox="popup" toolboxPage="CoverTools" brush="8" ink="#8a5a2b" units="{&quot;height&quot;:900,&quot;width&quot;:600}" zoom="true" none="surface" onchange="coverPainted" />
-</View>

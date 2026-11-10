@@ -56,3 +56,13 @@ export function marksOf(proposals: { change: Mark; subject: string }[]): Record<
 
 /** The extension of a diagram file, as clarity_spec::diagrams::DIAGRAM_EXTENSION names it. */
 export const DIAGRAM_EXTENSION = "mermaid";
+
+/** How far to scroll so a drawing at `rect` (in the view's coordinates) has
+ *  its middle in the middle of the view of `size`, leaving out `covered`
+ *  pixels at its right (the properties drawer lying over it). */
+export function centerScroll(rect: { left: number; top: number; width: number; height: number }, size: { width: number; height: number }, covered: number): { dx: number; dy: number } {
+  return {
+    dx: Math.round(rect.left + rect.width / 2 - (size.width - covered) / 2),
+    dy: Math.round(rect.top + rect.height / 2 - size.height / 2),
+  };
+}

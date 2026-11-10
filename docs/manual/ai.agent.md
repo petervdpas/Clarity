@@ -11,7 +11,8 @@ Click **Agent** at the right of the tab row. The panel sits to the right of ever
 The agent is a model that knows Clarity and works on the open project through tools. Each tool use shows as a line in the conversation; click it to see what the tool gave back.
 
 - Look at the project: its project file, its modules and its problems.
-- Read and write the project file and the `.clarity` modules in the project's folder. Every write is checked at once, and the agent sees the errors it made.
+- Read every file of the project, and write the project file, code and texts. Every write is checked at once, and the agent sees the errors it made.
+- Change the data model, windows, views, parts, the app and its frame with structural tools that take names (`add_entity`, `add_field`, `add_window`, `add_part`, `change_part`, `wire_event` and more). Each makes the same checked change the designer makes; an unknown name is refused with the names there are. Windows and views (`.cxaml`) change only through these tools.
 - Read and write the Markdown files of the resources (`resources/rules-en.md`), and point a key at one per language in the language files, for a markdown part. It cannot add pictures; it uses the ones the resources have.
 - Check the whole project.
 - Look up the parts a window can hold, with their properties.

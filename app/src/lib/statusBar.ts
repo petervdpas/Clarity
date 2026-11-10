@@ -50,3 +50,30 @@ export function buildStatus(state: {
   if (state.done && state.done.message !== "running") return { text: state.done.message, tone: "ok" };
   return { text: "Ready", tone: "idle" };
 }
+
+/** How long an outside agent's last call stays in the bar without a new one. */
+export const AGENT_CALL_SHOWN_SECONDS = 120;
+
+/** An outside agent's call, as the activity list has it (AgentActivity). */
+export type AgentCall = {
+  time: number;
+  client: string;
+  tool: string;
+  path: string | null;
+  ok: boolean;
+  said: string;
+};
+
+/** The last call an outside agent made through `clarity mcp`, as the bar shows it at `now`
+ *  (seconds since 1970); none when there is none or it is older than two minutes. */
+export function agentCall(call: AgentCall | null, now: number): { text: string; ok: boolean; title: string } | null {
+  if (!call || now - call.time > AGENT_CALL_SHOWN_SECONDS) return null;
+  const where = call.path ? ` (${call.path})` : "";
+  // A program may start without giving its name.
+  const client = call.client || "Agent";
+  return {
+    text: `${client}: ${call.tool}`,
+    ok: call.ok,
+    title: `${client} called ${call.tool}${where}: ${call.said} Opens the agent activity.`,
+  };
+}

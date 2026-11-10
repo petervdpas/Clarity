@@ -69,10 +69,11 @@ content: it shows the editor of what is picked in the tree, one at a time.
 
 The diagram view (slide-up, footer) shows the class diagram or the ERD of a
 domain version (a table per class definition a table is filled from); the
-version dial stops at the domain's newest version, and **Arrange** lays the
-boxes out in rows by their links (the Fcdm engine's `arrangeBoxes`), which
-you can drag on from there. The class diagram and the ERD share each data
-object's position.
+version box stops at the domain's newest version. Its toolbox holds select,
+draw a line, zoom, place a new data object (class diagram only) and
+**Arrange**, which lays the boxes out in rows by their links (the Fcdm
+engine's `arrangeBoxes`); you can drag on from there. The class diagram and
+the ERD share each data object's position.
 
 ## Order of work
 
@@ -86,6 +87,16 @@ object's position.
 Later, the mapping stage: applications (sources and targets), their
 entities and fields, field mappings onto object versions, lineage and
 coverage. Never call them systems: the whole is the integration platform.
+
+## Files
+
+- `../modelling.clarity`: the project file (stack, theme, the SQLite data source, the file store).
+- `model.clarity`: the entities and enums.
+- `modelling.clarity`: the settings, the Fcdm engine and the code behind the windows and views.
+- `themes.clarity`: the two looks, Studio and Midnight.
+- `design/`: a `.cxaml` file per window, view and the app: the app with its menu, the Workspace window, its editors, the diagram canvas and its toolbox.
+- `translations/`: English and Dutch.
+- `migrations/main/`: the database's migration steps.
 
 ## Rules
 

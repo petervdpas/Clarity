@@ -2904,3 +2904,74 @@ migration     = "migration" String ["baseline"]
                     | ("add" | "remove") "unique" Entity "." name
                     | "map" ("table" Entity | "key" Entity | "column" Entity "." name) "to" (String | "default"))*
 ```
+
+## 13. Diagrams
+
+Diagrams are Mermaid files in the project's `diagrams/` folder. An ERD and a class diagram map onto the project: they propose changes, and Apply makes them. The other kinds (state, sequence, activity, architecture) are drawn only. A project keeps one ERD, and data changes are written into it.
+
+### ERD
+
+```
+erDiagram
+    Customer {
+        text(80) name "required"
+        email email UK
+        CustomerKind kind
+        text[] tags
+    }
+    Order {
+        text(12) number UK "required"
+        Customer customer FK "required"
+        money total "computed"
+        decimal discount "decimal(5, 2), min 0"
+    }
+    OrderLine {
+        Order order FK "required"
+        integer quantity "default 1"
+    }
+    Order }o..|| Customer : customer
+    OrderLine }o..|| Order : order
+    %% clarity: Customer at 24,109
+    %% clarity: Order at 408,93
+```
+
+- An entity block is an entity; an attribute `type name` is a field in Clarity's types (`text(80)`, `money`, `email`, an enum's name), a list as `text[] tags`. Clarity adds `id` itself; names are camelCase.
+- `UK` is `unique`. The comment holds every other modifier as the module writes it (`"required"`, `"computed"`, `"min 0"`, `"default 1"`, `"owned"`), and a type Mermaid's word cannot hold, first (`"decimal(5, 2), min 0"`). An attribute left without its modifiers proposes removing them.
+- A ref is an attribute with `FK` (`Customer customer FK "required"`) and a line to its entity named after the field: `Order }o..|| Customer : customer`, the many side first. Exactly one (`||`) makes it required, zero or one (`o|`) leaves it optional. An identifying line (`--`) also gives the one side an owned list, a non-identifying one (`..`) a plain list when the one side lists them.
+- The `%% clarity:` lines say where each box stands (and how a line bends): keep them when writing the diagram again.
+
+### Class diagram
+
+```
+classDiagram
+    namespace customers {
+        class Customer {
+            +name: text(80), required
+            +email: email, unique
+            +kind: CustomerKind
+        }
+        class CustomerKind {
+            <<enumeration>>
+            Private
+            Business
+        }
+    }
+    namespace sales {
+        class Order {
+            +number: text(12)
+            +customer: Customer
+        }
+    }
+    class sales {
+        <<module>>
+        +totalOf(order: Order) money
+    }
+    Order "*" --> "1" Customer : customer
+    sales ..> Customer
+```
+
+- Each class stands in the namespace of its module and is named by its own name everywhere, in relations too: `Order`, never `sales.Order`. A class name is written once.
+- An attribute carries its type and modifiers as the module writes them (`+name: text(80), required`, `+total: money, computed`); one left without its modifiers proposes removing them.
+- A class with attributes is an entity; `<<enumeration>>` with its values is an enum; `<<engine>>` with methods is an engine; a `<<module>>` class, named as its module and outside the namespaces, holds the module's functions and actions.
+- Keep the `%% clarity:` lines, which say where each box stands, when writing the diagram again.
+- `A "*" --> "1" B` is `b: ref B` on A; a composition `*--` is an owned list, an aggregation `o--` a plain list. A uses arrow from a `<<module>>` or `<<engine>>` (`sales ..> Customer`) is drawn only.

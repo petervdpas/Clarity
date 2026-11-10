@@ -109,7 +109,7 @@ A markdown part or an image can show a file of the resources by a key, a file pe
 
 Resources sits under i18n in the project tree: every file of the `resources` folder, with its type. A resource is Markdown (`.md`), a picture (`.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.webp`, `.svg`), a PDF, a drawing (`.dxf`) or another file; the application carries each as it is.
 
-- **+ New resource** asks for its name and type, and the file it starts from: Clarity copies the file into `resources/` under the name, with the file's extension. Markdown may start without a file, as a heading to write under; every other type starts from one.
+- **+ New resource** asks for its name and type, and the file it starts from, chosen in Clarity's file browser: Clarity copies the file into `resources/` under the name, with the file's extension. Markdown may start without a file, as a heading to write under; every other type starts from one.
 - Click a resource to open it: Markdown to write here, with how it reads beside it (**Save**, or Ctrl+S), a picture to look at, or what the file is. Each says which keys point at it.
 - **Replace file...** puts a file you pick in the resource's place, of the same extension; the name, and what points at it, stay.
 

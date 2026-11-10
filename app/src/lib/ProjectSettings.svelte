@@ -7,7 +7,7 @@
   import { openAppSettings } from "./appSettings.svelte";
   import { resizableColumns } from "@clarity/ui/screen/columnWidths.ts";
   import { invoke } from "@tauri-apps/api/core";
-  import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+  import { browse } from "./fileBrowserStore.svelte";
   import ImportPanel from "./ImportPanel.svelte";
   import ApiPanel from "./ApiPanel.svelte";
   import MigrationPanel from "./MigrationPanel.svelte";
@@ -98,20 +98,25 @@
   }
 
   async function browseOutput() {
-    const picked = await openDialog({
-      directory: true,
+    const picked = await browse({
+      purpose: "app-folder",
       title: "App folder: where Run and Build create the app",
-      defaultPath: await invoke<string>("project_folder"),
+      pick: "folder",
+      start: await invoke<string>("project_folder"),
     });
     if (typeof picked === "string") save({ out: await stored(picked) });
   }
 
   /** A SQLite file may not exist yet, so this asks where it goes, like a save. */
   async function browseDatabase(i: number) {
-    const picked = await saveDialog({
+    const current = project.settings?.datasources[i]?.url.trim() ?? "";
+    const picked = await browse({
+      purpose: "database-file",
       title: "Database file",
-      defaultPath: (await invoke<string>("project_folder")) + "/data/app.db",
-      filters: [{ name: "SQLite database", extensions: ["db", "sqlite", "sqlite3"] }],
+      pick: "save",
+      kinds: ["db", "sqlite", "sqlite3"],
+      start: await invoke<string>("project_folder"),
+      name: current.split(/[\\/]/).at(-1) || "app.db",
     });
     if (typeof picked === "string") saveSource(i, { url: await stored(picked) });
   }
@@ -152,10 +157,11 @@
   }
 
   async function browseStore(i: number) {
-    const picked = await openDialog({
-      directory: true,
+    const picked = await browse({
+      purpose: "file-store-folder",
       title: "File store: the folder that keeps the pictures",
-      defaultPath: await invoke<string>("project_folder"),
+      pick: "folder",
+      start: await invoke<string>("project_folder"),
     });
     if (typeof picked === "string") saveStore(i, { location: await stored(picked) });
   }

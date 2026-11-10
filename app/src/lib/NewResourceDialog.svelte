@@ -5,7 +5,7 @@
   // under in Clarity IDE; every other type starts from a file.
 
   import Modal from "./Modal.svelte";
-  import { open as openDialog } from "@tauri-apps/plugin-dialog";
+  import { browse } from "./fileBrowserStore.svelte";
   import type { ResourceKind } from "@clarity/ui/generated/ResourceKind.ts";
   import type { ResourceKindInfo } from "@clarity/ui/generated/ResourceKindInfo.ts";
 
@@ -44,7 +44,12 @@
 
   /** Picks the file to copy in, of the type's extensions; its name names the resource until one is typed. */
   async function pick() {
-    const picked = await openDialog({ multiple: false, filters: info && info.extensions.length > 0 ? [{ name: info.name, extensions: info.extensions }] : [] });
+    const picked = await browse({
+      purpose: "resource-new",
+      title: info ? `The file the new resource starts from: ${info.name}` : "The file the new resource starts from",
+      pick: "file",
+      kinds: info && info.extensions.length > 0 ? info.extensions : undefined,
+    });
     if (typeof picked !== "string") return;
     from = picked;
     if (!name.trim()) name = (picked.split(/[\\/]/).at(-1) ?? "").replace(/\.[^.]*$/, "");

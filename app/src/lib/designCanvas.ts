@@ -397,3 +397,18 @@ export function freeName(base: string, taken: string[]): string {
 export function wholePoints(via: Point[]): [number, number][] {
   return via.map((p) => [Math.round(p.x), Math.round(p.y)]);
 }
+
+/** The pan that puts the middle of the drawn boxes in the middle of the
+ *  canvas of `size`, at `zoom`, leaving out `covered` pixels at its right
+ *  (the properties drawer lying over it); the start when nothing is drawn. */
+export function centered(laid: { x: number; y: number; w: number; h: number }[], size: { width: number; height: number }, zoom: number, covered: number): Point {
+  if (laid.length === 0) return { x: 0, y: 0 };
+  const left = Math.min(...laid.map((b) => b.x));
+  const right = Math.max(...laid.map((b) => b.x + b.w));
+  const top = Math.min(...laid.map((b) => b.y));
+  const bottom = Math.max(...laid.map((b) => b.y + b.h));
+  return {
+    x: Math.round((size.width - covered) / 2 - ((left + right) / 2) * zoom),
+    y: Math.round(size.height / 2 - ((top + bottom) / 2) * zoom),
+  };
+}

@@ -1040,24 +1040,28 @@ impl Editor<'_> {
             };
             return fail(format!("this window already has {what}"));
         }
-        // Starter content, so the new region shows up and is ready to edit.
+        // Starter content, so the new region shows up and is ready to edit; every
+        // starter command named, as the checker asks of every command.
         let span = self.fresh();
+        let named = |kind: CommandKind, caption: &str| {
+            let mut props = frame::new_command(kind, Some(caption.into()));
+            props.name = Some(free_in(&used, &crate::names::command_name(props.caption.as_deref(), frame::command_keyword(props.kind))));
+            props
+        };
         match region {
             RegionKind::Menu => {
-                let mut file = self.command(frame::new_command(CommandKind::Item, Some("File".into())));
-                let mut quit = frame::new_command(CommandKind::Item, Some("Quit".into()));
+                let mut file = self.command(named(CommandKind::Item, "File"));
+                let mut quit = named(CommandKind::Item, "Quit");
                 quit.on_click = Some("quit".into());
                 file.items.push(self.command(quit));
                 designed.frame().menu = Some(Menu { name: Some(free_in(&used, "mainMenu")), items: vec![file], span });
             }
             RegionKind::Toolbar => {
-                let button = self.command(frame::new_command(CommandKind::Button, Some("Button".into())));
+                let button = self.command(named(CommandKind::Button, "Button"));
                 designed.frame().toolbar = Some(Toolbar { name: Some(free_in(&used, "mainToolbar")), items: vec![button], span });
             }
             RegionKind::Ribbon => {
-                let mut props = frame::new_command(CommandKind::Button, Some("Button".into()));
-                props.name = Some(free_in(&used, &crate::names::command_name(props.caption.as_deref(), frame::command_keyword(props.kind))));
-                let button = self.command(props);
+                let button = self.command(named(CommandKind::Button, "Button"));
                 let group = RibbonGroup { title: "Actions".into(), name: Some(free_in(&used, "actionsGroup")), items: vec![button], span: self.fresh() };
                 let tab = RibbonTab { title: "Home".into(), name: Some(free_in(&used, "homeTab")), groups: vec![group], span: self.fresh() };
                 designed.frame().ribbon = Some(Ribbon { name: Some(free_in(&used, "mainRibbon")), collapsible: false, collapsed: false, tabs: vec![tab], span });

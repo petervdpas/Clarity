@@ -1,0 +1,70 @@
+classDiagram
+    namespace customers {
+        class CustomerKind {
+            <<enumeration>>
+            Private
+            Business
+        }
+        class Customer {
+            +name: text(80), required, search
+            +email: email, unique, search
+            +kind: CustomerKind, default Private
+            +vatNumber: text(14), help @customerVatNumberHelp
+            +creditLimit: money, min 0, default 0
+            +active: bool, default true
+            +since: date
+            +notes: text, search, help @customerNotesHelp
+            +tags: list<text>, search
+            +contract: file
+        }
+    }
+    namespace sales {
+        class OrderStatus {
+            <<enumeration>>
+            Pending
+            Approved
+            Shipped
+            Cancelled
+        }
+        class Order {
+            +number: text(12), required, unique, pattern "^ORD-[0-9]{8}$"
+            +status: OrderStatus, default Pending
+            +orderedOn: date, required
+            +total: money, computed
+            +remarks: text(200)
+        }
+        class OrderLine {
+            +product: text(80), required
+            +quantity: integer, min 1, default 1
+            +price: money
+        }
+        class Pricing {
+            <<engine>>
+            +total(lines: list<OrderLine>) money
+        }
+    }
+    class sales {
+        <<module>>
+        +withinCredit(order: Order) bool
+        +creditNote(order: Order) text
+        +approve(order: Order)
+    }
+    namespace suppliers {
+        class Supplier {
+            +name: text(80), required
+            +email: email, unique
+            +phone: text(40)
+            +website: url
+        }
+    }
+    Order "*" --> "1" Customer : customer
+    OrderLine "*" --> "1" Order : order
+    sales ..> Order
+    %% clarity: CustomerKind at 162,98
+    %% clarity: Customer at -134,147
+    %% clarity: OrderStatus at 453,501
+    %% clarity: Order at 429,177
+    %% clarity: OrderLine at 515,-89
+    %% clarity: Pricing at 634,69
+    %% clarity: sales at 632,406
+    %% clarity: Supplier at 1021,40

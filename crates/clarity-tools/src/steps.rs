@@ -71,7 +71,7 @@ pub fn follow(file: &Path, dir: &Path, renames: &[Rename]) -> Result<Followed, S
                 let text = clarity_spec::migrate::step_text(AGENT_STEP, &ops);
                 std::fs::write(&path, &text).map_err(|err| format!("cannot write {}: {err}", path.display()))?;
                 lines.push(format!("Folded into the step {}:\n{}", shown(dir, &path), text.trim_end()));
-                out.written.push(Written { file: path, before: was, after: text });
+                out.written.push(Written { file: path, before: was, after: Some(text) });
             }
             None => {
                 let ops = clarity_spec::migrate::pending(&project, &source.name, renames);
@@ -81,7 +81,7 @@ pub fn follow(file: &Path, dir: &Path, renames: &[Rename]) -> Result<Followed, S
                 let path = clarity_spec::write_step(dir, &source.name, AGENT_STEP, &ops).map_err(|err| format!("cannot write the step: {err}"))?;
                 let text = std::fs::read_to_string(&path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
                 lines.push(format!("Wrote the step {}:\n{}", shown(dir, &path), text.trim_end()));
-                out.written.push(Written { file: path, before: None, after: text });
+                out.written.push(Written { file: path, before: None, after: Some(text) });
             }
         }
     }

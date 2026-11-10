@@ -1,5 +1,6 @@
-// The shop example: customers, orders and a desk window, in four modules
-// in the shop folder next to this file.
+// The shop example: customers and their orders, with browse windows, editors,
+// a customer card and a sales dashboard, in four modules and a window or view
+// per file in design/, in the shop folder next to this file.
 project Shop
     stack rust desktop
     language "en"

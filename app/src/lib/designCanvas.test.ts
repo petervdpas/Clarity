@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { boxes, columns, endMark, ends, frames, freeName, meeting, pinned, umlMark, type Box } from "./designCanvas.ts";
+import { boxes, centered, columns, endMark, ends, frames, freeName, meeting, pinned, umlMark, type Box } from "./designCanvas.ts";
 
 /** Every character is 7 wide, as a monospace font at 12px nearly is. */
 const measure = (text: string) => text.length * 7;
@@ -162,4 +162,15 @@ test("a layer is ordered by where its neighbours are, so lines do not cross", ()
 test("lines that go round in a circle still lay out, each box once", () => {
   const laid = boxes([unplaced("A"), unplaced("B"), unplaced("C")], measure, [refers("A", "B"), refers("B", "C"), refers("C", "A"), refers("A", "A")]);
   assert.equal(new Set(laid.map((b) => `${b.x},${b.y}`)).size, 3);
+});
+
+test("centering puts the drawing in the middle of the room left free, at the zoom it has", () => {
+  const laid = [
+    { x: 100, y: 50, w: 100, h: 50 },
+    { x: 300, y: 250, w: 100, h: 50 },
+  ];
+  // The drawing spans 100..400 by 50..300: its middle is (250, 175).
+  assert.deepEqual(centered(laid, { width: 800, height: 600 }, 1, 0), { x: 150, y: 125 });
+  assert.deepEqual(centered(laid, { width: 800, height: 600 }, 2, 200), { x: -200, y: -50 }, "a drawer over the right covers 200");
+  assert.deepEqual(centered([], { width: 800, height: 600 }, 1, 0), { x: 0, y: 0 }, "nothing drawn: back to the start");
 });

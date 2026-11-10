@@ -10,6 +10,7 @@ import { isRuns } from "./agent";
 import type { AgentAnswered } from "@clarity/ui/generated/AgentAnswered.ts";
 import type { Runs } from "@clarity/ui/generated/Runs.ts";
 import type { AgentAsk } from "@clarity/ui/generated/AgentAsk.ts";
+import type { AgentChoice } from "@clarity/ui/generated/AgentChoice.ts";
 import type { AgentEnded } from "@clarity/ui/generated/AgentEnded.ts";
 import type { AgentEvent } from "@clarity/ui/generated/AgentEvent.ts";
 import type { ConnectionRow } from "@clarity/ui/generated/ConnectionRow.ts";
@@ -53,6 +54,8 @@ class AgentStore {
   /** The tokens of the turn that runs or ran last, and of the conversation. */
   turnUsage = $state<Usage>(NO_USAGE);
   sessionUsage = $state<Usage>(NO_USAGE);
+  /** The outside agent's choices for this chat (normal or Plan, model, effort): only safe ones; none before its session opens. */
+  choices = $state<AgentChoice[]>([]);
   /** What the screen does when a turn ends; App sets it. */
   onEnded: (ended: AgentEnded) => void = () => {};
 
@@ -65,6 +68,7 @@ class AgentStore {
       }
       this.items = applyEvent(this.items, event);
     });
+    listen<AgentChoice[]>("agent-choices", (e) => (this.choices = e.payload));
     listen<AgentAsk>("agent-ask", (e) => (this.items = applyAsk(this.items, e.payload)));
     listen<AgentAnswered>("agent-answered", (e) => (this.items = applyAnswer(this.items, e.payload)));
     listen<AgentEnded>("agent-ended", (e) => {
@@ -98,6 +102,8 @@ class AgentStore {
   }
 
   pick(connection: string) {
+    // Another program has choices of its own, told when its session opens.
+    if (connection !== this.connection) this.choices = [];
     this.connection = connection;
     this.needsSignIn = false;
     remember(CONNECTION_KEY, connection);
@@ -140,6 +146,15 @@ class AgentStore {
       this.items = [...this.items, { kind: "error", text: String(err) }];
     } finally {
       this.signingIn = false;
+    }
+  }
+
+  /** Sets one of the chat's choices; it holds for this chat, and New starts on the program's defaults. */
+  async choose(id: string, value: string) {
+    try {
+      await invoke("agent_set_choice", { id, value });
+    } catch (err) {
+      this.items = [...this.items, { kind: "error", text: String(err) }];
     }
   }
 

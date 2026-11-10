@@ -470,7 +470,7 @@ pub fn agent_send(text: String, connection: String, runs: Runs, app: AppHandle, 
             *kept = conversation;
         }
         let changes: Vec<FileChange> =
-            merged(&tools.core.written).into_iter().map(|w| FileChange { file: w.file, before: w.before, after: Some(w.after) }).collect();
+            merged(&tools.core.written).into_iter().map(|w| FileChange { file: w.file, before: w.before, after: w.after }).collect();
         let changed = !changes.is_empty();
         // A project made during the turn opens with a history of its own.
         if tools.core.made.is_none() && changed {
@@ -544,8 +544,9 @@ mod tests {
             "backup_data", "restore_backup",
             // Running or building, only after the person allows it.
             "build",
+            // The structural tools are added below: each makes one checked designer edit and runs nothing.
         ];
-        let mut allowed: Vec<String> = allowed.iter().map(|n| n.to_string()).collect();
+        let mut allowed: Vec<String> = allowed.iter().map(|n| n.to_string()).chain(clarity_tools::structural::definitions().into_iter().map(|t| t.name)).collect();
         allowed.sort();
         assert_eq!(names, allowed);
     }

@@ -88,6 +88,44 @@ impl Vendor {
         }
     }
 
+    /// The program's choices the person may make per chat, with the values
+    /// allowed (None: every value it offers). Only choices that keep it asking
+    /// before it changes anything, so every AI changes the project through
+    /// Clarity's tools (the user: "all ai must use tools!"). Codex's `mode`
+    /// stays read-only (workspace-write, agent and full access write by
+    /// themselves); Copilot's autopilot and `allow_all` stop it asking. Names
+    /// and values as the programs gave them over ACP (codex-acp 2.6.0, GitHub
+    /// Copilot CLI 1.0.108).
+    fn choosable(self) -> &'static [(&'static str, Option<&'static [&'static str]>)] {
+        const COPILOT_MODES: &[&str] = &["https://agentclientprotocol.com/protocol/session-modes#agent", "https://agentclientprotocol.com/protocol/session-modes#plan"];
+        match self {
+            Vendor::Codex => &[("collaboration_mode", None), ("model", None), ("reasoning_effort", None)],
+            Vendor::Copilot => &[("mode", Some(COPILOT_MODES)), ("model", None)],
+        }
+    }
+
+    /// The choices of `all` the person may make per chat, in the program's
+    /// order: only the ones `choosable` names, with only allowed values, each
+    /// value once. A choice whose current value is not allowed is left out.
+    pub fn safe_choices(self, all: &[crate::Choice]) -> Vec<crate::Choice> {
+        let mut out = Vec::new();
+        for choice in all {
+            let Some((_, allowed)) = self.choosable().iter().find(|(id, _)| *id == choice.id) else { continue };
+            let ok = |value: &str| allowed.is_none_or(|list| list.contains(&value));
+            if !ok(&choice.current) {
+                continue;
+            }
+            let mut values: Vec<crate::ChoiceValue> = Vec::new();
+            for v in &choice.values {
+                if ok(&v.value) && !values.iter().any(|seen| seen.value == v.value) {
+                    values.push(v.clone());
+                }
+            }
+            out.push(crate::Choice { values, ..choice.clone() });
+        }
+        out
+    }
+
     /// Environment the program starts with, beside its arguments.
     pub fn environment(self) -> &'static [(&'static str, &'static str)] {
         match self {

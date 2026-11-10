@@ -57,7 +57,7 @@ fn docks_regions_after_the_data_in_catalog_order() {
     let text = edit(&text, Edit::AddRegion { owner: at(&text, "<Window"), region: RegionKind::Menu, side: None });
     assert!(
         text.contains(
-            "  <Data name=\"customer\" type=\"Customer\" />\n  <Menu name=\"mainMenu\">\n    <Item caption=\"File\">\n      <Item caption=\"Quit\" opens=\"quit\" />\n    </Item>\n  </Menu>\n  <Footer status=\"Ready\" columns=\"12\" />\n  <Label name=\"label1\""
+            "  <Data name=\"customer\" type=\"Customer\" />\n  <Menu name=\"mainMenu\">\n    <Item caption=\"File\" name=\"fileItem\">\n      <Item caption=\"Quit\" name=\"quitItem\" opens=\"quit\" />\n    </Item>\n  </Menu>\n  <Footer status=\"Ready\" columns=\"12\" />\n  <Label name=\"label1\""
         ),
         "{text}"
     );

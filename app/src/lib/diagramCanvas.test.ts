@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { boxName, marksOf, themeVariables } from "./diagramCanvas.ts";
+import { boxName, centerScroll, marksOf, themeVariables } from "./diagramCanvas.ts";
 
 test("the drawing takes the IDE theme's colors", () => {
   const vars: Record<string, string> = {
@@ -39,4 +39,11 @@ test("proposals mark the boxes they are about", () => {
   ]);
   assert.deepEqual(marks, { Order: "add", Customer: "change", Invoice: "change" });
   assert.deepEqual(marksOf([{ change: "remove", subject: "OrderStatus.Approved" }]), { OrderStatus: "remove" });
+});
+
+test("centering scrolls the drawing to the middle of the room the drawer leaves free", () => {
+  // The drawing stands 100..500 by 50..250 in a view of 800 by 600 with 200 covered at the right:
+  // its middle (300, 150) goes to (300, 300).
+  assert.deepEqual(centerScroll({ left: 100, top: 50, width: 400, height: 200 }, { width: 800, height: 600 }, 200), { dx: 0, dy: -150 });
+  assert.deepEqual(centerScroll({ left: 0, top: 0, width: 400, height: 200 }, { width: 800, height: 600 }, 0), { dx: -200, dy: -200 });
 });

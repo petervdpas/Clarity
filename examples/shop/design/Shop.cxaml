@@ -16,6 +16,9 @@
       <Item caption="@allOrdersItem" name="allOrdersItem" opens="OrderBrowse" />
       <Item caption="@salesDashboardItem" name="salesDashboardItem" opens="SalesDashboard" newWindow="true" />
     </Item>
+    <Item caption="@suppliersItem" name="suppliersItem">
+      <Item caption="@allSuppliersItem" name="allSuppliersItem" opens="SupplierBrowse" />
+    </Item>
   </Menu>
   <Toolbar name="mainToolbar">
     <Item kind="button" caption="@customers2Caption" name="customers2" icon="users" opens="CustomerBrowse" />
@@ -23,6 +26,7 @@
     <Item kind="button" caption="@dashboard2Caption" name="dashboard2" icon="chart-column" opens="SalesDashboard" />
     <Item kind="separator" />
     <Item kind="button" caption="@cardButtonCaption" name="cardButton" icon="credit-card" opens="CustomerCard" />
+    <Item kind="button" caption="@suppliers2Caption" name="suppliers2" icon="truck" opens="SupplierBrowse" />
   </Toolbar>
   <Footer status="@shopStatus" columns="12" />
 </App>

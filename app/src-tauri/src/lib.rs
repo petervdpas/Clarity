@@ -19,6 +19,7 @@ mod themes;
 mod translations;
 mod vault;
 mod acp;
+mod browse;
 mod agent;
 mod manual;
 mod migrations;
@@ -37,7 +38,7 @@ use clarity_project::{Catalog, ProjectFile, Settings, Stack};
 use clarity_tools::files::{FileChange, is_spec_file, write_atomically};
 use clarity_tools::new_project::write_new_project;
 use clarity_spec::Preview;
-use clarity_spec::edit::{self, Edit};
+use clarity_spec::edit::Edit;
 use clarity_spec::rename::RenameKind;
 use notify::{RecursiveMode, Watcher};
 use serde::Serialize;
@@ -226,6 +227,10 @@ fn open_file(path: &str, app: AppHandle, state: &WatchState, history: &HistorySt
     if let Err(err) = clarity_project::ide::set_open_project(&file) {
         logging::line(&err);
     }
+    // The file browser's Recent projects (docs/PROJECT-BROWSER-PLAN.md).
+    if let Err(err) = clarity_project::recent::remember_project(&file) {
+        logging::line(&err);
+    }
     *state.open.held().map_err(|_| "watch state is poisoned")? = Some(OpenProject {
         file,
         dir,
@@ -257,100 +262,11 @@ fn apply_edit(
         ));
     }
 
-    let read_err = |err: std::io::Error| format!("cannot read {}: {err}", dir.display());
-    let before = clarity_project::load_modules(&dir).map_err(read_err)?;
-    // A window's, view's or app's own file: the edit is made on what it holds and the file written;
-    // what belongs in the module (the handlers a wiring writes, code) goes to the module's file.
-    // Its whole markup typed in the Design text replaces the file, checked as any edit.
-    let mut outcomes: Vec<(PathBuf, String, edit::EditOutcome)> = Vec::new();
-    let mut added_files: Vec<(PathBuf, String)> = Vec::new();
-    match &edit {
-        edit::Edit::ReplaceDecl { text, .. } if is_page_file(&file) => {
-            outcomes.push((file.clone(), source.clone(), edit::EditOutcome { text: text.clone(), focus: None, keys: Vec::new() }));
-        }
-        // Removing a window, view or app itself: its file goes, and its code in the module with it.
-        edit::Edit::Remove { item } if is_page_file(&file) && clarity_spec::cxaml::read_designed(&source, "").is_ok_and(|d| d.start() == *item) => {
-            let module = code_file_of(file.clone())?;
-            let text = std::fs::read_to_string(&module).map_err(|err| format!("cannot read {}: {err}", module.display()))?;
-            let without = clarity_spec::cxaml::removed(&source, *item, &text).expect("the file's own window")?;
-            outcomes.push((file.clone(), source.clone(), edit::EditOutcome { text: String::new(), focus: None, keys: Vec::new() }));
-            outcomes.push((module, text, edit::EditOutcome { text: without, focus: None, keys: Vec::new() }));
-        }
-        _ if is_page_file(&file) => {
-            let (design, code) = clarity_spec::design_edit::split(&edit);
-            if let Some(design) = design {
-                let outcome = clarity_spec::cxaml::apply(Some(&before), &source, &design).map_err(|err| err.to_string())?;
-                outcomes.push((file.clone(), source.clone(), outcome));
-            }
-            if let Some(code) = code {
-                let module = code_file_of(file.clone())?;
-                let text = std::fs::read_to_string(&module).map_err(|err| format!("cannot read {}: {err}", module.display()))?;
-                let outcome = edit::apply_in(&before, &text, &code).map_err(|err| err.to_string())?;
-                outcomes.push((module, text, outcome));
-            }
-        }
-        _ => match clarity_spec::cxaml::added(&before, &file, &source, &edit) {
-            // A new window, view or app is files of its own in design/; the code it starts with goes in the module.
-            Some(added) => {
-                let added = added?;
-                added_files = added.files;
-                outcomes.push((file.clone(), source.clone(), edit::EditOutcome { text: added.module, focus: None, keys: added.keys }));
-            }
-            None => {
-                let outcome = edit::apply_in(&before, &source, &edit).map_err(|err| err.to_string())?;
-                outcomes.push((file.clone(), source.clone(), outcome));
-            }
-        },
-    }
-    // What the edit focuses: in the file it was asked of.
-    let focus = outcomes.first().and_then(|(path, _, o)| (*path == file).then_some(o.focus).flatten());
-    // A window, view or app the edit added: its own .cxaml files (docs/CXAML-SOURCE-PLAN.md).
-    let new_pages = added_files;
-    let changed: Vec<&(PathBuf, String, edit::EditOutcome)> = outcomes.iter().filter(|(_, before_text, o)| o.text != *before_text).collect();
-    if !changed.is_empty() || !new_pages.is_empty() {
-        // A text the edit wrote became a key: every language file gets it,
-        // the default language with its text.
-        let default = clarity_spec::translations::default_language(&before);
-        let keys: Vec<(String, String)> = changed.iter().flat_map(|(_, _, o)| o.keys.clone()).collect();
-        let languages = clarity_spec::keyed::plan_keys(&dir, &default, &keys).map_err(read_err)?;
-        let mut replaced: Vec<(&Path, &str)> = changed.iter().map(|(path, _, o)| (path.as_path(), o.text.as_str())).collect();
-        replaced.extend(new_pages.iter().map(|(path, text)| (path.as_path(), text.as_str())));
-        replaced.extend(languages.iter().map(|(path, _, after)| (path.as_path(), after.as_str())));
-        // The checker decides what is valid: an edit that adds an error
-        // anywhere in the project (an overlap, a wrong binding) is refused.
-        let after = clarity_project::load_modules_with_files(&dir, &replaced).map_err(read_err)?;
-        if let Some(error) = clarity_spec::new_error(&before, &after) {
-            return Err(error.message.clone());
-        }
-        let mut changes = Vec::new();
-        for (path, before_text, outcome) in &changed {
-            // A design file written as nothing is removed: its window, view or app is gone.
-            if outcome.text.is_empty() && is_page_file(path) {
-                std::fs::remove_file(path).map_err(|err| format!("cannot remove {}: {err}", path.display()))?;
-                changes.push(FileChange { file: path.clone(), before: Some(before_text.clone()), after: None });
-                continue;
-            }
-            write_atomically(path, &outcome.text)?;
-            changes.push(FileChange { file: path.clone(), before: Some(before_text.clone()), after: Some(outcome.text.clone()) });
-        }
-        for (path, text) in new_pages {
-            if path.exists() {
-                return Err(format!("{} is there already", path.display()));
-            }
-            if let Some(folder) = path.parent() {
-                std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
-            }
-            write_atomically(&path, &text)?;
-            changes.push(FileChange { file: path, before: None, after: Some(text) });
-        }
-        for (path, before_text, after_text) in languages {
-            if let Some(folder) = path.parent() {
-                std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
-            }
-            write_atomically(&path, &after_text)?;
-            changes.push(FileChange { file: path, before: before_text, after: Some(after_text) });
-        }
-        record(&history, changes)?;
+    // The designer's edit, made as every agent's tools make it (clarity_tools::edits): checked, written, one Undo.
+    let applied = clarity_tools::edits::apply(&dir, &file, &edit)?;
+    let focus = applied.focus;
+    if !applied.changes.is_empty() {
+        record(&history, applied.changes)?;
     }
     Ok(EditApplied {
         preview: load(&dir)?,
@@ -1045,6 +961,11 @@ pub fn run() {
             acp::set_outside_agents,
             acp::agent_activity,
             acp::agent_sign_in,
+            acp::agent_set_choice,
+            browse::browse_list,
+            browse::browse_places,
+            browse::browse_remember,
+            browse::recent_projects,
             agent::agent_stop,
             agent::agent_answer,
             agent::agent_forget,

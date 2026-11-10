@@ -26,10 +26,13 @@ The program keeps its own sign-in. To sign out, use the vendor's program.
 ## What it may do
 
 - Use Clarity's tools: look at the project, read and write its files (each write is checked at once), check it, generate the application's code, write migration steps, and show a window in Preview or a diagram when its turn ends.
-- Edit files in the project's folder itself. Writes outside the folder are refused.
+- Change Clarity's own files (modules, the project file, windows and views, the README, the resources' texts) only through Clarity's tools. When it tries to write or edit one itself, that is refused and it is told which tools to use.
+- Edit other files in the project's folder itself, such as a custom part's code. Writes outside the folder are refused.
 - Ask before it runs anything: every command the agent wants to run comes to you as **Allow** or **Deny**, and Deny is the default.
 
 One exception: Codex runs commands that only read (listing or reading files, for one) inside its own read-only sandbox without asking. Anything that would change something still asks.
+
+Once a chat has started, a row under the panel's header shows the program's own choices for that chat: normal or Plan, the model, and for Codex the reasoning effort. A choice holds for that chat only; **New** starts on the program's defaults again. Modes that would let the program change files without asking (Codex's Workspace access, Auto review and Full access, Copilot's Autopilot) are not offered.
 
 **Undo** takes back a whole turn at once, whether the agent wrote through Clarity's tools or by itself. Files that are not text, such as pictures and sounds, cannot be put back; the panel names them when a turn changed one. A migration step follows the turn's changes to your entities once, when the turn ends.
 

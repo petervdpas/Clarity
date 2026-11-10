@@ -2,11 +2,15 @@
   // The status bar at the foot of Clarity: what is open, how the build is
   // doing, the project's errors and warnings, its stack and the folder
   // builds write to, and the computer's load as three meters (cpu, mem,
-  // io) that open Clarity settings, System. Each part that leads somewhere
-  // is a button.
+  // io) that open Clarity settings, System. While an outside agent (Claude
+  // Code, Codex) works through `clarity mcp`, its last call shows, green when
+  // it went through and red when refused, and opens the agent activity. Each
+  // part that leads somewhere is a button.
 
   import type { Selected } from "./selection";
-  import { buildStatus, counted, openLabel } from "./statusBar";
+  import type { AgentActivity } from "@clarity/ui/generated/AgentActivity.ts";
+  import { invoke } from "@clarity/ui/host/backend.ts";
+  import { agentCall, buildStatus, counted, openLabel } from "./statusBar";
   import { bytes, ioLevel, percent } from "./systemLoad";
   import { systemLoad } from "./systemLoad.svelte";
 
@@ -25,6 +29,7 @@
     oncheck,
     onsettings,
     onsystem,
+    onactivity,
   }: {
     open: Selected | null;
     /** The open project file; none before a project is open. */
@@ -41,7 +46,33 @@
     oncheck: () => void;
     onsettings: () => void;
     onsystem: () => void;
+    onactivity: () => void;
   } = $props();
+
+  /** How often the bar asks for outside agents' new calls. */
+  const FOLLOW_MS = 1500;
+  let lastCall = $state<AgentActivity | null>(null);
+  let now = $state(Date.now() / 1000);
+  const agent = $derived(agentCall(lastCall, now));
+
+  $effect(() => {
+    let after = 0;
+    async function follow() {
+      now = Date.now() / 1000;
+      try {
+        const fresh = await invoke<AgentActivity[]>("agent_activity", { after });
+        if (fresh.length > 0) {
+          lastCall = fresh[fresh.length - 1];
+          after = lastCall.seq;
+        }
+      } catch {
+        // The activity is a convenience: a failed read leaves the bar as it was.
+      }
+    }
+    void follow();
+    const timer = setInterval(() => void follow(), FOLLOW_MS);
+    return () => clearInterval(timer);
+  });
 
   const build = $derived(buildStatus({ building, commandRunning, running, done }));
 
@@ -68,6 +99,11 @@
       <span class:error={errors > 0}>{counted(errors, "error", "errors")}</span>,
       <span class:warning={warnings > 0}>{counted(warnings, "warning", "warnings")}</span>
     </button>
+    {#if agent}
+      <button class="item agent" class:refused={!agent.ok} title={agent.title} onclick={onactivity}>
+        <span class="dot" aria-hidden="true"></span>{agent.text}
+      </button>
+    {/if}
     <button class="item" title="The project's stack; opens the project settings" onclick={onsettings}>{stack}</button>
     {#if appFolder}
       <button class="item path" title="Builds write to {appFolder}; opens the project settings" onclick={onsettings}>{appFolder}</button>
@@ -153,6 +189,21 @@
   }
   .warning {
     color: var(--warning);
+  }
+  .agent {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .agent.refused .dot {
+    background: var(--error);
   }
   .meters {
     display: flex;

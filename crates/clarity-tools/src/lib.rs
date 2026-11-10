@@ -6,12 +6,14 @@
 //! top; the MCP server offers these as they are (docs/MCP-PLAN.md).
 
 pub mod diagrams;
+pub mod edits;
 pub mod files;
 pub mod generate;
 pub mod manual;
 pub mod new_project;
 pub mod parts;
 pub mod steps;
+pub mod structural;
 pub mod turn;
 
 use std::path::{Path, PathBuf};
@@ -46,6 +48,19 @@ fn headings(doc: &str) -> Vec<(usize, usize, &str)> {
         }
     }
     found
+}
+
+/// The first class a class diagram names as `module.Class` (on a `class`
+/// line or in a relation), which Mermaid and Clarity take as no class.
+fn dotted_class(text: &str) -> Option<String> {
+    let relation = |line: &str| ["--", ".."].iter().any(|arrow| line.contains(arrow));
+    text.lines().map(str::trim).filter(|l| !l.starts_with("%%") && (l.starts_with("class ") || relation(l))).find_map(|line| {
+        line.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '.')).find_map(|word| {
+            let (module, class) = word.split_once('.')?;
+            let ident = |w: &str| w.chars().next().is_some_and(|c| c.is_alphabetic());
+            (ident(module) && class.chars().next().is_some_and(char::is_uppercase)).then(|| word.to_string())
+        })
+    })
 }
 
 /// A section of a Markdown document (`name` says which in messages):
@@ -99,36 +114,33 @@ How you work:
 - Start a task by looking at the project (project_overview), and read a file before you change it.
 - README.md holds the project's goal: work toward it; update it when the goal or plan changes.
 - Take a request for an application, or a feature of one, in this order. Read the manual topics it touches. Find \
-what Clarity does itself: the parts tool lists every built-in part with its properties and events, and the \
-manual says what code can do and tells each part (design.sound, for one); use those. Reach for a library or a custom part only for what nothing built in does, \
+what Clarity does itself: the parts tool lists every built-in part with its properties and events, the manual what \
+code can do; use those. Reach for a library or a custom part only for what nothing built in does, \
 and tell the person why. When the request needs data, design it in a diagram first (below). Then write the windows \
 and their code and fix what each write's check reports. \
 Finish by saying what works and what Clarity cannot do yet; never invent syntax or a part to fill a gap.
 - Before you write Clarity new to this conversation, check its exact syntax with the reference tool.
-- A project is one project file (path `project`), modules (`.clarity` files, `todo.clarity`: app, entities, \
-enums, themes, code) and windows and views, one `.cxaml` each in design/ (`design/Main.cxaml`, its root naming \
-module and page: `<Window class=\"todo.Main\">`, `<View class=\"todo.Tasks\">`).
-- Write whole files with write_file. Every write is checked at once: fix every error it reports before you go on, \
-and finish only when check reports no errors.
+- A project is one project file (path `project`), modules (`.clarity` files: app, entities, enums, themes, code) \
+and windows and views, one `.cxaml` each in design/ (`design/Main.cxaml`, `<Window class=\"todo.Main\">`), which \
+you read but never write.
+- Change the data model, windows, views, parts, the app and its frame with the structural tools, which take \
+names and check each change. Write code and texts with write_file. Fix every error a change reports, and finish only when check reports no errors.
 - Give every part a name, and name parts and handlers in camelCase: letters and digits only, starting with a small \
 letter, such as `newGame`, `statusText` and `newGameClicked`. Name a part after what it is for, never `button1` or \
 `label2`: an input after its field (`name`, `vatNumber`), its label and help after the input (`nameLabel`, \
 `nameHelp`), a button after what it does in its window (`saveOrder`, `openAlbum`, `newCustomer`), a container after \
 what it holds (`identityPanel`, `albumTabs`). A part's name is not a word code uses, such as `save` or `close`. \
-Every other name is camelCase too: fields, data, settings, functions, actions, parameters and locals \
-(`vatNumber`, `withinCredit`, `isPlaying`), never snake_case; entities, enums and their values, windows and the app \
-are PascalCase.
+Every other name is camelCase too (`withinCredit`, `isPlaying`), never snake_case; entities, enums and their values, \
+windows and the app are PascalCase.
 - Every text people read is a key: `title @customerCardTitle`, `button @saveCaption name saveOrder ...`, \
 `message @savedName(name = customer.name)`, `label @customerNameLabel` on every field. Give each key its text in the \
 default language's file, `translations/en.clarity` (read it first; lines like `saveCaption \"Save\"`), and the same \
 key in every other language file, empty (`saveCaption \"\"`) when you do not translate it. Name a key in camelCase \
-after where it is: the part and what the text is to it (`identityPanelCaption`, `nameLabel`). Parts that say the same \
-thing share one key, such as `saveCaption` for every Save button.
-- Long texts, such as rules or help, are Markdown files of the resources, written with write_file as \
-`resources/rules-en.md`, one per language. A markdown part shows one by a key (`markdown @gameRules`), and each \
+after its part and role (`identityPanelCaption`, `nameLabel`); parts that say the same share one (`saveCaption`).
+- Long texts (rules, help) are Markdown files of the resources, `resources/rules-en.md`, one per language. A markdown part shows one by a key (`markdown @gameRules`), and each \
 language file points the key at its file: `gameRules resource \"rules-nl.md\"`. A file that is the same in every \
 language is shown by its source (`markdown source \"license.md\"`). Pictures you cannot write; use those the \
-overview lists (`image source \"logo.png\"`, or a key pointing each language at one).
+overview lists (`image source \"logo.png\"`).
 - A custom part (`part Arena`) is a part an outside library draws; a library (`library Words`) gives code functions \
 from a package. Both are written in the project's own language: C or C++ (`native`, `cmake`), Rust (`crate`), Go \
 (`go`), C# (`nuget`, `dll`); never another stack's. Read the manual topics design.custom-parts and code.libraries \
@@ -142,20 +154,17 @@ a `public static partial` method per function in PascalCase (`isPlaying` is `IsP
 trait in src/clarity.rs, C and C++ as the header declares them. Build one on its own with the build tool's part to \
 see its compiler's errors. A sound (`sound name rattle source \"roll.wav\"`) plays sound and music files of the \
 resources, tones and melodies (`music.play(path)`, `on end`, design.sound); it has no place in the window, and \
-music needs no library of its own. Sound files you cannot write; use those the overview lists.
-- Lay windows out to use the full width of their grid: inputs and tables reach the last column, labels sit left of \
-their inputs, buttons sit together at the bottom right.
-- Data is designed in a diagram first. When asked for new or changed data (\"an order system with customers and \
-invoices\"), read the Data model with diagram_view, then sketch the change as a Mermaid ERD (or a class diagram for \
-enums) with write_diagram, say in a few lines what it proposes, and stop: the person \
+music needs no library of its own; use the sound files the overview lists.
+- Lay windows out to the full width: inputs and tables reach the last column, labels left of their inputs, buttons \
+together at the bottom right.
+- Data is designed in the project's one ERD first. When asked for new or changed data (\"an order system with \
+customers and invoices\"), write the change into the ERD in diagrams/ (read it first, keep all it holds); with none \
+yet, make diagrams/data.mermaid from diagram_view, the whole Data model. Write it with write_diagram, say in a few lines what it proposes, and stop: the person \
 adjusts it in Clarity. Apply it with apply_diagram only when the person asks, reading diagram_proposals first since \
 they may have changed it. Diagrams propose and the data dictionary decides; never apply a removal unless the person \
-asks for that one. In an ERD write Clarity's types (`text(80)`, `money`, `email`, an enum's name), `UK` for unique, \
-and other modifiers or a decimal's full type in the comment (`\"required\"`, `\"decimal(10, 2), computed\"`). \
-In a class diagram put each class in the namespace of its module (`namespace music {{`), the module's functions on a \
-`<<module>>` class of the module's name outside the namespaces; the designer draws each module as a frame around its \
-classes. Draw what a module's functions use as a uses arrow from the module's class (`music ..> Images`); Apply \
-ignores it.
+asks for that one. A data change is done only when the windows show it: once applied, put each new field on the \
+forms of its entity with place_field, say which lists could show it as a column, then show_window. Write a diagram as the reference's section 13 \
+(Diagrams) says, every field with its modifiers, and keep its `%% clarity:` lines.
 - Entity changes go into a migration step by themselves. Rename an entity, enum or field with the rename tool: a name \
 written over is a drop and an add, which loses the data.
 - Read generated code with read_generated and never edit it: fix the project, or say what in Clarity needs fixing.
@@ -178,12 +187,13 @@ The language reference's sections (read one with the reference tool):
     )
 }
 
-/// One change of one file during a turn: its text before (none for a new file) and after.
+/// One change of one file during a turn: its text before (none for a new
+/// file) and after (none when the turn removed it, as a removed window's file).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Written {
     pub file: PathBuf,
     pub before: Option<String>,
-    pub after: String,
+    pub after: Option<String>,
 }
 
 
@@ -328,10 +338,27 @@ impl ProjectTools {
             let before = std::fs::read_to_string(&path).ok();
             write_atomically(&path, &file.text)?;
             paths.push(clarity_project::slashed(path.strip_prefix(&dir).unwrap_or(&path)));
-            self.written.push(Written { file: path, before, after: file.text });
+            self.written.push(Written { file: path, before, after: Some(file.text) });
         }
         let step = self.follow(&renamed.into_iter().collect::<Vec<_>>())?;
         Ok(format!("Renamed {what} to {to} in {}. {step}{}", listed(&paths.iter().map(String::as_str).collect::<Vec<_>>()), self.problems()?))
+    }
+
+    /// What a structural tool tells after its edit (crate::structural): the
+    /// edit's files kept for Undo, a change of the entities put into the
+    /// agent's migration step, and the files and problems as the agent reads them.
+    pub(crate) fn applied(&mut self, what: &str, applied: crate::edits::Applied) -> Result<String, String> {
+        let (_, dir) = self.open()?.clone();
+        let mut names = Vec::new();
+        for change in applied.changes {
+            names.push(clarity_project::slashed(change.file.strip_prefix(&dir).unwrap_or(&change.file)));
+            self.written.push(Written { file: change.file, before: change.before, after: change.after });
+        }
+        if names.is_empty() {
+            return Ok(format!("{what}: nothing changed. {}", self.problems()?));
+        }
+        let step = self.follow(&[])?;
+        Ok(format!("{what}. Changed {}. {step}{}", listed(&names.iter().map(String::as_str).collect::<Vec<_>>()), self.problems()?))
     }
 
     /// The project's problems, as `file:line:col: error: message` lines.
@@ -422,6 +449,14 @@ impl ProjectTools {
         if self.clarity_s_file(path.trim())? {
             return Err(format!("{path} is Clarity's: Clarity writes it from the declaration, so change the declaration instead"));
         }
+        // Windows, views and the app change only through the structural tools (docs/AGENT-TOOLS-PLAN.md).
+        if clarity_spec::cxaml::is_page_file(path.trim()) {
+            let names: Vec<String> = crate::structural::windows::definitions().into_iter().chain(crate::structural::frame::definitions()).map(|t| t.name).collect();
+            return Err(format!(
+                "{path} is a window, view or app: change it with the structural tools, which check every change and keep the markup right: {}",
+                names.join(", ")
+            ));
+        }
         let file = self.file_of(path)?;
         let before = std::fs::read_to_string(&file).ok();
         if let Some(folder) = file.parent() {
@@ -429,7 +464,7 @@ impl ProjectTools {
         }
         let text = if text.ends_with('\n') { text.to_string() } else { format!("{text}\n") };
         write_atomically(&file, &text)?;
-        self.written.push(Written { file, before, after: text });
+        self.written.push(Written { file, before, after: Some(text) });
         let step = self.follow(&[])?;
         Ok(format!("Wrote {path}. {step}{}", self.problems()?))
     }
@@ -538,11 +573,30 @@ impl ProjectTools {
         let (_, dir) = self.open()?.clone();
         let file = crate::diagrams::diagram_file(&dir, name)?;
         let before = std::fs::read_to_string(&file).ok();
+        // A project has one ERD: data changes go into it, and a second is refused, naming it.
+        if clarity_spec::diagrams::kind_of(text) == Some(clarity_spec::diagrams::DiagramKind::Erd) {
+            let shown = file.file_name().unwrap_or_default().to_string_lossy().to_string();
+            let erds: Vec<String> = clarity_spec::diagrams::diagram_files(&dir)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|d| d.kind == Some(clarity_spec::diagrams::DiagramKind::Erd) && d.name != shown)
+                .map(|d| format!("diagrams/{}", d.name))
+                .collect();
+            if !erds.is_empty() {
+                return Err(format!("the project has its ERD already ({}): write the change into it, keeping what it holds", erds.join(", ")));
+            }
+        }
+        if clarity_spec::diagrams::kind_of(text) == Some(clarity_spec::diagrams::DiagramKind::Class)
+            && let Some(dotted) = dotted_class(text)
+        {
+            let own = dotted.rsplit('.').next().unwrap_or_default();
+            return Err(format!("{dotted} is no class: name a class by its own name, in relations too ({own}), and put it in its module's namespace (namespace {} {{ class {own} }})", dotted.split('.').next().unwrap_or_default()));
+        }
         std::fs::create_dir_all(dir.join(clarity_spec::diagrams::DIAGRAMS_DIR)).map_err(|err| format!("cannot make the diagrams folder: {err}"))?;
         let text = if text.ends_with('\n') { text.to_string() } else { format!("{text}\n") };
         write_atomically(&file, &text)?;
         let shown = file.file_name().unwrap_or_default().to_string_lossy().to_string();
-        self.written.push(Written { file, before, after: text.clone() });
+        self.written.push(Written { file, before, after: Some(text.clone()) });
         Ok(format!("Wrote diagrams/{shown}. {}", self.proposals_text(&text)?))
     }
 
@@ -562,7 +616,7 @@ impl ProjectTools {
         // Apply writes files; it takes none away.
         for change in changes {
             if let Some(after) = change.after {
-                self.written.push(Written { file: change.file, before: change.before, after });
+                self.written.push(Written { file: change.file, before: change.before, after: Some(after) });
             }
         }
         let step = self.follow(&[])?;
@@ -587,7 +641,7 @@ impl ProjectTools {
         let title = input["title"].as_str().filter(|t| !t.trim().is_empty()).unwrap_or(crate::steps::AGENT_STEP);
         let path = clarity_spec::write_step(&dir, &source, title.trim(), &ops).map_err(|err| format!("cannot write the step: {err}"))?;
         let text = std::fs::read_to_string(&path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
-        self.written.push(Written { file: path.clone(), before: None, after: text.clone() });
+        self.written.push(Written { file: path.clone(), before: None, after: Some(text.clone()) });
         Ok(format!("Wrote the step {}:\n{text}\n{}", path.display(), self.problems()?))
     }
 
@@ -717,7 +771,7 @@ impl Tools for ProjectTools {
             ),
             tool(
                 "write_file",
-                "Writes a whole module (a path like todo.clarity), the project file (`project`) or a Markdown file of the resources (resources/rules-en.md), new or replacing it. Gives the project's problems after the write.",
+                "Writes a whole module (a path like todo.clarity), the project file (`project`) or a Markdown file of the resources (resources/rules-en.md), new or replacing it. Windows, views and the app (.cxaml) are changed with the structural tools, never written. Gives the project's problems after the write.",
                 schema(json!({ "path": { "type": "string" }, "text": { "type": "string", "description": "The whole file." } }), &["path", "text"]),
             ),
             tool("check", "Checks the whole project and gives its problems.", schema(json!({}), &[])),
@@ -824,7 +878,7 @@ impl Tools for ProjectTools {
                 ),
             ),
         ];
-        tools
+        tools.into_iter().chain(crate::structural::definitions()).collect()
     }
 
     fn call(&mut self, name: &str, input: &Value) -> ToolResult {
@@ -852,7 +906,10 @@ impl Tools for ProjectTools {
                 let numbers: Vec<usize> = input["proposals"].as_array().map(|a| a.iter().filter_map(|n| n.as_u64()).map(|n| n as usize).collect()).unwrap_or_default();
                 self.apply_diagram(&text("name"), &numbers)
             }
-            other => Err(format!("there is no tool {other}")),
+            other => match crate::structural::call(self, other, input) {
+                Some(result) => result,
+                None => Err(format!("there is no tool {other}")),
+            },
         };
         match result {
             Ok(text) => ToolResult { text, is_error: false },
@@ -1018,7 +1075,7 @@ mod tests {
         assert_eq!(one.len(), 3, "the module, the language file and the step");
         let module = one.iter().find(|c| c.file.ends_with("tasks.clarity")).unwrap();
         assert_eq!(module.before, None);
-        assert!(module.after.contains("text(120)"));
+        assert!(module.after.as_deref().is_some_and(|a| a.contains("text(120)")));
         std::fs::remove_dir_all(&root).unwrap();
     }
 
@@ -1058,6 +1115,43 @@ mod tests {
         for name in ["../escape", "a/b", ""] {
             assert!(tools.call("write_diagram", &json!({"name": name, "text": sketch})).is_error, "{name}");
         }
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// A project has one ERD: the agent writes data changes into it, and
+    /// makes it only when there is none. A second ERD is refused, naming the
+    /// one there is; other kinds of diagram are not limited.
+    #[test]
+    fn a_project_has_one_erd() {
+        let (root, file, dir) = project("one-erd");
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        let sketch = "erDiagram\n    Customer {\n        text(80) name \"required\"\n    }\n";
+        assert!(!tools.call("write_diagram", &json!({"name": "data", "text": sketch})).is_error);
+        let changed = format!("{sketch}    Invoice {{\n        date issued_on\n    }}\n");
+        assert!(!tools.call("write_diagram", &json!({"name": "data", "text": changed})).is_error, "the ERD itself changes");
+        let second = tools.call("write_diagram", &json!({"name": "invoices", "text": sketch}));
+        assert!(second.is_error && second.text.contains("diagrams/data.mermaid"), "{}", second.text);
+        assert!(!dir.join("diagrams/invoices.mermaid").exists());
+        let class = "classDiagram\n    class Customer\n";
+        assert!(!tools.call("write_diagram", &json!({"name": "classes", "text": class})).is_error, "another kind is free");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// A class is named by its own name in a class diagram, relations too:
+    /// `sales.Order` is no class, and drew an empty second box beside the
+    /// real one, so it is refused, naming how to write it.
+    #[test]
+    fn a_class_diagram_names_classes_by_their_own_names() {
+        let (root, file, dir) = project("class-names");
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        let dotted = "classDiagram\n    namespace todo {\n        class Task {\n            +title: text(80)\n        }\n    }\n    class todo.Task\n";
+        let refused = tools.call("write_diagram", &json!({"name": "classes", "text": dotted}));
+        assert!(refused.is_error && refused.text.contains("todo.Task") && refused.text.contains("Task"), "{}", refused.text);
+        assert!(!dir.join("diagrams/classes.mermaid").exists());
+        let relation = "classDiagram\n    class Task\n    class List\n    todo.Task \"*\" --> \"1\" List : list\n";
+        assert!(tools.call("write_diagram", &json!({"name": "classes", "text": relation})).is_error, "in a relation too");
+        let plain = "classDiagram\n    namespace todo {\n        class Task {\n            +title: text(80)\n        }\n    }\n";
+        assert!(!tools.call("write_diagram", &json!({"name": "classes", "text": plain})).is_error);
         std::fs::remove_dir_all(&root).unwrap();
     }
 
@@ -1236,7 +1330,7 @@ mod tests {
             assert!(told.contains(&format!("- {}: ", topic.id)), "{} is not offered", topic.id);
         }
         // The reference's sections by title, not the reference itself.
-        assert!(told.contains("Queries") && !told.contains("## 12. Grammar summary\n"));
+        assert!(told.contains("Queries") && told.contains("## 13. Diagrams") && !told.contains("A class name is written once"));
         assert!(told.contains("manual tool") && told.contains("reference tool") && told.contains("write_file"));
         // How parts and keys are named, as the examples are: never a number, never a statement word.
         for rule in ["never `button1` or `label2`", "`nameLabel`", "`nameHelp`", "`saveOrder`", "not a word code uses, such as `save` or `close`", "`saveCaption`"] {
@@ -1283,16 +1377,19 @@ mod tests {
         ]
         .iter()
         .map(|n| n.to_string())
+        // The structural tools: each makes one checked designer edit (crate::edits::apply) and runs nothing.
+        .chain(crate::structural::definitions().into_iter().map(|t| t.name))
         .collect();
         allowed.sort();
         assert_eq!(names, allowed);
     }
 
     /// Windows and views are `.cxaml` files in the design folder (CXAML-SOURCE-PLAN.md):
-    /// the agent reads and writes them by their paths, the overview lists
-    /// them, and its instructions say where a window goes.
+    /// the agent reads them by their paths and the overview lists them, but
+    /// changes them only with the structural tools (docs/AGENT-TOOLS-PLAN.md,
+    /// "add and change only through tools"): writing one is refused, naming the tools.
     #[test]
-    fn the_agent_writes_windows_and_views_as_cxaml() {
+    fn the_agent_reads_windows_and_views_and_changes_them_with_tools() {
         let (root, file, dir) = project("cxaml");
         let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
         let overview = tools.call("project_overview", &json!({})).text;
@@ -1301,15 +1398,12 @@ mod tests {
         assert!(!main.is_error && main.text.contains("<Window class=\"todo.Main\""), "{}", main.text);
 
         let view = "<View class=\"todo.Tasks\">\n</View>\n";
-        let wrote = tools.call("write_file", &json!({"path": "design/Tasks.cxaml", "text": view}));
-        assert!(!wrote.is_error && wrote.text.contains("No problems."), "{}", wrote.text);
-        assert_eq!(std::fs::read_to_string(dir.join("design/Tasks.cxaml")).unwrap(), view);
-        assert!(tools.written.iter().any(|w| w.file.ends_with("design/Tasks.cxaml")));
-
-        // Only a page file of the design folder, by its plain name.
-        for path in ["design/../escape.cxaml", "design/a/b.cxaml", "design/notes.txt", "Main.cxaml"] {
-            assert!(tools.call("write_file", &json!({"path": path, "text": view})).is_error, "{path}");
-        }
+        let refused = tools.call("write_file", &json!({"path": "design/Tasks.cxaml", "text": view}));
+        assert!(refused.is_error && refused.text.contains("add_view") && refused.text.contains("change_part"), "{}", refused.text);
+        assert!(!dir.join("design/Tasks.cxaml").exists(), "nothing written");
+        let main_before = std::fs::read_to_string(dir.join("design/Main.cxaml")).unwrap();
+        assert!(tools.call("write_file", &json!({"path": "design/Main.cxaml", "text": view})).is_error);
+        assert_eq!(std::fs::read_to_string(dir.join("design/Main.cxaml")).unwrap(), main_before);
         let told = instructions(&[]);
         assert!(told.contains("design/Main.cxaml") && told.contains("<Window class="), "the instructions say nothing of .cxaml");
         std::fs::remove_dir_all(&root).unwrap();

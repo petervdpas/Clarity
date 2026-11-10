@@ -5,7 +5,8 @@
   import Guarded from "@clarity/ui/parts/Guarded.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import { open as openDialog } from "@tauri-apps/plugin-dialog";
+  import FileBrowser from "./lib/FileBrowser.svelte";
+  import { browse } from "./lib/fileBrowserStore.svelte";
   import { onMount, tick, untrack } from "svelte";
   // The installers' icon, from the same drawing.
   import logo from "../src-tauri/icons/icon.svg";
@@ -851,7 +852,6 @@
   }
 
   /** Project files are .clarity files, like the modules in their folder. */
-  const PROJECT_FILTER = [{ name: "Clarity project", extensions: ["clarity"] }];
 
   async function openProject(path: string) {
     const trimmed = path.trim();
@@ -900,16 +900,22 @@
     }
   }
 
-  async function chooseProject() {
-    const defaultPath = (await projectsFolder()) ?? undefined;
-    const file = await openDialog({ title: "Open a Clarity project", filters: PROJECT_FILTER, defaultPath });
-    if (typeof file === "string") openProject(file);
+  /** The folder of the open project, else nothing. */
+  function openFolder(): string {
+    return openFile ? openFile.replace(/[\\/][^\\/]*$/, "") : "";
   }
 
-  /** Asks for a new project, starting in the projects folder of Clarity settings, else the open project's folder. */
-  async function newProject() {
-    const beside = openFile ? openFile.replace(/[\\/][^\\/]*$/, "") : "";
-    const folder = (await projectsFolder()) ?? beside;
+  /** Opens a project with Clarity's own browser, which marks the projects and makes a new one where it is. */
+  async function chooseProject() {
+    const start = (await projectsFolder()) ?? (openFolder() || null);
+    const file = await browse({ purpose: "open-project", title: "Open a Clarity project", pick: "project", start, newProject: (folder) => newProject(folder) });
+    if (file) openProject(file);
+  }
+
+  /** Asks for a new project in `folder`, else the projects folder of Clarity settings, else the open project's folder. */
+  async function newProject(folder?: string) {
+    // Only a folder's path: a button or key that hands its event in gets the usual start.
+    folder = (typeof folder === "string" && folder) || (await projectsFolder()) || openFolder();
     try {
       newProjectError = null;
       newProjectIn = { folder, catalog: await invoke<Catalog>("stack_catalog") };
@@ -1046,7 +1052,7 @@
     "view.preview": { run: () => switchTab("preview") },
     "view.vault": { run: () => switchTab("vault") },
     "project.open": { run: chooseProject },
-    "project.new": { run: newProject },
+    "project.new": { run: () => newProject() },
     settings: { run: () => (appSettings.open ? closeAppSettings() : (appSettings.open = true)) },
     agent: { run: () => agent.toggle() },
     "project.reload": { run: () => openFile && openProject(openFile), can: () => !!openFile },
@@ -1300,7 +1306,7 @@
         {#if tab === "project"}
           <div class="group">
             <div class="buttons">
-              <RibbonButton icon="new" label="New" title="Create a project: a .clarity file with its folder" keys={keysFor("project.new")} onclick={newProject} />
+              <RibbonButton icon="new" label="New" title="Create a project: a .clarity file with its folder" keys={keysFor("project.new")} onclick={() => newProject()} />
               <RibbonButton icon="open" label="Open" title="Open a project file (.clarity)" keys={keysFor("project.open")} onclick={chooseProject} />
               <RibbonButton icon="reload" label="Reload" keys={keysFor("project.reload")} disabled={!openFile} onclick={() => openFile && openProject(openFile)} />
               <RibbonButton icon="settings" label="Settings" title="Stack and data sources" keys={keysFor("project.settings")} disabled={!preview} active={current?.kind === "settings"} onclick={selectSettings} />
@@ -1589,6 +1595,10 @@
                 applyPreview(next);
                 select({ kind: "diagram", name: file });
               }}
+              ondeleted={(next) => {
+                applyPreview(next);
+                select({ kind: "readme", name: "" });
+              }}
             />
           {:else if current?.kind === "resource"}
             <ResourceView {preview} name={current.name} onapplied={applyPreview} />
@@ -1752,11 +1762,13 @@
     oncheck={checkProject}
     onsettings={() => (appSettings.open && closeAppSettings(), selectSettings())}
     onsystem={() => openAppSettings("system")}
+    onactivity={() => openAppSettings("agent")}
   />
 </div>
 
 <UnlockDialog />
 <DialogHost />
+<FileBrowser />
 
 {#if newData && preview}
   <PartGuard name="NameDialog">

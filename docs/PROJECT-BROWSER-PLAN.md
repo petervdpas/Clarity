@@ -1,6 +1,6 @@
 # Clarity's own file browser
 
-A plan, written 2026-11-10 at the user's request; nothing is built yet.
+A plan, written 2026-11-10 at the user's request and agreed the same day. Steps 1 to 3 are built (2026-11-10); step 4, the manual, is open. The user: "I think you plan now, but not build... that'll be tomorrow".
 
 ## Goal
 
@@ -31,6 +31,9 @@ Its parts:
 
 ## A Clarity project, told exactly
 
+As built: a project is a file (`shop.clarity`) beside the folder of its modules (`shop/`), often several side by side (as in `examples/`). So the list marks the project file itself with its name and stack, the folder beside it as "the modules of Shop", and a folder that holds project files as holding them.
+
+
 No guessing (the house rule: determinism). A folder is shown as a Clarity project when it holds a project file:
 
 - a file ending in `.clarity` whose first line, leaving out blank lines and comments, starts with `project` (`project Shop`), as the project file's reader takes it;
@@ -40,7 +43,7 @@ Such a folder shows the Clarity icon. Opening it opens its project file; with mo
 
 ## Recent projects
 
-The projects opened last, newest first, kept in Clarity's own folder (`recent.json`, like `ide.json`), changed by read-modify-write. A project that is no longer there is left out of the list, not removed from the file. The IDE's start already remembers the last project; that becomes the top of this list.
+The 10 projects opened last, newest first, kept in Clarity's own folder (`recent.json`, like `ide.json`), changed by read-modify-write. A project that is no longer there is left out of the list, not removed from the file. The IDE's start already remembers the last project; that becomes the top of this list.
 
 ## Where it replaces the system window
 
@@ -69,12 +72,15 @@ Every one gets the browser's own start folder: the one it shows now (`defaultPat
 ## Order of work
 
 1. The listing and the project detection in `clarity-project`, with recent projects (tests first).
-2. `FileBrowser.svelte` and `browse()`, with Open project and New project here.
+2. `FileBrowser.svelte` and `browse()`, with Open project and New project here; the New project dialog without its UI field.
 3. Every other place in the table moves to it; the system dialog plugin is then no longer used by the IDE's own screens.
 4. Manual: the Open and New project pages, and a word in each page whose Browse changed.
 
+## Decided
+
+- Recent projects and the last folder: the user said "10 recent, remember last folder, build it after release". So Recent projects keeps the last 10, and the browser starts each use where it was left last time (per use: Open project, a folder, a file kind); the table's start folder is for its first time.
+- The New project dialog loses its UI field: every backend offers only Clarity.UI for a new project, so the field is a list of one. Asked, the user said "yes, after the release". Project settings keeps showing the UI as text, so an older project still says what it uses.
+
 ## Open questions
 
-- How many recent projects to keep (10?), and whether one can be taken off the list by hand.
-- Whether the browser remembers its last folder per use (Open project starts where it was left), or always starts as the table says.
 - Whether network places (smb, mounted drives) need anything beyond what the system already shows as folders.

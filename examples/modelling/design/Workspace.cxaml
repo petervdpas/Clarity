@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- The workspace: the domains in the tree at the left, the domain picked in
      the middle. A data object's version opens in the object editor and an
-     enum in the enum editor, both sliding out from the right; the domain's
-     diagrams slide up from the footer. -->
+     enum in the enum editor, both views in the middle of the window; the
+     domain's diagrams slide up from the bottom. -->
 <Window class="modelling.Workspace" title="@workspaceTitle" width="1280" height="800" onopen="workspaceOpened">
   <Data name="chosen" type="Picked" />
   <Data name="project" type="Project" />

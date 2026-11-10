@@ -58,7 +58,7 @@ test("a dialog asked while another is open waits its turn", async () => {
   assert.equal(dialogs.current, null);
 });
 
-test("Clarity shows no dialog of the system or the browser: only the file pickers come from the dialog plugin", async () => {
+test("Clarity shows no dialog of the system or the browser: files and folders are chosen in its own browser", async () => {
   const { readdirSync, readFileSync, statSync } = await import("node:fs");
   const { join } = await import("node:path");
   const root = (await import("node:url")).fileURLToPath(new URL("..", import.meta.url));
@@ -77,7 +77,8 @@ test("Clarity shows no dialog of the system or the browser: only the file picker
     const text = readFileSync(file, "utf8");
     for (const m of text.matchAll(/import\s*\{([^}]*)\}\s*from\s*"@tauri-apps\/plugin-dialog"/g)) {
       const names = m[1].split(",").map((n) => n.trim().split(/\s+as\s+/)[0]).filter(Boolean);
-      for (const name of names) if (name !== "open" && name !== "save") found.push(`${file}: ${name} from the dialog plugin`);
+      // Files and folders are chosen in Clarity's own browser (fileBrowserStore: browse), never the system's window.
+      for (const name of names) found.push(`${file}: ${name} from the dialog plugin; use browse() from fileBrowserStore`);
     }
     // The browser's own: window.alert, window.confirm, window.prompt, or alert alone (Clarity has functions named confirm and prompt).
     for (const m of text.matchAll(/(?:window\.(alert|confirm|prompt)|(?<![\w.])(alert))\s*\(/g)) found.push(`${file}: ${m[1] ?? m[2]}()`);

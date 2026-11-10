@@ -1,12 +1,13 @@
 <script lang="ts">
   // Asks for a new project before it is created: its name, the folder it
   // goes in (the projects folder of Clarity settings to start with, chosen
-  // with Browse), and what it is transpiled into. The line under the folder
+  // with Browse), and what it is transpiled into (backend and targets; every
+  // backend offers only Clarity.UI for a new project, so there is no UI to choose). The line under the folder
   // shows the file it becomes as the name is typed, or why it cannot be (a
   // name taken there). The project starts with one SQLite data source; more
   // are added in the project settings.
 
-  import { open as openDialog } from "@tauri-apps/plugin-dialog";
+  import { browse as browseFiles } from "./fileBrowserStore.svelte";
   import { invoke } from "@clarity/ui/host/backend.ts";
   import Modal from "./Modal.svelte";
   import StackFields from "./StackFields.svelte";
@@ -54,7 +55,7 @@
   });
 
   async function browse() {
-    const picked = await openDialog({ directory: true, title: "The folder the new project goes in", defaultPath: folder || undefined });
+    const picked = await browseFiles({ purpose: "new-project-folder", title: "The folder the new project goes in", pick: "folder", start: folder || null });
     if (typeof picked === "string") folder = picked;
   }
 
@@ -84,7 +85,7 @@
       {:else}
         <p class="muted">The project's file goes in this folder, beside a folder of the same name for its modules.</p>
       {/if}
-      <StackFields {catalog} {stack} onchange={(next) => (stack = next)} />
+      <StackFields {catalog} {stack} showUi={false} onchange={(next) => (stack = next)} />
     </div>
     <p class="note">The project starts with one SQLite database. Data sources and the stack can be changed later on the Project tab.</p>
     {#if error}<p class="error">{error}</p>{/if}

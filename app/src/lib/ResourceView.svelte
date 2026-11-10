@@ -6,7 +6,7 @@
   // says which keys point a language at it.
 
   import { invoke } from "@tauri-apps/api/core";
-  import { open as openDialog } from "@tauri-apps/plugin-dialog";
+  import { browse } from "./fileBrowserStore.svelte";
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
   import MarkdownView from "@clarity/ui/parts/MarkdownView.svelte";
   import { openLink } from "@clarity/ui/host/backend.ts";
@@ -46,7 +46,7 @@
 
   /** Puts a picked file of the resource's type in its place; the name stays. */
   async function replace() {
-    const picked = await openDialog({ multiple: false, filters: extension ? [{ name: typeName, extensions: [extension] }] : [] });
+    const picked = await browse({ purpose: "resource-replace", title: `Replace ${name}`, pick: "file", kinds: extension ? [extension] : undefined });
     if (typeof picked !== "string") return;
     try {
       error = null;

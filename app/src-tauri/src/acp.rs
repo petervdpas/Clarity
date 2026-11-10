@@ -174,7 +174,7 @@ async fn started(app: &AppHandle, connection: &str, vendor: Vendor, program: &cl
         }
     });
     let shown = std::env::temp_dir().join(format!("clarity-turn-{}-{}.jsonl", std::process::id(), connection.replace(|c: char| !c.is_ascii_alphanumeric(), "_")));
-    let tools = ToolServer { name: "clarity".into(), command: clarity_cli(), args: vec!["mcp".into(), "--turn".into(), shown.display().to_string()] };
+    let tools = ToolServer { name: clarity_acp::TOOL_SERVER.into(), command: clarity_cli(), args: vec!["mcp".into(), "--turn".into(), shown.display().to_string()] };
     // Clarity's tools go with the program's start for a vendor that takes them so (Copilot), else with the session.
     let mut program = program.clone();
     let session_tools = match vendor.tools_at_start(&tools) {
@@ -202,7 +202,62 @@ async fn started(app: &AppHandle, connection: &str, vendor: Vendor, program: &cl
         }
         Err(err) => return Err(err),
     };
+    tell_choices(app, vendor, &agent);
     Ok(Running { connection: connection.to_string(), project: file.to_path_buf(), agent, session, shown, instructed: false })
+}
+
+/// The event that tells the panel the chat's choices.
+pub const CHOICES_EVENT: &str = "agent-choices";
+
+/// One of an outside agent's choices for this chat, as the panel shows it: a
+/// picker with the program's own names.
+#[derive(Debug, Clone, serde::Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct AgentChoice {
+    pub id: String,
+    pub name: String,
+    pub current: String,
+    pub values: Vec<AgentChoiceValue>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct AgentChoiceValue {
+    pub value: String,
+    pub name: String,
+}
+
+/// Tells the panel the choices the person may make for this chat: only the
+/// safe ones (Vendor::safe_choices), so every AI keeps to Clarity's tools.
+fn tell_choices(app: &AppHandle, vendor: Vendor, agent: &Agent) {
+    let choices: Vec<AgentChoice> = vendor
+        .safe_choices(&agent.choices())
+        .into_iter()
+        .map(|c| AgentChoice { id: c.id, name: c.name, current: c.current, values: c.values.into_iter().map(|v| AgentChoiceValue { value: v.value, name: v.name }).collect() })
+        .collect();
+    let _ = app.emit(CHOICES_EVENT, &choices);
+}
+
+/// Sets one of the chat's choices (model, effort, normal or Plan); it holds
+/// for this chat only, and New starts on the program's defaults again. A
+/// choice or value outside the safe ones is refused.
+#[tauri::command]
+pub async fn agent_set_choice(id: String, value: String, app: AppHandle) -> Result<(), String> {
+    let acp = app.state::<AcpState>();
+    let running = acp.running.lock().await;
+    let r = running.as_ref().ok_or("no chat with an outside agent is open")?;
+    let vendor = vendor_of(&app, &r.connection).ok_or_else(|| format!("the connection {} is not an outside agent's", r.connection))?;
+    let safe = vendor.safe_choices(&r.agent.choices());
+    let choice = safe.iter().find(|c| c.id == id).ok_or_else(|| format!("{} cannot be chosen here", id))?;
+    if !choice.values.iter().any(|v| v.value == value) {
+        return Err(format!("{value} cannot be chosen for {}", choice.name));
+    }
+    r.agent.set_choice(&r.session, &id, &value).await.map_err(|err| match err {
+        Failure::NotSignedIn => format!("{} is not signed in", vendor.name()),
+        Failure::Other(why) => why,
+    })?;
+    tell_choices(&app, vendor, &r.agent);
+    Ok(())
 }
 
 /// The vendor's own way to sign in over ACP, by its id: never another the program offers
@@ -293,6 +348,8 @@ pub fn forget(app: &AppHandle) {
     if let Ok(mut running) = acp.running.try_lock() {
         *running = None;
     }
+    // A new chat starts on the program's own defaults: no choices until its session opens.
+    let _ = app.emit(CHOICES_EVENT, &Vec::<AgentChoice>::new());
 }
 
 /// Signs in to the outside agent of `connection` the vendor's own way: a

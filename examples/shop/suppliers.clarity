@@ -1,0 +1,36 @@
+module suppliers
+
+entity Supplier
+    name: text(80), required, label @supplierNameLabel
+    email: email, unique, label @supplierEmailLabel
+    phone: text(40), label @supplierPhoneLabel
+    website: url, label @supplierWebsiteLabel
+
+code SupplierBrowse
+    handler loadSuppliers
+        // On open, and after the editor closes, which may have changed the records.
+        filterChanged()
+
+code SupplierBrowseView
+    handler filterChanged
+        suppliers = find s in Supplier where s.name contains nameFilter.text order by s.name
+
+    handler newClicked
+        open SupplierEditor
+
+    handler openClicked
+        open SupplierEditor with supplier = suppliersTable.selected
+
+code SupplierEditorView
+    handler saveClicked
+        // Problems show at the input they are about.
+        name.error = ""
+        if supplier.name == ""
+            name.error = @nameIsRequired
+            return
+        save supplier
+        message @savedName(name = supplier.name)
+        close
+
+    handler closeClicked
+        close

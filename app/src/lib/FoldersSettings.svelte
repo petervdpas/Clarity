@@ -3,7 +3,7 @@
   // makes a project and Open starts, and where Run and Build write the apps,
   // a folder per project. A folder is chosen with Browse only; the field shows it.
 
-  import { open as openDialog } from "@tauri-apps/plugin-dialog";
+  import { browse as browseFiles } from "./fileBrowserStore.svelte";
   import { invoke } from "@clarity/ui/host/backend.ts";
   import type { FoldersView } from "@clarity/ui/generated/FoldersView.ts";
 
@@ -47,8 +47,11 @@
     }
   }
 
+  /** The file browser's use for each folder, so each starts where it was left. */
+  const PURPOSES: Record<Which, string> = { projects: "projects-folder", output: "apps-folder" };
+
   async function browse(which: Which, title: string) {
-    const picked = await openDialog({ directory: true, title, defaultPath: view?.[which] ?? undefined });
+    const picked = await browseFiles({ purpose: PURPOSES[which], title, pick: "folder", start: view?.[which] ?? null });
     if (typeof picked === "string") set(which, picked);
   }
 

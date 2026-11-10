@@ -1,7 +1,7 @@
 <script lang="ts">
   // Backend, UI and targets of a project, with the choices the Rust
   // catalog offers, as rows of a .form-grid. Used by the New project dialog
-  // and the settings.
+  // (without the UI row: a new project always starts on Clarity.UI) and the settings.
 
   import type { Backend } from "@clarity/ui/generated/Backend.ts";
   import type { Catalog } from "@clarity/ui/generated/Catalog.ts";
@@ -17,9 +17,12 @@
     stack,
     onchange,
     onenvironment,
+    showUi = true,
   }: {
     catalog: Catalog;
     stack: Stack;
+    /** Whether the UI row shows; off in the New project dialog, where the starter's UI stays. */
+    showUi?: boolean;
     onchange: (stack: Stack) => void;
     /** Opens Clarity settings at Environment, where the build tools are chosen; without it the row says where they are. */
     onenvironment?: () => void;
@@ -55,7 +58,7 @@
 <select value={stack.backend} onchange={(e) => setBackend(e.currentTarget.value as Backend)} aria-label="Backend">
   {#each catalog.backends as b (b.id)}<option value={b.id}>{b.label}</option>{/each}
 </select>
-{#if windowed}
+{#if windowed && showUi}
   <span class="form-label">UI</span>
   <select value={stack.ui} onchange={(e) => onchange({ ...stack, ui: e.currentTarget.value as Ui })} aria-label="UI">
     {#each uis as u (u)}<option value={u}>{uiLabel(u)}</option>{/each}

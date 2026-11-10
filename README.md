@@ -38,7 +38,7 @@ editors/vscode/          colors for .clarity files in VS Code (and JetBrains, th
 app/                     Clarity IDE: Tauri 2 + Svelte 5
   src-tauri/             Rust side: loads, watches and edits projects; Run and Build; the Agent panel
 docs/manual/             the manual, one topic per page; the IDE opens it with F1
-examples/                example projects, each a project file with a folder of its modules, on the stack it names:
+examples/                example projects, each a project file with a folder of its modules and a README, on the stack it names:
   shop                   Rust    customers and orders, priced by an engine
   dashboard              Rust    sales and stock at a glance: charts, totals and the products running low
   modelling              Rust    a data model kept in one place, from which the app writes what developers would write by hand
@@ -61,12 +61,12 @@ examples/                example projects, each a project file with a folder of 
   build-engines.sh       builds the examples' engines from their sources in <example>/engines/<name>/
 ```
 
-Generated applications get their runtime as a package: Rust from crates.io (`clarity-runtime`), Go as a module (`github.com/petervdpas/Clarity/runtimes/go`), C# from NuGet (`Clarity.Ui` for a desktop program, which brings Clarity.UI's native library and `Clarity.Runtime`; `Clarity.Ui.Server` for a web server, which serves Clarity.UI's browser files; a driver package per kind of database, such as `Clarity.Runtime.Sqlite`; and `Clarity.Runtime.Engines` for engines). The C and C++ runtimes are copied into every application, so it builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`). `runtimes/parts` is the part host of the C and C++ stacks, which runs custom parts written in C or C++, with its tests in `runtimes/parts/tests`; the Rust and Go runtimes host their parts themselves.
+Generated applications get their runtime as a package: Rust from crates.io (`clarity-runtime`), Go as a module (`github.com/petervdpas/Clarity/runtimes/go`), C# from NuGet (`Clarity.Ui` for a desktop program, which brings Clarity.UI's native library and `Clarity.Runtime`; `Clarity.Ui.Server` for a web server, which serves Clarity.UI's browser files; a driver package per kind of database, such as `Clarity.Runtime.Sqlite`; and `Clarity.Runtime.Engines` for engines). The C and C++ runtimes are copied into every application, so it builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`). A custom part is a library of the project in its own language (a Rust crate, a Go package, C or C++ with CMake, C# with NuGet): the program builds it in and Clarity.UI draws it; see [Custom parts](docs/manual/design.custom-parts.md).
 
 ## Requirements
 
 - Rust 1.88 or newer (edition 2024)
-- Node.js 20 or newer
+- Node.js 20.19, or 22.12 or newer (what Vite asks)
 - On Linux: the Tauri system libraries (WebKitGTK 4.1, GTK 3, libsoup 3)
 - For C applications: CMake 3.25 or newer, a C17 compiler, pkg-config, and the SQLite 3 development package (`libsqlite3-dev` on Debian)
 - For C++ applications: CMake 3.25 or newer, a C++20 compiler, pkg-config, and the SQLite 3 and nlohmann-json development packages (`libsqlite3-dev nlohmann-json3-dev` on Debian)
@@ -120,7 +120,7 @@ mkdir -p /tmp/try && cp -r examples/shop examples/shop.clarity /tmp/try/   # the
 
 On Windows, `dev.bat` takes the same arguments: `dev.bat %TEMP%\try\shop.clarity`.
 
-A project is one file, `shop.clarity`, with its modules in the folder `shop/` next to it and a `.cxaml` file per window in `shop/design/`. Without a file, `./dev.sh` or `dev.bat` opens the project used last time. Edit the files in any editor; the designer and the preview follow every save, and every change in the designer is written straight to the files, so point it at a copy if you only want to experiment.
+A project is one file, `shop.clarity`, with its modules in the folder `shop/` next to it and a `.cxaml` file per window in `shop/design/`. Without a file, `./dev.sh` or `dev.bat` opens the project used last time. In the IDE, **Open** on the Project tab browses for a project anywhere in Clarity's own browser, which shows each Clarity project as a card with its stack and the start of its README, keeps the last ten opened, and makes a new project in the folder you are in; see [Opening a project](docs/manual/start.overview.md#opening-a-project). Edit the files in any editor; the designer and the preview follow every save, and every change in the designer is written straight to the files, so point it at a copy if you only want to experiment.
 
 How to work in the IDE (the ribbon's Project, Design, Preview and Vault tabs, the designer, Run and Build, the Agent panel) is in the manual, starting with [What Clarity is](docs/manual/start.overview.md).
 

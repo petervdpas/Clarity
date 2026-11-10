@@ -38,7 +38,6 @@ code Bookcase
     handler caseReturned
         loadBooks()
 
-code BookcaseView
     handler loadBooks
         books = find b in Book order by b.title
 
@@ -85,13 +84,13 @@ code BookcaseView
         exportManuscript(book)
         message @exported(title = book.title)
 
-code CoverDeskView
+code CoverDesk
     handler coverPainted
         save book
 
 code Desk
     handler deskOpened
-        parts.swap(ChaptersPart)
+        parts.open = 1
         forBook = book
         researchBook = book
         characterBook = book
@@ -201,7 +200,7 @@ code Desk
         book.last = position
         save book
         showChapter()
-        parts.swap(ChaptersPart)
+        parts.open = 1
         message @jumpedTo(number = chapter.number, title = chapter.title)
 
     // Chapters jumped to a piece of research: choose it in Research.
@@ -212,7 +211,7 @@ code Desk
                 research = r
                 researchList.selected = r
         researchPlaces = find p in ResearchPlace where p.research == research order by p.chapter.position
-        parts.swap(ResearchPart)
+        parts.open = 2
         message @jumpedToResearch(title = title)
 
     // Chapters jumped to a character: choose it in Characters.
@@ -223,7 +222,7 @@ code Desk
                 character = c
                 characterList.selected = c
         appearances = find a in Appearance where a.character == character order by a.chapter.position
-        parts.swap(CharactersPart)
+        parts.open = 3
         message @jumpedToCharacter(name = name)
 
     // Chapters jumped to a fragment: choose it in Fragments.
@@ -235,7 +234,7 @@ code Desk
                 fragment = f
                 fragmentList.selected = f
         fragmentPlaces = find p in FragmentPlace where p.fragment == fragment order by p.chapter.position
-        parts.swap(FragmentsPart)
+        parts.open = 4
         message @jumpedToFragment(heading = fragment.heading)
 
     // Chapters jumped to a dialogue: choose it in Dialogues.
@@ -248,23 +247,8 @@ code Desk
         lines = find x in Line where x.balloon == balloon order by x.position
         participants = find x in Participation where x.balloon == balloon order by x.character.name
         balloonPlaces = find x in BalloonPlace where x.balloon == balloon order by x.chapter.position
-        parts.swap(DialoguesPart)
+        parts.open = 5
         message @jumpedToDialogue(title = balloon.title)
-
-    handler showChapters
-        parts.swap(ChaptersPart)
-
-    handler showResearch
-        parts.swap(ResearchPart)
-
-    handler showCharacters
-        parts.swap(CharactersPart)
-
-    handler showFragments
-        parts.swap(FragmentsPart)
-
-    handler showDialogues
-        parts.swap(DialoguesPart)
 
 code ChaptersPart
     handler loadList

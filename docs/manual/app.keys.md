@@ -97,7 +97,7 @@ See [The agent](ai.agent.md).
 
 | Key | Does |
 |---|---|
-| Escape | Cancel the New project, New window, New entity and New enum dialogs, and the vault password dialog |
+| Escape | Cancel the New project, New window, New entity and New enum dialogs, the file browser, and the vault password dialog |
 | Escape | In the name field of an entity or enum editor: put the old name back |
 
 ## In your application

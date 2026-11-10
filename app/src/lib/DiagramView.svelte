@@ -14,6 +14,8 @@
   import ClassProperties from "./ClassProperties.svelte";
   import DesignCanvas from "./DesignCanvas.svelte";
   import DiagramCanvas from "./DiagramCanvas.svelte";
+  import Splitter from "@clarity/ui/parts/Splitter.svelte";
+  import { layout } from "./layout.svelte";
   import ErdProperties from "./ErdProperties.svelte";
   import { CLASS_PALETTE, classEdit, classLinks, classShapes } from "./classDesign";
   import type { Box, CanvasEdit, CanvasPick } from "./designCanvas";
@@ -35,6 +37,7 @@
     onapplied,
     onopen,
     onrenamed = () => {},
+    ondeleted = () => {},
     renaming = false,
     onrenaming = () => {},
   }: {
@@ -46,6 +49,8 @@
     onopen: (name: string) => void;
     /** The diagram's file was renamed to `file`. */
     onrenamed?: (file: string, preview: Preview) => void;
+    /** The diagram's file was deleted (Undo brings it back). */
+    ondeleted?: (preview: Preview) => void;
     /** Rename was asked for from outside, as from the tree's menu: the name is readied, then `onrenaming` says so. */
     renaming?: boolean;
     onrenaming?: () => void;
@@ -222,6 +227,17 @@
     }
   }
 
+  /** Deletes the diagram's file, after asking; Undo brings it back. */
+  async function remove() {
+    if (!(await dialogs.confirm({ text: `Delete the diagram ${name}? Undo brings it back.`, action: "Delete", danger: true }))) return;
+    try {
+      error = null;
+      ondeleted(await invoke<Preview>("delete_diagram", { name }));
+    } catch (err) {
+      error = String(err);
+    }
+  }
+
   function open(box: string) {
     if (known.includes(box)) onopen(box);
   }
@@ -251,6 +267,7 @@
       >
     {/if}
     <button onclick={() => renameField?.focus()} title="Rename the diagram's file">Rename</button>
+    <button onclick={remove} title="Delete the diagram's file; Undo brings it back">Delete</button>
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected={tab === "design"} class:active={tab === "design"} onclick={() => (tab = "design")}>Design</button>
       <button role="tab" aria-selected={tab === "text"} class:active={tab === "text"} onclick={() => (tab = "text")}>Text</button>
@@ -270,11 +287,20 @@
         onopen={open}
         canopen={(n) => known.includes(n)}
         {openLabel}
+        covered={layout.folded.diagram ? 0 : layout.sizes.diagram}
       />
     {:else}
-      <DiagramCanvas text={shown} names={known} {marks} onopen={open} />
+      <DiagramCanvas text={shown} names={known} {marks} onopen={open} covered={layout.folded.diagram ? 0 : layout.sizes.diagram} />
     {/if}
+    {#if layout.folded.diagram}
+      <!-- Folded away: a tab at the right edge brings it back. -->
+      <button class="dock" title="Show the properties and proposals" onclick={() => layout.toggle("diagram")}>&lsaquo; Properties</button>
+    {:else}
+    <!-- A drawer over the canvas's right side: the canvas keeps its full width underneath. -->
+    <div class="drawer" style:width="{layout.sizes.diagram}px">
+    <Splitter axis="x" label="Width of the properties" onmove={(d) => layout.resize("diagram", -d)} />
     <div class="side">
+      <button class="undock" title="Fold the properties away, for more canvas" onclick={() => layout.toggle("diagram")}>Hide &rsaquo;</button>
       {#if designer === "erd"}
         <ErdProperties {erd} bind:picked {types} onchange={changeErd} />
       {:else if designer === "class"}
@@ -302,6 +328,8 @@
         {/if}
       </section>
     </div>
+    </div>
+    {/if}
   </div>
 
   <div class="body" hidden={tab !== "text"}>
@@ -342,8 +370,9 @@
 
   header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
+    gap: 8px 12px;
     padding: 8px 12px;
     border-bottom: 1px solid var(--border);
     background: var(--panel);
@@ -366,9 +395,21 @@
   }
 
   .body {
+    position: relative;
     flex: 1;
     display: flex;
     min-height: 0;
+  }
+
+  .drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+    display: flex;
+    max-width: calc(100% - 120px);
+    box-shadow: -6px 0 16px rgba(0, 0, 0, 0.12);
   }
 
   .body[hidden] {
@@ -376,13 +417,41 @@
   }
 
   .side {
-    width: 320px;
-    flex-shrink: 0;
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     border-left: 1px solid var(--border);
     background: var(--panel);
     overflow: auto;
+  }
+
+  .undock {
+    align-self: flex-end;
+    padding: 4px 10px 0;
+    font-size: 11px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+  }
+
+  .dock {
+    position: absolute;
+    top: 8px;
+    right: 4px;
+    z-index: 2;
+    writing-mode: vertical-rl;
+    padding: 10px 4px;
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .undock:hover,
+  .dock:hover {
+    color: var(--text);
   }
 
   .proposals {

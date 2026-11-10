@@ -54,6 +54,21 @@ And on the details: "1. yes, 2. it uses clarity's own form and translates that t
 - The form is only for new apps. When the goal changes later, the agent edits README.md (or an extra document) like any other file.
 - The questions and the form texts come from translations, like every other text in Clarity.
 
+## Forms to clarify, with decision trees
+
+The user, 2026-11-10: "and like the questionaire for a new app, I want to offer forms (from the chat inside clarity or the mpc client (claude terminal)) to clarify things and fill out decision tree(s)".
+
+So the questionnaire grows from one form for a new app into a tool any agent calls when it needs to clarify something: it gives a form (questions, choices, the parts of Clarity to pick from) and gets the answers back, and a decision tree decides the next question from the answers so far. It works from Clarity's own chat panel and through `clarity mcp` (Claude Code in a terminal, and the other MCP clients).
+
+Decided: both. Asked where the form shows, the user said "then do both... for better ux. I think this is an area that needs to evolve ftm." So a simple question goes as the protocol's own form, which the client draws (MCP's elicitation, ACP's equivalent): flat (text, number, yes or no, a choice), one form per step of a decision tree, and it reaches a client without Clarity. When Clarity runs, the rich form opens in Clarity's own window (the questionnaire's: "mcp opens clarity own window"), with the catalog, pictures and several steps on one page. The user meant the AI world in general by "needs to evolve": forms in agents (MCP's elicitation, ACP's, what clients draw) are still taking shape, so Clarity follows the standards as they grow.
+
+How it looks inside Clarity, the user's words: "follows standards and within clarity it can be front-runner by using centered popup screens/forms... see it as my view on improved ux and hid". So outside Clarity the forms follow the standards as clients draw them; inside Clarity (the chat panel, and when `clarity mcp` opens Clarity's window) a question is a centered pop-up form over the IDE, as Clarity's own dialogs are, one step of a decision tree at a time, not a list in the chat.
+
+Open questions, for the user:
+
+- Where the decision trees come from: written by Clarity per kind of question (a new app, a new window, data), or made by the agent for the case at hand.
+- Whether answers are kept in the project (as the questionnaire keeps its answers in README.md) or only go back to the agent.
+
 ## Order of work
 
 Agreed 2026-11-09 (user: "agree"), interleaved with the `.cxaml` refactor ("Next: no translator between design and code" in CXAML-SOURCE-PLAN.md) because two steps touch pages:

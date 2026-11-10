@@ -5,7 +5,7 @@
   // chooses a program elsewhere with Browse, or leaves it to Clarity (the
   // first one found). Paths are never typed, so none is mistyped.
 
-  import { open as openDialog } from "@tauri-apps/plugin-dialog";
+  import { browse as browseFiles } from "./fileBrowserStore.svelte";
   import { invoke } from "@clarity/ui/host/backend.ts";
   import type { EnvironmentView } from "@clarity/ui/generated/EnvironmentView.ts";
   import type { ToolView } from "@clarity/ui/generated/ToolView.ts";
@@ -41,9 +41,11 @@
     }
   }
 
-  /** Chooses a copy the scan did not find, with the system's file chooser. */
+  /** Chooses a copy the scan did not find, with Clarity's file browser, starting in the folder of the one used now. */
   async function browse(tool: ToolView) {
-    const picked = await openDialog({ title: `The ${tool.name} program builds use`, defaultPath: tool.chosen ?? tool.used ?? undefined });
+    const current = tool.chosen ?? tool.used;
+    const start = current ? current.replace(/[\\/][^\\/]*$/, "") || null : null;
+    const picked = await browseFiles({ purpose: "tool-program", title: `The ${tool.name} program builds use`, pick: "file", start });
     if (typeof picked === "string") choose(tool, picked);
   }
 

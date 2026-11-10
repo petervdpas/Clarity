@@ -6,13 +6,15 @@
   // for what is added, amber for what changes, grey for what would go.
 
   import { onDestroy } from "svelte";
-  import { boxName, themeVariables, type Mark } from "./diagramCanvas";
+  import ZoomBar from "./ZoomBar.svelte";
+  import { boxName, centerScroll, themeVariables, type Mark } from "./diagramCanvas";
 
   let {
     text,
     names,
     marks = {},
     onopen = null,
+    covered = 0,
   }: {
     /** The Mermaid text to draw. */
     text: string;
@@ -21,6 +23,8 @@
     marks?: Record<string, Mark>;
     /** A click on the box of `name`; null where nothing opens. */
     onopen?: ((name: string) => void) | null;
+    /** How much of the canvas's right side something lies over (the properties drawer), in pixels. */
+    covered?: number;
   } = $props();
 
   type Mermaid = (typeof import("mermaid"))["default"];
@@ -115,6 +119,24 @@
     doc.addEventListener("pointerleave", release);
   }
 
+  /** Scrolls the drawing to the middle of the room the drawer leaves free. */
+  function center() {
+    const doc = frameDoc();
+    const holder = doc?.getElementById("drawing");
+    if (!doc || !holder || !frame) return;
+    const scroller = (doc.scrollingElement ?? doc.documentElement) as HTMLElement;
+    const { dx, dy } = centerScroll(holder.getBoundingClientRect(), { width: frame.clientWidth, height: frame.clientHeight }, covered);
+    scroller.scrollLeft += dx;
+    scroller.scrollTop += dy;
+  }
+
+  // The drawing centers itself in the room the drawer leaves free: the frame's page is padded under the drawer.
+  $effect(() => {
+    const pad = frameDoc()?.getElementById("pad");
+    if (pad) pad.style.paddingRight = `${24 + covered}px`;
+    void drawn;
+  });
+
   function setZoom(next: number) {
     zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
     const holder = frameDoc()?.getElementById("drawing");
@@ -184,11 +206,7 @@
 </script>
 
 <div class="canvas">
-  <div class="zoom">
-    <button onclick={() => setZoom(zoom / ZOOM_STEP)} title="Zoom out (Ctrl+wheel)" aria-label="Zoom out">-</button>
-    <button class="level" onclick={() => setZoom(1)} title="Back to 100%">{Math.round(zoom * 100)}%</button>
-    <button onclick={() => setZoom(zoom * ZOOM_STEP)} title="Zoom in (Ctrl+wheel)" aria-label="Zoom in">+</button>
-  </div>
+  <ZoomBar {zoom} onzoom={(f) => setZoom(zoom * f)} onreset={() => setZoom(1)} oncenter={center} />
   <iframe bind:this={frame} title="Diagram" class:faded={error !== null && drawn}></iframe>
   {#if error}
     <p class="error" role="alert">Mermaid cannot draw this: {error}</p>
@@ -217,25 +235,9 @@
     opacity: 0.4;
   }
 
-  .zoom {
-    position: absolute;
-    top: 8px;
-    right: 12px;
-    display: flex;
-    gap: 2px;
-    z-index: 1;
-  }
 
-  .zoom button {
-    min-width: 28px;
-    padding: 2px 6px;
-    font-size: 12px;
-  }
 
-  .zoom .level {
-    min-width: 52px;
-    font-variant-numeric: tabular-nums;
-  }
+
 
   .error {
     margin: 0;

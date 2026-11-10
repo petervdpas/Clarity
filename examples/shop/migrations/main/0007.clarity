@@ -1,0 +1,2 @@
+migration "Add supplier phone"
+    add field Supplier.phone: text(40)

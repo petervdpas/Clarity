@@ -103,7 +103,7 @@ Then `http get "/templates" from forms every page` reads page after page until t
 
 ## An OpenAPI description
 
-A service that describes itself with OpenAPI (Swagger) does not need these actions written by hand. Put its description, a YAML or JSON file, in the project's `apis` folder, or choose it with **Choose file...** where the web API opens from the project tree (or **API...** beside the data source in the project settings). Then pick what the application uses:
+A service that describes itself with OpenAPI (Swagger) does not need these actions written by hand. Put its description, a YAML or JSON file, in the project's `apis` folder, or choose it in Clarity's file browser with **Choose file...** where the web API opens from the project tree (or **API...** beside the data source in the project settings). Then pick what the application uses:
 
 ```
 datasource forms rest "https://forms.example.com/api"

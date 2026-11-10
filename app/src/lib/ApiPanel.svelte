@@ -6,7 +6,7 @@
   // and an action per operation, and writes it again for a new revision.
 
   import { invoke } from "@tauri-apps/api/core";
-  import { open as openDialog } from "@tauri-apps/plugin-dialog";
+  import { browse } from "./fileBrowserStore.svelte";
   import type { ApiListing } from "@clarity/ui/generated/ApiListing.ts";
   import type { DataSource } from "@clarity/ui/generated/DataSource.ts";
   import type { Paging } from "@clarity/ui/generated/Paging.ts";
@@ -53,7 +53,7 @@
   );
 
   async function chooseFile() {
-    const picked = await openDialog({ multiple: false, filters: [{ name: "OpenAPI description", extensions: ["yaml", "yml", "json"] }] });
+    const picked = await browse({ purpose: "openapi", title: "OpenAPI description", pick: "file", kinds: ["yaml", "yml", "json"] });
     if (typeof picked !== "string") return;
     try {
       const name = await invoke<string>("add_api_file", { from: picked });

@@ -84,6 +84,57 @@ pub struct Host {
     pub permissions: mpsc::UnboundedSender<(Permission, oneshot::Sender<Decision>)>,
 }
 
+/// One of the program's own choices for a chat (its model, effort or
+/// mode), as ACP's config options carry them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Choice {
+    pub id: String,
+    pub name: String,
+    /// The value chosen now.
+    pub current: String,
+    pub values: Vec<ChoiceValue>,
+}
+
+/// A value a choice can take, and its name as the program gives it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChoiceValue {
+    pub value: String,
+    pub name: String,
+}
+
+/// The choices in an ACP `configOptions` list: the select ones, their values
+/// flat (a grouped list read group by group).
+fn choices_of(options: &Value) -> Vec<Choice> {
+    let values = |list: &Value| -> Vec<ChoiceValue> {
+        let mut out = Vec::new();
+        for item in list.as_array().into_iter().flatten() {
+            match item["options"].as_array() {
+                Some(group) => out.extend(group.iter().filter_map(value_of)),
+                None => out.extend(value_of(item)),
+            }
+        }
+        out
+    };
+    options
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|o| o["type"] == "select")
+        .filter_map(|o| {
+            Some(Choice {
+                id: o["id"].as_str()?.to_string(),
+                name: o["name"].as_str().unwrap_or_default().to_string(),
+                current: o["currentValue"].as_str()?.to_string(),
+                values: values(&o["options"]),
+            })
+        })
+        .collect()
+}
+
+fn value_of(item: &Value) -> Option<ChoiceValue> {
+    Some(ChoiceValue { value: item["value"].as_str()?.to_string(), name: item["name"].as_str().unwrap_or_default().to_string() })
+}
+
 /// A way the program signs in, as it offers it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignIn {
@@ -207,6 +258,8 @@ pub struct Agent {
     /// The project folder its sessions work in.
     root: PathBuf,
     connection: Arc<Connection>,
+    /// The session's choices, as the program last told them.
+    choices: Arc<Mutex<Vec<Choice>>>,
 }
 
 impl Agent {
@@ -234,7 +287,8 @@ impl Agent {
 
     async fn connect(reader: impl AsyncRead + Send + Unpin + 'static, writer: impl AsyncWrite + Send + Unpin + 'static, child: Option<tokio::process::Child>, root: &Path, host: Host) -> Result<Agent, String> {
         let connection = Arc::new(Connection { writer: tokio::sync::Mutex::new(Box::new(writer)), next: AtomicU64::new(0), pending: Mutex::default(), _child: child });
-        let client = Client { root: root.to_path_buf(), host, known: Mutex::default() };
+        let choices: Arc<Mutex<Vec<Choice>>> = Arc::default();
+        let client = Client { root: root.to_path_buf(), host, known: Mutex::default(), choices: choices.clone() };
         tokio::spawn(read(BufReader::new(reader), Arc::downgrade(&connection), Arc::new(client)));
         // Files read and written, never a terminal: Clarity runs nothing for the agent.
         let init = connection
@@ -250,7 +304,7 @@ impl Agent {
             .map_err(|err| format!("the agent did not start: {}", err.message))?;
         let name = init["agentInfo"]["name"].as_str().unwrap_or_default().to_string();
         let sign_ins = init["authMethods"].as_array().map(|ways| ways.iter().filter_map(sign_in_of).collect()).unwrap_or_default();
-        Ok(Agent { name, sign_ins, root: root.to_path_buf(), connection })
+        Ok(Agent { name, sign_ins, root: root.to_path_buf(), connection, choices })
     }
 
     /// The program's name, as it gives it.
@@ -275,7 +329,32 @@ impl Agent {
             .map(|s| json!({ "name": s.name, "command": s.command.display().to_string(), "args": s.args, "env": [] }))
             .collect();
         let result = self.connection.request("session/new", json!({ "cwd": self.root.display().to_string(), "mcpServers": servers })).await.map_err(|err| failure(err, "the session did not open"))?;
+        self.keep_choices(&result["configOptions"]);
         result["sessionId"].as_str().map(str::to_string).ok_or_else(|| Failure::Other("the agent gave no session".into()))
+    }
+
+    /// The session's choices (model, effort, mode), as the program last told them.
+    pub fn choices(&self) -> Vec<Choice> {
+        self.choices.lock().map(|c| c.clone()).unwrap_or_default()
+    }
+
+    /// Sets the choice `id` to `value` for the session; the program answers with all its choices.
+    pub async fn set_choice(&self, session: &str, id: &str, value: &str) -> Result<(), Failure> {
+        let result = self
+            .connection
+            .request("session/set_config_option", json!({ "sessionId": session, "configId": id, "value": value }))
+            .await
+            .map_err(|err| failure(err, "the choice was not taken"))?;
+        self.keep_choices(&result["configOptions"]);
+        Ok(())
+    }
+
+    fn keep_choices(&self, options: &Value) {
+        if options.is_array()
+            && let Ok(mut kept) = self.choices.lock()
+        {
+            *kept = choices_of(options);
+        }
     }
 
     /// Sends what the person typed; how the turn ended.
@@ -309,6 +388,8 @@ struct Client {
     host: Host,
     /// What each tool is and touches, as the agent told of it, for its permission later.
     known: Mutex<HashMap<String, Known>>,
+    /// The session's choices, shared with the Agent; a `config_option_update` replaces them.
+    choices: Arc<Mutex<Vec<Choice>>>,
 }
 
 /// Reads the program's lines: answers to Clarity's requests, the agent's
@@ -374,6 +455,9 @@ impl Client {
             "fs/write_text_file" => {
                 let path = PathBuf::from(params["path"].as_str().unwrap_or_default());
                 let content = params["content"].as_str().unwrap_or_default();
+                if clarity_s_own(&self.root, &path) {
+                    return Err((INVALID_PARAMS, OWN_FILES.to_string()));
+                }
                 inside(&self.root, &path)
                     .and_then(|real| {
                         if let Some(folder) = real.parent() {
@@ -390,15 +474,19 @@ impl Client {
     }
 
     /// The outcome of a permission: reading and editing inside the project
-    /// are the client's to allow (one Undo takes the turn back); anything
+    /// are the client's to allow (one Undo takes the turn back), changing
+    /// Clarity's own files is rejected (Clarity's tools change them); anything
     /// else asks the person. Allowed is once, never always; denied is
     /// rejected once, or cancelled when no rejection is offered.
     async fn permission(&self, params: &Value) -> Value {
         let call = &params["toolCall"];
-        let decision = if self.allowed_by_itself(call) {
+        let decision = if self.changes_clarity_s_own(call) {
+            Decision::Deny
+        } else if self.allowed_by_itself(call) || self.clarity_s_tool(params) {
             Decision::Allow
         } else {
-            let title = call["title"].as_str().unwrap_or_default().to_string();
+            // A request may name its tool call by id alone: it is asked by the title the call was told with.
+            let title = self.known_tool(call).title.unwrap_or_default();
             let (answer, decided) = oneshot::channel();
             match self.host.permissions.send((Permission { title }, answer)) {
                 Ok(()) => decided.await.unwrap_or(Decision::Deny),
@@ -428,12 +516,46 @@ impl Client {
         files_only && !tool.locations.is_empty() && tool.locations.iter().all(|path| inside(&self.root, path).is_ok())
     }
 
+    /// What is known of a permission's tool call: its announcement and updates, with the request over them.
+    fn known_tool(&self, call: &Value) -> Known {
+        let id = call["toolCallId"].as_str().unwrap_or_default();
+        let mut tool = self.known.lock().ok().and_then(|k| k.get(id).cloned()).unwrap_or_default();
+        tool.merge(call);
+        tool
+    }
+
+    /// Whether a permission is for one of Clarity's own tools (the server
+    /// `clarity` Clarity hands over): they check every change and run nothing,
+    /// so the client allows them without asking. Codex asks about them as an
+    /// MCP tool approval (`_meta.is_mcp_tool_approval`), its call titled
+    /// `mcp.<server>.<tool>` (codex-acp 2.6.0, McpToolReporter).
+    fn clarity_s_tool(&self, params: &Value) -> bool {
+        let approval = params["_meta"]["is_mcp_tool_approval"].as_bool().unwrap_or(false);
+        approval && self.known_tool(&params["toolCall"]).title.is_some_and(|t| t.starts_with(&format!("mcp.{TOOL_SERVER}.")))
+    }
+
+    /// Whether a permission would change one of Clarity's own files, which
+    /// every AI changes only through Clarity's tools.
+    fn changes_clarity_s_own(&self, call: &Value) -> bool {
+        let id = call["toolCallId"].as_str().unwrap_or_default();
+        let mut tool = self.known.lock().ok().and_then(|k| k.get(id).cloned()).unwrap_or_default();
+        tool.merge(call);
+        let reads = matches!(tool.kind.as_deref(), Some("read" | "search"));
+        !reads && tool.locations.iter().any(|path| clarity_s_own(&self.root, path))
+    }
+
     /// A `session/update`: kept for permissions, and told to the panel.
     fn update(&self, update: &Value) {
         let id = update["toolCallId"].as_str().unwrap_or_default().to_string();
         let event = match update["sessionUpdate"].as_str() {
             Some("agent_message_chunk") => update["content"]["text"].as_str().map(|t| Event::Text(t.to_string())),
             Some("agent_thought_chunk") => update["content"]["text"].as_str().map(|t| Event::Thought(t.to_string())),
+            Some("config_option_update") => {
+                if let Ok(mut kept) = self.choices.lock() {
+                    *kept = choices_of(&update["configOptions"]);
+                }
+                None
+            }
             Some("tool_call") => {
                 if let Ok(mut known) = self.known.lock() {
                     known.insert(id.clone(), Known::default().merged(update));
@@ -458,6 +580,7 @@ impl Client {
 #[derive(Debug, Clone, Default)]
 struct Known {
     kind: Option<String>,
+    title: Option<String>,
     locations: Vec<PathBuf>,
 }
 
@@ -466,6 +589,9 @@ impl Known {
     fn merge(&mut self, call: &Value) {
         if let Some(kind) = call["kind"].as_str() {
             self.kind = Some(kind.to_string());
+        }
+        if let Some(title) = call["title"].as_str().filter(|t| !t.is_empty()) {
+            self.title = Some(title.to_string());
         }
         if let Some(locations) = call["locations"].as_array() {
             self.locations = locations.iter().filter_map(|l| l["path"].as_str().map(PathBuf::from)).collect();
@@ -495,6 +621,25 @@ fn sign_in_of(way: &Value) -> Option<SignIn> {
         name: way["name"].as_str().unwrap_or_default().to_string(),
         description: way["description"].as_str().map(str::to_string),
     })
+}
+
+/// The name Clarity's tools go to the agent under (the IDE's ToolServer).
+pub const TOOL_SERVER: &str = "clarity";
+
+/// What an agent is told when it writes one of Clarity's own files itself.
+const OWN_FILES: &str = "Clarity's own files (modules, the project file, windows and views, README.md, the resources' texts) change only through Clarity's tools: write_file for code and texts, the structural tools (add_entity, add_window, add_part, change_part...) for the rest";
+
+/// Whether `path` is one of Clarity's own files in the project folder
+/// `root`, which every AI changes only through Clarity's tools: a module or
+/// the project file (`.clarity`), a window or view (`.cxaml`), the README,
+/// or a Markdown text of the resources.
+pub fn clarity_s_own(root: &Path, path: &Path) -> bool {
+    let extension = path.extension().and_then(|e| e.to_str()).unwrap_or_default();
+    if matches!(extension, "clarity" | "cxaml") {
+        return true;
+    }
+    let within = path.strip_prefix(root).ok();
+    within.is_some_and(|w| w == Path::new("README.md") || (w.starts_with("resources") && extension == "md"))
 }
 
 /// `path` when it lies inside the project folder `root`: absolute, without

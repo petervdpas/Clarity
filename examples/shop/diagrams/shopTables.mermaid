@@ -1,0 +1,39 @@
+erDiagram
+    Customer {
+        text(80) name "required"
+        email email UK
+        CustomerKind kind
+        text(14) vatNumber
+        money creditLimit
+        bool active
+        date since
+        text notes
+        text[] tags
+        file contract
+    }
+    Order {
+        text(12) number UK "required"
+        Customer customer FK "required"
+        OrderStatus status
+        date orderedOn "required"
+        money total "computed"
+        text(200) remarks
+    }
+    OrderLine {
+        Order order FK "required"
+        text(80) product "required"
+        integer quantity
+        money price
+    }
+    Supplier {
+        text(80) name "required"
+        email email UK
+        text(40) phone
+        url website
+    }
+    Order }o..|| Customer : customer
+    OrderLine }o..|| Order : order
+    %% clarity: Customer at 24,109
+    %% clarity: Order at 408,93
+    %% clarity: OrderLine at 504,397
+    %% clarity: Supplier at 149,396

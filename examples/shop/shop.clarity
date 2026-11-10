@@ -3,6 +3,7 @@ module shop
 use customers
 use sales
 use counter
+use suppliers
 
 // How the shop looks. The project file names it with: theme Shop
 theme Shop

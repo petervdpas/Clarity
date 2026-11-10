@@ -9,8 +9,9 @@
   // (erdDesign.ts, classDesign.ts); the drawing is designCanvas.ts.
 
   import ContextMenu from "./ContextMenu.svelte";
+  import ZoomBar from "./ZoomBar.svelte";
   import type { Mark } from "./diagramCanvas";
-  import { boxes, columns, endMark, ends, FRAME_LABEL, frames, ROW, umlMark, type Box, type Frame, type CanvasEdit, type CanvasPick, type EndStyle, type Link, type PaletteItem, type Point, type Shape } from "./designCanvas";
+  import { boxes, centered, columns, endMark, ends, FRAME_LABEL, frames, ROW, umlMark, type Box, type Frame, type CanvasEdit, type CanvasPick, type EndStyle, type Link, type PaletteItem, type Point, type Shape } from "./designCanvas";
 
   let {
     shapes,
@@ -23,6 +24,7 @@
     onopen = () => {},
     canopen = () => true,
     openLabel = () => "Open",
+    covered = 0,
   }: {
     shapes: Shape[];
     links: Link[];
@@ -40,6 +42,8 @@
     canopen?: (name: string) => boolean;
     /** The menu item that opens the box of `name`: "Open entity". */
     openLabel?: (name: string) => string;
+    /** How much of the canvas's right side something lies over (the properties drawer), in pixels. */
+    covered?: number;
   } = $props();
 
   const FONT_SIZE = 12;
@@ -86,6 +90,12 @@
   const framed = $derived(frames(laid));
   const byName = $derived(new Map(laid.map((b) => [b.name, b])));
   const meetings = $derived(ends(laid, shownLinks));
+
+  /** Moves the view so the drawing sits in the middle of the room left free, at the zoom it has. */
+  function center() {
+    const r = svg?.getBoundingClientRect();
+    if (r) pan = centered(laid, { width: r.width, height: r.height }, zoom, covered);
+  }
 
   /** Lays every box out again in layers, as boxes without a place are, in one edit. */
   function arrange() {
@@ -350,14 +360,11 @@
       {/each}
     </div>
   {/if}
-  <div class="zoom">
-    <button onclick={() => setZoom(zoom / 1.2)} aria-label="Zoom out" title="Zoom out (Ctrl+wheel)">-</button>
-    <button class="level" onclick={() => ((zoom = 1), (pan = { x: 0, y: 0 }))} title="Back to 100%">{Math.round(zoom * 100)}%</button>
-    <button onclick={() => setZoom(zoom * 1.2)} aria-label="Zoom in" title="Zoom in (Ctrl+wheel)">+</button>
+  <ZoomBar {zoom} onzoom={(f) => setZoom(zoom * f)} onreset={() => ((zoom = 1), (pan = { x: 0, y: 0 }))} oncenter={center}>
     {#if !readonly}
       <button onclick={arrange} title="Lay every box out again: what is referred to above what refers to it">Arrange</button>
     {/if}
-  </div>
+  </ZoomBar>
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <svg bind:this={svg} class:connecting={tool !== null} onpointerdown={pressBackground} onwheel={wheel} style:font>
@@ -461,6 +468,8 @@
     flex: 1;
     min-width: 0;
     min-height: 0;
+    /* The drawing stays inside the canvas, under its own zoom bar, however narrow the canvas gets. */
+    overflow: hidden;
     display: flex;
     background: var(--bg);
   }
@@ -660,7 +669,7 @@
 
   .palette {
     position: absolute;
-    top: 10px;
+    top: 44px;
     left: 10px;
     z-index: 1;
     display: flex;
@@ -752,25 +761,9 @@
     background: var(--text-muted);
   }
 
-  .zoom {
-    position: absolute;
-    top: 10px;
-    right: 12px;
-    z-index: 1;
-    display: flex;
-    gap: 2px;
-  }
 
-  .zoom button {
-    min-width: 28px;
-    padding: 2px 6px;
-    font-size: 12px;
-  }
 
-  .zoom .level {
-    min-width: 52px;
-    font-variant-numeric: tabular-nums;
-  }
+
 
   .ghost {
     position: fixed;

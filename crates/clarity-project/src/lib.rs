@@ -4,11 +4,13 @@
 //! docs/DESIGN.md sections 1.2 and 1.3.
 
 pub mod activity;
+pub mod browse;
 pub mod engines;
 mod file;
 pub mod folders;
 pub mod ide;
 pub mod openapi;
+pub mod recent;
 
 use std::path::{Path, PathBuf};
 

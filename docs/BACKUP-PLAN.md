@@ -38,6 +38,16 @@ When a generated application starts and has steps to apply to an existing SQLite
 
 PostgreSQL, MySQL and SQL Server have no `VACUUM INTO`, and their own dump tools are not every machine's. A backup of one becomes Clarity's own portable form instead: every owned table's rows, read through the runtime that already connects to it, written as one file per backup, and restored into the same database or into another kind (which is also the copy tool section 1.3 of DESIGN.md promises). Until then the IDE says that a server database is backed up by its administrator.
 
+## Next: backups off for a data source
+
+The user, after the examples' databases gathered backups (2026-11-10): "dont keep backups for the examples", then "is it a project option? backup?" and "yes, add it to the backup plan". Today an application always backs up a SQLite database before it applies a migration step; nothing turns that off.
+
+- **The option**: a word on the data source in the project file, `datasource main sqlite "data/novel.db" backups off`, read and written by the project file's reader, and a checkbox "Back up before a migration" (on by default) on the data source in the project settings.
+- **What it does**: with `backups off`, the generated application migrates without the backup before it, on every stack (Rust, Go, C#, C, C++, desktop and web). Taking a backup by hand (the IDE's Data, `clarity data backup`) and restoring stay as they are; `clarity data migrate` follows the option too.
+- **The examples**: every example's SQLite data source gets `backups off`, so running an example never fills its `data/backups/`.
+- **Checks**: the project file's tests (read, write, refused on a web API, which has no database of its own), and each runtime's migration test once with the backup and once without.
+- **Release**: it changes what the runtimes do, so it goes out with a release of the runtimes and the generators together.
+
 ## Later
 
 - **An application backs up from its own code**, as the modelling example's import should before it replaces domains: a statement such as `back up main "before-import"`.

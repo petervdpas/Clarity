@@ -6,18 +6,21 @@ const KEY = "clarity.layout";
 type Sizes = {
   sidebar: number;
   properties: number;
+  /** The diagram designer's properties and proposals. */
+  diagram: number;
   output: number;
   agent: number;
   /** The list of topics in the manual's window. */
   manualTopics: number;
 };
 
-const DEFAULTS: Sizes = { sidebar: 300, properties: 380, output: 240, agent: 380, manualTopics: 250 };
+const DEFAULTS: Sizes = { sidebar: 300, properties: 380, diagram: 320, output: 240, agent: 380, manualTopics: 250 };
 
 /** The smallest and largest size of each panel, in pixels. */
 const LIMITS: Record<keyof Sizes, [number, number]> = {
   sidebar: [200, 600],
   properties: [240, 1200],
+  diagram: [240, 900],
   output: [100, 700],
   agent: [280, 900],
   manualTopics: [180, 480],
@@ -35,7 +38,7 @@ function read(): Sizes {
 const FOLDED_KEY = "clarity.folded";
 
 /** The panels and sections that can be folded away. */
-type Foldable = "properties";
+type Foldable = "properties" | "diagram";
 
 function readFolded(): Partial<Record<Foldable, boolean>> {
   try {

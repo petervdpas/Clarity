@@ -133,3 +133,41 @@ fn a_missing_program_points_at_the_connection() {
     assert!(err.contains("field command of its connection in the vault"), "{err}");
     assert!(!err.contains("Clarity's settings"), "{err}");
 }
+
+/// What the person may choose per chat: only choices that keep the program
+/// asking before it changes anything, so every AI changes the project through
+/// Clarity's tools. Model and effort pass; a mode that lets it write by itself
+/// (Codex's workspace-write, agent, full access; Copilot's autopilot and
+/// allow-all) never reaches the panel, and an option no list names is left out.
+#[test]
+fn only_safe_choices_reach_the_panel() {
+    use clarity_acp::{Choice, ChoiceValue};
+    let choice = |id: &str, values: &[&str]| Choice {
+        id: id.into(),
+        name: id.into(),
+        current: values[0].into(),
+        values: values.iter().map(|v| ChoiceValue { value: v.to_string(), name: v.to_string() }).collect(),
+    };
+    let codex = [
+        choice("mode", &["read-only", "workspace-write", "agent", "agent-full-access"]),
+        choice("collaboration_mode", &["default", "plan"]),
+        choice("model", &["gpt-6.1-sol", "gpt-6-astra"]),
+        choice("reasoning_effort", &["low", "high"]),
+        choice("fast-mode", &["off", "on"]),
+    ];
+    let safe = Vendor::Codex.safe_choices(&codex);
+    assert_eq!(safe.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["collaboration_mode", "model", "reasoning_effort"]);
+
+    const AGENT: &str = "https://agentclientprotocol.com/protocol/session-modes#agent";
+    const PLAN: &str = "https://agentclientprotocol.com/protocol/session-modes#plan";
+    const AUTOPILOT: &str = "https://agentclientprotocol.com/protocol/session-modes#autopilot";
+    let copilot = [choice("mode", &[AGENT, PLAN, AUTOPILOT]), choice("model", &["auto", "auto", "gpt-6"]), choice("allow_all", &["off", "on"])];
+    let safe = Vendor::Copilot.safe_choices(&copilot);
+    assert_eq!(safe.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["mode", "model"]);
+    assert_eq!(safe[0].values.iter().map(|v| v.value.as_str()).collect::<Vec<_>>(), [AGENT, PLAN], "no autopilot");
+    assert_eq!(safe[1].values.iter().map(|v| v.value.as_str()).collect::<Vec<_>>(), ["auto", "gpt-6"], "a value told twice shows once");
+    // A mode whose current value is not safe is not offered at all.
+    let mut loose = copilot.clone();
+    loose[0].current = AUTOPILOT.into();
+    assert!(Vendor::Copilot.safe_choices(&loose).iter().all(|c| c.id != "mode"));
+}

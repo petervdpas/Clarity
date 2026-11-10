@@ -4,9 +4,9 @@ A short walk from an empty folder to a running application: a task entity, a win
 
 ## 1. Create the project
 
-On the **Project** tab, click **New**. Choose where the project file goes and give it a name, such as `tasks.clarity`. The folder `tasks` next to it must be new or empty. With a Projects folder set in **Clarity settings**, **Folders**, New only asks for the name, `tasks`, and makes the project there.
+On the **Project** tab, click **New**. The New project dialog asks for the project's **Name**, such as `tasks`, and the **Folder** it goes in. The folder starts as the Projects folder of **Clarity settings**, **Folders** (else the folder of the open project); **Browse...** chooses another one in Clarity's file browser (see [Opening a project](start.overview.md#opening-a-project)). The line under the folder shows what you get as you type, `Creates /home/you/projects/tasks.clarity`, or why it cannot be made there: a `tasks.clarity` or a `tasks` folder that is there already. The project file goes in the folder, beside a folder of the same name for its modules.
 
-The New project dialog asks for the stack: a backend, a UI and one or more targets. The Build tools row says whether this machine has what the stack needs. Click **Create project**.
+The dialog also asks for the stack: a **Backend** and one or more **Targets** (Desktop, Web, CLI). The windows of a new project are always drawn by Clarity.UI, so there is no UI to choose. The Build tools row says whether this machine has what the stack needs. Click **Create project**.
 
 Clarity writes the project file, a first module `tasks/tasks.clarity`, the app, the main window and the view it shows in `tasks/design`, the translations, and a `.gitignore` that keeps the generated `out/` and `data/` folders out of version control. The module starts as one line, `module tasks`; entities and code go there. The app is `tasks/design/Tasks.cxaml`, which names the main window:
 

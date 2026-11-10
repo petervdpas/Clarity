@@ -32,8 +32,8 @@ entity Note
 fn example_project_is_clean() {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/shop");
     let project = load_dir(std::path::Path::new(dir)).unwrap();
-    // Its four modules, and its windows and views in design/.
-    assert_eq!(project.files.iter().filter(|f| !clarity_spec::cxaml::is_page_file(&f.path)).count(), 4);
+    // Its five modules, and its windows and views in design/.
+    assert_eq!(project.files.iter().filter(|f| !clarity_spec::cxaml::is_page_file(&f.path)).count(), 5);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
 }
 

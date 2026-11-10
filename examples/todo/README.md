@@ -25,7 +25,7 @@ C#, desktop. An example builds only for the stack its project file names.
 ## What it shows
 
 - A splash screen (`Welcome.cxaml`), shown for 2.5 seconds, whose status the app's `onstart` handler sets.
-- An app icon (`icon "todo.svg"`) and version (`version "1.0.0"`), shown on the splash as `{app.version}`.
+- An app icon (`icon "todo.svg"`) and version (`version "1.0.0"`), which the splash shows as "Version 1.0.0".
 - Settings per person: language, theme and `showDone`, edited in a dialog.
 - A question in code (`ask ... then deleteConfirmed`) before a delete.
 - Two themes, Light and Dark, with the splash screen's own colours and styles.

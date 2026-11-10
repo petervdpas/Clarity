@@ -56,14 +56,14 @@ const EN: &str = "translation en
 
 const NL: &str = "translation nl
     customerName \"Naam\"
-    customerNameHelp \"\"
+    customerNameHelp \"Zoals op de factuur\"
     cardTitle \"Klantkaart\"
-    noteStart \"\"
-    fullName \"\"
+    noteStart \"Vraag naar het factuuradres\"
+    fullName \"Volledige naam\"
     saveCaption \"Opslaan\"
     savedCustomer \"{name} opgeslagen\"
-    savedCaption \"\"
-    checkedBy \"\"
+    savedCaption \"Opgeslagen\"
+    checkedBy \"Gecontroleerd door {name}\"
     yes \"Ja\"
     no \"Nee\"
     ok \"OK\"
@@ -138,7 +138,7 @@ fn the_default_language_gives_every_key_a_value() {
 fn every_language_file_has_the_same_keys() {
     let errors = |nl: &str| messages(&project(SHOP, &[("translations/en.clarity", EN), ("translations/nl.clarity", nl)]), Severity::Error);
     assert!(errors(NL).is_empty(), "{:#?}", errors(NL));
-    assert_has(&errors(&NL.replace("    fullName \"\"\n", "")), "key 'fullName' is missing in nl; every language file has the same keys");
+    assert_has(&errors(&NL.replace("    fullName \"Volledige naam\"\n", "")), "key 'fullName' is missing in nl; every language file has the same keys");
     assert_has(&errors(&format!("{NL}    extraText \"Meer\"\n")), "key 'extraText' is in nl but not in en, the default language");
 }
 

@@ -151,5 +151,5 @@ translation nl
     suppliersItem "Leveranciers"
     allSuppliersItem "Alle leveranciers"
     suppliers2Caption "Leveranciers"
-    supplierPhoneLabel ""
-    supplierWebsiteLabel ""
+    supplierPhoneLabel "Telefoon"
+    supplierWebsiteLabel "Website"

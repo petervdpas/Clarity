@@ -50,6 +50,23 @@ fn headings(doc: &str) -> Vec<(usize, usize, &str)> {
     found
 }
 
+/// How many texts each language other than the default still lacks (empty,
+/// or the default's own text), as `nl 3, de 1`; none when every one has its own.
+fn untranslated(project: &clarity_spec::Project) -> Option<String> {
+    let default = clarity_spec::translations::default_language(project);
+    let texts = project.translations.get(&default)?;
+    let counts: Vec<String> = project
+        .translations
+        .iter()
+        .filter(|(l, _)| **l != default)
+        .filter_map(|(language, own)| {
+            let n = texts.iter().filter(|(key, text)| !text.trim().is_empty() && own.get(*key).is_none_or(|t| t.trim().is_empty() || t == *text)).count();
+            (n > 0).then(|| format!("{language} {n}"))
+        })
+        .collect();
+    (!counts.is_empty()).then(|| counts.join(", "))
+}
+
 /// The first class a class diagram names as `module.Class` (on a `class`
 /// line or in a relation), which Mermaid and Clarity take as no class.
 fn dotted_class(text: &str) -> Option<String> {
@@ -124,7 +141,7 @@ Finish by saying what works and what Clarity cannot do yet; never invent syntax 
 and windows and views, one `.cxaml` each in design/ (`design/Main.cxaml`, `<Window class=\"todo.Main\">`), which \
 you read but never write.
 - Change the data model, windows, views, parts, the app and its frame with the structural tools, which take \
-names and check each change. Write code and texts with write_file. Fix every error a change reports, and finish only when check reports no errors.
+names and check each change. Write code and texts with write_file. Fix every error a change reports, and finish only when check reports no errors and nothing left to translate.
 - Give every part a name, and name parts and handlers in camelCase: letters and digits only, starting with a small \
 letter, such as `newGame`, `statusText` and `newGameClicked`. Name a part after what it is for, never `button1` or \
 `label2`: an input after its field (`name`, `vatNumber`), its label and help after the input (`nameLabel`, \
@@ -135,7 +152,7 @@ windows and the app are PascalCase.
 - Every text people read is a key: `title @customerCardTitle`, `button @saveCaption name saveOrder ...`, \
 `message @savedName(name = customer.name)`, `label @customerNameLabel` on every field. Give each key its text in the \
 default language's file, `translations/en.clarity` (read it first; lines like `saveCaption \"Save\"`), and the same \
-key in every other language file, empty (`saveCaption \"\"`) when you do not translate it. Name a key in camelCase \
+key in every other language file, translated; missing_translations lists what is left. Name a key in camelCase \
 after its part and role (`identityPanelCaption`, `nameLabel`); parts that say the same share one (`saveCaption`).
 - Long texts (rules, help) are Markdown files of the resources, `resources/rules-en.md`, one per language. A markdown part shows one by a key (`markdown @gameRules`), and each \
 language file points the key at its file: `gameRules resource \"rules-nl.md\"`. A file that is the same in every \
@@ -377,11 +394,37 @@ impl ProjectTools {
             .collect();
         let errors = project.diagnostics.iter().filter(|d| d.severity == Severity::Error).count();
         let warnings = project.diagnostics.len() - errors;
-        Ok(match (errors, warnings) {
-            (0, 0) => "No problems.".into(),
+        let said = match (errors, warnings) {
+            (0, 0) => "No problems.".to_string(),
             (0, n) => format!("No errors; {n} warning(s):\n{}", lines.join("\n")),
             (e, _) => format!("{e} error(s):\n{}", lines.join("\n")),
+        };
+        // Every check says what is left to translate, so no agent leaves a language showing another's texts.
+        Ok(match untranslated(&project) {
+            Some(left) => format!("{said}\nNot translated yet (empty, or still the default's text): {left}. Run missing_translations and translate them before you finish; keep a text the same only where the language says it the same way."),
+            None => said,
         })
+    }
+
+    /// Per language other than the default, the keys still empty or the same
+    /// as the default's text: what is left to translate.
+    pub fn missing_translations(&self) -> Result<String, String> {
+        let (_, dir) = self.open()?;
+        let project = clarity_project::load_modules(dir).map_err(|err| format!("cannot read the project: {err}"))?;
+        let default = clarity_spec::translations::default_language(&project);
+        let Some(texts) = project.translations.get(&default) else { return Ok(format!("The project has no {default} language file.")) };
+        let mut out = Vec::new();
+        for (language, own) in project.translations.iter().filter(|(l, _)| **l != default) {
+            let left: Vec<String> = texts
+                .iter()
+                .filter(|(key, text)| !text.trim().is_empty() && own.get(*key).is_none_or(|t| t.trim().is_empty() || t == *text))
+                .map(|(key, text)| format!("    {key} {text:?}"))
+                .collect();
+            if !left.is_empty() {
+                out.push(format!("{language} ({} to translate; the {default} text after each key):\n{}", left.len(), left.join("\n")));
+            }
+        }
+        Ok(if out.is_empty() { "Every language has its own text for every key.".into() } else { out.join("\n\n") })
     }
 
     pub fn overview(&self) -> Result<String, String> {
@@ -776,6 +819,11 @@ impl Tools for ProjectTools {
             ),
             tool("check", "Checks the whole project and gives its problems.", schema(json!({}), &[])),
             tool(
+                "missing_translations",
+                "Lists, per language, the keys whose text is still empty or the same as the default language's, with the default text: what to translate. Write the translations into translations/<language>.clarity with write_file.",
+                schema(json!({}), &[]),
+            ),
+            tool(
                 "api",
                 "What a web API data source's OpenAPI description offers: its operations and schemas, which the project picks, and how the source pages. Read it before you pick.",
                 schema(json!({ "source": { "type": "string", "description": "The data source, like forms." } }), &["source"]),
@@ -888,6 +936,7 @@ impl Tools for ProjectTools {
             "read_file" => self.read(&text("path")),
             "write_file" => self.write(&text("path"), &text("text")),
             "check" => self.problems(),
+            "missing_translations" => self.missing_translations(),
             "api" => self.api(&text("source")),
             "pick_api" => self.pick_api(input),
             "parts" => serde_json::to_string(&clarity_spec::widgets::catalog()).map_err(|err| err.to_string()),
@@ -1155,6 +1204,22 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
     }
 
+    /// What is left to translate, per language: empty, or the same as the default's text.
+    #[test]
+    fn missing_translations_lists_what_is_left_to_translate() {
+        let (root, file, dir) = project("missing");
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        let en = std::fs::read_to_string(dir.join("translations/en.clarity")).unwrap();
+        std::fs::write(dir.join("translations/nl.clarity"), en.replacen("translation en", "translation nl", 1)).unwrap();
+        let left = tools.call("missing_translations", &json!({}));
+        assert!(!left.is_error && left.text.starts_with("nl ("), "{}", left.text);
+        // Every check says so, until it is done.
+        assert!(tools.call("check", &json!({})).text.contains("still the default's text): nl "), "the check is silent about it");
+        std::fs::remove_file(dir.join("translations/nl.clarity")).unwrap();
+        assert_eq!(tools.call("missing_translations", &json!({})).text, "Every language has its own text for every key.");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
     /// What the agent says follows Clarity's house style: no dashes for
     /// asides, plain sentences. Its instructions say so, and are written so.
     #[test]
@@ -1368,7 +1433,7 @@ mod tests {
         names.sort();
         let mut allowed: Vec<String> = [
             // Reading.
-            "api", "check", "design", "diagram_proposals", "diagram_view", "manual", "parts", "project_overview", "read_file", "read_generated",
+            "api", "check", "design", "diagram_proposals", "diagram_view", "manual", "missing_translations", "parts", "project_overview", "read_file", "read_generated",
             "reference",
             // Writing project files, checked at once and undone with one Undo.
             "apply_diagram", "migrate", "new_project", "pick_api", "rename", "write_diagram", "write_file",

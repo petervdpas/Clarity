@@ -530,7 +530,7 @@ mod tests {
         names.sort();
         let allowed = [
             // Reading.
-            "api", "build_output", "check", "design", "diagram_proposals", "diagram_view", "manual", "parts", "project_overview", "read_file",
+            "api", "build_output", "check", "design", "diagram_proposals", "diagram_view", "manual", "missing_translations", "parts", "project_overview", "read_file",
             "read_generated", "reference",
             // Writing project files, checked at once and undone with one Undo.
             "apply_diagram", "migrate", "new_project", "pick_api", "rename", "write_diagram", "write_file",

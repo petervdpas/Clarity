@@ -779,7 +779,8 @@ pub fn add_keys(dir: &std::path::Path, default: &str, keys: &[(String, String)])
 }
 
 /// What `add_keys` would write: each language file that changes, with what
-/// it holds now (none for one not there yet) and after.
+/// it holds now (none for one not there yet) and after. A new key gets the
+/// default language's text in every language.
 pub fn plan_keys(dir: &std::path::Path, default: &str, keys: &[(String, String)]) -> std::io::Result<Vec<(std::path::PathBuf, Option<String>, String)>> {
     let folder = dir.join(crate::translations::TRANSLATIONS_DIR);
     let mut languages: Vec<std::path::PathBuf> = match std::fs::read_dir(&folder) {
@@ -801,7 +802,9 @@ pub fn plan_keys(dir: &std::path::Path, default: &str, keys: &[(String, String)]
             if parsed.entries.iter().any(|e| &e.key == key) {
                 continue;
             }
-            let value = if language == default { value.as_str() } else { "" };
+            // Every language starts with the default language's text, so none shows an empty one;
+            // the missing_translations tool lists what is still the default's, to translate.
+            let value = value.as_str();
             if !after.ends_with('\n') {
                 after.push('\n');
             }

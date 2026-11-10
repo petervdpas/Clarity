@@ -88,3 +88,10 @@ For every workspace, write it in `~/.copilot/mcp-config.json` (or `mcp-config.js
 ## Asking well
 
 Ask as you would in the Agent panel; see [The agent](ai.agent.md). The agent reads the project and the manual pages a task needs before it writes, and Clarity's designer follows each file it writes. Changes it makes are plain file changes: Clarity's Undo does not take back an outside agent's turn, so keep your project in version control.
+
+## Turning it off and watching it
+
+**Clarity settings**, section **Agent**, holds both:
+
+- **Let outside agents work on my project**: on unless you turn it off. While it is off, your agent can still read this manual and the references through `clarity mcp`, but no tool touches the project.
+- **Agent activity**: each tool call an outside agent makes, as it happens: which program, the tool, the file, and whether it worked. It never shows what a file holds, and it keeps only the last calls.

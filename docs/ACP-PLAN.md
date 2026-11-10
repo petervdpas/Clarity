@@ -57,7 +57,7 @@ Clarity's own agent with an API key stays as it is, as one of the choices.
 
 ## Decided
 
-- The ACP layer: the user said "use the crate, standards are better". So `crates/clarity-acp` builds on the `agent-client-protocol` crate.
+- The ACP layer: first the user said "use the crate, standards are better", so `crates/clarity-acp` was built on the `agent-client-protocol` crate. That crate switches on serde_json's `preserve_order` for the whole workspace, which changed the key order of every JSON Clarity writes and failed eight test targets in the checks of v0.36.0. Told so, the user said "go non standard use json_something then!". So `crates/clarity-acp` speaks ACP (JSON-RPC lines over the program's stdin and stdout) itself, with serde_json, and depends on no ACP crate.
 - The tools, the agent's edits and Claude: the user said "also preview and diagrams, edits allowed, wait for anthropic (api-key for now)". So:
   - The outside agent gets `clarity mcp`'s tools plus the IDE's two that run nothing: show a window in Preview and show a diagram.
   - Its own file edits are allowed inside the project folder, checked at once and undone with the turn; a write outside the folder is refused.

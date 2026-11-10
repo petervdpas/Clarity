@@ -7,11 +7,11 @@ license.workspace = true
 publish = false
 
 [dependencies]
-# The Agent Client Protocol's own crate (docs/ACP-PLAN.md): the user said "use the crate, standards are better".
-agent-client-protocol = { version = "=3.5.0", features = ["process"] }
-# The version the workspace already has through the IDE.
-tokio = { version = "1.53.3", features = ["rt", "sync"] }
+# ACP is JSON-RPC lines over the program's stdin and stdout, spoken with serde_json
+# itself: no ACP crate (docs/ACP-PLAN.md, "go non standard use json_something then!").
 serde_json.workspace = true
+# The version the workspace already has through the IDE: the program, its pipes, the channels.
+tokio = { version = "1.53.3", features = ["rt", "sync", "process", "io-util"] }
 
 [dev-dependencies]
-tokio = { version = "1.53.3", features = ["rt", "sync", "macros", "time"] }
+tokio = { version = "1.53.3", features = ["rt", "sync", "process", "io-util", "macros"] }

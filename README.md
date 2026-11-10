@@ -4,41 +4,60 @@
 
 A development environment that keeps humans in control of AI-assisted codebases. An application is written in Clarity, its own language: windows are designed visually, the behavior behind them is written in Clarity, and Clarity transpiles both into real frontend and backend code. How to use it is in [the manual](docs/manual/README.md), one topic per page. The language is described in full in [docs/LANGUAGE.md](docs/LANGUAGE.md), the design and its reasons in [docs/DESIGN.md](docs/DESIGN.md).
 
-Current state: the designer for windows and the application frame, with every part on a fluid snap grid (S1 to S3e); projects as one file with their settings (P1, P2); handlers in the code behind and functions and actions in modules, written in Clarity (L1, L2); window and app events (E1); forms, labels and help texts (U1a); queries and migrations written in Clarity (D1a, D1b); and the Rust generator, which turns a project into a Tauri desktop application with SQLite that Clarity builds and runs (G1). See the roadmap in docs/DESIGN.md.
+Five stacks are generated: Rust, C#, Go, C and C++. Every desktop program draws its windows with Clarity.UI, Clarity's own UI framework, and each stack can also serve the same windows to a browser, where Clarity.UI draws them as WebAssembly. Each window, view and the app is a `.cxaml` file in the project's `design` folder; entities, themes, code, functions and actions are Clarity text in the project's modules. What is built and what is planned is in the roadmap in docs/DESIGN.md and in the plans next to it in `docs/`.
 
 ## Layout
 
 ```text
 crates/clarity-spec/     lexer, parser, checker, neutral model, sample data, structural edits
-crates/clarity-project/  the project file: stack, output and data sources
+crates/clarity-project/  the project file: stack, output and data sources; the project open in the IDE; the activity log of outside agents
+crates/clarity-db/       reads the schema of databases Clarity does not own, to import their tables
 crates/clarity-vault/    Clarity's vault of secrets and its connections
 crates/clarity-gen/      the transpiler: a project as a Rust, C#, Go, C or C++ application
+crates/clarity-wasm/     compiles an engine written in Clarity to WebAssembly
+crates/clarity-agent/    Clarity's agent: a conversation with a model that works on a project through tools
+crates/clarity-tools/    the tools every agent designs and generates with, shared by the Agent panel and `clarity mcp`
+crates/clarity-mcp/      Clarity as an MCP server, so an agent you already use works on the open project
+crates/clarity-acp/      Clarity as an ACP client, so the Agent panel talks to Codex or GitHub Copilot with your own login
 crates/clarity-cli/      the `clarity` command
 runtimes/rust/           the runtime of generated Rust applications (the clarity-runtime crate)
 runtimes/rust-engine/    what an engine written in Rust stands on (the clarity-engine crate): the engine interface, typed functions, services
-runtimes/csharp/         the runtime of generated C# applications, with Clarity.UI
+runtimes/rust-ui/        Clarity.UI: draws every generated program's windows itself, with Skia
+runtimes/rust-ui-ffi/    Clarity.UI's C interface, which C#, Go, C and C++ call
+runtimes/rust-ui-browser/ Clarity.UI compiled to WebAssembly, for web programs and the IDE's designer and preview
+runtimes/rust-audio/     Clarity.Audio, behind the sound part (with its C interface in rust-audio-ffi)
+runtimes/rust-video/     Clarity.Video, behind the video part (with its C interface in rust-video-ffi)
+runtimes/rust-image/     Clarity.Image, the picture functions of code (with its C interface in rust-image-ffi)
+runtimes/csharp/         the runtime of generated C# applications
 runtimes/go/             the runtime of generated Go applications, on Clarity.UI through cgo
 runtimes/c/              the runtime of generated C applications, with cJSON
 runtimes/cpp/            the runtime of generated C++ applications
+runtimes/web/            the part of Clarity's model the IDE's front end shares
 conformance/             cases every runtime and renderer must pass alike
 editors/vscode/          colors for .clarity files in VS Code (and JetBrains, through TextMate bundles)
-app/                     Clarity: Tauri 2 + Svelte 5
-  src-tauri/             Rust side: loads, watches and edits projects; Run and Build
-  src/lib/generated/     TypeScript types generated from the Rust model (do not edit)
-examples/                example projects, each a project file with a folder of its modules:
-  shop                   customers and orders, priced by an engine
-  records                a record collection, with albums, tracks and loans; an engine reads photo sizes
-  todo                   tasks with a done flag, edited in their table
-  calculator             a calculator: values in clicks, plain window data, a seven-segment display
-  dial                   a speed dial drawn on a canvas by code, its needle placed by an engine
-  noughts                noughts and crosses against an engine written in Clarity that keeps each window's game
-  ledger                 a command-line program alone: accounts and what is booked on them, in C#
-  stock                  a stock list with a window and a command line over the same items, in Go
-  orbs                   a game whose field of orbs a custom part draws, in C++
-  waves                  water whose waves meet, drawn by a Go package into a buffer of pixels (a custom part in Go)
-  pills                  a game like Arkanoid, breaking a wall of pills: its engine beside the screen, written in Clarity and run by its interpreter, in Go
-  invaders               a fleet that marches down and you shoot it: a game served to a browser, the web target, in Go
-  walker                 a stick figure that walks across the window and back: C# in the browser, its timer's handler on the server (not generated until C#'s web target exists)
+app/                     Clarity IDE: Tauri 2 + Svelte 5
+  src-tauri/             Rust side: loads, watches and edits projects; Run and Build; the Agent panel
+docs/manual/             the manual, one topic per page; the IDE opens it with F1
+examples/                example projects, each a project file with a folder of its modules, on the stack it names:
+  shop                   Rust    customers and orders, priced by an engine
+  dashboard              Rust    sales and stock at a glance: charts, totals and the products running low
+  modelling              Rust    a data model kept in one place, from which the app writes what developers would write by hand
+  records                Go      a record collection, with albums, tracks and loans; an engine reads photo sizes
+  calculator             Go      a calculator: values in clicks, plain window data, a seven-segment display
+  dial                   Go      a speed dial drawn on a canvas by code, its needle placed by an engine
+  stock                  Go      a stock list with a window and a command line over the same items
+  waves                  Go      water whose waves meet, drawn by a Go package into a buffer of pixels (a custom part in Go)
+  pills                  Go      a game like Arkanoid, breaking a wall of pills: its engine beside the screen, written in Clarity and run by its interpreter
+  videoplayer            Go      plays videos with the video part
+  invaders               Go web  a fleet that marches down and you shoot it: a game served to a browser
+  todo                   C#      tasks with a done flag, edited in their table
+  noughts                C#      noughts and crosses against an engine written in Clarity that keeps each window's game
+  mp3player              C#      plays music with the sound part
+  ledger                 C# cli  a command-line program alone: accounts and what is booked on them
+  walker                 C# web  a stick figure that walks across the window and back, its timer's handler on the server
+  kitchen                C       recipes by course, with their ingredients and a photo
+  orbs                   C++     a game whose field of orbs a custom part draws
+  novel                  C++     books and their chapters, fragments and progress, for writing a novel, a screenplay or a play
   build-engines.sh       builds the examples' engines from their sources in <example>/engines/<name>/
 ```
 
@@ -80,6 +99,12 @@ Generate the application into the project's output folder (`examples/shop/out`),
 cargo run -p clarity-cli -- gen examples/shop.clarity
 ```
 
+Look for the build tools of every stack, and what to install:
+
+```sh
+cargo run -p clarity-cli -- tools
+```
+
 Run the tests. This also regenerates the TypeScript bindings in `runtimes/web/src/generated/`:
 
 ```sh
@@ -95,30 +120,9 @@ mkdir -p /tmp/try && cp -r examples/shop examples/shop.clarity /tmp/try/   # the
 
 On Windows, `dev.bat` takes the same arguments: `dev.bat %TEMP%\try\shop.clarity`.
 
-A project is one file, `shop.clarity`, with its modules in the folder `shop/` next to it. Without a file, `./dev.sh` or `dev.bat` opens the project used last time. Edit the `.clarity` files in any editor; the preview reloads on every save.
+A project is one file, `shop.clarity`, with its modules in the folder `shop/` next to it and a `.cxaml` file per window in `shop/design/`. Without a file, `./dev.sh` or `dev.bat` opens the project used last time. Edit the files in any editor; the designer and the preview follow every save, and every change in the designer is written straight to the files, so point it at a copy if you only want to experiment.
 
-Clarity has a ribbon with three tabs, and the left sidebar follows the tab:
-
-- **Project:** New project (choose where its file goes; the folder next to it is made too), Open (a `.clarity` project file), Reload, Settings (name, title, folders, stack, data sources), New window, the app, and the error count. The sidebar shows the project settings and the project as one tree: the app, its windows (the main window first), its data with their fields, and the modules its files form. Click an entity for its data dictionary (a row per field: name, type, required, unique, label, default, help; add, reorder and remove fields), an enum for its values, and rename either by editing the name at the top: every reference in every file follows, and one Undo takes the whole rename back. Click a module for what it declares and which modules it uses. A change that would break a window is refused with the reason.
-- **Design:** Undo and Redo (also Ctrl+Z and Ctrl+Y), Delete (the picked part, or the window itself when nothing is picked), New window and the snap grid. Every change is written to the project files at once; the Save button shows that. The sidebar has the project tree, the parts, a tree of the open window and the design settings. The right column shows the window's own properties and, below them, what is picked.
-- **Preview:** run the main window or any other window, and go back after following a button.
-
-Every window is designed the same way:
-
-- Drag parts onto a grid cell: frame regions, basic input, containers, data and graphics. Drag a field of the window's data to get a caption label plus a bound input in one step; a list becomes a table.
-- Drag parts to move them, also into panels, tabs and splitter panes; drag the corner handle of the picked part to resize it.
-- Pick a part on the window or in the Window tab to edit its caption, position, size, binding and part-specific properties. Delete removes it, Escape clears the pick.
-- Every part has a name (new parts get one after their purpose, like `vatNumberLabel` or `ordersTable`) and an Events list. **Wire** connects an event to a handler named after the part and the event, such as `on click: saveClick`; the handlers will be written in Clarity in the window's code behind.
-- "+ New window" in the Project tab starts a window blank, as a form for an entity, or as a browse for an entity. The templates produce ordinary windows that you then design like any other.
-
-For the application frame (an `app` block, see `examples/shop/shop.clarity`):
-
-- Pick the app in the Project tab to design the menu, toolbar, ribbon, sidebars and footer that every window shows. A window page can have its own regions, which replace the app's; the app's regions show dimmed in its designer.
-- Drag Menu, Toolbar, Ribbon, Sidebar or Footer from the Frame parts onto an edge of the window; the edges that accept it light up.
-- Click a menu item, button, ribbon tab or group to set its caption, icon, shortcut, size and click target, to add items and submenus, or to move and remove it. Drag widgets onto a sidebar or the footer like onto the page grid.
-- In Preview, the menu, toolbar and ribbon open their targets; `close` closes the current window.
-
-Every change is written straight to the `.clarity` file. Only the affected lines change; comments and formatting elsewhere stay as they are. An edit is refused if the file changed on disk in the meantime, or if it would make the spec invalid. Note that the designer edits the files in place, so point it at a copy if you only want to experiment.
+How to work in the IDE (the ribbon's Project, Design, Preview and Vault tabs, the designer, Run and Build, the Agent panel) is in the manual, starting with [What Clarity is](docs/manual/start.overview.md).
 
 Type-check the frontend:
 
@@ -126,6 +130,15 @@ Type-check the frontend:
 cd app
 npm run check
 ```
+
+## AI agents
+
+Clarity's own agent works in the Agent panel through a connection in the vault, such as an Anthropic API key; see [The agent](docs/manual/ai.agent.md). Two more ways use an agent you already pay for, with no API key in Clarity:
+
+- **Your agent in Clarity:** Codex (with `codex-acp`) or the GitHub Copilot CLI in the Agent panel, started by Clarity and signed in with the vendor's own login. See [Your own agent in Clarity](docs/manual/ai.your-agent.md).
+- **Clarity in your agent:** Claude Code, Codex or Copilot starts `clarity mcp` and designs and generates the project open in the IDE with Clarity's tools: `claude mcp add --scope user clarity -- clarity mcp`. See [Clarity in your own agent](docs/manual/ai.mcp.md).
+
+`clarity mcp` never builds or runs. In the panel, Clarity's own agent runs or builds only as **Clarity settings** allow (it asks each time by default), and Codex or Copilot asks before every command it runs, apart from commands that only read, which Codex runs in its read-only sandbox. The same settings section turns outside agents off and shows each tool call they make.
 
 ## License
 

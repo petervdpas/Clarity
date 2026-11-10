@@ -2,6 +2,12 @@
 //! person's own agent program (Codex, Copilot), signed in with that
 //! program's own login, so no API key is typed into Clarity.
 //!
+//! The Agent Client Protocol is JSON-RPC 2.0, one message per line, over the
+//! program's stdin and stdout. Clarity speaks it itself with serde_json and
+//! no ACP crate: the user said "go non standard use json_something then!"
+//! after that crate's serde_json features changed the key order of every
+//! JSON Clarity writes.
+//!
 //! [`Agent::start`] starts the program and initializes it; the panel then
 //! signs in when the program asks, opens a session with Clarity's tools
 //! (`clarity mcp`) and sends prompts. What the agent says and does arrives as
@@ -13,17 +19,20 @@ pub mod vendors;
 
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use agent_client_protocol as acp;
-use acp::schema::ProtocolVersion;
-use acp::schema::v1::{
-    AuthMethod, AuthenticateRequest, CancelNotification, ClientCapabilities, ContentBlock, FileSystemCapabilities, InitializeRequest,
-    McpServer, McpServerStdio, NewSessionRequest, PermissionOptionKind, PromptRequest, ReadTextFileRequest, ReadTextFileResponse,
-    RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse, SelectedPermissionOutcome, SessionId,
-    SessionNotification, SessionUpdate, StopReason, TextContent, ToolCallStatus, ToolKind, WriteTextFileRequest, WriteTextFileResponse,
-};
+use serde_json::{Value, json};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, oneshot};
+
+/// The protocol version Clarity speaks.
+const PROTOCOL_VERSION: u64 = 1;
+
+/// JSON-RPC error codes Clarity reads or writes.
+const AUTH_REQUIRED: i64 = -32000;
+const INVALID_PARAMS: i64 = -32602;
+const METHOD_NOT_FOUND: i64 = -32601;
 
 /// The agent program to start, as the person's settings name it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,16 +134,69 @@ impl From<Failure> for String {
     }
 }
 
-/// A failed request as a Failure: not signed in, or `what` failed.
-fn failure(err: acp::Error, what: &str) -> Failure {
-    if err.code == acp::ErrorCode::AuthRequired { Failure::NotSignedIn } else { Failure::Other(format!("{what}: {err}")) }
+/// A JSON-RPC error as it came.
+#[derive(Debug, Clone)]
+struct RpcError {
+    code: i64,
+    message: String,
 }
 
-enum Command {
-    SignIn(String, oneshot::Sender<Result<(), Failure>>),
-    NewSession(Vec<ToolServer>, oneshot::Sender<Result<String, Failure>>),
-    Prompt(String, String, oneshot::Sender<Result<Ended, Failure>>),
-    Cancel(String),
+/// A failed request as a Failure: not signed in, or `what` failed.
+fn failure(err: RpcError, what: &str) -> Failure {
+    if err.code == AUTH_REQUIRED { Failure::NotSignedIn } else { Failure::Other(format!("{what}: {} ({})", err.message, err.code)) }
+}
+
+type Pending = Mutex<HashMap<u64, oneshot::Sender<Result<Value, RpcError>>>>;
+
+/// The connection to the program: writing lines, and the answers awaited.
+struct Connection {
+    writer: tokio::sync::Mutex<Box<dyn AsyncWrite + Send + Unpin>>,
+    next: AtomicU64,
+    pending: Pending,
+    /// The program, stopped when the last handle to it goes.
+    _child: Option<tokio::process::Child>,
+}
+
+impl Connection {
+    async fn send(&self, message: Value) -> Result<(), String> {
+        let mut line = message.to_string();
+        line.push('\n');
+        let mut writer = self.writer.lock().await;
+        writer.write_all(line.as_bytes()).await.map_err(|err| format!("cannot write to the agent: {err}"))?;
+        writer.flush().await.map_err(|err| format!("cannot write to the agent: {err}"))
+    }
+
+    async fn request(&self, method: &str, params: Value) -> Result<Value, RpcError> {
+        let id = self.next.fetch_add(1, Ordering::SeqCst) + 1;
+        let (reply, answer) = oneshot::channel();
+        if let Ok(mut pending) = self.pending.lock() {
+            pending.insert(id, reply);
+        }
+        let stopped = |message: String| RpcError { code: 0, message };
+        self.send(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params })).await.map_err(stopped)?;
+        answer.await.map_err(|_| stopped("the agent has stopped".into()))?
+    }
+
+    async fn notify(&self, method: &str, params: Value) -> Result<(), String> {
+        self.send(json!({ "jsonrpc": "2.0", "method": method, "params": params })).await
+    }
+
+    async fn answer(&self, id: Value, result: Result<Value, (i64, String)>) {
+        let message = match result {
+            Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
+            Err((code, message)) => json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } }),
+        };
+        if let Err(err) = self.send(message).await {
+            eprintln!("clarity-acp: {err}");
+        }
+    }
+
+    /// The program closed its output: every answer still awaited fails.
+    fn closed(&self) {
+        if let Ok(mut pending) = self.pending.lock() {
+            pending.clear();
+        }
+    }
 }
 
 /// A running agent program, initialized. A clone talks to the same program.
@@ -142,131 +204,53 @@ enum Command {
 pub struct Agent {
     name: String,
     sign_ins: Vec<SignIn>,
-    commands: mpsc::UnboundedSender<Command>,
+    /// The project folder its sessions work in.
+    root: PathBuf,
+    connection: Arc<Connection>,
 }
 
 impl Agent {
     /// Starts `program`, working in the project folder `root`.
     pub async fn start(program: &Program, root: &Path, host: Host) -> Result<Agent, String> {
-        let config = acp::AcpAgentConfig::new(&program.command).args(program.args.iter().cloned()).envs(program.env.iter().cloned());
-        Self::start_on(acp::AcpAgent::new(config), root, host).await
+        let mut command = tokio::process::Command::new(&program.command);
+        command
+            .args(&program.args)
+            .envs(program.env.iter().cloned())
+            .current_dir(root)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true);
+        let mut child = command.spawn().map_err(|err| format!("cannot start {}: {err}", program.command.display()))?;
+        let stdin = child.stdin.take().ok_or("the agent has no input")?;
+        let stdout = child.stdout.take().ok_or("the agent has no output")?;
+        Self::connect(stdout, stdin, Some(child), root, host).await
     }
 
-    /// Like `start`, over any transport (the tests use a channel in memory).
-    pub async fn start_on(transport: impl acp::ConnectTo<acp::Client> + Send + 'static, root: &Path, host: Host) -> Result<Agent, String> {
-        let root = root.to_path_buf();
-        let (commands, mut queue) = mpsc::unbounded_channel::<Command>();
-        let (ready, started) = oneshot::channel::<Result<(String, Vec<SignIn>), String>>();
-        let Host { events, permissions } = host;
-        let (read_root, write_root, ask_root, session_root) = (root.clone(), root.clone(), root.clone(), root);
-        // What each tool is and touches, as the agent told of it, for its permission later.
-        let known: Arc<Mutex<HashMap<String, Known>>> = Arc::default();
-        let told = known.clone();
-        tokio::spawn(async move {
-            let ended = acp::Client
-                .builder()
-                .name("clarity")
-                .on_receive_notification(
-                    async move |note: SessionNotification, _cx| {
-                        remember(&told, &note.update);
-                        if let Some(event) = event_of(note.update) {
-                            let _ = events.send(event);
-                        }
-                        Ok(())
-                    },
-                    acp::on_receive_notification!(),
-                )
-                .on_receive_request(
-                    async move |asked: RequestPermissionRequest, responder, cx: acp::ConnectionTo<acp::Agent>| {
-                        let permissions = permissions.clone();
-                        // Reading and editing inside the project are the client's to allow: one Undo takes the turn back.
-                        if allowed_by_itself(&ask_root, &known, &asked) {
-                            return responder.respond(RequestPermissionResponse::new(outcome(&asked, Decision::Allow)));
-                        }
-                        cx.spawn(async move {
-                            let title = asked.tool_call.fields.title.clone().unwrap_or_default();
-                            let (answer, decided) = oneshot::channel();
-                            let decision = match permissions.send((Permission { title }, answer)) {
-                                Ok(()) => decided.await.unwrap_or(Decision::Deny),
-                                Err(_) => Decision::Deny,
-                            };
-                            responder.respond(RequestPermissionResponse::new(outcome(&asked, decision)))
-                        })
-                    },
-                    acp::on_receive_request!(),
-                )
-                .on_receive_request(
-                    async move |read: ReadTextFileRequest, responder, _cx| match inside(&read_root, &read.path).and_then(|path| {
-                        std::fs::read_to_string(&path).map_err(|err| format!("cannot read {}: {err}", read.path.display()))
-                    }) {
-                        Ok(text) => responder.respond(ReadTextFileResponse::new(lines(&text, read.line, read.limit))),
-                        Err(why) => responder.respond_with_error(acp::Error::invalid_params().data(why)),
-                    },
-                    acp::on_receive_request!(),
-                )
-                .on_receive_request(
-                    async move |write: WriteTextFileRequest, responder, _cx| match inside(&write_root, &write.path).and_then(|path| {
-                        if let Some(folder) = path.parent() {
-                            std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
-                        }
-                        std::fs::write(&path, &write.content).map_err(|err| format!("cannot write {}: {err}", write.path.display()))
-                    }) {
-                        Ok(()) => responder.respond(WriteTextFileResponse::new()),
-                        Err(why) => responder.respond_with_error(acp::Error::invalid_params().data(why)),
-                    },
-                    acp::on_receive_request!(),
-                )
-                .connect_with(transport, async move |cx: acp::ConnectionTo<acp::Agent>| {
-                    // Files read and written, never a terminal: Clarity runs nothing for the agent.
-                    let capabilities = ClientCapabilities::new().fs(FileSystemCapabilities::new().read_text_file(true).write_text_file(true)).terminal(false);
-                    let init = cx.send_request(InitializeRequest::new(ProtocolVersion::V1).client_capabilities(capabilities)).block_task().await;
-                    let init = match init {
-                        Ok(init) => init,
-                        Err(err) => {
-                            let _ = ready.send(Err(format!("the agent did not start: {err}")));
-                            return Ok(());
-                        }
-                    };
-                    let name = init.agent_info.as_ref().map(|i| i.name.clone()).unwrap_or_default();
-                    let _ = ready.send(Ok((name, init.auth_methods.iter().map(sign_in_of).collect())));
-                    while let Some(command) = queue.recv().await {
-                        let cx = cx.clone();
-                        match command {
-                            Command::SignIn(id, reply) => {
-                                cx.clone().spawn(async move {
-                                    let result = cx.send_request(AuthenticateRequest::new(id)).block_task().await;
-                                    let _ = reply.send(result.map(|_| ()).map_err(|err| failure(err, "signing in failed")));
-                                    Ok(())
-                                })?;
-                            }
-                            Command::NewSession(servers, reply) => {
-                                let request = NewSessionRequest::new(session_root.clone()).mcp_servers(servers.into_iter().map(server_of).collect());
-                                cx.clone().spawn(async move {
-                                    let result = cx.send_request(request).block_task().await;
-                                    let _ = reply.send(result.map(|r| r.session_id.to_string()).map_err(|err| failure(err, "the session did not open")));
-                                    Ok(())
-                                })?;
-                            }
-                            Command::Prompt(session, text, reply) => {
-                                let request = PromptRequest::new(SessionId::new(session), vec![ContentBlock::Text(TextContent::new(text))]);
-                                cx.clone().spawn(async move {
-                                    let result = cx.send_request(request).block_task().await;
-                                    let _ = reply.send(result.map(|r| ended_of(r.stop_reason)).map_err(|err| failure(err, "the turn failed")));
-                                    Ok(())
-                                })?;
-                            }
-                            Command::Cancel(session) => cx.send_notification(CancelNotification::new(SessionId::new(session)))?,
-                        }
-                    }
-                    Ok(())
-                })
-                .await;
-            if let Err(err) = ended {
-                eprintln!("clarity-acp: the agent's connection ended: {err}");
-            }
-        });
-        let (name, sign_ins) = started.await.map_err(|_| "the agent stopped before it started".to_string())??;
-        Ok(Agent { name, sign_ins, commands })
+    /// Like `start`, over any pair of streams (the tests use a pipe in memory).
+    pub async fn start_on(reader: impl AsyncRead + Send + Unpin + 'static, writer: impl AsyncWrite + Send + Unpin + 'static, root: &Path, host: Host) -> Result<Agent, String> {
+        Self::connect(reader, writer, None, root, host).await
+    }
+
+    async fn connect(reader: impl AsyncRead + Send + Unpin + 'static, writer: impl AsyncWrite + Send + Unpin + 'static, child: Option<tokio::process::Child>, root: &Path, host: Host) -> Result<Agent, String> {
+        let connection = Arc::new(Connection { writer: tokio::sync::Mutex::new(Box::new(writer)), next: AtomicU64::new(0), pending: Mutex::default(), _child: child });
+        let client = Client { root: root.to_path_buf(), host, known: Mutex::default() };
+        tokio::spawn(read(BufReader::new(reader), Arc::downgrade(&connection), Arc::new(client)));
+        // Files read and written, never a terminal: Clarity runs nothing for the agent.
+        let init = connection
+            .request(
+                "initialize",
+                json!({
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "clientCapabilities": { "fs": { "readTextFile": true, "writeTextFile": true }, "terminal": false },
+                    "clientInfo": { "name": "clarity", "version": env!("CARGO_PKG_VERSION") },
+                }),
+            )
+            .await
+            .map_err(|err| format!("the agent did not start: {}", err.message))?;
+        let name = init["agentInfo"]["name"].as_str().unwrap_or_default().to_string();
+        let sign_ins = init["authMethods"].as_array().map(|ways| ways.iter().filter_map(sign_in_of).collect()).unwrap_or_default();
+        Ok(Agent { name, sign_ins, root: root.to_path_buf(), connection })
     }
 
     /// The program's name, as it gives it.
@@ -281,30 +265,236 @@ impl Agent {
 
     /// Signs in the way `id` names; the program does it (a browser opens for most).
     pub async fn sign_in(&self, id: &str) -> Result<(), Failure> {
-        self.ask(|reply| Command::SignIn(id.to_string(), reply)).await
+        self.connection.request("authenticate", json!({ "methodId": id })).await.map(|_| ()).map_err(|err| failure(err, "signing in failed"))
     }
 
     /// Opens a session in the project folder with these tools; its id.
     pub async fn new_session(&self, tools: Vec<ToolServer>) -> Result<String, Failure> {
-        self.ask(|reply| Command::NewSession(tools, reply)).await
+        let servers: Vec<Value> = tools
+            .into_iter()
+            .map(|s| json!({ "name": s.name, "command": s.command.display().to_string(), "args": s.args, "env": [] }))
+            .collect();
+        let result = self.connection.request("session/new", json!({ "cwd": self.root.display().to_string(), "mcpServers": servers })).await.map_err(|err| failure(err, "the session did not open"))?;
+        result["sessionId"].as_str().map(str::to_string).ok_or_else(|| Failure::Other("the agent gave no session".into()))
     }
 
     /// Sends what the person typed; how the turn ended.
     pub async fn prompt(&self, session: &str, text: &str) -> Result<Ended, Failure> {
-        self.ask(|reply| Command::Prompt(session.to_string(), text.to_string(), reply)).await
+        let result = self
+            .connection
+            .request("session/prompt", json!({ "sessionId": session, "prompt": [{ "type": "text", "text": text }] }))
+            .await
+            .map_err(|err| failure(err, "the turn failed"))?;
+        Ok(match result["stopReason"].as_str() {
+            Some("max_tokens" | "max_turn_requests") => Ended::TooLong,
+            Some("refusal") => Ended::Refused,
+            Some("cancelled") => Ended::Cancelled,
+            _ => Ended::Done,
+        })
     }
 
     /// Asks the agent to stop the turn; the turn then ends as Cancelled.
     pub fn cancel(&self, session: &str) {
-        let _ = self.commands.send(Command::Cancel(session.to_string()));
+        let connection = self.connection.clone();
+        let session = session.to_string();
+        tokio::spawn(async move {
+            let _ = connection.notify("session/cancel", json!({ "sessionId": session })).await;
+        });
+    }
+}
+
+/// What the client keeps and where it reports.
+struct Client {
+    root: PathBuf,
+    host: Host,
+    /// What each tool is and touches, as the agent told of it, for its permission later.
+    known: Mutex<HashMap<String, Known>>,
+}
+
+/// Reads the program's lines: answers to Clarity's requests, the agent's
+/// own requests (permissions, files) and its notifications (what it does).
+async fn read(mut reader: BufReader<impl AsyncRead + Unpin>, connection: std::sync::Weak<Connection>, client: Arc<Client>) {
+    let mut line = String::new();
+    loop {
+        line.clear();
+        match reader.read_line(&mut line).await {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        let Ok(message) = serde_json::from_str::<Value>(line.trim()) else { continue };
+        let Some(connection) = connection.upgrade() else { break };
+        let method = message["method"].as_str().map(str::to_string);
+        match (method, message.get("id").cloned()) {
+            // An answer to one of Clarity's requests.
+            (None, Some(id)) => {
+                let waiting = id.as_u64().and_then(|id| connection.pending.lock().ok().and_then(|mut p| p.remove(&id)));
+                if let Some(reply) = waiting {
+                    let result = match message.get("error") {
+                        Some(error) => Err(RpcError { code: error["code"].as_i64().unwrap_or(0), message: error["message"].as_str().unwrap_or_default().to_string() }),
+                        None => Ok(message.get("result").cloned().unwrap_or(Value::Null)),
+                    };
+                    let _ = reply.send(result);
+                }
+            }
+            // A request of the agent's: answered on its own task, so a permission's wait holds up nothing.
+            (Some(method), Some(id)) => {
+                let client = client.clone();
+                let params = message["params"].clone();
+                tokio::spawn(async move {
+                    let result = client.handle(&method, &params).await;
+                    connection.answer(id, result).await;
+                });
+            }
+            // A notification: what the agent says and does.
+            (Some(method), None) => {
+                if method == "session/update" {
+                    client.update(&message["params"]["update"]);
+                }
+            }
+            (None, None) => {}
+        }
+    }
+    if let Some(connection) = connection.upgrade() {
+        connection.closed();
+    }
+}
+
+impl Client {
+    async fn handle(&self, method: &str, params: &Value) -> Result<Value, (i64, String)> {
+        match method {
+            "session/request_permission" => Ok(json!({ "outcome": self.permission(params).await })),
+            "fs/read_text_file" => {
+                let path = PathBuf::from(params["path"].as_str().unwrap_or_default());
+                let text = inside(&self.root, &path)
+                    .and_then(|real| std::fs::read_to_string(&real).map_err(|err| format!("cannot read {}: {err}", path.display())))
+                    .map_err(|why| (INVALID_PARAMS, why))?;
+                let number = |key: &str| params[key].as_u64().map(|n| n as u32);
+                Ok(json!({ "content": lines(&text, number("line"), number("limit")) }))
+            }
+            "fs/write_text_file" => {
+                let path = PathBuf::from(params["path"].as_str().unwrap_or_default());
+                let content = params["content"].as_str().unwrap_or_default();
+                inside(&self.root, &path)
+                    .and_then(|real| {
+                        if let Some(folder) = real.parent() {
+                            std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
+                        }
+                        std::fs::write(&real, content).map_err(|err| format!("cannot write {}: {err}", path.display()))
+                    })
+                    .map_err(|why| (INVALID_PARAMS, why))?;
+                Ok(Value::Null)
+            }
+            // A terminal and the rest are not offered: Clarity runs nothing for the agent.
+            other => Err((METHOD_NOT_FOUND, format!("Clarity does not offer {other}"))),
+        }
     }
 
-    async fn ask<T>(&self, command: impl FnOnce(oneshot::Sender<Result<T, Failure>>) -> Command) -> Result<T, Failure> {
-        let stopped = || Failure::Other("the agent has stopped".to_string());
-        let (reply, answer) = oneshot::channel();
-        self.commands.send(command(reply)).map_err(|_| stopped())?;
-        answer.await.map_err(|_| stopped())?
+    /// The outcome of a permission: reading and editing inside the project
+    /// are the client's to allow (one Undo takes the turn back); anything
+    /// else asks the person. Allowed is once, never always; denied is
+    /// rejected once, or cancelled when no rejection is offered.
+    async fn permission(&self, params: &Value) -> Value {
+        let call = &params["toolCall"];
+        let decision = if self.allowed_by_itself(call) {
+            Decision::Allow
+        } else {
+            let title = call["title"].as_str().unwrap_or_default().to_string();
+            let (answer, decided) = oneshot::channel();
+            match self.host.permissions.send((Permission { title }, answer)) {
+                Ok(()) => decided.await.unwrap_or(Decision::Deny),
+                Err(_) => Decision::Deny,
+            }
+        };
+        let wanted = match decision {
+            Decision::Allow => "allow_once",
+            Decision::Deny => "reject_once",
+        };
+        let options = params["options"].as_array().cloned().unwrap_or_default();
+        match options.iter().find(|o| o["kind"] == wanted).and_then(|o| o["optionId"].as_str()) {
+            Some(id) => json!({ "outcome": "selected", "optionId": id }),
+            None => json!({ "outcome": "cancelled" }),
+        }
     }
+
+    /// Whether a permission is the client's to give without asking:
+    /// reading, searching or changing files, every one of them named and
+    /// inside the project. Running anything, fetching, or a file outside (or
+    /// none named) goes to the person.
+    fn allowed_by_itself(&self, call: &Value) -> bool {
+        let id = call["toolCallId"].as_str().unwrap_or_default();
+        let mut tool = self.known.lock().ok().and_then(|k| k.get(id).cloned()).unwrap_or_default();
+        tool.merge(call);
+        let files_only = matches!(tool.kind.as_deref(), Some("read" | "edit" | "delete" | "move" | "search"));
+        files_only && !tool.locations.is_empty() && tool.locations.iter().all(|path| inside(&self.root, path).is_ok())
+    }
+
+    /// A `session/update`: kept for permissions, and told to the panel.
+    fn update(&self, update: &Value) {
+        let id = update["toolCallId"].as_str().unwrap_or_default().to_string();
+        let event = match update["sessionUpdate"].as_str() {
+            Some("agent_message_chunk") => update["content"]["text"].as_str().map(|t| Event::Text(t.to_string())),
+            Some("agent_thought_chunk") => update["content"]["text"].as_str().map(|t| Event::Thought(t.to_string())),
+            Some("tool_call") => {
+                if let Ok(mut known) = self.known.lock() {
+                    known.insert(id.clone(), Known::default().merged(update));
+                }
+                Some(Event::Tool { id, title: update["title"].as_str().unwrap_or_default().to_string(), status: status_of(&update["status"]).unwrap_or(ToolStatus::Pending) })
+            }
+            Some("tool_call_update") => {
+                if let Ok(mut known) = self.known.lock() {
+                    known.entry(id.clone()).or_default().merge(update);
+                }
+                Some(Event::ToolUpdate { id, title: update["title"].as_str().map(str::to_string), status: status_of(&update["status"]) })
+            }
+            _ => None,
+        };
+        if let Some(event) = event {
+            let _ = self.host.events.send(event);
+        }
+    }
+}
+
+/// What a tool is and the files it touches, as the agent told of it.
+#[derive(Debug, Clone, Default)]
+struct Known {
+    kind: Option<String>,
+    locations: Vec<PathBuf>,
+}
+
+impl Known {
+    /// Takes what a tool's announcement, update or permission says of it.
+    fn merge(&mut self, call: &Value) {
+        if let Some(kind) = call["kind"].as_str() {
+            self.kind = Some(kind.to_string());
+        }
+        if let Some(locations) = call["locations"].as_array() {
+            self.locations = locations.iter().filter_map(|l| l["path"].as_str().map(PathBuf::from)).collect();
+        }
+    }
+
+    fn merged(mut self, call: &Value) -> Known {
+        self.merge(call);
+        self
+    }
+}
+
+fn status_of(status: &Value) -> Option<ToolStatus> {
+    match status.as_str()? {
+        "pending" => Some(ToolStatus::Pending),
+        "in_progress" => Some(ToolStatus::Running),
+        "completed" => Some(ToolStatus::Done),
+        "failed" => Some(ToolStatus::Failed),
+        _ => Some(ToolStatus::Running),
+    }
+}
+
+/// A sign-in way as the program offers it: by the agent itself (no `type`) or in a terminal.
+fn sign_in_of(way: &Value) -> Option<SignIn> {
+    Some(SignIn {
+        id: way["id"].as_str()?.to_string(),
+        name: way["name"].as_str().unwrap_or_default().to_string(),
+        description: way["description"].as_str().map(str::to_string),
+    })
 }
 
 /// `path` when it lies inside the project folder `root`: absolute, without
@@ -330,49 +520,6 @@ pub fn inside(root: &Path, path: &Path) -> Result<PathBuf, String> {
     Ok(if rest.as_os_str().is_empty() { real } else { real.join(rest) })
 }
 
-/// What a tool is and the files it touches, as the agent told of it.
-#[derive(Debug, Clone, Default)]
-struct Known {
-    kind: Option<ToolKind>,
-    locations: Vec<PathBuf>,
-}
-
-/// Keeps what a tool is and touches, from its announcement and its updates.
-fn remember(known: &Mutex<HashMap<String, Known>>, update: &SessionUpdate) {
-    let Ok(mut known) = known.lock() else { return };
-    match update {
-        SessionUpdate::ToolCall(call) => {
-            known.insert(call.tool_call_id.to_string(), Known { kind: Some(call.kind.clone()), locations: call.locations.iter().map(|l| l.path.clone()).collect() });
-        }
-        SessionUpdate::ToolCallUpdate(update) => {
-            let entry = known.entry(update.tool_call_id.to_string()).or_default();
-            if let Some(kind) = &update.fields.kind {
-                entry.kind = Some(kind.clone());
-            }
-            if let Some(locations) = &update.fields.locations {
-                entry.locations = locations.iter().map(|l| l.path.clone()).collect();
-            }
-        }
-        _ => {}
-    }
-}
-
-/// Whether a permission is the client's to give without asking: reading,
-/// searching or changing files, every one of them named and inside the
-/// project. Running anything, fetching, or a file outside (or none named)
-/// goes to the person.
-fn allowed_by_itself(root: &Path, known: &Mutex<HashMap<String, Known>>, asked: &RequestPermissionRequest) -> bool {
-    let mut tool = known.lock().ok().and_then(|k| k.get(&asked.tool_call.tool_call_id.to_string()).cloned()).unwrap_or_default();
-    if let Some(kind) = &asked.tool_call.fields.kind {
-        tool.kind = Some(kind.clone());
-    }
-    if let Some(locations) = &asked.tool_call.fields.locations {
-        tool.locations = locations.iter().map(|l| l.path.clone()).collect();
-    }
-    let files_only = matches!(tool.kind, Some(ToolKind::Read | ToolKind::Edit | ToolKind::Delete | ToolKind::Move | ToolKind::Search));
-    files_only && !tool.locations.is_empty() && tool.locations.iter().all(|path| inside(root, path).is_ok())
-}
-
 /// From line `line` (counted from 1), `limit` lines at most.
 fn lines(text: &str, line: Option<u32>, limit: Option<u32>) -> String {
     if line.is_none() && limit.is_none() {
@@ -381,67 +528,4 @@ fn lines(text: &str, line: Option<u32>, limit: Option<u32>) -> String {
     let skip = line.map_or(0, |l| l.saturating_sub(1) as usize);
     let take = limit.map_or(usize::MAX, |l| l as usize);
     text.split_inclusive('\n').skip(skip).take(take).collect()
-}
-
-/// Allowed is once, never always, so the next command asks again; denied
-/// is rejected once, or the request cancelled when it offers no rejection.
-fn outcome(asked: &RequestPermissionRequest, decision: Decision) -> RequestPermissionOutcome {
-    let wanted = match decision {
-        Decision::Allow => PermissionOptionKind::AllowOnce,
-        Decision::Deny => PermissionOptionKind::RejectOnce,
-    };
-    match asked.options.iter().find(|o| o.kind == wanted) {
-        Some(option) => RequestPermissionOutcome::Selected(SelectedPermissionOutcome::new(option.option_id.clone())),
-        None => RequestPermissionOutcome::Cancelled,
-    }
-}
-
-fn event_of(update: SessionUpdate) -> Option<Event> {
-    let text = |block: ContentBlock| match block {
-        ContentBlock::Text(t) => Some(t.text),
-        _ => None,
-    };
-    match update {
-        SessionUpdate::AgentMessageChunk(chunk) => text(chunk.content).map(Event::Text),
-        SessionUpdate::AgentThoughtChunk(chunk) => text(chunk.content).map(Event::Thought),
-        SessionUpdate::ToolCall(call) => Some(Event::Tool { id: call.tool_call_id.to_string(), title: call.title, status: status_of(call.status) }),
-        SessionUpdate::ToolCallUpdate(update) => Some(Event::ToolUpdate {
-            id: update.tool_call_id.to_string(),
-            title: update.fields.title,
-            status: update.fields.status.map(status_of),
-        }),
-        _ => None,
-    }
-}
-
-fn status_of(status: ToolCallStatus) -> ToolStatus {
-    match status {
-        ToolCallStatus::Pending => ToolStatus::Pending,
-        ToolCallStatus::InProgress => ToolStatus::Running,
-        ToolCallStatus::Completed => ToolStatus::Done,
-        ToolCallStatus::Failed => ToolStatus::Failed,
-        _ => ToolStatus::Running,
-    }
-}
-
-fn ended_of(reason: StopReason) -> Ended {
-    match reason {
-        StopReason::EndTurn => Ended::Done,
-        StopReason::MaxTokens | StopReason::MaxTurnRequests => Ended::TooLong,
-        StopReason::Refusal => Ended::Refused,
-        StopReason::Cancelled => Ended::Cancelled,
-        _ => Ended::Done,
-    }
-}
-
-fn sign_in_of(method: &AuthMethod) -> SignIn {
-    match method {
-        AuthMethod::Agent(m) => SignIn { id: m.id.to_string(), name: m.name.clone(), description: m.description.clone() },
-        AuthMethod::Terminal(m) => SignIn { id: m.id.to_string(), name: m.name.clone(), description: m.description.clone() },
-        _ => SignIn { id: String::new(), name: String::new(), description: None },
-    }
-}
-
-fn server_of(server: ToolServer) -> McpServer {
-    McpServer::Stdio(McpServerStdio::new(server.name, server.command).args(server.args))
 }

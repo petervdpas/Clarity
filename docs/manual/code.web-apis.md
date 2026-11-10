@@ -64,11 +64,11 @@ code Orders
         orders = read list<Order> from json reply.text at "data"
 ```
 
-- `read Order from json text` reads one record, `read list<Order> from json text` a list. `at "data"` starts inside the JSON, at the names given with dots between: `at "result.items"`.
-- A service names its fields its own way, so names match also ignoring case, underscores and hyphens: `creditLimit` fills `creditLimit`. A number fills a money or decimal field, and a string of a number fills an integer. A date and time fills a date with its date. An enum value matches in any case.
-- What the JSON leaves out keeps its default, and what the entity does not have is left aside. The id is never read, nor references, pictures, files and lists of stored records. The records are new: `save` adds them.
-- An entity of a web API holds the records its service nests: `owner: User` holds one, `lines: list<Line>` several. They are read from the nested object and list, each fitted to its own entity, and `json of` writes them nested. Code reads them as any record and list: `order.owner.name`, `for line in order.lines`.
-- JSON that does not fit stops the handler with a message that says where, such as `field 'lines' of Order is an integer, not "three"`, as a refused save does.
+- `read Order from json text` reads one record, `read list<Order> from json text` a list; `at "data"` starts inside the JSON. `json of` writes a record nested as the service sent it.
+- A service names its fields its own way, so names match also ignoring case, underscores, hyphens and spaces, and numbers and strings of numbers stand for each other. What the JSON leaves out keeps its default; JSON that does not fit stops the handler with a message that says where.
+- An entity of a web API holds the records its service nests: `owner: User` holds one, `lines: list<Line>` several, read each into its own entity. Code reads them as any record and list: `order.owner.name`, `for line in order.lines`.
+
+JSON is the first of Clarity's data formats; how every format reads and writes is on [Data formats](code.formats.md).
 
 ## A web API data source
 

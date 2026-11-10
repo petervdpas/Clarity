@@ -28,6 +28,7 @@ With `stack rust desktop` Clarity writes a Cargo project into the output folder 
 - `build.rs`: links Clarity.UI's ready-made library from the folder the environment variable `CLARITY_UI` names, as Go, C and C++ programs do, and copies it next to the program. Clarity's build names the folder.
 - `src/modules/<module>.rs`: one Rust module per Clarity module, with its records, enums, functions, actions, windows and handlers. `src/modules.rs` declares them.
 - `src/schema.rs`: the migration steps of every database Clarity owns.
+- For code that reads or writes a [data format](code.formats.md), `Cargo.toml` turns on the runtime's `formats` feature, which brings the crate `clarity-formats`.
 - `windows/<Window>.cxaml` and `apps/<App>.cxaml`: each window and each app frame (menu bar, toolbar, ribbon, sidebars, footer) as markup (`.cxaml`, Clarity's own dialect): its parts as elements with their options, as in Clarity (`<Button name="clearKey" at="1,3" span="1" caption="@clearKeyCaption" key="Escape" onclick="clear" />`).
 - `themes/<theme>.light.json` and `.dark.json`: each theme the project offers, as Clarity resolves it. Without any, Clarity.UI shows Clarity's own.
 - `resources/`: the project's pictures and other resources, carried in the program.

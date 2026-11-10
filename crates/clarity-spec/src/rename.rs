@@ -309,11 +309,16 @@ fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
                 expr(e, name, found);
             }
         }
-        ExprKind::JsonOf { value } => expr(value, name, found),
-        ExprKind::ReadJson { text, at, .. } => {
-            expr(text, name, found);
-            if let Some(at) = at {
-                expr(at, name, found);
+        ExprKind::FormatOf { value, options, .. } => {
+            expr(value, name, found);
+            for option in options {
+                expr(&option.value, name, found);
+            }
+        }
+        ExprKind::ReadFormat { input, options, .. } => {
+            expr(input, name, found);
+            for option in options {
+                expr(&option.value, name, found);
             }
         }
         ExprKind::Ask { question, form } => {

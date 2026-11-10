@@ -51,13 +51,16 @@ fn parses_reading_and_writing() {
     let (file, diagnostics) = parse(SHOP, "shop.clarity");
     assert!(diagnostics.is_empty(), "{diagnostics:#?}");
     let StmtKind::Return { value: Some(value) } = &file.functions[0].body[0].kind else { panic!() };
-    let ExprKind::ReadJson { ty, text, at } = &value.kind else { panic!("{value:#?}") };
+    let ExprKind::ReadFormat { format, ty, input, options } = &value.kind else { panic!("{value:#?}") };
+    assert_eq!(format.name, "json");
     assert_eq!(ty.kind, TypeRefKind::List { item: "Order".into() });
-    assert!(matches!(&text.kind, ExprKind::Name { name } if name == "text"));
-    assert!(matches!(at.as_deref().map(|a| &a.kind), Some(ExprKind::Str { value }) if value == "data.orders"));
+    assert!(matches!(&input.kind, ExprKind::Name { name } if name == "text"));
+    assert_eq!(options.len(), 1);
+    assert_eq!(options[0].name.name, "at");
+    assert!(matches!(&options[0].value.kind, ExprKind::Str { value } if value == "data.orders"));
     let StmtKind::Let { value, .. } = &file.functions[1].body[0].kind else { panic!() };
     let ExprKind::Http { body: Some(body), .. } = &value.kind else { panic!() };
-    assert!(matches!(&body.kind, ExprKind::JsonOf { .. }));
+    assert!(matches!(&body.kind, ExprKind::FormatOf { format, options, .. } if format.name == "json" && options.is_empty()));
 }
 
 #[test]
@@ -67,7 +70,11 @@ fn json_reads_records_and_lists_of_them() {
     let errs = errors(&with("read Order from json reply.text", "read Order from json reply.status"));
     assert!(errs.iter().any(|e| e.contains("the JSON to read is text, not integer")), "{errs:?}");
     let errs = errors(&with("at \"data.orders\"", "at 3"));
-    assert!(errs.iter().any(|e| e.contains("where to start in the JSON is text, not integer")), "{errs:?}");
+    assert!(errs.iter().any(|e| e.contains("the option 'at' of json is text, not integer")), "{errs:?}");
+    let errs = errors(&with("at \"data.orders\"", "at \"data\" at \"orders\""));
+    assert!(errs.iter().any(|e| e.contains("the option 'at' is given twice")), "{errs:?}");
+    let errs = errors(&with("read Order from json reply.text", "read Order from yaml reply.text"));
+    assert!(errs.iter().any(|e| e.contains("there is no format 'yaml'; the formats are json")), "{errs:?}");
     // What it reads has the type it names.
     let errs = errors(&with("return read list<Order> from json text at \"data.orders\"", "return read Order from json text"));
     assert!(!errs.is_empty(), "one Order is no list<Order>");

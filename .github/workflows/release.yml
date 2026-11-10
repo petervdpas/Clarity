@@ -78,11 +78,6 @@ jobs:
         working-directory: app
         run: npm run check
 
-      # The designer's test reads every example through the command line
-      # Clarity; built here, so no test spends its time limit compiling it.
-      - name: Build the command line Clarity
-        run: cargo build -p clarity-cli
-
       - name: Test the renderer
         working-directory: app
         run: npm test

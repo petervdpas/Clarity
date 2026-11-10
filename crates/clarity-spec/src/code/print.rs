@@ -30,15 +30,14 @@ pub fn expr(e: &Expr) -> String {
         ExprKind::Files { var, store, filter, order } => query(&format!("files {} in {}", var.name, store.name), filter.as_deref(), order),
         ExprKind::ReadText { file } => format!("read text of {}", expr(file)),
         ExprKind::ReadBytes { file } => format!("read bytes of {}", expr(file)),
-        ExprKind::JsonOf { value } => format!("json of {}", expr(value)),
-        ExprKind::ReadJson { ty, text, at } => {
+        ExprKind::FormatOf { format, value, options } => format!("{} of {}{}", format.name, expr(value), format_options(options)),
+        ExprKind::ReadFormat { format, ty, input, options } => {
             let read = match &ty.kind {
                 super::TypeRefKind::Named { name } => name.clone(),
                 super::TypeRefKind::List { item } => format!("list<{item}>"),
                 _ => "...".to_string(),
             };
-            let at = at.as_deref().map(|a| format!(" at {}", expr(a))).unwrap_or_default();
-            format!("read {read} from json {}{at}", expr(text))
+            format!("read {read} from {} {}{}", format.name, expr(input), format_options(options))
         }
         ExprKind::Http { method, url, from, pages, body, headers, query } => {
             let mut text = format!("http {} {}", method.word(), expr(url));
@@ -112,4 +111,9 @@ pub fn type_ref(ty: &super::TypeRef) -> String {
         K::Named { name } => name.clone(),
         K::List { item } => format!("list<{item}>"),
     }
+}
+
+/// A format's options as code writes them: ` at "data.orders"`.
+fn format_options(options: &[super::FormatOption]) -> String {
+    options.iter().map(|o| format!(" {} {}", o.name.name, expr(&o.value))).collect()
 }

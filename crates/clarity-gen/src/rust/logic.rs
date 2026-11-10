@@ -809,6 +809,12 @@ impl<'a> Emitter<'a> {
     }
 
     /// An expression as an owned value.
+    /// A format's options as a Rust expression of their JSON object (`String::new()` for none).
+    fn format_options(&mut self, options: &[clarity_spec::code::FormatOption]) -> String {
+        let given: Vec<(String, String)> = options.iter().map(|o| (o.name.name.clone(), format!("clarity_runtime::formats::quoted(&{})", self.value(&o.value)))).collect();
+        rust_pieces(&crate::shape::options_pieces(&given))
+    }
+
     fn value(&mut self, expr: &Expr) -> String {
         // `app.version`: the project's version, written as the literal text it is.
         if clarity_spec::code::reads_app_version(expr) {
@@ -931,28 +937,27 @@ impl<'a> Emitter<'a> {
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text(&{})?", self.object(file)),
-            // JSON (DESIGN 5.23): a value as Clarity's JSON, and records read from a service's.
-            ExprKind::JsonOf { value } => format!("clarity_runtime::json::of(&{})", self.value(value)),
-            ExprKind::ReadJson { ty, text, at } => {
-                let Some((entity, many)) = crate::json_fields::target(ty) else {
+            // A format of the catalog (docs/FORMATS-PLAN.md): a value written in it, and records read from it, through Clarity.Formats.
+            ExprKind::FormatOf { format, value, options } => {
+                let Some(kind) = crate::shape::write_kind(self.project, &self.types.type_of(value)) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
                 };
-                let Some(decl) = self.project.entity(entity) else { return String::new() };
-                let fields: Vec<String> = crate::json_fields::fields(self.project, decl)
-                    .iter()
-                    .map(|(name, kind)| format!("clarity_runtime::json::Field {{ name: {name:?}, kind: {} }}", rust_json_kind(kind)))
-                    .collect();
-                let text = self.value(text);
-                let at = match at {
-                    Some(at) => format!("Some(({}).as_str())", self.value(at)),
-                    None => "None".to_string(),
+                let options = self.format_options(options);
+                format!("clarity_runtime::formats::write({:?}, &{}, &{options}, {kind:?})", format.name, self.value(value))
+            }
+            ExprKind::ReadFormat { format, ty, input, options } => {
+                let Some(kind) = crate::shape::read_kind(self.project, ty) else {
+                    self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
+                    return String::new();
                 };
-                let read = if many { format!("Vec<{entity}>") } else { entity.to_string() };
-                format!(
-                    "clarity_runtime::json::read::<{read}>(&{text}, {at}, {many}, {entity:?}, &[{}], &serde_json::to_value({entity}::default()).unwrap_or_default())?",
-                    fields.join(", ")
-                )
+                let read = match &ty.kind {
+                    clarity_spec::code::TypeRefKind::List { item } => format!("Vec<{item}>"),
+                    clarity_spec::code::TypeRefKind::Named { name } => name.clone(),
+                    _ => String::new(),
+                };
+                let options = self.format_options(options);
+                format!("clarity_runtime::formats::read::<{read}>({:?}, &{}, &{options}, &{})?", format.name, self.value(input), rust_pieces(&kind))
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
             ExprKind::Http { method, url, from, pages, body, headers, query } => {
@@ -1933,25 +1938,20 @@ fn changes(body: &[Stmt], var: &str) -> bool {
     })
 }
 
-/// What a field takes from JSON, as the Rust runtime names it.
-fn rust_json_kind(kind: &crate::json_fields::Kind) -> String {
-    use crate::json_fields::Kind;
-    match kind {
-        Kind::Text => "clarity_runtime::json::Kind::Text".into(),
-        Kind::Integer => "clarity_runtime::json::Kind::Integer".into(),
-        Kind::Decimal => "clarity_runtime::json::Kind::Decimal".into(),
-        Kind::Bool => "clarity_runtime::json::Kind::Bool".into(),
-        Kind::Date => "clarity_runtime::json::Kind::Date".into(),
-        Kind::DateTime => "clarity_runtime::json::Kind::DateTime".into(),
-        Kind::Enum(values) => format!("clarity_runtime::json::Kind::Enum(&[{}])", values.iter().map(|v| format!("{v:?}")).collect::<Vec<_>>().join(", ")),
-        Kind::Values(item) => format!("clarity_runtime::json::Kind::Values(&{})", rust_json_kind(item)),
-        // A record held inside (DESIGN 5.25): its entity's fields, over a new record of it.
-        Kind::Record(nested) | Kind::Records(nested) => format!(
-            "clarity_runtime::json::Kind::{}(&clarity_runtime::json::Nested {{ entity: {:?}, fields: &[{}], base: &serde_json::to_value({}::default()).unwrap_or_default() }})",
-            if matches!(kind, Kind::Record(_)) { "Record" } else { "Records" },
-            nested.entity,
-            nested.fields.iter().map(|(name, kind)| format!("clarity_runtime::json::Field {{ name: {name:?}, kind: {} }}", rust_json_kind(kind))).collect::<Vec<_>>().join(", "),
-            nested.entity
-        ),
+/// A kind's or options' pieces (crate::shape) as a Rust expression of a `String`: a base
+/// is a new record as serde writes it, a piece of code is already JSON text.
+fn rust_pieces(pieces: &[crate::shape::Piece]) -> String {
+    use crate::shape::Piece;
+    if pieces.is_empty() {
+        return "String::new()".to_string();
     }
+    let parts: Vec<String> = pieces
+        .iter()
+        .map(|p| match p {
+            Piece::Text(t) => format!("String::from({t:?})"),
+            Piece::Base(entity) => format!("clarity_runtime::formats::base(&{entity}::default())"),
+            Piece::Code(code) => code.clone(),
+        })
+        .collect();
+    format!("[{}].concat()", parts.join(", "))
 }

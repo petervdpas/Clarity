@@ -1,0 +1,158 @@
+{
+  "about": "Each stack end to end through Clarity.Formats (docs/FORMATS-PLAN.md): the stack reads `input` in JSON with `options` through the library, decodes what was fitted with its own record codec into its own records, writes them back through the library, and gets `written` byte for byte; or, where it does not fit, stops with `error` word for word. The records are an Order (id, number: text, total: decimal, placed: date, lines: list of Line) and a Line (id, product: text, quantity: integer), written in each stack as its generator writes records. The library itself is tested exhaustively by formats-json-read.json and formats-json-write.json; this file checks only what each stack adds: passing the kind and options, decoding, encoding and the messages.",
+  "cases": [
+    {
+      "name": "a record with records inside, read from inside a reply, decoded and written back",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "lines",
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            }
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "total": "0",
+          "placed": null,
+          "lines": []
+        }
+      },
+      "options": {
+        "at": "data"
+      },
+      "input": "{\"data\": {\"Number\": \"A-1\", \"total\": 12.50, \"placed\": \"2026-10-25T10:00:00Z\", \"lines\": [{\"product\": \"pen\", \"quantity\": \"2\"}]}}",
+      "written": "{\"id\":0,\"number\":\"A-1\",\"total\":\"12.5\",\"placed\":\"2026-10-25\",\"lines\":[{\"id\":0,\"product\":\"pen\",\"quantity\":2}]}"
+    },
+    {
+      "name": "a list of records, what each leaves out keeping its default",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "lines",
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            }
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "total": "0",
+          "placed": null,
+          "lines": []
+        }
+      },
+      "input": "[{\"number\": \"B-1\"}, {\"number\": \"B-2\", \"total\": \"3\"}]",
+      "written": "[{\"id\":0,\"number\":\"B-1\",\"total\":\"0\",\"placed\":null,\"lines\":[]},{\"id\":0,\"number\":\"B-2\",\"total\":\"3\",\"placed\":null,\"lines\":[]}]"
+    },
+    {
+      "name": "what does not fit stops with the library's message, word for word",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "lines",
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            }
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "total": "0",
+          "placed": null,
+          "lines": []
+        }
+      },
+      "input": "{\"lines\": [{\"quantity\": \"two\"}]}",
+      "error": "field 'lines' of Order, item 1: field 'quantity' of Line is an integer, not \"two\""
+    }
+  ]
+}

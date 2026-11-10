@@ -1377,12 +1377,14 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
         TokenKind::Ident if token.text == "files" && cursor.peek_at(2).is_some_and(|t| t.text == "in") => {
             return parse_files(cursor);
         }
-        // `json of value` and `read Order from json text` (DESIGN 5.23).
-        TokenKind::Ident if token.text == "json" && cursor.peek_at(1).is_some_and(|t| t.text == "of") => {
+        // `json of value` and `read Order from json text`: a format of the catalog (docs/FORMATS-PLAN.md).
+        TokenKind::Ident if clarity_formats::format(&token.text).is_some() && cursor.peek_at(1).is_some_and(|t| t.text == "of") => {
+            let format = Ident { name: token.text.clone(), span: token.span };
             cursor.next();
             cursor.next();
             let value = parse_postfix(cursor)?;
-            return Ok(Expr { span: join(token.span, value.span), kind: ExprKind::JsonOf { value: Box::new(value) } });
+            let (options, end) = parse_format_options(cursor, &format.name, false, value.span)?;
+            return Ok(Expr { span: join(token.span, end), kind: ExprKind::FormatOf { format, value: Box::new(value), options } });
         }
         TokenKind::Ident
             if token.text == "read"
@@ -1391,19 +1393,21 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
         {
             cursor.next();
             let ty = parse_type_ref(cursor)?;
-            if !cursor.eat_keyword("from") || !cursor.eat_keyword("json") {
-                return Err(cursor.error_here("expected 'from json' and the text, as in read Order from json reply.text"));
+            if !cursor.eat_keyword("from") {
+                return Err(cursor.error_here("expected 'from' and a format, as in read Order from json reply.text"));
             }
-            let text = parse_expr(cursor)?;
-            let mut end = text.span;
-            let at = if cursor.eat_keyword("at") {
-                let at = parse_expr(cursor)?;
-                end = at.span;
-                Some(Box::new(at))
-            } else {
-                None
+            let Some(named) = cursor.peek().filter(|t| t.kind == TokenKind::Ident).cloned() else {
+                return Err(cursor.error_here("expected a format after 'from', as in read Order from json reply.text"));
             };
-            return Ok(Expr { span: join(token.span, end), kind: ExprKind::ReadJson { ty, text: Box::new(text), at } });
+            if clarity_formats::format(&named.text).is_none() {
+                let formats: Vec<&str> = clarity_formats::catalog().iter().map(|f| f.name).collect();
+                return Err(cursor.error_here(&format!("there is no format '{}'; the formats are {}", named.text, formats.join(", "))));
+            }
+            cursor.next();
+            let format = Ident { name: named.text.clone(), span: named.span };
+            let input = parse_expr(cursor)?;
+            let (options, end) = parse_format_options(cursor, &format.name, true, input.span)?;
+            return Ok(Expr { span: join(token.span, end), kind: ExprKind::ReadFormat { format, ty, input: Box::new(input), options } });
         }
         // `http get url`: a call to a web API (DESIGN 5.23).
         TokenKind::Ident
@@ -1729,4 +1733,20 @@ fn slot_path(inner: &str, offset: u32, string: Span) -> ParseResult<Expr> {
         at += word.len() as u32 + 1;
     }
     expr.ok_or_else(wrong)
+}
+
+/// The options of format `format` written after what is read (`reading`) or
+/// written: each a name of the catalog's options for it, then its value
+/// (`at "data.orders"`). Gives them and where the last one ends.
+fn parse_format_options(cursor: &mut Cursor, format: &str, reading: bool, mut end: Span) -> Result<(Vec<crate::code::FormatOption>, Span), Diagnostic> {
+    let Some(info) = clarity_formats::format(format) else { return Ok((Vec::new(), end)) };
+    let mut options = Vec::new();
+    while let Some(token) = cursor.peek().filter(|t| t.kind == TokenKind::Ident).cloned() {
+        let Some(option) = info.options.iter().find(|o| o.name == token.text && if reading { o.reads } else { o.writes }) else { break };
+        cursor.next();
+        let value = parse_expr(cursor)?;
+        end = value.span;
+        options.push(crate::code::FormatOption { name: Ident { name: option.name.to_string(), span: token.span }, value });
+    }
+    Ok((options, end))
 }

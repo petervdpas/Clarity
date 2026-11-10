@@ -28,19 +28,15 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/service.cpp)
   endif()
 endif()
 
-# The desktop program on Clarity.UI (DESIGN 7.9): only in a project whose
-# runtime copy has it, so a command-line program and a web server build
-# without it. Clarity.UI is one library (libclarity_ui.so, clarity_ui.dll,
-# libclarity_ui.dylib) with its header, in the folder CLARITY_UI names:
-# include/clarity_ui.h and lib/ with the library for this system. Without
-# it, a generated project (which names CLARITY_UI_VERSION) fetches the
-# library from its release into the build folder (clarity_ui.cmake). The
-# program finds the shared library beside it, where clarity_ui_beside
-# copies it after each build.
-if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/desktop.cpp)
+# The folder of Clarity.UI's library and the libraries beside it (CLARITY_UI):
+# named by the environment variable or -DCLARITY_UI, else fetched from the
+# release of CLARITY_UI_VERSION into the build folder. The desktop needs it,
+# and so does any program that reads or writes a format (Clarity.Formats lies there).
+set(CLARITY_RUNTIME_DIR ${CMAKE_CURRENT_LIST_DIR})
+macro(clarity_ui_folder)
   set(CLARITY_UI "$ENV{CLARITY_UI}" CACHE PATH "The folder of Clarity.UI: include/clarity_ui.h and lib/ with the library")
   if(NOT CLARITY_UI AND CLARITY_UI_VERSION)
-    include(${CMAKE_CURRENT_LIST_DIR}/clarity_ui.cmake)
+    include(${CLARITY_RUNTIME_DIR}/clarity_ui.cmake)
     clarity_ui_rid(CLARITY_UI_RID "${CMAKE_SYSTEM_NAME}" "${CMAKE_SYSTEM_PROCESSOR}")
     if(CLARITY_UI_RID)
       clarity_ui_fetch(CLARITY_UI ${CLARITY_UI_RELEASES} ${CLARITY_UI_VERSION} ${CLARITY_UI_RID} ${CMAKE_BINARY_DIR}/clarity-ui)
@@ -52,11 +48,24 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/desktop.cpp)
   # The libraries are looked up in the folder CLARITY_UI names, and CMake keeps what it found:
   # when that folder changes (a new Clarity.UI version fetched), what was found in the old one goes.
   if(NOT "${CLARITY_UI}" STREQUAL "${CLARITY_UI_LOOKED_IN}")
-    foreach(found CLARITY_UI_SHARED CLARITY_UI_IMPORT CLARITY_AUDIO_IMPORT CLARITY_IMAGE_IMPORT CLARITY_VIDEO_IMPORT)
+    foreach(found CLARITY_UI_SHARED CLARITY_UI_IMPORT CLARITY_AUDIO_IMPORT CLARITY_IMAGE_IMPORT CLARITY_VIDEO_IMPORT CLARITY_FORMATS_IMPORT)
       unset(${found} CACHE)
     endforeach()
     set(CLARITY_UI_LOOKED_IN "${CLARITY_UI}" CACHE INTERNAL "The Clarity.UI folder the libraries were looked up in")
   endif()
+endmacro()
+
+# The desktop program on Clarity.UI (DESIGN 7.9): only in a project whose
+# runtime copy has it, so a command-line program and a web server build
+# without it. Clarity.UI is one library (libclarity_ui.so, clarity_ui.dll,
+# libclarity_ui.dylib) with its header, in the folder CLARITY_UI names:
+# include/clarity_ui.h and lib/ with the library for this system. Without
+# it, a generated project (which names CLARITY_UI_VERSION) fetches the
+# library from its release into the build folder (clarity_ui.cmake). The
+# program finds the shared library beside it, where clarity_ui_beside
+# copies it after each build.
+if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/desktop.cpp)
+  clarity_ui_folder()
   if(WIN32)
     find_file(CLARITY_UI_SHARED NAMES clarity_ui.dll PATHS ${CLARITY_UI}/lib ${CLARITY_UI}/bin NO_DEFAULT_PATH)
     find_file(CLARITY_UI_IMPORT NAMES clarity_ui.dll.lib clarity_ui.lib libclarity_ui.dll.a PATHS ${CLARITY_UI}/lib NO_DEFAULT_PATH)
@@ -121,6 +130,39 @@ function(clarity_use_audio target)
   target_link_libraries(${target} PRIVATE clarity_audio)
   add_custom_command(TARGET ${target} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_audio> $<TARGET_FILE_DIR:${target}>)
+endfunction()
+
+# Clarity.Formats (docs/FORMATS-PLAN.md) for a program whose code reads or
+# writes a format, on any target: its library lies beside Clarity.UI's in
+# the folder CLARITY_UI names (include/clarity_formats.h and lib/), and the
+# runtime's formats/formats.cpp calls it. Linked to `target` and put beside it,
+# where the program finds it.
+function(clarity_use_formats target)
+  clarity_ui_folder()
+  if(NOT TARGET clarity_formats)
+    if(NOT EXISTS "${CLARITY_UI}/include/clarity_formats.h")
+      message(FATAL_ERROR "The program's code reads or writes a format, but Clarity.Formats' library is not in '${CLARITY_UI}': use a Clarity.UI folder with include/clarity_formats.h and its library in lib/")
+    endif()
+    add_library(clarity_formats SHARED IMPORTED GLOBAL)
+    set_target_properties(clarity_formats PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${CLARITY_UI}/include")
+    if(WIN32)
+      find_library(CLARITY_FORMATS_IMPORT NAMES clarity_formats.dll.lib libclarity_formats.dll.a clarity_formats.lib PATHS "${CLARITY_UI}/lib" NO_DEFAULT_PATH REQUIRED)
+      set_target_properties(clarity_formats PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/clarity_formats.dll" IMPORTED_IMPLIB "${CLARITY_FORMATS_IMPORT}")
+    elseif(APPLE)
+      set_target_properties(clarity_formats PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/libclarity_formats.dylib")
+    else()
+      set_target_properties(clarity_formats PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/libclarity_formats.so" IMPORTED_NO_SONAME TRUE)
+    endif()
+  endif()
+  target_sources(${target} PRIVATE ${CLARITY_RUNTIME_DIR}/formats/formats.cpp)
+  target_link_libraries(${target} PRIVATE clarity_formats)
+  add_custom_command(TARGET ${target} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_formats> $<TARGET_FILE_DIR:${target}>)
+  if(APPLE)
+    set_target_properties(${target} PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
+  elseif(UNIX)
+    set_target_properties(${target} PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+  endif()
 endfunction()
 
 # Clarity.Image (docs/IMAGE-PLAN.md) for a program whose code calls a

@@ -3,7 +3,7 @@
   <Data name="suppliers" type="list&lt;Supplier&gt;" />
   <Label name="nameFilterLabel" at="1,1" span="2" caption="@supplierNameLabel" for="nameFilter" />
   <Textbox name="nameFilter" at="3,1" span="4" onchange="filterChanged" />
-  <Table name="suppliersTable" at="1,2" span="12" rows="8" bind="suppliers" columns="name, email" undoScope="suppliersTable" onopen="openClicked" />
+  <Table name="suppliersTable" at="1,2" span="12" rows="8" bind="suppliers" columns="name, email" onopen="openClicked" />
   <Button name="newSupplier" at="9,10" span="2" caption="@newCaption" onclick="newClicked" />
   <Button name="openSupplier" at="11,10" span="2" caption="@openCaption" onclick="openClicked" />
 </View>

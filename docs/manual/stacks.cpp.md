@@ -30,7 +30,7 @@ Clarity writes a CMake project into the output folder (`out` by default). All ge
 - `browser/`: for the web target, what the browser takes: `index.html` (the page Clarity.UI draws on), Clarity.UI's browser files (`clarity-ui.js`, `clarity-ui.wasm`, `clarity-ui-worker.js`, `clarity-ui-page.js`), `clarity/files.json` (the windows and app frames as markup, the themes, the model, the title and size) and `clarity/resources/`. CMake builds every file of `browser/` into the program (`clarity_browser_files`), so it serves them without a folder beside it.
 - `src/parts.cpp` and `parts/`: the [custom parts](design.custom-parts.md), each a library of its own folder.
 - `src/main.cpp`: opens and migrates the databases and runs the windows on Clarity.UI (or serves them, for the web target).
-- `clarity-runtime/`: the C++ runtime, copied in.
+- `clarity-runtime/`: the C++ runtime, copied in. For code that reads or writes a [data format](code.formats.md) it holds `formats/` too, and `CMakeLists.txt` links Clarity.Formats' library from Clarity.UI's folder (`clarity_use_formats`), for a program of any target.
 - `README.md`: what to install to build the project without Clarity.
 
 Do not edit these files. Change the project in Clarity; it writes the folder again.

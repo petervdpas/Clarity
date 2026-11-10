@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="Clarity.Audio/Clarity.Audio.csproj" />
   <Project Path="Clarity.Image/Clarity.Image.csproj" />
+  <Project Path="Clarity.Formats/Clarity.Formats.csproj" />
   <Project Path="Clarity.Runtime.Engines/Clarity.Runtime.Engines.csproj" />
   <Project Path="Clarity.Runtime.MySql/Clarity.Runtime.MySql.csproj" />
   <Project Path="Clarity.Runtime.PostgreSql/Clarity.Runtime.PostgreSql.csproj" />

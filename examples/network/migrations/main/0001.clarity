@@ -1,0 +1,23 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Network"
+    add entity Organisation
+        name: text(80)
+        city: text(60)
+    add entity Person
+        name: text(80)
+        role: text(80)
+        organisation: ref Organisation
+    add entity Project
+        name: text(80)
+        lead: ref Person
+        organisation: ref Organisation
+    add entity Idea
+        title: text(80)
+        kind: text(40)
+        note: text
+    add entity IdeaLink
+        source: ref Idea, cascade
+        target: ref Idea, cascade
+        relation: text(60)
+        strength: integer

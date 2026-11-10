@@ -16,6 +16,7 @@
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
   import type { Surface } from "@clarity/ui/generated/Surface.ts";
   import type { WidgetProps } from "@clarity/ui/generated/WidgetProps.ts";
+  import type { GraphLayout } from "@clarity/ui/generated/GraphLayout.ts";
   import { findFrameElement } from "@clarity/ui/screen/frame.ts";
   import { WINDOW_HEIGHT, WINDOW_MAX_HEIGHT, WINDOW_MAX_WIDTH, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH, WINDOW_WIDTH } from "@clarity/ui/screen/grid.ts";
   import { cellEdits, describeType, themeStyles } from "@clarity/ui/screen/model.ts";
@@ -105,6 +106,14 @@
 
   /** Fields of the entity behind a collection binding, for table columns and list items. */
   const collectionFields = $derived.by(() => {
+    // A graph of lists tells the fields of every entity it shows, each name once.
+    if (p?.kind === "graph" && p.lists.length > 0) {
+      const all = p.lists.flatMap((list) => {
+        const decl = page.data.find((d) => d.name.name === list);
+        return entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null))?.fields ?? [];
+      });
+      return all.filter((f, i) => f.type.kind !== "list" && all.findIndex((g) => g.name.name === f.name.name) === i);
+    }
     if (!p?.bind) return [];
     // A search dropdown shows fields of the records its reference points at.
     if (p.bind.includes(".")) {
@@ -118,6 +127,27 @@
     const entity = entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null));
     return (entity?.fields ?? []).filter((f) => f.type.kind !== "list");
   });
+
+  /** The window's plain values of a type, which a graph of lists writes its picked node's entity or id into. */
+  function valuesOf(kind: "text" | "integer"): string[] {
+    return page.data.filter((d) => d.of.kind === "value" && d.of.ty.kind.kind === kind).map((d) => d.name.name);
+  }
+
+  /** Fields of the records of a graph's edges list. */
+  const edgeFields = $derived.by(() => {
+    const decl = page.data.find((d) => d.name.name === p?.edges);
+    const entity = entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null));
+    return (entity?.fields ?? []).filter((f) => !["list", "image", "file"].includes(f.type.kind));
+  });
+
+  /** The kinds a graph has looks for, with what each says; a new one is added empty. */
+  function setLook(which: "nodeLooks" | "edgeLooks", kind: string, look: Record<string, unknown> | null) {
+    if (!p) return;
+    const looks: Record<string, unknown> = { ...p[which] };
+    if (look === null) delete looks[kind];
+    else looks[kind] = Object.fromEntries(Object.entries(look).filter(([, v]) => v !== null && v !== ""));
+    update({ [which]: looks } as Partial<WidgetProps>);
+  }
 
   /** A slider's or a spin box's range when its ends are not written: the bound field's own. */
   const shownRange = $derived.by(() => {
@@ -364,7 +394,7 @@
           {/each}
         </select>
       </label>
-    {:else if info.bind === "collection"}
+    {:else if info.bind === "collection" && !(p.kind === "graph" && p.lists.length > 0)}
       <label class="prop">
         <span>Bound to</span>
         <select value={p.bind ?? ""} onchange={(e) => update({ bind: textOf(e), columns: [], edit: [], switches: [], show: [], widths: {}, order: null })}>
@@ -413,6 +443,131 @@
           {/each}
         </select>
       </label>
+    {/if}
+    {#if p.kind === "graph"}
+      {@const nodeFieldNames = ["id", ...collectionFields.map((f) => f.name.name)]}
+      <fieldset class="checks" title="A graph of the data model: the records of these lists, of any entities, joined by their references to each other. Without them it shows the list it binds.">
+        <legend>Lists of the data model</legend>
+        {#each listOptions as name (name)}
+          <label>
+            <input
+              type="checkbox"
+              checked={p.lists.includes(name)}
+              onchange={(e) => {
+                const lists = toggle(p.lists, name, e.currentTarget.checked);
+                update(lists.length > 0 ? { lists, bind: null, edges: null, nodeKey: null, nodeLabel: null, nodeKind: null, edgeFrom: null, edgeTo: null, edgeLabel: null, edgeKind: null, show: [] } : { lists, pickedKind: null, pickedId: null, show: [] });
+              }}
+            />
+            {name}
+          </label>
+        {/each}
+      </fieldset>
+      {#if p.lists.length > 0}
+        {#each [["pickedKind", "Picked entity", "The text data the picked node's entity goes into; code sets it to pick another", "text"], ["pickedId", "Picked id", "The whole-number data the picked node's id goes into; code sets it to pick another", "integer"]] as [field, label, tip, kind] (field)}
+          <label class="prop" title={tip}>
+            <span>{label}</span>
+            <select value={(p as Record<string, unknown>)[field] ?? ""} onchange={(e) => update({ [field]: textOf(e) } as Partial<WidgetProps>)}>
+              <option value="">(none)</option>
+              {#each valuesOf(kind as "text" | "integer") as name (name)}
+                <option value={name}>{name}</option>
+              {/each}
+            </select>
+          </label>
+        {/each}
+      {/if}
+      <label class="prop" title="Shows only what lies this many edges from the picked node, with a control to change it; empty shows all of it">
+        <span>Hops</span>
+        <input type="number" min="1" max="10" placeholder="all" value={p.hops ?? ""} onchange={(e) => update({ hops: e.currentTarget.value ? Number(e.currentTarget.value) : null })} />
+      </label>
+      <label class="prop" title="Its kinds as chips that hide and show them">
+        <span>Legend</span>
+        <input type="checkbox" checked={p.legend} onchange={(e) => update({ legend: e.currentTarget.checked })} />
+      </label>
+      {#if p.lists.length === 0}
+      <label class="prop" title="The list of records that join the nodes; each names the nodes it joins in two of its fields">
+        <span>Edges</span>
+        <select value={p.edges ?? ""} onchange={(e) => update({ edges: textOf(e), edgeFrom: null, edgeTo: null, edgeLabel: null, edgeKind: null })}>
+          <option value="">(none)</option>
+          {#each listOptions.filter((l) => l !== p.bind) as name (name)}
+            <option value={name}>{name}</option>
+          {/each}
+        </select>
+      </label>
+      <label class="prop" title="How the nodes are placed">
+        <span>Layout</span>
+        <select value={p.layout ?? "force"} onchange={(e) => update({ layout: e.currentTarget.value as GraphLayout })}>
+          <option value="force">Force</option>
+          <option value="layered">Layered</option>
+          <option value="radial">Radial, around the picked node</option>
+          <option value="circle">Circle</option>
+        </select>
+      </label>
+      {#each [["nodeKey", "Node key", "The field the edges name a node by; id without it"], ["nodeLabel", "Node label", "The field a node shows; its key without it"], ["nodeKind", "Node kind", "The field whose value chooses a node's look"]] as [field, label, tip] (field)}
+        <label class="prop" title={tip}>
+          <span>{label}</span>
+          <select value={(p as Record<string, unknown>)[field] ?? ""} onchange={(e) => update({ [field]: textOf(e) } as Partial<WidgetProps>)}>
+            <option value="">{field === "nodeKey" ? "id" : "(none)"}</option>
+            {#each nodeFieldNames.filter((n) => n !== "id") as name (name)}
+              <option value={name}>{name}</option>
+            {/each}
+          </select>
+        </label>
+      {/each}
+      {#if p.edges}
+        {#each [["edgeFrom", "Edge from", "The field of an edge that holds the key of the node it starts at; source without it"], ["edgeTo", "Edge to", "The field of an edge that holds the key of the node it ends at; target without it"], ["edgeLabel", "Edge label", "The field an edge shows"], ["edgeKind", "Edge kind", "The field whose value chooses an edge's look"]] as [field, label, tip] (field)}
+          <label class="prop" title={tip}>
+            <span>{label}</span>
+            <select value={(p as Record<string, unknown>)[field] ?? ""} onchange={(e) => update({ [field]: textOf(e) } as Partial<WidgetProps>)}>
+              <option value="">{field === "edgeFrom" ? "source" : field === "edgeTo" ? "target" : "(none)"}</option>
+              {#each edgeFields as f (f.name.name)}
+                <option value={f.name.name}>{f.label}</option>
+              {/each}
+            </select>
+          </label>
+        {/each}
+      {/if}
+      {/if}
+      <label class="prop" title="The most nodes it shows; 500 without it">
+        <span>Limit</span>
+        <input type="number" min="1" max="5000" placeholder="500" value={p.limit ?? ""} onchange={(e) => update({ limit: e.currentTarget.value ? Number(e.currentTarget.value) : null })} />
+      </label>
+      <fieldset class="looks">
+        <legend>Node looks, by kind</legend>
+        {#each Object.entries(p.nodeLooks) as [kind, look] (kind)}
+          <div class="look">
+            <span class="look-kind" title="Nodes whose kind is this value">{kind || "(no kind)"}</span>
+            <select aria-label="Shape of {kind}" value={look.shape ?? ""} onchange={(e) => setLook("nodeLooks", kind, { ...look, shape: textOf(e) })}>
+              <option value="">Circle</option>
+              <option value="square">Square</option>
+              <option value="diamond">Diamond</option>
+              <option value="box">Box with its label</option>
+            </select>
+            <input aria-label="Color of {kind}" placeholder="color" value={look.color ?? ""} onchange={(e) => setLook("nodeLooks", kind, { ...look, color: e.currentTarget.value.trim() })} />
+            <input aria-label="Size of {kind}" type="number" min="4" max="80" placeholder="16" value={look.size ?? ""} onchange={(e) => setLook("nodeLooks", kind, { ...look, size: e.currentTarget.value ? Number(e.currentTarget.value) : null })} />
+            <button type="button" class="remove" title="Take this look away" onclick={() => setLook("nodeLooks", kind, null)}>×</button>
+          </div>
+        {/each}
+        <input class="new-kind" placeholder="Add a kind's look" onchange={(e) => { const kind = e.currentTarget.value.trim(); e.currentTarget.value = ""; if (!(kind in p.nodeLooks)) setLook("nodeLooks", kind, {}); }} />
+      </fieldset>
+      {#if p.edges}
+        <fieldset class="looks">
+          <legend>Edge looks, by kind</legend>
+          {#each Object.entries(p.edgeLooks) as [kind, look] (kind)}
+            <div class="look">
+              <span class="look-kind" title="Edges whose kind is this value">{kind || "(no kind)"}</span>
+              <select aria-label="Line of {kind}" value={look.line ?? ""} onchange={(e) => setLook("edgeLooks", kind, { ...look, line: textOf(e) })}>
+                <option value="">Solid</option>
+                <option value="dashed">Dashed</option>
+                <option value="dotted">Dotted</option>
+              </select>
+              <input aria-label="Color of {kind}" placeholder="color" value={look.color ?? ""} onchange={(e) => setLook("edgeLooks", kind, { ...look, color: e.currentTarget.value.trim() })} />
+              <label class="arrow"><input type="checkbox" checked={look.arrow ?? true} onchange={(e) => setLook("edgeLooks", kind, { ...look, arrow: e.currentTarget.checked ? null : false })} /> Arrow</label>
+              <button type="button" class="remove" title="Take this look away" onclick={() => setLook("edgeLooks", kind, null)}>×</button>
+            </div>
+          {/each}
+          <input class="new-kind" placeholder="Add a kind's look" onchange={(e) => { const kind = e.currentTarget.value.trim(); e.currentTarget.value = ""; if (!(kind in p.edgeLooks)) setLook("edgeLooks", kind, {}); }} />
+        </fieldset>
+      {/if}
     {/if}
     {#if info.properties.includes("children")}
       {@const own = (() => {
@@ -1445,6 +1600,50 @@
     display: flex;
     gap: 6px;
     align-items: center;
+  }
+
+  .looks {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin: 0;
+    padding: 6px 10px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .looks legend {
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 0 4px;
+  }
+
+  .look {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 6em auto auto;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .look input[type="number"] {
+    width: 4em;
+  }
+
+  .look-kind {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .look .arrow {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .look .remove {
+    padding: 0 6px;
   }
 
   .hint {

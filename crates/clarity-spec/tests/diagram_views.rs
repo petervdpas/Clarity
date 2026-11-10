@@ -70,7 +70,7 @@ fn example(name: &str) -> Project {
 
 #[test]
 fn every_examples_data_model_reads_back_as_the_project() {
-    for name in ["shop", "records", "todo", "noughts", "calculator", "dial", "ledger", "stock", "orbs"] {
+    for name in ["shop", "records", "todo", "noughts", "calculator", "dial", "ledger", "stock", "orbs", "network"] {
         let project = example(name);
         let view = views::data_model(&project);
         let (diagram, problems) = diagrams::parse(&view.text);
@@ -102,7 +102,7 @@ fn the_data_model_keeps_the_places_of_its_boxes_for_the_entities_it_draws() {
 
 #[test]
 fn every_examples_class_diagram_reads_back_as_the_project() {
-    for name in ["shop", "records", "todo", "noughts", "calculator", "dial", "ledger", "stock", "orbs"] {
+    for name in ["shop", "records", "todo", "noughts", "calculator", "dial", "ledger", "stock", "orbs", "network"] {
         let project = example(name);
         let text = diagrams::class_model::write(&views::classes_of(&project, None));
         let (diagram, problems) = diagrams::parse(&text);
@@ -169,4 +169,23 @@ fn a_module_uses_the_engines_it_calls_and_the_records_its_functions_take_find_an
     assert!(uses.contains(&("music", "Track")), "total_length takes a list of tracks: {uses:?}");
     assert!(uses.contains(&("loans", "Loan")), "{uses:?}");
     assert!(uses.iter().all(|(from, _)| ["music", "loans", "records"].contains(from)), "only modules use: {uses:?}");
+}
+
+/// The network example's ERD and class diagram are the project's, as From
+/// project writes them; `CLARITY_WRITE_DIAGRAMS=1` writes them again.
+#[test]
+fn the_network_example_s_diagrams_are_its_project_s() {
+    let project = example("network");
+    let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/network/diagrams");
+    let wanted = [("network.mermaid", views::data_model(&project).text), ("networkClasses.mermaid", diagrams::class_model::write(&views::classes_of(&project, None)))];
+    for (name, text) in wanted {
+        let path = folder.join(name);
+        if std::env::var("CLARITY_WRITE_DIAGRAMS").is_ok() {
+            std::fs::create_dir_all(&folder).unwrap();
+            std::fs::write(&path, &text).unwrap();
+        }
+        let written = std::fs::read_to_string(&path).unwrap_or_default();
+        let drawing: String = written.lines().filter(|l| !l.trim_start().starts_with("%% clarity:")).map(|l| format!("{l}\n")).collect();
+        assert_eq!(drawing, text, "{name} is behind the project; write it with CLARITY_WRITE_DIAGRAMS=1");
+    }
 }

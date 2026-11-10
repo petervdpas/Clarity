@@ -100,8 +100,8 @@ fn local_runtime(dir: &Path, backend: Backend, command: &mut Command) {
 /// `toolchain` for a Go, C or C++ desktop program, given Clarity.UI's
 /// library as the IDE gives it: the folder CLARITY_UI names, else the one
 /// this repository built (`cargo build --release -p clarity-ui-ffi`).
-fn with_library(toolchain: clarity_gen::Toolchain, settings: &clarity_project::Settings, target: clarity_project::Target) -> clarity_gen::Toolchain {
-    if target != clarity_project::Target::Desktop || !clarity_gen::uses_clarity_ui(&settings) {
+fn with_library(toolchain: clarity_gen::Toolchain, project: &clarity_spec::Project, settings: &clarity_project::Settings, target: clarity_project::Target) -> clarity_gen::Toolchain {
+    if !clarity_gen::needs_library_folder(project, settings, target) {
         return toolchain;
     }
     let folder = match std::env::var_os("CLARITY_UI") {
@@ -156,7 +156,7 @@ pub fn build_for_run(file: &Path, project: &clarity_spec::Project, settings: &cl
     clarity_gen::write_programs(&out, &programs, settings.stack.backend, &settings.keeps).unwrap();
     let program = programs.iter().find(|p| p.target == target).unwrap_or_else(|| panic!("{} has no {target:?} program", file.display()));
     let folder = clarity_project::target_dir(&out, program.target);
-    let toolchain = with_library(clarity_gen::toolchain(&built, false).expect("Clarity builds this stack"), settings, target);
+    let toolchain = with_library(clarity_gen::toolchain(&built, false).expect("Clarity builds this stack"), project, settings, target);
     let mut command = Command::new(toolchain.tool);
     command.args(&toolchain.args).envs(toolchain.env.iter().cloned()).current_dir(&folder);
     local_runtime(&folder, settings.stack.backend, &mut command);
@@ -186,7 +186,7 @@ pub fn builds_without_warnings(file: &Path, project: &clarity_spec::Project, set
         let target = clarity_project::target_dir(&out, program.target);
         for &release in configurations(settings.stack.backend) {
             let toolchain = if program.target == clarity_project::Target::Cli { clarity_gen::cli_toolchain(&built, release) } else { clarity_gen::toolchain(&built, release) }.expect("Clarity builds this stack");
-            let toolchain = with_library(toolchain, settings, program.target);
+            let toolchain = with_library(toolchain, project, settings, program.target);
             let mut command = Command::new(toolchain.tool);
             command.args(&toolchain.args).envs(toolchain.env.iter().cloned()).current_dir(&target);
             local_runtime(&target, settings.stack.backend, &mut command);

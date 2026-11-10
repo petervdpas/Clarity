@@ -106,6 +106,8 @@ const VIDEO_PACKAGE: &str = "Clarity.Video";
 /// The package of the picture functions of code (docs/IMAGE-PLAN.md), with
 /// Clarity.Image's native library, carried only when code calls one.
 pub(crate) const IMAGE_PACKAGE: &str = "Clarity.Image";
+/// Clarity.Formats' native library (docs/FORMATS-PLAN.md), carried only when code reads or writes a format.
+pub(crate) const FORMATS_PACKAGE: &str = "Clarity.Formats";
 
 /// What a kind of database brings into a project: the runtime's package of
 /// its driver (with the client it stands on), and the class whose Use() turns
@@ -176,7 +178,7 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     let songs = ui == DESKTOP_PACKAGE && clarity_spec::resources::carries_audio(project);
     let videos = ui == DESKTOP_PACKAGE && clarity_spec::resources::plays_videos(project);
     let pictures = crate::uses_picture_functions(project);
-    let media: Vec<&str> = [(songs, AUDIO_PACKAGE), (videos, VIDEO_PACKAGE), (pictures, IMAGE_PACKAGE)].into_iter().filter(|(on, _)| *on).map(|(_, p)| p).collect();
+    let media: Vec<&str> = [(songs, AUDIO_PACKAGE), (videos, VIDEO_PACKAGE), (pictures, IMAGE_PACKAGE), (project.uses_formats(), FORMATS_PACKAGE)].into_iter().filter(|(on, _)| *on).map(|(_, p)| p).collect();
     let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, ui, &media, &packaged, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, parts::references(project) + &library_references(project)))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };

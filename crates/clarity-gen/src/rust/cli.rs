@@ -87,6 +87,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if crate::uses_picture_functions(project) {
         features.push("pictures");
     }
+    // The data formats of code (docs/FORMATS-PLAN.md): Clarity.Formats.
+    if project.uses_formats() {
+        features.push("formats");
+    }
     features.sort();
     features.dedup();
     let types = check::types(&project.files);

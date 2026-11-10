@@ -1296,7 +1296,7 @@
       {#each TABS as t (t.key)}
         <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} title={keyTip(t.name, `view.${t.key}`)} onclick={() => switchTab(t.key)}>{t.name}</button>
       {/each}
-      {#if projectName}<span class="project-name">{projectName}</span>{/if}
+      {#if projectName}<span class="project-name"><span class="project-name-label">Project name:</span> {projectName}</span>{/if}
       <button class="corner settings-button" class:active={appSettings.open} aria-pressed={appSettings.open} onclick={() => (appSettings.open ? closeAppSettings() : (appSettings.open = true))} title={keyTip("Clarity's own settings: its display, its keys, where projects and apps go, where the build tools are, and what the agent may run", "settings")}>Clarity settings</button>
       <button class="corner manual-button" onclick={() => openManual()} title={keyTip("Open the manual on this tab's page", "manual")}>Manual</button>
       <button class="corner agent-toggle" class:active={agent.open} aria-pressed={agent.open} onclick={() => agent.toggle()} title={keyTip("Show or hide the agent", "agent")}>Agent</button>
@@ -2083,7 +2083,10 @@
     margin-left: auto;
     align-self: center;
     font-size: 12px;
-    opacity: 0.8;
+  }
+
+  .project-name-label {
+    opacity: 0.7;
   }
 
   .ribbon-body {

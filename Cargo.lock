@@ -1232,11 +1232,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "clarity-formats"
+version = "0.1.0"
+
+[[package]]
+name = "clarity-formats-ffi"
+version = "0.1.0"
+dependencies = [
+ "clarity-formats",
+]
+
+[[package]]
 name = "clarity-gen"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "bzip2",
+ "clarity-formats",
  "clarity-project",
  "clarity-runtime",
  "clarity-spec",
@@ -1248,6 +1260,13 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tar",
+]
+
+[[package]]
+name = "clarity-graph"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -1323,11 +1342,12 @@ dependencies = [
 
 [[package]]
 name = "clarity-runtime"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
  "chrono",
+ "clarity-formats",
  "clarity-image",
  "keyring",
  "mysql",
@@ -1350,6 +1370,7 @@ name = "clarity-spec"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "clarity-formats",
  "serde",
  "serde_json",
  "ts-rs",
@@ -1371,13 +1392,14 @@ dependencies = [
 
 [[package]]
 name = "clarity-ui"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "accesskit",
  "accesskit_winit",
  "arboard",
  "base64 0.22.1",
  "clarity-audio",
+ "clarity-graph",
  "clarity-image",
  "clarity-runtime",
  "clarity-video",
@@ -1402,7 +1424,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-ui-ffi"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "base64 0.22.1",
  "clarity-audio-ffi",

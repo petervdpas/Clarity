@@ -1,4 +1,4 @@
-//! The data parts: tables, lists, trees, charts, trends and canvases.
+//! The data parts: tables, lists, trees, charts, trends, canvases and graphs.
 //! One test binary for these files (each a module, its tests named
 //! `<file>::<test>`), so Skia is linked once for them all.
 
@@ -16,6 +16,7 @@ mod core_svg;
 mod data_canvas;
 mod data_canvas_engine;
 mod data_chart;
+mod data_graph;
 mod data_list;
 mod data_table;
 mod data_tree;

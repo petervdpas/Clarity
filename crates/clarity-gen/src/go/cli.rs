@@ -105,6 +105,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         files.push(text("engines.go", super::engines_go(project, &[])));
     }
     files.push(text("main.go", main_go(project, settings, &databases, &servers)));
+    // The data formats of code (docs/FORMATS-PLAN.md): Clarity.Formats through cgo, only when used.
+    if project.uses_formats() {
+        files.push(text("formats.go", super::FORMATS_GO.to_string()));
+    }
     let mut direct = vec![RUNTIME_MODULE];
     if files.iter().any(|f| f.path.ends_with(".go") && f.text.contains("\t\"github.com/shopspring/decimal\"\n")) {
         direct.push("github.com/shopspring/decimal");

@@ -9,6 +9,8 @@
   <Chart name="lentChart" at="9,9" span="4" rows="6" bind="albums" chart="pie" by="lentTo" measure="{&quot;field&quot;:&quot;copies&quot;,&quot;kind&quot;:&quot;average&quot;}" />
   <Table name="albumGrid" at="1,15" span="12" rows="4" bind="albums" columns="title, copies" sortable="true" order="{&quot;desc&quot;:false,&quot;field&quot;:&quot;title&quot;}" page="2" />
   <Button name="detailsButton" at="1,19" span="2" caption="@folders" opens="folderDetails" />
+  <Graph name="folderGraph" at="1,20" span="12" rows="6" bind="folders" edges="folders" nodeLabel="name" edgeFrom="id" edgeTo="parent" layout="layered" nodeLooks="{&quot;&quot;:{&quot;shape&quot;:&quot;box&quot;}}" show="size" onselect="folderPicked" onopen="folderPicked" />
+  <Graph name="libraryGraph" at="1,26" span="12" rows="6" lists="folders, albums" hops="2" legend="true" />
   <Slideout name="folderDetails" at="1,1" span="6" rows="4" caption="@folders" resizable="true" slideWidth="360" pinnable="true" max="700" min="300" onopen="folderPicked">
     <Label name="folderLabel" at="1,1" span="6" caption="@folders" />
     <Content name="overviewContent" at="1,2" span="6" rows="3">

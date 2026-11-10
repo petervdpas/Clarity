@@ -1665,6 +1665,12 @@ impl<'a> Emitter<'a> {
     }
 
     /// An expression as a value; a record as a pointer to it.
+    /// A format's options as a C expression of their JSON object (`""` for none).
+    fn format_options(&mut self, options: &[clarity_spec::code::FormatOption], pre: &mut String) -> String {
+        let given: Vec<(String, String)> = options.iter().map(|o| (o.name.name.clone(), format!("clarity_json_of(clarity_json_text({}))", bare(self.value(&o.value, pre))))).collect();
+        c_pieces(&crate::shape::options_pieces(&given))
+    }
+
     fn value(&mut self, expr: &Expr, pre: &mut String) -> String {
         // `app.version`: the project's version, written as the literal text it is.
         if clarity_spec::code::reads_app_version(expr) {
@@ -1786,9 +1792,13 @@ impl<'a> Emitter<'a> {
                 let file = bare(self.value(file, pre));
                 self.lift("ClarityBytes", &format!("clarity_read_bytes(db, {file}, {{out}})"), pre)
             }
-            // JSON (DESIGN 5.23): a value as Clarity's JSON, and records read from a service's.
-            ExprKind::JsonOf { value } => {
+            // A format of the catalog (docs/FORMATS-PLAN.md): a value written in it, and records read from it, through Clarity.Formats.
+            ExprKind::FormatOf { format, value, options } => {
                 let ty = self.types.type_of(value);
+                let Some(kind) = crate::shape::write_kind(self.project, &ty) else {
+                    self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
+                    return String::new();
+                };
                 let v = bare(self.value(value, pre));
                 let json = match &ty {
                     TypeInfo::Record(entity) => format!("{}_json({v})", prefix(entity)),
@@ -1810,34 +1820,27 @@ impl<'a> Emitter<'a> {
                         return String::new();
                     }
                 };
-                format!("clarity_json_of({json})")
+                let options = self.format_options(options, pre);
+                format!("clarity_formats_write({}, clarity_json_of({json}), {options}, {})", string(&format.name), string(&kind))
             }
-            ExprKind::ReadJson { ty, text, at } => {
-                let Some((entity, many)) = crate::json_fields::target(ty) else {
+            ExprKind::ReadFormat { format, ty, input, options } => {
+                let Some(kind) = crate::shape::read_kind(self.project, ty) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
                 };
-                let Some(decl) = self.project.entity(entity) else { return String::new() };
-                let fields = crate::json_fields::fields(self.project, decl);
-                let listed: Vec<String> = fields.iter().map(|(name, kind)| format!("{{{}, {}}}", string(name), c_json_kind(kind))).collect();
-                let text = bare(self.value(text, pre));
-                let at = match at {
-                    Some(at) => bare(self.value(at, pre)),
-                    None => "NULL".to_string(),
+                let (entity, many) = match &ty.kind {
+                    clarity_spec::code::TypeRefKind::List { item } => (item.clone(), true),
+                    clarity_spec::code::TypeRefKind::Named { name } => (name.clone(), false),
+                    _ => return String::new(),
                 };
-                let p = prefix(entity);
-                let template = self.temp();
-                let _ = writeln!(pre, "{entity} {template} = {p}_new();");
-                let fields_arg = if listed.is_empty() { "NULL".to_string() } else { format!("(ClarityJsonField[]){{{}}}", listed.join(", ")) };
-                let fitted = self.lift(
-                    "cJSON*",
-                    &format!("clarity_json_fit({text}, {at}, {many}, {}, {fields_arg}, {}, {p}_json(&{template}), {{out}})", string(entity), fields.len()),
-                    pre,
-                );
+                let input = bare(self.value(input, pre));
+                let options = self.format_options(options, pre);
+                let fitted = self.lift("cJSON*", &format!("clarity_formats_read({}, {input}, {options}, {}, {{out}})", string(&format.name), c_pieces(&kind)), pre);
+                let p = prefix(&entity);
                 if many {
-                    self.lift(&list_type(entity), &format!("{p}_list_from_json({fitted}, {{out}})"), pre)
+                    self.lift(&list_type(&entity), &format!("{p}_list_from_json({fitted}, {{out}})"), pre)
                 } else {
-                    self.lift_record(entity, &format!("{p}_from_json({fitted}, {{out}})"), pre)
+                    self.lift_record(&entity, &format!("{p}_from_json({fitted}, {{out}})"), pre)
                 }
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
@@ -2386,34 +2389,21 @@ fn through(hops: &[crate::query::Hop], cond: String) -> String {
     hops.iter().rev().fold(cond, |inner, h| format!("clarity_through({}, {}, {}, {inner})", string(&h.column), string(&h.table), string(&h.key)))
 }
 
-/// What a field takes from JSON, as the C runtime names it.
-fn c_json_kind(kind: &crate::json_fields::Kind) -> String {
-    use crate::json_fields::Kind;
-    let is = |k: &Kind| match k {
-        Kind::Text => "CLARITY_JSON_TEXT",
-        Kind::Integer => "CLARITY_JSON_INTEGER",
-        Kind::Decimal => "CLARITY_JSON_DECIMAL",
-        Kind::Bool => "CLARITY_JSON_BOOL",
-        Kind::Date => "CLARITY_JSON_DATE",
-        Kind::DateTime => "CLARITY_JSON_DATE_TIME",
-        Kind::Enum(_) => "CLARITY_JSON_ENUM",
-        Kind::Values(_) => "CLARITY_JSON_VALUES",
-        Kind::Record(_) => "CLARITY_JSON_RECORD",
-        Kind::Records(_) => "CLARITY_JSON_RECORDS",
-    };
-    match kind {
-        Kind::Enum(values) => format!(
-            "{{CLARITY_JSON_ENUM, (const char*[]){{{}}}, {}, NULL}}",
-            values.iter().map(|v| string(v)).collect::<Vec<_>>().join(", "),
-            values.len()
-        ),
-        Kind::Values(item) => format!("{{CLARITY_JSON_VALUES, NULL, 0, &(ClarityJsonKind){}}}", c_json_kind(item)),
-        // A record held inside (DESIGN 5.25): its entity's fields, over a new record of it.
-        Kind::Record(nested) | Kind::Records(nested) => {
-            let fields: Vec<String> = nested.fields.iter().map(|(name, kind)| format!("{{{}, {}}}", string(name), c_json_kind(kind))).collect();
-            let listed = if fields.is_empty() { "NULL".to_string() } else { format!("(ClarityJsonField[]){{{}}}", fields.join(", ")) };
-            format!("{{{}, NULL, 0, NULL, {}, {listed}, {}, {}_json_new()}}", is(kind), string(&nested.entity), fields.len(), prefix(&nested.entity))
-        }
-        other => format!("{{{}, NULL, 0, NULL}}", is(other)),
+/// A kind's or options' pieces (crate::shape) as a C expression of a text
+/// in the scratch arena: a base is a new record as its JSON function writes it.
+/// Every piece goes in as a `%s` argument, so a `%` in it is only text.
+fn c_pieces(pieces: &[crate::shape::Piece]) -> String {
+    use crate::shape::Piece;
+    if pieces.is_empty() {
+        return "\"\"".to_string();
     }
+    let parts: Vec<String> = pieces
+        .iter()
+        .map(|p| match p {
+            Piece::Text(t) => string(t),
+            Piece::Base(entity) => format!("clarity_json_of({}_json_new())", prefix(entity)),
+            Piece::Code(code) => code.clone(),
+        })
+        .collect();
+    format!("clarity_format(\"{}\", {})", "%s".repeat(parts.len()), parts.join(", "))
 }

@@ -117,16 +117,18 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let program = crate::commands::program_name(settings);
     let types = check::types(&project.files);
     let engines = !crate::engines(project).is_empty();
-    let mut files = vec![text("CMakeLists.txt", cmake_lists(&program, &space, engines, project.calls_out(), !project.secret_settings().is_empty())), text("CMakePresets.json", PRESETS.to_string())];
+    let cmake = cmake_lists(&program, &space, engines, project.calls_out(), !project.secret_settings().is_empty()) + &crate::c::formats_cmake_lines(project, &space);
+    let mut files = vec![text("CMakeLists.txt", cmake), text("CMakePresets.json", PRESETS.to_string())];
     // The runtime without the service and the desktop: no window.
     let engine_files = ENGINE_FILES.iter().chain(&crate::c::WASM3_FILES).filter(|_| engines);
     let http_files = super::HTTP_FILES.iter().filter(|_| project.calls_out());
     let secret_files = super::SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
-    for (path, body) in RUNTIME_FILES.iter().chain(engine_files).chain(http_files).chain(secret_files) {
+    let formats_files = super::FORMATS_FILES.iter().filter(|_| project.uses_formats());
+    for (path, body) in RUNTIME_FILES.iter().chain(engine_files).chain(http_files).chain(formats_files).chain(secret_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
     let (records_h, records_cpp) = model::emit(project);
-    files.push(text("src/records.hpp", namespaced(&space, &format!("#pragma once\n\n#include <optional>\n#include <string>\n#include <vector>\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/db.hpp\"\n#include \"clarity/sql.hpp\"\n#include \"clarity/json_read.hpp\"\n{}", if project.calls_out() { "#include \"http/http.hpp\"\n" } else { "" }), &records_h)));
+    files.push(text("src/records.hpp", namespaced(&space, &format!("#pragma once\n\n#include <optional>\n#include <string>\n#include <vector>\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/db.hpp\"\n#include \"clarity/sql.hpp\"\n{}{}", if project.calls_out() { "#include \"http/http.hpp\"\n" } else { "" }, if project.uses_formats() { "#include \"formats/formats.hpp\"\n" } else { "" }), &records_h)));
     files.push(text("src/records.cpp", namespaced(&space, "#include \"records.hpp\"\n", &records_cpp)));
 
     let mut errors = Vec::new();

@@ -131,6 +131,12 @@
       <rect x="12" y="14" width="6" height="10" class="fill" />
       <rect x="22" y="8" width="6" height="16" class="fill" />
       <rect x="32" y="17" width="6" height="7" class="fill" />
+    {:else if kind === "graph"}
+      <path d="M13 8 L31 6 M13 8 L22 21 M31 6 L37 19 M22 21 L37 19" class="line" />
+      <circle cx="13" cy="8" r="3.5" class="fill" />
+      <circle cx="31" cy="6" r="3" class="fill" />
+      <circle cx="22" cy="21" r="3.5" class="fill" />
+      <circle cx="37" cy="19" r="3" class="fill" />
     {:else if kind === "tree" || kind === "treeTable"}
       <path d="M8 6 h8 M12 6 v14 M12 13 h6 M12 20 h6" />
       <rect x="18" y="10" width="{kind === 'tree' ? 14 : 24}" height="6" rx="1" class="fill" />

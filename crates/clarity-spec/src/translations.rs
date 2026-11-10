@@ -239,6 +239,16 @@ pub const TABLE_ROW_KEYS: [(&str, &str); 4] = [("addRow", "Add"), ("removeRow", 
 /// `on open`): the tooltip over its rows, so people see they open.
 pub const OPEN_ROW_KEYS: [(&str, &str); 1] = [("openRow", "Double-click or press Enter to open")];
 
+/// What a graph says when it shows fewer nodes than its lists hold (its
+/// `limit`), its hops control, and the tooltip of a kind's chip in its legend.
+pub const GRAPH_KEYS: [(&str, &str); 5] = [
+    ("graphCut", "{shown} of {count} nodes shown"),
+    ("graphHops", "{hops} hops"),
+    ("graphFewerHops", "Fewer hops"),
+    ("graphMoreHops", "More hops"),
+    ("graphKind", "Hide or show {kind}"),
+];
+
 /// What a markdown memo's switch says: writing its text, or reading it as it shows.
 pub const MARKDOWN_MEMO_KEYS: [(&str, &str); 2] = [("markdownWrite", "Write"), ("markdownPreview", "Preview")];
 
@@ -295,6 +305,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&TABLE_ROW_KEYS)
         .chain(&OPEN_ROW_KEYS)
         .chain(&MARKDOWN_MEMO_KEYS)
+        .chain(&GRAPH_KEYS)
         .chain(&RUNTIME_ERROR_KEYS)
         .chain(&DIVISION_KEYS)
         .chain(&ENGINE_ERROR_KEYS)
@@ -691,7 +702,9 @@ fn shown(project: &Project) -> Shown {
     let progress = project.files.iter().flat_map(|f| &f.engines).any(|e| e.uses.iter().any(|u| u.name == crate::code::check::PROGRESS));
     let folders = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Folder));
     let paged = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.page.is_some()));
-    let zooms = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.zoom));
+    let graphs = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Graph));
+    // A graph has the zoom bar a zooming canvas has.
+    let zooms = graphs || project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.zoom));
     let paints = project.files.iter().flat_map(|f| &f.pages).any(|p| {
         any_widget(&p.widgets, &|w| matches!(w.props.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector)))
     });
@@ -780,6 +793,7 @@ fn shown(project: &Project) -> Shown {
         .chain(if table_rows { TABLE_ROW_KEYS.as_slice() } else { &[] })
         .chain(if open_rows { OPEN_ROW_KEYS.as_slice() } else { &[] })
         .chain(if markdown_memos { MARKDOWN_MEMO_KEYS.as_slice() } else { &[] })
+        .chain(if graphs { GRAPH_KEYS.as_slice() } else { &[] })
         .chain(if windows { RUNTIME_ERROR_KEYS.as_slice() } else { &[] })
         .chain(if engines { ENGINE_ERROR_KEYS.as_slice() } else { &[] })
         .chain(if divides { DIVISION_KEYS.as_slice() } else { &[] });

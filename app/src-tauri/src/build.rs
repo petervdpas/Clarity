@@ -270,7 +270,8 @@ fn transpile(file: &Path) -> Result<Source, String> {
         clarity_gen::web_browser::with_library(&mut programs, &browser_folder()?)?;
     }
     let out = clarity_project::out_dir(file, &settings);
-    Ok(Source { out, settings, programs, shown, written: clarity_gen::Written::default() })
+    let formats = project.uses_formats();
+    Ok(Source { out, settings, programs, shown, written: clarity_gen::Written::default(), formats })
 }
 
 /// A project's source tree as it was written: its output folder, its settings and programs.
@@ -282,12 +283,14 @@ pub struct Source {
     shown: String,
     /// What Generate wrote and removed in the output folder; nothing for a transpile alone.
     pub written: clarity_gen::Written,
+    /// Whether the code reads or writes a format, so a Go, C or C++ program of any target links Clarity.Formats.
+    pub formats: bool,
 }
 
 /// What Build and Run build: the source Generate wrote, which must be the
 /// project as it is now; they generate nothing themselves.
 pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, String> {
-    let Source { out, settings, programs, shown, .. } = transpile(file)?;
+    let Source { out, settings, programs, shown, formats, .. } = transpile(file)?;
     // Each program is in its own folder of the output; one without windows has only the command line.
     let cli = cli || !settings.stack.has_ui();
     if cli && !settings.stack.has(clarity_project::Target::Cli) {
@@ -306,7 +309,8 @@ pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, 
     let built = clarity_gen::last_build(&out, &fingerprint)
         .and_then(|release| toolchain_of(release).map(|t| (t, release)))
         .filter(|(t, _)| out.join(&t.program).exists());
-    let library = !cli && clarity_gen::uses_clarity_ui(&settings);
+    // Clarity.UI's folder: a desktop program draws with it, and a program whose code uses a format links Clarity.Formats from it.
+    let library = (!cli && clarity_gen::uses_clarity_ui(&settings)) || (formats && matches!(settings.stack.backend, clarity_project::Backend::Go | clarity_project::Backend::C | clarity_project::Backend::Cpp));
     let data = clarity_project::data_folder(&clarity_project::module_dir(file), &settings);
     Ok(Generated { out, data, toolchain, stack: settings.stack, fingerprint, release, built, library })
 }

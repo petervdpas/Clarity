@@ -101,3 +101,8 @@ bool clarity_json_get_bytes(const cJSON* in, const char* name, ClarityBytes* out
     *out = clarity_from_base64(item->valuestring);
     return true;
 }
+
+const char* clarity_json_of(const cJSON* value) {
+    char* printed = cJSON_PrintUnformatted(value);
+    return printed ? printed : "";
+}

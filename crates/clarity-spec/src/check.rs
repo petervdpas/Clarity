@@ -1578,6 +1578,12 @@ impl<'a> Checker<'a> {
         if p.kind == WidgetKind::Canvas {
             self.check_canvas_mode(file, page, widget, &at);
         }
+        if p.kind == WidgetKind::Graph {
+            self.check_graph_options(file, page, widget, &at);
+            if !p.lists.is_empty() {
+                return;
+            }
+        }
 
         // A markdown or an image shows one thing: a key, a file of the resources (source), or what it binds.
         if matches!(p.kind, WidgetKind::Markdown | WidgetKind::Image)
@@ -1756,6 +1762,9 @@ impl<'a> Checker<'a> {
                 if p.kind == WidgetKind::Chart {
                     self.check_chart(file, &at, entity, widget);
                 }
+                if p.kind == WidgetKind::Graph {
+                    self.check_graph(file, page, &at, entity, widget);
+                }
             }
         }
     }
@@ -1851,6 +1860,91 @@ impl<'a> Checker<'a> {
                 self.error(file, format!("{at}: '{field}' is {}; a chart sums or averages a number", widgets::field_type_tag(&f.ty)), widget.span)
             }
             Some(_) => {}
+        }
+    }
+
+    /// What every graph is given whatever its nodes come from (`hops`), and
+    /// a graph of the data model (`lists`): lists of records, instead of a
+    /// list it binds and its edges; the picked node's entity and id go into
+    /// text and whole-number data.
+    fn check_graph_options(&mut self, file: usize, page: &PageContext<'a>, widget: &Widget, at: &str) {
+        let p = &widget.props;
+        if let Some(hops) = p.hops.filter(|h| !(1..=widgets::GRAPH_MAX_HOPS).contains(h)) {
+            self.error(file, format!("{at}: a graph shows 1 to {} hops from the picked node, not {hops}", widgets::GRAPH_MAX_HOPS), widget.span);
+        }
+        if p.lists.is_empty() {
+            if p.picked_kind.is_some() || p.picked_id.is_some() {
+                self.error(file, format!("{at}: pickedKind and pickedId belong to a graph of lists; a graph it binds has its picked record in selected"), widget.span);
+            }
+            if p.bind.is_none() {
+                self.error(file, format!("{at}: a graph shows the records of the list it binds, as in bind=\"things\", or of the lists it names, as in lists=\"people, places\""), widget.span);
+            }
+            return;
+        }
+        if p.bind.is_some() || p.edges.is_some() || p.node_key.is_some() || p.node_label.is_some() || p.node_kind.is_some() || p.edge_from.is_some() || p.edge_to.is_some() || p.edge_label.is_some() || p.edge_kind.is_some() {
+            self.error(file, format!("{at}: a graph of lists takes its nodes, labels, kinds and edges from the data model; it binds nothing and names no edges or node fields"), widget.span);
+        }
+        let mut entities: Vec<&Entity> = Vec::new();
+        for list in &p.lists {
+            match page.data.get(list.as_str()) {
+                Some(Held::List(Some(entity))) => entities.push(*entity),
+                Some(_) => self.error(file, format!("{at}: '{list}' is no list of records; a graph of lists shows records, as in data people: list<Person>"), widget.span),
+                None => self.error(file, format!("{at}: unknown data '{list}'"), widget.span),
+            }
+        }
+        for field in &p.show {
+            if field != "id" && !entities.iter().any(|e| e.field(field).is_some()) {
+                self.error(file, format!("{at}: none of {} has a field '{field}'", entities.iter().map(|e| e.name.name.as_str()).collect::<Vec<_>>().join(", ")), widget.span);
+            }
+        }
+        for (data, wanted) in [(&p.picked_kind, "text"), (&p.picked_id, "integer")] {
+            let Some(data) = data else { continue };
+            let fits = match page.data.get(data.as_str()) {
+                Some(Held::Value(FieldType::Text { .. })) => wanted == "text",
+                Some(Held::Value(FieldType::Integer | FieldType::Id)) => wanted == "integer",
+                None => {
+                    self.error(file, format!("{at}: unknown data '{data}'"), widget.span);
+                    continue;
+                }
+                _ => false,
+            };
+            if !fits {
+                self.error(file, format!("{at}: '{data}' is to hold the picked node's {}; declare it as {wanted}", if wanted == "text" { "entity" } else { "id" }), widget.span);
+            }
+        }
+    }
+
+    /// A graph's nodes are the records it binds, its edges the records of
+    /// `edges`; every field it names is a field of those records, and its
+    /// key and its edges' ends are the key or a field of their own.
+    fn check_graph(&mut self, file: usize, page: &PageContext<'a>, at: &str, nodes: &Entity, widget: &Widget) {
+        let p = &widget.props;
+        let has = |entity: &Entity, field: &str| field == "id" || field == entity.key_column() || entity.field(field).is_some();
+        let key = p.node_key.as_deref().unwrap_or("id");
+        for field in [Some(key), p.node_label.as_deref(), p.node_kind.as_deref()].into_iter().flatten().chain(p.show.iter().map(String::as_str)) {
+            if !has(nodes, field) {
+                self.error(file, format!("{at}: {} has no field '{field}'", nodes.name.name), widget.span);
+            }
+        }
+        if let Some(limit) = p.limit.filter(|l| !(1..=widgets::GRAPH_MAX_LIMIT).contains(l)) {
+            self.error(file, format!("{at}: a graph shows 1 to {} nodes, not {limit}", widgets::GRAPH_MAX_LIMIT), widget.span);
+        }
+        let Some(list) = p.edges.as_deref() else {
+            if p.edge_from.is_some() || p.edge_to.is_some() || p.edge_label.is_some() || p.edge_kind.is_some() || !p.edge_looks.is_empty() {
+                self.error(file, format!("{at}: name the list of its edges first, as in edges=\"links\""), widget.span);
+            }
+            return;
+        };
+        let edges = match page.data.get(list) {
+            Some(Held::List(Some(entity))) => *entity,
+            Some(_) => return self.error(file, format!("{at}: '{list}' is no list of records; a graph's edges are records, as in data links: list<Link>"), widget.span),
+            None => return self.error(file, format!("{at}: unknown data '{list}'"), widget.span),
+        };
+        let ends = [p.edge_from.as_deref().unwrap_or("source"), p.edge_to.as_deref().unwrap_or("target")];
+        for field in ends.into_iter().chain([p.edge_label.as_deref(), p.edge_kind.as_deref()].into_iter().flatten()) {
+            if !has(edges, field) {
+                self.error(file, format!("{at}: {} has no field '{field}'; an edge names the nodes it joins in its fields (edgeFrom, edgeTo)", edges.name.name), widget.span);
+            }
         }
     }
 

@@ -1,11 +1,13 @@
 //! Data parts: list (with cards), table (with pages, order, columns, edited
 //! cells and reordering), tree and tree table, chart (of rows or of numbers),
-//! trend, and canvas (drawn by code, with its modes, or by an engine).
+//! trend, canvas (drawn by code, with its modes, or by an engine), and
+//! graph (nodes and edges of any records, docs/GRAPH-PLAN.md).
 //! Each kind is a module in the folder of this group; KINDS lists the kinds
 //! the group draws with the function that makes each.
 
 pub mod canvas;
 pub mod chart;
+pub mod graph;
 pub mod groups;
 pub mod list;
 pub mod rows;
@@ -23,4 +25,5 @@ pub const KINDS: &[(&str, MakePart)] = &[
     ("chart", chart::make),
     ("trend", trend::make),
     ("canvas", canvas::make),
+    ("graph", graph::make),
 ];

@@ -16,7 +16,7 @@ mod csharp;
 mod ddl;
 pub(crate) mod go;
 mod cpp;
-mod json_fields;
+mod shape;
 use clarity_spec::code::print;
 mod query;
 mod readme;
@@ -490,7 +490,7 @@ pub(crate) fn rows_shown(page: Option<&clarity_spec::model::Page>) -> std::colle
     fn walk(widgets: &[Widget], out: &mut std::collections::BTreeMap<String, Vec<String>>) {
         for widget in widgets {
             let p = &widget.props;
-            if let (WidgetKind::Table | WidgetKind::List | WidgetKind::Tree | WidgetKind::TreeTable, Some(name), Some(bind)) = (p.kind, &p.name, &p.bind)
+            if let (WidgetKind::Table | WidgetKind::List | WidgetKind::Tree | WidgetKind::TreeTable | WidgetKind::Graph, Some(name), Some(bind)) = (p.kind, &p.name, &p.bind)
                 && !bind.contains('.')
             {
                 out.entry(bind.clone()).or_default().push(name.clone());
@@ -1316,8 +1316,9 @@ fn with_codecs(files: &mut Vec<OutFile>, codecs: Vec<(String, OutFile)>, backend
 }
 
 /// The crates of the base libraries every Go, C, C++ and Rust desktop program
-/// links: Clarity.UI and Clarity.Audio, Clarity.Video and Clarity.Image beside it.
-pub const BASE_LIBRARIES: [&str; 4] = ["clarity-ui-ffi", "clarity-audio-ffi", "clarity-video-ffi", "clarity-image-ffi"];
+/// links: Clarity.UI and Clarity.Audio, Clarity.Video, Clarity.Image and
+/// Clarity.Formats beside it (a program of any target whose code uses a format links Clarity.Formats too).
+pub const BASE_LIBRARIES: [&str; 5] = ["clarity-ui-ffi", "clarity-audio-ffi", "clarity-video-ffi", "clarity-image-ffi", "clarity-formats-ffi"];
 
 /// Clarity's repository holding `from` or a folder above it; none outside one.
 pub fn repository_of(from: &std::path::Path) -> Option<std::path::PathBuf> {
@@ -1344,6 +1345,16 @@ pub fn rebuild_base_libraries(repo: &std::path::Path) -> Result<std::path::PathB
 /// Whether the windowed build (not the command-line program) links
 /// Clarity.UI's library from the folder CLARITY_UI names: a Go, C, C++ or
 /// Rust desktop program (DESIGN 7.9). C# brings the library in its package.
+/// Whether a build of the program of `target` needs Clarity.UI's folder
+/// (CLARITY_UI): a Go, C, C++ or Rust desktop program draws with its library,
+/// and a Go, C or C++ program of any target whose code reads or writes a
+/// format links Clarity.Formats from beside it (docs/FORMATS-PLAN.md).
+pub fn needs_library_folder(project: &Project, settings: &clarity_project::Settings, target: clarity_project::Target) -> bool {
+    let draws = target == clarity_project::Target::Desktop && uses_clarity_ui(settings);
+    let formats = project.uses_formats() && matches!(settings.stack.backend, Backend::Go | Backend::C | Backend::Cpp);
+    draws || formats
+}
+
 pub fn uses_clarity_ui(settings: &clarity_project::Settings) -> bool {
     let stack = &settings.stack;
     let links = match stack.backend {

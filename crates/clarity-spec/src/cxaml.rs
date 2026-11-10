@@ -40,6 +40,11 @@ const COMMAND_WORDS: [(&str, &str); 3] = [("shortcut", "key"), ("onClick", "open
 /// (`onclick`), and what the project works out itself (`made`).
 const OWN_FORM: [&str; 8] = ["kind", "name", "col", "row", "width", "height", "handlers", "made"];
 
+/// Fields the project works out when it loads (a part's undo scope, a
+/// graph's model): a program's markup carries them, a source never does,
+/// though a designer's edit brings them back with a part's properties.
+const WORKED_OUT: [&str; 2] = ["undoScope", "graphModel"];
+
 /// What the markup carries beyond the parts, by who writes it: a program's
 /// own markup marks nothing; the designer's marks each box with where it is
 /// written (`designItem`) and the page a container shows (`designShown`).
@@ -485,7 +490,7 @@ fn attributes(widget: &Widget, marks: &Marks) -> String {
     let mut none = Vec::new();
     if let Value::Object(defaults) = defaults {
         for (field, value) in &own {
-            if OWN_FORM.contains(&field.as_str()) || defaults.get(field) == Some(value) {
+            if OWN_FORM.contains(&field.as_str()) || defaults.get(field) == Some(value) || (marks.source && WORKED_OUT.contains(&field.as_str())) {
                 continue;
             }
             let word = WORDS.iter().find(|(f, _)| f == field).map_or(field.as_str(), |(_, w)| w);

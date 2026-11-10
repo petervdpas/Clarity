@@ -1,0 +1,151 @@
+module network
+
+// An organisation people work for and projects belong to.
+entity Organisation
+    name: text(80), required, label @organisationName
+    city: text(60), label @organisationCity
+
+// A person, who works for an organisation.
+entity Person
+    name: text(80), required, label @personName
+    role: text(80), label @personRole
+    organisation: ref Organisation, label @personOrganisation
+
+// A project, led by a person, of an organisation.
+entity Project
+    name: text(80), required, label @projectName
+    lead: ref Person, label @projectLead
+    organisation: ref Organisation, label @projectOrganisation
+
+// An idea: any thought, of any kind.
+entity Idea
+    title: text(80), required, label @ideaTitle
+    kind: text(40), label @ideaKind
+    note: text, label @ideaNote
+
+// A link from one idea to another, with how they relate.
+entity IdeaLink
+    source: ref Idea, cascade, label @linkSource
+    target: ref Idea, cascade, label @linkTarget
+    relation: text(60), label @linkRelation
+    strength: integer, label @linkStrength
+
+action organisation(name: text, city: text) -> Organisation
+    effects db.write
+    let o = new Organisation
+    o.name = name
+    o.city = city
+    save o
+    return o
+
+action person(name: text, role: text, at: Organisation) -> Person
+    effects db.write
+    let p = new Person
+    p.name = name
+    p.role = role
+    p.organisation = at
+    save p
+    return p
+
+action project(name: text, lead: Person, at: Organisation)
+    effects db.write
+    let p = new Project
+    p.name = name
+    p.lead = lead
+    p.organisation = at
+    save p
+
+action idea(title: text, kind: text, note: text) -> Idea
+    effects db.write
+    let i = new Idea
+    i.title = title
+    i.kind = kind
+    i.note = note
+    save i
+    return i
+
+action link(source: Idea, target: Idea, relation: text, strength: integer)
+    effects db.write
+    let l = new IdeaLink
+    l.source = source
+    l.target = target
+    l.relation = relation
+    l.strength = strength
+    save l
+
+// The records a new database starts with, so both graphs have something to show.
+action startingRecords()
+    effects db.read, db.write
+    if count(find o in Organisation) > 0
+        return
+    let lab = organisation("Northwind Lab", "Utrecht")
+    let works = organisation("Harbour Works", "Rotterdam")
+    let ada = person("Ada", "Engineer", lab)
+    let bo = person("Bo", "Designer", lab)
+    let cas = person("Cas", "Planner", works)
+    let dee = person("Dee", "Engineer", works)
+    project("Bridge sensors", ada, lab)
+    project("Quay planning", cas, works)
+    project("Shared dashboard", bo, works)
+    let graphs = idea("Graphs", "topic", "Records as nodes joined by edges")
+    let layout = idea("Layouts", "topic", "Force, layered, radial, circle")
+    let force = idea("Force layout", "method", "Pushed apart, pulled together")
+    let model = idea("Data model", "topic", "References become edges")
+    let question = idea("Typed properties?", "question", "Open information on a node")
+    link(layout, graphs, "part of", 3)
+    link(force, layout, "kind of", 2)
+    link(model, graphs, "feeds", 3)
+    link(question, model, "extends", 1)
+    link(question, graphs, "about", 1)
+
+code Map
+    handler mapOpened
+        startingRecords()
+        reload people
+        reload organisations
+        reload projects
+        reload ideas
+        reload links
+        nodePicked()
+
+    // The details of the node picked on the map: its record, in the panel of its kind.
+    handler nodePicked
+        personPanel.visible = kindPicked == "Person"
+        organisationPanel.visible = kindPicked == "Organisation"
+        projectPanel.visible = kindPicked == "Project"
+        if kindPicked == "Person"
+            let found = find p in Person where p.id == idPicked
+            if count(found) > 0
+                pickedPerson = found[1]
+        if kindPicked == "Organisation"
+            let found = find o in Organisation where o.id == idPicked
+            if count(found) > 0
+                pickedOrganisation = found[1]
+        if kindPicked == "Project"
+            let found = find p in Project where p.id == idPicked
+            if count(found) > 0
+                pickedProject = found[1]
+
+    handler addIdeaClicked
+        let i = new Idea
+        i.title = @newIdeaTitle
+        save i
+        reload ideas
+    handler removeIdeaClicked
+        delete ideaTable.selected
+        reload ideas
+        reload links
+    handler addLinkClicked
+        if count(ideas) < 2
+            return
+        link(ideas[1], ideas[2], @newLinkRelation, 1)
+        reload links
+    handler removeLinkClicked
+        delete linkTable.selected
+        reload links
+    handler ideaEdited
+        save ideaTable.selected
+        reload ideas
+    handler linkEdited
+        save linkTable.selected
+        reload links

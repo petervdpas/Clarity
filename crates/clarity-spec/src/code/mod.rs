@@ -295,6 +295,14 @@ impl MessageLevel {
     }
 }
 
+/// An option of a format, as code writes it after what is read or written: `at "data.orders"`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct FormatOption {
+    pub name: Ident,
+    pub value: Expr,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct Expr {
@@ -418,15 +426,12 @@ pub enum ExprKind {
     ListOf { items: Vec<Expr> },
     /// The value at a position of a list, from 1: `squares[3]`.
     Index { list: Box<Expr>, index: Box<Expr> },
-    /// `json of order`: a record, a list or a value as Clarity's JSON (DESIGN 5.23).
-    JsonOf { value: Box<Expr> },
-    /// `read list<Order> from json text at "data.orders"`: records read from
-    /// JSON, fitted to the entity first.
-    ReadJson {
-        ty: TypeRef,
-        text: Box<Expr>,
-        at: Option<Box<Expr>>,
-    },
+    /// `json of order`: a record, a list or a value written in a format of
+    /// the catalog (docs/FORMATS-PLAN.md), as every stack writes it.
+    FormatOf { format: Ident, value: Box<Expr>, options: Vec<FormatOption> },
+    /// `read list<Order> from json text at "data.orders"`: what a format
+    /// holds, read and fitted to the record first.
+    ReadFormat { format: Ident, ty: TypeRef, input: Box<Expr>, options: Vec<FormatOption> },
     /// `http post url with body header "Accept": "text/plain"`: a call to a
     /// web API, giving its reply (DESIGN 5.23). Only post, put and patch send a body.
     /// `from shop` calls a path of that web API data source, at its address
@@ -1086,12 +1091,17 @@ pub fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
             each_expr(list, found);
             each_expr(index, found);
         }
-        ExprKind::JsonOf { value } => each_expr(value, found),
-        ExprKind::ReadJson { text, at, .. } => {
-            each_expr(text, found);
-            if let Some(at) = at {
-                each_expr(at, found);
+        ExprKind::FormatOf { value, options, .. } => {
+            each_expr(value, found);
+            for option in options {
+                each_expr(&option.value, found);
             }
+        }
+        ExprKind::ReadFormat { input: text, options, .. } => {
+            for option in options {
+                each_expr(&option.value, found);
+            }
+            each_expr(text, found);
         }
         ExprKind::Http { url, body, headers, query, .. } => {
             for e in http_exprs(url, body.as_deref(), headers, query) {
@@ -1199,7 +1209,13 @@ pub fn each_expr_mut(expr: &mut Expr, found: &mut impl FnMut(&mut Expr)) {
                 each_expr_mut(filter, found);
             }
         }
-        ExprKind::ReadText { file } | ExprKind::ReadBytes { file } | ExprKind::JsonOf { value: file } => each_expr_mut(file, found),
+        ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => each_expr_mut(file, found),
+        ExprKind::FormatOf { value, options, .. } => {
+            each_expr_mut(value, found);
+            for option in options {
+                each_expr_mut(&mut option.value, found);
+            }
+        }
         ExprKind::Ask { question, form } => {
             each_expr_mut(question, found);
             ask_exprs_mut(form, found);
@@ -1209,11 +1225,11 @@ pub fn each_expr_mut(expr: &mut Expr, found: &mut impl FnMut(&mut Expr)) {
             each_expr_mut(list, found);
             each_expr_mut(index, found);
         }
-        ExprKind::ReadJson { text, at, .. } => {
-            each_expr_mut(text, found);
-            if let Some(at) = at {
-                each_expr_mut(at, found);
+        ExprKind::ReadFormat { input: text, options, .. } => {
+            for option in options {
+                each_expr_mut(&mut option.value, found);
             }
+            each_expr_mut(text, found);
         }
         ExprKind::Http { url, body, headers, query, .. } => {
             each_expr_mut(url, found);

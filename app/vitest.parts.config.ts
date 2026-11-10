@@ -10,6 +10,7 @@ export default defineConfig({
   server: shared.server,
   test: {
     environment: "jsdom",
+    globalSetup: ["./vitest.cli.setup.ts"],
     include: ["../runtimes/web/src/**/*.svelte.test.ts", "src/**/*.svelte.test.ts"],
   },
 });

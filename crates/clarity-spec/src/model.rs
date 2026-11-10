@@ -132,6 +132,104 @@ pub struct Field {
     pub span: Span,
 }
 
+/// How a graph places its nodes (docs/GRAPH-PLAN.md): pushed apart along
+/// their edges, in layers along the edges' direction, in rings around the
+/// chosen node, or on one circle. Every layout places the same graph the
+/// same way each time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum GraphLayout {
+    #[default]
+    Force,
+    Layered,
+    Radial,
+    Circle,
+}
+
+/// The shape a graph draws a node as.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum NodeShape {
+    Circle,
+    Square,
+    Diamond,
+    /// A rounded box with the label inside it.
+    Box,
+}
+
+/// The line a graph draws an edge with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum EdgeLine {
+    Solid,
+    Dashed,
+    Dotted,
+}
+
+/// How a graph draws the nodes of one kind; what is left out takes the
+/// graph's own: a circle in the kind's color of the palette.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NodeLook {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shape: Option<NodeShape>,
+    /// A color of the theme (`accent`) or written out (`#d97706`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// Across, in pixels at 100%.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<u32>,
+}
+
+/// How a graph draws the edges of one kind; what is left out takes the
+/// graph's own: a solid line with an arrow at its target.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct EdgeLook {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<EdgeLine>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arrow: Option<bool>,
+}
+
+/// What a graph of the data model knows of the model (docs/GRAPH-PLAN.md,
+/// step 2), worked out when the project loads: each list it shows, the
+/// entity of its records, the field a record shows as its label, and its
+/// references to the other entities shown, which become its edges.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct GraphModel {
+    pub lists: Vec<GraphList>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct GraphList {
+    pub list: String,
+    pub entity: String,
+    /// The record's first text field, as a reference shows a record; none: it shows its entity and id.
+    pub label: Option<String>,
+    pub refs: Vec<GraphRef>,
+}
+
+/// A reference field of a list's records and the entity it refers to.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct GraphRef {
+    pub field: String,
+    pub to: String,
+}
+
 /// What a chart draws: bars, a line through points, or slices of a pie.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -817,6 +915,63 @@ pub struct WidgetProps {
     /// `count`, `sum total`, `average total`: each group's number.
     #[serde(default)]
     pub measure: Option<ChartMeasure>,
+    /// A graph's edges (docs/GRAPH-PLAN.md): the list of records that join
+    /// its nodes, the records of the list it binds.
+    #[serde(default)]
+    pub edges: Option<String>,
+    /// The field of a graph's node its edges name it by; `id` without it.
+    #[serde(default)]
+    pub node_key: Option<String>,
+    /// The field a graph's node shows as its label; its key without it.
+    #[serde(default)]
+    pub node_label: Option<String>,
+    /// The field that gives a graph's node its kind, which its look is chosen by.
+    #[serde(default)]
+    pub node_kind: Option<String>,
+    /// The field of an edge that holds the key of the node it starts at; `source` without it.
+    #[serde(default)]
+    pub edge_from: Option<String>,
+    /// The field of an edge that holds the key of the node it ends at; `target` without it.
+    #[serde(default)]
+    pub edge_to: Option<String>,
+    /// The field an edge shows as its label.
+    #[serde(default)]
+    pub edge_label: Option<String>,
+    /// The field that gives an edge its kind, which its look is chosen by.
+    #[serde(default)]
+    pub edge_kind: Option<String>,
+    /// How a graph places its nodes; force without it.
+    #[serde(default)]
+    pub layout: Option<GraphLayout>,
+    /// How a graph draws the nodes of each kind, by the kind's value.
+    #[serde(default)]
+    pub node_looks: std::collections::BTreeMap<String, NodeLook>,
+    /// How a graph draws the edges of each kind, by the kind's value.
+    #[serde(default)]
+    pub edge_looks: std::collections::BTreeMap<String, EdgeLook>,
+    /// The most nodes a graph shows; `widgets::GRAPH_LIMIT` without it.
+    #[serde(default)]
+    pub limit: Option<u32>,
+    /// A graph of the data model (step 2): the lists of records it shows,
+    /// of any entities, joined by their references to each other.
+    #[serde(default)]
+    pub lists: Vec<String>,
+    /// The text data a graph of the data model writes the picked node's entity into, and reads it from.
+    #[serde(default)]
+    pub picked_kind: Option<String>,
+    /// The whole-number data a graph of the data model writes the picked node's id into, and reads it from.
+    #[serde(default)]
+    pub picked_id: Option<String>,
+    /// A graph shows only the nodes this many edges from the picked one, with a control to change it.
+    #[serde(default)]
+    pub hops: Option<u32>,
+    /// A graph shows its kinds as chips that hide and show them.
+    #[serde(default)]
+    pub legend: bool,
+    /// What a graph of the data model knows of the model, worked out when
+    /// the project loads (`make_graph_models`); it is never written back.
+    #[serde(default)]
+    pub graph_model: Option<GraphModel>,
     /// `children children`: the list field of a tree's rows that lists
     /// records of their own kind, arranged by its reference (U1c).
     #[serde(default)]
@@ -1468,6 +1623,11 @@ impl Project {
     /// stack then brings its HTTP client along.
     pub fn calls_out(&self) -> bool {
         self.any_expr(&|e| matches!(e.kind, crate::code::ExprKind::Http { .. }))
+    }
+
+    /// Whether the code reads or writes a format (docs/FORMATS-PLAN.md), so its program carries Clarity.Formats.
+    pub fn uses_formats(&self) -> bool {
+        self.any_expr(&|e| matches!(e.kind, crate::code::ExprKind::ReadFormat { .. } | crate::code::ExprKind::FormatOf { .. }))
     }
 
     /// Whether the code calls a function `wanted` says yes to, such as a picture function.

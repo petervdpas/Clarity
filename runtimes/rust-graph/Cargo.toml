@@ -1,0 +1,16 @@
+[package]
+name = "clarity-graph"
+description = "Clarity's graphs: nodes and edges read from lists of records or from the data model, the nodes a number of hops away, and deterministic layouts (force, layered, radial, circle)"
+# Released on its own (tag runtimes/rust-graph/vX.Y.Z), before the clarity-ui release that needs it.
+version = "0.1.0"
+edition.workspace = true
+license = "MIT"
+repository = "https://github.com/petervdpas/Clarity"
+homepage = "https://github.com/petervdpas/Clarity"
+readme = "README.md"
+keywords = ["clarity", "graph", "layout", "network"]
+categories = ["visualization"]
+include = ["src/**", "README.md", "LICENSE"]
+
+[dependencies]
+serde_json.workspace = true

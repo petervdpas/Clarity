@@ -111,8 +111,8 @@ fn serve() -> String {
                     200,
                     r#"{"data": [{"number": "A-1", "total": 19.99, "lines": "3", "paid": true, "kind": "person", "placed": "2026-10-25T08:00:00Z", "tags": ["x", "y"], "extra": 1}, {"Number": "A-2", "TOTAL": "5", "kind": "BUSINESS"}]}"#.to_string(),
                 ),
-                // What was sent, as JSON with its names sorted, so every stack's `json of` compares alike.
-                "/json" => (200, serde_json::from_slice::<serde_json::Value>(&body).map(|v| v.to_string()).unwrap_or_else(|e| format!("no JSON: {e}"))),
+                // What was sent, as it was sent: every stack's `json of` writes the same bytes (Clarity.Formats).
+                "/json" => (200, String::from_utf8_lossy(&body).into_owned()),
                 _ => (404, "no such page".to_string()),
             };
             let reason = if status == 200 { "OK" } else { "Not Found" };
@@ -145,11 +145,12 @@ fn the_calls_come_back(program: &Path, dir: &Path, server: &str) {
     assert_eq!(printed(program, dir, &["numbers"]), "[1,2,3,4,5]");
     let refused = printed(program, dir, &["fetch", "http://127.0.0.1:1/"]);
     assert!(refused.starts_with("0 no cannot reach 127.0.0.1: "), "{refused}");
-    // JSON (DESIGN 5.23): a service's list read into records, a record sent as Clarity's JSON.
+    // JSON through Clarity.Formats (docs/FORMATS-PLAN.md): a service's list read into
+    // records, a record sent as JSON, the same bytes on every stack.
     assert_eq!(printed(program, dir, &["orders", &format!("{server}/orders")]), "A-1 19.99 3 yes Person 2026-10-25 2\nA-2 5 0 no Business  0");
     assert_eq!(
         printed(program, dir, &["order", &format!("{server}/json")]),
-        r#"{"id":0,"kind":"Business","lines":2,"number":"A-9","paid":true,"placed":null,"tags":[],"total":"12.5"}"#
+        r#"{"id":0,"number":"A-9","total":"12.5","lines":2,"paid":true,"kind":"Business","placed":null,"tags":[]}"#
     );
     let broken = Command::new(program).args(["broken", &format!("{server}/missing")]).current_dir(dir).env("XDG_CONFIG_HOME", dir.join("config")).output().unwrap();
     assert!(!broken.status.success());
@@ -197,9 +198,9 @@ fn a_go_program_calls_out() {
     std::fs::write(out.join("go.work"), format!("{go}\n\nuse .\n\nreplace github.com/petervdpas/Clarity/runtimes/go => {}\n", clarity_project::slashed(&runtime))).unwrap();
     let gofmt = Command::new("gofmt").args(["-l", "."]).current_dir(&out).output().unwrap();
     assert_eq!(String::from_utf8_lossy(&gofmt.stdout), "", "gofmt would change these files");
-    let vet = Command::new("go").args(["vet", "./..."]).current_dir(&out).output().unwrap();
+    let vet = Command::new("go").args(["vet", "./..."]).current_dir(&out).envs(clarity_gen::go_cgo_env(Some(&library_folder()), std::env::consts::OS)).output().unwrap();
     assert!(vet.status.success(), "{}", String::from_utf8_lossy(&vet.stderr));
-    let build = Command::new("go").args(["build", "-o", "bin/calls", "."]).current_dir(&out).output().unwrap();
+    let build = Command::new("go").args(["build", "-o", "bin/calls", "."]).current_dir(&out).envs(clarity_gen::go_cgo_env(Some(&library_folder()), std::env::consts::OS)).output().unwrap();
     assert!(build.status.success(), "{}", String::from_utf8_lossy(&build.stderr));
     the_calls_come_back(&out.join("bin/calls"), &out, &server);
     std::fs::remove_dir_all(&out).unwrap();
@@ -224,9 +225,16 @@ fn a_csharp_program_calls_out() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
+/// Clarity.UI's folder as this repository builds it, with Clarity.Formats
+/// beside it, which a program that reads or writes a format links.
+fn library_folder() -> PathBuf {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    clarity_gen::clarity_ui::repository_library(&repo, std::env::consts::OS).expect("Clarity.UI's library: cargo build --release -p clarity-ui-ffi -p clarity-formats-ffi")
+}
+
 /// Builds a generated CMake project in `out` and gives its program.
 fn cmake_build(out: &Path, program: &str) -> PathBuf {
-    let configure = Command::new("cmake").args(["-S", ".", "-B", "build/debug", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Debug"]).current_dir(out).output().unwrap();
+    let configure = Command::new("cmake").args(["-S", ".", "-B", "build/debug", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Debug"]).current_dir(out).env("CLARITY_UI", library_folder()).output().unwrap();
     assert!(configure.status.success(), "{}{}", String::from_utf8_lossy(&configure.stdout), String::from_utf8_lossy(&configure.stderr));
     let build = Command::new("cmake").args(["--build", "build/debug", "-j2"]).current_dir(out).output().unwrap();
     assert!(build.status.success(), "{}{}", String::from_utf8_lossy(&build.stdout), String::from_utf8_lossy(&build.stderr));

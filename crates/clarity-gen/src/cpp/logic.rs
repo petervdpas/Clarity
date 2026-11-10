@@ -1114,6 +1114,12 @@ impl<'a> Emitter<'a> {
         format!("db.copied_picture<{}>({object}.{}, {object}.id, {}, {from}, std::nullopt)", read.entity, ident(&read.field), string(&read.column))
     }
 
+    /// A format's options as a C++ expression of their JSON object (an empty string for none).
+    fn format_options(&mut self, options: &[clarity_spec::code::FormatOption]) -> String {
+        let given: Vec<(String, String)> = options.iter().map(|o| (o.name.name.clone(), format!("clarity::json_of(std::string({}))", self.value(&o.value)))).collect();
+        cpp_pieces(&crate::shape::options_pieces(&given))
+    }
+
     fn value(&mut self, expr: &Expr) -> String {
         // `app.version`: the project's version, written as the literal text it is.
         if clarity_spec::code::reads_app_version(expr) {
@@ -1160,22 +1166,27 @@ impl<'a> Emitter<'a> {
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text({})", self.value(file)),
             ExprKind::ReadBytes { file } => format!("db.read_bytes({})", self.value(file)),
-            // JSON (DESIGN 5.23): a value as Clarity's JSON, and records read from a service's.
-            ExprKind::JsonOf { value } => format!("clarity::json_of({})", self.value(value)),
-            ExprKind::ReadJson { ty, text, at } => {
-                let Some((entity, many)) = crate::json_fields::target(ty) else {
+            // A format of the catalog (docs/FORMATS-PLAN.md): a value written in it, and records read from it, through Clarity.Formats.
+            ExprKind::FormatOf { format, value, options } => {
+                let Some(kind) = crate::shape::write_kind(self.project, &self.types.type_of(value)) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
                 };
-                let Some(decl) = self.project.entity(entity) else { return String::new() };
-                let fields: Vec<String> = crate::json_fields::fields(self.project, decl).iter().map(|(name, kind)| format!("{{{}, {}}}", string(name), cpp_json_kind(kind))).collect();
-                let text = self.value(text);
-                let at = match at {
-                    Some(at) => self.value(at),
-                    None => "std::string()".to_string(),
+                let options = self.format_options(options);
+                format!("clarity::formats_write({}, {}, {options}, {})", string(&format.name), self.value(value), string(&kind))
+            }
+            ExprKind::ReadFormat { format, ty, input, options } => {
+                let Some(kind) = crate::shape::read_kind(self.project, ty) else {
+                    self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
+                    return String::new();
                 };
-                let read = if many { format!("std::vector<{entity}>") } else { entity.to_string() };
-                format!("clarity::json_read<{read}>({text}, {at}, {many}, {}, {{{}}}, {entity}{{}})", string(entity), fields.join(", "))
+                let read = match &ty.kind {
+                    clarity_spec::code::TypeRefKind::List { item } => format!("std::vector<{item}>"),
+                    clarity_spec::code::TypeRefKind::Named { name } => name.clone(),
+                    _ => String::new(),
+                };
+                let options = self.format_options(options);
+                format!("clarity::formats_read<{read}>({}, {}, {options}, {})", string(&format.name), self.value(input), cpp_pieces(&kind))
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
             ExprKind::Http { method, url, from, pages, body, headers, query } => {
@@ -1595,31 +1606,21 @@ pub(crate) fn method(handler: &str) -> String {
 }
 
 /// What a field takes from JSON, as the C++ runtime names it.
-fn cpp_json_kind(kind: &crate::json_fields::Kind) -> String {
-    use crate::json_fields::Kind;
-    let is = |k: &Kind| match k {
-        Kind::Text => "Text",
-        Kind::Integer => "Integer",
-        Kind::Decimal => "Decimal",
-        Kind::Bool => "Bool",
-        Kind::Date => "Date",
-        Kind::DateTime => "DateTime",
-        Kind::Enum(_) => "Enum",
-        Kind::Values(_) => "Values",
-        Kind::Record(_) => "Record",
-        Kind::Records(_) => "Records",
-    };
-    match kind {
-        Kind::Enum(values) => format!("clarity::JsonKind{{clarity::JsonKind::Enum, {{{}}}}}", values.iter().map(|v| string(v)).collect::<Vec<_>>().join(", ")),
-        Kind::Values(item) => format!("clarity::JsonKind{{clarity::JsonKind::Values, {{}}, std::make_shared<clarity::JsonKind>({})}}", cpp_json_kind(item)),
-        // A record held inside (DESIGN 5.25): its entity's fields, over a new record of it.
-        Kind::Record(nested) | Kind::Records(nested) => format!(
-            "clarity::JsonKind{{clarity::JsonKind::{}, {{}}, nullptr, {}, std::make_shared<std::vector<clarity::JsonField>>(std::vector<clarity::JsonField>{{{}}}), nlohmann::json({}{{}})}}",
-            is(kind),
-            string(&nested.entity),
-            nested.fields.iter().map(|(name, kind)| format!("{{{}, {}}}", string(name), cpp_json_kind(kind))).collect::<Vec<_>>().join(", "),
-            nested.entity
-        ),
-        other => format!("clarity::JsonKind{{clarity::JsonKind::{}}}", is(other)),
+
+/// A kind's or options' pieces (crate::shape) as a C++ expression of a
+/// std::string: a base is a new record as nlohmann writes it.
+fn cpp_pieces(pieces: &[crate::shape::Piece]) -> String {
+    use crate::shape::Piece;
+    if pieces.is_empty() {
+        return "std::string()".to_string();
     }
+    let parts: Vec<String> = pieces
+        .iter()
+        .map(|p| match p {
+            Piece::Text(t) => format!("std::string({})", string(t)),
+            Piece::Base(entity) => format!("clarity::json_of({entity}{{}})"),
+            Piece::Code(code) => code.clone(),
+        })
+        .collect();
+    parts.join(" + ")
 }

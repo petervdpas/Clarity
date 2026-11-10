@@ -99,6 +99,9 @@ pub enum WidgetKind {
     /// The last values of one number, taken every so many seconds, as a
     /// line (DESIGN 5.26).
     Trend,
+    /// Nodes joined by edges, two lists of records of any kind, laid out
+    /// and drawn by kind (docs/GRAPH-PLAN.md).
+    Graph,
     Image,
     Display,
     Canvas,
@@ -459,7 +462,30 @@ pub enum WidgetProperty {
     Markdown,
     /// `view ClassEditor`: the view a slide-out shows.
     View,
+    /// `edges="links"`, `edgeFrom`, `edgeTo`, `edgeLabel`, `edgeKind`: a graph's edges and their fields.
+    Edges,
+    /// `nodeKey`, `nodeLabel`, `nodeKind`: the fields of a graph's nodes.
+    Nodes,
+    /// `layout="layered"`: how a graph places its nodes.
+    Layout,
+    /// `nodeLooks`, `edgeLooks`: how a graph draws each kind of node and edge.
+    Looks,
+    /// `limit="200"`: the most nodes a graph shows.
+    Limit,
+    /// `lists="people, places"`, `pickedKind`, `pickedId`: a graph of the data model.
+    Lists,
+    /// `hops="2"`: a graph shows what lies that many edges from the picked node.
+    Hops,
+    /// `legend`: a graph's kinds as chips that hide and show them.
+    Legend,
 }
+
+/// The most hops a graph may be given.
+pub const GRAPH_MAX_HOPS: u32 = 10;
+
+/// The most nodes a graph shows without a `limit`, and the most one may be given.
+pub const GRAPH_LIMIT: u32 = 500;
+pub const GRAPH_MAX_LIMIT: u32 = 5000;
 
 /// The fewest and most rows a table's page holds.
 pub const PAGE_SIZES: std::ops::RangeInclusive<u32> = 1..=1000;
@@ -1072,6 +1098,23 @@ const ENTRIES: &[Entry] = &[
         events: &[],
         properties: &[WidgetProperty::By, WidgetProperty::Measure, WidgetProperty::Points, WidgetProperty::Max],
     },
+    // Nodes and edges of any kind, laid out and drawn by kind (docs/GRAPH-PLAN.md).
+    Entry {
+        kind: WidgetKind::Graph,
+        keyword: "graph",
+        name: "Graph",
+        category: Category::Data,
+        size: (8, 8),
+        caption: None,
+        bind: BindTarget::Collection,
+        field_types: &[],
+        input: false,
+        container: None,
+        // A click on a node runs `on click` or opens what `opens` names (a slide-out with its details).
+        clickable: true,
+        events: &[Event::Click, Event::Select, Event::Open],
+        properties: &[WidgetProperty::Edges, WidgetProperty::Nodes, WidgetProperty::Layout, WidgetProperty::Looks, WidgetProperty::Limit, WidgetProperty::Show, WidgetProperty::Lists, WidgetProperty::Hops, WidgetProperty::Legend],
+    },
     // One number's last values as a line, taken every so many seconds (DESIGN 5.26).
     Entry {
         kind: WidgetKind::Trend,
@@ -1608,6 +1651,24 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         chart: (kind == WidgetKind::Chart).then_some(crate::model::ChartKind::Bar),
         by: None,
         measure: (kind == WidgetKind::Chart).then_some(crate::model::ChartMeasure::Count),
+        edges: None,
+        node_key: None,
+        node_label: None,
+        node_kind: None,
+        edge_from: None,
+        edge_to: None,
+        edge_label: None,
+        edge_kind: None,
+        layout: None,
+        node_looks: Default::default(),
+        edge_looks: Default::default(),
+        limit: None,
+        lists: Vec::new(),
+        picked_kind: None,
+        picked_id: None,
+        hops: None,
+        legend: false,
+        graph_model: None,
         search: false,
         labels: None,
         volume: None,
@@ -2187,6 +2248,14 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Copy, props.copy, "copy"),
         (WidgetProperty::Markdown, props.markdown, "markdown"),
         (WidgetProperty::View, props.view.is_some(), "view"),
+        (WidgetProperty::Edges, props.edges.is_some() || props.edge_from.is_some() || props.edge_to.is_some() || props.edge_label.is_some() || props.edge_kind.is_some(), "edges"),
+        (WidgetProperty::Nodes, props.node_key.is_some() || props.node_label.is_some() || props.node_kind.is_some(), "nodeKey"),
+        (WidgetProperty::Layout, props.layout.is_some(), "layout"),
+        (WidgetProperty::Looks, !props.node_looks.is_empty() || !props.edge_looks.is_empty(), "nodeLooks"),
+        (WidgetProperty::Limit, props.limit.is_some(), "limit"),
+        (WidgetProperty::Lists, !props.lists.is_empty() || props.picked_kind.is_some() || props.picked_id.is_some(), "lists"),
+        (WidgetProperty::Hops, props.hops.is_some(), "hops"),
+        (WidgetProperty::Legend, props.legend, "legend"),
     ];
     for (property, present, what) in checks {
         if present && !has_property(props.kind, property) {
@@ -2312,6 +2381,7 @@ fn grows(kind: WidgetKind) -> bool {
             | WidgetKind::Tree
             | WidgetKind::TreeTable
             | WidgetKind::Chart
+            | WidgetKind::Graph
             | WidgetKind::Image
             | WidgetKind::Canvas
             | WidgetKind::Markdown

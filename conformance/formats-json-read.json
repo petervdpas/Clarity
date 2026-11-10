@@ -1,0 +1,1074 @@
+{
+  "about": "Reading JSON into records through Clarity.Formats (docs/FORMATS-PLAN.md; DESIGN 5.23): `read Order from json text` and `read list<Order> from json text`, with the option `at` (`\"data.items\"`) to start inside. The library fits what is read to what the program wants (`kind`: a record or a list of records, with its entity, fields and base) before the stack's own decoder reads the result: the text is parsed, `at` walks object names (dots between them), then each object is fitted to the entity's fields. A field is found by its name, else by its name ignoring case, underscores and hyphens (credit_limit, creditLimit and Credit-Limit are one). Fields the JSON leaves out, or gives as null, keep the record's defaults (`base`, a new record as Clarity writes it), and names the entity does not have are ignored; so is `id`, as the record is new. Each kind takes: text a string, a number or a bool (written as JSON writes it); integer a whole number or a string of one; decimal (and money) a number or a string of one, written as exact text; bool true or false; date a string of the date (a date and time keeps its date); datetime a string `YYYY-MM-DDTHH:MM` or with seconds, a fraction of a second and a `Z` left out; enum a string of one of its values, any case; values a list whose items fit `item`; record an object, fitted to the fields and base of its own entity (`entity`, `fields`, `base` on the field), and records a list of such objects, each fitted alike: records inside records, which an entity of a web API has (DESIGN 5.25); other (a reference, a picture, a file, a list of stored records) is never read. An error inside a nested object or list says where: `field 'lines' of Order, item 2: ` before the message about the inner record. `fitted` is the record or list that results; `error` the message a reading that does not fit gives, word for word. Numbers are taken from the text they were written in, never through a floating point number: a decimal keeps every digit and an exponent is written out, a whole number is any 64-bit integer (also written with a zero fraction or an exponent), strings of numbers may have spaces around them, a number read as text keeps how it was written, and of names that match ignoring case, underscores, hyphens and spaces the first written counts.",
+  "cases": [
+    {
+      "name": "an object fits its fields, by name and by name ignoring case and underscores",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "credit_limit",
+            "kind": "decimal"
+          },
+          {
+            "name": "lines",
+            "kind": "integer"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "credit_limit": "0",
+          "lines": 0,
+          "paid": false
+        }
+      },
+      "input": "{\"number\": \"A-12\", \"creditLimit\": 1999.5, \"LINES\": 3, \"paid\": true, \"extra\": [1, 2]}",
+      "fitted": {
+        "id": 0,
+        "number": "A-12",
+        "credit_limit": "1999.5",
+        "lines": 3,
+        "paid": true
+      }
+    },
+    {
+      "name": "what the JSON leaves out or gives as null keeps its default, and id is never read",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "lines",
+            "kind": "integer"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "new",
+          "lines": 1
+        }
+      },
+      "input": "{\"id\": 77, \"lines\": null}",
+      "fitted": {
+        "id": 0,
+        "number": "new",
+        "lines": 1
+      }
+    },
+    {
+      "name": "numbers and bools become text, strings of numbers become numbers",
+      "kind": {
+        "kind": "record",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "flag",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          },
+          {
+            "name": "price",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "flag": "",
+          "count": 0,
+          "price": "0"
+        }
+      },
+      "input": "{\"code\": 42, \"flag\": false, \"count\": \"7\", \"price\": \"12.50\"}",
+      "fitted": {
+        "id": 0,
+        "code": "42",
+        "flag": "false",
+        "count": 7,
+        "price": "12.50"
+      }
+    },
+    {
+      "name": "dates, dates and times and enums",
+      "kind": {
+        "kind": "record",
+        "entity": "Visit",
+        "fields": [
+          {
+            "name": "on",
+            "kind": "date"
+          },
+          {
+            "name": "since",
+            "kind": "date"
+          },
+          {
+            "name": "at",
+            "kind": "datetime"
+          },
+          {
+            "name": "kind",
+            "kind": "enum",
+            "values": [
+              "Person",
+              "Business"
+            ]
+          }
+        ],
+        "base": {
+          "id": 0,
+          "on": null,
+          "since": null,
+          "at": null,
+          "kind": "Person"
+        }
+      },
+      "input": "{\"on\": \"2026-10-25\", \"since\": \"2026-01-02T08:30:00Z\", \"at\": \"2026-10-25T14:05:09.250Z\", \"kind\": \"business\"}",
+      "fitted": {
+        "id": 0,
+        "on": "2026-10-25",
+        "since": "2026-01-02",
+        "at": "2026-10-25T14:05:09",
+        "kind": "Business"
+      }
+    },
+    {
+      "name": "a list of values fits each item, and what is never read keeps its default",
+      "kind": {
+        "kind": "record",
+        "entity": "Album",
+        "fields": [
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "years",
+            "kind": "values",
+            "item": {
+              "kind": "integer"
+            }
+          },
+          {
+            "name": "artist",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "tags": [],
+          "years": [],
+          "artist": null
+        }
+      },
+      "input": "{\"tags\": [\"jazz\", 1959], \"years\": [1959, \"1960\"], \"artist\": {\"name\": \"Miles\"}}",
+      "fitted": {
+        "id": 0,
+        "tags": [
+          "jazz",
+          "1959"
+        ],
+        "years": [
+          1959,
+          1960
+        ],
+        "artist": null
+      }
+    },
+    {
+      "name": "a list of records, from inside the reply",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": ""
+        }
+      },
+      "options": {
+        "at": "data.orders"
+      },
+      "input": "{\"data\": {\"orders\": [{\"number\": \"A-1\"}, {\"number\": \"A-2\"}], \"count\": 2}}",
+      "fitted": [
+        {
+          "id": 0,
+          "number": "A-1"
+        },
+        {
+          "id": 0,
+          "number": "A-2"
+        }
+      ]
+    },
+    {
+      "name": "text that is no JSON",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": ""
+        }
+      },
+      "input": "<html>Not found</html>",
+      "error": "the text is no JSON"
+    },
+    {
+      "name": "a path that is not there",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": ""
+        }
+      },
+      "options": {
+        "at": "data.items"
+      },
+      "input": "{\"data\": {\"orders\": []}}",
+      "error": "the JSON has no 'data.items'"
+    },
+    {
+      "name": "one record where a list is wanted",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": ""
+        }
+      },
+      "input": "{\"number\": \"A-1\"}",
+      "error": "the JSON is not a list of Order"
+    },
+    {
+      "name": "a list where one record is wanted",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": ""
+        }
+      },
+      "input": "[{\"number\": \"A-1\"}]",
+      "error": "the JSON is not one Order"
+    },
+    {
+      "name": "an item of a list that is no record",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": ""
+        }
+      },
+      "input": "[{\"number\": \"A-1\"}, \"A-2\"]",
+      "error": "item 2 of the list is not one Order"
+    },
+    {
+      "name": "a value that does not fit its field",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "lines",
+            "kind": "integer"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "lines": 0
+        }
+      },
+      "input": "{\"lines\": \"three\"}",
+      "error": "field 'lines' of Order is an integer, not \"three\""
+    },
+    {
+      "name": "a value of a list item that does not fit",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "paid",
+            "kind": "bool"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "paid": false
+        }
+      },
+      "input": "[{\"paid\": true}, {\"paid\": \"yes\"}]",
+      "error": "item 2: field 'paid' of Order is true or false, not \"yes\""
+    },
+    {
+      "name": "an enum value it does not have",
+      "kind": {
+        "kind": "record",
+        "entity": "Customer",
+        "fields": [
+          {
+            "name": "kind",
+            "kind": "enum",
+            "values": [
+              "Person",
+              "Business"
+            ]
+          }
+        ],
+        "base": {
+          "id": 0,
+          "kind": "Person"
+        }
+      },
+      "input": "{\"kind\": \"Robot\"}",
+      "error": "field 'kind' of Customer is Person or Business, not \"Robot\""
+    },
+    {
+      "name": "a decimal that is no number",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "total": "0"
+        }
+      },
+      "input": "{\"total\": \"12,50\"}",
+      "error": "field 'total' of Order is a decimal, not \"12,50\""
+    },
+    {
+      "name": "a date that is no date",
+      "kind": {
+        "kind": "record",
+        "entity": "Visit",
+        "fields": [
+          {
+            "name": "on",
+            "kind": "date"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "on": null
+        }
+      },
+      "input": "{\"on\": \"25-10-2026\"}",
+      "error": "field 'on' of Visit is a date, not \"25-10-2026\""
+    },
+    {
+      "name": "a nested object and a list of objects fit their own entities",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "title",
+            "kind": "text"
+          },
+          {
+            "name": "owner",
+            "kind": "record",
+            "entity": "User",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              },
+              {
+                "name": "age",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": "",
+              "age": 0
+            }
+          },
+          {
+            "name": "lines",
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            }
+          }
+        ],
+        "base": {
+          "id": 0,
+          "title": "",
+          "owner": {
+            "id": 0,
+            "name": "",
+            "age": 0
+          },
+          "lines": []
+        }
+      },
+      "input": "{\"title\": \"Pens\", \"Owner\": {\"Name\": \"Ann\", \"age\": \"41\", \"id\": 9}, \"lines\": [{\"product\": \"Pen\", \"quantity\": 2}, {\"PRODUCT\": \"Ink\"}]}",
+      "fitted": {
+        "id": 0,
+        "title": "Pens",
+        "owner": {
+          "id": 0,
+          "name": "Ann",
+          "age": 41
+        },
+        "lines": [
+          {
+            "id": 0,
+            "product": "Pen",
+            "quantity": 2
+          },
+          {
+            "id": 0,
+            "product": "Ink",
+            "quantity": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "a nested object or list left out or null keeps its default",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "title",
+            "kind": "text"
+          },
+          {
+            "name": "owner",
+            "kind": "record",
+            "entity": "User",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              },
+              {
+                "name": "age",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": "",
+              "age": 0
+            }
+          },
+          {
+            "name": "lines",
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            }
+          }
+        ],
+        "base": {
+          "id": 0,
+          "title": "",
+          "owner": {
+            "id": 0,
+            "name": "",
+            "age": 0
+          },
+          "lines": []
+        }
+      },
+      "input": "{\"title\": \"Empty\", \"owner\": null}",
+      "fitted": {
+        "id": 0,
+        "title": "Empty",
+        "owner": {
+          "id": 0,
+          "name": "",
+          "age": 0
+        },
+        "lines": []
+      }
+    },
+    {
+      "name": "a nested object that is no object",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "title",
+            "kind": "text"
+          },
+          {
+            "name": "owner",
+            "kind": "record",
+            "entity": "User",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              },
+              {
+                "name": "age",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": "",
+              "age": 0
+            }
+          },
+          {
+            "name": "lines",
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            }
+          }
+        ],
+        "base": {
+          "id": 0,
+          "title": "",
+          "owner": {
+            "id": 0,
+            "name": "",
+            "age": 0
+          },
+          "lines": []
+        }
+      },
+      "input": "{\"owner\": \"Ann\"}",
+      "error": "field 'owner' of Order is one User, not \"Ann\""
+    },
+    {
+      "name": "a list of objects that is no list",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "title",
+            "kind": "text"
+          },
+          {
+            "name": "owner",
+            "kind": "record",
+            "entity": "User",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              },
+              {
+                "name": "age",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": "",
+              "age": 0
+            }
+          },
+          {
+            "name": "lines",
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            }
+          }
+        ],
+        "base": {
+          "id": 0,
+          "title": "",
+          "owner": {
+            "id": 0,
+            "name": "",
+            "age": 0
+          },
+          "lines": []
+        }
+      },
+      "input": "{\"lines\": 3}",
+      "error": "field 'lines' of Order is a list of Line, not 3"
+    },
+    {
+      "name": "an item of a nested list that is no object",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "title",
+            "kind": "text"
+          },
+          {
+            "name": "owner",
+            "kind": "record",
+            "entity": "User",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              },
+              {
+                "name": "age",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": "",
+              "age": 0
+            }
+          },
+          {
+            "name": "lines",
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            }
+          }
+        ],
+        "base": {
+          "id": 0,
+          "title": "",
+          "owner": {
+            "id": 0,
+            "name": "",
+            "age": 0
+          },
+          "lines": []
+        }
+      },
+      "input": "{\"lines\": [{\"product\": \"Pen\"}, 7]}",
+      "error": "field 'lines' of Order, item 2 is not one Line"
+    },
+    {
+      "name": "a value inside a nested object that does not fit",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "title",
+            "kind": "text"
+          },
+          {
+            "name": "owner",
+            "kind": "record",
+            "entity": "User",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              },
+              {
+                "name": "age",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": "",
+              "age": 0
+            }
+          },
+          {
+            "name": "lines",
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            }
+          }
+        ],
+        "base": {
+          "id": 0,
+          "title": "",
+          "owner": {
+            "id": 0,
+            "name": "",
+            "age": 0
+          },
+          "lines": []
+        }
+      },
+      "input": "{\"owner\": {\"age\": \"old\"}}",
+      "error": "field 'owner' of Order: field 'age' of User is an integer, not \"old\""
+    },
+    {
+      "name": "a value inside a nested list that does not fit",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "title",
+            "kind": "text"
+          },
+          {
+            "name": "owner",
+            "kind": "record",
+            "entity": "User",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              },
+              {
+                "name": "age",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": "",
+              "age": 0
+            }
+          },
+          {
+            "name": "lines",
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            }
+          }
+        ],
+        "base": {
+          "id": 0,
+          "title": "",
+          "owner": {
+            "id": 0,
+            "name": "",
+            "age": 0
+          },
+          "lines": []
+        }
+      },
+      "input": "{\"lines\": [{\"quantity\": 1}, {\"quantity\": \"three\"}]}",
+      "error": "field 'lines' of Order, item 2: field 'quantity' of Line is an integer, not \"three\""
+    },
+    {
+      "name": "a decimal read from a number keeps every digit, and an exponent is written out",
+      "kind": {
+        "kind": "record",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "price",
+            "kind": "decimal"
+          },
+          {
+            "name": "big",
+            "kind": "decimal"
+          },
+          {
+            "name": "thousand",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "price": "0",
+          "big": "0",
+          "thousand": "0"
+        }
+      },
+      "input": "{\"price\": 12.50, \"big\": 123456789012345678.10, \"thousand\": 1e3}",
+      "fitted": {
+        "id": 0,
+        "price": "12.50",
+        "big": "123456789012345678.10",
+        "thousand": "1000"
+      }
+    },
+    {
+      "name": "a whole number is any 64-bit integer, also written with a zero fraction or an exponent",
+      "kind": {
+        "kind": "record",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "a",
+            "kind": "integer"
+          },
+          {
+            "name": "b",
+            "kind": "integer"
+          },
+          {
+            "name": "c",
+            "kind": "integer"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "a": 0,
+          "b": 0,
+          "c": 0
+        }
+      },
+      "input": "{\"a\": 3.0, \"b\": 9007199254740993, \"c\": 2e3}",
+      "fitted": {
+        "id": 0,
+        "a": 3,
+        "b": 9007199254740993,
+        "c": 2000
+      }
+    },
+    {
+      "name": "a whole number past the 64-bit range does not fit",
+      "kind": {
+        "kind": "record",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "a",
+            "kind": "integer"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "a": 0
+        }
+      },
+      "input": "{\"a\": 9223372036854775808}",
+      "error": "field 'a' of Item is an integer, not 9223372036854775808"
+    },
+    {
+      "name": "a string of a number may have spaces around it",
+      "kind": {
+        "kind": "record",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "count",
+            "kind": "integer"
+          },
+          {
+            "name": "price",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "count": 0,
+          "price": "0"
+        }
+      },
+      "input": "{\"count\": \" 7 \", \"price\": \" 12.5 \"}",
+      "fitted": {
+        "id": 0,
+        "count": 7,
+        "price": "12.5"
+      }
+    },
+    {
+      "name": "of names that match ignoring case and underscores, the first written counts",
+      "kind": {
+        "kind": "record",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "credit_limit",
+            "kind": "integer"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "credit_limit": 0
+        }
+      },
+      "input": "{\"Credit_Limit\": 1, \"creditlimit\": 2}",
+      "fitted": {
+        "id": 0,
+        "credit_limit": 1
+      }
+    },
+    {
+      "name": "a number read as text keeps how it was written",
+      "kind": {
+        "kind": "record",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": ""
+        }
+      },
+      "input": "{\"code\": 1.50}",
+      "fitted": {
+        "id": 0,
+        "code": "1.50"
+      }
+    }
+  ]
+}

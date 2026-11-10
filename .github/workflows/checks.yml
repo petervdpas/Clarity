@@ -65,13 +65,13 @@ jobs:
         with:
           key: library
       - name: Build the libraries
-        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi
+        run: cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi -p clarity-formats-ffi
       - name: Pack the folder
         run: |
           set -euo pipefail
           mkdir -p clarity-ui/include clarity-ui/lib
-          cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h runtimes/rust-image-ffi/include/clarity_image.h clarity-ui/include/
-          cp target/release/libclarity_ui.so target/release/libclarity_audio.so target/release/libclarity_video.so target/release/libclarity_image.so clarity-ui/lib/
+          cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h runtimes/rust-image-ffi/include/clarity_image.h runtimes/rust-formats-ffi/include/clarity_formats.h clarity-ui/include/
+          cp target/release/libclarity_ui.so target/release/libclarity_audio.so target/release/libclarity_video.so target/release/libclarity_image.so target/release/libclarity_formats.so clarity-ui/lib/
           python3 .github/scripts/fetch_openh264.py linux-x64 clarity-ui/lib
           ls -lR clarity-ui
       - uses: actions/upload-artifact@v7
@@ -134,11 +134,6 @@ jobs:
       - name: Check the renderer
         working-directory: app
         run: npm run check
-      # The designer's test reads every example through the command line
-      # Clarity; built here, so no test spends its time limit compiling it.
-      - name: Build the command line Clarity
-        if: ${{ !inputs.tests }}
-        run: cargo build -p clarity-cli
       - name: Test the renderer
         if: ${{ !inputs.tests }}
         working-directory: app
@@ -161,6 +156,7 @@ jobs:
 
   go:
     name: Go runtime
+    needs: [library]
     if: ${{ !inputs.only || inputs.only == 'all' || inputs.only == 'go' }}
     runs-on: ubuntu-24.04
     steps:
@@ -169,9 +165,20 @@ jobs:
         with:
           go-version-file: runtimes/go/go.mod
           cache-dependency-path: runtimes/go/go.sum
+      - uses: actions/download-artifact@v8
+        with:
+          name: clarity-ui-linux-x64
+          path: clarity-ui
       - name: Test the runtime
         working-directory: runtimes/go
         run: go test ./clarity
+      # The data formats through Clarity.Formats, linked through cgo as a program links it.
+      - name: Test the data formats
+        working-directory: runtimes/go
+        run: |
+          set -euo pipefail
+          folder="$GITHUB_WORKSPACE/clarity-ui"
+          CGO_CFLAGS="-I$folder/include" CGO_LDFLAGS="-L$folder/lib -Wl,-rpath,$folder/lib" go test -tags clarityformats -run Formats ./clarity
 
   c-cpp:
     name: C and C++ runtimes
@@ -219,7 +226,7 @@ jobs:
       - name: Place the native libraries
         run: |
           set -euo pipefail
-          for part in ui audio video image; do
+          for part in ui audio video image formats; do
             Part="$(echo ${part:0:1} | tr a-z A-Z)${part:1}"
             dest="runtimes/csharp/Clarity.$Part/runtimes/linux-x64/native"
             mkdir -p "$dest"
@@ -243,7 +250,7 @@ jobs:
       fail-fast: false
       matrix:
         # Run by hand with one example's name: that one alone.
-        example: ${{ fromJSON(inputs.example && format('["{0}"]', inputs.example) || '["calculator", "dashboard", "dial", "invaders", "kitchen", "ledger", "modelling", "mp3player", "noughts", "novel", "orbs", "pills", "records", "shop", "stock", "todo", "videoplayer", "walker", "waves"]') }}
+        example: ${{ fromJSON(inputs.example && format('["{0}"]', inputs.example) || '["calculator", "dashboard", "dial", "invaders", "kitchen", "ledger", "modelling", "mp3player", "network", "noughts", "novel", "orbs", "pills", "records", "shop", "stock", "todo", "videoplayer", "walker", "waves"]') }}
     env:
       # Debug builds only, as on the laptop's routine checks.
       CLARITY_EXAMPLES_QUICK: "1"
@@ -273,7 +280,7 @@ jobs:
       - name: Place the native libraries for C#
         run: |
           set -euo pipefail
-          for part in ui audio video image; do
+          for part in ui audio video image formats; do
             Part="$(echo ${part:0:1} | tr a-z A-Z)${part:1}"
             dest="runtimes/csharp/Clarity.$Part/runtimes/linux-x64/native"
             mkdir -p "$dest"

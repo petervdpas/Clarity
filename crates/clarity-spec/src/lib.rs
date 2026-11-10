@@ -114,6 +114,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
     make_form_labels(&mut files);
     make_undo_scopes(&mut files);
     make_custom_grows(&mut files);
+    make_graph_models(&mut files);
     make_hears(&mut files);
     diagnostics.extend(check::check(&files));
     diagnostics.extend(files.iter().flat_map(themes::check_decls));
@@ -231,6 +232,51 @@ fn make_undo_scopes(files: &mut [model::SpecFile]) {
         }
         for app in &mut file.apps {
             frame(&mut app.frame);
+        }
+    }
+}
+
+/// What each graph of lists knows of the data model (docs/GRAPH-PLAN.md,
+/// step 2), worked out once for every screen: the entity of each list it
+/// shows, its records' label (the first text field, as a reference shows a
+/// record), and its references to the other entities shown, its edges.
+fn make_graph_models(files: &mut [model::SpecFile]) {
+    let entities: Vec<model::Entity> = files.iter().flat_map(|f| f.entities.iter().chain(&f.records)).cloned().collect();
+    fn set(widgets: &mut [model::Widget], data: &[model::DataDecl], entities: &[model::Entity]) {
+        for w in widgets.iter_mut() {
+            if w.props.kind == widgets::WidgetKind::Graph && !w.props.lists.is_empty() {
+                let of = |list: &str| match data.iter().find(|d| d.name.name == list).map(|d| &d.of) {
+                    Some(model::DataKind::List { entity }) => entities.iter().find(|e| e.name.name == entity.name),
+                    _ => None,
+                };
+                let shown: Vec<(&String, &model::Entity)> = w.props.lists.iter().filter_map(|l| of(l).map(|e| (l, e))).collect();
+                let lists = shown
+                    .iter()
+                    .map(|(list, entity)| model::GraphList {
+                        list: (*list).clone(),
+                        entity: entity.name.name.clone(),
+                        label: entity.fields.iter().find(|f| matches!(f.ty, model::FieldType::Text { .. })).map(|f| f.name.name.clone()),
+                        refs: entity
+                            .fields
+                            .iter()
+                            .filter_map(|f| match &f.ty {
+                                model::FieldType::Ref { entity: to } if shown.iter().any(|(_, e)| e.name.name == to.name) => Some(model::GraphRef { field: f.name.name.clone(), to: to.name.clone() }),
+                                _ => None,
+                            })
+                            .collect(),
+                    })
+                    .collect();
+                w.props.graph_model = Some(model::GraphModel { lists });
+            }
+            set(&mut w.children, data, entities);
+            for inner in &mut w.pages {
+                set(&mut inner.children, data, entities);
+            }
+        }
+    }
+    for file in files.iter_mut() {
+        for page in &mut file.pages {
+            set(&mut page.widgets, &page.data, &entities);
         }
     }
 }

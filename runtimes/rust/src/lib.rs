@@ -21,7 +21,8 @@ pub mod files;
 #[cfg(feature = "http")]
 pub mod http;
 pub mod i18n;
-pub mod json;
+#[cfg(feature = "formats")]
+pub mod formats;
 pub mod keys;
 pub mod list_fields;
 pub mod markdown;

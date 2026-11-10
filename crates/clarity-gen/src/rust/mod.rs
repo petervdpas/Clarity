@@ -118,6 +118,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if crate::uses_picture_functions(project) {
         features.push("pictures");
     }
+    // The data formats of code (docs/FORMATS-PLAN.md): Clarity.Formats.
+    if project.uses_formats() {
+        features.push("formats");
+    }
     // Secret settings (DESIGN 5.27): the system's protected store.
     if !project.secret_settings().is_empty() {
         features.push("secrets");

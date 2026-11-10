@@ -32,12 +32,12 @@ if [ "$browser_ready" = 0 ]; then
 fi
 cp LICENSE "$browser/"
 
-cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi
+cargo build --release -p clarity-ui-ffi -p clarity-audio-ffi -p clarity-video-ffi -p clarity-image-ffi -p clarity-formats-ffi
 
 stage=app/src-tauri/clarity-ui
 rm -rf "$stage"
 mkdir -p "$stage/include" "$stage/lib"
-cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h runtimes/rust-image-ffi/include/clarity_image.h "$stage/include/"
+cp runtimes/rust-ui-ffi/include/clarity_ui.h runtimes/rust-audio-ffi/include/clarity_audio.h runtimes/rust-video-ffi/include/clarity_video.h runtimes/rust-image-ffi/include/clarity_image.h runtimes/rust-formats-ffi/include/clarity_formats.h "$stage/include/"
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) files="clarity_ui.dll clarity_ui.dll.lib" ;;
     Darwin) files="libclarity_ui.dylib" ;;
@@ -48,6 +48,7 @@ for f in $files; do
     cp "target/release/${f/clarity_ui/clarity_audio}" "$stage/lib/"
     cp "target/release/${f/clarity_ui/clarity_video}" "$stage/lib/"
     cp "target/release/${f/clarity_ui/clarity_image}" "$stage/lib/"
+    cp "target/release/${f/clarity_ui/clarity_formats}" "$stage/lib/"
 done
 case "$(uname -s)-$(uname -m)" in
     MINGW*-x86_64|MSYS*-x86_64|CYGWIN*-x86_64) rid=win-x64 ;;

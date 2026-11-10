@@ -1,0 +1,196 @@
+{
+  "about": "Writing JSON through Clarity.Formats (docs/FORMATS-PLAN.md): `json of value`. A stack's codec writes the value as it writes it (its own order of names, its own way with numbers); the library writes it in Clarity's one form, so every stack gives the same bytes: a record's `id` first, then its fields in the entity's order (`kind` lists them), then anything else as it came; a decimal as exact text in its shortest form (no zeros at the end of its fraction, which decimal types keep or drop differently: `12.50` is written `12.5`); a whole number without a fraction or exponent; a date as `YYYY-MM-DD` and a date and time as `YYYY-MM-DDTHH:MM:SS`; an enum value as declared; no spaces; a text with only quotes, backslashes and control characters escaped. `value` is what a stack's codec wrote, `written` the bytes every stack writes, word for word.",
+  "cases": [
+    {
+      "name": "a record's id first, then its fields in the entity's order, whatever order its stack wrote them in",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "kind",
+            "kind": "enum",
+            "values": [
+              "Person",
+              "Business"
+            ]
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "lines",
+            "kind": "integer"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "shipped",
+            "kind": "datetime"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "customer",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "kind": "Person",
+          "total": "0",
+          "lines": 0,
+          "paid": false,
+          "placed": null,
+          "shipped": null,
+          "tags": [],
+          "customer": null
+        }
+      },
+      "value": "{\"customer\":4,\"id\":7,\"kind\":\"Business\",\"lines\":2,\"number\":\"A-9\",\"paid\":true,\"placed\":\"2026-10-25\",\"shipped\":\"2026-10-25T09:30:00\",\"tags\":[\"x\"],\"total\":\"12.50\"}",
+      "written": "{\"id\":7,\"number\":\"A-9\",\"kind\":\"Business\",\"total\":\"12.5\",\"lines\":2,\"paid\":true,\"placed\":\"2026-10-25\",\"shipped\":\"2026-10-25T09:30:00\",\"tags\":[\"x\"],\"customer\":4}"
+    },
+    {
+      "name": "a decimal becomes exact text in its shortest form, a whole number loses a zero fraction, a date and time loses a fraction and a Z",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "kind",
+            "kind": "enum",
+            "values": [
+              "Person",
+              "Business"
+            ]
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "lines",
+            "kind": "integer"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "shipped",
+            "kind": "datetime"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "customer",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "kind": "Person",
+          "total": "0",
+          "lines": 0,
+          "paid": false,
+          "placed": null,
+          "shipped": null,
+          "tags": [],
+          "customer": null
+        }
+      },
+      "value": "{\"id\":1,\"number\":\"B-1\",\"kind\":\"business\",\"total\":12.5,\"lines\":2.0,\"paid\":false,\"placed\":null,\"shipped\":\"2026-10-25T09:30:00.123Z\",\"tags\":[],\"customer\":null}",
+      "written": "{\"id\":1,\"number\":\"B-1\",\"kind\":\"Business\",\"total\":\"12.5\",\"lines\":2,\"paid\":false,\"placed\":null,\"shipped\":\"2026-10-25T09:30:00\",\"tags\":[],\"customer\":null}"
+    },
+    {
+      "name": "a list of records, each in its entity's order, and records inside records",
+      "kind": {
+        "kind": "records",
+        "entity": "Invoice",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "lines",
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "amount",
+                "kind": "decimal"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "amount": "0"
+            }
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "lines": []
+        }
+      },
+      "value": "[{\"lines\":[{\"amount\":\"2.00\",\"id\":0,\"product\":\"pen\"}],\"number\":\"I-1\",\"id\":3}]",
+      "written": "[{\"id\":3,\"number\":\"I-1\",\"lines\":[{\"id\":0,\"product\":\"pen\",\"amount\":\"2\"}]}]"
+    },
+    {
+      "name": "a plain value and a list of values",
+      "kind": {
+        "kind": "values",
+        "item": {
+          "kind": "decimal"
+        }
+      },
+      "value": "[1.50,\"2\",3e1]",
+      "written": "[\"1.5\",\"2\",\"30\"]"
+    },
+    {
+      "name": "a text keeps its characters, escaping only what JSON must",
+      "kind": {
+        "kind": "text"
+      },
+      "value": "\"caf\\u00e9 \\\"quoted\\\" a/b\"",
+      "written": "\"café \\\"quoted\\\" a/b\""
+    }
+  ]
+}

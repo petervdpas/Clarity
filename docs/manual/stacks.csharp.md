@@ -18,7 +18,7 @@ Clarity.UI is not named in the stack line: after the language come the targets, 
 
 Clarity writes a .NET project into the output folder (`out` by default). `<Name>` is the project name in Pascal case.
 
-- `<Name>.csproj`: the project, targeting .NET 10 (`net10.0`).
+- `<Name>.csproj`: the project, targeting .NET 10 (`net10.0`). For code that reads or writes a [data format](code.formats.md) it takes the NuGet `Clarity.Formats` too, which carries the library for every system.
 - `Modules/<Module>.cs`: one file per Clarity module, with its enums, records, functions, actions and data events.
 - `Windows/<Window>ViewModel.cs`: each window's view model, which holds its data, the state of its parts and its handlers.
 - `Windows/<Window>.cxaml` and `Apps/<App>.cxaml`: each window and each app frame as markup, which Clarity.UI draws (see [Windows](design.windows.md)).

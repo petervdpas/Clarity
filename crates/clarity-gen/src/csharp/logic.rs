@@ -943,6 +943,12 @@ impl<'a> Emitter<'a> {
         format!("{}.CopiedPicture<{}>({object}.{}, {object}.Id, {}, {from}, null)", self.db, read.entity, property(&read.entity, &read.field), string(&read.column))
     }
 
+    /// A format's options as a C# expression of their JSON object (`""` for none).
+    fn format_options(&mut self, options: &[clarity_spec::code::FormatOption]) -> String {
+        let given: Vec<(String, String)> = options.iter().map(|o| (o.name.name.clone(), format!("JsonValues.Of({})", self.value(&o.value)))).collect();
+        cs_pieces(&crate::shape::options_pieces(&given))
+    }
+
     fn value(&mut self, expr: &Expr) -> String {
         // `app.version`: the project's version, written as the literal text it is.
         if clarity_spec::code::reads_app_version(expr) {
@@ -1022,22 +1028,27 @@ impl<'a> Emitter<'a> {
                 let db = self.db;
                 format!("{db}.ReadBytes({})", self.value(file))
             }
-            // JSON (DESIGN 5.23): a value as Clarity's JSON, and records read from a service's.
-            ExprKind::JsonOf { value } => format!("JsonValues.Of({})", self.value(value)),
-            ExprKind::ReadJson { ty, text, at } => {
-                let Some((entity, many)) = crate::json_fields::target(ty) else {
+            // A format of the catalog (docs/FORMATS-PLAN.md): a value written in it, and records read from it, through Clarity.Formats.
+            ExprKind::FormatOf { format, value, options } => {
+                let Some(kind) = crate::shape::write_kind(self.project, &self.types.type_of(value)) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
                 };
-                let Some(decl) = self.project.entity(entity) else { return String::new() };
-                let fields: Vec<String> = crate::json_fields::fields(self.project, decl).iter().map(|(name, kind)| format!("new JsonField({}, {})", string(name), cs_json_kind(kind))).collect();
-                let text = self.value(text);
-                let at = match at {
-                    Some(at) => self.value(at),
-                    None => "null".to_string(),
+                let options = self.format_options(options);
+                format!("Clarity.Formats.FormatFunctions.Write({}, {}, {options}, {})", string(&format.name), self.value(value), string(&kind))
+            }
+            ExprKind::ReadFormat { format, ty, input, options } => {
+                let Some(kind) = crate::shape::read_kind(self.project, ty) else {
+                    self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
+                    return String::new();
                 };
-                let read = if many { "ReadList" } else { "Read" };
-                format!("JsonValues.{read}({text}, {at}, {}, [{}], new {entity}())", string(entity), fields.join(", "))
+                let read = match &ty.kind {
+                    clarity_spec::code::TypeRefKind::List { item } => format!("List<{item}>"),
+                    clarity_spec::code::TypeRefKind::Named { name } => name.clone(),
+                    _ => String::new(),
+                };
+                let options = self.format_options(options);
+                format!("Clarity.Formats.FormatFunctions.Read<{read}>({}, {}, {options}, {})", string(&format.name), self.value(input), cs_pieces(&kind))
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
             ExprKind::Http { method, url, from, pages, body, headers, query } => {
@@ -1381,19 +1392,21 @@ fn through(hops: &[crate::query::Hop], cond: String) -> String {
 }
 
 /// What a field takes from JSON, as the C# runtime names it.
-fn cs_json_kind(kind: &crate::json_fields::Kind) -> String {
-    use crate::json_fields::Kind;
-    match kind {
-        Kind::Enum(values) => format!("new JsonKind(\"enum\", [{}])", values.iter().map(|v| string(v)).collect::<Vec<_>>().join(", ")),
-        Kind::Values(item) => format!("new JsonKind(\"values\", null, {})", cs_json_kind(item)),
-        // A record held inside (DESIGN 5.25): its entity's fields, over a new record of it.
-        Kind::Record(nested) | Kind::Records(nested) => format!(
-            "JsonKind.{}({}, [{}], new {}())",
-            if matches!(kind, Kind::Record(_)) { "Record" } else { "Records" },
-            string(&nested.entity),
-            nested.fields.iter().map(|(name, kind)| format!("new JsonField({}, {})", string(name), cs_json_kind(kind))).collect::<Vec<_>>().join(", "),
-            nested.entity
-        ),
-        other => format!("new JsonKind(\"{}\")", other.word()),
+
+/// A kind's or options' pieces (crate::shape) as a C# expression of a
+/// string: a base is a new record as Clarity's JSON writes it.
+fn cs_pieces(pieces: &[crate::shape::Piece]) -> String {
+    use crate::shape::Piece;
+    if pieces.is_empty() {
+        return "\"\"".to_string();
     }
+    pieces
+        .iter()
+        .map(|p| match p {
+            Piece::Text(t) => string(t),
+            Piece::Base(entity) => format!("JsonValues.Of(new {entity}())"),
+            Piece::Code(code) => code.clone(),
+        })
+        .collect::<Vec<_>>()
+        .join(" + ")
 }

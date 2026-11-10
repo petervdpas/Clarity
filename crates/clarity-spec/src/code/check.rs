@@ -3090,16 +3090,28 @@ impl<'a> BodyChecker<'_, 'a> {
     }
 
     /// `read Order from json text at "path"`: an entity or a list of one,
-    /// from text, starting at a text path. Pure, so functions read JSON
-    /// too; an engine keeps to its own values.
-    fn read_json(&mut self, ty: &TypeRef, text: &Expr, at: Option<&Expr>, span: Span) -> Ty<'a> {
+    /// read from a format of the catalog (docs/FORMATS-PLAN.md), from text,
+    /// with the format's options. Pure, so functions read formats too; an
+    /// engine keeps to its own values.
+    fn read_format(&mut self, format: &Ident, ty: &TypeRef, input: &Expr, options: &[super::FormatOption], span: Span) -> Ty<'a> {
+        let Some(info) = clarity_formats::format(&format.name) else {
+            self.error(format!("there is no format '{}'", format.name), format.span);
+            return Ty::Unknown;
+        };
         if let Some(engine) = self.engine {
-            self.error(format!("an engine does not read JSON: engine {} takes records, and a handler or an action reads them", engine.name.name), span);
+            self.error(format!("an engine does not read {}: engine {} takes records, and a handler or an action reads them", info.title, engine.name.name), span);
         }
         let read = match self.env.type_ref(ty) {
-            Ok(found @ (Ty::Record(entity) | Ty::List(entity))) if !entity.settings => found,
+            Ok(found @ (Ty::Record(entity) | Ty::List(entity))) if !entity.settings => {
+                if !info.nests
+                    && let Some(field) = entity.fields.iter().find(|f| matches!(f.ty, FieldType::Record { .. } | FieldType::List { .. }))
+                {
+                    self.error(format!("{} holds no records inside records: field '{}' of {} does", info.title, field.name.name, entity.name.name), ty.span);
+                }
+                found
+            }
             Ok(other) => {
-                self.error(format!("'read ... from json' reads a record or a list of records, not {}", other.name()), ty.span);
+                self.error(format!("'read ... from {}' reads a record or a list of records, not {}", info.name, other.name()), ty.span);
                 Ty::Unknown
             }
             Err(why) => {
@@ -3107,17 +3119,32 @@ impl<'a> BodyChecker<'_, 'a> {
                 Ty::Unknown
             }
         };
-        let given = self.expr(text, Some(Ty::Text));
+        let given = self.expr(input, Some(Ty::Text));
         if !matches!(given, Ty::Text | Ty::Unknown) {
-            self.error(format!("the JSON to read is text, not {}", given.name()), text.span);
+            self.error(format!("the {} to read is text, not {}", info.title, given.name()), input.span);
         }
-        if let Some(at) = at {
-            let given = self.expr(at, Some(Ty::Text));
-            if !matches!(given, Ty::Text | Ty::Unknown) {
-                self.error(format!("where to start in the JSON is text, not {}", given.name()), at.span);
+        self.format_options(&info, options);
+        read
+    }
+
+    /// The options written with a format: each once, of the kind the catalog says.
+    fn format_options(&mut self, info: &clarity_formats::FormatInfo, options: &[super::FormatOption]) {
+        for (i, option) in options.iter().enumerate() {
+            if options[..i].iter().any(|o| o.name.name == option.name.name) {
+                self.error(format!("the option '{}' is given twice", option.name.name), option.name.span);
+            }
+            let Some(declared) = info.options.iter().find(|o| o.name == option.name.name) else { continue };
+            let (wanted, word) = match declared.kind {
+                clarity_formats::OptionKind::Text => (Ty::Text, "text"),
+                clarity_formats::OptionKind::Bool => (Ty::Bool, "true or false"),
+            };
+            let text = matches!(wanted, Ty::Text);
+            let given = self.expr(&option.value, Some(wanted));
+            let fits = matches!(given, Ty::Unknown) || if text { matches!(given, Ty::Text) } else { matches!(given, Ty::Bool) };
+            if !fits {
+                self.error(format!("the option '{}' of {} is {word}, not {}", option.name.name, info.name, given.name()), option.value.span);
             }
         }
-        read
     }
 
     /// An HTTP call: in handlers and commands, and in actions with `effects
@@ -3624,7 +3651,7 @@ impl<'a> BodyChecker<'_, 'a> {
             "brush" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas && matches!(p.mode, Some(crate::model::CanvasMode::Paint | crate::model::CanvasMode::Vector))) => value(Ty::Integer),
             "selected" => {
                 let Part::Widget(props) = part else { return None };
-                if !matches!(props.kind, WidgetKind::Table | WidgetKind::List | WidgetKind::Tree | WidgetKind::TreeTable) {
+                if !matches!(props.kind, WidgetKind::Table | WidgetKind::List | WidgetKind::Tree | WidgetKind::TreeTable | WidgetKind::Graph) {
                     return None;
                 }
                 let item = props.bind.as_deref().and_then(|b| self.data(b)).map(|d| self.env.data_type(d));
@@ -3867,14 +3894,17 @@ impl<'a> BodyChecker<'_, 'a> {
                 Ty::Text
             }
             ExprKind::Http { method, url, body, headers, query, .. } => self.http(*method, url, body.as_deref(), headers, query, expr.span),
-            ExprKind::JsonOf { value } => {
+            ExprKind::FormatOf { format, value, options } => {
                 let ty = self.expr(value, None);
                 if !(ty.is_value() || matches!(ty, Ty::Record(_) | Ty::List(_) | Ty::Values(_) | Ty::Unknown)) {
-                    self.error(format!("'json of' takes a record, a list or a value, not {}", ty.name()), value.span);
+                    self.error(format!("'{} of' takes a record, a list or a value, not {}", format.name, ty.name()), value.span);
+                }
+                if let Some(info) = clarity_formats::format(&format.name) {
+                    self.format_options(&info, options);
                 }
                 Ty::Text
             }
-            ExprKind::ReadJson { ty, text, at } => self.read_json(ty, text, at.as_deref(), expr.span),
+            ExprKind::ReadFormat { format, ty, input, options } => self.read_format(format, ty, input, options, expr.span),
             ExprKind::ReadBytes { file } => {
                 self.check_files("reads a file", "files.read", expr.span);
                 let ty = self.expr(file, None);
@@ -4777,8 +4807,8 @@ fn mentions(expr: &Expr, var: &str) -> bool {
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => mentions(file, var),
         ExprKind::Http { url, body, headers, query, .. } => crate::code::http_exprs(url, body.as_deref(), headers, query).iter().any(|e| mentions(e, var)),
-        ExprKind::JsonOf { value } => mentions(value, var),
-        ExprKind::ReadJson { text, at, .. } => mentions(text, var) || at.as_deref().is_some_and(|a| mentions(a, var)),
+        ExprKind::FormatOf { value, options, .. } => mentions(value, var) || options.iter().any(|o| mentions(&o.value, var)),
+        ExprKind::ReadFormat { input, options, .. } => mentions(input, var) || options.iter().any(|o| mentions(&o.value, var)),
         ExprKind::Ask { question, form } => mentions(question, var) || crate::code::ask_exprs(form).iter().any(|e| mentions(e, var)),
         ExprKind::New { .. } => false,
         ExprKind::Text { parts } => parts.iter().any(|p| matches!(p, TextPart::Slot { value } if mentions(value, var))),
@@ -5258,11 +5288,16 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
                 each_expr(e, found);
             }
         }
-        ExprKind::JsonOf { value } => each_expr(value, found),
-        ExprKind::ReadJson { text, at, .. } => {
-            each_expr(text, found);
-            if let Some(at) = at {
-                each_expr(at, found);
+        ExprKind::FormatOf { value, options, .. } => {
+            each_expr(value, found);
+            for option in options {
+                each_expr(&option.value, found);
+            }
+        }
+        ExprKind::ReadFormat { input, options, .. } => {
+            each_expr(input, found);
+            for option in options {
+                each_expr(&option.value, found);
             }
         }
         ExprKind::Ask { question, form } => {

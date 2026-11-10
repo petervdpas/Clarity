@@ -1,0 +1,31 @@
+erDiagram
+    Organisation {
+        text(80) name "required"
+        text(60) city
+    }
+    Person {
+        text(80) name "required"
+        text(80) role
+        Organisation organisation FK
+    }
+    Project {
+        text(80) name "required"
+        Person lead FK
+        Organisation organisation FK
+    }
+    Idea {
+        text(80) title "required"
+        text(40) kind
+        text note
+    }
+    IdeaLink {
+        Idea source FK
+        Idea target FK
+        text(60) relation
+        integer strength
+    }
+    Person }o..o| Organisation : organisation
+    Project }o..o| Person : lead
+    Project }o..o| Organisation : organisation
+    IdeaLink }o..o| Idea : source
+    IdeaLink }o..o| Idea : target

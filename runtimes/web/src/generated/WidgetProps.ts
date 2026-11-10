@@ -6,8 +6,12 @@ import type { ChartKind } from "./ChartKind";
 import type { ChartMeasure } from "./ChartMeasure";
 import type { ColumnLink } from "./ColumnLink";
 import type { DropFrom } from "./DropFrom";
+import type { EdgeLook } from "./EdgeLook";
+import type { GraphLayout } from "./GraphLayout";
+import type { GraphModel } from "./GraphModel";
 import type { Handler } from "./Handler";
 import type { Literal } from "./Literal";
+import type { NodeLook } from "./NodeLook";
 import type { Orientation } from "./Orientation";
 import type { SlideSide } from "./SlideSide";
 import type { Surface } from "./Surface";
@@ -217,6 +221,81 @@ by: string | null,
  * `count`, `sum total`, `average total`: each group's number.
  */
 measure: ChartMeasure | null, 
+/**
+ * A graph's edges (docs/GRAPH-PLAN.md): the list of records that join
+ * its nodes, the records of the list it binds.
+ */
+edges: string | null, 
+/**
+ * The field of a graph's node its edges name it by; `id` without it.
+ */
+nodeKey: string | null, 
+/**
+ * The field a graph's node shows as its label; its key without it.
+ */
+nodeLabel: string | null, 
+/**
+ * The field that gives a graph's node its kind, which its look is chosen by.
+ */
+nodeKind: string | null, 
+/**
+ * The field of an edge that holds the key of the node it starts at; `source` without it.
+ */
+edgeFrom: string | null, 
+/**
+ * The field of an edge that holds the key of the node it ends at; `target` without it.
+ */
+edgeTo: string | null, 
+/**
+ * The field an edge shows as its label.
+ */
+edgeLabel: string | null, 
+/**
+ * The field that gives an edge its kind, which its look is chosen by.
+ */
+edgeKind: string | null, 
+/**
+ * How a graph places its nodes; force without it.
+ */
+layout: GraphLayout | null, 
+/**
+ * How a graph draws the nodes of each kind, by the kind's value.
+ */
+nodeLooks: { [key in string]: NodeLook }, 
+/**
+ * How a graph draws the edges of each kind, by the kind's value.
+ */
+edgeLooks: { [key in string]: EdgeLook }, 
+/**
+ * The most nodes a graph shows; `widgets::GRAPH_LIMIT` without it.
+ */
+limit: number | null, 
+/**
+ * A graph of the data model (step 2): the lists of records it shows,
+ * of any entities, joined by their references to each other.
+ */
+lists: Array<string>, 
+/**
+ * The text data a graph of the data model writes the picked node's entity into, and reads it from.
+ */
+pickedKind: string | null, 
+/**
+ * The whole-number data a graph of the data model writes the picked node's id into, and reads it from.
+ */
+pickedId: string | null, 
+/**
+ * A graph shows only the nodes this many edges from the picked one, with a control to change it.
+ */
+hops: number | null, 
+/**
+ * A graph shows its kinds as chips that hide and show them.
+ */
+legend: boolean, 
+/**
+ * What a graph of the data model knows of the model, worked out when
+ * the project loads (`make_graph_models`); it is never written back.
+ */
+graphModel: GraphModel | null, 
 /**
  * `children children`: the list field of a tree's rows that lists
  * records of their own kind, arranged by its reference (U1c).

@@ -144,16 +144,18 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let program = crate::commands::program_name(settings);
     let types = check::types(&project.files);
     let engines = !crate::engines(project).is_empty();
-    let mut files = vec![text("CMakeLists.txt", cmake_lists(&program, engines, project.calls_out(), !project.secret_settings().is_empty())), text("CMakePresets.json", PRESETS.to_string())];
+    let cmake = cmake_lists(&program, engines, project.calls_out(), !project.secret_settings().is_empty()) + &super::formats_cmake_lines(project, &snake(&program));
+    let mut files = vec![text("CMakeLists.txt", cmake), text("CMakePresets.json", PRESETS.to_string())];
     // The runtime without the desktop layer: no window.
     let engine_files = ENGINE_FILES.iter().chain(&WASM3_FILES).filter(|_| engines);
     let http_files = super::HTTP_FILES.iter().filter(|_| project.calls_out());
     let secret_files = super::SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
-    for (path, body) in RUNTIME_FILES.iter().chain(engine_files).chain(http_files).chain(secret_files) {
+    let formats_files = super::FORMATS_FILES.iter().filter(|_| project.uses_formats());
+    for (path, body) in RUNTIME_FILES.iter().chain(engine_files).chain(http_files).chain(formats_files).chain(secret_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
     let (records_h, records_c) = model::emit(project);
-    files.push(text("src/records.h", format!("{HEADER}\n#pragma once\n\n#include <stddef.h>\n\n#include \"clarity/code.h\"\n#include \"clarity/list_fields.h\"\n{}\n{}", if project.calls_out() { "#include \"http/http.h\"\n" } else { "" }, records_h.trim_end().to_string() + "\n")));
+    files.push(text("src/records.h", format!("{HEADER}\n#pragma once\n\n#include <stddef.h>\n\n#include \"clarity/code.h\"\n#include \"clarity/list_fields.h\"\n{}{}\n{}", if project.calls_out() { "#include \"http/http.h\"\n" } else { "" }, if project.uses_formats() { "#include \"formats/formats.h\"\n" } else { "" }, records_h.trim_end().to_string() + "\n")));
     files.push(text("src/records.c", format!("{HEADER}\n#include <stdlib.h>\n#include <string.h>\n\n#include \"app.h\"\n\n{}", records_c.trim_end().to_string() + "\n")));
 
     let mut errors = Vec::new();

@@ -1,0 +1,9 @@
+// Network: graphs of records. A map of people, organisations and projects
+// drawn from the data model, and a free graph of ideas and their links.
+// Its module is in the network folder next to this file.
+project Network
+    title "Network"
+    stack rust desktop
+    output "out"
+    language "en"
+    datasource main sqlite "data/network.db"

@@ -18,7 +18,7 @@ use crate::ProjectTools;
 const TEMPLATES: [&str; 6] = ["blank", "form", "browse", "settings", "splash", "toolbox"];
 
 /// Properties a part has that are worked out, never set.
-const WORKED_OUT: [&str; 5] = ["kind", "made", "undoScope", "grows", "description"];
+const WORKED_OUT: [&str; 6] = ["kind", "made", "undoScope", "grows", "description", "graphModel"];
 
 fn page_prop() -> Value {
     json!({ "type": "string", "description": "The window or view, by its name (Main, CustomerView)" })

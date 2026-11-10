@@ -1,0 +1,42 @@
+classDiagram
+    namespace network {
+        class Organisation {
+            +name: text(80), required
+            +city: text(60)
+        }
+        class Person {
+            +name: text(80), required
+            +role: text(80)
+        }
+        class Project {
+            +name: text(80), required
+        }
+        class Idea {
+            +title: text(80), required
+            +kind: text(40)
+            +note: text
+        }
+        class IdeaLink {
+            +relation: text(60)
+            +strength: integer
+        }
+    }
+    class network {
+        <<module>>
+        +organisation(name: text, city: text) Organisation
+        +person(name: text, role: text, at: Organisation) Person
+        +project(name: text, lead: Person, at: Organisation)
+        +idea(title: text, kind: text, note: text) Idea
+        +link(source: Idea, target: Idea, relation: text, strength: integer)
+        +startingRecords()
+    }
+    Person "*" --> "0..1" Organisation : organisation
+    Project "*" --> "0..1" Person : lead
+    Project "*" --> "0..1" Organisation : organisation
+    IdeaLink "*" --> "0..1" Idea : source
+    IdeaLink "*" --> "0..1" Idea : target
+    network ..> Organisation
+    network ..> Person
+    network ..> Project
+    network ..> Idea
+    network ..> IdeaLink

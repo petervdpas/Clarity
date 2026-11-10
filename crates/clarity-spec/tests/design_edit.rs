@@ -284,3 +284,20 @@ fn a_wiring_is_split_between_the_design_file_and_the_module() {
     assert_eq!(split(&Edit::AddEntity { name: "Thing".into() }).0, None);
     assert!(split(&Edit::NameParts).1.is_none());
 }
+
+/// What the project works out when it loads (a part's undo scope, a graph's
+/// model) comes back with the part's properties in a designer's edit, and
+/// is never written into the source.
+#[test]
+fn an_edit_writes_no_worked_out_property_into_the_source() {
+    let markup = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Window class=\"m.Main\">\n  <Graph name=\"map\" at=\"1,1\" span=\"6\" rows=\"6\" lists=\"people\" />\n</Window>\n";
+    let page = read_page(markup, "").0.unwrap();
+    let graph = &page.widgets[0];
+    let mut props = graph.props.clone();
+    props.undo_scope = Some("map".into());
+    props.graph_model = Some(clarity_spec::model::GraphModel { lists: vec![clarity_spec::model::GraphList { list: "people".into(), entity: "Person".into(), label: None, refs: vec![] }] });
+    props.legend = true;
+    let done = apply(None, markup, &Edit::UpdateWidget { item: graph.span.start, container: None, props }).unwrap();
+    assert!(done.text.contains("legend=\"true\""), "{}", done.text);
+    assert!(!done.text.contains("undoScope") && !done.text.contains("graphModel"), "{}", done.text);
+}

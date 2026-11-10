@@ -568,6 +568,7 @@ impl Builder {
             }
             "chart" | "trend" => AccessNode::new(id, Role::Image, name_of(caption), b),
             "canvas" => AccessNode::new(id, Role::Canvas, name_of(caption), b).with_actions(&interactive),
+            "graph" => AccessNode::new(id, Role::Canvas, name_of(caption), b).with_actions(&interactive),
             "button" => {
                 let text = any.downcast_ref::<button::ButtonPart>().map(|b| b.caption()).or(caption);
                 AccessNode::new(id, Role::Button, name_of(text), b).with_actions(&interactive)

@@ -423,6 +423,15 @@ pub fn repository_library(repo: &Path, os: &str) -> Option<PathBuf> {
     if video.iter().all(|(from, _)| from.is_file()) {
         files.extend(video);
     }
+    let formats_header = repo.join("runtimes").join("rust-formats-ffi").join("include").join("clarity_formats.h");
+    let formats_file = library_file(os).replace("clarity_ui", "clarity_formats");
+    let mut formats = vec![(formats_header, PathBuf::from("include").join("clarity_formats.h")), (release.join(&formats_file), PathBuf::from("lib").join(&formats_file))];
+    if os == "windows" {
+        formats.push((release.join("clarity_formats.dll.lib"), PathBuf::from("lib").join("clarity_formats.dll.lib")));
+    }
+    if formats.iter().all(|(from, _)| from.is_file()) {
+        files.extend(formats);
+    }
     // Cisco's openh264, from the cache Clarity.Video's tests fetch it into, when it is there.
     if let Some(name) = openh264_file(os, std::env::consts::ARCH) {
         let home = std::env::var("XDG_CACHE_HOME").ok().filter(|v| !v.is_empty()).map(PathBuf::from).or_else(|| std::env::var("HOME").ok().map(|h| PathBuf::from(h).join(".cache")));

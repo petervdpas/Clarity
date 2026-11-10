@@ -97,7 +97,7 @@ command broken(url: text)
 
 command store(status: text)
     help "Lists the items of the shop's web API, then what it was asked and how it was signed"
-    for item in items_in(status)
+    for item in itemsIn(status)
         print "{item.name} {item.price}"
     print asked(status)
     print asked(status, page: 2)

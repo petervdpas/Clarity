@@ -79,9 +79,14 @@ fn typed(p: &ParamSpec, at: usize) -> String {
     }
 }
 
-fn csproj(name: &str, program: &str, drivers: &[&Driver], engines: bool, pictures: bool) -> String {
+fn csproj(name: &str, program: &str, drivers: &[&Driver], engines: bool, pictures: bool, formats: bool) -> String {
     let version = runtime_version();
-    let packages: Vec<&str> = std::iter::once(RUNTIME_PACKAGE).chain(pictures.then_some(super::IMAGE_PACKAGE)).chain(drivers.iter().map(|s| s.package)).chain(engines.then_some(ENGINES_PACKAGE)).collect();
+    let packages: Vec<&str> = std::iter::once(RUNTIME_PACKAGE)
+        .chain(pictures.then_some(super::IMAGE_PACKAGE))
+        .chain(formats.then_some(super::FORMATS_PACKAGE))
+        .chain(drivers.iter().map(|s| s.package))
+        .chain(engines.then_some(ENGINES_PACKAGE))
+        .collect();
     let references: String = packages.iter().map(|p| format!("    <PackageReference Include=\"{p}\" Version=\"{version}\" />\n")).collect();
     let projects: String = packages.iter().map(|p| format!("    <ProjectReference Include=\"$(ClarityRuntime)/{p}/{p}.csproj\" />\n")).collect();
     let resources = if engines { "  <ItemGroup>\n    <EmbeddedResource Include=\"Engines/*.wasm\" LogicalName=\"Engines/%(Filename)%(Extension)\" />\n  </ItemGroup>\n" } else { "" };
@@ -125,7 +130,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let texts = texts::Texts::of(project);
     let drivers: Vec<&Driver> = DRIVERS.iter().filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql)).collect();
     let engines = !crate::engines(project).is_empty();
-    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &program, &drivers, engines, crate::uses_picture_functions(project)))];
+    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &program, &drivers, engines, crate::uses_picture_functions(project), project.uses_formats()))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let file_types = types.get(&file.path).cloned().unwrap_or_default();

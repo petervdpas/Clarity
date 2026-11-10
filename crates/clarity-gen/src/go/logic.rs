@@ -1456,6 +1456,12 @@ impl<'a> Emitter<'a> {
     }
 
     /// An expression as a value.
+    /// A format's options as a Go expression of their JSON object (`""` for none).
+    fn format_options(&mut self, options: &[clarity_spec::code::FormatOption], pre: &mut String) -> String {
+        let given: Vec<(String, String)> = options.iter().map(|o| (o.name.name.clone(), format!("clarity.JSONOf({})", bare(self.value(&o.value, pre))))).collect();
+        go_pieces(&crate::shape::options_pieces(&given))
+    }
+
     fn value(&mut self, expr: &Expr, pre: &mut String) -> String {
         // `app.version`: the project's version, written as the literal text it is.
         if clarity_spec::code::reads_app_version(expr) {
@@ -1553,22 +1559,29 @@ impl<'a> Emitter<'a> {
                 let file = bare(self.value(file, pre));
                 self.lift(format!("db.ReadBytes({file})"), pre)
             }
-            // JSON (DESIGN 5.23): a value as Clarity's JSON, and records read from a service's.
-            ExprKind::JsonOf { value } => format!("clarity.JSONOf({})", bare(self.value(value, pre))),
-            ExprKind::ReadJson { ty, text, at } => {
-                let Some((entity, many)) = crate::json_fields::target(ty) else {
+            // A format of the catalog (docs/FORMATS-PLAN.md): a value written in it, and records read from it, through Clarity.Formats.
+            ExprKind::FormatOf { format, value, options } => {
+                let Some(kind) = crate::shape::write_kind(self.project, &self.types.type_of(value)) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
                 };
-                let Some(decl) = self.project.entity(entity) else { return String::new() };
-                let fields: Vec<String> = crate::json_fields::fields(self.project, decl).iter().map(|(name, kind)| format!("{{Name: {}, Kind: {}}}", string(name), go_json_kind(kind))).collect();
-                let text = bare(self.value(text, pre));
-                let at = match at {
-                    Some(at) => bare(self.value(at, pre)),
-                    None => "\"\"".to_string(),
+                let options = self.format_options(options, pre);
+                format!("clarity.WriteFormat(formatsWrite, {}, {}, {options}, {})", string(&format.name), bare(self.value(value, pre)), string(&kind))
+            }
+            ExprKind::ReadFormat { format, ty, input, options } => {
+                let Some(kind) = crate::shape::read_kind(self.project, ty) else {
+                    self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
+                    return String::new();
                 };
-                let read = if many { "ReadJSONList" } else { "ReadJSON" };
-                self.lift(format!("clarity.{read}({text}, {at}, {}, []clarity.JSONField{{{}}}, New{entity}())", string(entity), fields.join(", ")), pre)
+                let read = match &ty.kind {
+                    // One record is held by pointer, a list holds its records, as the generator writes them everywhere.
+                    clarity_spec::code::TypeRefKind::List { item } => format!("[]{item}"),
+                    clarity_spec::code::TypeRefKind::Named { name } => format!("*{name}"),
+                    _ => String::new(),
+                };
+                let input = bare(self.value(input, pre));
+                let options = self.format_options(options, pre);
+                self.lift(format!("clarity.ReadFormat[{read}](formatsRead, {}, {input}, {options}, {})", string(&format.name), go_pieces(&kind)), pre)
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
             ExprKind::Http { method, url, from, pages, body, headers, query } => {
@@ -2024,20 +2037,22 @@ fn through(hops: &[crate::query::Hop], cond: String) -> String {
     })
 }
 
-/// What a field takes from JSON, as the Go runtime names it.
-fn go_json_kind(kind: &crate::json_fields::Kind) -> String {
-    use crate::json_fields::Kind;
-    match kind {
-        Kind::Enum(values) => format!("clarity.JSONKind{{Is: \"enum\", Values: []string{{{}}}}}", values.iter().map(|v| string(v)).collect::<Vec<_>>().join(", ")),
-        Kind::Values(item) => format!("clarity.JSONKind{{Is: \"values\", Item: &{}}}", go_json_kind(item)),
-        // A record held inside (DESIGN 5.25): its entity's fields, over a new record of it.
-        Kind::Record(nested) | Kind::Records(nested) => format!(
-            "clarity.JSONKind{{Is: \"{}\", Entity: {}, Fields: []clarity.JSONField{{{}}}, Base: New{}()}}",
-            kind.word(),
-            string(&nested.entity),
-            nested.fields.iter().map(|(name, kind)| format!("{{Name: {}, Kind: {}}}", string(name), go_json_kind(kind))).collect::<Vec<_>>().join(", "),
-            nested.entity
-        ),
-        other => format!("clarity.JSONKind{{Is: \"{}\"}}", other.word()),
+
+/// A kind's or options' pieces (crate::shape) as a Go expression of a
+/// string: a base is a new record as encoding/json writes it.
+fn go_pieces(pieces: &[crate::shape::Piece]) -> String {
+    use crate::shape::Piece;
+    if pieces.is_empty() {
+        return "\"\"".to_string();
     }
+    pieces
+        .iter()
+        .map(|p| match p {
+            Piece::Text(t) => string(t),
+            Piece::Base(entity) => format!("clarity.JSONOf(New{entity}())"),
+            Piece::Code(code) => code.clone(),
+        })
+        .collect::<Vec<_>>()
+        // Always a call's argument, where gofmt writes `+` without spaces.
+        .join("+")
 }

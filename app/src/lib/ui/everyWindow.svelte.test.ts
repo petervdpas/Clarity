@@ -4,7 +4,7 @@
 // (DESIGN 8.1), whose markup every example is read with in its own tests.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { flushSync, mount, unmount, type Component } from "svelte";
 import { expect, test, vi } from "vitest";
@@ -26,14 +26,11 @@ const examples = readdirSync(join(root, "examples"))
   .map((name) => name.slice(0, -".clarity".length))
   .sort();
 
-/** The project as the IDE gets it, from the command line Clarity the build made, or else built now. */
+/** The project as the IDE gets it, from the command line Clarity that vitest.cli.setup.ts built. */
 function previewOf(example: string): Preview {
-  const built = join(root, "target/debug/clarity");
+  const built = join(root, "target/debug", process.platform === "win32" ? "clarity.exe" : "clarity");
   const project = join(root, "examples", `${example}.clarity`);
-  const args = ["spec", "model", "--samples", project];
-  const json = existsSync(built)
-    ? execFileSync(built, args, { maxBuffer: 1 << 28 })
-    : execFileSync("cargo", ["run", "-q", "-p", "clarity-cli", "--", ...args], { cwd: root, maxBuffer: 1 << 28, env: { ...process.env, CARGO_BUILD_JOBS: "2" } });
+  const json = execFileSync(built, ["spec", "model", "--samples", project], { maxBuffer: 1 << 28 });
   return JSON.parse(json.toString());
 }
 

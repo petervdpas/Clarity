@@ -35,3 +35,6 @@ bool clarity_json_get_date(const cJSON* in, const char* name, ClarityDate* out);
 bool clarity_json_get_date_time(const cJSON* in, const char* name, ClarityDateTime* out);
 bool clarity_json_get_reference(const cJSON* in, const char* name, int64_t* out);
 bool clarity_json_get_picture(const cJSON* in, const char* name, ClarityPicture** out);
+
+/// A value as compact JSON text, in the scratch arena; "" when it cannot be written.
+const char* clarity_json_of(const cJSON* value);

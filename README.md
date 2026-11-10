@@ -42,6 +42,7 @@ examples/                example projects, each a project file with a folder of 
   shop                   Rust    customers and orders, priced by an engine
   dashboard              Rust    sales and stock at a glance: charts, totals and the products running low
   modelling              Rust    a data model kept in one place, from which the app writes what developers would write by hand
+  network                Rust    graphs of records: people, organisations and projects from the data model, and free ideas with their links
   records                Go      a record collection, with albums, tracks and loans; an engine reads photo sizes
   calculator             Go      a calculator: values in clicks, plain window data, a seven-segment display
   dial                   Go      a speed dial drawn on a canvas by code, its needle placed by an engine

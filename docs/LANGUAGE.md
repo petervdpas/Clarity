@@ -1025,6 +1025,62 @@ code MonitorView
 - **A trend** follows one number: every `every n` seconds (1 without it) it takes the value its number has, and keeps the last `points n` (60 without it), the newest at the right. It does not wait for code: what code last set is what it takes. `max n` fixes the top of its axis, which otherwise takes in its largest value.
 - **A list of numbers** grows with `+`: `readings + [cpu]` is a new list with the item after the others; both sides are lists of the same kind of item. A chart of the list draws its last `points n` numbers.
 
+### Graphs
+
+A `graph` shows records as nodes joined by edges: the records of the list it binds are its nodes, the records of the list `edges` names are its edges. Both are records of any kind the project declares, with whatever fields they need; the graph only has to know which fields play which part:
+
+```clarity
+entity Thing
+    name: text
+    kind: text
+    owner: text
+
+entity Link
+    source: integer
+    target: integer
+    field: text
+    since: integer
+```
+
+```xml
+<!-- ideas/design/MapView.cxaml -->
+<View class="ideas.MapView">
+  <Data name="things" type="list&lt;Thing&gt;" />
+  <Data name="links" type="list&lt;Link&gt;" />
+  <Graph name="map" at="1,1" span="12" rows="10" bind="things" edges="links" nodeLabel="name" nodeKind="kind" edgeLabel="field" layout="force" nodeLooks="{&quot;person&quot;:{&quot;shape&quot;:&quot;box&quot;,&quot;color&quot;:&quot;accent&quot;}}" onselect="picked" onopen="opened" />
+</View>
+```
+
+- **A node** is named by its key, `nodeKey` (`id` without it); `nodeLabel` is the field it shows (its key without it), `nodeKind` the field whose value chooses its look.
+- **An edge** joins the node whose key its `edgeFrom` field holds (`source` without it) to the node whose key its `edgeTo` field holds (`target` without it). A key is matched by its value, and a reference field may hold it, so a list can be its own edges: `bind="folders" edges="folders" edgeFrom="id" edgeTo="parent"` draws folders under their parents. An edge whose ends are not both shown is left out. `edgeLabel` and `edgeKind` are an edge's label and kind.
+- **Every other field** is the record's own. Pointing at a node tells its label and its fields, the ones `show` names or else every field that plays no part; pointing at an edge tells its label, the nodes it joins and its fields.
+- **`layout`** places the nodes: `force` (the default) pushes them apart and pulls them together along their edges, `layered` puts them in layers along the edges' direction, `radial` in rings around the picked node, `circle` on one circle. Each places the same graph the same way every time.
+- **`nodeLooks`** gives the nodes of a kind, by the kind's value, a `shape` (`circle`, `square`, `diamond`, or `box` with the label inside), a `color` (a color of the theme or written out) and a `size` across in pixels; a kind without a look is a circle in the next color of the palette's fourth row. **`edgeLooks`** gives an edge kind a `line` (`solid`, `dashed`, `dotted`), a `color` and `arrow` (an arrow at its target unless `false`). The kind `""` is the look of nodes or edges without a kind.
+- **`limit n`** is the most nodes it shows, the first ones of the list (500 without it, at most 5000); a graph cut short says so in its corner (Clarity's word `graphCut`).
+- The person zooms with the buttons in its corner (Clarity's words `zoomOut`, `zoomWhole`, `zoomIn`), with Ctrl and the wheel, and with + and -; 0 shows it whole again. The wheel or a drag of the background pans.
+- A drag of a node moves it, and it stays where it was left: as the graph changes, and the next time the window opens, kept for the person by the window's and the graph's name (as a table keeps its column widths). A node is kept by its record (its key, or in a graph of lists its entity and id), not by its place in the list. Picking, hops and the legend move no node: the whole graph is laid out, and they only keep some of it from showing.
+- A click on a node picks it and runs `on select` when it is another one; every click runs `on click`, or opens what `opens` names, as a button's: `opens="nodeDetails"` slides out a slide-out with the picked record's details. A double click or Enter runs `on open`. Code reads the picked record as `map.selected`, as a table's. The graph draws again when its lists change.
+
+#### A graph of the data model
+
+Instead of a list it binds and its edges, a graph can name lists of records of different entities, `lists`: their records are its nodes, and the data model gives the rest. A record's kind is its entity, its label its entity's first text field (as a reference shows a record), and each reference field to an entity the graph shows is an edge, labelled with the field. No code is needed: a window's lists hold every record when it opens.
+
+```xml
+<View class="shop.CustomerMapView">
+  <Data name="customers" type="list&lt;Customer&gt;" />
+  <Data name="orders" type="list&lt;Order&gt;" />
+  <Data name="kindPicked" type="text" />
+  <Data name="idPicked" type="integer" />
+  <Graph name="map" at="1,1" span="12" rows="10" lists="customers, orders" hops="2" legend="true" pickedKind="kindPicked" pickedId="idPicked" onopen="opened" />
+</View>
+```
+
+- A record in two lists is one node; records of two entities with the same id are two. A reference to an entity the graph does not show is no edge.
+- A graph of lists binds nothing and names no edges or node fields. Its looks, layout, `show` (fields of any of its entities) and `limit` are a graph's as above.
+- **`pickedKind`** and **`pickedId`** name text and whole-number data: picking a node writes its entity and id there, and code that sets them picks that node. The handlers of `on select` and `on open` read them: `if kindPicked == "Order"`.
+
+`hops n` (1 to 10), on any graph, shows only the nodes at most that many edges from the picked node, either way along them, with a control in its corner to show fewer or more (Clarity's words `graphHops`, `graphFewerHops`, `graphMoreHops`); with nothing picked it shows all of it. `legend` shows each kind as a chip in its corner, in its color; a click hides or shows that kind (`graphKind`). The picked node always shows.
+
 ### Trees
 
 A `tree` and a `treetable` show a list the window holds as a tree. The entity has one reference to its own kind, a row's parent, and a list field of its own kind that stands for the rows under it:
@@ -2598,6 +2654,29 @@ action exportCollection()
 - A file becomes a record's picture with `photo.picture = f`. In the field's own store (`store photos`) it is the file itself: the column holds its path, nothing is copied, as a catalog of photos wants. Kept anywhere else, the picture is a copy of the file. A file that is no picture is refused.
 - Listing, reading and writing are effects, `files.read` and `files.write`, which an action declares; a function cannot reach files.
 
+### Data formats
+
+Code reads records from text in a format, and writes values in one, through one catalog of formats (docs/FORMATS-PLAN.md). Every stack calls the same implementation, Clarity.Formats, so a format reads and writes alike everywhere, to the byte.
+
+```clarity
+let orders = read list<Order> from json reply.text at "data.orders"
+let order = read Order from json text
+let body = json of order
+```
+
+- `read T from <format> text` reads one record (`T` an entity) or a list of them (`list<Order>`); `<format> of value` writes a record, a list of records or a value. The format is a name of the catalog; options follow the text, each as its name and value.
+- The catalog:
+
+| Format | Reads | Writes | Options |
+| --- | --- | --- | --- |
+| `json` | records, records inside records (`owner: User`, `lines: list<Line>` of a web API) | records, lists, values | `at "data.orders"` (reading): starts inside, at those object names |
+
+- **What is read is fitted to the entity.** A name matches by itself, else ignoring case, underscores, hyphens and spaces (`creditLimit` matches `credit_limit`, `CreditLimit` and `Credit Limit`), the first written counting when several do. Numbers and strings of numbers stand for each other (a string may have spaces around it); a number read as text keeps how it was written; a decimal keeps every digit and an exponent is written out (`1e3` is `1000`); a whole number is any 64-bit integer, also written `3.0` or `2e3`; a date and time keeps its date where a date is wanted; an enum value matches in any case. What is left out or null keeps its default; other names, `id` and the fields that are references, pictures, files and lists of stored records are not read. A record held inside, and a list of them, are read from the nested object and list, each fitted to its own entity. The records are new, so `save` adds them.
+- **What does not fit stops the code** with a message that says where, the same words on every stack: `the text is no JSON`, `the JSON has no 'data.orders'`, `the JSON is not a list of Order`, `field 'lines' of Order, item 2: field 'quantity' of Line is an integer, not "three"`.
+- **What is written is Clarity's one form**, the same bytes on every stack: a record's `id` first, then its fields in the entity's order; names as the fields are named; decimals and money as exact text in their shortest form (`12.50` is written `12.5`); whole numbers without a fraction; enums by name; dates as `2026-10-25` and dates and times as `2026-10-25T09:30:00`; no spaces.
+- An option is given once, of the kind the catalog says (`the option 'at' of json is text, not integer`), and a format holds records inside records only where the catalog says it nests. Reading and writing have no effect, so a function may do it; an engine does not.
+- A program carries Clarity.Formats only when its code reads or writes a format: Rust through the crate `clarity-formats`, C# through the NuGet `Clarity.Formats`, Go, C and C++ through its library beside Clarity.UI's (a Go program then builds with cgo).
+
 ### Calling web APIs
 
 Code calls a web API with `http`, and gets its reply.
@@ -2624,8 +2703,7 @@ code Status
 - `http get "/orders" from shop every page` reads a long list a page at a time, as the source's `paging` line says, and gives one reply: its text is one JSON list of the items of every page. Only `get` reads every page, and only from a source that pages. A page that is not ok is the reply; after 1000 pages the reply has status 0.
 - **Records inside records.** An entity of a web API holds the records its service nests: `owner: User` holds one, `lines: list<Line>` several, and code reads them as any record and list (`order.owner.name`, `for line in order.lines`); `json of` writes them nested too. What it holds lives in the web API as well, and a record never holds itself, through any number of records: a list may, as it can be empty. A stored entity refers to another with `ref User` instead, and keeps its lists in their own table.
 - A key does not belong in the code: a header named `Authorization`, or one that holds `key`, `token` or `secret`, with a plain text as its value is a warning. Keep the key in a setting and put it in with a slot.
-- `json of value` is the JSON of a record, a list of records or a value, as Clarity writes values everywhere: names as the fields are named, decimals and money as exact text, enums by name, dates as `2026-10-25`. A post sends a record with `http post url with json of order header "Content-Type": "application/json"`.
-- `read Order from json text` reads one record and `read list<Order> from json text` a list; `at "data.orders"` starts inside the JSON, at those names. A service's JSON is fitted to the entity: a name matches also ignoring case, underscores and hyphens (`creditLimit` matches `credit_limit` and `CreditLimit`), numbers and strings of numbers stand for each other, a date and time keeps its date where a date is wanted, an enum value matches in any case. What the JSON leaves out or gives as null keeps its default; other names, `id` and the fields that are references, pictures, files and lists of stored records are not read. A record held inside (`owner: User`) and a list of them (`lines: list<Line>`) are read from the nested object and list, each fitted to its own entity, and an error says where: `field 'lines' of Order, item 2: field 'quantity' of Line is an integer, not "three"`. The records are new, so `save` adds them. JSON that does not fit stops the code with a message that says where (`field 'lines' of Order is an integer, not "three"`). Reading JSON has no effect, so a function may do it; an engine does not.
+- `json of order` writes a record as JSON, and `read list<Order> from json reply.text at "data"` reads a service's JSON into records: see [Data formats](#data-formats). A post sends a record with `http post url with json of order header "Content-Type": "application/json"`.
 
 ### Types
 

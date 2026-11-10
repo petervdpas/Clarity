@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The network: a map of people, organisations and projects drawn from the data model,
+     and ideas with their links; a click on a node of the map shows its details. -->
+<Window class="network.Map" title="@mapTitle" width="1200" height="780" onopen="mapOpened">
+  <Data name="people" type="list&lt;Person&gt;" />
+  <Data name="organisations" type="list&lt;Organisation&gt;" />
+  <Data name="projects" type="list&lt;Project&gt;" />
+  <Data name="ideas" type="list&lt;Idea&gt;" />
+  <Data name="links" type="list&lt;IdeaLink&gt;" />
+  <Data name="kindPicked" type="text" />
+  <Data name="idPicked" type="integer" />
+  <Data name="pickedPerson" type="Person" />
+  <Data name="pickedOrganisation" type="Organisation" />
+  <Data name="pickedProject" type="Project" />
+  <Tabs name="networkTabs" at="1,1" span="12" rows="17">
+    <Tab title="@mapTab">
+      <Label name="mapHelp" at="1,1" span="12" caption="@mapHelp" />
+      <Graph name="map" at="1,2" span="12" rows="15" opens="nodeDetails" layout="force" nodeLooks="{&quot;Organisation&quot;:{&quot;shape&quot;:&quot;box&quot;},&quot;Project&quot;:{&quot;shape&quot;:&quot;diamond&quot;,&quot;size&quot;:18}}" lists="people, organisations, projects" pickedKind="kindPicked" pickedId="idPicked" hops="2" legend="true" onselect="nodePicked" />
+    </Tab>
+    <Tab title="@ideasTab">
+      <Label name="ideasHelp" at="1,1" span="12" caption="@ideasHelp" />
+      <Graph name="ideaGraph" at="1,2" span="7" rows="15" bind="ideas" edges="links" nodeLabel="title" nodeKind="kind" edgeLabel="relation" layout="layered" nodeLooks="{&quot;question&quot;:{&quot;shape&quot;:&quot;diamond&quot;},&quot;topic&quot;:{&quot;shape&quot;:&quot;box&quot;}}" legend="true" show="note" />
+      <Table name="ideaTable" at="8,2" span="5" rows="7" bind="ideas" columns="title, kind, note" edit="title, kind, note" add="true" remove="true" onadd="addIdeaClicked" onremove="removeIdeaClicked" onchange="ideaEdited" />
+      <Table name="linkTable" at="8,10" span="5" rows="7" bind="links" columns="source, target, relation, strength" edit="source, target, relation, strength" add="true" remove="true" onadd="addLinkClicked" onremove="removeLinkClicked" onchange="linkEdited" />
+    </Tab>
+  </Tabs>
+  <Slideout name="nodeDetails" at="1,1" span="6" rows="12" caption="@detailsCaption" resizable="true" slideWidth="380" max="700" min="300">
+    <Panel name="personPanel" at="1,1" span="6" rows="4" caption="@personHeading">
+      <Label name="personNameLabel" at="1,1" span="2" caption="@personName" for="personNameBox" />
+      <Textbox name="personNameBox" at="3,1" span="4" bind="pickedPerson.name" readonly="true" />
+      <Label name="personRoleLabel" at="1,2" span="2" caption="@personRole" for="personRoleBox" />
+      <Textbox name="personRoleBox" at="3,2" span="4" bind="pickedPerson.role" readonly="true" />
+      <Label name="personOrganisationLabel" at="1,3" span="2" caption="@personOrganisation" for="personOrganisationBox" />
+      <Dropdown name="personOrganisationBox" at="3,3" span="4" bind="pickedPerson.organisation" readonly="true" />
+    </Panel>
+    <Panel name="organisationPanel" at="1,5" span="6" rows="3" caption="@organisationHeading">
+      <Label name="organisationNameLabel" at="1,1" span="2" caption="@organisationName" for="organisationNameBox" />
+      <Textbox name="organisationNameBox" at="3,1" span="4" bind="pickedOrganisation.name" readonly="true" />
+      <Label name="organisationCityLabel" at="1,2" span="2" caption="@organisationCity" for="organisationCityBox" />
+      <Textbox name="organisationCityBox" at="3,2" span="4" bind="pickedOrganisation.city" readonly="true" />
+    </Panel>
+    <Panel name="projectPanel" at="1,8" span="6" rows="4" caption="@projectHeading">
+      <Label name="projectNameLabel" at="1,1" span="2" caption="@projectName" for="projectNameBox" />
+      <Textbox name="projectNameBox" at="3,1" span="4" bind="pickedProject.name" readonly="true" />
+      <Label name="projectLeadLabel" at="1,2" span="2" caption="@projectLead" for="projectLeadBox" />
+      <Dropdown name="projectLeadBox" at="3,2" span="4" bind="pickedProject.lead" readonly="true" />
+      <Label name="projectOrganisationLabel" at="1,3" span="2" caption="@projectOrganisation" for="projectOrganisationBox" />
+      <Dropdown name="projectOrganisationBox" at="3,3" span="4" bind="pickedProject.organisation" readonly="true" />
+    </Panel>
+  </Slideout>
+</Window>

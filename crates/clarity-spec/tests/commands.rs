@@ -172,7 +172,7 @@ command show
         [
             "a command has no window: 'open' belongs in a handler",
             "a command has no window: 'close' belongs in a handler",
-            "a command has no window: 'reload' belongs in a handler",
+            "unknown name 'customer': outside a window's handlers, reload reads a record variable again",
             "unknown name 'save'",
         ]
     );

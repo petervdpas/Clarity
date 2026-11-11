@@ -133,7 +133,7 @@ fn reload_takes_the_windows_data() {
         ["Customers has no data 'clients'"]
     );
     let in_function = format!("{SHOP}\nfunction f() -> integer\n    reload customers\n    return 1\n");
-    assert_eq!(errors(&in_function), ["'reload' belongs in a handler, not in a function"]);
+    assert_eq!(errors(&in_function), ["unknown name 'customers': outside a window's handlers, reload reads a record variable again"]);
 }
 
 /// The `.cxaml` the page or app `name` of the shop becomes.

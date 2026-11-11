@@ -1,6 +1,6 @@
 # Signing in
 
-How a program knows who is using it: the people, the ways they sign in, the sign-in window, and what code and windows do with who signed in.
+Who signs in, and how.
 
 ## Turning it on
 

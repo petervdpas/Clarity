@@ -150,7 +150,7 @@ fn names_the_expected_values_for_an_unknown_one() {
 #[test]
 fn refuses_unknown_settings_and_a_wrong_shape() {
     let err = parse(&SHOP.replace("    stack", "    frontend svelte\n    stack")).unwrap_err();
-    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, icon, stack, output, language, currency, theme, keys, engines, port, row height, datasource, filestore and codec");
+    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, icon, stack, output, language, currency, theme, signin, keys, engines, port, row height, datasource, filestore and codec");
     assert_eq!(parse("module shop\n").unwrap_err(), "line 1: a project file starts with 'project Name'");
     assert_eq!(
         parse("project Shop\n    datasource main sqlite \"x.db\"\n").unwrap_err(),
@@ -485,7 +485,7 @@ fn the_language_reference_project_files_are_valid() {
         assert!(validate(&settings).is_empty(), "{:?}", validate(&settings));
         found += 1;
     }
-    assert_eq!(found, 2);
+    assert_eq!(found, 3);
 }
 
 #[test]

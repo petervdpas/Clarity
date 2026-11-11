@@ -11,7 +11,7 @@
 
 use clarity_spec::Project;
 use clarity_spec::code::check::{TypeInfo, ValueItem};
-use clarity_spec::code::{TypeRef, TypeRefKind};
+use clarity_spec::code::{Expr, MappingDecl, MappingUse, TypeRef, TypeRefKind};
 use clarity_spec::model::{Entity, FieldType, ListItem};
 
 /// A piece of a kind's JSON: text as it is, or where a new record of an entity goes.
@@ -36,6 +36,30 @@ pub(crate) fn options_pieces(options: &[(String, String)]) -> Vec<Piece> {
     }
     out.push(Piece::Text("}".into()));
     out
+}
+
+/// The format a reading or writing is in, and its options as pieces
+/// (docs/FORMATS-PLAN.md, step 4): a mapping written in place gives each
+/// option's value as the stack's code, which `code` writes as JSON; a
+/// declared mapping is its options object whole. None for a mapping the
+/// project does not declare.
+pub(crate) fn mapping_pieces(project: &Project, mapping: &MappingUse, mut code: impl FnMut(&Expr) -> String) -> Option<(String, Vec<Piece>)> {
+    match mapping {
+        MappingUse::Inline { format, options } => {
+            let given: Vec<(String, String)> = options.iter().map(|o| (o.name.name.clone(), code(&o.value))).collect();
+            Some((format.name.clone(), options_pieces(&given)))
+        }
+        MappingUse::Named { name } => {
+            let declared = project.mapping(&name.name)?;
+            Some((declared.format.name.clone(), vec![Piece::Text(mapping_options(declared))]))
+        }
+    }
+}
+
+/// A mapping as the options object every stack passes to Clarity.Formats,
+/// written once in clarity-spec, where the IDE's preview reads with it too.
+pub(crate) fn mapping_options(mapping: &MappingDecl) -> String {
+    clarity_spec::code::mapping::options_json(mapping)
 }
 
 /// What `read T from <format>` reads: one record of an entity or a list of

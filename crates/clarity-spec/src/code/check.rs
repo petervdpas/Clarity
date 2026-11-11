@@ -684,6 +684,11 @@ impl<'a> Env<'a> {
         self.visible.iter().flat_map(|f| &f.libraries).find(|l| l.name.name == name)
     }
 
+    /// A mapping declared in a visible module (docs/FORMATS-PLAN.md, step 4).
+    fn mapping(&self, name: &str) -> Option<&'a super::MappingDecl> {
+        self.visible.iter().flat_map(|f| &f.mappings).find(|m| m.name.name == name)
+    }
+
     /// A custom part declared in a visible module (DESIGN 5.19).
     fn part_decl(&self, name: &str) -> Option<&'a PartDecl> {
         self.visible.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name)
@@ -1276,6 +1281,8 @@ fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
     check_engines(env, file, out);
     check_parts(env, file, out);
     check_libraries(env, file, out);
+    let mappings: Vec<&super::MappingDecl> = env.visible.iter().flat_map(|f| &f.mappings).collect();
+    super::mapping::check(file, &|name| env.entity(name), &mappings, &mut out.diagnostics);
     check_placed_parts(env, file, out);
     let owners = owners(file, &env.visible);
     for owner in &owners {
@@ -3093,17 +3100,19 @@ impl<'a> BodyChecker<'_, 'a> {
     /// read from a format of the catalog (docs/FORMATS-PLAN.md), from text,
     /// with the format's options. Pure, so functions read formats too; an
     /// engine keeps to its own values.
-    fn read_format(&mut self, format: &Ident, ty: &TypeRef, input: &Expr, options: &[super::FormatOption], span: Span) -> Ty<'a> {
-        let Some(info) = clarity_formats::format(&format.name) else {
-            self.error(format!("there is no format '{}'", format.name), format.span);
-            return Ty::Unknown;
-        };
+    fn read_format(&mut self, ty: &TypeRef, input: &Expr, mapping: &super::MappingUse, span: Span) -> Ty<'a> {
+        let given = self.expr(input, Some(Ty::Text));
+        let Some((info, declared)) = self.format_of(mapping) else { return Ty::Unknown };
         if let Some(engine) = self.engine {
             self.error(format!("an engine does not read {}: engine {} takes records, and a handler or an action reads them", info.title, engine.name.name), span);
         }
         let read = match self.env.type_ref(ty) {
             Ok(found @ (Ty::Record(entity) | Ty::List(entity))) if !entity.settings => {
-                if !info.nests
+                if let Some(declared) = declared
+                    && declared.entity.name != entity.name.name
+                {
+                    self.error(format!("mapping {} lays a file over {}, not {}", declared.name.name, declared.entity.name, entity.name.name), ty.span);
+                } else if !info.nests
                     && let Some(field) = entity.fields.iter().find(|f| matches!(f.ty, FieldType::Record { .. } | FieldType::List { .. }))
                 {
                     self.error(format!("{} holds no records inside records: field '{}' of {} does", info.title, field.name.name, entity.name.name), ty.span);
@@ -3119,12 +3128,33 @@ impl<'a> BodyChecker<'_, 'a> {
                 Ty::Unknown
             }
         };
-        let given = self.expr(input, Some(Ty::Text));
         if !matches!(given, Ty::Text | Ty::Unknown) {
             self.error(format!("the {} to read is text, not {}", info.title, given.name()), input.span);
         }
-        self.format_options(&info, options);
+        self.format_options(&info, mapping.options());
         read
+    }
+
+    /// The format a reading or writing is in, and the mapping it names, if
+    /// it names one: an unknown format or mapping is reported here.
+    fn format_of(&mut self, mapping: &super::MappingUse) -> Option<(clarity_formats::FormatInfo, Option<&'a super::MappingDecl>)> {
+        match mapping {
+            super::MappingUse::Inline { format, .. } => match clarity_formats::format(&format.name) {
+                Some(info) => Some((info, None)),
+                None => {
+                    self.error(format!("there is no format '{}'", format.name), format.span);
+                    None
+                }
+            },
+            super::MappingUse::Named { name } => {
+                let Some(declared) = self.env.mapping(&name.name) else {
+                    self.error(format!("there is no mapping '{}'", name.name), name.span);
+                    return None;
+                };
+                // An unknown format is reported on the mapping itself.
+                clarity_formats::format(&declared.format.name).map(|info| (info, Some(declared)))
+            }
+        }
     }
 
     /// The options written with a format: each once, of the kind the catalog says.
@@ -3894,17 +3924,55 @@ impl<'a> BodyChecker<'_, 'a> {
                 Ty::Text
             }
             ExprKind::Http { method, url, body, headers, query, .. } => self.http(*method, url, body.as_deref(), headers, query, expr.span),
-            ExprKind::FormatOf { format, value, options } => {
+            ExprKind::FormatOf { value, mapping } => {
                 let ty = self.expr(value, None);
+                let written = match mapping {
+                    super::MappingUse::Inline { format, .. } => format!("'{} of'", format.name),
+                    super::MappingUse::Named { name } => format!("'text of ... using {}'", name.name),
+                };
                 if !(ty.is_value() || matches!(ty, Ty::Record(_) | Ty::List(_) | Ty::Values(_) | Ty::Unknown)) {
-                    self.error(format!("'{} of' takes a record, a list or a value, not {}", format.name, ty.name()), value.span);
+                    self.error(format!("{written} takes a record, a list or a value, not {}", ty.name()), value.span);
                 }
-                if let Some(info) = clarity_formats::format(&format.name) {
-                    self.format_options(&info, options);
+                if let Some((info, declared)) = self.format_of(mapping) {
+                    if let Some(declared) = declared {
+                        if !info.text {
+                            self.error(format!("'text of' writes text; {} is bytes", info.title), expr.span);
+                        }
+                        match &ty {
+                            Ty::Record(entity) | Ty::List(entity) if entity.name.name == declared.entity.name => {}
+                            Ty::Unknown => {}
+                            other => self.error(format!("mapping {} lays a file over {}, not {}", declared.name.name, declared.entity.name, other.name()), value.span),
+                        }
+                    }
+                    // A flat format (CSV) is one table: records, without records inside.
+                    if !info.nests {
+                        match &ty {
+                            Ty::Record(entity) | Ty::List(entity) => {
+                                if let Some(field) = entity.fields.iter().find(|f| matches!(f.ty, FieldType::Record { .. } | FieldType::List { .. })) {
+                                    self.error(format!("{} holds no records inside records: field '{}' of {} does", info.title, field.name.name, entity.name.name), value.span);
+                                }
+                            }
+                            Ty::Unknown => {}
+                            other => self.error(format!("{written} writes a record or a list of records: {} is one table, not {}", info.title, other.name()), value.span),
+                        }
+                    }
+                    self.format_options(&info, mapping.options());
+                    // An option the catalog says writing always takes (xml's `at`), given in place or by the mapping.
+                    for required in info.options.iter().filter(|o| o.writes) {
+                        let given = match declared {
+                            Some(declared) => super::mapping::gives(declared, required.name),
+                            None => mapping.options().iter().any(|o| o.name.name == required.name),
+                        };
+                        if let Some(says) = required.required_writing
+                            && !given
+                        {
+                            self.error(format!("{written} needs '{}': {says}", required.name), expr.span);
+                        }
+                    }
                 }
                 Ty::Text
             }
-            ExprKind::ReadFormat { format, ty, input, options } => self.read_format(format, ty, input, options, expr.span),
+            ExprKind::ReadFormat { ty, input, mapping } => self.read_format(ty, input, mapping, expr.span),
             ExprKind::ReadBytes { file } => {
                 self.check_files("reads a file", "files.read", expr.span);
                 let ty = self.expr(file, None);
@@ -4807,8 +4875,8 @@ fn mentions(expr: &Expr, var: &str) -> bool {
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => mentions(file, var),
         ExprKind::Http { url, body, headers, query, .. } => crate::code::http_exprs(url, body.as_deref(), headers, query).iter().any(|e| mentions(e, var)),
-        ExprKind::FormatOf { value, options, .. } => mentions(value, var) || options.iter().any(|o| mentions(&o.value, var)),
-        ExprKind::ReadFormat { input, options, .. } => mentions(input, var) || options.iter().any(|o| mentions(&o.value, var)),
+        ExprKind::FormatOf { value, mapping } => mentions(value, var) || mapping.options().iter().any(|o| mentions(&o.value, var)),
+        ExprKind::ReadFormat { input, mapping, .. } => mentions(input, var) || mapping.options().iter().any(|o| mentions(&o.value, var)),
         ExprKind::Ask { question, form } => mentions(question, var) || crate::code::ask_exprs(form).iter().any(|e| mentions(e, var)),
         ExprKind::New { .. } => false,
         ExprKind::Text { parts } => parts.iter().any(|p| matches!(p, TextPart::Slot { value } if mentions(value, var))),
@@ -5288,15 +5356,15 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
                 each_expr(e, found);
             }
         }
-        ExprKind::FormatOf { value, options, .. } => {
+        ExprKind::FormatOf { value, mapping } => {
             each_expr(value, found);
-            for option in options {
+            for option in mapping.options() {
                 each_expr(&option.value, found);
             }
         }
-        ExprKind::ReadFormat { input, options, .. } => {
+        ExprKind::ReadFormat { input, mapping, .. } => {
             each_expr(input, found);
-            for option in options {
+            for option in mapping.options() {
                 each_expr(&option.value, found);
             }
         }

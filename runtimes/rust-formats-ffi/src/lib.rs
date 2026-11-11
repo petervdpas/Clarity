@@ -8,7 +8,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use formats::{Problem, ProblemKind};
 
-pub const INTERFACE: u32 = 1;
+pub const INTERFACE: u32 = 2;
 
 pub const OK: i32 = 0;
 pub const NOT_FITTING: i32 = 1;
@@ -27,9 +27,12 @@ pub struct ClarityFormatsApi {
     pub catalog: extern "C" fn(Out, *mut usize) -> i32,
     pub free: extern "C" fn(*mut u8, usize),
     pub problem: extern "C" fn(*mut c_char, usize) -> i32,
+    pub read_table: extern "C" fn(*const u8, usize, *const u8, usize, *const u8, usize, *const u8, usize, Out, *mut usize) -> i32,
+    #[allow(clippy::type_complexity)]
+    pub write_table: extern "C" fn(*const u8, usize, *const u8, usize, *const u8, usize, *const u8, usize, *const u8, usize, Out, *mut usize) -> i32,
 }
 
-static API: ClarityFormatsApi = ClarityFormatsApi { interface: INTERFACE, read, write, catalog, free, problem };
+static API: ClarityFormatsApi = ClarityFormatsApi { interface: INTERFACE, read, write, catalog, free, problem, read_table, write_table };
 
 /// The table, the same for the library's whole life.
 #[unsafe(no_mangle)]
@@ -102,6 +105,16 @@ extern "C" fn write(format: *const u8, format_len: usize, value: *const u8, valu
     giving(out, out_len, || formats::write_json(text(format, format_len)?, text(value, value_len)?, text(options, options_len)?, text(kind, kind_len)?))
 }
 
+#[allow(clippy::too_many_arguments)]
+extern "C" fn read_table(format: *const u8, format_len: usize, input: *const u8, input_len: usize, options: *const u8, options_len: usize, fields: *const u8, fields_len: usize, out: Out, out_len: *mut usize) -> i32 {
+    giving(out, out_len, || Ok(formats::read_table(text(format, format_len)?, bytes(input, input_len), text(options, options_len)?, text(fields, fields_len)?)?.into_bytes()))
+}
+
+#[allow(clippy::too_many_arguments)]
+extern "C" fn write_table(format: *const u8, format_len: usize, original: *const u8, original_len: usize, table: *const u8, table_len: usize, options: *const u8, options_len: usize, fields: *const u8, fields_len: usize, out: Out, out_len: *mut usize) -> i32 {
+    giving(out, out_len, || formats::write_table(text(format, format_len)?, bytes(original, original_len), text(table, table_len)?, text(options, options_len)?, text(fields, fields_len)?))
+}
+
 extern "C" fn catalog(out: Out, out_len: *mut usize) -> i32 {
     giving(out, out_len, || Ok(formats::catalog_json().into_bytes()))
 }
@@ -151,7 +164,7 @@ mod tests {
         let kind = r#"{"kind":"record","entity":"Order","fields":[{"name":"total","kind":"decimal"}],"base":{"id":0,"total":"0"}}"#;
         assert_eq!(call("json", r#"{"Total": 12.50}"#, "", kind), (OK, r#"{"id":0,"total":"12.50"}"#.into()));
         assert_eq!(call("json", r#"{"total": true}"#, "", kind), (NOT_FITTING, "field 'total' of Order is a decimal, not true".into()));
-        assert_eq!(call("yaml", "x", "", kind).0, UNKNOWN_FORMAT);
+        assert_eq!(call("toml", "x", "", kind).0, UNKNOWN_FORMAT);
         assert_eq!(call("json", "{}", r#"{"sep":","}"#, kind).0, BAD_OPTIONS);
         assert_eq!(call("json", "{}", "", "{}").0, FAILED);
     }

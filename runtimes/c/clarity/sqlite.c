@@ -165,3 +165,5 @@ bool clarity_open_sqlite(const char* path, ClarityDriver** out) {
     *out = &s->driver;
     return true;
 }
+
+bool clarity_sqlite_autocommit(ClarityDriver* driver) { return sqlite3_get_autocommit(db_of(driver)) != 0; }

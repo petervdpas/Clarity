@@ -1,0 +1,648 @@
+{
+  "about": "An XML file of a file data source as one table, through Clarity.Formats (docs/FORMATS-PLAN.md, \"XML\", \"A file as a data source\"). `at` names the records with slashes, first the root, last the record element; without it the root's child elements are the records. The first column, `#node`, is each record's element as its XML text, so writing back keeps the attributes and elements no field maps; then one column per field the entity maps, in the order given. A column that is a plain name is found as a child element of that name, else an attribute of that name (names by their local name, exact first, then ignoring case, underscores, hyphens and spaces); `@a` is the attribute only, `a/b` the text of an element inside, `a/@b` its attribute, `.` the record's own text. Nothing found, or empty, is null: a column found in no record is no error in XML. A field that is a record or a list of records is no column; it stays inside `#node`. A list of values is a column: the elements of its name, repeated, or the items inside one element of its name whose children all have one name; one empty element is an empty list; its cell is the list's JSON text. Cells are fitted as formats-table.json says. `write_table` puts row i in the place of old record i in the parent; a place left over is removed with the blank text before it, more rows follow the last record, each after a copy of that blank; with no records before, the rows go at the end of the parent. A row's element is its `#node`, or a new element named by the last step of `at`; each column's value is set where its column says (a plain name: the child element there, else the attribute there, else a new child element), made where missing; null empties an element's text or removes an attribute; a list's items are written as elements of its name in the old ones' places (inside the old wrapper when there was one), null removing them and an empty list one empty element; a yes or no is written true or false. Everything outside the records is kept; the declaration is written again with the original's encoding name (UTF-8 without one), the nodes around the root on their own lines when the original's first node ended its line. An empty original is a new file: the elements `at` names, laid out by `indent`, in the `encoding` given (UTF-8 without it).",
+  "read": [
+    {
+      "name": "the records at a path; a plain name is a child element first, else an attribute; each record's element kept whole in '#node'; a column found nowhere, or empty, is null",
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "fields": [
+        {
+          "name": "number",
+          "kind": "text"
+        },
+        {
+          "name": "Paid",
+          "kind": "bool"
+        },
+        {
+          "name": "note",
+          "kind": "text"
+        },
+        {
+          "name": "total",
+          "kind": "decimal"
+        },
+        {
+          "name": "quantity",
+          "kind": "integer"
+        }
+      ],
+      "input": "<?xml version=\"1.0\"?><!-- feed --><shop><orders><order number=\"A-1\" paid=\"true\" note=\"attr\"><customer><name>Ada</name></customer><note>leave at door</note><total>12.50</total></order><other/><order number=\"A-2\" note=\"attr\"><total/></order></orders></shop>",
+      "table": {
+        "columns": [
+          "#node",
+          "number",
+          "Paid",
+          "note",
+          "total",
+          "quantity"
+        ],
+        "rows": [
+          [
+            "<order number=\"A-1\" paid=\"true\" note=\"attr\"><customer><name>Ada</name></customer><note>leave at door</note><total>12.50</total></order>",
+            "A-1",
+            1,
+            "leave at door",
+            "12.50",
+            null
+          ],
+          [
+            "<order number=\"A-2\" note=\"attr\"><total/></order>",
+            "A-2",
+            null,
+            "attr",
+            null,
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "name": "paths: '@a' the attribute only, 'a/b' an element inside, 'a/@b' its attribute, '.' the own text; names by their local name; entities and CDATA read as text",
+      "options": {
+        "at": "feed/item"
+      },
+      "fields": [
+        {
+          "name": "@code",
+          "kind": "integer"
+        },
+        {
+          "name": ".",
+          "kind": "text"
+        },
+        {
+          "name": "price/amount",
+          "kind": "decimal"
+        },
+        {
+          "name": "price/@currency",
+          "kind": "text"
+        },
+        {
+          "name": "@price",
+          "kind": "text"
+        }
+      ],
+      "input": "<o:feed xmlns:o=\"urn:x\"><o:item o:code=\"7\" price=\"x\">Coffee<o:price currency=\"EUR\"><o:amount>2.10</o:amount></o:price></o:item><o:item code=\"8\">Tea &amp; milk<![CDATA[ <hot>]]></o:item></o:feed>",
+      "table": {
+        "columns": [
+          "#node",
+          "@code",
+          ".",
+          "price/amount",
+          "price/@currency",
+          "@price"
+        ],
+        "rows": [
+          [
+            "<o:item o:code=\"7\" price=\"x\">Coffee<o:price currency=\"EUR\"><o:amount>2.10</o:amount></o:price></o:item>",
+            7,
+            "Coffee",
+            "2.10",
+            "EUR",
+            "x"
+          ],
+          [
+            "<o:item code=\"8\">Tea &amp; milk<![CDATA[ <hot>]]></o:item>",
+            8,
+            "Tea & milk <hot>",
+            null,
+            null,
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "name": "without 'at' the records are the root's child elements; a field that is a record stays inside the element, no column; a list of values is a column",
+      "fields": [
+        {
+          "name": "name",
+          "kind": "text"
+        },
+        {
+          "name": "customer",
+          "kind": "record",
+          "entity": "Customer",
+          "fields": [
+            {
+              "name": "name",
+              "kind": "text"
+            }
+          ],
+          "base": {}
+        },
+        {
+          "name": "tags",
+          "kind": "values",
+          "item": {
+            "kind": "text"
+          }
+        }
+      ],
+      "input": "<list>\n  <a name=\"x\"><tags>t</tags></a>\n  <b><name>y</name></b>\n</list>\n",
+      "table": {
+        "columns": [
+          "#node",
+          "name",
+          "tags"
+        ],
+        "rows": [
+          [
+            "<a name=\"x\"><tags>t</tags></a>",
+            "x",
+            "[\"t\"]"
+          ],
+          [
+            "<b><name>y</name></b>",
+            "y",
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "name": "a list of values: the elements of its name, repeated, or the items inside one element of its name; one empty element is an empty list, none is null; a path names the elements inside",
+      "options": {
+        "at": "shop/item"
+      },
+      "fields": [
+        {
+          "name": "@code",
+          "kind": "integer"
+        },
+        {
+          "name": "tag",
+          "kind": "values",
+          "item": {
+            "kind": "text"
+          }
+        },
+        {
+          "name": "sizes",
+          "kind": "values",
+          "item": {
+            "kind": "integer"
+          }
+        },
+        {
+          "name": "colours/colour",
+          "kind": "values",
+          "item": {
+            "kind": "text"
+          }
+        }
+      ],
+      "input": "<shop><item code=\"1\"><tag>a</tag><name>x</name><tag>b</tag></item><item code=\"2\"><sizes><size>3</size><size>4</size></sizes><colours><colour>red</colour><other>x</other><colour>blue</colour></colours></item><item code=\"3\"><tag/></item><item code=\"4\"/></shop>",
+      "table": {
+        "columns": [
+          "#node",
+          "@code",
+          "tag",
+          "sizes",
+          "colours/colour"
+        ],
+        "rows": [
+          [
+            "<item code=\"1\"><tag>a</tag><name>x</name><tag>b</tag></item>",
+            1,
+            "[\"a\",\"b\"]",
+            null,
+            null
+          ],
+          [
+            "<item code=\"2\"><sizes><size>3</size><size>4</size></sizes><colours><colour>red</colour><other>x</other><colour>blue</colour></colours></item>",
+            2,
+            null,
+            "[3,4]",
+            "[\"red\",\"blue\"]"
+          ],
+          [
+            "<item code=\"3\"><tag/></item>",
+            3,
+            "[]",
+            null,
+            null
+          ],
+          [
+            "<item code=\"4\"/>",
+            4,
+            null,
+            null,
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "name": "a list item that does not fit says its row and column",
+      "options": {
+        "at": "shop/item"
+      },
+      "fields": [
+        {
+          "name": "sizes",
+          "kind": "values",
+          "item": {
+            "kind": "integer"
+          }
+        }
+      ],
+      "input": "<shop><item><sizes>1</sizes><sizes>big</sizes></item></shop>",
+      "error": "row 1: column 'sizes' is a list, not [\"1\",\"big\"]"
+    },
+    {
+      "name": "a list in an attribute or the own text is no place for it",
+      "fields": [
+        {
+          "name": "@tags",
+          "kind": "values",
+          "item": {
+            "kind": "text"
+          }
+        }
+      ],
+      "input": "<a/>",
+      "error": "the column '@tags' is a list, kept in elements of its name"
+    },
+    {
+      "name": "an empty file is a new one: '#node' and the entity's columns, no rows",
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "fields": [
+        {
+          "name": "number",
+          "kind": "text"
+        },
+        {
+          "name": "total",
+          "kind": "decimal"
+        }
+      ],
+      "input": "",
+      "table": {
+        "columns": [
+          "#node",
+          "number",
+          "total"
+        ],
+        "rows": []
+      }
+    },
+    {
+      "name": "a parent element the path names is missing",
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "fields": [
+        {
+          "name": "number",
+          "kind": "text"
+        }
+      ],
+      "input": "<shop><order/></shop>",
+      "error": "the XML has no 'shop/orders'"
+    },
+    {
+      "name": "the root is not the one the path names",
+      "options": {
+        "at": "store/orders/order"
+      },
+      "fields": [
+        {
+          "name": "number",
+          "kind": "text"
+        }
+      ],
+      "input": "<shop><orders/></shop>",
+      "error": "the XML has no 'store'"
+    },
+    {
+      "name": "a parent that holds no records is no rows",
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "fields": [
+        {
+          "name": "number",
+          "kind": "text"
+        }
+      ],
+      "input": "<shop><orders><!-- none --></orders></shop>",
+      "table": {
+        "columns": [
+          "#node",
+          "number"
+        ],
+        "rows": []
+      }
+    },
+    {
+      "name": "a text that is no XML",
+      "fields": [
+        {
+          "name": "number",
+          "kind": "text"
+        }
+      ],
+      "input": "<shop><orders></shop>",
+      "error": "the text is no XML"
+    },
+    {
+      "name": "a value that does not fit says its row and column",
+      "options": {
+        "at": "log/day"
+      },
+      "fields": [
+        {
+          "name": "visits",
+          "kind": "integer"
+        }
+      ],
+      "input": "<log><day visits=\"3\"/><day><visits>many</visits></day></log>",
+      "error": "row 2: column 'visits' is an integer, not \"many\""
+    },
+    {
+      "name": "a column that is no XML path",
+      "fields": [
+        {
+          "name": "@a/b",
+          "kind": "text"
+        }
+      ],
+      "input": "<a/>",
+      "error": "the column '@a/b' is no XML path"
+    }
+  ],
+  "write": [
+    {
+      "name": "the whole document kept: declaration, comments, other elements, layout and what no field maps; rows take the old records' places, one left over goes with its blank; a value set where it was, a new name as a child element, null removes an attribute",
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "fields": [
+        {
+          "name": "number",
+          "kind": "text"
+        },
+        {
+          "name": "paid",
+          "kind": "bool"
+        },
+        {
+          "name": "total",
+          "kind": "decimal"
+        },
+        {
+          "name": "note",
+          "kind": "text"
+        }
+      ],
+      "original": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- feed -->\n<shop>\n  <name>Corner</name>\n  <orders>\n    <!-- first -->\n    <order number=\"A-1\" paid=\"true\"><customer><name>Ada</name></customer><total>12.50</total></order>\n    <order number=\"A-2\"><total>3</total></order>\n    <order number=\"A-3\"><total>4</total></order>\n  </orders>\n</shop>\n<!-- end -->\n",
+      "table": {
+        "columns": [
+          "#node",
+          "number",
+          "paid",
+          "total",
+          "note"
+        ],
+        "rows": [
+          [
+            "<order number=\"A-1\" paid=\"true\"><customer><name>Ada</name></customer><total>12.50</total></order>",
+            "A-1",
+            0,
+            "13.00",
+            "fragile"
+          ],
+          [
+            "<order number=\"A-3\"><total>4</total></order>",
+            null,
+            null,
+            "4",
+            null
+          ]
+        ]
+      },
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- feed -->\n<shop>\n  <name>Corner</name>\n  <orders>\n    <!-- first -->\n    <order number=\"A-1\" paid=\"false\"><customer><name>Ada</name></customer><total>13.00</total><note>fragile</note></order>\n    <order><total>4</total></order>\n  </orders>\n</shop>\n<!-- end -->\n"
+    },
+    {
+      "name": "a new record is an element named by the path with the mapped fields only, after the last one with the same blank before it; paths made where missing",
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "fields": [
+        {
+          "name": "@number",
+          "kind": "text"
+        },
+        {
+          "name": "customer/name",
+          "kind": "text"
+        },
+        {
+          "name": ".",
+          "kind": "text"
+        },
+        {
+          "name": "paid",
+          "kind": "bool"
+        }
+      ],
+      "original": "<shop>\n  <orders>\n    <order number=\"A-1\"/>\n  </orders>\n</shop>",
+      "table": {
+        "columns": [
+          "#node",
+          "@number",
+          "customer/name",
+          ".",
+          "paid"
+        ],
+        "rows": [
+          [
+            "<order number=\"A-1\"/>",
+            "A-1",
+            null,
+            null,
+            null
+          ],
+          [
+            null,
+            "A-2",
+            "Bo & Co",
+            "rush",
+            1
+          ]
+        ]
+      },
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><shop>\n  <orders>\n    <order number=\"A-1\"/>\n    <order number=\"A-2\">rush<customer><name>Bo &amp; Co</name></customer><paid>true</paid></order>\n  </orders>\n</shop>"
+    },
+    {
+      "name": "no records before: the rows at the end of the parent, its other nodes kept; a missing parent is made",
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "fields": [
+        {
+          "name": "number",
+          "kind": "text"
+        }
+      ],
+      "original": "<shop><name>Corner</name></shop>",
+      "table": {
+        "columns": [
+          "#node",
+          "number"
+        ],
+        "rows": [
+          [
+            null,
+            "A-1"
+          ]
+        ]
+      },
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><shop><name>Corner</name><orders><order><number>A-1</number></order></orders></shop>"
+    },
+    {
+      "name": "every record deleted leaves the parent with its other nodes",
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "fields": [
+        {
+          "name": "number",
+          "kind": "text"
+        }
+      ],
+      "original": "<shop><orders><!-- kept --><order number=\"1\"/><order number=\"2\"/></orders></shop>",
+      "table": {
+        "columns": [
+          "#node",
+          "number"
+        ],
+        "rows": []
+      },
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><shop><orders><!-- kept --></orders></shop>"
+    },
+    {
+      "name": "a new file: the elements 'at' names, indented with 'indent'",
+      "options": {
+        "at": "shop/orders/order",
+        "indent": true
+      },
+      "fields": [
+        {
+          "name": "number",
+          "kind": "text"
+        },
+        {
+          "name": "total",
+          "kind": "decimal"
+        }
+      ],
+      "original": "",
+      "table": {
+        "columns": [
+          "#node",
+          "number",
+          "total"
+        ],
+        "rows": [
+          [
+            null,
+            "A-1",
+            "2.50"
+          ],
+          [
+            null,
+            "A-2",
+            null
+          ]
+        ]
+      },
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<shop>\n  <orders>\n    <order>\n      <number>A-1</number>\n      <total>2.50</total>\n    </order>\n    <order>\n      <number>A-2</number>\n    </order>\n  </orders>\n</shop>\n"
+    },
+    {
+      "name": "without 'at' the root's child elements are the records, an element kept as it was",
+      "fields": [
+        {
+          "name": "name",
+          "kind": "text"
+        }
+      ],
+      "original": "<list><a name=\"x\"/><!-- c --><b/></list>",
+      "table": {
+        "columns": [
+          "#node",
+          "name"
+        ],
+        "rows": [
+          [
+            "<b/>",
+            "y"
+          ]
+        ]
+      },
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><list><b><name>y</name></b><!-- c --></list>"
+    },
+    {
+      "name": "a list of values written as elements of its name in the old ones' places, inside the old wrapper when there was one; null removes them; an empty list is one empty element",
+      "options": {
+        "at": "shop/item"
+      },
+      "fields": [
+        {
+          "name": "@code",
+          "kind": "text"
+        },
+        {
+          "name": "tag",
+          "kind": "values",
+          "item": {
+            "kind": "text"
+          }
+        },
+        {
+          "name": "sizes",
+          "kind": "values",
+          "item": {
+            "kind": "integer"
+          }
+        }
+      ],
+      "original": "<shop>\n  <item code=\"1\"><tag>a</tag><name>x</name><tag>b</tag><sizes>1</sizes></item>\n  <item code=\"2\"><sizes><size>3</size><size>4</size></sizes></item>\n</shop>",
+      "table": {
+        "columns": [
+          "#node",
+          "@code",
+          "tag",
+          "sizes"
+        ],
+        "rows": [
+          [
+            "<item code=\"1\"><tag>a</tag><name>x</name><tag>b</tag><sizes>1</sizes></item>",
+            "1",
+            "[\"c\"]",
+            null
+          ],
+          [
+            "<item code=\"2\"><sizes><size>3</size><size>4</size></sizes></item>",
+            "2",
+            null,
+            "[5,6,7]"
+          ],
+          [
+            null,
+            "3",
+            "[\"x\",\"y\"]",
+            "[]"
+          ]
+        ]
+      },
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><shop>\n  <item code=\"1\"><tag>c</tag><name>x</name></item>\n  <item code=\"2\"><sizes><size>5</size><size>6</size><size>7</size></sizes></item>\n  <item code=\"3\"><tag>x</tag><tag>y</tag><sizes/></item>\n</shop>"
+    }
+  ]
+}

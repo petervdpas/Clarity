@@ -37,7 +37,7 @@ extern "C" {
 #endif
 
 /* The version of the table; it grows when a field is added at its end. */
-#define CLARITY_FORMATS_INTERFACE 1
+#define CLARITY_FORMATS_INTERFACE 2
 
 #define CLARITY_FORMATS_OK 0
 /* What was read does not fit what the program wants, or is not in the format. */
@@ -62,6 +62,19 @@ typedef struct ClarityFormatsApi {
     void (*free)(uint8_t* bytes, size_t len);
     /* What the last failing call on this thread was about, as UTF-8 into `into`; its code. */
     int32_t (*problem)(char* into, size_t size);
+    /* Interface 2: a file of a file data source as a table,
+     * {"columns":[...],"rows":[[...],...]}: the file's columns in its order,
+     * the cells of the columns an entity maps (`fields`, JSON
+     * [{"name":"site","kind":"text"},...]) fitted as SQLite keeps them, an
+     * empty field null. */
+    int32_t (*read_table)(const char* format, size_t format_len, const uint8_t* input, size_t input_len,
+                          const char* options, size_t options_len, const char* fields, size_t fields_len,
+                          uint8_t** out, size_t* out_len);
+    /* The table written back: the whole file, or for JSON the list at `at`
+     * inside `original`, the rest of the file kept. */
+    int32_t (*write_table)(const char* format, size_t format_len, const uint8_t* original, size_t original_len,
+                           const char* table, size_t table_len, const char* options, size_t options_len,
+                           const char* fields, size_t fields_len, uint8_t** out, size_t* out_len);
 } ClarityFormatsApi;
 
 /* The table, the same for the library's whole life. */

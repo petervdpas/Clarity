@@ -36,10 +36,11 @@ fn formats_read_decode_and_write_as_every_stack_does() {
         let options = case.get("options").map(Value::to_string).unwrap_or_default();
         let input = case["input"].as_str().unwrap();
         let many = case["kind"]["kind"] == "records";
+        let format = case.get("format").and_then(Value::as_str).unwrap_or("json");
         let written = if many {
-            formats::read::<Vec<Order>>("json", input, &options, &kind).map(|orders| formats::write("json", &orders, "", &kind))
+            formats::read::<Vec<Order>>(format, input, &options, &kind).map(|orders| formats::write(format, &orders, &options, &kind))
         } else {
-            formats::read::<Order>("json", input, &options, &kind).map(|order| formats::write("json", &order, "", &kind))
+            formats::read::<Order>(format, input, &options, &kind).map(|order| formats::write(format, &order, &options, &kind))
         };
         match (case.get("written"), case.get("error")) {
             (Some(wanted), _) => assert_eq!(written.unwrap_or_else(|e| panic!("{name}: {e}")), wanted.as_str().unwrap(), "{name}"),

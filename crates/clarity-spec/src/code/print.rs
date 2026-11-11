@@ -1,7 +1,14 @@
 //! Expressions back as Clarity text, for the messages of contract checks
-//! (`condition failed: order.status == Pending`).
+//! (`condition failed: order.status == Pending`), and mappings, which the
+//! IDE's mapping page writes back.
 
 use super::{Expr, ExprKind, UnaryOp};
+
+/// A mapping declaration as the language writes it (`mapping OrderFeed of
+/// Order from xml` with its lines), for writing it back into its module.
+pub fn mapping(m: &super::MappingDecl) -> String {
+    super::mapping::text(&super::mapping::form_of(m))
+}
 
 pub fn expr(e: &Expr) -> String {
     match &e.kind {
@@ -30,14 +37,18 @@ pub fn expr(e: &Expr) -> String {
         ExprKind::Files { var, store, filter, order } => query(&format!("files {} in {}", var.name, store.name), filter.as_deref(), order),
         ExprKind::ReadText { file } => format!("read text of {}", expr(file)),
         ExprKind::ReadBytes { file } => format!("read bytes of {}", expr(file)),
-        ExprKind::FormatOf { format, value, options } => format!("{} of {}{}", format.name, expr(value), format_options(options)),
-        ExprKind::ReadFormat { format, ty, input, options } => {
+        ExprKind::FormatOf { value, mapping: super::MappingUse::Inline { format, options } } => format!("{} of {}{}", format.name, expr(value), format_options(options)),
+        ExprKind::FormatOf { value, mapping: super::MappingUse::Named { name } } => format!("text of {} using {}", expr(value), name.name),
+        ExprKind::ReadFormat { ty, input, mapping } => {
             let read = match &ty.kind {
                 super::TypeRefKind::Named { name } => name.clone(),
                 super::TypeRefKind::List { item } => format!("list<{item}>"),
                 _ => "...".to_string(),
             };
-            format!("read {read} from {} {}{}", format.name, expr(input), format_options(options))
+            match mapping {
+                super::MappingUse::Inline { format, options } => format!("read {read} from {} {}{}", format.name, expr(input), format_options(options)),
+                super::MappingUse::Named { name } => format!("read {read} from {} using {}", expr(input), name.name),
+            }
         }
         ExprKind::Http { method, url, from, pages, body, headers, query } => {
             let mut text = format!("http {} {}", method.word(), expr(url));

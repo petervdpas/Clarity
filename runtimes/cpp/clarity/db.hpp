@@ -27,6 +27,8 @@
 namespace clarity {
 
 class Db;
+/// A data source that is a file in a format (formats/file_source.hpp).
+struct FileSource;
 
 template <typename R>
 concept Record = requires(R r, const R c, int64_t id, const Row& values) {
@@ -235,6 +237,13 @@ public:
         if (!id) throw NotFoundError(R::table, std::nullopt);
         return get<R>(*id);
     }
+
+    /// Adds the file source `source.name`, its file found as an SQLite
+    /// file's location is (CLARITY_DATA, `env:`), read whole into its table.
+    /// Throws a StorageError, `data source <name>: ...`, when the file cannot
+    /// be read or does not fit. Carried with the formats part
+    /// (formats/file_source.cpp), as only a program that uses formats calls it.
+    void add_file(const FileSource& source);
 
     /// Adds the file store `name` at a folder (made when it is not there
     /// yet); `env:NAME` takes it from that environment variable.

@@ -6,5 +6,6 @@ import { searchForWorkspaceRoot, type UserConfig } from "vite";
 
 export const shared: UserConfig = {
   resolve: { dedupe: ["svelte", "@tauri-apps/api", "vitest"] },
-  server: { fs: { allow: [searchForWorkspaceRoot(process.cwd()), "../runtimes/web"] } },
+  // Clarity's one icon set, which the IDE draws its icons from as apps do.
+  server: { fs: { allow: [searchForWorkspaceRoot(process.cwd()), "../runtimes/web", "../crates/clarity-spec/icons"] } },
 };

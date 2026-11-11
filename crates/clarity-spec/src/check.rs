@@ -2581,7 +2581,66 @@ pub(crate) fn check_sources(project: &mut Project) {
             found.extend(check_mapping(entity).into_iter().map(|d| d.in_file(&file.path)));
         }
     }
+    found.extend(check_source_mappings(project));
     project.diagnostics.extend(found);
+}
+
+/// A file source laid over by a mapping (`using OrderFeed`): a module
+/// declares the mapping, and its entity lives in that source. A missing
+/// mapping is reported on the `source` line of each module in the source.
+fn check_source_mappings(project: &Project) -> Vec<Diagnostic> {
+    let mut found = Vec::new();
+    for source in &project.sources {
+        let Some(name) = &source.mapping else { continue };
+        let Some(mapping) = project.mapping(name) else {
+            for file in project.files.iter().filter(|f| f.source.as_ref().is_some_and(|s| s.name == source.name)) {
+                let span = file.source.as_ref().map(|s| s.span).unwrap_or_default();
+                found.push(Diagnostic::error(format!("data source {} is laid over by mapping {name}, which no module declares", source.name), span).in_file(&file.path));
+            }
+            continue;
+        };
+        if !project.entities_in(&source.name).any(|e| e.name.name == mapping.entity.name) {
+            let file = project.files.iter().find(|f| f.mappings.iter().any(|m| std::ptr::eq(m, mapping)));
+            found.push(
+                Diagnostic::error(
+                    format!("data source {} is laid over by mapping {name}, so {} lives in it: write 'source {}' in the module of {}", source.name, mapping.entity.name, source.name, mapping.entity.name),
+                    mapping.name.span,
+                )
+                .in_file(file.map(|f| f.path.as_str()).unwrap_or_default()),
+            );
+        }
+        // The records inside (`lines of Line`) are kept in the same file, so their entity lives in the source too.
+        let file = project.files.iter().find(|f| f.mappings.iter().any(|m| std::ptr::eq(m, mapping)));
+        // Each with the record around it, so a record made in code knows where in the file it goes.
+        let mut inside: Vec<(&str, &crate::code::MappedField, &crate::code::MappedInside)> =
+            mapping.fields.iter().filter_map(|f| f.inside.as_ref().map(|i| (mapping.entity.name.as_str(), f, i))).collect();
+        while let Some((outer, field, nested)) = inside.pop() {
+            inside.extend(nested.fields.iter().filter_map(|f| f.inside.as_ref().map(|i| (nested.entity.name.as_str(), f, i))));
+            let entity = &nested.entity.name;
+            if nested.parent.is_none() {
+                found.push(
+                    Diagnostic::error(
+                        format!(
+                            "data source {} keeps the {entity} records inside each {outer}, so mapping {name} names the {outer} a {entity} sits in: write '{} is \"..\"' under '{} of {entity}', with {}: ref {outer} on {entity}",
+                            source.name,
+                            lower_first(outer),
+                            field.field.name,
+                            lower_first(outer)
+                        ),
+                        nested.entity.span,
+                    )
+                    .in_file(file.map(|f| f.path.as_str()).unwrap_or_default()),
+                );
+            }
+            if project.entity(entity).is_some() && !project.entities_in(&source.name).any(|e| e.name.name == *entity) {
+                found.push(
+                    Diagnostic::error(format!("data source {} is laid over by mapping {name}, so {entity} lives in it: write 'source {}' in the module of {entity}", source.name, source.name), nested.entity.span)
+                        .in_file(file.map(|f| f.path.as_str()).unwrap_or_default()),
+                );
+            }
+        }
+    }
+    found
 }
 
 /// `table`, `key` and `column` map an entity onto a table, one column per
@@ -2673,4 +2732,10 @@ fn frame_keys<'a>(file: usize, menu: &'a Option<crate::model::Menu>, toolbar: &'
 /// How a page's kind reads in a message: `window Card`, `dialog Ask`.
 fn page_kind_word(kind: PageKind) -> &'static str {
     kind.word()
+}
+
+/// A name with its first letter lower case: `Order` is `order`.
+fn lower_first(name: &str) -> String {
+    let mut chars = name.chars();
+    chars.next().map(|c| c.to_lowercase().chain(chars).collect()).unwrap_or_default()
 }

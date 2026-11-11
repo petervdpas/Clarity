@@ -6,15 +6,20 @@ using Microsoft.Data.Sqlite;
 
 namespace Clarity.Runtime;
 
-internal sealed class SqliteDriver(SqliteConnection conn) : IDriver
+internal sealed class SqliteDriver(SqliteConnection conn) : IDriver, ITransactional
 {
     /// <summary>SQLITE_CONSTRAINT_FOREIGNKEY.</summary>
     const int ForeignKey = 787;
 
     public Dialect Dialect => Dialect.Sqlite;
 
+    /// <summary>Whether a transaction is open: SQLite is out of autocommit.</summary>
+    public bool InTransaction => conn.Handle is { } handle && SQLitePCL.raw.sqlite3_get_autocommit(handle) == 0;
+
     internal static SqliteDriver Open(string path)
     {
+        if (path == ":memory:")
+            return Memory();
         var dir = Path.GetDirectoryName(Path.GetFullPath(path));
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);

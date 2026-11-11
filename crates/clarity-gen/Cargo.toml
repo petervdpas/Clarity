@@ -11,6 +11,8 @@ clarity-project.workspace = true
 clarity-wasm.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# The catalog of formats, for data sources that are files (file_sources).
+clarity-formats = { path = "../../runtimes/rust-formats", version = "0.2.0" }
 base64 = "0.22"
 # Clarity.UI's library for Go, C and C++, fetched from its release (clarity_ui.rs).
 sha2 = "0.10"

@@ -7,3 +7,4 @@ project Todo
     language "en"
     theme Light Dark
     datasource main sqlite "data/todo.db"
+    datasource ideas file "data/ideas.yaml" external using IdeaList

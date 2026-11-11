@@ -129,6 +129,8 @@
     X(every_http_call_gives_the_reply_the_cases_name)            \
     X(a_url_names_its_host)                                      \
     X(formats_read_and_write_as_every_stack_does)               \
+    X(a_csv_file_is_a_data_source_written_back_after_each_change) \
+    X(a_file_source_holds_the_records_inside_its_records_in_their_own_table) \
     X(a_secret_is_kept_read_and_forgotten)                       \
     X(settings_keep_their_secrets_out_of_the_file) \
     X(a_database_connects_with_a_secret_setting) \

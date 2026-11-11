@@ -31,6 +31,8 @@
     <InternalsVisibleTo Include="Clarity.Runtime.PostgreSql" />
     <InternalsVisibleTo Include="Clarity.Runtime.MySql" />
     <InternalsVisibleTo Include="Clarity.Runtime.SqlServer" />
+    <!-- A file as a data source, kept in SQLite (docs/FORMATS-PLAN.md). -->
+    <InternalsVisibleTo Include="Clarity.Formats" />
     <InternalsVisibleTo Include="Clarity.Runtime.Tests" />
     <InternalsVisibleTo Include="Clarity.Ui" />
     <!-- The program answering Clarity.UI's commands (Program/ProgramWire.cs): the desktop's and the web server's. -->

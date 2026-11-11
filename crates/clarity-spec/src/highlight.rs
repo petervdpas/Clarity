@@ -59,7 +59,7 @@ const KEYWORDS: &[&str] = &[
     "close", "refuse", "reload", "write", "to", "find", "where", "order", "by", "desc", "files", "read", "of", "new", "and", "or",
     "not", "contains", "matches", "div", "mod", "require", "ensure", "effects", "quit", "cli", "command", "option", "print", "exit", "copy",
     // HTTP calls (DESIGN 5.23).
-    "http", "get", "post", "put", "patch", "header", "json", "query", "when", "every",
+    "http", "get", "post", "put", "patch", "header", "query", "when", "every",
     // A web API data source: its paging and its OpenAPI description.
     "paging", "offset", "cursor", "next", "items", "link", "openapi", "pick", "schema",
     // Custom parts (DESIGN 5.19).
@@ -79,6 +79,8 @@ const KEYWORDS: &[&str] = &[
     "mode", "objects", "paint", "vector", "tools", "brush", "ink",
     // A tree's levels (DESIGN 5.33): `level Domain under project show name`.
     "level", "under",
+    // Mappings (docs/FORMATS-PLAN.md, step 4): `mapping OrderFeed of Order from xml`, `order is ".."`, `check "orders.xsd"`, `using OrderFeed`.
+    "mapping", "is", "check", "using",
 ];
 
 /// Clarity's own types.
@@ -90,12 +92,17 @@ const LITERALS: &[&str] = &["true", "false", "none"];
 /// Whether `word` is a word of the language: a keyword, a type, a literal
 /// or a part. A name the project gives should not be one.
 pub fn is_word_of_the_language(word: &str) -> bool {
-    KEYWORDS.contains(&word) || TYPES.contains(&word) || LITERALS.contains(&word) || crate::widgets::catalog().iter().any(|w| w.keyword == word)
+    KEYWORDS.contains(&word) || TYPES.contains(&word) || LITERALS.contains(&word) || crate::widgets::catalog().iter().any(|w| w.keyword == word) || is_format(word)
+}
+
+/// Whether `word` names a format of Clarity.Formats' catalog (`json`, `csv`, `xml`).
+fn is_format(word: &str) -> bool {
+    clarity_formats::format(word).is_some()
 }
 
 /// Words after which the next word is a name the project gives.
 const NAMING: &[&str] =
-    &["name", "bind", "handler", "function", "action", "let", "for", "data", "keep", "const", "module", "use", "source", "store", "datasource", "filestore"];
+    &["name", "bind", "handler", "function", "action", "let", "for", "data", "keep", "const", "module", "use", "source", "store", "datasource", "filestore", "mapping"];
 
 /// The pieces of every line of `source`, in order.
 pub fn highlight(source: &str) -> Vec<Piece> {
@@ -188,7 +195,7 @@ fn word_kind(tokens: &[Token], i: usize) -> PieceKind {
         return PieceKind::Type;
     }
     // A part's line has words of its own (`cards`, `typed`), which the parser names.
-    if KEYWORDS.contains(&word) || crate::parser::LINE_WORDS.contains(&word) || crate::widgets::by_keyword(word).is_some() || crate::widgets::Event::by_keyword(word).is_some() {
+    if KEYWORDS.contains(&word) || crate::parser::LINE_WORDS.contains(&word) || crate::widgets::by_keyword(word).is_some() || crate::widgets::Event::by_keyword(word).is_some() || is_format(word) {
         return PieceKind::Keyword;
     }
     PieceKind::Name
@@ -232,6 +239,7 @@ pub fn keywords() -> Vec<String> {
     // A custom part is written by its own name, never by the catalog's word for its kind.
     words.extend(crate::widgets::catalog().into_iter().filter(|w| w.kind != crate::widgets::WidgetKind::Custom).map(|w| w.keyword));
     words.extend(crate::widgets::ALL_EVENTS.iter().map(|e| e.keyword().to_string()));
+    words.extend(clarity_formats::catalog().into_iter().map(|f| f.name.to_string()));
     words.sort();
     words.dedup();
     words

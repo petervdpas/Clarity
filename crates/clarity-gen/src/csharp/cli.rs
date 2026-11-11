@@ -128,9 +128,13 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let types = check::types(&project.files);
     let mut errors = Vec::new();
     let texts = texts::Texts::of(project);
-    let drivers: Vec<&Driver> = DRIVERS.iter().filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql)).collect();
+    let drivers: Vec<&Driver> = DRIVERS
+        .iter()
+        // A data source that is a file is kept in an in-memory SQLite table.
+        .filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql) || (s.sql == crate::ddl::Sql::Sqlite && !crate::file_sources(project, settings).unwrap_or_default().is_empty()))
+        .collect();
     let engines = !crate::engines(project).is_empty();
-    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &program, &drivers, engines, crate::uses_picture_functions(project), project.uses_formats()))];
+    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &program, &drivers, engines, crate::uses_picture_functions(project), crate::carries_formats(project, settings)))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
@@ -217,6 +221,7 @@ fn program_cs(project: &Project, settings: &Settings, name: &str, databases: &[(
     let folder_stores: String = crate::folder_stores(project, settings)
         .iter()
         .map(|(name, setting, default)| format!("        db.AddStoreSetting({}, {}, {}, {});\n", string(name), string(&program_name), string(setting), string(default)))
+        .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("        Clarity.Formats.FileSources.AddFile(db, new Clarity.Formats.FileSource({}, {}, {}, {}, {}, {}, {}, {}));\n", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)))
         .collect();
 
     let databases = databases.iter().map(|(source, sql, at)| format!("({}, {}, {})", string(source), dialect(*sql), string(at))).collect::<Vec<_>>().join(", ");

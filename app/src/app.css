@@ -253,3 +253,17 @@ table.sized th {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* A button that is an icon alone, its words in its tooltip: square, the
+   height of the inputs beside it, the same everywhere in the IDE. */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+  height: 30px;
+  width: 30px;
+  flex: none;
+}

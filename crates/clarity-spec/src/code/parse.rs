@@ -1,7 +1,7 @@
 //! Parses `code` blocks: handlers, their statements (one per line, blocks
 //! by indentation) and expressions (precedence climbing on one line).
 
-use super::{AskForm, HttpPair, NamedArg, HttpMethod, CliDecl, LibraryDecl, LibrarySource, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep, ConstDecl,
+use super::{AskForm, HttpPair, MappingUse, MappingDecl, MappedField, MappedInside, MappedParent, MappingOption, MappingText, MappingValue, NamedArg, HttpMethod, CliDecl, LibraryDecl, LibrarySource, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep, ConstDecl,
     Arg, BinaryOp, Branch, CodeBlock, DataEvent, EngineDecl, EngineFunction, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
@@ -1060,6 +1060,128 @@ pub(crate) fn parse_library(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> P
     Ok(library)
 }
 
+/// `mapping OrderFeed of Order from xml` and its lines (docs/FORMATS-PLAN.md,
+/// step 4): `at`, a line per field, the records inside with their own lines,
+/// `check`, and the format's options. The checker holds them to the entity
+/// and the catalog; the parser only reads their shape.
+pub(crate) fn parse_mapping(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<MappingDecl> {
+    let mut cursor = Cursor::new(node.line);
+    cursor.next();
+    let shape = "as in 'mapping OrderFeed of Order from xml'";
+    let name = cursor.expect_ident(&format!("the mapping's name, {shape}"))?;
+    if !cursor.eat_keyword("of") {
+        return Err(cursor.error_here(format!("expected 'of' and the entity, {shape}")));
+    }
+    let entity = cursor.expect_ident(&format!("the entity the file is laid over, {shape}"))?;
+    if !cursor.eat_keyword("from") {
+        return Err(cursor.error_here(format!("expected 'from' and a format, {shape}")));
+    }
+    let format = cursor.expect_ident(&format!("a format, {shape}"))?;
+    cursor.expect_end()?;
+    let mut mapping = MappingDecl { name, entity, format, at: None, fields: Vec::new(), check: None, schema: None, options: Vec::new(), span: node.span() };
+    for child in &node.children {
+        let parsed = (|| {
+            let mut line = Cursor::new(child.line);
+            let first = line.peek().cloned();
+            let second = line.peek_at(1).cloned();
+            match (first, second) {
+                (Some(word), Some(value)) if (word.text == "at" || word.text == "check") && word.kind == TokenKind::Ident && value.kind == TokenKind::Str => {
+                    no_children(child)?;
+                    line.next();
+                    line.next();
+                    line.expect_end()?;
+                    let text = MappingText { value: value.text.clone(), span: value.span };
+                    let slot = if word.text == "at" { &mut mapping.at } else { &mut mapping.check };
+                    if slot.is_some() {
+                        return Err(Diagnostic::error(format!("a mapping has one '{}'", word.text), word.span));
+                    }
+                    *slot = Some(text);
+                    Ok(())
+                }
+                (Some(word), Some(next)) if word.kind == TokenKind::Ident && next.kind == TokenKind::Ident && matches!(next.text.as_str(), "at" | "of" | "is") => {
+                    match mapped_line(child, diagnostics)? {
+                        Mapped::Field(field) => mapping.fields.push(field),
+                        Mapped::Parent(parent) => {
+                            return Err(Diagnostic::error("'is' names the record that records inside sit in; write it under a field's 'of' line, as in order is \"..\"", parent.field.span));
+                        }
+                    }
+                    Ok(())
+                }
+                (Some(word), Some(value)) if word.kind == TokenKind::Ident => {
+                    no_children(child)?;
+                    line.next();
+                    line.next();
+                    line.expect_end()?;
+                    let value = match value.kind {
+                        TokenKind::Str => MappingValue::Text(value.text.clone()),
+                        TokenKind::Ident if value.text == "true" || value.text == "false" => MappingValue::Bool(value.text == "true"),
+                        _ => return Err(Diagnostic::error(format!("an option of the format takes text in quotes or true or false, as in {} true", word.text), value.span)),
+                    };
+                    mapping.options.push(MappingOption { name: Ident { name: word.text.clone(), span: word.span }, value, span: child.line.span });
+                    Ok(())
+                }
+                _ => Err(line.error_here("a mapping holds 'at \"path\"', a line per field (number at \"@number\"), the records inside (lines of Line at \"lines/line\"), 'check \"file\"' and the format's options")),
+            }
+        })();
+        if let Err(diag) = parsed {
+            diagnostics.push(diag);
+        }
+    }
+    Ok(mapping)
+}
+
+/// A line of a mapping that names a field: where it is, the records inside
+/// it with their lines, or (inside) the field naming the record around.
+enum Mapped {
+    Field(MappedField),
+    Parent(MappedParent),
+}
+
+fn mapped_line(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Mapped> {
+    let mut line = Cursor::new(node.line);
+    let field = line.expect_ident("a field")?;
+    let path = |line: &mut Cursor, what: &str| -> ParseResult<MappingText> {
+        let token = line.expect(TokenKind::Str, what)?;
+        Ok(MappingText { value: token.text.clone(), span: token.span })
+    };
+    if line.eat_keyword("is") {
+        let path = path(&mut line, "the record around in quotes, as in order is \"..\"")?;
+        line.expect_end()?;
+        no_children(node)?;
+        return Ok(Mapped::Parent(MappedParent { field, path }));
+    }
+    let inside_of = if line.eat_keyword("of") { Some(line.expect_ident("the entity of the records inside, as in lines of Line at \"lines/line\"")?) } else { None };
+    let at = if line.eat_keyword("at") { Some(path(&mut line, "a path in quotes, as in number at \"@number\"")?) } else { None };
+    line.expect_end()?;
+    let Some(entity) = inside_of else {
+        no_children(node)?;
+        return Ok(Mapped::Field(MappedField { field, at, inside: None, span: node.line.span }));
+    };
+    let mut inside = MappedInside { entity, fields: Vec::new(), parent: None };
+    for child in &node.children {
+        let parsed = (|| {
+            let line = Cursor::new(child.line);
+            if !line.peek_at(1).is_some_and(|t| t.kind == TokenKind::Ident && matches!(t.text.as_str(), "at" | "of" | "is")) {
+                return Err(line.error_here("the records inside hold a line per field (name at \"name\"), records inside them, and the field naming the record around (order is \"..\")"));
+            }
+            match mapped_line(child, diagnostics)? {
+                Mapped::Field(field) => inside.fields.push(field),
+                Mapped::Parent(parent) => {
+                    if inside.parent.is_some() {
+                        return Err(Diagnostic::error("the records inside name the record around once", parent.field.span));
+                    }
+                    inside.parent = Some(parent);
+                }
+            }
+            Ok(())
+        })();
+        if let Err(diag) = parsed {
+            diagnostics.push(diag);
+        }
+    }
+    Ok(Mapped::Field(MappedField { field, at, inside: Some(inside), span: node.span() }))
+}
+
 fn capitalized(name: &str) -> String {
     let mut chars = name.chars();
     chars.next().map(|c| c.to_ascii_uppercase().to_string() + chars.as_str()).unwrap_or_default()
@@ -1384,7 +1506,18 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
             cursor.next();
             let value = parse_postfix(cursor)?;
             let (options, end) = parse_format_options(cursor, &format.name, false, value.span)?;
-            return Ok(Expr { span: join(token.span, end), kind: ExprKind::FormatOf { format, value: Box::new(value), options } });
+            return Ok(Expr { span: join(token.span, end), kind: ExprKind::FormatOf { value: Box::new(value), mapping: MappingUse::Inline { format, options } } });
+        }
+        // `text of orders using OrderFeed`: records written as a mapping says.
+        TokenKind::Ident if token.text == "text" && cursor.peek_at(1).is_some_and(|t| t.text == "of") => {
+            cursor.next();
+            cursor.next();
+            let value = parse_postfix(cursor)?;
+            if !cursor.eat_keyword("using") {
+                return Err(cursor.error_here("expected 'using' and a mapping, as in text of orders using OrderFeed"));
+            }
+            let name = cursor.expect_ident("a mapping, as in text of orders using OrderFeed")?;
+            return Ok(Expr { span: join(token.span, name.span), kind: ExprKind::FormatOf { value: Box::new(value), mapping: MappingUse::Named { name } } });
         }
         TokenKind::Ident
             if token.text == "read"
@@ -1400,14 +1533,23 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
                 return Err(cursor.error_here("expected a format after 'from', as in read Order from json reply.text"));
             };
             if clarity_formats::format(&named.text).is_none() {
-                let formats: Vec<&str> = clarity_formats::catalog().iter().map(|f| f.name).collect();
-                return Err(cursor.error_here(&format!("there is no format '{}'; the formats are {}", named.text, formats.join(", "))));
+                // `read list<Order> from text using OrderFeed`: the mapping names the format.
+                let input = parse_expr(cursor)?;
+                if !cursor.eat_keyword("using") {
+                    let formats: Vec<&str> = clarity_formats::catalog().iter().map(|f| f.name).collect();
+                    return Err(Diagnostic::error(
+                        format!("there is no format '{}'; the formats are {}, or read Order from text using a mapping", named.text, formats.join(", ")),
+                        named.span,
+                    ));
+                }
+                let name = cursor.expect_ident("a mapping, as in read list<Order> from text using OrderFeed")?;
+                return Ok(Expr { span: join(token.span, name.span), kind: ExprKind::ReadFormat { ty, input: Box::new(input), mapping: MappingUse::Named { name } } });
             }
             cursor.next();
             let format = Ident { name: named.text.clone(), span: named.span };
             let input = parse_expr(cursor)?;
             let (options, end) = parse_format_options(cursor, &format.name, true, input.span)?;
-            return Ok(Expr { span: join(token.span, end), kind: ExprKind::ReadFormat { format, ty, input: Box::new(input), options } });
+            return Ok(Expr { span: join(token.span, end), kind: ExprKind::ReadFormat { ty, input: Box::new(input), mapping: MappingUse::Inline { format, options } } });
         }
         // `http get url`: a call to a web API (DESIGN 5.23).
         TokenKind::Ident

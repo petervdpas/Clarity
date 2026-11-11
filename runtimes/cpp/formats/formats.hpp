@@ -30,6 +30,17 @@ std::string formats_fitted(const std::string& format, const std::string& input, 
 /// `value` (as to_json wrote it) written in `format` with its `options`, as `kind` describes it.
 std::string formats_written(const std::string& format, const std::string& value, const std::string& options, const std::string& kind);
 
+/// The file `input` in `format` as a table (interface 2), JSON
+/// {"columns":[...],"rows":[[...],...]}: the file's columns in its order, the
+/// cells of the columns in `fields` (JSON [{"name":"site","kind":"text"},...])
+/// fitted as SQLite keeps them. Throws a ValueError with Clarity.Formats' message.
+std::string formats_read_table(const std::string& format, const std::string& input, const std::string& options, const std::string& fields);
+
+/// `table` (as formats_read_table gives it) written back in `format`
+/// (interface 2): the whole file, or for JSON the list inside `original`,
+/// the rest kept. Throws a ValueError with Clarity.Formats' message.
+std::string formats_write_table(const std::string& format, const std::string& original, const std::string& table, const std::string& options, const std::string& fields);
+
 /// Reads `input` in `format` and decodes what was fitted as a `T` (a record, or a vector of them).
 template <typename T>
 T formats_read(const std::string& format, const std::string& input, const std::string& options, const std::string& kind) {

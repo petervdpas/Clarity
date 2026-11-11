@@ -1,0 +1,1054 @@
+{
+  "about": "YAML through Clarity.Formats in code (docs/FORMATS-PLAN.md, \"Step 5: YAML\"): `read list<Order> from yaml text at \"orders\"` and `yaml of orders at \"orders\"`. YAML is syntax only: YAML 1.2's core schema read into the one document model as JSON's values are (a mapping is an object, a sequence a list), so paths, `at`, mappings, fitting and the messages are the engine's, as for JSON, with \"YAML\" in them. Reading: block mappings and sequences, flow `{}` and `[]`, plain, single- and double-quoted scalars (escapes, folding), block scalars `|` and `>` with chomping `-` and `+`, comments, anchors and aliases (a copy of what the anchor names), the first document of a stream (`%` directives and `---` before it, `...` or the next `---` after it); tags are left aside; complex keys (`?`) are refused. A plain scalar is a number (an integer or a float, kept as the JSON number it is), `true` or `false` (also `True`, `TRUE`), null (`null`, `~` or nothing), else text; `.inf` and `.nan` stay text; a key is its text as written. What is no YAML is `the text is no YAML at line N`. Writing: block style, two spaces, keys in order, a list item's first key on its dash's line; a text in double quotes (with escapes) where it would read back as something else (number-like, true, false or null, a leading indicator, `: ` or ` #` inside, a trailing `:`, a leading or trailing space, empty, a control character), a text of several lines as a `|` block (`|-` without a final line break, `|+` with more than one); an empty list `[]`, an empty record `{}`; the file ends with a line break. `read` cases read and fit `kind`; `write` cases write `value` as `kind` and give `written` byte for byte; `roundTrip` cases write `value` and read it back with the same `at` to the same value. A file source written back keeping its comments is in formats-table.json.",
+  "read": [
+    {
+      "name": "block mappings and sequences, flow collections, comments, quoting, block scalars; a plain number, yes or no and a date as the core schema reads them",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "",
+          "tags": [],
+          "lines": []
+        }
+      },
+      "options": {
+        "at": "orders"
+      },
+      "input": "# orders, kept by hand\norders:\n  - number: A-1   # the first\n    total: 12.50\n    paid: true\n    placed: 2026-11-01\n    note: |\n      first line\n      second line\n    tags: [new, 'rush']\n    lines:\n      - product: Tea\n        quantity: 2\n      - {product: Coffee, quantity: 1}\n  - number: \"007\"\n    total: 3\n    paid: false\n    note: >\n      folded\n      text\n    tags: []\n    lines: []\n",
+      "fitted": [
+        {
+          "id": 0,
+          "number": "A-1",
+          "placed": "2026-11-01",
+          "total": "12.50",
+          "paid": true,
+          "note": "first line\nsecond line\n",
+          "tags": [
+            "new",
+            "rush"
+          ],
+          "lines": [
+            {
+              "id": 0,
+              "product": "Tea",
+              "quantity": 2
+            },
+            {
+              "id": 0,
+              "product": "Coffee",
+              "quantity": 1
+            }
+          ]
+        },
+        {
+          "id": 0,
+          "number": "007",
+          "placed": null,
+          "total": "3",
+          "paid": false,
+          "note": "folded text\n",
+          "tags": [],
+          "lines": []
+        }
+      ]
+    },
+    {
+      "name": "a sequence at its key's own column, a block scalar's chomping, escapes in double quotes, a plain text over lines folded",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "",
+          "tags": [],
+          "lines": []
+        }
+      },
+      "options": {
+        "at": "orders"
+      },
+      "input": "orders:\n- number: B-1\n  note: |-\n    no line break at the end\n  tags:\n  - \"tab\\there\"\n  - 'it''s'\n  - plain text\n    over two lines\n",
+      "fitted": [
+        {
+          "id": 0,
+          "number": "B-1",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "no line break at the end",
+          "tags": [
+            "tab\there",
+            "it's",
+            "plain text over two lines"
+          ],
+          "lines": []
+        }
+      ]
+    },
+    {
+      "name": "the first document of a stream: directives and '---' before it, '...' or the next '---' after it; an anchor and an alias, a tag left aside",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "",
+          "tags": [],
+          "lines": []
+        }
+      },
+      "input": "%YAML 1.2\n---\nnumber: &n !!str C-1\nnote: *n\n...\n--- [this, is, not, read\n",
+      "fitted": {
+        "id": 0,
+        "number": "C-1",
+        "placed": null,
+        "total": "0",
+        "paid": false,
+        "note": "C-1",
+        "tags": [],
+        "lines": []
+      }
+    },
+    {
+      "name": "null, ~ and nothing leave the default; a missing key too",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "",
+          "tags": [],
+          "lines": []
+        }
+      },
+      "input": "number: ~\nnote:\ntotal: null\n",
+      "fitted": {
+        "id": 0,
+        "number": "",
+        "placed": null,
+        "total": "0",
+        "paid": false,
+        "note": "",
+        "tags": [],
+        "lines": []
+      }
+    },
+    {
+      "name": "a byte order mark is dropped",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "",
+          "tags": [],
+          "lines": []
+        }
+      },
+      "input": "﻿number: D-1\n",
+      "fitted": {
+        "id": 0,
+        "number": "D-1",
+        "placed": null,
+        "total": "0",
+        "paid": false,
+        "note": "",
+        "tags": [],
+        "lines": []
+      }
+    },
+    {
+      "name": "what is no YAML says the line",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "",
+          "tags": [],
+          "lines": []
+        }
+      },
+      "input": "number: D-1\nlines: [1, 2\n",
+      "error": "the text is no YAML at line 3"
+    },
+    {
+      "name": "a key and a value on one line after another key is no YAML",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "",
+          "tags": [],
+          "lines": []
+        }
+      },
+      "input": "number: a: b\n",
+      "error": "the text is no YAML at line 1"
+    },
+    {
+      "name": "complex keys are refused",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "",
+          "tags": [],
+          "lines": []
+        }
+      },
+      "input": "? number\n: E-1\n",
+      "error": "the text is no YAML at line 1"
+    },
+    {
+      "name": "a value that does not fit says where, with YAML in the message",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "",
+          "tags": [],
+          "lines": []
+        }
+      },
+      "input": "- number: F-1\n  total: lots\n",
+      "error": "item 1: field 'total' of Order is a decimal, not \"lots\""
+    },
+    {
+      "name": "at names what is not there",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "",
+          "tags": [],
+          "lines": []
+        }
+      },
+      "options": {
+        "at": "data/orders"
+      },
+      "input": "orders: []\n",
+      "error": "the YAML has no 'data'"
+    }
+  ],
+  "write": [
+    {
+      "name": "block style, two spaces, the entity's fields in order; a text quoted where it would read back as something else, a text of several lines a '|' block, an empty list '[]'",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "",
+          "tags": [],
+          "lines": []
+        }
+      },
+      "options": {
+        "at": "orders"
+      },
+      "value": "[{\"id\": 1, \"number\": \"007\", \"placed\": \"2026-11-01\", \"total\": \"12.5\", \"paid\": true, \"note\": \"two\\nlines\", \"tags\": [\"a: b\", \"true\", \"- x\", \" pad\", \"#no\", \"\"], \"lines\": [{\"id\": 0, \"product\": \"Tea\", \"quantity\": 2}]}, {\"id\": 2, \"number\": \"A-2\", \"placed\": null, \"total\": \"0\", \"paid\": false, \"note\": \"\", \"tags\": [], \"lines\": []}]",
+      "written": "orders:\n  - id: 1\n    number: \"007\"\n    placed: 2026-11-01\n    total: \"12.5\"\n    paid: true\n    note: |-\n      two\n      lines\n    tags:\n      - \"a: b\"\n      - \"true\"\n      - \"- x\"\n      - \" pad\"\n      - \"#no\"\n      - \"\"\n    lines:\n      - id: 0\n        product: Tea\n        quantity: 2\n  - id: 2\n    number: A-2\n    placed: null\n    total: \"0\"\n    paid: false\n    note: \"\"\n    tags: []\n    lines: []\n"
+    },
+    {
+      "name": "one record without at is the document itself; at with slashes nests it",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "",
+          "tags": [],
+          "lines": []
+        }
+      },
+      "options": {
+        "at": "shop/order"
+      },
+      "value": "{\"id\": 3, \"number\": \"B-1\", \"placed\": null, \"total\": \"0\", \"paid\": false, \"note\": \"it's \\\"quoted\\\"\\ttab\", \"tags\": [], \"lines\": []}",
+      "written": "shop:\n  order:\n    id: 3\n    number: B-1\n    placed: null\n    total: \"0\"\n    paid: false\n    note: \"it's \\\"quoted\\\"\\ttab\"\n    tags: []\n    lines: []\n"
+    }
+  ],
+  "roundTrip": [
+    {
+      "name": "a list of records with everything a record holds",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "",
+          "tags": [],
+          "lines": []
+        }
+      },
+      "options": {
+        "at": "orders"
+      },
+      "value": "[{\"id\": 0, \"number\": \"A-1\", \"placed\": \"2026-11-01\", \"total\": \"12.5\", \"paid\": true, \"note\": \"line one\\n  indented\\n\\nafter an empty line\\n\", \"tags\": [\"x\", \"y: z\", \"null\", \"1.0\", \"~\"], \"lines\": [{\"id\": 0, \"product\": \"Coffee\", \"quantity\": 2}]}, {\"id\": 0, \"number\": \"-1\", \"placed\": null, \"total\": \"0\", \"paid\": false, \"note\": \"ends\\n\\n\", \"tags\": [], \"lines\": []}]"
+    },
+    {
+      "name": "texts that look like other values",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": null,
+          "total": "0",
+          "paid": false,
+          "note": "",
+          "tags": [],
+          "lines": []
+        }
+      },
+      "value": "{\"id\": 0, \"number\": \"0x1F\", \"placed\": null, \"total\": \"0\", \"paid\": false, \"note\": \" leading and trailing \", \"tags\": [\"true\", \"False\", \"NULL\", \"-\", \"?\", \":\", \"[a]\", \"{b}\", \"*c\", \"&d\", \"!e\", \"|f\", \">g\", \"%h\", \"@i\", \"`j\", \"'k'\", \"\\\"l\\\"\", \"a #b\", \"c:\", \"...\", \"---\", \".inf\", \"-.Inf\", \".NaN\", \"1e3\", \"+1\", \"\\u00e9\\u20ac\", \"\\u0001\", \"two\\nlines\"], \"lines\": []}"
+    }
+  ]
+}

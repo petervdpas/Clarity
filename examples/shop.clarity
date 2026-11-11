@@ -1,9 +1,12 @@
 // The shop example: customers and their orders, with browse windows, editors,
-// a customer card and a sales dashboard, in four modules and a window or view
-// per file in design/, in the shop folder next to this file.
+// a customer card, a sales dashboard and a supplier price list kept in a CSV
+// file, in five modules and a window or view per file in design/, in the shop
+// folder next to this file.
 project Shop
     stack rust desktop
     language "en"
     currency EUR
     theme Shop Night Day
     datasource main sqlite "data/shop.db"
+    datasource prices csv "data/prices.csv" external
+        separator ";"

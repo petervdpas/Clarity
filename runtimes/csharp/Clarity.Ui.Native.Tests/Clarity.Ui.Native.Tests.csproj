@@ -22,6 +22,8 @@
     <ProjectReference Include="../Clarity.Video/Clarity.Video.csproj" />
     <ProjectReference Include="../Clarity.Image/Clarity.Image.csproj" />
     <ProjectReference Include="../Clarity.Formats/Clarity.Formats.csproj" />
+    <!-- A file as a data source keeps its table in SQLite (FileSourceTests). -->
+    <ProjectReference Include="../Clarity.Runtime.Sqlite/Clarity.Runtime.Sqlite.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Clarity.Ui" />

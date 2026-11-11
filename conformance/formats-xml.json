@@ -1,0 +1,4399 @@
+{
+  "about": "XML through Clarity.Formats in code (docs/FORMATS-PLAN.md, \"XML\"): `read list<Order> from xml text at \"shop/orders/order\"` and `xml of orders at \"shop/orders/order\"`. `at` is a path of local names with slashes (a leading slash allowed): the first is the root element's name, the middle ones are descended into (the first of that name), the last names the record's elements; a list is every element of that name there, possibly none, one record the first (none is an error that names the path, as a missing step names the path walked so far). Without `at` a list is the root element's child elements and one record the root element. Bytes become text by a byte order mark (UTF-8, UTF-16), else the declaration's encoding (utf-8, windows-1252, iso-8859-1), else UTF-8. Names match by local name (a prefix ignored); fields as JSON's names do, ignoring case, underscores, hyphens and spaces, the exact name first. A field takes the text of a child element of its name, else an attribute of its name (namespace declarations are none); an empty one is left out, so the record keeps its default. A record field takes the element of its name. A list field takes the elements of its name; when there is one of them and its child elements all have one name that is not a field of the item's entity, those children are the items; one empty element is an empty list. No other name is guessed. `other` fields are never read. Values are then fitted as JSON's are, with \"XML\" in the messages. Writing always takes `at`: the elements around the records and the record's own (a list needs both). The XML declaration first (`encoding`: UTF-8, windows-1252 or ISO-8859-1; a character the encoding cannot hold as a character reference), each field in the entity's order as a child element of its name, null, the id and `other` fields left out, a list of values as repeated elements of the field's name, a list of records inside an element of the field's name with one element per record named after its entity in camelCase, a record field as an element of its name holding its fields; values in Clarity's one form; `indent true` one element a line; `namespace` as `xmlns` on the outermost element. `read` cases give `fitted` or `error`, `write` cases `written` or `error`, word for word; `roundTrip` cases are written with `options` and read back with their `at`, giving `value` again.",
+  "read": [
+    {
+      "name": "the design's example: attributes and child elements, a record field, a list inside one element whose children have one name, a prefix ignored, other kinds left out",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "input": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- export -->\n<shop xmlns:o=\"urn:o\">\n  <orders>\n    <o:order number=\"A-1\" placed=\"2026-11-01\" owner=\"7\">\n      <customer><name>Ada</name></customer>\n      <lines><line product=\"Coffee\" quantity=\"2\"/><line product=\"Tea\" quantity=\"1\"/></lines>\n      <note>leave at door</note>\n    </o:order>\n    <order number=\"A-2\" total=\"12.50\" paid=\"true\" status=\"closed\"/>\n  </orders>\n</shop>\n",
+      "fitted": [
+        {
+          "id": 0,
+          "number": "A-1",
+          "placed": "2026-11-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "leave at door",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": "Ada"
+          },
+          "lines": [
+            {
+              "id": 0,
+              "product": "Coffee",
+              "quantity": 2
+            },
+            {
+              "id": 0,
+              "product": "Tea",
+              "quantity": 1
+            }
+          ],
+          "owner": null
+        },
+        {
+          "id": 0,
+          "number": "A-2",
+          "placed": "2026-01-01",
+          "total": "12.50",
+          "paid": true,
+          "status": "Closed",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      ]
+    },
+    {
+      "name": "a child element comes before an attribute of the same name",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order"
+      },
+      "input": "<order number=\"from-attribute\"><number>from-element</number></order>",
+      "fitted": {
+        "id": 0,
+        "number": "from-element",
+        "placed": "2026-01-01",
+        "total": "0",
+        "paid": false,
+        "status": "Open",
+        "note": "",
+        "tags": [],
+        "customer": {
+          "id": 0,
+          "name": ""
+        },
+        "lines": [],
+        "owner": null
+      }
+    },
+    {
+      "name": "names match ignoring case, underscores, hyphens and spaces, the exact name first; the path matches local names exactly",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order"
+      },
+      "input": "<order PLACED=\"2026-02-03\"><Note>n</Note><NOTE>later</NOTE><Total>3</Total></order>",
+      "fitted": {
+        "id": 0,
+        "number": "",
+        "placed": "2026-02-03",
+        "total": "3",
+        "paid": false,
+        "status": "Open",
+        "note": "n",
+        "tags": [],
+        "customer": {
+          "id": 0,
+          "name": ""
+        },
+        "lines": [],
+        "owner": null
+      }
+    },
+    {
+      "name": "an empty element or attribute is left out, so the record keeps its default; space between elements is no text",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order"
+      },
+      "input": "<order number=\"\" total=\"5\"><note/><paid></paid><customer>\n  <name>Bo</name>\n</customer></order>",
+      "fitted": {
+        "id": 0,
+        "number": "",
+        "placed": "2026-01-01",
+        "total": "5",
+        "paid": false,
+        "status": "Open",
+        "note": "",
+        "tags": [],
+        "customer": {
+          "id": 0,
+          "name": "Bo"
+        },
+        "lines": [],
+        "owner": null
+      }
+    },
+    {
+      "name": "text keeps its spaces, entities, character references and CDATA; comments are left aside",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order"
+      },
+      "input": "<order><note>  A &amp; B &lt;3 &#233;<!-- x --><![CDATA[<raw>]]> </note></order>",
+      "fitted": {
+        "id": 0,
+        "number": "",
+        "placed": "2026-01-01",
+        "total": "0",
+        "paid": false,
+        "status": "Open",
+        "note": "  A & B <3 é<raw> ",
+        "tags": [],
+        "customer": {
+          "id": 0,
+          "name": ""
+        },
+        "lines": [],
+        "owner": null
+      }
+    },
+    {
+      "name": "a list of values: the elements of its name, repeated",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order"
+      },
+      "input": "<order><tags>a</tags><tags>b</tags><tags></tags></order>",
+      "fitted": {
+        "id": 0,
+        "number": "",
+        "placed": "2026-01-01",
+        "total": "0",
+        "paid": false,
+        "status": "Open",
+        "note": "",
+        "tags": [
+          "a",
+          "b",
+          ""
+        ],
+        "customer": {
+          "id": 0,
+          "name": ""
+        },
+        "lines": [],
+        "owner": null
+      }
+    },
+    {
+      "name": "a list of values: one element of its name holding elements of one name",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order"
+      },
+      "input": "<order><tags><tag>a</tag><tag>b</tag></tags></order>",
+      "fitted": {
+        "id": 0,
+        "number": "",
+        "placed": "2026-01-01",
+        "total": "0",
+        "paid": false,
+        "status": "Open",
+        "note": "",
+        "tags": [
+          "a",
+          "b"
+        ],
+        "customer": {
+          "id": 0,
+          "name": ""
+        },
+        "lines": [],
+        "owner": null
+      }
+    },
+    {
+      "name": "a list of values: one element of its name with only text is one item, an empty one an empty list",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "input": "<shop><orders><order><tags>a</tags></order><order><tags/></order></orders></shop>",
+      "fitted": [
+        {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [
+            "a"
+          ],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        },
+        {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      ]
+    },
+    {
+      "name": "a list of records: the elements of its name, repeated",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order"
+      },
+      "input": "<order><lines product=\"Coffee\" quantity=\"2\"/><lines><product>Tea</product><quantity>1</quantity></lines></order>",
+      "fitted": {
+        "id": 0,
+        "number": "",
+        "placed": "2026-01-01",
+        "total": "0",
+        "paid": false,
+        "status": "Open",
+        "note": "",
+        "tags": [],
+        "customer": {
+          "id": 0,
+          "name": ""
+        },
+        "lines": [
+          {
+            "id": 0,
+            "product": "Coffee",
+            "quantity": 2
+          },
+          {
+            "id": 0,
+            "product": "Tea",
+            "quantity": 1
+          }
+        ],
+        "owner": null
+      }
+    },
+    {
+      "name": "a list of records: one element of its name with attributes is one item, an empty one an empty list",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "input": "<shop><orders><order><lines product=\"Coffee\"/></order><order><lines/></order></orders></shop>",
+      "fitted": [
+        {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [
+            {
+              "id": 0,
+              "product": "Coffee",
+              "quantity": 0
+            }
+          ],
+          "owner": null
+        },
+        {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      ]
+    },
+    {
+      "name": "a list of records: one element whose children all have the name of a field of the item is one item, not a wrapper",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order"
+      },
+      "input": "<order><lines><product>Tea</product></lines></order>",
+      "fitted": {
+        "id": 0,
+        "number": "",
+        "placed": "2026-01-01",
+        "total": "0",
+        "paid": false,
+        "status": "Open",
+        "note": "",
+        "tags": [],
+        "customer": {
+          "id": 0,
+          "name": ""
+        },
+        "lines": [
+          {
+            "id": 0,
+            "product": "Tea",
+            "quantity": 0
+          }
+        ],
+        "owner": null
+      }
+    },
+    {
+      "name": "no other name is guessed: <line> elements directly inside the record do not fill lines",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order"
+      },
+      "input": "<order><line product=\"Tea\"/><tag>a</tag></order>",
+      "fitted": {
+        "id": 0,
+        "number": "",
+        "placed": "2026-01-01",
+        "total": "0",
+        "paid": false,
+        "status": "Open",
+        "note": "",
+        "tags": [],
+        "customer": {
+          "id": 0,
+          "name": ""
+        },
+        "lines": [],
+        "owner": null
+      }
+    },
+    {
+      "name": "without at a list is the root element's child elements, whatever their names",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "input": "<orders><order number=\"1\"/><!-- c --><record number=\"2\"/></orders>",
+      "fitted": [
+        {
+          "id": 0,
+          "number": "1",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        },
+        {
+          "id": 0,
+          "number": "2",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      ]
+    },
+    {
+      "name": "without at one record is the root element",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "input": "<order number=\"1\"/>",
+      "fitted": {
+        "id": 0,
+        "number": "1",
+        "placed": "2026-01-01",
+        "total": "0",
+        "paid": false,
+        "status": "Open",
+        "note": "",
+        "tags": [],
+        "customer": {
+          "id": 0,
+          "name": ""
+        },
+        "lines": [],
+        "owner": null
+      }
+    },
+    {
+      "name": "one record at a path is the first element of the last name",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "input": "<shop><orders><other/><order number=\"1\"/><order number=\"2\"/></orders></shop>",
+      "fitted": {
+        "id": 0,
+        "number": "1",
+        "placed": "2026-01-01",
+        "total": "0",
+        "paid": false,
+        "status": "Open",
+        "note": "",
+        "tags": [],
+        "customer": {
+          "id": 0,
+          "name": ""
+        },
+        "lines": [],
+        "owner": null
+      }
+    },
+    {
+      "name": "a list at a path with no elements of the last name is empty",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "input": "<shop><orders/></shop>",
+      "fitted": []
+    },
+    {
+      "name": "a leading slash in the path is allowed",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "/shop/orders/order"
+      },
+      "input": "<shop><orders><order number=\"1\"/></orders></shop>",
+      "fitted": [
+        {
+          "id": 0,
+          "number": "1",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      ]
+    },
+    {
+      "name": "a list at a path of one name is the root element when it has that name",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order"
+      },
+      "input": "<order number=\"1\"/>",
+      "fitted": [
+        {
+          "id": 0,
+          "number": "1",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      ]
+    },
+    {
+      "name": "a value at the top: the element's text",
+      "kind": {
+        "kind": "integer"
+      },
+      "options": {
+        "at": "doc/count"
+      },
+      "input": "<doc><count> 42 </count></doc>",
+      "fitted": 42
+    },
+    {
+      "name": "a list of values at the top: the texts of the elements of the last name",
+      "kind": {
+        "kind": "values",
+        "item": {
+          "kind": "integer"
+        }
+      },
+      "options": {
+        "at": "doc/n"
+      },
+      "input": "<doc><n>1</n><x>9</x><n>2</n></doc>",
+      "fitted": [
+        1,
+        2
+      ]
+    },
+    {
+      "name": "a missing step says the path walked so far",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "input": "<shop><order/></shop>",
+      "error": "the XML has no 'shop/orders'"
+    },
+    {
+      "name": "a root element of another name",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "input": "<store><orders/></store>",
+      "error": "the XML has no 'shop'"
+    },
+    {
+      "name": "one record at a path that holds none",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "input": "<shop><orders/></shop>",
+      "error": "the XML has no 'shop/orders/order'"
+    },
+    {
+      "name": "a value that does not fit says where, as JSON's do",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "input": "<shop><orders><order total=\"abc\"/></orders></shop>",
+      "error": "item 1: field 'total' of Order is a decimal, not \"abc\""
+    },
+    {
+      "name": "a nested value that does not fit says where",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order"
+      },
+      "input": "<order><lines><line quantity=\"two\"/></lines></order>",
+      "error": "field 'lines' of Order, item 1: field 'quantity' of Line is an integer, not \"two\""
+    },
+    {
+      "name": "text that is no XML",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "input": "<orders><order></orders>",
+      "error": "the text is no XML"
+    },
+    {
+      "name": "an encoding Clarity does not read",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "input": "<?xml version=\"1.0\" encoding=\"Shift_JIS\"?><orders/>",
+      "error": "xml reads utf-8, utf-16, windows-1252 or iso-8859-1, not \"shift_jis\""
+    }
+  ],
+  "write": [
+    {
+      "name": "a list of records inside the elements of the path: fields in the entity's order as child elements, null and other kinds and the id left out, a list of values repeated, a list of records inside an element of its name with one element per record named after its entity in camelCase",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "value": "[{\"id\": 0, \"number\": \"A-1\", \"placed\": \"2026-11-01\", \"total\": 12.5, \"paid\": true, \"status\": \"closed\", \"note\": null, \"tags\": [\"x\", \"y\"], \"customer\": {\"id\": 3, \"name\": \"Ada & Bo\"}, \"lines\": [{\"id\": 1, \"product\": \"Coffee\", \"quantity\": 2}, {\"id\": 2, \"product\": \"Tea <green>\", \"quantity\": 1}], \"owner\": 7}]",
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><shop><orders><order><number>A-1</number><placed>2026-11-01</placed><total>12.5</total><paid>true</paid><status>Closed</status><tags>x</tags><tags>y</tags><customer><name>Ada &amp; Bo</name></customer><lines><line><product>Coffee</product><quantity>2</quantity></line><line><product>Tea &lt;green&gt;</product><quantity>1</quantity></line></lines></order></orders></shop>"
+    },
+    {
+      "name": "indent true writes one element a line; namespace the default namespace on the outermost element",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "orders/order",
+        "indent": true,
+        "namespace": "urn:shop"
+      },
+      "value": "[{\"number\": \"A-1\", \"paid\": false, \"lines\": [], \"tags\": []}, {\"number\": \"A-2\"}]",
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<orders xmlns=\"urn:shop\">\n  <order>\n    <number>A-1</number>\n    <paid>false</paid>\n    <lines/>\n  </order>\n  <order>\n    <number>A-2</number>\n  </order>\n</orders>\n"
+    },
+    {
+      "name": "one record: at names the elements around it and its own",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "export/order"
+      },
+      "value": "{\"number\":\"A-1\",\"total\":\"3.10\",\"note\":\"\"}",
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><export><order><number>A-1</number><total>3.1</total><note/></order></export>"
+    },
+    {
+      "name": "one record at one name is the root element",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order"
+      },
+      "value": "{\"number\":\"A-1\"}",
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><order><number>A-1</number></order>"
+    },
+    {
+      "name": "an empty list writes the elements around it",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "value": "[]",
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><shop><orders/></shop>"
+    },
+    {
+      "name": "a value: the last element holds its text",
+      "kind": {
+        "kind": "decimal"
+      },
+      "options": {
+        "at": "doc/total"
+      },
+      "value": "12.50",
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><doc><total>12.5</total></doc>"
+    },
+    {
+      "name": "a list of values: one element per item named by the last step",
+      "kind": {
+        "kind": "values",
+        "item": {
+          "kind": "text"
+        }
+      },
+      "options": {
+        "at": "tags/tag"
+      },
+      "value": "[\"a\",\"b\"]",
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><tags><tag>a</tag><tag>b</tag></tags>"
+    },
+    {
+      "name": "a character the encoding cannot hold is a character reference",
+      "kind": {
+        "kind": "text"
+      },
+      "options": {
+        "at": "note",
+        "encoding": "iso-8859-1"
+      },
+      "value": "\"price €\"",
+      "written": "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><note>price &#8364;</note>"
+    },
+    {
+      "name": "without at nothing is written",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "value": "[]",
+      "error": "xml of needs 'at', the elements around the records and the record's own: at \"orders/order\""
+    },
+    {
+      "name": "a list needs an element around its items",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order"
+      },
+      "value": "[]",
+      "error": "xml of a list needs the element around its items and the item's own: at \"orders/order\""
+    },
+    {
+      "name": "a path step that is no XML name",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "shop//order"
+      },
+      "value": "{}",
+      "error": "'' in at \"shop//order\" is no XML name"
+    },
+    {
+      "name": "an encoding Clarity does not write",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order",
+        "encoding": "utf-16"
+      },
+      "value": "{}",
+      "error": "xml writes utf-8, windows-1252 or iso-8859-1, not \"utf-16\""
+    }
+  ],
+  "roundTrip": [
+    {
+      "name": "a list of records with everything a record holds",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "value": "[{\"id\": 0, \"number\": \"A-1\", \"placed\": \"2026-11-01\", \"total\": \"12.5\", \"paid\": true, \"status\": \"Closed\", \"note\": \"a & b <c>\", \"tags\": [\"x\", \"y\"], \"customer\": {\"id\": 0, \"name\": \"Ada\"}, \"lines\": [{\"id\": 0, \"product\": \"Coffee\", \"quantity\": 2}, {\"id\": 0, \"product\": \"Tea\", \"quantity\": 1}], \"owner\": null}, {\"id\": 0, \"number\": \"A-2\", \"placed\": \"2026-01-01\", \"total\": \"0\", \"paid\": false, \"status\": \"Open\", \"note\": \"\", \"tags\": [], \"customer\": {\"id\": 0, \"name\": \"\"}, \"lines\": [], \"owner\": null}]"
+    },
+    {
+      "name": "indented, with a namespace",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "orders/order",
+        "indent": true,
+        "namespace": "urn:shop"
+      },
+      "value": "[{\"id\": 0, \"number\": \"A-1\", \"placed\": \"2026-11-01\", \"total\": \"12.5\", \"paid\": true, \"status\": \"Closed\", \"note\": \"a & b <c>\", \"tags\": [\"x\", \"y\"], \"customer\": {\"id\": 0, \"name\": \"Ada\"}, \"lines\": [{\"id\": 0, \"product\": \"Coffee\", \"quantity\": 2}, {\"id\": 0, \"product\": \"Tea\", \"quantity\": 1}], \"owner\": null}]"
+    },
+    {
+      "name": "one record with one line of one field and one tag",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "order"
+      },
+      "value": "{\"id\": 0, \"number\": \"\", \"placed\": \"2026-01-01\", \"total\": \"0\", \"paid\": false, \"status\": \"Open\", \"note\": \"\", \"tags\": [\"only\"], \"customer\": {\"id\": 0, \"name\": \"\"}, \"lines\": [{\"id\": 0, \"product\": \"Tea\", \"quantity\": 0}], \"owner\": null}"
+    },
+    {
+      "name": "one record with empty lists",
+      "kind": {
+        "kind": "record",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "status",
+            "kind": "enum",
+            "values": [
+              "Open",
+              "Closed"
+            ]
+          },
+          {
+            "name": "note",
+            "kind": "text"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "kind": "record",
+            "entity": "Customer",
+            "fields": [
+              {
+                "name": "name",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "name": ""
+            },
+            "name": "customer"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "placed": "2026-01-01",
+          "total": "0",
+          "paid": false,
+          "status": "Open",
+          "note": "",
+          "tags": [],
+          "customer": {
+            "id": 0,
+            "name": ""
+          },
+          "lines": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "at": "export/order"
+      },
+      "value": "{\"id\": 0, \"number\": \"A-3\", \"placed\": \"2026-01-01\", \"total\": \"0\", \"paid\": false, \"status\": \"Open\", \"note\": \"\", \"tags\": [], \"customer\": {\"id\": 0, \"name\": \"\"}, \"lines\": [], \"owner\": null}"
+    },
+    {
+      "name": "a list of values",
+      "kind": {
+        "kind": "values",
+        "item": {
+          "kind": "integer"
+        }
+      },
+      "options": {
+        "at": "doc/n"
+      },
+      "value": "[1,2,3]"
+    }
+  ]
+}

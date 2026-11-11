@@ -88,8 +88,12 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         features.push("pictures");
     }
     // The data formats of code (docs/FORMATS-PLAN.md): Clarity.Formats.
-    if project.uses_formats() {
+    if crate::carries_formats(project, settings) {
         features.push("formats");
+    }
+    // A data source that is a file: an in-memory SQLite table filled through Clarity.Formats.
+    if !crate::file_sources(project, settings)?.is_empty() {
+        features.extend(["sqlite", "formats"]);
     }
     features.sort();
     features.dedup();
@@ -155,6 +159,7 @@ fn main_rs(project: &Project, settings: &Settings, databases: &[(String, crate::
     let folder_stores: String = crate::folder_stores(project, settings)
         .iter()
         .map(|(name, setting, default)| format!("    if let Err(err) = db.add_store_setting({name:?}, {program_name:?}, {setting:?}, {default:?}) {{\n        eprintln!(\"{{err}}\");\n        return std::process::ExitCode::from(1);\n    }}\n"))
+        .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("    if let Err(err) = db.add_file({}) {{\n        eprintln!(\"{{err}}\");\n        return std::process::ExitCode::from(1);\n    }}\n", super::file_source(f))))
         .collect();
     let languages: Vec<String> = project.translations.keys().map(|l| format!("{l:?}.to_string()")).collect();
     let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());

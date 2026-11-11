@@ -14,6 +14,7 @@
   import BackupPanel from "./BackupPanel.svelte";
   import { themeChoice } from "@clarity/ui/screen/scheme.svelte.ts";
   import StackFields from "./StackFields.svelte";
+  import FormatOptions from "./FormatOptions.svelte";
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
   import type { AuthKind } from "@clarity/ui/generated/AuthKind.ts";
   import type { DataSource } from "@clarity/ui/generated/DataSource.ts";
@@ -30,6 +31,7 @@
     preview,
     onapplied,
     onopentheme,
+    onopenmapping = null,
   }: {
     project: ProjectFile;
     /** The project file. */
@@ -42,6 +44,8 @@
     onapplied: (preview: Preview) => void;
     /** Opens a theme in its own view, where it is written. */
     onopentheme: (name: string) => void;
+    /** Opens the mapping a file source is laid over, on its own page. */
+    onopenmapping?: ((name: string) => void) | null;
   } = $props();
 
   /** The pictures among the resources, which can be the application's icon. */
@@ -82,9 +86,33 @@
     save({ datasources });
   }
 
+  /** The kind list's value of a source: its kind, or `file:csv` for a file in a format. */
+  function kindValue(source: DataSource): string {
+    return source.kind === "file" ? "file:" + (source.file?.format ?? "") : source.kind;
+  }
+
+  /** A source of the kind list's value `kind`: a file in a format is always external. */
+  function ofKind(kind: string): Partial<DataSource> {
+    const format = kind.startsWith("file:") ? catalog.formats.find((f) => "file:" + f.name === kind) : undefined;
+    if (format) return { kind: "file", file: { format: format.name, options: [], mapping: null }, url: format.urlExample, auth: null, external: true };
+    return { kind: kind as SourceKind, file: null, url: sourceInfo(kind as SourceKind)?.urlExample ?? "", auth: null };
+  }
+
   /** A new kind starts from its example location, since the old one rarely fits. */
-  function setKind(i: number, kind: SourceKind) {
-    saveSource(i, { kind, url: sourceInfo(kind)?.urlExample ?? "", auth: null });
+  function setKind(i: number, kind: string) {
+    saveSource(i, ofKind(kind));
+  }
+
+  /** Sets option `name` of a file source's format; an empty value leaves it out. */
+  function setOption(i: number, source: DataSource, name: string, value: string) {
+    if (!source.file) return;
+    const options = source.file.options.filter((o) => o.name !== name);
+    if (value !== "") options.push({ name, value });
+    saveSource(i, { file: { ...source.file, options } });
+  }
+
+  function optionValue(source: DataSource, name: string): string {
+    return source.file?.options.find((o) => o.name === name)?.value ?? "";
   }
 
   function setAuth(i: number, source: DataSource, kind: AuthKind | "") {
@@ -177,13 +205,13 @@
   }
 
   let newName = $state("");
-  let newKind = $state<SourceKind>("sqlite");
+  let newKind = $state<string>("sqlite");
 
   function addSource(e: SubmitEvent) {
     e.preventDefault();
     const name = newName.trim();
     if (!name || !project.settings) return;
-    const source: DataSource = { name, kind: newKind, url: sourceInfo(newKind)?.urlExample ?? "", auth: null, external: false, readonly: false, beside: false, openapi: null, picks: [], pick_schemas: [], paging: null };
+    const source: DataSource = { name, kind: "sqlite", url: "", auth: null, external: false, readonly: false, beside: false, openapi: null, picks: [], pick_schemas: [], paging: null, file: null, ...ofKind(newKind) };
     save({ datasources: [...project.settings.datasources, source] });
     newName = "";
   }
@@ -403,8 +431,10 @@
                   <tr>
                     <td><input class="mono" value={source.name} onchange={(e) => saveSource(i, { name: e.currentTarget.value.trim() })} /></td>
                     <td>
-                      <select value={source.kind} onchange={(e) => setKind(i, e.currentTarget.value as SourceKind)}>
+                      <select value={kindValue(source)} onchange={(e) => setKind(i, e.currentTarget.value)}>
+                        {#if source.file?.mapping}<option value="file:">File, by its mapping</option>{/if}
                         {#each catalog.sources as s (s.id)}<option value={s.id}>{s.label}</option>{/each}
+                        {#each catalog.formats as f (f.name)}<option value={"file:" + f.name}>{f.label}</option>{/each}
                       </select>
                     </td>
                     <td>
@@ -420,6 +450,17 @@
                           <button onclick={() => browseDatabase(i)} title="Choose the database file">Browse...</button>
                         {/if}
                       </div>
+                      {#if source.kind === "file" && source.file?.mapping}
+                        <div class="laid-over">
+                          <span class="muted">Laid over mapping <code>{source.file.mapping}</code></span>
+                          {#if onopenmapping}
+                            {@const mapping = source.file.mapping}
+                            <button title="Open the mapping: the format, where the records and each field are" onclick={() => onopenmapping(mapping)}>Mapping...</button>
+                          {/if}
+                        </div>
+                      {:else if source.kind === "file"}
+                        <FormatOptions format={catalog.formats.find((f) => f.name === source.file?.format)} value={(name) => optionValue(source, name)} onset={(name, value) => setOption(i, source, name, value)} />
+                      {/if}
                     </td>
                     <td>
                       {#if info?.hasAuth}
@@ -447,7 +488,7 @@
                       {:else}
                         <div class="flags">
                           <label title="A database Clarity does not own: it never changes its tables">
-                            <input type="checkbox" checked={source.external} onchange={(e) => saveSource(i, { external: e.currentTarget.checked })} />
+                            <input type="checkbox" checked={source.external} disabled={source.kind === "file"} onchange={(e) => saveSource(i, { external: e.currentTarget.checked })} />
                             External
                           </label>
                           <label title="Records are read, never saved or deleted">
@@ -471,6 +512,9 @@
                         <button title="Import tables of this database as entities" onclick={() => (importing = source.name)}>Import...</button>
                         <button title="Let Clarity change this database's tables from now on" onclick={() => (owning = source.name)}>Own...</button>
                       {/if}
+                      {#if source.kind === "file"}
+                        <button title="Import the file's columns as an entity" onclick={() => (importing = source.name)}>Import...</button>
+                      {/if}
                       <button title="Move up" disabled={i === 0} onclick={() => move(i, -1)}>&uarr;</button>
                       <button title="Move down" disabled={i === settings.datasources.length - 1} onclick={() => move(i, 1)}>&darr;</button>
                       <button class="danger" title="Remove the data source" onclick={() => remove(i)}>&times;</button>
@@ -485,6 +529,7 @@
           <input class="mono" bind:value={newName} placeholder="new_source" spellcheck="false" />
           <select bind:value={newKind}>
             {#each catalog.sources as s (s.id)}<option value={s.id}>{s.label}</option>{/each}
+            {#each catalog.formats as f (f.name)}<option value={"file:" + f.name}>{f.label}</option>{/each}
           </select>
           <button type="submit" disabled={!newName.trim()}>Add data source</button>
         </form>
@@ -508,7 +553,9 @@
           {/if}
         {/if}
         {#if importing}
-          <ImportPanel source={importing} {onapplied} onclose={() => (importing = null)} />
+          {@const importFrom = settings.datasources.find((s) => s.name === importing)}
+          {@const importFormat = catalog.formats.find((f) => f.name === importFrom?.file?.format)}
+          <ImportPanel source={importing} single={importFrom?.kind === "file"} schemaKinds={importFormat?.schemaKinds ?? []} {onapplied} onclose={() => (importing = null)} />
         {/if}
       </section>
 
@@ -579,6 +626,15 @@
 
   .problem {
     color: var(--error);
+  }
+
+  /* A file source laid over a mapping, under its location. */
+  .laid-over {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 4px;
+    font-size: 12px;
   }
 
   .flags {

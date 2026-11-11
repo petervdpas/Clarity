@@ -1,0 +1,685 @@
+{
+  "about": "Mappings (docs/FORMATS-PLAN.md, step 4) through Clarity.Formats, one engine for every format: each case lists one input per format that can hold its data (`json`, `yaml`, `xml`, `csv`) and one expected result, which every input gives, word for word (`errors` where a message names its format). Options hold the generic mapping keys beside a format's own: `at` (slashes; dots where there is no slash), `fields` (a field's path relative to its record: names with slashes, `@name` an attribute where the format has them, `.` the record's own text, `..` the record it was found in; in a flat file a column's name), `nested` (a field holding records, with its own `at`, `fields`, `nested` and `parent`). `read` cases read and fit `kind`; `write` cases write `value` as `kind` and give `written` per format; `table` cases read a file source's table, the `#node` column left out of the comparison (each format writes its own node); `tables` cases read several tables where `nested` is given (the source's own named \"\", each nested one by its field, with its `entity`, its second column the link to its row's place, named by `parent` or `#parent`), `#node` left out, and write them back unchanged to the same input.",
+  "read": [
+    {
+      "name": "fields: a field at a path inside its record, the records at a path",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "customer",
+            "kind": "text"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "customer": "",
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/orders/order",
+        "fields": {
+          "customer": "customer/name"
+        }
+      },
+      "inputs": {
+        "json": "{\"shop\":{\"orders\":{\"order\":[{\"number\":\"A-1\",\"customer\":{\"name\":\"Ada\"},\"total\":\"12.50\"},{\"number\":\"A-2\",\"customer\":{\"name\":\"Bo\"}}]}}}",
+        "xml": "<shop><orders><order><number>A-1</number><customer><name>Ada</name></customer><total>12.50</total></order><order><number>A-2</number><customer><name>Bo</name></customer></order></orders></shop>",
+        "yaml": "# the shop\nshop:\n  orders:\n    order:\n      - number: A-1\n        customer:\n          name: Ada   # the first\n        total: \"12.50\"\n      - number: 'A-2'\n        customer: {name: Bo}\n"
+      },
+      "fitted": [
+        {
+          "id": 0,
+          "number": "A-1",
+          "customer": "Ada",
+          "total": "12.50"
+        },
+        {
+          "id": 0,
+          "number": "A-2",
+          "customer": "Bo",
+          "total": "0"
+        }
+      ]
+    },
+    {
+      "name": "at written with dots reads as with slashes, in every format",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": ""
+        }
+      },
+      "options": {
+        "at": "shop.orders.order"
+      },
+      "inputs": {
+        "json": "{\"shop\":{\"orders\":{\"order\":[{\"number\":\"A-1\",\"customer\":{\"name\":\"Ada\"},\"total\":\"12.50\"},{\"number\":\"A-2\",\"customer\":{\"name\":\"Bo\"}}]}}}",
+        "xml": "<shop><orders><order><number>A-1</number><customer><name>Ada</name></customer><total>12.50</total></order><order><number>A-2</number><customer><name>Bo</name></customer></order></orders></shop>",
+        "yaml": "# the shop\nshop:\n  orders:\n    order:\n      - number: A-1\n        customer:\n          name: Ada   # the first\n        total: \"12.50\"\n      - number: 'A-2'\n        customer: {name: Bo}\n"
+      },
+      "fitted": [
+        {
+          "id": 0,
+          "number": "A-1"
+        },
+        {
+          "id": 0,
+          "number": "A-2"
+        }
+      ]
+    },
+    {
+      "name": "fields: a field under another name, in a flat file a column of that name",
+      "kind": {
+        "kind": "records",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0
+        }
+      },
+      "options": {
+        "fields": {
+          "code": "sku"
+        }
+      },
+      "inputs": {
+        "json": "[{\"sku\":\"A\",\"count\":1},{\"sku\":\"B\",\"count\":\"2\"}]",
+        "xml": "<items><item><sku>A</sku><count>1</count></item><item sku=\"B\" count=\"2\"/></items>",
+        "csv": "sku,count\nA,1\nB,2\n",
+        "yaml": "- sku: A\n  count: 1\n- sku: B\n  count: '2'\n"
+      },
+      "fitted": [
+        {
+          "id": 0,
+          "code": "A",
+          "count": 1
+        },
+        {
+          "id": 0,
+          "code": "B",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "name": "nested: records inside at their own path with their own fields, '..' the record around them",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              },
+              {
+                "name": "order",
+                "kind": "text"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0,
+              "order": ""
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "lines": []
+        }
+      },
+      "options": {
+        "at": "shop/orders/order",
+        "nested": {
+          "lines": {
+            "at": "lines/line",
+            "fields": {
+              "product": "name",
+              "order": "../number"
+            }
+          }
+        }
+      },
+      "inputs": {
+        "json": "{\"shop\":{\"orders\":{\"order\":[{\"number\":\"A-1\",\"lines\":{\"line\":[{\"name\":\"Tea\",\"quantity\":2},{\"name\":\"Coffee\"}]}},{\"number\":\"A-2\",\"lines\":{\"line\":[{\"name\":\"Milk\",\"quantity\":1}]}}]}}}",
+        "xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><shop><orders><order><number>A-1</number><lines><line><name>Tea</name><quantity>2</quantity></line><line><name>Coffee</name></line></lines></order><order><number>A-2</number><lines><line><name>Milk</name><quantity>1</quantity></line></lines></order></orders></shop>",
+        "yaml": "shop:\n  orders:\n    order:\n    - number: A-1\n      lines:\n        line:\n        - {name: Tea, quantity: 2}\n        - name: Coffee\n    - number: A-2\n      lines:\n        line: [{name: Milk, quantity: 1}]\n"
+      },
+      "fitted": [
+        {
+          "id": 0,
+          "number": "A-1",
+          "lines": [
+            {
+              "id": 0,
+              "product": "Tea",
+              "quantity": 2,
+              "order": "A-1"
+            },
+            {
+              "id": 0,
+              "product": "Coffee",
+              "quantity": 0,
+              "order": "A-1"
+            }
+          ]
+        },
+        {
+          "id": 0,
+          "number": "A-2",
+          "lines": [
+            {
+              "id": 0,
+              "product": "Milk",
+              "quantity": 1,
+              "order": "A-2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a value that does not fit says where, the same in every format",
+      "kind": {
+        "kind": "records",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0
+        }
+      },
+      "options": {
+        "fields": {
+          "count": "n"
+        }
+      },
+      "inputs": {
+        "json": "[{\"code\":\"A\",\"n\":\"many\"}]",
+        "xml": "<items><item><code>A</code><n>many</n></item></items>",
+        "csv": "code,n\nA,many\n",
+        "yaml": "- code: A\n  n: many\n"
+      },
+      "error": "item 1: field 'count' of Item is an integer, not \"many\""
+    },
+    {
+      "name": "'@' names an attribute where a format has them",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": ""
+        }
+      },
+      "options": {
+        "at": "orders/order",
+        "fields": {
+          "number": "@id"
+        }
+      },
+      "inputs": {
+        "xml": "<orders><order id=\"A-1\" number=\"x\"/></orders>"
+      },
+      "fitted": [
+        {
+          "id": 0,
+          "number": "A-1"
+        }
+      ]
+    },
+    {
+      "name": "a format without attributes refuses '@'",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": ""
+        }
+      },
+      "options": {
+        "fields": {
+          "number": "@id"
+        }
+      },
+      "inputs": {
+        "json": "[]",
+        "yaml": "[]\n"
+      },
+      "errors": {
+        "json": "the path '@id' of field 'number' names an attribute, which JSON does not have",
+        "yaml": "the path '@id' of field 'number' names an attribute, which YAML does not have"
+      }
+    },
+    {
+      "name": "a path that is none",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": ""
+        }
+      },
+      "options": {
+        "fields": {
+          "number": "a//b"
+        }
+      },
+      "inputs": {
+        "json": "[]",
+        "xml": "<a/>",
+        "yaml": "[]\n"
+      },
+      "errors": {
+        "json": "the path 'a//b' of field 'number' is no JSON path",
+        "xml": "the path 'a//b' of field 'number' is no XML path",
+        "yaml": "the path 'a//b' of field 'number' is no YAML path"
+      }
+    }
+  ],
+  "write": [
+    {
+      "name": "fields and nested lay a value out where they say",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "customer",
+            "kind": "text"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "customer": "",
+          "lines": []
+        }
+      },
+      "options": {
+        "at": "shop/orders/order",
+        "fields": {
+          "number": "@number",
+          "customer": "customer/name"
+        },
+        "nested": {
+          "lines": {
+            "at": "lines/line",
+            "fields": {
+              "product": "@product"
+            }
+          }
+        }
+      },
+      "value": "[{\"id\":1,\"number\":\"A-1\",\"customer\":\"Ada\",\"lines\":[{\"id\":0,\"product\":\"Tea\",\"quantity\":2}]}]",
+      "written": {
+        "xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><shop><orders><order number=\"A-1\"><customer><name>Ada</name></customer><lines><line product=\"Tea\"><quantity>2</quantity></line></lines></order></orders></shop>"
+      }
+    },
+    {
+      "name": "fields and nested move members where they say, the rest as Clarity's one form writes it",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "customer",
+            "kind": "text"
+          },
+          {
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            },
+            "name": "lines"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "customer": "",
+          "lines": []
+        }
+      },
+      "options": {
+        "at": "shop/orders/order",
+        "fields": {
+          "customer": "customer/name"
+        },
+        "nested": {
+          "lines": {
+            "at": "lines/line",
+            "fields": {
+              "product": "name"
+            }
+          }
+        }
+      },
+      "value": "[{\"id\":1,\"number\":\"A-1\",\"customer\":\"Ada\",\"lines\":[{\"id\":0,\"product\":\"Tea\",\"quantity\":2}]}]",
+      "written": {
+        "json": "{\"shop\":{\"orders\":{\"order\":[{\"id\":1,\"number\":\"A-1\",\"customer\":{\"name\":\"Ada\"},\"lines\":{\"line\":[{\"id\":0,\"name\":\"Tea\",\"quantity\":2}]}}]}}}",
+        "yaml": "shop:\n  orders:\n    order:\n      - id: 1\n        number: A-1\n        customer:\n          name: Ada\n        lines:\n          line:\n            - id: 0\n              name: Tea\n              quantity: 2\n"
+      }
+    },
+    {
+      "name": "fields names a flat file's columns",
+      "kind": {
+        "kind": "records",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0
+        }
+      },
+      "options": {
+        "fields": {
+          "code": "sku"
+        }
+      },
+      "value": "[{\"id\":1,\"code\":\"A\",\"count\":1}]",
+      "written": {
+        "csv": "sku,count\r\nA,1\r\n"
+      }
+    }
+  ],
+  "table": [
+    {
+      "name": "a file source's columns at their paths, the same cells from every format ('#node' left out here, as each format writes its own)",
+      "fields": [
+        {
+          "name": "number",
+          "kind": "text"
+        },
+        {
+          "name": "customer",
+          "kind": "text"
+        },
+        {
+          "name": "total",
+          "kind": "decimal"
+        }
+      ],
+      "options": {
+        "at": "shop/orders/order",
+        "fields": {
+          "customer": "customer/name"
+        }
+      },
+      "inputs": {
+        "json": "{\"shop\":{\"orders\":{\"order\":[{\"number\":\"A-1\",\"customer\":{\"name\":\"Ada\"},\"total\":\"12.50\"},{\"number\":\"A-2\",\"customer\":{\"name\":\"Bo\"}}]}}}",
+        "xml": "<shop><orders><order><number>A-1</number><customer><name>Ada</name></customer><total>12.50</total></order><order><number>A-2</number><customer><name>Bo</name></customer></order></orders></shop>",
+        "yaml": "# the shop\nshop:\n  orders:\n    order:\n      - number: A-1\n        customer:\n          name: Ada   # the first\n        total: \"12.50\"\n      - number: 'A-2'\n        customer: {name: Bo}\n"
+      },
+      "table": {
+        "columns": [
+          "number",
+          "customer",
+          "total"
+        ],
+        "rows": [
+          [
+            "A-1",
+            "Ada",
+            "12.50"
+          ],
+          [
+            "A-2",
+            "Bo",
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "name": "a field under another name: its column under the field's name",
+      "fields": [
+        {
+          "name": "code",
+          "kind": "text"
+        },
+        {
+          "name": "count",
+          "kind": "integer"
+        }
+      ],
+      "options": {
+        "fields": {
+          "code": "sku"
+        }
+      },
+      "inputs": {
+        "json": "[{\"sku\":\"A\",\"count\":1}]",
+        "xml": "<items><item><sku>A</sku><count>1</count></item></items>",
+        "csv": "sku,count\nA,1\n",
+        "yaml": "- sku: A   # one\n  count: 1\n"
+      },
+      "table": {
+        "columns": [
+          "code",
+          "count"
+        ],
+        "rows": [
+          [
+            "A",
+            1
+          ]
+        ]
+      }
+    }
+  ],
+  "tables": [
+    {
+      "name": "nested: several tables from one file, each nested row linked to the place of its row; written back unchanged it is the same file",
+      "fields": [
+        {
+          "name": "number",
+          "kind": "text"
+        },
+        {
+          "kind": "records",
+          "entity": "Line",
+          "fields": [
+            {
+              "name": "product",
+              "kind": "text"
+            },
+            {
+              "name": "quantity",
+              "kind": "integer"
+            }
+          ],
+          "base": {},
+          "name": "lines"
+        }
+      ],
+      "options": {
+        "at": "shop/orders/order",
+        "nested": {
+          "lines": {
+            "at": "lines/line",
+            "fields": {
+              "product": "name"
+            },
+            "parent": "order"
+          }
+        }
+      },
+      "inputs": {
+        "json": "{\"shop\":{\"orders\":{\"order\":[{\"number\":\"A-1\",\"lines\":{\"line\":[{\"name\":\"Tea\",\"quantity\":2},{\"name\":\"Coffee\"}]}},{\"number\":\"A-2\",\"lines\":{\"line\":[{\"name\":\"Milk\",\"quantity\":1}]}}]}}}",
+        "xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><shop><orders><order><number>A-1</number><lines><line><name>Tea</name><quantity>2</quantity></line><line><name>Coffee</name></line></lines></order><order><number>A-2</number><lines><line><name>Milk</name><quantity>1</quantity></line></lines></order></orders></shop>",
+        "yaml": "# the shop\nshop:\n  orders:\n    order:\n      - number: A-1   # first\n        lines:\n          line:\n            - name: Tea\n              quantity: 2\n            - name: Coffee\n      - number: A-2\n        lines:\n          line:\n            - {name: Milk, quantity: 1}\n"
+      },
+      "tables": [
+        {
+          "name": "",
+          "columns": [
+            "number"
+          ],
+          "rows": [
+            [
+              "A-1"
+            ],
+            [
+              "A-2"
+            ]
+          ]
+        },
+        {
+          "name": "lines",
+          "entity": "Line",
+          "columns": [
+            "order",
+            "product",
+            "quantity"
+          ],
+          "rows": [
+            [
+              1,
+              "Tea",
+              2
+            ],
+            [
+              1,
+              "Coffee",
+              null
+            ],
+            [
+              2,
+              "Milk",
+              1
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

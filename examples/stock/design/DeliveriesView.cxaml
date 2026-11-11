@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<View class="deliveries.DeliveriesView">
+  <Data name="deliveries" type="list&lt;Delivery&gt;" />
+  <Table name="table" at="1,1" span="12" rows="10" bind="deliveries" columns="item, number, arrives, note" edit="item, number, arrives, note" resizable="true" add="true" remove="true" confirm="true" onadd="addClicked" onremove="deleteClicked" onchange="deliveryChanged" />
+</View>

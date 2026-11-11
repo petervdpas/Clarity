@@ -1,6 +1,6 @@
 # Formats plan
 
-One catalog of data formats, written once in the shared Rust library `clarity-formats`, used by code (`read ... from <format>`, `<format> of`) and by data sources that are files in a format. Step 1 of APP-CAPABILITIES-PLAN.md, split out on 2026-11-10 because it grew. Step 1 built 2026-11-10 (unreleased: clarity-formats 0.1.0, clarity-runtime 0.54.0, Clarity.UI library 0.18.0, C# 0.90.0 with Clarity.Formats, Go v0.57.0); step 2 not built.
+One catalog of data formats, written once in the shared Rust library `clarity-formats`, used by code (`read ... from <format>`, `<format> of`) and by data sources that are files in a format. Step 1 of APP-CAPABILITIES-PLAN.md, split out on 2026-11-10 because it grew. Step 1 built 2026-11-10 and released in Clarity 0.38.0 on 2026-11-11 (clarity-formats 0.1.0, clarity-runtime 0.54.0, Clarity.UI library 0.18.0, C# 0.90.0 with Clarity.Formats, Go v0.57.0); steps 2 (CSV, file data sources), 3 (XML), 4 (mappings on one model and engine) and 5 (YAML) built 2026-11-12, unreleased.
 
 ## The user's words
 
@@ -9,6 +9,9 @@ One catalog of data formats, written once in the shared Rust library `clarity-fo
 - "shared Rust library, go with that"
 - "be sure we are not going to do half implementations scattered all over!!!!!"
 - "the both of you, work out the formats crate throught clarity!!"
+- On XML (2026-11-12): "design xml in the plan... and remember it needs to be generic! No fixed format!!! What C++ builder could Clarity should be able to do but then in this day and age"
+- After XML (2026-11-12): "yaml! and the still points should be configured per case not carved in stone beforehand!"
+- On the first per-format design of those points: "you're not taking this generic!!!!!!!!", and "Clarity language and implementation needs to general all purpose!!!!"
 
 On JSON: answered in this session "Keep per runtime" (JSON stays in each runtime). Relayed afterwards from the other session, the user pointed out that this "leaves a formats crate with CSV and JSON somewhere else, which removes the strength of the idea", and JSON moves into the library. This plan follows the later decision; see "Decided".
 
@@ -51,7 +54,62 @@ Each entry declares, in one place the parser, checker, designer, generator and a
 - An option has a name, a type and a default, like a part property, with an i18n label and help for the designer and Settings, and an entry in the language reference written from the catalog.
 - `csv` reads RFC 4180: quoted fields, doubled quotes, commas and line breaks inside quotes, CRLF or LF, a UTF-8 BOM dropped. The first row names the columns unless `noHeader`, which fills fields in declared order. Writing quotes where needed and writes a header row.
 
-Later entries (each a full step, see "Order"): `xml` (which elements are rows, attributes: to design in its own step), `yaml`, `xlsx` and `ods` (bytes, several tables: the sheets; cell values only, see open questions).
+Later entries (each a full step, see "Order"): `xml` (designed under "XML" below), `yaml`, `xlsx` and `ods` (bytes, several tables: the sheets; cell values only, see open questions).
+
+## XML
+
+### What C++ Builder had
+
+- **TXMLDocument**: any XML document as a tree, read, changed and written.
+- **XML Data Binding wizard**: read an XML file or its XSD schema and generate typed classes for its elements, so code says `Order->Number` instead of walking nodes.
+- **XML Mapper with TXMLTransformProvider**: map any XML document's elements and attributes onto the rows and fields of a dataset (a transformation file per mapping), so a TDBGrid edits an XML file that was never designed for it, and writes the changes back into the same document.
+
+So no XML shape was fixed: the developer said where the rows are and where each field is, and the grid did not care. Clarity does the same with the words it already has, without a separate mapping file or generated classes: the entity is the typed class, its fields are the mapping, and the catalog's options say where the records are.
+
+### Where the records are, where each field is
+
+```clarity
+// <shop><orders><order number="A-1" placed="2026-11-01"><customer><name>Ada</name></customer>
+//   <lines><line product="Coffee" quantity="2"/></lines><note>leave at door</note></order>...</orders></shop>
+let orders = read list<Order> from xml text at "shop/orders/order"
+let feed = xml of orders at "shop/orders/order"
+```
+
+- `at` says where the records are, in every format that nests: for JSON the list, for XML the repeated element. An XML path is written as XPath writes one, names with slashes between (`"shop/orders/order"`); the last name is the record's element: every `<order>` inside `<shop><orders>` is one record. Without `at`, reading takes the root element's children as the records.
+- A field finds its value inside the record's element by name, matched as every format matches names (case, underscores, hyphens and spaces ignored), in this order: a child element of that name, else an attribute of that name. `number` above comes from the attribute, `note` from the child element. The order is fixed, never guessed per document.
+- Where a field's value is somewhere else, its `column` says where, the same word that maps a field onto a database column or a CSV column: `column "@number"` is the attribute only, `column "customer/name"` the text of an element inside, `column "."` the record element's own text. A path is relative to the record's element.
+- An element's text is its value: numbers, dates, yes and no as every format fits them. The entity says what each element is, since XML has no lists of its own: a field that is a record takes the element of its name (`customer: Customer` from `<customer>`). A field that is a list takes the elements of its own name, repeated (`<tags>a</tags><tags>b</tags>`), or one element of its name holding the items, when that element's children all have one name that is not a field of the item's entity (`<lines><line/><line/></lines>`; `<lines><product>Tea</product></lines>` is one line). No other name is guessed: `<line>` elements directly inside the record fill `lines` only with `column "line"`.
+- Namespaces: names match by their local name, so `<o:order>` is an `order`, whatever its prefix. Writing puts no prefix; the `namespace "urn:..."` option writes that namespace as the document's default.
+- The XML declaration's encoding is honoured on reading (UTF-8, UTF-16 and the encodings CSV reads); writing is UTF-8 unless `encoding` says otherwise.
+
+### Writing
+
+- `xml of value` writes a record, a list of records or a value, and always takes `at`: it names the elements written around the records and the record element itself, `at "shop/orders/order"` writing `<shop><orders><order>...`, and `at "order"` one record as `<order>`. Without it the checker asks for it; no element name is guessed.
+- Each field is written as a child element of its name; a list of values as repeated elements of the field's name, and a list of records inside an element of the field's name holding one element per record, named after its entity in camelCase (`<lines><line>...</line></lines>`). So what Clarity writes it reads back the same. A null value is left out. `indent true` writes one element per line, indented, for files people read. The document starts with the XML declaration.
+
+### A file as a data source
+
+```
+datasource feed xml "imports/orders.xml" external
+    at "shop/orders/order"
+```
+
+- One entity's records, at `at`, kept in the in-memory table as every file source is. The fields map by name or `column` path as above.
+- Writing back keeps the whole document: everything outside the records as it was (the declaration, comments, other elements), and inside each record element the attributes and elements no field maps, in their place. A new record gets an element with the mapped fields only; a deleted record's element goes, with what it held.
+- A file source is flat, one table: a field that is a record or a list of records inside the record element is kept with the element, unmapped. Nested documents are read and written whole in code (`read list<Order> from xml text`), where records inside records work as in JSON.
+
+### Import, and the XML Data Binding wizard made generic
+
+- **Import...** next to an XML file source lists the repeated elements found in the file, by their path (`shop/orders/order`); ticking one writes an entity with a text field per attribute and child element of its records, each with its `column` path where its name alone would not find it. Types are not guessed from values (determinism).
+- **From a schema**: Import also takes an XSD file. Its types become the entities and fields with their real types: `xs:int` and the other whole numbers an `integer`, `xs:decimal` a `decimal`, `xs:date` a `date`, `xs:dateTime` a `datetime`, `xs:boolean` a `bool`, an enumeration an `enum`, `maxLength` a text's size, `minOccurs="1"` `required`, a complex type inside another a record field, `maxOccurs="unbounded"` a list. This is what the Data Binding wizard did, written as Clarity's own entities instead of generated classes, so every stack and every part uses them.
+
+### The catalog entry
+
+| Entry | Text or bytes | Tables | Nests | Options |
+|---|---|---|---|---|
+| `xml` | text | one per `at` | yes | `at "a/b/record"` (reading, writing, file source), `namespace "urn:..."` (writing), `indent true` (writing), `encoding "..."` (writing) |
+
+The parser is a small pure Rust XML reader in `clarity-formats` (quick-xml, without features), so every stack reads XML alike; XML is turned into the same tree the fit already reads (an element into an object of its attributes and children), and the fit, the table calls and the write-back stay one mechanism for every format.
 
 ## A file as a data source
 
@@ -207,13 +265,88 @@ Each step is done only when every item of its list is done. Nothing of a later s
 6. An example that reads a CSV in code and edits a CSV data source in a table part (the erasure example's import, or one of its own).
 7. Every example building green.
 
+   Built 2026-11-12. Decided while building: a file source is one table of an in-memory SQLite database in each runtime, filled through Clarity.Formats (`read_table`, `write_table`, C interface 2, `conformance/formats-table.json`), so the generated find, save and delete code is the SQLite code; each change kept (outside a transaction, or at its commit) writes the file again to `<path>.new`, which then replaces it. A file not there yet starts empty with the entity's columns and is made at the first save (a readonly source needs its file). Without an `id` column, a record's id is its row's place, never written. The generators write `add_file` per file source after connecting (`crates/clarity-gen/tests/file_sources.rs`); `carries_formats` decides in one place whether a program carries the library. Settings offers **CSV file** and **JSON file** with the format's options from the catalog; Import takes a file source as one table of text fields. A yes/no option is written with its value, `noHeader true`. The IDE has no data browser yet, so item 3's "the data browser shows them" waits for one. The example is the shop's price list (`examples/shop/prices.clarity`).
+
+### Step 3: XML, in code and as a data source
+
+1. The `xml` entry with its options; the record path (`at`), field paths (`column "@a"`, `"b/c"`, `"."`), records and lists inside records, namespaces by local name; conformance cases (attributes and elements, a path, namespaces, entities and CDATA, an encoding declaration, writing with and without `at`, indent) passing on all five stacks.
+2. XML file sources: the table calls for `xml`, writing back the whole document with unmapped attributes and elements kept in their place; runtime tests on all five stacks.
+3. The checker: `column` paths on fields of entities read from XML or held in an XML file source; a path that cannot be (`"@a/b"`) is an error at the field; `xml of` without `at` is an error at the line.
+4. Settings: **XML file** with its options; Import of an XML file (its repeated elements) and of an XSD (typed entities); `clarity import` for both.
+5. Language reference, manual (`code.formats.md`, `data.sources.md`, `project.file.md`), agent instructions, i18n keys of the new options.
+6. An example: an existing example gains an XML feed or settings file, reading it in code and editing it as a data source.
+7. Every example building green.
+
+   Built 2026-11-12; its implementation was then moved onto the one document model and engine of step 4 (see there), which replaced its per-format code (`xml_doc.rs`, `xml_table.rs`, `xml_describe.rs`). What stays from it: XML's reading rules (a child element before an attribute, the wrapper rule for lists, `xml of` needing `at` through the catalog's `required_writing`), write-back keeping a whole document, Import listing every table a file holds and writing typed fields from an XSD (into a file source the top entity only), and the examples (stock's deliveries in `data/deliveries.xml`, shop's editable CSV price list).
+
+### Step 4: mappings, one per case, for every format
+
+The user: "the still points should be configured per case not carved in stone beforehand!", and on the step 5 first written here per format: "you're not taking this generic!!!!!!!!".
+
+What C++ Builder's XML Mapper did for XML (a transformation file per case, saying where the rows and each field are), Clarity does for every format with one declaration, the **mapping**: how one kind of file is laid over an entity, configured per case, in the Clarity project, used in code and on data sources alike. Nothing in it is particular to a format; each format only reads and writes its own syntax behind the `Format` interface.
+
+```clarity
+mapping OrderFeed of Order from xml
+    at "shop/orders/order"
+    number at "@number"
+    customer at "customer/name"
+    lines of Line at "lines/line"
+        order is ".."
+    check "orders.xsd"
+    indent true
+
+let orders = read list<Order> from text using OrderFeed
+let feed = text of orders using OrderFeed
+datasource feed file "imports/orders.xml" external using OrderFeed
+```
+
+- **One path style for every format**: names with slashes between, `@name` for an attribute where a format has them, `.` for a record's own text, `..` for the record around it. JSON, YAML and XML read the same paths; a format without attributes refuses `@` with a message.
+- **What a mapping says**, every line optional, each one a choice for this case only:
+  - `at`: where the records are (else a format's own default: the whole file for JSON and YAML, the root's children for XML, the rows for CSV);
+  - `field at "path"`: where a field is (else found by its name, as today);
+  - `field of Entity at "path"`: records inside, another entity from the same file, with `field is ".."` naming the record they sit in (several entities from one file, linked, per mapping);
+  - `check "file"`: a schema the file is checked against while it is read (a value that breaks it stops the read with a message that says where); a format says which schema kinds it takes (`schema_kinds`);
+  - the format's own options (`separator ";"`, `indent true`), from the catalog as today.
+- **Without a mapping** everything works as it does now: `read list<Order> from xml text at "..."` is a mapping written inline, and a file source's indented options are one too.
+- **The IDE**: a mapping is edited as a page of its own (the format, the entity, a row per field with its path, the entities inside), with a preview of a sample file laid over it; Import writes a mapping beside the entities it writes, so the paths it found are kept and can be changed.
+- **The checker**: a path a format cannot have, a field the entity lacks, a schema file that is not there.
+
+### How it is built: one document model, one engine
+
+General purpose in the implementation too, not only in the language:
+
+- **One document model** in `clarity-formats`: a node has a name, attributes (where the format has them), its text, and child nodes in their order, and keeps what a writer needs to write a file back as it was (comments, order, quoting, spacing). Every format parses into it and writes from it: XML elements are nodes; a JSON or YAML object is a node whose children are its members, a list is repeated children of one name; a CSV is a root of row nodes whose children are the columns.
+- **One engine** on that model, written once for every format: paths (`at`, a field's path, `..`), what a record and a field are (a value, a record inside, a list), fitting to the entity, the table of a file source (several tables when a mapping has entities inside), writing records back into the document with what no field maps kept in place, and the schema check (a format turns its schema kind into the engine's one rule set).
+- **A format is its syntax only**: `parse(bytes) -> document`, `write(document) -> bytes`, and its schema kinds. JSON, CSV and XML move onto it; YAML is added on it. Formats from libraries (a later step) implement the same two calls.
+- **A mapping crosses to every stack as data**: the generator writes a mapping as the options object every stack already passes (`{"at": "shop/orders/order", "fields": {"number": "@number"}, "nested": {"lines": {"of": "Line", "at": "lines/line", "parent": "order"}}, "check": "orders.xsd", "indent": true}`), so the C interface and the five runtimes take mappings without a change of their own, except where a file source holds several entities (the table JSON then holds several tables).
+
+Decided by the user on 2026-11-12: build mappings first ("Yes, build mappings"); one path style for every format, slashes, with JSON's released dots still read ("Slashes, dots still read").
+
+Built so far (2026-11-12):
+
+- **The library** (`runtimes/rust-formats/src`): one model (`doc.rs`: a node has a name, a form, attributes and children; a document keeps what a writer needs), formats as syntax only behind `Format` (`info`, `parse`, `write`, `schema`; `json.rs`, `csv.rs`, `xml.rs` with `markup.rs`, `xsd.rs`), and one engine (`path.rs`, `mapping.rs`, `shape.rs` then the one fit, `build.rs`, `table.rs`, `describe.rs`). A format's entry says how its records lie (`nodes`: values, elements or rows), whether paths may name attributes (`attributes`), its path separator and schema kinds. `conformance/formats-mapping.json` runs the same mapping cases against JSON, XML and CSV.
+- **Paths**, as built: slashes; `@name` an attribute where the format has them; `.` the own text and `./name` a name holding a dot; `..` the record a record was found in; an `at` without a slash is split at dots, so released JSON paths read as before.
+- **The language**: `mapping Name of Entity from <format>` with `at`, `field at "path"`, `field of Entity at "path"` and its lines, `field is ".."`, `check "file"` and the format's options; `read ... from text using M`, `text of x using M`; `datasource feed file "x" external using M`. The generator writes a mapping as the options object (`at`, `fields`, `nested` with `parent`, the format's options) for all five stacks; the checker reads the catalog for attributes, nesting and schema kinds.
+- **`check`**: the project is loaded with the schema file's text (`MappingDecl.schema`), the generator writes it into the options (`"check": "<xs:schema ...>"`), so no stack reads files for the library; the engine (`check.rs`) reads it with the format's `schema` and checks the whole document before fitting, in `read` and a file source's `read_table` (`conformance/formats-check.json`). A format without schema kinds refuses it.
+- **Several entities in one file source**: a mapping with records inside (`lines of Line`) makes the file source hold both entities on all five runtimes. The generator passes the records field among the fields with its kind and the table and key its entity is stored in (`{"name":"lines","kind":"records","entity":"Line","fields":[...],"base":{},"table":"line","key":"id"}`), and the mapping's field lines and `order is ".."` by column; the checker wants the inner entity in the same source. Each runtime keeps one SQLite table per table the library gives, turns a link (the place of the row it sits in) into that row's key on reading and back into its place on writing, and writes all tables back after any change.
+- **The IDE**: a mapping page (`app/src/lib/MappingPage.svelte`), opened from **Mappings** in the project tree (**+ New mapping** asks for the entity, the format and the name with Clarity's dialogs) and from **Mapping...** next to a file source laid over one. It edits the mapping as a form (`clarity_spec::code::mapping::MappingForm`, `form_of`, `text`): the format, the entity, `at`, a row per field with its path, records inside as nested rows with their `is ".."` field, `check` through Clarity's file browser, and the format's options with the rows Settings shows (`FormatOptions.svelte`). Each change is written back into its module by the printer as one edit (`save_mapping`). A sample file picked with the file browser is read through the mapping's options object (`options_json`, the generator's too) by `clarity_formats::read_table`, the first records shown as the entity's fields hold them, or the read's message (`clarity_project::mappings::preview_mapping`).
+- **Import writes a mapping**: beside the entity of a file source, `mapping <Entity>Feed of <Entity> from <format>` with the `at`, the paths that differ from the fields' names and the source's options, and the source becomes `datasource x file "path" external using <Entity>Feed`. A source laid over a mapping already keeps it.
+- **Not yet**: examples using a mapping.
+
+### Step 5: YAML
+
+YAML is one more implementation of `Format` (reading YAML 1.2's core schema into the tree every format reads, writing block YAML, a file source that keeps the file as written outside what changed, Import by `describe`); the paths, mappings, checks and Settings it uses are those of step 4, so the step is its parser and writer, their conformance cases on all five stacks, and an example.
+
+
+   Built 2026-11-12: `runtimes/rust-formats/src/yaml.rs`, parse and write only; its entry is JSON's (values, no attributes, `at`), so paths, mappings, fitting, file sources and Import are the engine's. The model gained one generic field, a document's text as read (`Kept.text`), so write-back keeps a YAML file as written (comments, quoting, untouched lines). Decided while building: numbers JSON cannot write (`007`, `.5`, `0x1F`) become the number they equal; `.inf` and `.nan` stay text; complex keys are refused; a flow list is written in block style once it changes. Conformance: `formats-yaml.json`, YAML inputs in `formats-mapping.json` and `formats-table.json`, a YAML case in `formats-runtime.json`.
 ### Later steps, each with the same list
 
-- XML (its row and attribute design first), YAML.
 - `xlsx` and `ods`: formats like csv, but bytes and several tables (the sheets).
 - Formats from libraries, when a project needs one: a library declares `format name`, its adapter (in the project's own language) turns text or bytes into rows and back, and the runtime fits them as for a built-in entry.
 
 ## Decided
+
+XML, answered by the user on 2026-11-12: "xpath slashes, element first, require at, start step 3". XML paths are written with slashes (`"shop/orders/order"`, `"customer/name"`); a field takes a child element of its name before an attribute of its name; `xml of` always takes `at`.
 
 Answered by the user, relayed by the other session on 2026-11-10:
 
@@ -223,6 +356,10 @@ Answered by the user, relayed by the other session on 2026-11-10:
 - JSON moves into the library (the later of the two answers under "The user's words"); the three answers above build on it.
 
 ## Open questions
+
+Step 4, waiting for the user's word:
+
+- Whether `check` also takes JSON Schema for JSON and YAML files, beside XSD for XML.
 
 - Spreadsheet styling (widths, colors, formulas) on writing: an option of the `xlsx` entry, or a report output (REPORT-PLAN.md). Reading takes cell values only.
 - A file source picked while the program runs (`"setting:name"`): reloaded when the setting changes, or at the next start.

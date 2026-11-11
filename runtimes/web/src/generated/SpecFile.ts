@@ -10,6 +10,7 @@ import type { EnumDecl } from "./EnumDecl";
 import type { FunctionDecl } from "./FunctionDecl";
 import type { Ident } from "./Ident";
 import type { LibraryDecl } from "./LibraryDecl";
+import type { MappingDecl } from "./MappingDecl";
 import type { Page } from "./Page";
 import type { PartDecl } from "./PartDecl";
 import type { ThemeDecl } from "./ThemeDecl";
@@ -64,4 +65,9 @@ parts: Array<PartDecl>,
 /**
  * Its outside libraries, called from code (DESIGN 5.21).
  */
-libraries: Array<LibraryDecl>, };
+libraries: Array<LibraryDecl>, 
+/**
+ * Its mappings: how a kind of file is laid over an entity, per case
+ * (docs/FORMATS-PLAN.md, step 4).
+ */
+mappings: Array<MappingDecl>, };

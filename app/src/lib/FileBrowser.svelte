@@ -7,6 +7,7 @@
   // the folder of its modules beside it, a folder that holds one. Each use
   // starts where it was left last time.
 
+  import IdeIcon from "./IdeIcon.svelte";
   import { invoke } from "@clarity/ui/host/backend.ts";
   import type { Listing } from "@clarity/ui/generated/Listing.ts";
   import type { Entry } from "@clarity/ui/generated/Entry.ts";
@@ -129,8 +130,8 @@
   <Modal title={request.title} width={760} onclose={() => fileBrowser.answer(null)}>
     <div class="browser">
       <div class="bar">
-        <button type="button" onclick={() => listing?.up && go(listing.up)} disabled={!listing?.up} title="Up to the folder above">Up</button>
-        <button type="button" onclick={() => places?.home && go(places.home)} disabled={!places?.home} title="Home">Home</button>
+        <button type="button" class="icon-button" onclick={() => listing?.up && go(listing.up)} disabled={!listing?.up} title="Up to the folder above" aria-label="Up"><IdeIcon name="up" /></button>
+        <button type="button" class="icon-button" onclick={() => places?.home && go(places.home)} disabled={!places?.home} title="Home" aria-label="Home"><IdeIcon name="home" /></button>
         <input
           class="address"
           aria-label="Folder"
@@ -239,6 +240,7 @@
 {/if}
 
 <style>
+
   .browser {
     display: flex;
     flex-direction: column;

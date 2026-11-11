@@ -512,6 +512,9 @@ pub struct SourceRef {
     pub auth: Option<(String, String)>,
     /// How a web API hands out a long list, which `every page` follows.
     pub paging: Option<Paging>,
+    /// The mapping a file source is laid over by (`using OrderFeed`,
+    /// docs/FORMATS-PLAN.md step 4), which a module must declare.
+    pub mapping: Option<String>,
 }
 
 impl SourceRef {
@@ -524,6 +527,7 @@ impl SourceRef {
             address: String::new(),
             auth: None,
             paging: None,
+            mapping: None,
         }
     }
 
@@ -536,6 +540,7 @@ impl SourceRef {
             address: String::new(),
             auth: None,
             paging: None,
+            mapping: None,
         }
     }
 
@@ -732,6 +737,10 @@ pub fn load_dir_for(dir: &Path, replaced: &[(&Path, &str)], sources: &[SourceRef
     let part_files = native::native_files(dir, &project)?;
     native::attach(&mut project, part_files);
     project.diagrams = diagrams::diagram_files(dir)?;
+    // A mapping's schema (`check "orders.xsd"`) is a file of the project's folder.
+    let missing = code::mapping::missing_schemas(&project, &|path| dir.join(path).is_file());
+    project.diagnostics.extend(missing);
+    code::mapping::attach_schemas(&mut project, &|path| std::fs::read_to_string(dir.join(path)).ok());
     project.readme = std::fs::read_to_string(dir.join(README_FILE)).ok();
     Ok(project)
 }

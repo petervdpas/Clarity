@@ -1,0 +1,29 @@
+module deliveries
+source deliveries
+
+// Deliveries on their way, kept in data/deliveries.xml:
+// <deliveries><delivery item="Pens" number="10" date="2026-11-12"><note>back door</note></delivery></deliveries>
+entity Delivery
+    item: text(80), required, column "@item", label @deliveryItemLabel
+    number: integer, min 1, column "@number", label @deliveryNumberLabel
+    arrives: date, column "@date", label @deliveryArrivesLabel
+    note: text(200), label @deliveryNoteLabel
+
+code Deliveries
+    handler deliveriesOpened
+        deliveries = find d in Delivery order by d.arrives
+
+code DeliveriesView
+    handler addClicked
+        let delivery = new Delivery
+        delivery.item = @newDeliveryItem
+        delivery.number = 1
+        save delivery
+        deliveries = find d in Delivery order by d.arrives
+
+    handler deliveryChanged
+        save table.selected
+
+    handler deleteClicked
+        delete table.selected
+        deliveries = find d in Delivery order by d.arrives

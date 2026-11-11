@@ -7,7 +7,9 @@ pub mod activity;
 pub mod browse;
 pub mod engines;
 mod file;
+mod file_import;
 pub mod folders;
+pub mod mappings;
 pub mod ide;
 pub mod openapi;
 pub mod recent;
@@ -66,6 +68,34 @@ pub enum SourceKind {
     Mysql,
     Mssql,
     Rest,
+    /// A file in a format of Clarity's catalog (CSV, JSON), kept external:
+    /// its `file` says which format and its options.
+    File,
+}
+
+/// The format of a data source that is a file, and its options as the
+/// project file writes them (`separator ";"`, `noHeader true`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct FileFormat {
+    /// The format's name; empty when `mapping` names it.
+    pub format: String,
+    #[serde(default)]
+    pub options: Vec<SourceOption>,
+    /// `datasource feed file "imports/orders.xml" external using OrderFeed`:
+    /// a mapping of the project says the format and how the file is laid
+    /// over its entity (docs/FORMATS-PLAN.md, step 4), in place of the options.
+    #[serde(default)]
+    pub mapping: Option<String>,
+}
+
+/// One option of a file source's format: its name, and its value as text
+/// (`true` or `false` for an option that is yes or no).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SourceOption {
+    pub name: String,
+    pub value: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -170,6 +200,9 @@ pub struct DataSource {
     /// How a web API hands out a long list, a page at a time.
     #[serde(default)]
     pub paging: Option<Paging>,
+    /// The format of a source that is a file, with its options.
+    #[serde(default)]
+    pub file: Option<FileFormat>,
 }
 
 /// The settings of a project, as the Project tab shows them. The first data
@@ -296,6 +329,7 @@ pub fn source_word(kind: SourceKind) -> &'static str {
         SourceKind::Mysql => "mysql",
         SourceKind::Mssql => "mssql",
         SourceKind::Rest => "rest",
+        SourceKind::File => "file",
     }
 }
 
@@ -377,6 +411,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
             picks: Vec::new(),
             pick_schemas: Vec::new(),
             paging: None,
+            file: None,
         }],
         language: None,
         currency: None,
@@ -696,6 +731,69 @@ pub struct Catalog {
     pub targets: Vec<Choice<Target>>,
     pub sources: Vec<SourceInfo>,
     pub auths: Vec<Choice<AuthKind>>,
+    /// The formats a data source can be a file in, with their options.
+    pub formats: Vec<FormatChoice>,
+}
+
+/// A format of Clarity's catalog as Settings offers it for a file source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FormatChoice {
+    pub name: &'static str,
+    /// `CSV file`.
+    pub label: String,
+    pub url_example: String,
+    /// The file kinds of its schemas (`xsd`), which Import can take typed tables from.
+    pub schema_kinds: Vec<&'static str>,
+    /// Whether its records can hold records inside (XML, JSON; not CSV), which a mapping maps.
+    pub nests: bool,
+    pub options: Vec<FormatOptionChoice>,
+}
+
+/// An option of a format, as Settings shows it under a file source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FormatOptionChoice {
+    pub name: &'static str,
+    /// Whether it is yes or no (a box), else text.
+    pub flag: bool,
+    pub label: &'static str,
+    pub help: &'static str,
+}
+
+/// The label and help of each option of the formats' catalog, by its label key.
+const FORMAT_OPTION_TEXTS: [(&str, &str, &str); 7] = [
+    ("formatOptionAt", "At", "Where the records are inside the file: in JSON object names with dots between, like data.orders; in XML element names with slashes between, the record's own last, like shop/orders/order"),
+    ("formatOptionSeparator", "Separator", "The character between fields, like ; or | (\\t for a tab); a comma when empty"),
+    ("formatOptionNoHeader", "No header row", "The file has no header row: its columns are the entity's fields in order"),
+    ("formatOptionQuote", "Quote", "The character around a field that holds the separator; a double quote when empty"),
+    ("formatOptionEncoding", "Encoding", "utf-8 (when empty), windows-1252 or iso-8859-1"),
+    ("formatOptionNamespace", "Namespace", "The namespace written as the document's default, like urn:example:orders"),
+    ("formatOptionIndent", "Indent", "Writes one element per line, indented, for files people read"),
+];
+
+/// The formats of the catalog with their options, for file sources.
+pub fn format_choices() -> Vec<FormatChoice> {
+    clarity_formats::catalog()
+        .into_iter()
+        .map(|f| FormatChoice {
+            name: f.name,
+            label: format!("{} file", f.title),
+            url_example: format!("data/records.{}", f.name),
+            schema_kinds: f.schema_kinds.to_vec(),
+            nests: f.nests,
+            options: f
+                .options
+                .iter()
+                .map(|o| {
+                    let (label, help) = FORMAT_OPTION_TEXTS.iter().find(|(key, _, _)| *key == o.label).map(|(_, l, h)| (*l, *h)).unwrap_or((o.name, ""));
+                    FormatOptionChoice { name: o.name, flag: o.kind == clarity_formats::OptionKind::Bool, label, help }
+                })
+                .collect(),
+        })
+        .collect()
 }
 
 
@@ -765,6 +863,7 @@ pub fn catalog() -> Catalog {
             Choice { id: AuthKind::ApiKey, label: "API key" },
             Choice { id: AuthKind::Basic, label: "User and password" },
         ],
+        formats: format_choices(),
     }
 }
 
@@ -784,6 +883,7 @@ pub fn source_refs(settings: &Settings) -> Vec<clarity_spec::SourceRef> {
                 readonly: s.readonly,
                 // Its connection, which may name a secret setting (DESIGN 5.27).
                 address: s.url.clone(),
+                mapping: s.file.as_ref().and_then(|f| f.mapping.clone()),
                 ..clarity_spec::SourceRef::sql(&s.name)
             },
         })
@@ -1146,35 +1246,90 @@ pub struct SourceTable {
     pub not_importable: Option<String>,
 }
 
-/// An import that was written: the module file and the tables left out.
+/// An import that was written: the module file, the tables left out, and
+/// the project file before and after when the import laid a file source
+/// over the mapping it wrote.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportDone {
     pub path: PathBuf,
     pub text: String,
     pub skipped: Vec<(String, String)>,
+    pub project_file: Option<(PathBuf, String, String)>,
 }
 
-/// The live schema of external data source `source` of the project whose
-/// modules are in `dir`.
-fn external_schema(dir: &Path, source: &str) -> Result<clarity_db::LiveSchema, String> {
+/// External data source `source` of the project whose modules are in `dir`.
+fn external_source(dir: &Path, source: &str) -> Result<DataSource, String> {
     let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
     let settings = load(&file).settings.ok_or_else(|| format!("{} cannot be read", file.display()))?;
-    let found = settings
+    let mut found = settings
         .datasources
-        .iter()
+        .into_iter()
         .find(|s| s.name == source)
         .ok_or_else(|| format!("the project has no data source {source}"))?;
     if !found.external {
         return Err(format!("data source {source} is not external; Clarity makes its tables from the dictionary"));
     }
+    // A file laid over by a mapping (`using OrderFeed`): its format is the mapping's.
+    if let Some(file) = found.file.as_mut()
+        && let Some(name) = file.mapping.clone()
+    {
+        let project = clarity_spec::load_dir(dir).map_err(|err| format!("{}: {err}", dir.display()))?;
+        let mapping = project.mapping(&name).ok_or_else(|| format!("data source {source} is laid over by mapping {name}, which no module declares"))?;
+        file.format = mapping.format.name.clone();
+        // Its `at` and the format's options, as a source's own would be given.
+        let form = clarity_spec::code::mapping::form_of(mapping);
+        file.options = std::iter::once(SourceOption { name: "at".to_string(), value: form.at })
+            .filter(|o| !o.value.is_empty())
+            .chain(form.options.into_iter().map(|o| SourceOption { name: o.name, value: o.value }))
+            .collect();
+    }
+    Ok(found)
+}
+
+/// The live schema of external database `source` of the project whose
+/// modules are in `dir`.
+fn external_schema(dir: &Path, source: &str) -> Result<clarity_db::LiveSchema, String> {
+    let found = &external_source(dir, source)?;
+    if let Some(file) = &found.file {
+        return Err(format!("data source {source} is a {} file; Clarity does not own its shape", file.format));
+    }
     if found.kind != SourceKind::Sqlite {
-        return Err(format!("data source {source} is {}; importing is for SQLite only for now", source_word(found.kind)));
+        return Err(format!("data source {source} is {}; importing is for SQLite and files only for now", source_word(found.kind)));
     }
     clarity_db::read_sqlite(&sqlite_path(dir, found))
 }
 
-/// The tables of external data source `source`, and which can be imported.
-pub fn source_tables(dir: &Path, source: &str) -> Result<Vec<SourceTable>, String> {
+/// A file source's options as the JSON object Clarity.Formats takes, each
+/// value of the kind its format says; empty when it has none.
+pub fn file_options_json(file: &FileFormat) -> String {
+    if file.options.is_empty() {
+        return String::new();
+    }
+    let info = clarity_formats::format(&file.format);
+    let pairs: Vec<String> = file
+        .options
+        .iter()
+        .map(|o| {
+            let flag = info.as_ref().and_then(|i| i.options.iter().find(|i| i.name == o.name)).is_some_and(|i| i.kind == clarity_formats::OptionKind::Bool);
+            let value = if flag { o.value.clone() } else { serde_json::Value::String(o.value.clone()).to_string() };
+            format!("{}:{value}", serde_json::Value::String(o.name.clone()))
+        })
+        .collect();
+    format!("{{{}}}", pairs.join(","))
+}
+
+/// The tables of external data source `source`, and which can be imported;
+/// for a file source, the tables in the file, or those its XSD `schema`
+/// declares (a path relative to the project's folder).
+pub fn source_tables(dir: &Path, source: &str, schema: Option<&Path>) -> Result<Vec<SourceTable>, String> {
+    let found = external_source(dir, source)?;
+    if let Some(file) = &found.file {
+        let tables = file_import::tables(dir, &found, file, schema)?;
+        return Ok(file_import::listed(&tables, &found, file));
+    }
+    if schema.is_some() {
+        return Err(format!("an XSD schema describes a file source; data source {source} is not one"));
+    }
     let schema = external_schema(dir, source)?;
     Ok(schema
         .tables
@@ -1188,8 +1343,10 @@ pub fn source_tables(dir: &Path, source: &str) -> Result<Vec<SourceTable>, Strin
 }
 
 /// Writes `tables` of external data source `source` as module `module`,
-/// in a new file next to the other modules.
-pub fn import_tables(dir: &Path, source: &str, module: &str, tables: &[String]) -> Result<ImportDone, String> {
+/// in a new file next to the other modules. A file source's tables come
+/// from the file, or typed from its XSD `schema`; importing a table that is
+/// not at the root of the file sets the source's `at` to it when it has none.
+pub fn import_tables(dir: &Path, source: &str, module: &str, tables: &[String], schema: Option<&Path>) -> Result<ImportDone, String> {
     if !is_identifier(module) {
         return Err(format!("'{module}' is not a valid module name"));
     }
@@ -1197,25 +1354,53 @@ pub fn import_tables(dir: &Path, source: &str, module: &str, tables: &[String]) 
     if path.exists() {
         return Err(format!("there is already a module file {}; choose another module name", path.display()));
     }
-    let schema = external_schema(dir, source)?;
+    let found = external_source(dir, source)?;
     let project = load_modules(dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     if project.files.iter().any(|f| f.module.as_ref().is_some_and(|m| m.name == module)) {
         return Err(format!("there is already a module {module}; choose another name"));
     }
-    let taken: Vec<String> = project.entities().map(|e| e.name.name.clone()).collect();
-    let imported = clarity_db::import(&schema, tables, module, source, &taken);
+    let mut taken: Vec<String> = project.entities().map(|e| e.name.name.clone()).collect();
+    let mut project_file = None;
+    let imported = match &found.file {
+        Some(file) => {
+            taken.extend(project.files.iter().flat_map(|f| &f.enums).map(|e| e.name.name.clone()));
+            let found_tables = file_import::tables(dir, &found, file, schema)?;
+            let from = schema.map(|s| s.display().to_string());
+            let mappings: Vec<String> = project.files.iter().flat_map(|f| &f.mappings).map(|m| m.name.name.clone()).collect();
+            let done = file_import::import(&found_tables, tables, &found, file, module, &taken, &mappings, from.as_deref())?;
+            if let Some(mapping) = &done.mapping {
+                // The source is laid over the mapping written beside its entity, which keeps the paths.
+                let settings_file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
+                let before = std::fs::read_to_string(&settings_file).map_err(|err| format!("cannot read {}: {err}", settings_file.display()))?;
+                let mut settings = parse(&before)?;
+                for s in settings.datasources.iter_mut().filter(|s| s.name == source) {
+                    s.kind = SourceKind::File;
+                    s.file = Some(FileFormat { format: String::new(), options: Vec::new(), mapping: Some(mapping.clone()) });
+                }
+                let after = write(Some(&before), &settings)?;
+                project_file = Some((settings_file, before, after));
+            }
+            clarity_db::Imported { text: done.text, skipped: done.skipped }
+        }
+        None if schema.is_some() => return Err(format!("an XSD schema describes a file source; data source {source} is not one")),
+        None => clarity_db::import(&external_schema(dir, source)?, tables, module, source, &taken),
+    };
     // Its fields' labels are read by people: keys, with their texts in the language files.
     let default = clarity_spec::translations::default_language(&project);
     let existing = project.translations.get(&default).cloned().unwrap_or_default();
     let keyed = clarity_spec::keyed::make_keys_beside(&[(path.to_string_lossy().as_ref(), imported.text.as_str())], &[], &default, &existing);
     let text = keyed.modules[0].1.clone();
     let keys: Vec<(String, String)> = keyed.order.iter().map(|k| (k.clone(), keyed.languages[&default][k].clone())).collect();
+    if let Some((settings_file, _, after)) = &project_file {
+        std::fs::write(settings_file, after).map_err(|err| format!("cannot write {}: {err}", settings_file.display()))?;
+    }
     std::fs::write(&path, &text).map_err(|err| format!("cannot write {}: {err}", path.display()))?;
     clarity_spec::keyed::add_keys(dir, &default, &keys).map_err(|err| format!("cannot write the language files: {err}"))?;
     Ok(ImportDone {
         path,
         text,
         skipped: imported.skipped,
+        project_file,
     })
 }
 

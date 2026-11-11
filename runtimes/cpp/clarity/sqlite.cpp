@@ -94,6 +94,7 @@ public:
     explicit Sqlite(sqlite3* db) : db_(db) {}
     ~Sqlite() override { sqlite3_close(db_); }
     Dialect dialect() const override { return Dialect::Sqlite; }
+    bool autocommit() const { return sqlite3_get_autocommit(db_) != 0; }
 
     int64_t execute(const std::string& sql, const std::vector<SqlValue>& params) override {
         Statement s(db_, sql);
@@ -161,6 +162,11 @@ std::unique_ptr<Driver> open_sqlite(const std::string& path) {
     auto driver = std::make_unique<Sqlite>(db);
     driver->batch("PRAGMA foreign_keys = ON");
     return driver;
+}
+
+bool sqlite_autocommit(const Driver& driver) {
+    auto sqlite = dynamic_cast<const Sqlite*>(&driver);
+    return !sqlite || sqlite->autocommit();
 }
 
 }  // namespace clarity

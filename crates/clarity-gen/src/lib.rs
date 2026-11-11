@@ -57,6 +57,10 @@ fn databases(project: &Project, settings: &Settings) -> Result<Databases, Vec<St
             continue;
         }
         // A web API keeps its own records (DESIGN 5.23): its entities are not stored.
+        // A file source is opened from its file, not connected to (`file_sources`).
+        if source.kind == clarity_project::SourceKind::File {
+            continue;
+        }
         let Some(sql) = Sql::of(source.kind) else { continue };
         if source.url.starts_with("keychain:") {
             return Err(vec![format!("data source '{}': {}", source.name, clarity_project::keychain_problem(&source.url))]);
@@ -69,6 +73,130 @@ fn databases(project: &Project, settings: &Settings) -> Result<Databases, Vec<St
         .map(|(name, sql, _)| (name.clone(), *sql))
         .collect();
     Ok((databases, owned))
+}
+
+/// A data source that is a file in a format (docs/FORMATS-PLAN.md), as
+/// every runtime opens it: read into one in-memory SQLite table of its
+/// entity, written back after each change.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FileSource {
+    pub name: String,
+    pub format: String,
+    pub path: String,
+    /// The format's options as a JSON object, or empty.
+    pub options: String,
+    pub table: String,
+    pub key: String,
+    /// The columns the entity maps with their kinds, as JSON.
+    pub fields: String,
+    pub readonly: bool,
+}
+
+/// The project's data sources that are files, each with the one entity it holds.
+pub(crate) fn file_sources(project: &Project, settings: &clarity_project::Settings) -> Result<Vec<FileSource>, Vec<String>> {
+    let mut out = Vec::new();
+    for source in &settings.datasources {
+        let Some(file) = &source.file else { continue };
+        // `using OrderFeed`: the mapping says the format, the entity and the options (docs/FORMATS-PLAN.md, step 4).
+        let mapping = match &file.mapping {
+            Some(name) => match project.mapping(name) {
+                Some(mapping) => Some(mapping),
+                None => return Err(vec![format!("data source '{}' is laid over by mapping {name}, which no module declares", source.name)]),
+            },
+            None => None,
+        };
+        let format = mapping.map_or(file.format.as_str(), |m| m.format.name.as_str());
+        let entities: Vec<&clarity_spec::model::Entity> = project.entities_in(&source.name).filter(|e| mapping.is_none_or(|m| m.entity.name == e.name.name)).collect();
+        let entity = match entities.as_slice() {
+            [] => continue,
+            [one] => *one,
+            _ => return Err(vec![format!("data source '{}' is one {format} file, one table: it holds the records of one entity, not {}", source.name, entities.len())]),
+        };
+        if clarity_formats::format(format).is_none() {
+            return Err(vec![format!("data source '{}': there is no format '{format}'", source.name)]);
+        }
+        let inside = mapping.map(|m| m.fields.as_slice()).unwrap_or_default();
+        let fields = file_fields(project, entity, inside);
+        out.push(FileSource {
+            name: source.name.clone(),
+            format: format.to_string(),
+            path: source.url.clone(),
+            options: mapping.map_or_else(|| clarity_project::file_options_json(file), |m| shape::mapping_options(&by_columns(project, m))),
+            table: entity.table_name(),
+            key: entity.key_column().to_string(),
+            fields: fields.to_string(),
+            readonly: source.readonly,
+        });
+    }
+    Ok(out)
+}
+
+/// The columns `entity` keeps in a file source with their kinds, as
+/// Clarity.Formats takes them: each stored field by its column, and each
+/// field of records inside (`lines of Line` in the mapping) as its records
+/// kind, with the table and key the runtime keeps those records in.
+fn file_fields(project: &Project, entity: &clarity_spec::model::Entity, inside: &[clarity_spec::code::MappedField]) -> serde_json::Value {
+    let kind = shape::write_kind(project, &clarity_spec::code::check::TypeInfo::Record(entity.name.name.clone())).unwrap_or_default();
+    let mut fields: Vec<serde_json::Value> = serde_json::from_str::<serde_json::Value>(&kind)
+        .ok()
+        .and_then(|k| k.get("fields").and_then(|f| f.as_array()).cloned())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|f| !matches!(f.get("kind").and_then(|k| k.as_str()), Some("other" | "record" | "records")))
+        .map(|mut f| {
+            let column = f.get("name").and_then(|n| n.as_str()).map(|n| entity.column_of(n)).unwrap_or_default();
+            f["name"] = serde_json::Value::String(column);
+            f
+        })
+        .collect();
+    for mapped in inside {
+        let Some(nested) = &mapped.inside else { continue };
+        let Some(inner) = project.entity(&nested.entity.name) else { continue };
+        let many = !matches!(entity.field(&mapped.field.name).map(|f| &f.ty), Some(clarity_spec::model::FieldType::Record { .. }));
+        fields.push(serde_json::json!({
+            "name": mapped.field.name,
+            "kind": if many { "records" } else { "record" },
+            "entity": inner.name.name,
+            "fields": file_fields(project, inner, &nested.fields),
+            "base": {},
+            "table": inner.table_name(),
+            "key": inner.key_column(),
+        }));
+    }
+    serde_json::Value::Array(fields)
+}
+
+/// A mapping as the columns it lays a file over: each field's line and
+/// `order is ".."` by the field's column, as the runtime's table names it;
+/// a field of records inside keeps its name, which the records field has.
+fn by_columns(project: &Project, mapping: &clarity_spec::code::MappingDecl) -> clarity_spec::code::MappingDecl {
+    fn rename(project: &Project, entity: Option<&clarity_spec::model::Entity>, fields: &mut [clarity_spec::code::MappedField]) {
+        for mapped in fields {
+            match &mut mapped.inside {
+                Some(nested) => {
+                    let inner = project.entity(&nested.entity.name);
+                    if let (Some(parent), Some(inner)) = (&mut nested.parent, inner) {
+                        parent.field.name = inner.column_of(&parent.field.name);
+                    }
+                    rename(project, inner, &mut nested.fields);
+                }
+                None => {
+                    if let Some(entity) = entity {
+                        mapped.field.name = entity.column_of(&mapped.field.name);
+                    }
+                }
+            }
+        }
+    }
+    let mut out = mapping.clone();
+    rename(project, project.entity(&mapping.entity.name), &mut out.fields);
+    out
+}
+
+/// Whether the program carries Clarity.Formats: its code reads or writes a
+/// format, or a data source is a file in one.
+pub fn carries_formats(project: &Project, settings: &clarity_project::Settings) -> bool {
+    project.uses_formats() || settings.datasources.iter().any(|s| s.file.is_some() && project.entities_in(&s.name).next().is_some())
 }
 
 /// Every file store an image field keeps its pictures in must be one of the
@@ -1351,7 +1479,7 @@ pub fn rebuild_base_libraries(repo: &std::path::Path) -> Result<std::path::PathB
 /// format links Clarity.Formats from beside it (docs/FORMATS-PLAN.md).
 pub fn needs_library_folder(project: &Project, settings: &clarity_project::Settings, target: clarity_project::Target) -> bool {
     let draws = target == clarity_project::Target::Desktop && uses_clarity_ui(settings);
-    let formats = project.uses_formats() && matches!(settings.stack.backend, Backend::Go | Backend::C | Backend::Cpp);
+    let formats = carries_formats(project, settings) && matches!(settings.stack.backend, Backend::Go | Backend::C | Backend::Cpp);
     draws || formats
 }
 

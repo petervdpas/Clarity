@@ -53,6 +53,9 @@ pub struct SpecFile {
     pub parts: Vec<crate::code::PartDecl>,
     /// Its outside libraries, called from code (DESIGN 5.21).
     pub libraries: Vec<crate::code::LibraryDecl>,
+    /// Its mappings: how a kind of file is laid over an entity, per case
+    /// (docs/FORMATS-PLAN.md, step 4).
+    pub mappings: Vec<crate::code::MappingDecl>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -1665,6 +1668,11 @@ impl Project {
     }
 
     /// An entity or a record (DESIGN 5.12) by its name: what has fields.
+    /// The mapping `name`, declared in any module (docs/FORMATS-PLAN.md, step 4).
+    pub fn mapping(&self, name: &str) -> Option<&crate::code::MappingDecl> {
+        self.files.iter().flat_map(|f| &f.mappings).find(|m| m.name.name == name)
+    }
+
     pub fn entity(&self, name: &str) -> Option<&Entity> {
         self.entities().find(|e| e.name.name == name).or_else(|| self.records().find(|r| r.name.name == name))
     }

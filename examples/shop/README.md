@@ -1,7 +1,8 @@
 # Shop
 
 A small shop administration: customers, their orders with order lines, and
-a dashboard of how sales go. The data is kept in a SQLite database. An
+a dashboard of how sales go. The data is kept in a SQLite database, and the
+suppliers' price list in a CSV file. An
 engine prices each order from its lines, and data events guard the
 customers' credit.
 
@@ -10,7 +11,7 @@ customers' credit.
 The app opens on the Customer card. Its menu has File (Customer card with
 `Ctrl+K`, Language, Theme, Quit with `Ctrl+Q`), Customers (All customers),
 Orders (All orders, and the Sales dashboard, which opens in a window of
-its own) and Suppliers (All suppliers). The toolbar opens the same windows,
+its own) and Suppliers (All suppliers, Price list). The toolbar opens the same windows,
 and the footer shows the status.
 
 - Customer card: a customer's name, kind, active box and credit limit, the shop logo, and tabs with their orders and their notes.
@@ -20,6 +21,7 @@ and the footer shows the status.
 - Order editor: the number, date, customer (a dropdown with search) and status, a table of order lines that is edited in place, the total, remarks, **Approve** and **Save**. The total is worked out again whenever a line changes.
 - Suppliers: a filter on the name and a table of suppliers with their e-mail. **New**, **Open** or a double click opens the supplier editor.
 - Supplier editor: a supplier's name, e-mail, phone number and website, with **Save** and **Close**. A supplier needs a name.
+- Price list: a table of the products, their supplier and price, kept in `data/prices.csv`, edited in place (Add above it, the trash on each row). Prices pasted into the box below it as CSV text, with a header row (`product;supplier;price`), are added with **Add prices** and written into the file.
 - Sales dashboard: three charts of the orders that are not cancelled: orders by status, sales per day (a line) and sales per customer (a pie).
 
 The rules on the data:
@@ -37,6 +39,8 @@ Rust, desktop. An example builds only for the stack its project file names.
 ## What it shows
 
 - An engine: `engine Pricing from "pricing.wasm"` declares `total`, which the Clarity code calls like its own function. Its source is the Rust crate in `engines/pricing`, built for `wasm32-unknown-unknown` into `engines/pricing.wasm`. A line costs its quantity times its price, with 5% off from 10 pieces and 10% off from 50; an order above 1000 gets 2% off the whole.
+- A data source that is a file: `datasource prices csv "data/prices.csv" external` with `separator ";"` keeps the price lines in a CSV file. The file is made at the first save, and its columns stay in their order.
+- Reading CSV in code: `read list<PriceLine> from csv pastedText separator ";"` turns pasted text into records.
 - Data events (`before save`, `before delete`) that run whenever a customer or order is saved or deleted, from any window.
 - An action, `approve`, with its requirements and its effect on the database.
 - Views that tell their window something changed (`Tells message="saved"`), so its table shows it at once.

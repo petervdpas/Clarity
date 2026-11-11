@@ -106,7 +106,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     files.push(text("main.go", main_go(project, settings, &databases, &servers)));
     // The data formats of code (docs/FORMATS-PLAN.md): Clarity.Formats through cgo, only when used.
-    if project.uses_formats() {
+    if crate::carries_formats(project, settings) {
         files.push(text("formats.go", super::FORMATS_GO.to_string()));
     }
     let mut direct = vec![RUNTIME_MODULE];
@@ -147,6 +147,7 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, crate::
     let folder_stores: String = crate::folder_stores(project, settings)
         .iter()
         .map(|(name, setting, default)| format!("\tif err := db.AddStoreSetting({}, {}, {}, {}); err != nil {{\n\t\tdb.Close()\n\t\treturn nil, err\n\t}}\n", string(name), string(&program_name), string(setting), string(default)))
+        .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("\tif err := db.AddFile(clarity.FileSource{{Name: {}, Format: {}, Path: {}, Options: {}, Table: {}, Key: {}, Fields: {}, Readonly: {}}}, formatsReadTable, formatsWriteTable); err != nil {{\n\t\tdb.Close()\n\t\treturn nil, err\n\t}}\n", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)))
         .collect();
 
     let languages: Vec<String> = project.translations.keys().map(|l| string(l)).collect();

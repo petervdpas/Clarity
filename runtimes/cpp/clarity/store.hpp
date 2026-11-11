@@ -53,5 +53,7 @@ std::string data_folder_sqlite_on(const std::string& os, const std::string& loca
 /// Connects to the database of a data source.
 std::unique_ptr<Driver> open_driver(Dialect dialect, const std::string& at);
 std::unique_ptr<Driver> open_sqlite(const std::string& path);
+/// Whether a connection open_sqlite made is outside a transaction.
+bool sqlite_autocommit(const Driver& driver);
 
 }  // namespace clarity

@@ -3,28 +3,16 @@
 //! else ignoring case, underscores, hyphens and spaces, in the order they
 //! were written; what is left out (or null) keeps the new record's value;
 //! names the entity does not have, `id` and what is never read are left
-//! aside; numbers and strings of numbers stand for each other; a value that
+//! aside; numbers and strings of numbers stand for each other, as do
+//! true and false and their text; a value that
 //! does not fit gives a message that says where, word for word on every stack.
 
 use crate::kind::{Kind, Shape};
 use crate::numbers;
 use crate::tree::{self, Tree};
 
-/// `tree`, read from a format called `name` (`JSON`), from `at` inward
-/// (object names with dots between), fitted to `kind`.
-pub fn fit(tree: Tree, at: Option<&str>, kind: &Kind, name: &str) -> Result<Tree, String> {
-    let mut value = tree;
-    if let Some(at) = at.filter(|a| !a.is_empty()) {
-        let mut walked = Vec::new();
-        for step in at.split('.') {
-            walked.push(step);
-            value = match value {
-                Tree::Object(pairs) => pairs.into_iter().find(|(n, _)| n == step).map(|(_, v)| v),
-                _ => None,
-            }
-            .ok_or_else(|| format!("the {name} has no '{}'", walked.join(".")))?;
-        }
-    }
+/// `tree`, read from a format called `name` (`JSON`) and shaped (shape.rs), fitted to `kind`.
+pub fn fit(value: Tree, kind: &Kind, name: &str) -> Result<Tree, String> {
     match kind {
         Kind::Records(shape) => {
             let Tree::List(items) = value else { return Err(format!("the {name} is not a list of {}", shape.entity)) };
@@ -51,7 +39,7 @@ pub fn plain(name: &str) -> String {
 }
 
 /// The value a record gives for `field`: by its exact name, else the first by its plain name, in the order written.
-pub fn found<'a>(object: &'a Tree, field: &str) -> Option<&'a Tree> {
+fn found<'a>(object: &'a Tree, field: &str) -> Option<&'a Tree> {
     let Tree::Object(pairs) = object else { return None };
     pairs.iter().find(|(n, _)| n == field).or_else(|| {
         let wanted = plain(field);
@@ -103,11 +91,16 @@ pub fn value(given: &Tree, kind: &Kind) -> Option<Tree> {
         (Kind::Decimal, Tree::Number(n)) => numbers::plain(n).map(Tree::Text),
         (Kind::Decimal, Tree::Text(s)) if numbers::is_decimal(s.trim()) => Some(Tree::Text(s.trim().to_string())),
         (Kind::Bool, Tree::Bool(_)) => Some(given.clone()),
+        // Yes and no as text, as a flat format (CSV) carries them.
+        (Kind::Bool, Tree::Text(s)) if s.trim().eq_ignore_ascii_case("true") => Some(Tree::Bool(true)),
+        (Kind::Bool, Tree::Text(s)) if s.trim().eq_ignore_ascii_case("false") => Some(Tree::Bool(false)),
         (Kind::Date, Tree::Text(s)) if numbers::is_date(s) => Some(given.clone()),
         (Kind::Date, Tree::Text(s)) => numbers::date_time(s).map(|d| Tree::Text(d[..10].to_string())),
         (Kind::DateTime, Tree::Text(s)) => numbers::date_time(s).map(Tree::Text),
         (Kind::Enum(values), Tree::Text(s)) => values.iter().find(|v| v.eq_ignore_ascii_case(s)).map(|v| Tree::Text(v.clone())),
         (Kind::Values(item), Tree::List(items)) => items.iter().map(|i| value(i, item)).collect::<Option<Vec<_>>>().map(Tree::List),
+        // A list as its JSON text, as a flat format (CSV) carries it.
+        (Kind::Values(_), Tree::Text(s)) => tree::parse(s).filter(|t| matches!(t, Tree::List(_))).and_then(|list| value(&list, kind)),
         _ => None,
     }
 }

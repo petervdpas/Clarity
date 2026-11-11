@@ -1,5 +1,7 @@
 module stock
 
+use deliveries
+
 // What the shop keeps, how many there are, and when to order more.
 entity Item
     name: text(80), required, unique, label @itemNameLabel
@@ -96,6 +98,40 @@ command bring(name: text, number: integer)
     item.count = item.count + number
     save item
     print @itemCountIs(name = name, count = item.count)
+
+// Every item as XML, for another program or another shop's stock.
+command export
+    help @exportHelp
+    print xml of find i in Item order by i.name at "stock/item" indent true
+
+// Items from XML, as export writes them; an item already there gets the count given.
+command import(text: text)
+    help @importHelp
+    let given = read list<Item> from xml text at "stock/item"
+    for g in given
+        let found = find i in Item where i.name == g.name
+        if count(found) > 0
+            let item = found[1]
+            item.count = g.count
+            item.low = g.low
+            save item
+        else
+            save g
+    print @itemsImported(count = count(given))
+
+// Books every delivery onto its item and removes it from the deliveries file.
+command receive
+    help @receiveHelp
+    for d in find d in Delivery order by d.arrives
+        let found = find i in Item where i.name == d.item
+        if count(found) == 0
+            print @noSuchItem(name = d.item)
+        else
+            let item = found[1]
+            item.count = item.count + d.number
+            save item
+            delete d
+            print @itemCountIs(name = item.name, count = item.count)
 
 // For scripts: ends with exit code 3 when any item runs low.
 command check

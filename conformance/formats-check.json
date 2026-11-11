@@ -1,0 +1,894 @@
+{
+  "about": "A mapping's `check` (docs/FORMATS-PLAN.md, step 4) through Clarity.Formats, one engine for every format with schemas: the options carry the schema's text (the generator reads the project's file), the format reads it into the engine's rules, and the whole file is checked before anything is fitted, a value that breaks it stopping the read with where it is (an XPath with a record's place among its kind). `read` cases read `input` in `format` as `kind` and give `fitted` or `error`; `table` cases read a file source's table (`#node` left out) or give `error`. A format without schema kinds refuses `check`.",
+  "read": [
+    {
+      "name": "a file the schema allows reads as it does without the check",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer></order><order number=\"A-2\"><placed>2026-02-01</placed><quantity>1</quantity><customer><name>Bo</name></customer><lines><line product=\"tea\" count=\"3\"/><line product=\"cake\"/></lines><paid>true</paid><shipped>2026-02-02T10:00:00Z</shipped></order></shop>",
+      "fitted": [
+        {
+          "id": 0,
+          "number": "A-1",
+          "status": "open",
+          "quantity": 2,
+          "total": "12.50"
+        },
+        {
+          "id": 0,
+          "number": "A-2",
+          "status": "",
+          "quantity": 1,
+          "total": "0"
+        }
+      ]
+    },
+    {
+      "name": "a required attribute missing says which record",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer></order><order ><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer></order></shop>",
+      "error": "shop/order[2]: 'number' is missing, which the schema requires"
+    },
+    {
+      "name": "a required element missing",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer></order></shop>",
+      "error": "shop/order[1]: 'placed' is missing, which the schema requires"
+    },
+    {
+      "name": "an integer",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>x</quantity><total>12.50</total><customer><name>Ada</name></customer></order></shop>",
+      "error": "shop/order[1]: 'quantity' is \"x\", which the schema says is an integer"
+    },
+    {
+      "name": "a date",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>31-01-2026</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer></order></shop>",
+      "error": "shop/order[1]: 'placed' is \"31-01-2026\", which the schema says is a date"
+    },
+    {
+      "name": "a decimal",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12,50</total><customer><name>Ada</name></customer></order></shop>",
+      "error": "shop/order[1]: 'total' is \"12,50\", which the schema says is a decimal"
+    },
+    {
+      "name": "a decimal's digits",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.345</total><customer><name>Ada</name></customer></order></shop>",
+      "error": "shop/order[1]: 'total' is \"12.345\", which the schema says has at most 6 digits, 2 after the point"
+    },
+    {
+      "name": "a decimal's digits in all",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>123456.5</total><customer><name>Ada</name></customer></order></shop>",
+      "error": "shop/order[1]: 'total' is \"123456.5\", which the schema says has at most 6 digits, 2 after the point"
+    },
+    {
+      "name": "an enumeration's values",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"lost\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer></order></shop>",
+      "error": "shop/order[1]: 'status' is \"lost\", which the schema says is open or shipped"
+    },
+    {
+      "name": "a text's longest",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><note>far too long a note</note><customer><name>Ada</name></customer></order></shop>",
+      "error": "shop/order[1]: 'note' is 19 characters long, which the schema says is at most 10"
+    },
+    {
+      "name": "an element the schema allows once",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer><customer><name>Bo</name></customer></order></shop>",
+      "error": "shop/order[1]: 'customer' is there 2 times, which the schema allows once"
+    },
+    {
+      "name": "a record inside a record, by its place",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer/></order></shop>",
+      "error": "shop/order[1]/customer: 'name' is missing, which the schema requires"
+    },
+    {
+      "name": "records inside a list, each by its place",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer><lines><line product=\"tea\"/><line count=\"2\"/></lines></order></shop>",
+      "error": "shop/order[1]/lines/line[2]: 'product' is missing, which the schema requires"
+    },
+    {
+      "name": "an attribute's type",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer><lines><line product=\"tea\" count=\"many\"/></lines></order></shop>",
+      "error": "shop/order[1]/lines/line[1]: 'count' is \"many\", which the schema says is an integer"
+    },
+    {
+      "name": "yes or no",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer><paid>yes</paid></order></shop>",
+      "error": "shop/order[1]: 'paid' is \"yes\", which the schema says is true or false"
+    },
+    {
+      "name": "a date and time",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer><shipped>2026-01-31 10:00</shipped></order></shop>",
+      "error": "shop/order[1]: 'shipped' is \"2026-01-31 10:00\", which the schema says is a date and time"
+    },
+    {
+      "name": "a root the schema does not declare",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "store/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<store><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer></order></store>",
+      "error": "the XML's root is <store>, which the schema does not declare"
+    },
+    {
+      "name": "a check that is no schema says why",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": "<a/>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer></order></shop>",
+      "error": "the schema's root is <a>, not <xs:schema>"
+    },
+    {
+      "name": "check is the schema's text",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "at": "shop/order",
+        "check": true
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer></order></shop>",
+      "error": "the option 'check' of xml is the text of a schema"
+    },
+    {
+      "name": "a format without schemas refuses check",
+      "format": "json",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "[]",
+      "error": "JSON has no schemas to check a file against; the formats with schemas are xml (xsd)"
+    },
+    {
+      "name": "a flat format refuses check too",
+      "format": "csv",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "status",
+            "kind": "text"
+          },
+          {
+            "name": "quantity",
+            "kind": "integer"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "status": "",
+          "quantity": 0,
+          "total": "0"
+        }
+      },
+      "options": {
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "number\nA-1\n",
+      "error": "CSV has no schemas to check a file against; the formats with schemas are xml (xsd)"
+    }
+  ],
+  "table": [
+    {
+      "name": "a file source's table is checked too",
+      "format": "xml",
+      "fields": [
+        {
+          "name": "number",
+          "kind": "text"
+        },
+        {
+          "name": "quantity",
+          "kind": "integer"
+        }
+      ],
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer></order><order number=\"A-2\"><placed>2026-02-01</placed><quantity>1</quantity><customer><name>Bo</name></customer><lines><line product=\"tea\" count=\"3\"/><line product=\"cake\"/></lines><paid>true</paid><shipped>2026-02-02T10:00:00Z</shipped></order></shop>",
+      "table": {
+        "columns": [
+          "number",
+          "quantity"
+        ],
+        "rows": [
+          [
+            "A-1",
+            2
+          ],
+          [
+            "A-2",
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "name": "a file source stops at what breaks the schema",
+      "format": "xml",
+      "fields": [
+        {
+          "name": "number",
+          "kind": "text"
+        },
+        {
+          "name": "quantity",
+          "kind": "integer"
+        }
+      ],
+      "options": {
+        "at": "shop/order",
+        "check": "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"shop\"><xs:complexType><xs:sequence><xs:element name=\"order\" maxOccurs=\"unbounded\"><xs:complexType><xs:sequence><xs:element name=\"placed\" type=\"xs:date\"/><xs:element name=\"quantity\" type=\"xs:int\"/><xs:element name=\"total\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:decimal\"><xs:totalDigits value=\"6\"/><xs:fractionDigits value=\"2\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"note\" minOccurs=\"0\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:maxLength value=\"10\"/></xs:restriction></xs:simpleType></xs:element><xs:element name=\"customer\"><xs:complexType><xs:sequence><xs:element name=\"name\" type=\"xs:string\"/></xs:sequence></xs:complexType></xs:element><xs:element name=\"lines\" minOccurs=\"0\"><xs:complexType><xs:sequence><xs:element name=\"line\" maxOccurs=\"unbounded\"><xs:complexType><xs:attribute name=\"product\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"count\" type=\"xs:int\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name=\"paid\" type=\"xs:boolean\" minOccurs=\"0\"/><xs:element name=\"shipped\" type=\"xs:dateTime\" minOccurs=\"0\"/></xs:sequence><xs:attribute name=\"number\" type=\"xs:string\" use=\"required\"/><xs:attribute name=\"status\" type=\"Status\"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:simpleType name=\"Status\"><xs:restriction base=\"xs:string\"><xs:enumeration value=\"open\"/><xs:enumeration value=\"shipped\"/></xs:restriction></xs:simpleType></xs:schema>"
+      },
+      "input": "<shop><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>2</quantity><total>12.50</total><customer><name>Ada</name></customer></order><order number=\"A-1\" status=\"open\"><placed>2026-01-31</placed><quantity>two</quantity><total>12.50</total><customer><name>Ada</name></customer></order></shop>",
+      "error": "shop/order[2]: 'quantity' is \"two\", which the schema says is an integer"
+    }
+  ]
+}

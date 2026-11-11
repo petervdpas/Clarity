@@ -38,6 +38,7 @@ func TestFormatsReadDecodeAndWriteAsEveryStackDoes(t *testing.T) {
 	var file struct {
 		Cases []struct {
 			Name    string          `json:"name"`
+			Format  string          `json:"format"`
 			Kind    json.RawMessage `json:"kind"`
 			Options json.RawMessage `json:"options"`
 			Input   string          `json:"input"`
@@ -52,18 +53,22 @@ func TestFormatsReadDecodeAndWriteAsEveryStackDoes(t *testing.T) {
 	for _, c := range file.Cases {
 		kind := string(c.Kind)
 		options := string(c.Options)
+		format := c.Format
+		if format == "" {
+			format = "json"
+		}
 		var written string
 		var err error
 		var probe struct{ Kind string `json:"kind"` }
 		_ = json.Unmarshal(c.Kind, &probe)
 		if probe.Kind == "records" {
 			var orders []formatsOrder
-			orders, err = ReadFormat[[]formatsOrder](reader, "json", c.Input, options, kind)
-			written = WriteFormat(writer, "json", orders, "", kind)
+			orders, err = ReadFormat[[]formatsOrder](reader, format, c.Input, options, kind)
+			written = WriteFormat(writer, format, orders, options, kind)
 		} else {
 			var order formatsOrder
-			order, err = ReadFormat[formatsOrder](reader, "json", c.Input, options, kind)
-			written = WriteFormat(writer, "json", order, "", kind)
+			order, err = ReadFormat[formatsOrder](reader, format, c.Input, options, kind)
+			written = WriteFormat(writer, format, order, options, kind)
 		}
 		switch {
 		case c.Written != nil:

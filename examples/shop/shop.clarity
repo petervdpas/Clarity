@@ -4,6 +4,7 @@ use customers
 use sales
 use counter
 use suppliers
+use prices
 
 // How the shop looks. The project file names it with: theme Shop
 theme Shop

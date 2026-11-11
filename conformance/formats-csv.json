@@ -1,0 +1,682 @@
+{
+  "about": "CSV through Clarity.Formats (docs/FORMATS-PLAN.md, step 2): `read list<Item> from csv text` and `csv of items`. RFC 4180: fields separated by a comma (option `separator`, `\\\\t` for a tab), quoted with `\"` (option `quote`) where they hold a separator, a quote or a line break, a quote inside doubled; CRLF or LF; a UTF-8 byte order mark dropped (option `encoding`: utf-8, windows-1252, iso-8859-1). The first row names the columns, matched as JSON's names are, unless `noHeader`, which fills the fields in the entity's order. An empty field is left out, so the record keeps its default. A list of values travels as its JSON text. Values are fitted as JSON's are. Writing gives a header row of the entity's fields that are one value (not the id, references, pictures, files or records inside) unless `noHeader`, then a row per record in Clarity's one form, quoted where needed, lines ended by CRLF. `read` cases give `fitted` or `error`, `write` cases `written`, word for word.",
+  "read": [
+    {
+      "name": "a header row names the columns, matched as JSON's names are; quotes, doubled quotes, line breaks, CRLF and a byte order mark",
+      "kind": {
+        "kind": "records",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          },
+          {
+            "name": "price",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      },
+      "input": "﻿Code,COUNT,Price,Extra\r\n\"A,1\",3,12.50,x\r\n\"say \"\"hi\"\"\",\"7\",1000,y\r\n\"two\nlines\",0,0,z\r\n",
+      "fitted": [
+        {
+          "id": 0,
+          "code": "A,1",
+          "count": 3,
+          "price": "12.50",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        },
+        {
+          "id": 0,
+          "code": "say \"hi\"",
+          "count": 7,
+          "price": "1000",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        },
+        {
+          "id": 0,
+          "code": "two\nlines",
+          "count": 0,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      ]
+    },
+    {
+      "name": "an empty field keeps the default, an empty last field too, and a list of values comes as its JSON text",
+      "kind": {
+        "kind": "records",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          },
+          {
+            "name": "price",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      },
+      "input": "code,count,price,paid,tags\nA,,,true,\"[\"\"x\"\",\"\"y\"\"]\"\nB,2,5,,\n",
+      "fitted": [
+        {
+          "id": 0,
+          "code": "A",
+          "count": 0,
+          "price": "0",
+          "paid": true,
+          "tags": [
+            "x",
+            "y"
+          ],
+          "owner": null
+        },
+        {
+          "id": 0,
+          "code": "B",
+          "count": 2,
+          "price": "5",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      ]
+    },
+    {
+      "name": "without a header the fields fill in the order the entity declares them",
+      "kind": {
+        "kind": "records",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          },
+          {
+            "name": "price",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "noHeader": true
+      },
+      "input": "A,1,2.5\nB,2,3\n",
+      "fitted": [
+        {
+          "id": 0,
+          "code": "A",
+          "count": 1,
+          "price": "2.5",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        },
+        {
+          "id": 0,
+          "code": "B",
+          "count": 2,
+          "price": "3",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      ]
+    },
+    {
+      "name": "another separator and quote",
+      "kind": {
+        "kind": "records",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          },
+          {
+            "name": "price",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "separator": ";",
+        "quote": "'"
+      },
+      "input": "code;count\n'A;1';4\n",
+      "fitted": [
+        {
+          "id": 0,
+          "code": "A;1",
+          "count": 4,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      ]
+    },
+    {
+      "name": "a tab as the separator",
+      "kind": {
+        "kind": "records",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          },
+          {
+            "name": "price",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "separator": "\\t"
+      },
+      "input": "code\tcount\nA\t9\n",
+      "fitted": [
+        {
+          "id": 0,
+          "code": "A",
+          "count": 9,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      ]
+    },
+    {
+      "name": "one record is the one row there is",
+      "kind": {
+        "kind": "record",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          },
+          {
+            "name": "price",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      },
+      "input": "code,count\nA,1\n",
+      "fitted": {
+        "id": 0,
+        "code": "A",
+        "count": 1,
+        "price": "0",
+        "paid": false,
+        "tags": [],
+        "owner": null
+      }
+    },
+    {
+      "name": "two rows are no one record",
+      "kind": {
+        "kind": "record",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          },
+          {
+            "name": "price",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      },
+      "input": "code\nA\nB\n",
+      "error": "the CSV is not one Item"
+    },
+    {
+      "name": "a quote that is not closed is no CSV",
+      "kind": {
+        "kind": "records",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          },
+          {
+            "name": "price",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      },
+      "input": "code\n\"A\n",
+      "error": "the text is no CSV"
+    },
+    {
+      "name": "a value that does not fit says the row, counting from the first record",
+      "kind": {
+        "kind": "records",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          },
+          {
+            "name": "price",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      },
+      "input": "code,count\nA,1\nB,x\n",
+      "error": "item 2: field 'count' of Item is an integer, not \"x\""
+    }
+  ],
+  "write": [
+    {
+      "name": "a header row of the fields in the entity's order, quoted where needed, lines ended by CRLF",
+      "kind": {
+        "kind": "records",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          },
+          {
+            "name": "price",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      },
+      "value": "[{\"id\":4,\"code\":\"A,1\",\"count\":3,\"price\":\"12.50\",\"paid\":true,\"tags\":[\"x\"],\"owner\":2},{\"id\":5,\"code\":\"say \\\"hi\\\"\",\"count\":0,\"price\":\"0\",\"paid\":false,\"tags\":[],\"owner\":null}]",
+      "written": "code,count,price,paid,tags\r\n\"A,1\",3,12.5,true,\"[\"\"x\"\"]\"\r\n\"say \"\"hi\"\"\",0,0,false,[]\r\n"
+    },
+    {
+      "name": "without a header, with another separator",
+      "kind": {
+        "kind": "records",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          },
+          {
+            "name": "price",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      },
+      "options": {
+        "noHeader": true,
+        "separator": ";"
+      },
+      "value": "[{\"id\":1,\"code\":\"A;B\",\"count\":1,\"price\":\"2\",\"paid\":false,\"tags\":[],\"owner\":null}]",
+      "written": "\"A;B\";1;2;false;[]\r\n"
+    },
+    {
+      "name": "one record is one row",
+      "kind": {
+        "kind": "record",
+        "entity": "Item",
+        "fields": [
+          {
+            "name": "code",
+            "kind": "text"
+          },
+          {
+            "name": "count",
+            "kind": "integer"
+          },
+          {
+            "name": "price",
+            "kind": "decimal"
+          },
+          {
+            "name": "paid",
+            "kind": "bool"
+          },
+          {
+            "name": "tags",
+            "kind": "values",
+            "item": {
+              "kind": "text"
+            }
+          },
+          {
+            "name": "owner",
+            "kind": "other"
+          }
+        ],
+        "base": {
+          "id": 0,
+          "code": "",
+          "count": 0,
+          "price": "0",
+          "paid": false,
+          "tags": [],
+          "owner": null
+        }
+      },
+      "value": "{\"id\":1,\"code\":\"A\",\"count\":1,\"price\":\"2\",\"paid\":false,\"tags\":[],\"owner\":null}",
+      "written": "code,count,price,paid,tags\r\nA,1,2,false,[]\r\n"
+    }
+  ]
+}

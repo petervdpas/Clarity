@@ -117,18 +117,18 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let program = crate::commands::program_name(settings);
     let types = check::types(&project.files);
     let engines = !crate::engines(project).is_empty();
-    let cmake = cmake_lists(&program, &space, engines, project.calls_out(), !project.secret_settings().is_empty()) + &crate::c::formats_cmake_lines(project, &space);
+    let cmake = cmake_lists(&program, &space, engines, project.calls_out(), !project.secret_settings().is_empty()) + &crate::c::formats_cmake_lines(project, settings, &space);
     let mut files = vec![text("CMakeLists.txt", cmake), text("CMakePresets.json", PRESETS.to_string())];
     // The runtime without the service and the desktop: no window.
     let engine_files = ENGINE_FILES.iter().chain(&crate::c::WASM3_FILES).filter(|_| engines);
     let http_files = super::HTTP_FILES.iter().filter(|_| project.calls_out());
     let secret_files = super::SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
-    let formats_files = super::FORMATS_FILES.iter().filter(|_| project.uses_formats());
+    let formats_files = super::FORMATS_FILES.iter().filter(|_| crate::carries_formats(project, settings));
     for (path, body) in RUNTIME_FILES.iter().chain(engine_files).chain(http_files).chain(formats_files).chain(secret_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
     let (records_h, records_cpp) = model::emit(project);
-    files.push(text("src/records.hpp", namespaced(&space, &format!("#pragma once\n\n#include <optional>\n#include <string>\n#include <vector>\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/db.hpp\"\n#include \"clarity/sql.hpp\"\n{}{}", if project.calls_out() { "#include \"http/http.hpp\"\n" } else { "" }, if project.uses_formats() { "#include \"formats/formats.hpp\"\n" } else { "" }), &records_h)));
+    files.push(text("src/records.hpp", namespaced(&space, &format!("#pragma once\n\n#include <optional>\n#include <string>\n#include <vector>\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/db.hpp\"\n#include \"clarity/sql.hpp\"\n{}{}", if project.calls_out() { "#include \"http/http.hpp\"\n" } else { "" }, if crate::carries_formats(project, settings) { "#include \"formats/formats.hpp\"\n#include \"formats/file_source.hpp\"\n" } else { "" }), &records_h)));
     files.push(text("src/records.cpp", namespaced(&space, "#include \"records.hpp\"\n", &records_cpp)));
 
     let mut errors = Vec::new();
@@ -206,6 +206,7 @@ fn main_cpp(project: &Project, settings: &Settings, space: &str, databases: &[(S
     let folder_stores: String = crate::folder_stores(project, settings)
         .iter()
         .map(|(name, setting, default)| format!("        db.add_store_setting({}, {}, {}, {});\n", string(name), string(&program_name), string(setting), string(default)))
+        .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("        db.add_file(clarity::FileSource{{{}, {}, {}, {}, {}, {}, {}, {}}});\n", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)))
         .collect();
     let languages: Vec<String> = project.translations.keys().map(|l| string(l)).collect();
     let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());

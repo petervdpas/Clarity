@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window class="prices.PriceList" title="@priceListTitle" onopen="loadPrices">
+  <Content name="main" at="1,1" span="12" rows="12">
+    <View name="PriceListView" />
+  </Content>
+</Window>

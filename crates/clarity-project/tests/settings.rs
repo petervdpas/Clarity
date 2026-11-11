@@ -30,6 +30,7 @@ fn source(name: &str, kind: SourceKind, url: &str) -> DataSource {
         picks: Vec::new(),
         pick_schemas: Vec::new(),
         paging: None,
+        file: None,
     }
 }
 
@@ -950,4 +951,73 @@ fn a_database_beside_the_project_stays_there() {
     let built = clarity_project::build_settings(&dir, &settings);
     assert_eq!(std::path::Path::new(&built.datasources[0].url), dir.join("data/writer.db"));
     assert_eq!(None, clarity_project::data_folder(&dir, &settings));
+}
+
+/// A data source that is a file in a format of the catalog (docs/FORMATS-PLAN.md):
+/// its kind is the format's name, its options indented lines under it.
+#[test]
+fn a_data_source_is_a_file_in_a_format() {
+    use clarity_project::{FileFormat, SourceOption};
+    let text = "project Erasure\n    stack rust desktop\n    datasource main sqlite \"data/erasure.db\"\n    datasource logins csv \"imports/logins.csv\" external readonly\n        separator \";\"\n        noHeader true\n";
+    let settings = parse(text).unwrap();
+    let logins = &settings.datasources[1];
+    assert_eq!(logins.kind, SourceKind::File);
+    assert!(logins.external && logins.readonly);
+    assert_eq!(
+        logins.file,
+        Some(FileFormat { format: "csv".into(), options: vec![SourceOption { name: "separator".into(), value: ";".into() }, SourceOption { name: "noHeader".into(), value: "true".into() }], mapping: None })
+    );
+    assert!(validate(&settings).is_empty(), "{:?}", validate(&settings));
+    assert_eq!(write(Some(text), &settings).unwrap(), text);
+    assert!(write(None, &settings).unwrap().ends_with("    datasource logins csv \"imports/logins.csv\" external readonly\n        separator \";\"\n        noHeader true\n"));
+    for (file, problem) in [
+        ("    datasource logins csv \"a.csv\"\n", "line 3: a data source that is a file is external, since Clarity does not own its shape: write it like: datasource logins csv \"a.csv\" external"),
+        ("    datasource logins csv \"a.csv\" external\n        noHeader \"yes\"\n", "line 4: write the option and true or false, like: noHeader true"),
+        ("    datasource logins csv \"a.csv\" external\n        at \"data\"\n", "line 4: unexpected indented line"),
+    ] {
+        assert_eq!(parse(&format!("project Erasure\n    stack rust desktop\n{file}")).unwrap_err(), problem);
+    }
+}
+
+/// A file source laid over by a mapping (docs/FORMATS-PLAN.md, step 4): its
+/// kind is `file`, and the mapping says the format and the options.
+#[test]
+fn a_file_source_names_its_mapping() {
+    use clarity_project::FileFormat;
+    let text = "project Shop\n    stack rust desktop\n    datasource main sqlite \"data/shop.db\"\n    datasource feed file \"imports/orders.xml\" external readonly using OrderFeed\n";
+    let settings = parse(text).unwrap();
+    let feed = &settings.datasources[1];
+    assert_eq!(feed.kind, SourceKind::File);
+    assert!(feed.external && feed.readonly);
+    assert_eq!(feed.file, Some(FileFormat { format: String::new(), options: Vec::new(), mapping: Some("OrderFeed".into()) }));
+    assert!(validate(&settings).is_empty(), "{:?}", validate(&settings));
+    assert_eq!(write(Some(text), &settings).unwrap(), text);
+    assert!(write(None, &settings).unwrap().ends_with("    datasource feed file \"imports/orders.xml\" external readonly using OrderFeed\n"));
+    assert_eq!(clarity_project::source_refs(&settings)[1].mapping.as_deref(), Some("OrderFeed"));
+    for (file, problem) in [
+        ("    datasource feed file \"a.xml\" external\n", "line 3: a data source of kind file names the mapping that says its format: write it like: datasource feed file \"a.xml\" external using OrderFeed"),
+        ("    datasource feed file \"a.xml\" using OrderFeed\n", "line 3: a data source that is a file is external, since Clarity does not own its shape: write it like: datasource feed file \"a.xml\" external using OrderFeed"),
+        ("    datasource feed xml \"a.xml\" external using OrderFeed\n", "line 3: a file laid over by a mapping is of kind file, since the mapping says its format: write it like: datasource feed file \"a.xml\" external using OrderFeed"),
+        ("    datasource feed file \"a.xml\" external using\n", "line 3: write the mapping after 'using', like: datasource feed file \"a.xml\" external using OrderFeed"),
+        ("    datasource feed file \"a.xml\" external using OrderFeed\n        indent true\n", "line 4: unexpected indented line"),
+    ] {
+        assert_eq!(parse(&format!("project Shop\n    stack rust desktop\n{file}")).unwrap_err(), problem);
+    }
+}
+
+/// Settings offers every format of the catalog for a file source, each
+/// option with a label and help: none is left without.
+#[test]
+fn settings_offers_every_format_with_labelled_options() {
+    let formats = clarity_project::catalog().formats;
+    let names: Vec<&str> = formats.iter().map(|f| f.name).collect();
+    assert_eq!(names, clarity_formats::catalog().iter().map(|f| f.name).collect::<Vec<_>>());
+    for format in &formats {
+        for option in &format.options {
+            assert!(option.label != option.name && !option.help.is_empty(), "{}: option {} has no label or help", format.name, option.name);
+        }
+    }
+    let csv = formats.iter().find(|f| f.name == "csv").unwrap();
+    assert_eq!(csv.label, "CSV file");
+    assert!(csv.options.iter().any(|o| o.name == "noHeader" && o.flag));
 }

@@ -42,7 +42,14 @@ pub fn snake(name: &str) -> String {
 /// Text as a C++ string literal.
 pub fn string(text: &str) -> String {
     let mut out = String::from("\"");
+    let mut piece = out.len();
     for c in text.chars() {
+        // A long text (a schema a mapping checks against) in pieces the
+        // compiler joins: MSVC takes at most 16380 bytes in one literal.
+        if out.len() - piece > 4000 {
+            out.push_str("\" \"");
+            piece = out.len();
+        }
         match c {
             '"' => out.push_str("\\\""),
             '\\' => out.push_str("\\\\"),

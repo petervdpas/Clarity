@@ -144,18 +144,18 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let program = crate::commands::program_name(settings);
     let types = check::types(&project.files);
     let engines = !crate::engines(project).is_empty();
-    let cmake = cmake_lists(&program, engines, project.calls_out(), !project.secret_settings().is_empty()) + &super::formats_cmake_lines(project, &snake(&program));
+    let cmake = cmake_lists(&program, engines, project.calls_out(), !project.secret_settings().is_empty()) + &super::formats_cmake_lines(project, settings, &snake(&program));
     let mut files = vec![text("CMakeLists.txt", cmake), text("CMakePresets.json", PRESETS.to_string())];
     // The runtime without the desktop layer: no window.
     let engine_files = ENGINE_FILES.iter().chain(&WASM3_FILES).filter(|_| engines);
     let http_files = super::HTTP_FILES.iter().filter(|_| project.calls_out());
     let secret_files = super::SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
-    let formats_files = super::FORMATS_FILES.iter().filter(|_| project.uses_formats());
+    let formats_files = super::FORMATS_FILES.iter().filter(|_| crate::carries_formats(project, settings));
     for (path, body) in RUNTIME_FILES.iter().chain(engine_files).chain(http_files).chain(formats_files).chain(secret_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
     let (records_h, records_c) = model::emit(project);
-    files.push(text("src/records.h", format!("{HEADER}\n#pragma once\n\n#include <stddef.h>\n\n#include \"clarity/code.h\"\n#include \"clarity/list_fields.h\"\n{}{}\n{}", if project.calls_out() { "#include \"http/http.h\"\n" } else { "" }, if project.uses_formats() { "#include \"formats/formats.h\"\n" } else { "" }, records_h.trim_end().to_string() + "\n")));
+    files.push(text("src/records.h", format!("{HEADER}\n#pragma once\n\n#include <stddef.h>\n\n#include \"clarity/code.h\"\n#include \"clarity/list_fields.h\"\n{}{}\n{}", if project.calls_out() { "#include \"http/http.h\"\n" } else { "" }, if crate::carries_formats(project, settings) { "#include \"formats/formats.h\"\n#include \"formats/file_source.h\"\n" } else { "" }, records_h.trim_end().to_string() + "\n")));
     files.push(text("src/records.c", format!("{HEADER}\n#include <stdlib.h>\n#include <string.h>\n\n#include \"app.h\"\n\n{}", records_c.trim_end().to_string() + "\n")));
 
     let mut errors = Vec::new();
@@ -238,6 +238,10 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
     let program_name = crate::settings_program(settings);
     stores.extend(crate::folder_stores(project, settings).iter().map(|(name, setting, default)| {
         format!("    if (!clarity_add_store_setting(db, {}, {}, {}, {})) return failed(db);", string(name), string(&program_name), string(setting), string(default))
+    }));
+    // A data source that is a file, opened from it after the databases.
+    stores.extend(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| {
+        format!("    if (!clarity_db_add_file(db, &(ClarityFileSource){{.name = {}, .format = {}, .path = {}, .options = {}, .table = {}, .key = {}, .fields = {}, .readonly = {}}})) return failed(db);", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)
     }));
     let languages: Vec<String> = project.translations.keys().map(|l| string(l)).collect();
     let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());

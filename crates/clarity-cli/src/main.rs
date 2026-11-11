@@ -72,8 +72,8 @@ enum Command {
         /// The external data source, as the project file names it.
         source: String,
     },
-    /// Import tables of an external SQLite data source as a module of
-    /// entities mapped onto them.
+    /// Import tables of an external SQLite data source, or the tables of a
+    /// data source that is a file (CSV, JSON, XML), as a module of entities mapped onto them.
     Import {
         /// The project file, like shop.clarity.
         project: PathBuf,
@@ -88,6 +88,9 @@ enum Command {
         /// Only list the tables.
         #[arg(long)]
         list: bool,
+        /// An XSD schema of an XML file source, for typed entities.
+        #[arg(long)]
+        schema: Option<PathBuf>,
     },
     /// Back up the project's SQLite databases, list the backups, and restore one (docs/BACKUP-PLAN.md).
     Data {
@@ -227,7 +230,8 @@ fn main() -> ExitCode {
             module,
             tables,
             list,
-        } => import(&project, &source, module, tables, list),
+            schema,
+        } => import(&project, &source, module, tables, list, schema),
         Command::Own { project, source } => own(&project, &source),
         Command::Data { command } => data(command),
         Command::Libraries => {
@@ -623,9 +627,11 @@ fn migrate(project_file: &std::path::Path, check: bool, title: Option<String>, n
     ExitCode::SUCCESS
 }
 
-fn import(project_file: &std::path::Path, source: &str, module: Option<String>, tables: Vec<String>, list: bool) -> ExitCode {
+fn import(project_file: &std::path::Path, source: &str, module: Option<String>, tables: Vec<String>, list: bool, schema: Option<PathBuf>) -> ExitCode {
     let dir = clarity_project::module_dir(project_file);
-    let available = match clarity_project::source_tables(&dir, source) {
+    // A schema named on the command line is found from where it runs.
+    let schema = schema.map(|s| std::path::absolute(&s).unwrap_or(s));
+    let available = match clarity_project::source_tables(&dir, source, schema.as_deref()) {
         Ok(tables) => tables,
         Err(err) => {
             eprintln!("clarity: {err}");
@@ -647,9 +653,12 @@ fn import(project_file: &std::path::Path, source: &str, module: Option<String>, 
         tables
     };
     let module = module.unwrap_or_else(|| source.to_string());
-    match clarity_project::import_tables(&dir, source, &module, &tables) {
+    match clarity_project::import_tables(&dir, source, &module, &tables, schema.as_deref()) {
         Ok(done) => {
             eprintln!("Wrote {}", done.path.display());
+            if let Some((file, _, _)) = &done.project_file {
+                eprintln!("Set the at of {source} in {}", file.display());
+            }
             for (table, reason) in &done.skipped {
                 eprintln!("  {table} is left out: {reason}");
             }

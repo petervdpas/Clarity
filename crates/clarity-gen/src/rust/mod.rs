@@ -83,6 +83,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let (databases, owned) = crate::databases(project, settings)?;
     let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
     let mut features: Vec<&str> = databases.iter().map(|(_, sql, _)| sql.feature()).collect();
+    // A data source that is a file: an in-memory SQLite table filled through Clarity.Formats.
+    if !crate::file_sources(project, settings)?.is_empty() {
+        features.extend(["sqlite", "formats"]);
+    }
     if !crate::engines(project).is_empty() {
         features.push("engines");
     }
@@ -119,7 +123,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         features.push("pictures");
     }
     // The data formats of code (docs/FORMATS-PLAN.md): Clarity.Formats.
-    if project.uses_formats() {
+    if crate::carries_formats(project, settings) {
         features.push("formats");
     }
     // Secret settings (DESIGN 5.27): the system's protected store.
@@ -1032,6 +1036,7 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     let folder_stores: String = crate::folder_stores(project, settings)
         .iter()
         .map(|(name, setting, default)| format!("    db.add_store_setting({name:?}, {program_name:?}, {setting:?}, {default:?})?;\n"))
+        .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("    db.add_file({})?;\n", file_source(f))))
         .collect();
     let pictures: String = crate::picture_fields(project)
         .iter()
@@ -1365,6 +1370,14 @@ pub fn migration_sql(project: &Project, source: &str, kind: clarity_project::Sou
 }
 
 /// SQL as a Rust string literal that needs no escapes.
+/// A data source that is a file, as the runtime takes it.
+pub(crate) fn file_source(f: &crate::FileSource) -> String {
+    format!(
+        "clarity_runtime::FileSource {{ name: {:?}, format: {:?}, path: {:?}, options: {}, table: {:?}, key: {:?}, fields: {}, readonly: {} }}",
+        f.name, f.format, f.path, raw(&f.options), f.table, f.key, raw(&f.fields), f.readonly
+    )
+}
+
 fn raw(text: &str) -> String {
     let mut hashes = "#".to_string();
     while text.contains(&format!("\"{hashes}")) {

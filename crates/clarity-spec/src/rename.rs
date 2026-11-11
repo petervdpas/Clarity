@@ -309,15 +309,15 @@ fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
                 expr(e, name, found);
             }
         }
-        ExprKind::FormatOf { value, options, .. } => {
+        ExprKind::FormatOf { value, mapping } => {
             expr(value, name, found);
-            for option in options {
+            for option in mapping.options() {
                 expr(&option.value, name, found);
             }
         }
-        ExprKind::ReadFormat { input, options, .. } => {
+        ExprKind::ReadFormat { input, mapping, .. } => {
             expr(input, name, found);
-            for option in options {
+            for option in mapping.options() {
                 expr(&option.value, name, found);
             }
         }

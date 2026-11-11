@@ -25,6 +25,7 @@
     onnewview = null,
     onnewapp = null,
     onnewdata = null,
+    onnewmapping = null,
     onnewtheme = null,
     onnewengine = null,
     onnewlanguage = null,
@@ -48,6 +49,8 @@
     onnewapp?: (() => void) | null;
     /** Starts a new entity or enum. */
     onnewdata?: ((kind: "entity" | "enum") => void) | null;
+    /** Asks for a new mapping: its entity, format and name; null where the tree only shows. */
+    onnewmapping?: (() => void) | null;
     onnewtheme?: (() => void) | null;
     /** Starts a new engine; null where the tree only shows. */
     onnewengine?: (() => void) | null;
@@ -61,7 +64,7 @@
     apis?: DataSource[];
     /** Asks for a new web API; null where the tree only shows. */
     onnewapi?: (() => void) | null;
-    /** A right click on a window, entity, enum, theme or engine; null where the tree only shows. */
+    /** A right click on a window, entity, enum, theme, engine or mapping; null where the tree only shows. */
     onmenu?: ((e: MouseEvent, item: Selected) => void) | null;
   } = $props();
 
@@ -88,6 +91,8 @@
   const views = $derived(files.flatMap((f) => f.pages.filter((page) => page.kind === "view" || page.kind === "toolbox").map((page) => ({ page, module: f.module?.name ?? "" }))));
   const entities = $derived(files.flatMap((f) => f.entities.filter((e) => !e.settings).map((entity) => ({ entity, module: f.module?.name ?? "" }))));
   const enums = $derived(files.flatMap((f) => f.enums.map((decl) => ({ decl, module: f.module?.name ?? "" }))));
+  /** How files are laid over entities, per case (docs/FORMATS-PLAN.md, step 4), with their modules. */
+  const mappings = $derived(files.flatMap((f) => f.mappings.map((decl) => ({ decl, module: f.module?.name ?? "" }))));
   const themes = $derived(files.flatMap((f) => f.themes.map((theme) => ({ theme, module: f.module?.name ?? "" }))));
   const engines = $derived(projectEngines(preview.project));
   // The outside libraries code calls (DESIGN 5.21), with their modules.
@@ -209,6 +214,22 @@
       {#if onnewdata}
         <button class="row add" onclick={() => onnewdata("entity")}>+ New entity</button>
         <button class="row add" onclick={() => onnewdata("enum")}>+ New enum</button>
+      {/if}
+    </details>
+
+    <!-- How a kind of file is laid over an entity, per case: read by code and by file data sources. -->
+    <details open={mappings.length > 0}>
+      <summary>Mappings <span class="count">{mappings.length}</span></summary>
+      {#each mappings as { decl, module } (decl.name.name)}
+        <button class="row" class:current={is("mapping", decl.name.name)} title="in module {module}" onclick={() => onselect({ kind: "mapping", name: decl.name.name })} oncontextmenu={(e) => menu(e, { kind: "mapping", name: decl.name.name })}>
+          {decl.name.name}
+          <span class="note">{decl.entity.name} from {decl.format.name}</span>
+        </button>
+      {:else}
+        <p class="empty">No mappings yet: how a file is laid over an entity, where its records and each field are.</p>
+      {/each}
+      {#if onnewmapping}
+        <button class="row add" onclick={onnewmapping}>+ New mapping</button>
       {/if}
     </details>
 

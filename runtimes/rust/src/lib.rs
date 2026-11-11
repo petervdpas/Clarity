@@ -23,6 +23,10 @@ pub mod http;
 pub mod i18n;
 #[cfg(feature = "formats")]
 pub mod formats;
+#[cfg(all(feature = "formats", feature = "sqlite"))]
+mod file_source;
+#[cfg(all(feature = "formats", feature = "sqlite"))]
+pub use file_source::FileSource;
 pub mod keys;
 pub mod list_fields;
 pub mod markdown;
@@ -484,6 +488,19 @@ impl Db {
             .map(|(name, dialect, at)| Ok(Source::new(name, store::open(*dialect, at)?)))
             .collect::<Result<Vec<_>>>()?;
         Ok(Db { sources, stores: Vec::new(), history: RefCell::default() })
+    }
+
+    /// Adds the data source that is a file in a format (`datasource logins
+    /// csv "imports/logins.csv" external`): its file, found as a SQLite
+    /// file's location is, read into a table its entity finds, saves and
+    /// deletes in; each change kept is written back to the file.
+    #[cfg(all(feature = "formats", feature = "sqlite"))]
+    pub fn add_file(&mut self, source: FileSource) -> Result<()> {
+        let at = store::location(&crate::data_folder::sqlite_here(source.path))?;
+        let driver = file_source::FileDriver::open(&source, std::path::Path::new(&at))?;
+        self.sources.retain(|s| s.name != source.name);
+        self.sources.push(Source::new(source.name, Box::new(driver)));
+        Ok(())
     }
 
     /// Adds the file store `name` at `location`, a folder (made when it is

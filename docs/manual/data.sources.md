@@ -20,7 +20,37 @@ You can also add, change, reorder and remove sources in the **Data sources** sec
 - `mysql`: a URL, such as `mysql://shop@db.example.com:3306/shop`.
 - `mssql`: an ADO.NET connection string, such as `server=tcp:db.example.com,1433;database=shop;user=shop`.
 
-The same entities and steps work on all four; the program writes each step in that database's own SQL. The C and C++ stacks support SQLite only for now. A `rest` source is a web API: its entities live in the service, and its module's actions read and send them; see [Calling web APIs](code.web-apis.md).
+The same entities and steps work on all four; the program writes each step in that database's own SQL. The C and C++ stacks support SQLite only for now. A `rest` source is a web API: its entities live in the service, and its module's actions read and send them; see [Calling web APIs](code.web-apis.md). A source can also be a file in a format, `csv`, `json`, `xml` or `yaml`; see [A file as a data source](#a-file-as-a-data-source).
+
+## A file as a data source
+
+A CSV, JSON or XML file can hold an entity's records, so a table part over it is a CSV editor with no code:
+
+```clarity
+datasource logins csv "imports/logins.csv" external readonly
+    separator ";"
+```
+
+- The kind is the format's name. The path follows SQLite's rules: relative to the project's folder, `"env:NAME"` or `"setting:name"`.
+- A file source is always `external`: Clarity reads and writes its records but never changes its shape. Add `readonly` when it may only be read.
+- The format's options are indented lines under it. CSV: `separator ";"` (any one character, `"\t"` for a tab), `quote "'"`, `noHeader true` (the file has no header row; its columns are the entity's fields in order) and `encoding "windows-1252"` (or `"iso-8859-1"`; UTF-8 by default). JSON: `at "data.logins"`, where the list of records is inside the file. XML: `at "shop/orders/order"`, `namespace`, `indent true` and `encoding`; see [An XML file](#an-xml-file).
+- The file holds one entity's records. Its fields map onto the file's columns as on an external database's: by name, or with `column "Login URL"`. A column the entity wants that the file lacks stops the program when it opens, with a message that names it.
+- `find`, `save` and `delete` work as on a database. The program reads the whole file when it starts and writes it again after each change: to a new file that then replaces the old one, so a crash never leaves half a file. The file's own column order and the columns no field maps are kept.
+- When the file has no `id` column, a record's id is its row's place, which is never written into the file.
+- In Settings, pick **CSV file**, **JSON file**, **XML file** or **YAML file** as the kind; the format's options show under the location.
+- A file can instead be laid over its entity by a mapping of the project, which says the format, where the records and fields are, and the options: `datasource feed file "imports/orders.xml" external using OrderFeed`. The kind is then `file`, and the entity is the mapping's (its module says `source feed`); see [Mappings](code.formats.md#mappings).
+
+### An XML file
+
+```clarity
+datasource feed xml "imports/orders.xml" external
+    at "shop/orders/order"
+```
+
+- `at` names the record's element by its path, element names with slashes between: every `<order>` inside `<shop><orders>` is one record.
+- A field takes a child element of its name, else an attribute of its name. Where its value is somewhere else, `column` says where, relative to the record's element: `column "@number"` is the attribute only, `column "customer/name"` the text of an element inside, `column "."` the record element's own text.
+- Without a mapping the source is one flat table: an element inside a record that holds a record or a list is kept with the record, unmapped. A mapping with records inside (`lines of Line at "lines/line"` with `order is ".."`) makes the file hold both entities: `Line` lives in the same source (its module says `source feed` too), each line refers to the order it sits in by `order`, and a line saved or deleted is written back inside its order.
+- Saving keeps the whole document: everything outside the records stays as it was (the declaration, comments, other elements), and so do the attributes and elements inside a record that no field maps, in their place. A new record gets an element with its mapped fields; a deleted record's element goes, with what it held.
 
 ## Passwords stay out of the project
 
@@ -65,7 +95,7 @@ Without `table`, the table is the entity's name in snake case; without `key`, th
 
 ## Import
 
-**Import...** next to an external SQLite source opens the Import panel. It lists the tables; tick the ones you want, name the module and click the **Import** button below them. The tables become entities mapped onto them, in a new module. Foreign keys between imported tables become `ref` fields, `NOT NULL` becomes `required`, and binary columns are left out. From the command line:
+**Import...** next to an external SQLite source, or a file source, opens the Import panel. It lists the tables; tick the ones you want, name the module and click the **Import** button below them. The tables become entities mapped onto them, in a new module. Foreign keys between imported tables become `ref` fields, `NOT NULL` becomes `required`, and binary columns are left out. From the command line:
 
 ```shell
 clarity import shop.clarity erp --tables tblInvoice,tblCustomers
@@ -73,8 +103,16 @@ clarity import shop.clarity erp --tables tblInvoice,tblCustomers
 
 `--list` shows the tables, and `--module` names the module (the source's name by default).
 
+A file source has one table, named after the file: its columns become text fields. Types are not guessed from the values; change them in the entity editor.
+
+For an XML file source, Import lists the repeated elements found in the file by their path (`shop/orders/order`) and writes an entity with a text field per attribute and child element of the records ticked.
+
+Beside the entity, Import writes a mapping, `mapping OrderFeed of Order from xml`, with the `at` where the records are, a line for each field whose path is not its name (`note at "@note"`) and the source's format options, and lays the source over it: `datasource feed file "imports/orders.xml" external using OrderFeed`. The paths are then kept in one place, and changed on the mapping's page (**Mapping...** next to the source); see [Mappings](code.formats.md#mappings).
+
+Import also takes an XSD schema of the file. Its types become entities with their real types: `xs:int` and the other whole numbers an `integer`, `xs:decimal` a `decimal`, `xs:date` a `date`, `xs:dateTime` a `datetime`, `xs:boolean` a `bool`, an enumeration an `enum`, `maxLength` a text's size, `minOccurs="1"` `required`, a complex type inside another a record field and `maxOccurs="unbounded"` a list.
+
 ## Taking ownership
 
 **Own...** next to an external SQLite source, or `clarity own shop.clarity erp`, makes Clarity the owner. It writes the source's first step, a baseline that describes the tables as they are and changes nothing in that database, and removes `external`. From then on your entities drive the tables through ordinary steps, and the `table`, `key` and `column` names stay. Undo takes it back.
 
-Import, the table check and Own work for SQLite only for now. An external PostgreSQL, MySQL or SQL Server database can be mapped by hand.
+Import works for SQLite and file sources, the table check and Own for SQLite only for now. An external PostgreSQL, MySQL or SQL Server database can be mapped by hand.

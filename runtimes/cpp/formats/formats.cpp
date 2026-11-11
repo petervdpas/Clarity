@@ -29,7 +29,40 @@ std::string call(bool reading, const std::string& format, const std::string& inp
     return out;
 }
 
+/// The table calls came with interface 2; an older library has no such fields.
+void tables_known() {
+    if (api()->interface < 2) throw ValueError("this Clarity.Formats library is too old to read a file as a table");
+}
+
+/// What the library made, or a ValueError with its problem.
+std::string made(int32_t code, uint8_t* bytes, size_t length) {
+    if (code != CLARITY_FORMATS_OK) {
+        char why[1024] = {0};
+        api()->problem(why, sizeof why);
+        throw ValueError(why[0] ? why : "what was read does not fit");
+    }
+    std::string out(reinterpret_cast<const char*>(bytes), length);
+    api()->free(bytes, length);
+    return out;
+}
+
 }  // namespace
+
+std::string formats_read_table(const std::string& format, const std::string& input, const std::string& options, const std::string& fields) {
+    tables_known();
+    uint8_t* bytes = nullptr;
+    size_t length = 0;
+    int32_t code = api()->read_table(format.data(), format.size(), reinterpret_cast<const uint8_t*>(input.data()), input.size(), options.data(), options.size(), fields.data(), fields.size(), &bytes, &length);
+    return made(code, bytes, length);
+}
+
+std::string formats_write_table(const std::string& format, const std::string& original, const std::string& table, const std::string& options, const std::string& fields) {
+    tables_known();
+    uint8_t* bytes = nullptr;
+    size_t length = 0;
+    int32_t code = api()->write_table(format.data(), format.size(), reinterpret_cast<const uint8_t*>(original.data()), original.size(), table.data(), table.size(), options.data(), options.size(), fields.data(), fields.size(), &bytes, &length);
+    return made(code, bytes, length);
+}
 
 std::string formats_fitted(const std::string& format, const std::string& input, const std::string& options, const std::string& kind) {
     bool ok = false;

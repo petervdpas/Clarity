@@ -10,3 +10,13 @@ Clarity's generator adds this package to a program whose code reads or writes a 
 var orders = Clarity.Formats.FormatFunctions.Read<List<Order>>("json", reply.Text, "{\"at\":\"data\"}", kind);
 var body = Clarity.Formats.FormatFunctions.Write("json", order, "", kind);
 ```
+
+A data source that is a file in a format (`datasource logins csv "imports/logins.csv" external`) is
+read into one table of an in-memory SQLite database and written back after each change that is kept.
+The program turns SQLite on (package Clarity.Runtime.Sqlite) and adds the source after connecting:
+
+```csharp
+Sqlite.Use();
+var db = Db.Connect();
+db.AddFile(new FileSource("logins", "csv", "imports/logins.csv", "{\"separator\":\";\"}", "login", "id", fields, Readonly: false));
+```

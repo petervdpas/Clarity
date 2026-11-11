@@ -109,9 +109,11 @@ const RUNTIME_FILES: [(&str, &str); 72] = [
 
 /// The data formats of code on Clarity.Formats' library (docs/FORMATS-PLAN.md),
 /// carried only when the code reads or writes a format (clarity_use_formats links it).
-pub(crate) const FORMATS_FILES: [(&str, &str); 2] = [
+pub(crate) const FORMATS_FILES: [(&str, &str); 4] = [
     ("formats/formats.h", include_str!("../../../../runtimes/c/formats/formats.h")),
     ("formats/formats.c", include_str!("../../../../runtimes/c/formats/formats.c")),
+    ("formats/file_source.h", include_str!("../../../../runtimes/c/formats/file_source.h")),
+    ("formats/file_source.c", include_str!("../../../../runtimes/c/formats/file_source.c")),
 ];
 
 /// The picture functions on Clarity.Image's library (docs/IMAGE-PLAN.md),
@@ -248,7 +250,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     // Custom parts are kinds of part of Clarity.UI, built into the program (DESIGN 7.9): on the desktop only.
     let custom = if desktop { parts::parts(project) } else { Vec::new() };
     let mut files = vec![
-        text("CMakeLists.txt", cmake_lists(&program, &links, &carried) + &parts::cmake_lines(&program, &custom) + &crate::libraries::cmake_lines(project, &program) + &audio_cmake_lines(project, settings, &program) + &formats_cmake_lines(project, &program)),
+        text("CMakeLists.txt", cmake_lists(&program, &links, &carried) + &parts::cmake_lines(&program, &custom) + &crate::libraries::cmake_lines(project, &program) + &audio_cmake_lines(project, settings, &program) + &formats_cmake_lines(project, settings, &program)),
         text("CMakePresets.json", PRESETS.to_string()),
     ];
     if !custom.is_empty() {
@@ -259,7 +261,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let engine_files = ENGINE_FILES.iter().chain(&WASM3_FILES).filter(|_| engines || screen_engines).chain(SCREEN_FILES.iter().filter(|_| screen_engines));
     let http_files = HTTP_FILES.iter().filter(|_| project.calls_out());
     let picture_files = PICTURE_FILES.iter().filter(|_| crate::uses_picture_functions(project));
-    let formats_files = FORMATS_FILES.iter().filter(|_| project.uses_formats());
+    let formats_files = FORMATS_FILES.iter().filter(|_| crate::carries_formats(project, settings));
     let secret_files = SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
     let desktop_files = DESKTOP_FILES.iter().filter(|_| desktop);
     for (path, body) in RUNTIME_FILES.iter().chain(&SERVICE_FILES).chain(desktop_files).chain(engine_files).chain(http_files).chain(picture_files).chain(formats_files).chain(secret_files) {
@@ -273,7 +275,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let http_include = if project.calls_out() { "#include \"http/http.h\"\n" } else { "" };
     // The picture functions, for code that calls one (docs/IMAGE-PLAN.md).
     let pictures_include = if crate::uses_picture_functions(project) { "#include \"pictures/pictures.h\"\n" } else { "" };
-    let formats_include = if project.uses_formats() { "#include \"formats/formats.h\"\n" } else { "" };
+    let formats_include = if crate::carries_formats(project, settings) { "#include \"formats/formats.h\"\n#include \"formats/file_source.h\"\n" } else { "" };
     files.push(text("src/records.h", format!("{HEADER}\n#pragma once\n\n#include <stddef.h>\n\n#include \"clarity/code.h\"\n#include \"clarity/list_fields.h\"\n{http_include}{pictures_include}{formats_include}{library_includes}\n{}", records_h.trim_end().to_string() + "\n")));
     for library in crate::libraries::libraries(project) {
         let n = &library.name.name;
@@ -580,8 +582,8 @@ clarity_carry({program}{browser})
 /// The CMake lines that link Clarity.Formats when the code reads or writes a
 /// format (docs/FORMATS-PLAN.md), on any target; C's and C++'s. Its library lies
 /// in Clarity.UI's folder, which a build with no CLARITY_UI fetches by the version named here.
-pub(crate) fn formats_cmake_lines(project: &Project, target: &str) -> String {
-    if !project.uses_formats() {
+pub(crate) fn formats_cmake_lines(project: &Project, settings: &Settings, target: &str) -> String {
+    if !crate::carries_formats(project, settings) {
         return String::new();
     }
     format!("{}\n# The code reads and writes formats through Clarity.Formats, whose library lies beside Clarity.UI's.\nclarity_use_formats({target})\n", crate::clarity_ui::cmake_version_lines())
@@ -745,6 +747,10 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
     let program_name = crate::settings_program(settings);
     stores.extend(crate::folder_stores(project, settings).iter().map(|(name, setting, default)| {
         format!("    if (!clarity_add_store_setting(db, {}, {}, {}, {})) return closed(db);", string(name), string(&program_name), string(setting), string(default))
+    }));
+    // A data source that is a file, opened from it after the databases.
+    stores.extend(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| {
+        format!("    if (!clarity_db_add_file(db, &(ClarityFileSource){{.name = {}, .format = {}, .path = {}, .options = {}, .table = {}, .key = {}, .fields = {}, .readonly = {}}})) return closed(db);", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)
     }));
     let windows: Vec<&logic::Owner> = owners.iter().filter(|o| !o.is_app).collect();
     let apps: Vec<&logic::Owner> = owners.iter().filter(|o| o.is_app).collect();

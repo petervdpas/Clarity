@@ -1457,9 +1457,16 @@ impl<'a> Emitter<'a> {
 
     /// An expression as a value.
     /// A format's options as a Go expression of their JSON object (`""` for none).
-    fn format_options(&mut self, options: &[clarity_spec::code::FormatOption], pre: &mut String) -> String {
-        let given: Vec<(String, String)> = options.iter().map(|o| (o.name.name.clone(), format!("clarity.JSONOf({})", bare(self.value(&o.value, pre))))).collect();
-        go_pieces(&crate::shape::options_pieces(&given))
+    /// The format of a reading or writing and its options object (docs/FORMATS-PLAN.md, step 4).
+    fn format_options(&mut self, mapping: &clarity_spec::code::MappingUse, pre: &mut String) -> (String, String) {
+        let project = self.project;
+        match crate::shape::mapping_pieces(project, mapping, |v| format!("clarity.JSONOf({})", bare(self.value(v, pre)))) {
+            Some((format, pieces)) => (format, go_pieces(&pieces)),
+            None => {
+                self.errors.push("a mapping the project does not declare".into());
+                (String::new(), go_pieces(&[]))
+            }
+        }
     }
 
     fn value(&mut self, expr: &Expr, pre: &mut String) -> String {
@@ -1560,15 +1567,15 @@ impl<'a> Emitter<'a> {
                 self.lift(format!("db.ReadBytes({file})"), pre)
             }
             // A format of the catalog (docs/FORMATS-PLAN.md): a value written in it, and records read from it, through Clarity.Formats.
-            ExprKind::FormatOf { format, value, options } => {
+            ExprKind::FormatOf { value, mapping } => {
                 let Some(kind) = crate::shape::write_kind(self.project, &self.types.type_of(value)) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
                 };
-                let options = self.format_options(options, pre);
-                format!("clarity.WriteFormat(formatsWrite, {}, {}, {options}, {})", string(&format.name), bare(self.value(value, pre)), string(&kind))
+                let (format, options) = self.format_options(mapping, pre);
+                format!("clarity.WriteFormat(formatsWrite, {}, {}, {options}, {})", string(&format), bare(self.value(value, pre)), string(&kind))
             }
-            ExprKind::ReadFormat { format, ty, input, options } => {
+            ExprKind::ReadFormat { ty, input, mapping } => {
                 let Some(kind) = crate::shape::read_kind(self.project, ty) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
@@ -1580,8 +1587,8 @@ impl<'a> Emitter<'a> {
                     _ => String::new(),
                 };
                 let input = bare(self.value(input, pre));
-                let options = self.format_options(options, pre);
-                self.lift(format!("clarity.ReadFormat[{read}](formatsRead, {}, {input}, {options}, {})", string(&format.name), go_pieces(&kind)), pre)
+                let (format, options) = self.format_options(mapping, pre);
+                self.lift(format!("clarity.ReadFormat[{read}](formatsRead, {}, {input}, {options}, {})", string(&format), go_pieces(&kind)), pre)
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
             ExprKind::Http { method, url, from, pages, body, headers, query } => {

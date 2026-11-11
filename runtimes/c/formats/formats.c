@@ -51,3 +51,41 @@ const char* clarity_formats_write(const char* format, const char* value, const c
     /* A kind the generator wrote always describes the value; should it not, the value as `_json` wrote it. */
     return written ? written : clarity_copy(value);
 }
+
+/* The table calls came with interface 2; an older library has no such fields. */
+static bool tables_known(void) {
+    return api()->interface >= 2 || clarity_fail(CLARITY_VALUE, "this Clarity.Formats library is too old to read a file as a table");
+}
+
+/* What the library made, copied into the arena, or its problem kept. */
+static bool made(int32_t code, uint8_t* bytes, size_t len, ClarityBytes* out) {
+    if (code != CLARITY_FORMATS_OK) {
+        char why[1024] = {0};
+        api()->problem(why, sizeof why);
+        return clarity_fail(CLARITY_VALUE, "%s", why[0] ? why : "what was read does not fit");
+    }
+    *out = (ClarityBytes){(const uint8_t*)clarity_copy_n((const char*)bytes, len), len};
+    api()->free(bytes, len);
+    return true;
+}
+
+bool clarity_formats_read_table(const char* format, ClarityBytes input, const char* options, const char* fields, const char** out) {
+    if (!tables_known()) return false;
+    options = options ? options : "";
+    uint8_t* bytes = NULL;
+    size_t len = 0;
+    int32_t code = api()->read_table(format, strlen(format), input.data, input.size, options, strlen(options), fields, strlen(fields), &bytes, &len);
+    ClarityBytes table = {0};
+    if (!made(code, bytes, len, &table)) return false;
+    *out = (const char*)table.data;
+    return true;
+}
+
+bool clarity_formats_write_table(const char* format, ClarityBytes original, const char* table, const char* options, const char* fields, ClarityBytes* out) {
+    if (!tables_known()) return false;
+    options = options ? options : "";
+    uint8_t* bytes = NULL;
+    size_t len = 0;
+    int32_t code = api()->write_table(format, strlen(format), original.data, original.size, table, strlen(table), options, strlen(options), fields, strlen(fields), &bytes, &len);
+    return made(code, bytes, len, out);
+}

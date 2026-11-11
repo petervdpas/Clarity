@@ -18,6 +18,7 @@
     </Item>
     <Item caption="@suppliersItem" name="suppliersItem">
       <Item caption="@allSuppliersItem" name="allSuppliersItem" opens="SupplierBrowse" />
+      <Item caption="@priceListItem" name="priceListItem" opens="PriceList" />
     </Item>
   </Menu>
   <Toolbar name="mainToolbar">

@@ -4,6 +4,7 @@
 //! window they belong to.
 
 pub mod check;
+pub mod mapping;
 pub(crate) mod parse;
 pub mod edit;
 pub mod print;
@@ -295,6 +296,113 @@ impl MessageLevel {
     }
 }
 
+/// How a file is laid over records where code reads or writes one
+/// (docs/FORMATS-PLAN.md, step 4): a mapping written in place, the format
+/// and its options (`xml text at "shop/orders/order"`), or a mapping the
+/// project declares, by name (`using OrderFeed`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub enum MappingUse {
+    Inline { format: Ident, options: Vec<FormatOption> },
+    Named { name: Ident },
+}
+
+impl MappingUse {
+    /// The options written in place; a named mapping has none in the code.
+    pub fn options(&self) -> &[FormatOption] {
+        match self {
+            MappingUse::Inline { options, .. } => options,
+            MappingUse::Named { .. } => &[],
+        }
+    }
+
+    pub fn options_mut(&mut self) -> &mut [FormatOption] {
+        match self {
+            MappingUse::Inline { options, .. } => options,
+            MappingUse::Named { .. } => &mut [],
+        }
+    }
+}
+
+/// `mapping OrderFeed of Order from xml` with its lines (docs/FORMATS-PLAN.md,
+/// step 4): how one kind of file is laid over an entity, for this case only.
+/// Every line is optional; what a mapping leaves out is found as without one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct MappingDecl {
+    pub name: Ident,
+    pub entity: Ident,
+    pub format: Ident,
+    /// `at "shop/orders/order"`: where the records are.
+    pub at: Option<MappingText>,
+    /// `number at "@number"`, `lines of Line at "lines/line"`.
+    pub fields: Vec<MappedField>,
+    /// `check "orders.xsd"`: a schema of the project the file is checked against.
+    pub check: Option<MappingText>,
+    /// The text of `check`'s file, read with the project's folder (relative
+    /// to it, as the checker resolves it); none without a check, without
+    /// the folder, or when the file is not there (which the checker reports).
+    #[serde(skip)]
+    #[ts(skip)]
+    pub schema: Option<String>,
+    /// The format's own options, from the catalog: `indent true`.
+    pub options: Vec<MappingOption>,
+    pub span: Span,
+}
+
+/// A text a mapping line gives, where it is written.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct MappingText {
+    pub value: String,
+    pub span: Span,
+}
+
+/// `customer at "customer/name"`, or `lines of Line at "lines/line"` with
+/// the lines of the records inside.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct MappedField {
+    pub field: Ident,
+    pub at: Option<MappingText>,
+    pub inside: Option<MappedInside>,
+    pub span: Span,
+}
+
+/// The records inside a record: their entity, their fields' lines, and
+/// `order is ".."`, the field of theirs that names the record they sit in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct MappedInside {
+    pub entity: Ident,
+    pub fields: Vec<MappedField>,
+    pub parent: Option<MappedParent>,
+}
+
+/// `order is ".."`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct MappedParent {
+    pub field: Ident,
+    pub path: MappingText,
+}
+
+/// An option of the mapping's format: `separator ";"`, `indent true`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct MappingOption {
+    pub name: Ident,
+    pub value: MappingValue,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub enum MappingValue {
+    Text(String),
+    Bool(bool),
+}
+
 /// An option of a format, as code writes it after what is read or written: `at "data.orders"`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
@@ -427,11 +535,13 @@ pub enum ExprKind {
     /// The value at a position of a list, from 1: `squares[3]`.
     Index { list: Box<Expr>, index: Box<Expr> },
     /// `json of order`: a record, a list or a value written in a format of
-    /// the catalog (docs/FORMATS-PLAN.md), as every stack writes it.
-    FormatOf { format: Ident, value: Box<Expr>, options: Vec<FormatOption> },
+    /// the catalog (docs/FORMATS-PLAN.md), as every stack writes it;
+    /// `text of orders using OrderFeed` writes it as a mapping says.
+    FormatOf { value: Box<Expr>, mapping: MappingUse },
     /// `read list<Order> from json text at "data.orders"`: what a format
-    /// holds, read and fitted to the record first.
-    ReadFormat { format: Ident, ty: TypeRef, input: Box<Expr>, options: Vec<FormatOption> },
+    /// holds, read and fitted to the record first; `read list<Order> from
+    /// text using OrderFeed` reads it as a mapping says.
+    ReadFormat { ty: TypeRef, input: Box<Expr>, mapping: MappingUse },
     /// `http post url with body header "Accept": "text/plain"`: a call to a
     /// web API, giving its reply (DESIGN 5.23). Only post, put and patch send a body.
     /// `from shop` calls a path of that web API data source, at its address
@@ -1091,14 +1201,14 @@ pub fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
             each_expr(list, found);
             each_expr(index, found);
         }
-        ExprKind::FormatOf { value, options, .. } => {
+        ExprKind::FormatOf { value, mapping } => {
             each_expr(value, found);
-            for option in options {
+            for option in mapping.options() {
                 each_expr(&option.value, found);
             }
         }
-        ExprKind::ReadFormat { input: text, options, .. } => {
-            for option in options {
+        ExprKind::ReadFormat { input: text, mapping, .. } => {
+            for option in mapping.options() {
                 each_expr(&option.value, found);
             }
             each_expr(text, found);
@@ -1210,9 +1320,9 @@ pub fn each_expr_mut(expr: &mut Expr, found: &mut impl FnMut(&mut Expr)) {
             }
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => each_expr_mut(file, found),
-        ExprKind::FormatOf { value, options, .. } => {
+        ExprKind::FormatOf { value, mapping } => {
             each_expr_mut(value, found);
-            for option in options {
+            for option in mapping.options_mut() {
                 each_expr_mut(&mut option.value, found);
             }
         }
@@ -1225,8 +1335,8 @@ pub fn each_expr_mut(expr: &mut Expr, found: &mut impl FnMut(&mut Expr)) {
             each_expr_mut(list, found);
             each_expr_mut(index, found);
         }
-        ExprKind::ReadFormat { input: text, options, .. } => {
-            for option in options {
+        ExprKind::ReadFormat { input: text, mapping, .. } => {
+            for option in mapping.options_mut() {
                 each_expr_mut(&mut option.value, found);
             }
             each_expr_mut(text, found);

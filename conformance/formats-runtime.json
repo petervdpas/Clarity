@@ -1,8 +1,8 @@
 {
-  "about": "Each stack end to end through Clarity.Formats (docs/FORMATS-PLAN.md): the stack reads `input` in JSON with `options` through the library, decodes what was fitted with its own record codec into its own records, writes them back through the library, and gets `written` byte for byte; or, where it does not fit, stops with `error` word for word. The records are an Order (id, number: text, total: decimal, placed: date, lines: list of Line) and a Line (id, product: text, quantity: integer), written in each stack as its generator writes records. The library itself is tested exhaustively by formats-json-read.json and formats-json-write.json; this file checks only what each stack adds: passing the kind and options, decoding, encoding and the messages.",
+  "about": "Each stack end to end through Clarity.Formats (docs/FORMATS-PLAN.md): the stack reads `input` in the case's `format` (JSON when none is given) with `options` through the library, decodes what was fitted with its own record codec into its own records, writes them back through the library in the same format with the same options, and gets `written` byte for byte; or, where it does not fit, stops with `error` word for word. The records are an Order (id, number: text, total: decimal, placed: date, lines: list of Line) and a Line (id, product: text, quantity: integer), written in each stack as its generator writes records. The library itself is tested exhaustively by formats-json-read.json and formats-json-write.json; this file checks only what each stack adds: passing the kind and options, decoding, encoding and the messages.",
   "cases": [
     {
-      "name": "a record with records inside, read from inside a reply, decoded and written back",
+      "name": "a record with records inside, read from inside a reply, decoded and written back inside it again",
       "kind": {
         "kind": "record",
         "entity": "Order",
@@ -52,7 +52,7 @@
         "at": "data"
       },
       "input": "{\"data\": {\"Number\": \"A-1\", \"total\": 12.50, \"placed\": \"2026-10-25T10:00:00Z\", \"lines\": [{\"product\": \"pen\", \"quantity\": \"2\"}]}}",
-      "written": "{\"id\":0,\"number\":\"A-1\",\"total\":\"12.5\",\"placed\":\"2026-10-25\",\"lines\":[{\"id\":0,\"product\":\"pen\",\"quantity\":2}]}"
+      "written": "{\"data\":{\"id\":0,\"number\":\"A-1\",\"total\":\"12.5\",\"placed\":\"2026-10-25\",\"lines\":[{\"id\":0,\"product\":\"pen\",\"quantity\":2}]}}"
     },
     {
       "name": "a list of records, what each leaves out keeping its default",
@@ -153,6 +153,168 @@
       },
       "input": "{\"lines\": [{\"quantity\": \"two\"}]}",
       "error": "field 'lines' of Order, item 1: field 'quantity' of Line is an integer, not \"two\""
+    },
+    {
+      "name": "CSV: another separator, read and written; the records inside are no column",
+      "format": "csv",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "lines",
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            }
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "total": "0",
+          "placed": null,
+          "lines": []
+        }
+      },
+      "options": {
+        "separator": ";"
+      },
+      "input": "number;total;placed\n\"A;1\";12.50;2026-11-01\nB;3;\n",
+      "written": "number;total;placed\r\n\"A;1\";12.5;2026-11-01\r\nB;3;\r\n"
+    },
+    {
+      "name": "XML: records at a path, a field from an attribute, a list inside a wrapper element, written back at the same path",
+      "format": "xml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "lines",
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            }
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "total": "0",
+          "placed": null,
+          "lines": []
+        }
+      },
+      "options": {
+        "at": "shop/orders/order"
+      },
+      "input": "<?xml version=\"1.0\"?><shop><orders><order number=\"A-1\"><total>12.50</total><placed>2026-11-01</placed><lines><line><product>Tea</product><quantity>2</quantity></line></lines></order><order number=\"B\"/></orders></shop>",
+      "written": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><shop><orders><order><number>A-1</number><total>12.5</total><placed>2026-11-01</placed><lines><line><product>Tea</product><quantity>2</quantity></line></lines></order><order><number>B</number><total>0</total><lines/></order></orders></shop>"
+    },
+    {
+      "name": "YAML: records at a path with comments, quoting and a block scalar, the lines inside, written back in block style at the same path",
+      "format": "yaml",
+      "kind": {
+        "kind": "records",
+        "entity": "Order",
+        "fields": [
+          {
+            "name": "number",
+            "kind": "text"
+          },
+          {
+            "name": "total",
+            "kind": "decimal"
+          },
+          {
+            "name": "placed",
+            "kind": "date"
+          },
+          {
+            "name": "lines",
+            "kind": "records",
+            "entity": "Line",
+            "fields": [
+              {
+                "name": "product",
+                "kind": "text"
+              },
+              {
+                "name": "quantity",
+                "kind": "integer"
+              }
+            ],
+            "base": {
+              "id": 0,
+              "product": "",
+              "quantity": 0
+            }
+          }
+        ],
+        "base": {
+          "id": 0,
+          "number": "",
+          "total": "0",
+          "placed": null,
+          "lines": []
+        }
+      },
+      "options": {
+        "at": "shop/orders"
+      },
+      "input": "# the shop\nshop:\n  orders:\n    - number: A-1   # first\n      total: 12.50\n      placed: 2026-11-01\n      lines:\n        - {product: Tea, quantity: 2}\n    - number: 'B'\n",
+      "written": "shop:\n  orders:\n    - id: 0\n      number: A-1\n      total: \"12.5\"\n      placed: 2026-11-01\n      lines:\n        - id: 0\n          product: Tea\n          quantity: 2\n    - id: 0\n      number: B\n      total: \"0\"\n      placed: null\n      lines: []\n"
     }
   ]
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { shownLine } from "./lib/outputLines";
   import PartGuard from "@clarity/ui/parts/PartGuard.svelte";
   import Toasts, { TOAST_MS } from "./lib/Toasts.svelte";
   import { catchUncaught } from "@clarity/ui/host/uncaught.ts";
@@ -51,6 +52,7 @@
   import ApiView from "./lib/ApiView.svelte";
   import { listenToLoad } from "./lib/systemLoad.svelte";
   import ProjectSettings from "./lib/ProjectSettings.svelte";
+  import MappingPage from "./lib/MappingPage.svelte";
   import type { Catalog } from "@clarity/ui/generated/Catalog.ts";
   import type { ProjectFile } from "@clarity/ui/generated/ProjectFile.ts";
   import type { FoldersView } from "@clarity/ui/generated/FoldersView.ts";
@@ -60,6 +62,8 @@
   import type { AppRunning } from "@clarity/ui/generated/AppRunning.ts";
   import type { Selected } from "./lib/selection";
   import type { Edit } from "@clarity/ui/generated/Edit.ts";
+  import type { EditApplied } from "@clarity/ui/generated/EditApplied.ts";
+  import type { MappingForm } from "@clarity/ui/generated/MappingForm.ts";
   import type { RenameKind } from "@clarity/ui/generated/RenameKind.ts";
   import { applyEdit } from "./lib/applyEdit";
   import type { Diagnostic } from "@clarity/ui/generated/Diagnostic.ts";
@@ -461,6 +465,8 @@
         return p.project.resources?.files.some((f) => f.name === o.name) ?? false;
       case "diagram":
         return p.project.diagrams.some((d) => d.name === o.name);
+      case "mapping":
+        return all.some((f) => f.mappings.some((m) => m.name.name === o.name));
       case "settings":
       case "api":
       // The README view stays open while it is written, also before the file exists.
@@ -522,7 +528,7 @@
     }
     await saveSettings({
       ...settings,
-      datasources: [...settings.datasources, { name: trimmed, kind: "rest", url: "https://", auth: null, external: false, readonly: false, beside: false, openapi: null, picks: [], pick_schemas: [], paging: null }],
+      datasources: [...settings.datasources, { name: trimmed, kind: "rest", url: "https://", auth: null, external: false, readonly: false, beside: false, openapi: null, picks: [], pick_schemas: [], paging: null, file: null }],
     });
     select({ kind: "api", name: trimmed });
     tab = "project";
@@ -723,6 +729,37 @@
     }
   }
 
+  /**
+   * Asks for a new mapping's entity, format and name, writes it into the
+   * entity's module and opens its page.
+   */
+  async function startNewMapping() {
+    const title = "New mapping";
+    const owned = files.flatMap((f) => f.entities.filter((e) => !e.settings).map((e) => ({ entity: e.name.name, file: f })));
+    if (owned.length === 0) {
+      await dialogs.message({ title, text: "A mapping lays a file over an entity. Add an entity first." });
+      return;
+    }
+    const entity = await dialogs.choose({ title, text: "The entity the file is laid over.", choices: owned.map((o) => ({ value: o.entity, label: o.entity })) });
+    if (!entity) return;
+    const formats = projectFile?.catalog.formats ?? [];
+    const format = await dialogs.choose({ title, text: `The format of the files laid over ${entity}.`, choices: formats.map((f) => ({ value: f.name, label: f.label })) });
+    if (!format) return;
+    const name = (
+      await dialogs.prompt({ title, text: "Its name, as code and data sources use it: read list<Order> from text using OrderFeed. A name with a capital.", value: `${entity}Feed`, action: "Add" })
+    )?.trim();
+    const target = owned.find((o) => o.entity === entity)?.file;
+    if (!name || !target) return;
+    actionError = null;
+    try {
+      const form: MappingForm = { name, entity, format, at: "", fields: [], check: "", options: [] };
+      applyPreview((await invoke<EditApplied>("save_mapping", { path: target.path, version: target.version, item: null, form })).preview);
+      select({ kind: "mapping", name });
+    } catch (err) {
+      actionError = String(err);
+    }
+  }
+
   /** The module a new theme goes into, while its dialog asks for the name. */
   let newTheme = $state<SpecFile | null>(null);
   let newThemeError = $state<string | null>(null);
@@ -801,7 +838,24 @@
     renamingDiagram = true;
   }
 
+  /** Deletes a mapping after asking; while a data source or code uses it, says where instead. */
+  async function deleteMapping(name: string) {
+    actionError = null;
+    try {
+      const uses = await invoke<string[]>("mapping_uses", { name });
+      if (uses.length > 0) {
+        await dialogs.message({ title: "Delete mapping", text: `Mapping ${name} is used by ${uses.join(", ")}. Change those first, then delete it.` });
+        return;
+      }
+      if (!(await dialogs.confirm({ text: `Delete mapping ${name}? Undo brings it back.`, action: "Delete", danger: true }))) return;
+      applyPreview((await invoke<EditApplied>("delete_mapping", { name })).preview);
+    } catch (err) {
+      actionError = String(err);
+    }
+  }
+
   async function deleteItem(item: Selected) {
+    if (item.kind === "mapping") return deleteMapping(item.name);
     if (item.kind === "diagram") {
       if (!(await dialogs.confirm({ text: `Delete diagram ${item.name}? Undo brings it back.`, action: "Delete", danger: true }))) return;
       actionError = null;
@@ -1186,7 +1240,7 @@
       building = true;
     });
     const unlistenLine = listen<string>("build-line", (e) => {
-      buildLog = [...buildLog.slice(-(BUILD_LOG_LINES - 1)), e.payload];
+      buildLog = [...buildLog.slice(-(BUILD_LOG_LINES - 1)), shownLine(e.payload)];
     });
     const unlistenBuilt = listen<EngineBuilt>("engine-built", (e) => recordBuilt(e.payload));
     const unlistenDone = listen<BuildDone>("build-done", (e) => {
@@ -1273,6 +1327,7 @@
         onwindow={selectPage}
         onselect={select}
         onnewdata={full ? startNewData : null}
+        onnewmapping={full ? startNewMapping : null}
         onnewtheme={full ? startNewTheme : null}
         onmenu={full ? (e, item) => (treeMenu = { x: e.clientX, y: e.clientY, item }) : null}
         onnewengine={full ? startNewEngine : null}
@@ -1580,7 +1635,9 @@
               <p>Open a project, or create a new one, with the buttons on the Project tab.</p>
             </div>
           {:else if current?.kind === "settings" && projectFile && openFile}
-            <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} {preview} onapplied={applyPreview} onopentheme={(name) => select({ kind: "theme", name })} />
+            <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} {preview} onapplied={applyPreview} onopentheme={(name) => select({ kind: "theme", name })} onopenmapping={(name) => select({ kind: "mapping", name })} />
+          {:else if current?.kind === "mapping" && projectFile}
+            <MappingPage {preview} name={current.name} formats={projectFile.catalog.formats} onapplied={applyPreview} ondelete={deleteMapping} />
           {:else if current?.kind === "api" && projectFile}
             <ApiView project={projectFile} name={current.name} onsave={saveSettings} />
           {:else if current?.kind === "diagram"}

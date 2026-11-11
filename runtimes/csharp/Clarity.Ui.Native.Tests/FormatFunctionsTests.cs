@@ -49,9 +49,10 @@ public sealed class FormatFunctionsTests
             var options = c.TryGetProperty("options", out var o) ? o.GetRawText() : "";
             var input = c.GetProperty("input").GetString()!;
             var many = c.GetProperty("kind").GetProperty("kind").GetString() == "records";
+            var format = c.TryGetProperty("format", out var f) ? f.GetString()! : "json";
             Func<string> run = many
-                ? () => FormatFunctions.Write("json", FormatFunctions.Read<List<Order>>("json", input, options, kind), "", kind)
-                : () => FormatFunctions.Write("json", FormatFunctions.Read<Order>("json", input, options, kind), "", kind);
+                ? () => FormatFunctions.Write(format, FormatFunctions.Read<List<Order>>(format, input, options, kind), options, kind)
+                : () => FormatFunctions.Write(format, FormatFunctions.Read<Order>(format, input, options, kind), options, kind);
             if (c.TryGetProperty("written", out var written))
                 Assert.True(written.GetString() == run(), name);
             else

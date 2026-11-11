@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<View class="prices.PriceListView">
+  <Data name="prices" type="list&lt;PriceLine&gt;" />
+  <Data name="pastedText" type="text" />
+  <Table name="pricesTable" at="1,1" span="12" rows="6" bind="prices" columns="product, supplier, price" edit="product, supplier, price" add="true" remove="true" confirm="true" onadd="addClicked" onremove="deleteClicked" onchange="priceChanged" />
+  <Memo name="pastedBox" at="1,7" span="12" rows="4" bind="pastedText" placeholder="@pastePricesPlaceholder" />
+  <Button name="importPrices" at="11,11" span="2" caption="@importPricesCaption" onclick="importClicked" />
+</View>

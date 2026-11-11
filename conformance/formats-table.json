@@ -1,0 +1,540 @@
+{
+  "about": "A file of a file data source as one table, through Clarity.Formats (docs/FORMATS-PLAN.md, \"A file as a data source\"): `read_table` gives, for a flat file (CSV), the file's columns in its order and its rows; for a file that nests (JSON, YAML, XML; see formats-xml-table.json), a first column `#node` holding each record's node as its format writes one (an object's JSON), so what no column maps stays in place, then one column per mapped field, in the order given; the cells of the columns the entity maps (`fields`, matched as names are) are fitted as SQLite keeps the stack's values (a yes or no as 1 or 0; a decimal, a date or a list of values as text), the others kept as the file has them; an empty field or a missing name is null. `write_table` writes a table back: for CSV the whole file, for JSON and YAML the list at `at` inside `original`, the rest kept (YAML keeps the file as written outside what changed: comments, quoting, spacing, an unchanged record as written), each row's record from its `#node` (a new one when null) with its mapped columns set (null removes the member); mapped columns turned back (1 as true). Each runtime keeps the table in an in-memory SQLite database while the program runs, writing the file back after each change. Cells are JSON values: a whole number as a number, a decimal as its text. An empty file (a new one, which a runtime reads as empty when it is not there yet) is the entity's columns without rows; writing it back makes the file, for JSON with the list inside the objects `at` names.",
+  "read": [
+    {
+      "name": "a CSV's columns in its order, mapped ones fitted as SQLite keeps them (true as 1), the others kept as text, empty as null",
+      "format": "csv",
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        },
+        {
+          "name": "paid",
+          "kind": "bool"
+        },
+        {
+          "name": "price",
+          "kind": "decimal"
+        }
+      ],
+      "input": "﻿Site,Visits,Note,paid,price\r\n\"a,b\",3,keep me,true,12.50\r\nc,,,false,\r\n",
+      "table": {
+        "columns": [
+          "Site",
+          "Visits",
+          "Note",
+          "paid",
+          "price"
+        ],
+        "rows": [
+          [
+            "a,b",
+            3,
+            "keep me",
+            1,
+            "12.50"
+          ],
+          [
+            "c",
+            null,
+            null,
+            0,
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "name": "another separator; without a header the columns are the entity's",
+      "format": "csv",
+      "options": {
+        "separator": ";",
+        "noHeader": true
+      },
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        }
+      ],
+      "input": "a;1\nb;2;extra\n",
+      "table": {
+        "columns": [
+          "site",
+          "visits"
+        ],
+        "rows": [
+          [
+            "a",
+            1
+          ],
+          [
+            "b",
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "name": "a JSON list at a path: each record's node kept whole in '#node' (a record inside stays there), then the mapped columns",
+      "format": "json",
+      "options": {
+        "at": "data"
+      },
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        }
+      ],
+      "input": "{\"data\":[{\"site\":\"a\",\"visits\":3,\"owner\":{\"n\":1}},{\"site\":\"b\",\"extra\":true}],\"next\":null}",
+      "table": {
+        "columns": [
+          "#node",
+          "site",
+          "visits"
+        ],
+        "rows": [
+          [
+            "{\"site\":\"a\",\"visits\":3,\"owner\":{\"n\":1}}",
+            "a",
+            3
+          ],
+          [
+            "{\"site\":\"b\",\"extra\":true}",
+            "b",
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "name": "a YAML list at a path, as JSON's: each record's node kept whole in '#node' as its JSON, then the mapped columns",
+      "format": "yaml",
+      "options": {
+        "at": "data"
+      },
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        }
+      ],
+      "input": "# logins\ndata:\n  - site: a\n    visits: 3\n    owner: {n: 1}\n  - site: b   # no visits\n    extra: true\nnext: ~\n",
+      "table": {
+        "columns": [
+          "#node",
+          "site",
+          "visits"
+        ],
+        "rows": [
+          [
+            "{\"site\":\"a\",\"visits\":3,\"owner\":{\"n\":1}}",
+            "a",
+            3
+          ],
+          [
+            "{\"site\":\"b\",\"extra\":true}",
+            "b",
+            null
+          ]
+        ]
+      }
+    },
+    {
+      "name": "a column the entity maps that the file lacks",
+      "format": "csv",
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        }
+      ],
+      "input": "site\na\n",
+      "error": "the CSV has no column 'visits'"
+    },
+    {
+      "name": "a value that does not fit says its row and column",
+      "format": "csv",
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        }
+      ],
+      "input": "site,visits\na,1\nb,many\n",
+      "error": "row 2: column 'visits' is an integer, not \"many\""
+    },
+    {
+      "name": "an empty file, a new one not written yet, is the entity's columns without rows",
+      "format": "csv",
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        }
+      ],
+      "input": "",
+      "table": {
+        "columns": [
+          "site",
+          "visits"
+        ],
+        "rows": []
+      }
+    }
+  ],
+  "write": [
+    {
+      "name": "CSV written whole: the file's columns in its order, 1 as true, null as empty, quoted where needed",
+      "format": "csv",
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        },
+        {
+          "name": "paid",
+          "kind": "bool"
+        },
+        {
+          "name": "price",
+          "kind": "decimal"
+        }
+      ],
+      "table": {
+        "columns": [
+          "Site",
+          "Visits",
+          "Note",
+          "paid",
+          "price"
+        ],
+        "rows": [
+          [
+            "a,b",
+            3,
+            "keep me",
+            1,
+            "12.5"
+          ],
+          [
+            "new",
+            null,
+            null,
+            0,
+            null
+          ]
+        ]
+      },
+      "written": "Site,Visits,Note,paid,price\r\n\"a,b\",3,keep me,true,12.5\r\nnew,,,false,\r\n"
+    },
+    {
+      "name": "JSON: the list at the path replaced, the rest of the file kept; each record from its node with what no column maps (a record inside) in place; numbers and yes or no as JSON has them; null leaves a member out",
+      "format": "json",
+      "options": {
+        "at": "data"
+      },
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        },
+        {
+          "name": "paid",
+          "kind": "bool"
+        },
+        {
+          "name": "price",
+          "kind": "decimal"
+        }
+      ],
+      "original": "{\"data\":[],\"next\":null}",
+      "table": {
+        "columns": [
+          "#node",
+          "site",
+          "visits",
+          "paid",
+          "price"
+        ],
+        "rows": [
+          [
+            "{\"site\":\"a\",\"visits\":3,\"owner\":{\"n\":1}}",
+            "a",
+            3,
+            1,
+            "12.50"
+          ],
+          [
+            null,
+            "b",
+            null,
+            0,
+            null
+          ]
+        ]
+      },
+      "written": "{\"data\":[{\"site\":\"a\",\"visits\":3,\"owner\":{\"n\":1},\"paid\":true,\"price\":12.5},{\"site\":\"b\",\"paid\":false}],\"next\":null}"
+    },
+    {
+      "name": "a new JSON file gets the list inside the objects its path names",
+      "format": "json",
+      "options": {
+        "at": "data.logins"
+      },
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        }
+      ],
+      "original": "",
+      "table": {
+        "columns": [
+          "#node",
+          "site",
+          "visits"
+        ],
+        "rows": [
+          [
+            null,
+            "a",
+            3
+          ]
+        ]
+      },
+      "written": "{\"data\":{\"logins\":[{\"site\":\"a\",\"visits\":3}]}}"
+    },
+    {
+      "name": "YAML written back keeps the file as written outside what changed: comments, quoting and spacing; an unchanged record as written, a changed one rewritten where it changed with what no column maps kept, a new one in block style",
+      "format": "yaml",
+      "options": {
+        "at": "data"
+      },
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        }
+      ],
+      "original": "# Logins, kept by hand\ndata:\n  # the first one\n  - site: a      # main\n    visits: 3\n    owner: {n: 1}\n  - site: 'b'\n    visits: 5\n    note: keep me\nnext: ~   # nothing yet\n",
+      "table": {
+        "columns": [
+          "#node",
+          "site",
+          "visits"
+        ],
+        "rows": [
+          [
+            "{\"site\":\"a\",\"visits\":3,\"owner\":{\"n\":1}}",
+            "a",
+            3
+          ],
+          [
+            "{\"site\":\"b\",\"visits\":5,\"note\":\"keep me\"}",
+            "b",
+            6
+          ],
+          [
+            null,
+            "c",
+            1
+          ]
+        ]
+      },
+      "written": "# Logins, kept by hand\ndata:\n  # the first one\n  - site: a      # main\n    visits: 3\n    owner: {n: 1}\n  - site: 'b'\n    visits: 6\n    note: keep me\n  - site: c\n    visits: 1\nnext: ~   # nothing yet\n"
+    },
+    {
+      "name": "a YAML record deleted takes the comments before it along; the rest stays as written",
+      "format": "yaml",
+      "options": {
+        "at": "data"
+      },
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        }
+      ],
+      "original": "# Logins, kept by hand\ndata:\n  # the first one\n  - site: a      # main\n    visits: 3\n    owner: {n: 1}\n  - site: 'b'\n    visits: 5\n    note: keep me\nnext: ~   # nothing yet\n",
+      "table": {
+        "columns": [
+          "#node",
+          "site",
+          "visits"
+        ],
+        "rows": [
+          [
+            "{\"site\":\"b\",\"visits\":5,\"note\":\"keep me\"}",
+            "b",
+            5
+          ]
+        ]
+      },
+      "written": "# Logins, kept by hand\ndata:\n  - site: 'b'\n    visits: 5\n    note: keep me\nnext: ~   # nothing yet\n"
+    },
+    {
+      "name": "a YAML list written in flow style becomes block style when it changes; values as YAML writes them, null leaving a key out",
+      "format": "yaml",
+      "options": {
+        "at": "data"
+      },
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        },
+        {
+          "name": "paid",
+          "kind": "bool"
+        },
+        {
+          "name": "price",
+          "kind": "decimal"
+        }
+      ],
+      "original": "data: []\nnext: null # stays\n",
+      "table": {
+        "columns": [
+          "#node",
+          "site",
+          "visits",
+          "paid",
+          "price"
+        ],
+        "rows": [
+          [
+            "{\"site\":\"a\",\"visits\":3,\"owner\":{\"n\":1}}",
+            "a",
+            3,
+            1,
+            "12.50"
+          ],
+          [
+            null,
+            "true",
+            null,
+            0,
+            null
+          ]
+        ]
+      },
+      "written": "data:\n  - site: a\n    visits: 3\n    owner:\n      n: 1\n    paid: true\n    price: 12.5\n  - site: \"true\"\n    paid: false\nnext: null # stays\n"
+    },
+    {
+      "name": "a new YAML file gets the list inside the mappings its path names",
+      "format": "yaml",
+      "options": {
+        "at": "data.logins"
+      },
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        }
+      ],
+      "original": "",
+      "table": {
+        "columns": [
+          "#node",
+          "site",
+          "visits"
+        ],
+        "rows": [
+          [
+            null,
+            "a",
+            3
+          ]
+        ]
+      },
+      "written": "data:\n  logins:\n    - site: a\n      visits: 3\n"
+    },
+    {
+      "name": "a new CSV file gets its header row",
+      "format": "csv",
+      "fields": [
+        {
+          "name": "site",
+          "kind": "text"
+        },
+        {
+          "name": "visits",
+          "kind": "integer"
+        }
+      ],
+      "original": "",
+      "table": {
+        "columns": [
+          "site",
+          "visits"
+        ],
+        "rows": [
+          [
+            "a",
+            3
+          ]
+        ]
+      },
+      "written": "site,visits\r\na,3\r\n"
+    }
+  ]
+}

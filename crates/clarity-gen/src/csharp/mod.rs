@@ -165,7 +165,11 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     let types = check::types(&project.files);
     let mut errors = Vec::new();
     let texts = texts::Texts::of(project);
-    let drivers: Vec<&Driver> = DRIVERS.iter().filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql)).collect();
+    let drivers: Vec<&Driver> = DRIVERS
+        .iter()
+        // A data source that is a file is kept in an in-memory SQLite table.
+        .filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql) || (s.sql == crate::ddl::Sql::Sqlite && !crate::file_sources(project, settings).unwrap_or_default().is_empty()))
+        .collect();
     let engines = !crate::engines(project).is_empty();
     // Engines beside the screen run in the application's process too, through the same package.
     let screen_engines = !crate::screen_engines(project).is_empty();
@@ -178,7 +182,7 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     let songs = ui == DESKTOP_PACKAGE && clarity_spec::resources::carries_audio(project);
     let videos = ui == DESKTOP_PACKAGE && clarity_spec::resources::plays_videos(project);
     let pictures = crate::uses_picture_functions(project);
-    let media: Vec<&str> = [(songs, AUDIO_PACKAGE), (videos, VIDEO_PACKAGE), (pictures, IMAGE_PACKAGE), (project.uses_formats(), FORMATS_PACKAGE)].into_iter().filter(|(on, _)| *on).map(|(_, p)| p).collect();
+    let media: Vec<&str> = [(songs, AUDIO_PACKAGE), (videos, VIDEO_PACKAGE), (pictures, IMAGE_PACKAGE), (crate::carries_formats(project, settings), FORMATS_PACKAGE)].into_iter().filter(|(on, _)| *on).map(|(_, p)| p).collect();
     let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, ui, &media, &packaged, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, parts::references(project) + &library_references(project)))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
@@ -482,6 +486,7 @@ fn opening(project: &Project, databases: &[(String, Sql, String)], drivers: &[&D
     let folder_stores: String = crate::folder_stores(project, settings)
         .iter()
         .map(|(name, setting, default)| format!("        db.AddStoreSetting({}, {}, {}, {});\n", string(name), string(&program_name), string(setting), string(default)))
+        .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("        Clarity.Formats.FileSources.AddFile(db, new Clarity.Formats.FileSource({}, {}, {}, {}, {}, {}, {}, {}));\n", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)))
         .collect();
     let databases = databases
         .iter()

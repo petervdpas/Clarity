@@ -34,6 +34,12 @@ internal interface IDriver : IDisposable
     void Apply(int version, IReadOnlyList<string> statements);
 }
 
+/// <summary>A driver that can say whether a transaction is open, as a file source asks of its SQLite database.</summary>
+internal interface ITransactional
+{
+    bool InTransaction { get; }
+}
+
 internal static class Store
 {
     /// <summary>The statement that records migration step <paramref name="version"/>.</summary>

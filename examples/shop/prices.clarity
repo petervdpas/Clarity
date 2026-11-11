@@ -1,0 +1,39 @@
+module prices
+source prices
+
+// The suppliers' price list, kept in data/prices.csv: a table over the file,
+// and prices pasted as CSV text added to it.
+entity PriceLine
+    product: text(80), required, label @priceProductLabel
+    supplier: text(80), label @priceSupplierLabel
+    price: money, label @priceLabel
+
+code PriceList
+    handler loadPrices
+        refreshPrices()
+
+code PriceListView
+    handler refreshPrices
+        prices = find p in PriceLine order by p.product
+
+    // The table edits the file in place: Add above it, the trash on each row.
+    handler addClicked
+        let line = new PriceLine
+        line.product = @newPriceProduct
+        save line
+        refreshPrices()
+
+    handler priceChanged
+        save pricesTable.selected
+
+    handler deleteClicked
+        delete pricesTable.selected
+        refreshPrices()
+
+    handler importClicked
+        // Lines like: Coffee;Bean Co;12.50, with a header row naming the columns.
+        let pasted = read list<PriceLine> from csv pastedText separator ";"
+        for line in pasted
+            save line
+        pastedText = ""
+        refreshPrices()

@@ -61,6 +61,20 @@ public sealed partial class Db : IDisposable
     IDriver Conn(string source) => At(source).Driver;
 
     /// <summary>
+    /// Adds the data source <paramref name="name"/> on <paramref name="driver"/>, in place of one
+    /// of that name: what a file source (Clarity.Formats) does after connecting.
+    /// </summary>
+    internal void AddSource(string name, IDriver driver)
+    {
+        foreach (var old in sources.FindAll(s => s.Name == name))
+        {
+            sources.Remove(old);
+            old.Driver.Dispose();
+        }
+        sources.Add(new SourceDb(name, driver));
+    }
+
+    /// <summary>
     /// Adds the file store <paramref name="name"/> at <paramref name="location"/>, a folder
     /// (made when it is not there yet); <c>env:NAME</c> takes it from that environment variable.
     /// </summary>

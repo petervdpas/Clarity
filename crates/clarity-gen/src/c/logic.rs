@@ -1666,9 +1666,16 @@ impl<'a> Emitter<'a> {
 
     /// An expression as a value; a record as a pointer to it.
     /// A format's options as a C expression of their JSON object (`""` for none).
-    fn format_options(&mut self, options: &[clarity_spec::code::FormatOption], pre: &mut String) -> String {
-        let given: Vec<(String, String)> = options.iter().map(|o| (o.name.name.clone(), format!("clarity_json_of(clarity_json_text({}))", bare(self.value(&o.value, pre))))).collect();
-        c_pieces(&crate::shape::options_pieces(&given))
+    /// The format of a reading or writing and its options object (docs/FORMATS-PLAN.md, step 4).
+    fn format_options(&mut self, mapping: &clarity_spec::code::MappingUse, pre: &mut String) -> (String, String) {
+        let project = self.project;
+        match crate::shape::mapping_pieces(project, mapping, |v| format!("clarity_json_of(clarity_json_text({}))", bare(self.value(v, pre)))) {
+            Some((format, pieces)) => (format, c_pieces(&pieces)),
+            None => {
+                self.errors.push("a mapping the project does not declare".into());
+                (String::new(), c_pieces(&[]))
+            }
+        }
     }
 
     fn value(&mut self, expr: &Expr, pre: &mut String) -> String {
@@ -1793,7 +1800,7 @@ impl<'a> Emitter<'a> {
                 self.lift("ClarityBytes", &format!("clarity_read_bytes(db, {file}, {{out}})"), pre)
             }
             // A format of the catalog (docs/FORMATS-PLAN.md): a value written in it, and records read from it, through Clarity.Formats.
-            ExprKind::FormatOf { format, value, options } => {
+            ExprKind::FormatOf { value, mapping } => {
                 let ty = self.types.type_of(value);
                 let Some(kind) = crate::shape::write_kind(self.project, &ty) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
@@ -1820,10 +1827,10 @@ impl<'a> Emitter<'a> {
                         return String::new();
                     }
                 };
-                let options = self.format_options(options, pre);
-                format!("clarity_formats_write({}, clarity_json_of({json}), {options}, {})", string(&format.name), string(&kind))
+                let (format, options) = self.format_options(mapping, pre);
+                format!("clarity_formats_write({}, clarity_json_of({json}), {options}, {})", string(&format), string(&kind))
             }
-            ExprKind::ReadFormat { format, ty, input, options } => {
+            ExprKind::ReadFormat { ty, input, mapping } => {
                 let Some(kind) = crate::shape::read_kind(self.project, ty) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
@@ -1834,8 +1841,8 @@ impl<'a> Emitter<'a> {
                     _ => return String::new(),
                 };
                 let input = bare(self.value(input, pre));
-                let options = self.format_options(options, pre);
-                let fitted = self.lift("cJSON*", &format!("clarity_formats_read({}, {input}, {options}, {}, {{out}})", string(&format.name), c_pieces(&kind)), pre);
+                let (format, options) = self.format_options(mapping, pre);
+                let fitted = self.lift("cJSON*", &format!("clarity_formats_read({}, {input}, {options}, {}, {{out}})", string(&format), c_pieces(&kind)), pre);
                 let p = prefix(&entity);
                 if many {
                     self.lift(&list_type(&entity), &format!("{p}_list_from_json({fitted}, {{out}})"), pre)

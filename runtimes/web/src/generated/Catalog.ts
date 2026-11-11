@@ -2,6 +2,7 @@
 import type { AuthKind } from "./AuthKind";
 import type { BackendInfo } from "./BackendInfo";
 import type { Choice } from "./Choice";
+import type { FormatChoice } from "./FormatChoice";
 import type { SourceInfo } from "./SourceInfo";
 import type { Stack } from "./Stack";
 import type { Target } from "./Target";
@@ -11,4 +12,8 @@ export type Catalog = {
 /**
  * The stack a new project starts with.
  */
-starter: Stack, backends: Array<BackendInfo>, uis: Array<Choice<Ui>>, targets: Array<Choice<Target>>, sources: Array<SourceInfo>, auths: Array<Choice<AuthKind>>, };
+starter: Stack, backends: Array<BackendInfo>, uis: Array<Choice<Ui>>, targets: Array<Choice<Target>>, sources: Array<SourceInfo>, auths: Array<Choice<AuthKind>>, 
+/**
+ * The formats a data source can be a file in, with their options.
+ */
+formats: Array<FormatChoice>, };

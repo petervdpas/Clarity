@@ -3,6 +3,7 @@
   <Menu name="mainMenu">
     <Item caption="@fileItem" name="fileItem">
       <Item caption="@usersItem" name="usersItem" opens="Users" />
+      <Item caption="@ideasItem" name="ideasItem" opens="Ideas" />
       <Item kind="separator" />
       <Item caption="@languageItem" name="languageItem" opens="language" />
       <Item caption="@themeItem" name="themeItem" opens="theme" />
@@ -15,10 +16,11 @@
     <Tab title="@homeTab" name="homeTab">
       <Group title="@peopleGroup" name="peopleGroup">
         <Item kind="button" caption="@usersButtonCaption" name="usersButton" icon="list" large="true" opens="Users" />
+        <Item kind="button" caption="@ideasItem" name="ideasButton" icon="lightbulb" large="true" opens="Ideas" />
       </Group>
       <Group title="@settingsGroup" name="settingsGroup">
         <Item kind="button" caption="@languageButtonCaption" name="languageButton" icon="languages" large="true" opens="language" />
-        <Item kind="button" caption="@themeButtonCaption" name="themeButton" large="true" opens="theme" />
+        <Item kind="button" caption="@themeButtonCaption" name="themeButton" icon="palette" large="true" opens="theme" />
       </Group>
     </Tab>
   </Ribbon>

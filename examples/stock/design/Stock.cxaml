@@ -1,3 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <App class="stock.Stock" title="@stockTitle" main="Items">
+  <Menu name="mainMenu">
+    <Item caption="@windowsItem" name="windowsItem">
+      <Item caption="@itemsTitle" name="itemsItem" opens="Items" />
+      <Item caption="@deliveriesTitle" name="deliveriesItem" opens="Deliveries" />
+    </Item>
+  </Menu>
 </App>

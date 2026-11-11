@@ -1,5 +1,7 @@
 module todo
 
+use ideas
+
 entity Person
     name: text(80), required, unique, label @personNameLabel
     color: color, default "#3b82f6", label @personColorLabel

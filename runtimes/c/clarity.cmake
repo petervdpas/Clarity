@@ -133,7 +133,8 @@ endfunction()
 # Clarity.Formats (docs/FORMATS-PLAN.md) for a program whose code reads or
 # writes a format, on any target: its library lies beside Clarity.UI's in
 # the folder CLARITY_UI names (include/clarity_formats.h and lib/), and the
-# runtime's formats/formats.c calls it. Linked to `target` and put beside it,
+# runtime's formats/formats.c calls it, and formats/file_source.c reads a
+# file data source through it. Linked to `target` and put beside it,
 # where the program finds it.
 function(clarity_use_formats target)
   clarity_ui_folder()
@@ -152,7 +153,7 @@ function(clarity_use_formats target)
       set_target_properties(clarity_formats PROPERTIES IMPORTED_LOCATION "${CLARITY_UI}/lib/libclarity_formats.so" IMPORTED_NO_SONAME TRUE)
     endif()
   endif()
-  target_sources(${target} PRIVATE ${CLARITY_RUNTIME_DIR}/formats/formats.c)
+  target_sources(${target} PRIVATE ${CLARITY_RUNTIME_DIR}/formats/formats.c ${CLARITY_RUNTIME_DIR}/formats/file_source.c)
   target_link_libraries(${target} PRIVATE clarity_formats)
   add_custom_command(TARGET ${target} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clarity_formats> $<TARGET_FILE_DIR:${target}>)

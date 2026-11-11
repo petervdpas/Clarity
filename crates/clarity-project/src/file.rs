@@ -211,6 +211,26 @@ pub fn parse(text: &str) -> Result<Settings, String> {
             source.paging = Some(paging(line, &args(entry))?);
             continue;
         }
+        // `separator ";"` under a data source that is a file: an option of its format.
+        if entry.indent > setting_indent
+            && let Some(source) = datasources.last_mut()
+            && let Some(file) = source.file.as_mut()
+            && let Some(info) = clarity_formats::format(&file.format)
+            && let Some(option) = info.options.iter().find(|o| o.name == keyword)
+        {
+            let a = args(entry);
+            let value = match (option.kind, a.first()) {
+                (clarity_formats::OptionKind::Text, Some(t)) if t.kind == TokenKind::Str && a.len() == 1 => t.text.clone(),
+                (clarity_formats::OptionKind::Bool, Some(t)) if a.len() == 1 && matches!(word(t), Some("true" | "false")) => t.text.clone(),
+                (clarity_formats::OptionKind::Text, _) => return Err(format!("line {line}: write the option and its text in quotes, like: {keyword} \";\"")),
+                (clarity_formats::OptionKind::Bool, _) => return Err(format!("line {line}: write the option and true or false, like: {keyword} true")),
+            };
+            if file.options.iter().any(|o| o.name == keyword) {
+                return Err(format!("line {line}: '{keyword}' is written twice"));
+            }
+            file.options.push(crate::SourceOption { name: keyword.to_string(), value });
+            continue;
+        }
         if entry.indent > setting_indent && (keyword == "openapi" || keyword == "pick") {
             let Some(source) = datasources.last_mut() else {
                 return Err(format!("line {line}: '{keyword}' belongs under a datasource line, indented"));
@@ -440,17 +460,35 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                         "line {line}: write a name, a kind and where it is, like: datasource main sqlite \"data/app.db\""
                     ));
                 };
-                let kind = pick(line, "data source kind", "kinds", &SOURCE_KINDS, source_word, kind)?;
+                // A format of Clarity's catalog names a source that is a file in it.
+                // `file ... using OrderFeed`: a file whose mapping says the format.
+                let (kind, mut file) = match clarity_formats::format(kind) {
+                    Some(info) => (crate::SourceKind::File, Some(crate::FileFormat { format: info.name.to_string(), options: Vec::new(), mapping: None })),
+                    None if kind == source_word(crate::SourceKind::File) => (crate::SourceKind::File, Some(crate::FileFormat { format: String::new(), options: Vec::new(), mapping: None })),
+                    None => (pick(line, "data source kind", "kinds", &SOURCE_KINDS, source_word, kind)?, None),
+                };
                 let url = string(line, a.get(2), "where the data source is")?;
                 let (mut external, mut readonly, mut beside) = (false, false, false);
-                for flag in &a[3.min(a.len())..] {
+                let mut flags = a[3.min(a.len())..].iter();
+                while let Some(flag) = flags.next() {
+                    if word(flag) == Some("using") {
+                        let Some(mapping) = flags.next().and_then(|t| word(t)) else {
+                            return Err(format!("line {line}: write the mapping after 'using', like: datasource {name} file \"{url}\" external using OrderFeed"));
+                        };
+                        match file.as_mut() {
+                            Some(f) if f.format.is_empty() && f.mapping.is_none() => f.mapping = Some(mapping.to_string()),
+                            Some(f) if f.mapping.is_some() => return Err(format!("line {line}: 'using' is written twice")),
+                            _ => return Err(format!("line {line}: a file laid over by a mapping is of kind file, since the mapping says its format: write it like: datasource {name} file \"{url}\" external using {mapping}")),
+                        }
+                        continue;
+                    }
                     let slot = match word(flag) {
                         Some("external") => &mut external,
                         Some("readonly") => &mut readonly,
                         Some("beside") => &mut beside,
                         _ => {
                             return Err(format!(
-                                "line {line}: unexpected '{}'; a data source can be external, readonly or beside",
+                                "line {line}: unexpected '{}'; a data source can be external, readonly or beside, and a file can be laid over by a mapping: using OrderFeed",
                                 flag.text
                             ));
                         }
@@ -459,6 +497,12 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                         return Err(format!("line {line}: '{}' is written twice", flag.text));
                     }
                     *slot = true;
+                }
+                if file.as_ref().is_some_and(|f| f.format.is_empty() && f.mapping.is_none()) {
+                    return Err(format!("line {line}: a data source of kind file names the mapping that says its format: write it like: datasource {name} file \"{url}\" external using OrderFeed"));
+                }
+                if file.is_some() && !external {
+                    return Err(format!("line {line}: a data source that is a file is external, since Clarity does not own its shape: write it like: datasource {name} {} \"{url}\" external{}", file.as_ref().map(|f| file_kind_word(f)).unwrap_or(""), file.as_ref().and_then(|f| f.mapping.as_ref()).map(|m| format!(" using {m}")).unwrap_or_default()));
                 }
                 datasources.push(DataSource {
                     name: name.to_string(),
@@ -472,6 +516,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     picks: Vec::new(),
                     pick_schemas: Vec::new(),
                     paging: None,
+                    file,
                 });
             }
             "filestore" => {
@@ -538,6 +583,11 @@ fn canonical(tokens: &[Token]) -> String {
         .join(" ")
 }
 
+/// The kind a file source's line names: its format, or `file` when its mapping says the format.
+fn file_kind_word(file: &crate::FileFormat) -> &str {
+    if file.mapping.is_some() { source_word(crate::SourceKind::File) } else { &file.format }
+}
+
 /// Which setting a line holds, so a changed file can keep each line's
 /// comments: `stack`, `datasource main`, `auth main`.
 fn key(entry: &Entry, current_source: Option<&str>) -> String {
@@ -551,6 +601,8 @@ fn key(entry: &Entry, current_source: Option<&str>) -> String {
         "paging" => format!("paging {}", current_source.unwrap_or("")),
         "pick" if entry.tokens.get(1).map(|t| t.text.as_str()) == Some("schema") => format!("pick schema {}", current_source.unwrap_or("")),
         "pick" => format!("pick {}", current_source.unwrap_or("")),
+        // An option of a file source's format, under its datasource line.
+        option if clarity_formats::catalog().iter().any(|f| f.options.iter().any(|o| o.name == option)) => format!("{option} {}", current_source.unwrap_or("")),
         // The two kinds of output line: where it is, and what it keeps.
         "output" if entry.tokens.get(1).map(|t| t.text.as_str()) == Some("keeps") => "output keeps".to_string(),
         other => other.to_string(),
@@ -645,13 +697,14 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
             format!("datasource {}", source.name),
             1,
             format!(
-                "datasource {} {} {}{}{}{}",
+                "datasource {} {} {}{}{}{}{}",
                 source.name,
-                source_word(source.kind),
+                source.file.as_ref().map(file_kind_word).unwrap_or(source_word(source.kind)),
                 quote(&source.url),
                 if source.external { " external" } else { "" },
                 if source.readonly { " readonly" } else { "" },
-                if source.beside { " beside" } else { "" }
+                if source.beside { " beside" } else { "" },
+                source.file.as_ref().and_then(|f| f.mapping.as_ref()).map(|m| format!(" using {m}")).unwrap_or_default()
             ),
         ));
         if let Some(auth) = &source.auth {
@@ -663,6 +716,14 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
         }
         if let Some(paging) = &source.paging {
             lines.push((format!("paging {}", source.name), 2, paging_line(paging)));
+        }
+        if let Some(file) = &source.file {
+            let info = clarity_formats::format(&file.format);
+            for option in &file.options {
+                let bool_option = info.as_ref().and_then(|i| i.options.iter().find(|o| o.name == option.name)).is_some_and(|o| o.kind == clarity_formats::OptionKind::Bool);
+                let value = if bool_option { option.value.clone() } else { quote(&option.value) };
+                lines.push((format!("{} {}", option.name, source.name), 2, format!("{} {value}", option.name)));
+            }
         }
         if let Some(openapi) = &source.openapi {
             lines.push((format!("openapi {}", source.name), 2, format!("openapi {}", quote(openapi))));

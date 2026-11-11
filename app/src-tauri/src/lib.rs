@@ -14,6 +14,7 @@ mod folders;
 mod system;
 mod parts;
 mod external;
+mod mappings;
 mod apis;
 mod themes;
 mod translations;
@@ -931,6 +932,12 @@ pub fn run() {
             apis::add_api_file,
             external::import_tables,
             external::take_ownership,
+            mappings::list_mappings,
+            mappings::read_mapping,
+            mappings::save_mapping,
+            mappings::preview_mapping,
+            mappings::mapping_uses,
+            mappings::delete_mapping,
             translations::translation_table,
             translations::set_translation,
             translations::set_translation_resource,

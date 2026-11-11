@@ -241,7 +241,7 @@ fn words(name: &str) -> Vec<String> {
 }
 
 /// `tblCustomers` as `Customers`: a table prefix such as tbl goes.
-fn entity_name(table: &str) -> String {
+pub fn entity_name(table: &str) -> String {
     let mut parts = words(table);
     if parts.len() > 1 && parts[0].eq_ignore_ascii_case("tbl") {
         parts.remove(0);
@@ -257,7 +257,7 @@ fn entity_name(table: &str) -> String {
 }
 
 /// `CustName` as `cust_name`.
-fn field_name(column: &str) -> String {
+pub fn field_name(column: &str) -> String {
     let name = clarity_spec::names::camel_case(&words(column).iter().map(|w| w.to_ascii_lowercase()).collect::<Vec<_>>().join("_"));
     if name.starts_with(|c: char| c.is_ascii_digit()) || name.is_empty() { format!("f{name}") } else { name }
 }

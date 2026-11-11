@@ -70,3 +70,5 @@ ClarityText* clarity_unconnected_reason(const ClarityError* error);
 /// Connects to the database of a data source.
 bool clarity_open_driver(ClarityDialect dialect, const char* at, ClarityDriver** out);
 bool clarity_open_sqlite(const char* path, ClarityDriver** out);
+/// Whether a connection clarity_open_sqlite made is outside a transaction.
+bool clarity_sqlite_autocommit(ClarityDriver* driver);

@@ -34,6 +34,8 @@ impl Sql {
             SourceKind::Mysql => Some(Sql::Mysql),
             SourceKind::Mssql => Some(Sql::Mssql),
             SourceKind::Rest => None,
+            // A file source is kept in an in-memory SQLite table while the program runs.
+            SourceKind::File => Some(Sql::Sqlite),
         }
     }
 

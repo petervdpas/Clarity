@@ -127,6 +127,9 @@ static int32_t clarity_format_read(const char* f, size_t fn, const char* i, size
 static int32_t clarity_format_write(const char* f, size_t fn, const char* v, size_t vn, const char* o, size_t on, const char* k, size_t kn, uint8_t** out, size_t* len) { return clarity_formats_api()->write(f, fn, v, vn, o, on, k, kn, out, len); }
 static void clarity_format_free(uint8_t* bytes, size_t len) { clarity_formats_api()->free(bytes, len); }
 static int32_t clarity_format_problem(char* into, size_t size) { return clarity_formats_api()->problem(into, size); }
+static uint32_t clarity_format_interface(void) { return clarity_formats_api()->interface; }
+static int32_t clarity_format_read_table(const char* f, size_t fn, const uint8_t* i, size_t in, const char* o, size_t on, const char* k, size_t kn, uint8_t** out, size_t* len) { return clarity_formats_api()->read_table(f, fn, i, in, o, on, k, kn, out, len); }
+static int32_t clarity_format_write_table(const char* f, size_t fn, const uint8_t* g, size_t gn, const char* t, size_t tn, const char* o, size_t on, const char* k, size_t kn, uint8_t** out, size_t* len) { return clarity_formats_api()->write_table(f, fn, g, gn, t, tn, o, on, k, kn, out, len); }
 */
 import \"C\"
 
@@ -149,12 +152,18 @@ func formatsCall(run formatCall, format, input, options, kind string) (string, e
 \tvar out *C.uint8_t
 \tvar length C.size_t
 \tcode := run(cs[0], C.size_t(len(format)), cs[1], C.size_t(len(input)), cs[2], C.size_t(len(options)), cs[3], C.size_t(len(kind)), &out, &length)
+\tmade, err := formatsMade(code, out, length)
+\treturn string(made), err
+}
+
+// formatsMade is what a call made, given back to Clarity.Formats, or why it failed.
+func formatsMade(code C.int32_t, out *C.uint8_t, length C.size_t) ([]byte, error) {
 \tif code != C.CLARITY_FORMATS_OK {
 \t\tvar why [1024]C.char
 \t\tC.clarity_format_problem(&why[0], C.size_t(len(why)))
-\t\treturn \"\", clarity.FormatProblem(C.GoString(&why[0]))
+\t\treturn nil, clarity.FormatProblem(C.GoString(&why[0]))
 \t}
-\tmade := C.GoStringN((*C.char)(unsafe.Pointer(out)), C.int(length))
+\tmade := C.GoBytes(unsafe.Pointer(out), C.int(length))
 \tC.clarity_format_free(out, length)
 \treturn made, nil
 }
@@ -169,6 +178,50 @@ func formatsWrite(format, value, options, kind string) (string, error) {
 \treturn formatsCall(func(f *C.char, fn C.size_t, v *C.char, vn C.size_t, o *C.char, on C.size_t, k *C.char, kn C.size_t, out **C.uint8_t, length *C.size_t) C.int32_t {
 \t\treturn C.clarity_format_write(f, fn, v, vn, o, on, k, kn, out, length)
 \t}, format, value, options, kind)
+}
+
+// formatsTables tells whether Clarity.Formats has the table calls of a file data source (interface 2).
+func formatsTables() error {
+\tif C.clarity_format_interface() < 2 {
+\t\treturn clarity.FormatProblem(\"Clarity.Formats is too old for a file data source\")
+\t}
+\treturn nil
+}
+
+// formatsReadTable reads a file of a file data source as a table (clarity.TableReader).
+func formatsReadTable(format string, input []byte, options, fields string) (string, error) {
+\tif err := formatsTables(); err != nil {
+\t\treturn \"\", err
+\t}
+\tf, o, k := C.CString(format), C.CString(options), C.CString(fields)
+\tdefer C.free(unsafe.Pointer(f))
+\tdefer C.free(unsafe.Pointer(o))
+\tdefer C.free(unsafe.Pointer(k))
+\ti := C.CBytes(input)
+\tdefer C.free(i)
+\tvar out *C.uint8_t
+\tvar length C.size_t
+\tcode := C.clarity_format_read_table(f, C.size_t(len(format)), (*C.uint8_t)(i), C.size_t(len(input)), o, C.size_t(len(options)), k, C.size_t(len(fields)), &out, &length)
+\tmade, err := formatsMade(code, out, length)
+\treturn string(made), err
+}
+
+// formatsWriteTable writes a file data source's table back into its file (clarity.TableWriter).
+func formatsWriteTable(format string, original []byte, table, options, fields string) ([]byte, error) {
+\tif err := formatsTables(); err != nil {
+\t\treturn nil, err
+\t}
+\tf, t, o, k := C.CString(format), C.CString(table), C.CString(options), C.CString(fields)
+\tdefer C.free(unsafe.Pointer(f))
+\tdefer C.free(unsafe.Pointer(t))
+\tdefer C.free(unsafe.Pointer(o))
+\tdefer C.free(unsafe.Pointer(k))
+\tg := C.CBytes(original)
+\tdefer C.free(g)
+\tvar out *C.uint8_t
+\tvar length C.size_t
+\tcode := C.clarity_format_write_table(f, C.size_t(len(format)), (*C.uint8_t)(g), C.size_t(len(original)), t, C.size_t(len(table)), o, C.size_t(len(options)), k, C.size_t(len(fields)), &out, &length)
+\treturn formatsMade(code, out, length)
 }
 ";
 
@@ -428,7 +481,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if crate::uses_picture_functions(project) {
         files.push(text("pictures.go", PICTURES_GO.to_string()));
     }
-    if project.uses_formats() {
+    if crate::carries_formats(project, settings) {
         files.push(text("formats.go", FORMATS_GO.to_string()));
     }
     // The modules the code imports itself, which go.mod lists as direct.
@@ -816,6 +869,7 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, Sql, St
     let folder_stores: String = crate::folder_stores(project, settings)
         .iter()
         .map(|(name, setting, default)| format!("\tif err := db.AddStoreSetting({}, {}, {}, {}); err != nil {{\n\t\tdb.Close()\n\t\treturn nil, err\n\t}}\n", string(name), string(&program_name), string(setting), string(default)))
+        .chain(crate::file_sources(project, settings).unwrap_or_default().iter().map(|f| format!("\tif err := db.AddFile(clarity.FileSource{{Name: {}, Format: {}, Path: {}, Options: {}, Table: {}, Key: {}, Fields: {}, Readonly: {}}}, formatsReadTable, formatsWriteTable); err != nil {{\n\t\tdb.Close()\n\t\treturn nil, err\n\t}}\n", string(&f.name), string(&f.format), string(&f.path), string(&f.options), string(&f.table), string(&f.key), string(&f.fields), f.readonly)))
         .collect();
 
     let cases: String = crate::picture_fields(project)

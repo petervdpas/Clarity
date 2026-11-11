@@ -1,6 +1,6 @@
 # App capabilities plan: data formats, encrypted storage, mail, sign-in, version check, background jobs
 
-Six things Clarity applications cannot do today, each added as a general concept on every stack rather than as a library one project writes for itself. Written 2026-11-10; not built.
+Six things Clarity applications cannot do today, each added as a general concept on every stack rather than as a library one project writes for itself. Written 2026-11-10. Data formats (FORMATS-PLAN.md) step 1 released in Clarity 0.38.0 (JSON through Clarity.Formats); everything else not built.
 
 ## Goal
 

@@ -12,6 +12,7 @@ the app's version and what is loading. Then the Main window opens.
 
 - Main: a search box and a table of tasks, edited in place. The search keeps the tasks with every word typed in their title. Add makes a task to type over, the trash removes one. Done tasks show only while the setting says so. **Users** opens the Users window.
 - Users: a table of people. Picking or adding one slides out the person editor with the name and a colour picker, saved with **Save** (`Ctrl+S`). A person who finished tasks cannot be removed; any other is removed after a question asked from the code.
+- Ideas (File menu or the ribbon): a table of ideas for later, kept in `data/ideas.yaml` and edited in place; each change is written into the file, which keeps its comments and layout. **Tasks as YAML** shows every task as YAML, ready to copy.
 - Preferences: a dialog with the language, the theme and whether done tasks show.
 
 The app's menu has File (Users, Language, Theme, Preferences, Quit with
@@ -30,14 +31,17 @@ C#, desktop. An example builds only for the stack its project file names.
 - A question in code (`ask ... then deleteConfirmed`) before a delete.
 - Two themes, Light and Dark, with the splash screen's own colours and styles.
 - Three languages.
+- A data source that is a YAML file, laid over by a mapping: `datasource ideas file "data/ideas.yaml" external using IdeaList`, and `mapping IdeaList of Idea from yaml` with `at "ideas"` in `ideas.clarity`. The file is made at the first save.
+- YAML in code: `yaml of find t in Task order by t.title`.
 - Migrations that change the model over time: three yes/no fields for who finished a task gave way to a Person entity.
 
 ## Files
 
-- `../todo.clarity`: the project file (title, icon, version, stack, output folder, the two themes, the SQLite data source).
+- `../todo.clarity`: the project file (title, icon, version, stack, output folder, the two themes, the SQLite data source and the YAML one).
 - `todo.clarity`: the Person and Task entities, the settings, and the code behind the windows, the person editor and the app.
+- `ideas.clarity`: the Idea entity, the mapping `IdeaList` that lays `data/ideas.yaml` over it, and the code behind the Ideas window.
 - `themes.clarity`: the Light and Dark themes.
-- `design/`: `Todo.cxaml` (the app with its menu, ribbon and splash), `Welcome.cxaml` (the splash screen), `Main.cxaml` and `MainView.cxaml` (the tasks), `Users.cxaml` and `UsersView.cxaml` (the people, with the slide-out), `PersonEditor.cxaml` (a person's name and colour), `Preferences.cxaml` (the settings dialog).
+- `design/`: `Todo.cxaml` (the app with its menu, ribbon and splash), `Welcome.cxaml` (the splash screen), `Main.cxaml` and `MainView.cxaml` (the tasks), `Users.cxaml` and `UsersView.cxaml` (the people, with the slide-out), `PersonEditor.cxaml` (a person's name and colour), `Preferences.cxaml` (the settings dialog), `Ideas.cxaml` and `IdeasView.cxaml` (the ideas and the tasks as YAML).
 - `resources/todo.svg`: the app's icon and the splash picture.
 - `translations/`: English, Dutch and German.
 - `migrations/main/`: six steps: tasks, who finishes a task, finished by a person, a colour for each person, search on tasks, and names in camelCase.

@@ -1,23 +1,36 @@
 <script lang="ts">
-  // Imports tables of an external database as a module of entities mapped
-  // onto them. The backend reads the tables and writes the module; this
-  // lets the developer pick what to import.
+  // Imports tables of an external database, or of a data source that is a
+  // file, as a module of entities mapped onto them. The backend reads the
+  // tables and writes the module; this lets the developer pick what to
+  // import. A file source holds one table, so one is picked, and the backend
+  // writes a mapping beside its entity; a format with schemas (an XSD for
+  // XML) can take its tables, typed, from a schema.
 
   import { invoke } from "@tauri-apps/api/core";
+  import { browse } from "./fileBrowserStore.svelte";
   import type { Imported } from "@clarity/ui/generated/Imported.ts";
   import type { Preview } from "@clarity/ui/generated/Preview.ts";
   import type { SourceTable } from "@clarity/ui/generated/SourceTable.ts";
 
   let {
     source,
+    single = false,
+    schemaKinds = [],
     onapplied,
     onclose,
   }: {
     /** The external data source to import from. */
     source: string;
+    /** A file source: one table is imported. */
+    single?: boolean;
+    /** The file kinds of the format's schemas (`xsd`), when it has them. */
+    schemaKinds?: string[];
     onapplied: (preview: Preview) => void;
     onclose: () => void;
   } = $props();
+
+  /** A schema the tables come from, relative to the project's folder; none for the file itself. */
+  let schema = $state<string | null>(null);
 
   let tables = $state<SourceTable[] | null>(null);
   let chosen = $state<string[]>([]);
@@ -28,12 +41,14 @@
 
   $effect(() => {
     const name = source;
+    const from = schema;
     module = name;
     done = null;
-    invoke<SourceTable[]>("source_tables", { source: name })
+    invoke<SourceTable[]>("source_tables", { source: name, schema: from })
       .then((found) => {
         tables = found;
-        chosen = found.filter((t) => t.notImportable === null).map((t) => t.name);
+        const open = found.filter((t) => t.notImportable === null).map((t) => t.name);
+        chosen = single ? open.slice(0, 1) : open;
         error = null;
       })
       .catch((err) => {
@@ -43,7 +58,13 @@
   });
 
   function toggle(name: string, on: boolean) {
-    chosen = on ? [...chosen, name] : chosen.filter((n) => n !== name);
+    if (single) chosen = on ? [name] : [];
+    else chosen = on ? [...chosen, name] : chosen.filter((n) => n !== name);
+  }
+
+  async function pickSchema() {
+    const picked = await browse({ purpose: "import-schema", title: "Schema to import from", pick: "file", kinds: schemaKinds, start: await invoke<string>("project_folder") });
+    if (typeof picked === "string") schema = await invoke<string>("project_path", { picked });
   }
 
   async function run(e: SubmitEvent) {
@@ -51,7 +72,7 @@
     if (busy) return;
     busy = true;
     try {
-      done = await invoke<Imported>("import_tables", { source, module: module.trim(), tables: chosen });
+      done = await invoke<Imported>("import_tables", { source, module: module.trim(), tables: chosen, schema });
       onapplied(done.preview);
       error = null;
     } catch (err) {
@@ -68,9 +89,22 @@
     <button class="small" onclick={onclose} title="Close">&times;</button>
   </div>
   <p class="intro">
-    The chosen tables become entities in a new module, mapped onto their tables and columns. Clarity reads and writes their records but
-    never changes these tables.
+    {#if single}
+      The chosen table becomes an entity in a new module, with a mapping beside it that says where its records and each field are in the
+      file; the data source is laid over that mapping, whose paths can be changed on its page. Clarity reads and writes the records and
+      keeps the rest of the file as it is.
+    {:else}
+      The chosen tables become entities in a new module, mapped onto their tables and columns. Clarity reads and writes their records but
+      never changes these tables.
+    {/if}
   </p>
+  {#if schemaKinds.length > 0}
+    <div class="row">
+      <span class="muted">{schema ? `Typed from ${schema}` : "From the file itself; a schema gives the fields their types"}</span>
+      <button class="small" onclick={pickSchema} title="Take the tables and their types from a schema">Schema...</button>
+      {#if schema}<button class="small" onclick={() => (schema = null)} title="Take the tables from the file itself">From the file</button>{/if}
+    </div>
+  {/if}
 
   {#if error}<p class="problem">{error}</p>{/if}
 
@@ -86,7 +120,8 @@
           <li>
             <label class:off={t.notImportable !== null}>
               <input
-                type="checkbox"
+                type={single ? "radio" : "checkbox"}
+                name="importTable"
                 disabled={t.notImportable !== null}
                 checked={chosen.includes(t.name)}
                 onchange={(e) => toggle(t.name, e.currentTarget.checked)}

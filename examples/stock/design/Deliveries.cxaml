@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The deliveries on their way, edited in the XML file they are kept in. -->
+<Window class="deliveries.Deliveries" title="@deliveriesTitle" onopen="deliveriesOpened">
+  <Content name="main" at="1,1" span="12" rows="10">
+    <View name="DeliveriesView" />
+  </Content>
+</Window>
